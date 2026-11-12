@@ -123,3 +123,35 @@ paging and exact retry, native timestamps/markers, empty/denied/unavailable/stal
 order, withdrawal, session replacement, late selections and disposal. Existing publication and inventory assertions
 remain unchanged; their native doubles include history. Native, browser, Storybook and broader acceptance remain
 deferred; this source pass uses changed-file formatting and the affected Web typecheck.
+
+## Author Book withdrawal
+
+Decision: Studio offers a separate withdrawal review only for an admitted currently published Book with a nonempty
+current release. Ordinary publication still requires selected saved chapters. The review names the exact current
+release and requires explicit confirmation: withdrawal removes the Book from current discovery, preserves drafts
+and the editable outline, and leaves historical exact releases and chapters under their existing access rules.
+Columns and article publication keep their existing flow.
+
+Withdrawal uses the installed `hosted_catalogue.publish` command with an empty occurrence selection, the reviewed
+structure revision and current publication revision. It retains the existing session, native authority, conditional
+write and idempotency recovery. Success requires the acknowledged empty withdrawal revision, the matching owner
+publication pointer and an admitted current empty release. The native discovery contract excludes that empty
+release; Studio does not scan Subject pages to infer absence. A null pointer, unavailable read, mismatched current
+release or nonempty receipt cannot confirm withdrawal. Uncertain recovery repeats the same command and key even
+after review expiry; stale CAS requires a fresh review after reopening the current Book. Saved chapters can later
+be selected and republished with the withdrawal release as the publication precondition.
+
+Sources read before design: `hosted-workspace.ts` review/publication, `hosted-native.ts`, `hosted-adapter.ts`,
+`controller.ts`, `contract.ts`, `publication.tsx`, the organizer/workspace callers, existing hosted publication and
+inventory tests, and Content's [hosted catalogue contract](../../../../services/kernel/src/content/hosted-chapters.md)
+(authoring/release, current discovery, exact reads and author history). The installed native API already supports
+empty releases; no merge, cherry-pick or backend change is required.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test src/studio/publication-withdrawal.test.tsx
+ tests/studio-hosted-publication.test.ts tests/studio-hosted-inventory.test.ts`. Focused cases cover the exact review,
+confirmation control, admission, empty-publish rejection, stale CAS, lost receipts, null/unavailable readback, review
+expiry during retry, session replacement, preserved drafts and subsequent republish. Existing selection assertions
+remain unchanged. Native acceptance verifies author withdrawal and subsequent republish, current discovery removal
+and historical exact release/chapter reads with unchanged current Access checks. Native, browser, Storybook and
+broader acceptance are deferred to the dev verifier; this source pass uses changed-file formatting and the affected
+Web typecheck.

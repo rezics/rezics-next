@@ -112,6 +112,8 @@ export type PublicationReview = Readonly<{
   authority?: 'hosted' | 'local';
   articleSnapshot?: ArticleReviewSnapshot;
   target: PublicationTarget;
+  /** Explicit author withdrawal of this admitted current release; never inferred from an empty selection. */
+  withdrawal?: Readonly<{ publicationId: string; revision: string }>;
   expectedPublicationRevision: string | null;
   expiresAt: string;
   /** Frozen selected book outline, including ancestor parts; articles carry no synthetic TOC. */
@@ -156,6 +158,10 @@ export type StudioInput = Readonly<{
   /** Render native account creation operands and account inventory recovery. */
   nativeDrafts?: boolean;
   canPublish: boolean;
+  /** Admitted current Book release, independent of paged publication history. */
+  currentBookPublication?: PublicationRecord | null;
+  /** The catalogue Post itself was admitted as published by the native owner reader. */
+  canWithdrawBook?: boolean;
   /** A missing native publication flow must not render an empty history as an admitted result. */
   publicationUnavailableReason?: string;
 }>;
@@ -191,6 +197,10 @@ export interface StudioPort {
   ): Promise<StudioResult<StudioRevision>>;
   reviewPublication(
     input: { projectId: string; target: PublicationTarget },
+    signal: AbortSignal,
+  ): Promise<StudioResult<PublicationReview>>;
+  reviewWithdrawal?(
+    input: { projectId: string; catalogueId: string; structureRevision: string; expectedPublicationId: string },
     signal: AbortSignal,
   ): Promise<StudioResult<PublicationReview>>;
   publish(

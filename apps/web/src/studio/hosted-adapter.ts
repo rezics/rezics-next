@@ -27,6 +27,8 @@ export type HostedBookPublicationInput = Readonly<{
   target: Extract<PublicationTarget, { kind: 'book' }>;
   /** Required even for a first release. A failed read must never be interpreted as null. */
   expectedPublicationId: string | null;
+  /** Only the explicit withdrawal review can opt into the native empty-manifest command. */
+  withdrawal?: boolean;
   idempotencyKey: string;
 }>;
 type Change = Parameters<BookOrganizerPort['change']>[0];
@@ -311,7 +313,8 @@ export class HostedBookAdapter implements BookOrganizerPort {
         const rows = bookTocRows(hostedBookStructure(book));
         const ids = new Set<string>();
         const chapters = new Set<string>();
-        if (!target.chapters.length) return invalid();
+        if (input.withdrawal ? target.chapters.length !== 0 || !input.expectedPublicationId : !target.chapters.length)
+          return invalid();
         for (const chapter of target.chapters) {
           const row = rows.find((entry) => entry.placement.occurrenceId === chapter.occurrenceId);
           if (

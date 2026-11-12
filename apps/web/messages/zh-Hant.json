@@ -11960,5 +11960,17 @@
   "knowledge_lifecycle_missing": "此位址已無法還原此文件。還原期限可能已過，或您的存取權限已變更。",
   "knowledge_lifecycle_unavailable": "無法取得文件狀態。請重試此私人頁面。",
   "knowledge_lifecycle_uncertain": "無法確認操作結果。請重試完全相同的操作以取得結果，再開始其他操作。",
-  "knowledge_lifecycle_reread": "重新讀取文件狀態"
+  "knowledge_lifecycle_reread": "重新讀取文件狀態",
+  "studio_withdraw_review": "審閱書籍撤回…",
+  "studio_withdraw_heading": "審閱書籍撤回",
+  "studio_withdraw_release": "目前發布版本：{revision}",
+  "studio_withdraw_discovery": "撤回後，此書將從目前的探索列表中移除。",
+  "studio_withdraw_drafts": "草稿和目錄會保留。之後可選擇已儲存的章節，審閱發布內容，再發布新版本。",
+  "studio_withdraw_history": "歷史精確發布版本和章節仍遵循現有存取規則。撤回不會刪除它們，也不會授予存取權限。",
+  "studio_withdraw_confirm": "我要將此精確的目前發布版本從探索列表中撤回。",
+  "studio_withdraw_action": "撤回已審閱的書籍",
+  "studio_withdraw_reviewing": "正在審閱書籍撤回",
+  "studio_withdraw_pending": "正在撤回已審閱的書籍",
+  "studio_withdraw_done": "書籍已從目前的探索列表中撤回。",
+  "studio_withdraw_receipt": "已確認撤回版本 {revision}。此書已從目前的探索列表中移除，草稿仍然保留。"
 }

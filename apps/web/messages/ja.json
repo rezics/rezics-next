@@ -11960,5 +11960,17 @@
   "knowledge_lifecycle_missing": "このアドレスではドキュメントを復元できません。期限が過ぎたか、アクセス権が変更された可能性があります。",
   "knowledge_lifecycle_unavailable": "ドキュメントの状態を取得できません。この非公開ページで再試行してください。",
   "knowledge_lifecycle_uncertain": "操作結果を確認できません。他の操作を始める前に、同じ操作をそのまま再試行して結果を取得してください。",
-  "knowledge_lifecycle_reread": "ドキュメントの状態を再読み込み"
+  "knowledge_lifecycle_reread": "ドキュメントの状態を再読み込み",
+  "studio_withdraw_review": "本の公開取り下げを確認…",
+  "studio_withdraw_heading": "本の公開取り下げを確認",
+  "studio_withdraw_release": "現在の公開版：{revision}",
+  "studio_withdraw_discovery": "公開を取り下げると、この本は現在の作品一覧や検索対象から外れます。",
+  "studio_withdraw_drafts": "下書きと目次は残ります。後で保存済みの章を選び、公開内容を確認して新しい版を公開できます。",
+  "studio_withdraw_history": "過去の特定の公開版や章には、引き続き既存のアクセス規則が適用されます。取り下げによって削除されたり、閲覧権限が付与されたりすることはありません。",
+  "studio_withdraw_confirm": "この特定の現在の公開版を作品一覧や検索対象から取り下げます。",
+  "studio_withdraw_action": "確認した本の公開を取り下げる",
+  "studio_withdraw_reviewing": "本の公開取り下げを確認中",
+  "studio_withdraw_pending": "確認した本の公開を取り下げ中",
+  "studio_withdraw_done": "本が現在の作品一覧や検索対象から外れました。",
+  "studio_withdraw_receipt": "取り下げ版 {revision} を確認しました。この本は現在の作品一覧や検索対象から外れ、下書きは残っています。"
 }

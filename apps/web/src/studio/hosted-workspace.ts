@@ -40,7 +40,7 @@ function publicationRecord(id: string, book: HostedBook): PublicationRecord {
         ]
       : [],
   );
-  return { publicationId: id, revision: book.revision.revisionId, publishedAt: null, state: 'published', entries };
+  return { publicationId: id, revision: book.revision.revisionId, publishedAt: null, state: book.placements.length === 0 ? 'withdrawn' : 'published', entries };
 }
 
 function reviewFor(
@@ -170,6 +170,7 @@ export async function openHostedStudio(
   }
   const unsupported = async () =>
     hostedFailure('unavailable', 'Article publication is not available in this workspace.');
+  let pendingPublication: { key: string; reviewId: string } | null = null;
   const port: StudioPort = {
     isCurrent: current,
     documents: (request, requestSignal) =>
@@ -200,22 +201,82 @@ export async function openHostedStudio(
         ? { ok: true, value: review }
         : hostedFailure('invalid', 'Select saved chapter versions from the current book structure.');
     },
+    async reviewWithdrawal(request, requestSignal) {
+      if (!current() || requestSignal.aborted || request.projectId !== input.projectId) return ended();
+      const structure = book.currentStructure();
+      if (
+        !structure ||
+        request.catalogueId !== options.catalogueId ||
+        request.structureRevision !== structure.revision
+      )
+        return hostedFailure('stale', 'Reload the current book before reviewing withdrawal.');
+      const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal, viewer);
+      if (!current() || requestSignal.aborted) return ended();
+      if (!freshOwner.ok) return freshOwner;
+      const item = freshOwner.value.item;
+      if (
+        item.postVisibility !== 'published' ||
+        item.headRevisionId !== structure.revision ||
+        !item.publicationId ||
+        item.publicationId !== request.expectedPublicationId
+      )
+        return hostedFailure('stale', 'The current published book changed. Reopen it before reviewing withdrawal.');
+      const release = await book.readPublication(options.catalogueId, requestSignal, item.publicationId);
+      if (!current() || requestSignal.aborted) return ended();
+      if (!release.ok) return release;
+      if (release.value.placements.length === 0)
+        return hostedFailure('stale', 'This book is already withdrawn. Reopen it to read its current release.');
+      publicationId = item.publicationId;
+      return {
+        ok: true,
+        value: {
+          reviewId: crypto.randomUUID(),
+          authority: 'hosted',
+          target: { kind: 'book', catalogueId: options.catalogueId, structureRevision: structure.revision, chapters: [] },
+          withdrawal: { publicationId, revision: release.value.revision.revisionId },
+          expectedPublicationRevision: publicationId,
+          expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+          bookOutline: { ...structure, placements: [] },
+          entries: [],
+          notices: [],
+        },
+      };
+    },
     async publish(request, requestSignal) {
       const review = request.review;
+      const recovering = pendingPublication?.key === request.idempotencyKey && pendingPublication.reviewId === review.reviewId;
       if (
         !current() ||
         requestSignal.aborted ||
         request.projectId !== input.projectId ||
         review.target.kind !== 'book' ||
-        Date.parse(review.expiresAt) <= Date.now() ||
+        (!recovering && Date.parse(review.expiresAt) <= Date.now()) ||
         review.expectedPublicationRevision !== publicationId
       )
         return hostedFailure('stale', 'Review the current book and publication again before publishing.');
+      if (
+        review.withdrawal
+          ? review.target.chapters.length !== 0 ||
+            review.entries.length !== 0 ||
+            review.withdrawal.publicationId !== publicationId ||
+            review.withdrawal.revision !== publicationId
+          : review.target.chapters.length === 0
+      )
+        return hostedFailure('invalid', 'Use the explicit withdrawal review to remove the current publication.');
+      pendingPublication = { key: request.idempotencyKey, reviewId: review.reviewId };
       const result = await book.publish(
-        { target: review.target, expectedPublicationId: publicationId, idempotencyKey: request.idempotencyKey },
+        {
+          target: review.target,
+          expectedPublicationId: publicationId,
+          withdrawal: Boolean(review.withdrawal),
+          idempotencyKey: request.idempotencyKey,
+        },
         requestSignal,
       );
-      if (!result.ok) return result;
+      if (!result.ok) {
+        if (result.error.kind !== 'uncertain' && result.error.kind !== 'unavailable') pendingPublication = null;
+        return result;
+      }
       const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal, viewer);
       if (!current() || requestSignal.aborted) return ended();
       if (!freshOwner.ok)
@@ -223,12 +284,25 @@ export async function openHostedStudio(
           'uncertain',
           'The release was accepted but its current publication could not be refreshed. Retry to recover it.',
         );
-      if (!freshOwner.value.item.publicationId)
+      if (freshOwner.value.item.publicationId !== result.value.revision.revisionId)
         return hostedFailure(
           'uncertain',
           'The release was accepted but the owner read did not expose its publication. Retry to recover it.',
         );
-      const nextPublicationId = freshOwner.value.item.publicationId;
+      const nextPublicationId = result.value.revision.revisionId;
+      if (review.withdrawal) {
+        // The current native release selects discovery. An exact historical receipt alone cannot confirm removal.
+        const visible = await book.readPublication(options.catalogueId, requestSignal);
+        if (!current() || requestSignal.aborted) return ended();
+        if (
+          result.value.placements.length !== 0 ||
+          !visible.ok ||
+          visible.value.revision.revisionId !== nextPublicationId ||
+          visible.value.revision.sourceRevisionId !== review.target.structureRevision ||
+          visible.value.placements.length !== 0
+        )
+          return hostedFailure('uncertain', 'The withdrawal was accepted but the current empty release could not be confirmed. Retry to recover it.');
+      }
       const record = publicationRecord(nextPublicationId, result.value);
       if (
         record.entries.length !== review.entries.length ||
@@ -246,6 +320,7 @@ export async function openHostedStudio(
         return hostedFailure('uncertain', 'The published snapshot did not match the reviewed chapter selection.');
       publicationId = nextPublicationId;
       currentPublication = record;
+      pendingPublication = null;
       return { ok: true, value: record };
     },
     publications: async () => ({ ok: true, value: { items: [], nextCursor: null } }),
@@ -259,6 +334,8 @@ export async function openHostedStudio(
           ...input,
           profile: { kind: 'book', structure: loaded.value },
           canPublish: true,
+          currentBookPublication: currentPublication,
+          canWithdrawBook: selected.postVisibility === 'published',
           publications: currentPublication
             ? { items: [currentPublication], nextCursor: null }
             : { items: [], nextCursor: null },

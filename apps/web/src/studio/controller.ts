@@ -39,6 +39,7 @@ export type WorkingDocument = Readonly<{
 export type StudioState = Readonly<{
   documents: StudioPage<StudioDocument>;
   publications: StudioPage<PublicationRecord>;
+  currentBookPublication: PublicationRecord | null;
   structure: BookStructure | null;
   selectedOccurrences: ReadonlySet<string>;
   selected: WorkingDocument | null;
@@ -76,6 +77,22 @@ function sameTarget(a: PublicationTarget, b: PublicationTarget): boolean {
 }
 function reviewMatches(review: PublicationReview, target: PublicationTarget, source: BookStructure | null): boolean {
   if (!sameTarget(review.target, target)) return false;
+  if (review.withdrawal)
+    return (
+      target.kind === 'book' &&
+      review.authority === 'hosted' &&
+      Boolean(review.reviewId) &&
+      review.withdrawal.publicationId === review.expectedPublicationRevision &&
+      review.withdrawal.revision === review.expectedPublicationRevision &&
+      Number.isFinite(Date.parse(review.expiresAt)) &&
+      target.chapters.length === 0 &&
+      review.entries.length === 0 &&
+      review.bookOutline?.placements.length === 0 &&
+      review.bookOutline.catalogueId === target.catalogueId &&
+      review.bookOutline.revision === target.structureRevision &&
+      source?.revision === target.structureRevision
+    );
+  if (target.kind === 'book' && target.chapters.length === 0) return false;
   if (target.kind === 'article' && review.authority === 'local')
     return (
       review.reviewId === '' &&
@@ -208,6 +225,7 @@ export class StudioController {
     this.state = {
       documents: input.documents,
       publications: input.publications,
+      currentBookPublication: input.currentBookPublication ?? null,
       structure: input.profile.kind === 'book' ? input.profile.structure : null,
       selectedOccurrences: new Set(),
       selected: input.initialSelection ? working(input.initialSelection) : null,
@@ -652,7 +670,22 @@ export class StudioController {
       ? { kind: 'article', document: selected.source.revision.exact }
       : null;
   };
-  reviewPublication = async () => {
+  canWithdrawBook = (): boolean => Boolean(
+    this.input.canPublish &&
+    this.input.canWithdrawBook &&
+    this.port.reviewWithdrawal &&
+    this.state.structure &&
+    this.state.currentBookPublication?.state === 'published'
+  );
+  private withdrawalTarget = (): PublicationTarget | null => {
+    const structure = this.state.structure;
+    return this.canWithdrawBook() && structure
+      ? { kind: 'book', catalogueId: structure.catalogueId, structureRevision: structure.revision, chapters: [] }
+      : null;
+  };
+  reviewPublication = () => this.prepareReview(false);
+  reviewWithdrawal = () => this.prepareReview(true);
+  private prepareReview = async (withdrawal: boolean) => {
     const selected = this.state.selected;
     if (
       !this.canMutate() ||
@@ -663,23 +696,33 @@ export class StudioController {
       selected?.uploading
     )
       return;
-    const target = this.publicationTarget();
-    if (!target) return;
+    const target = withdrawal ? this.withdrawalTarget() : this.publicationTarget();
+    const release = this.state.currentBookPublication;
+    if (!target || (withdrawal && !release)) return;
     this.patch({ review: null, published: null });
     await this.run<PublicationReview>(
-      'Reviewing publication',
+      withdrawal ? m.studio_withdraw_reviewing({}, { locale: getLocale() }) : 'Reviewing publication',
       async (signal) => {
-        const result = await this.port.reviewPublication({ projectId: this.input.projectId, target }, signal);
+        const result = withdrawal && target.kind === 'book' && release && this.port.reviewWithdrawal
+          ? await this.port.reviewWithdrawal({
+              projectId: this.input.projectId,
+              catalogueId: target.catalogueId,
+              structureRevision: target.structureRevision,
+              expectedPublicationId: release.publicationId,
+            }, signal)
+          : await this.port.reviewPublication({ projectId: this.input.projectId, target }, signal);
         if (
           result.ok &&
-          (!reviewMatches(result.value, target, this.state.structure) ||
+          (Boolean(result.value.withdrawal) !== withdrawal ||
+            (withdrawal && result.value.expectedPublicationRevision !== release?.publicationId) ||
+            !reviewMatches(result.value, target, this.state.structure) ||
             (result.value.authority !== 'local' && Date.parse(result.value.expiresAt) <= Date.now()))
         )
           return { ok: false, error: invalid };
         return result;
       },
       (review) => {
-        const current = this.publicationTarget();
+        const current = withdrawal ? this.withdrawalTarget() : this.publicationTarget();
         if (current && sameTarget(current, target) && !this.state.selected?.dirty) this.patch({ review });
       },
     );
@@ -698,7 +741,7 @@ export class StudioController {
       return false;
     if (!this.publishAttempt) {
       const { review, selected } = this.state;
-      const target = this.publicationTarget();
+      const target = review?.withdrawal ? this.withdrawalTarget() : this.publicationTarget();
       if (
         !review ||
         !target ||
@@ -719,7 +762,7 @@ export class StudioController {
     }
     const attempt = this.publishAttempt;
     return this.run<PublicationRecord>(
-      'Publishing reviewed versions',
+      attempt.review.withdrawal ? m.studio_withdraw_pending({}, { locale: getLocale() }) : 'Publishing reviewed versions',
       async (signal) => {
         const result = await this.port.publish(attempt, signal);
         if (!result.ok) {
@@ -752,7 +795,10 @@ export class StudioController {
                 sameExact(entry.document, reviewed.document)
               );
             });
-        if (result.value.state !== 'published' || !validLocalReadback) return { ok: false, error: uncertain };
+        if (
+          result.value.state !== (attempt.review.withdrawal ? 'withdrawn' : 'published') ||
+          !validLocalReadback
+        ) return { ok: false, error: uncertain };
         return result;
       },
       (published) => {
@@ -763,9 +809,12 @@ export class StudioController {
             ? { selected: { ...this.state.selected, source: published.readbackSelection, dirty: false } }
             : {}),
           published,
+          ...(attempt.review.target.kind === 'book' ? { currentBookPublication: published } : {}),
           review: null,
           message:
-            attempt.review.authority === 'local'
+            attempt.review.withdrawal
+              ? m.studio_withdraw_done({}, { locale: getLocale() })
+              : attempt.review.authority === 'local'
               ? m.studio_account_published({}, { locale: getLocale() })
               : 'The reviewed versions were published.',
           documents: {

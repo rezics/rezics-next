@@ -11960,5 +11960,17 @@
   "knowledge_lifecycle_missing": "Este documento ya no se puede restaurar en esta dirección. Puede haber vencido el plazo o cambiado tus permisos de acceso.",
   "knowledge_lifecycle_unavailable": "El estado del documento no está disponible. Vuelve a intentarlo en esta página privada.",
   "knowledge_lifecycle_uncertain": "Se desconoce el resultado de la operación. Repite exactamente la misma operación para recuperar su resultado antes de iniciar otra acción.",
-  "knowledge_lifecycle_reread": "Volver a leer el estado del documento"
+  "knowledge_lifecycle_reread": "Volver a leer el estado del documento",
+  "studio_withdraw_review": "Revisar retirada del libro…",
+  "studio_withdraw_heading": "Revisar retirada del libro",
+  "studio_withdraw_release": "Publicación actual: {revision}",
+  "studio_withdraw_discovery": "Al retirarlo, este libro dejará de aparecer en el descubrimiento actual.",
+  "studio_withdraw_drafts": "Tus borradores y el índice se conservan. Selecciona capítulos guardados y revisa la publicación para publicar una nueva edición más adelante.",
+  "studio_withdraw_history": "Las ediciones y los capítulos históricos exactos conservan sus reglas de acceso. Retirarlos no los elimina ni concede acceso.",
+  "studio_withdraw_confirm": "Quiero retirar esta publicación actual exacta del descubrimiento.",
+  "studio_withdraw_action": "Retirar libro revisado",
+  "studio_withdraw_reviewing": "Revisando retirada del libro",
+  "studio_withdraw_pending": "Retirando libro revisado",
+  "studio_withdraw_done": "El libro se ha retirado del descubrimiento actual.",
+  "studio_withdraw_receipt": "Retirada {revision} confirmada. El libro ya no aparece en el descubrimiento actual; tus borradores se conservan."
 }

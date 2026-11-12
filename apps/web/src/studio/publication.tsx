@@ -9,6 +9,8 @@ import type { StudioController, StudioState } from './controller';
 
 export function StudioPublication({ controller, state }: { controller: StudioController; state: StudioState }) {
   const review = state.review;
+  const withdrawal = review?.withdrawal;
+  const locale = getLocale();
   const [confirmed, setConfirmed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const confirmationId = useId();
@@ -63,17 +65,24 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
       {unsaved ? <p>Save the current draft before reviewing publication.</p> : null}
       {book && !hasTarget ? <p>Select chapters in the table of contents to prepare a release.</p> : null}
       {review ? (
-        <div className="studio-release-review" aria-label="Review before publishing">
-          <h3>Review this release</h3>
-          <p>
+        <div className="studio-release-review" aria-label={withdrawal ? m.studio_withdraw_heading({}, { locale }) : 'Review before publishing'}>
+          <h3>{withdrawal ? m.studio_withdraw_heading({}, { locale }) : 'Review this release'}</h3>
+          {withdrawal ? (
+            <div className="studio-stack">
+              <p className="studio-break">{m.studio_withdraw_release({ revision: withdrawal.revision }, { locale })}</p>
+              <p>{m.studio_withdraw_discovery({}, { locale })}</p>
+              <p>{m.studio_withdraw_drafts({}, { locale })}</p>
+              <p>{m.studio_withdraw_history({}, { locale })}</p>
+            </div>
+          ) : <p>
             {review.expectedPublicationRevision
               ? 'This advances the published snapshot.'
               : 'This creates the first published snapshot.'}
-          </p>
+          </p>}
           {review.target.kind === 'book' ? (
             <p className="studio-break">Structure revision: {review.target.structureRevision}</p>
           ) : null}
-          {review.bookOutline ? (
+          {review.bookOutline && !withdrawal ? (
             <nav aria-label="Frozen release table of contents">
               <ol className="studio-review-entries">
                 {bookTocRows({ ...review.bookOutline, canOrganize: false }).map(({ placement, depth }) => (
@@ -142,7 +151,9 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
               onChange={(event) => setConfirmed(event.target.checked)}
             />
             <span>
-              {review.authority === 'local'
+              {withdrawal
+                ? m.studio_withdraw_confirm({}, { locale })
+                : review.authority === 'local'
                 ? m.studio_account_confirm({}, { locale: getLocale() })
                 : 'I have reviewed these exact versions and want to publish this release.'}
             </span>
@@ -150,10 +161,11 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
           <div className="studio-action-row">
             <Button
               type="button"
+              variant={withdrawal ? 'destructive' : 'default'}
               disabled={!confirmed || blocked || expired || Boolean(unsaved)}
               onClick={() => void controller.publish()}
             >
-              Publish reviewed {book ? 'chapters' : 'article'}
+              {withdrawal ? m.studio_withdraw_action({}, { locale }) : `Publish reviewed ${book ? 'chapters' : 'article'}`}
             </Button>
             <Button type="button" variant="outline" disabled={blocked} onClick={controller.cancelReview}>
               Cancel review
@@ -169,9 +181,21 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
       >
         {review ? 'Refresh publication review' : 'Review publication…'}
       </Button>
+      {controller.canWithdrawBook() ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={blocked || Boolean(unsaved)}
+          onClick={() => void controller.reviewWithdrawal()}
+        >
+          {m.studio_withdraw_review({}, { locale })}
+        </Button>
+      ) : null}
       {state.published ? (
         <p role="status">
-          Published snapshot {state.published.revision}. Future draft changes do not change this release.
+          {state.published.state === 'withdrawn'
+            ? m.studio_withdraw_receipt({ revision: state.published.revision }, { locale })
+            : `Published snapshot ${state.published.revision}. Future draft changes do not change this release.`}
         </p>
       ) : null}
       <details className="studio-publication-history">

@@ -11960,5 +11960,17 @@
   "knowledge_lifecycle_missing": "此地址已无法恢复此文档。恢复期限可能已过，或您的访问权限已更改。",
   "knowledge_lifecycle_unavailable": "无法获取文档状态。请重试此私人页面。",
   "knowledge_lifecycle_uncertain": "无法确认操作结果。请重试完全相同的操作以获取结果，再开始其他操作。",
-  "knowledge_lifecycle_reread": "重新读取文档状态"
+  "knowledge_lifecycle_reread": "重新读取文档状态",
+  "studio_withdraw_review": "审阅图书撤回…",
+  "studio_withdraw_heading": "审阅图书撤回",
+  "studio_withdraw_release": "当前发布版本：{revision}",
+  "studio_withdraw_discovery": "撤回后，此书将从当前发现列表中移除。",
+  "studio_withdraw_drafts": "草稿和目录会保留。之后可选择已保存的章节，审阅发布内容，再发布新版本。",
+  "studio_withdraw_history": "历史精确发布版本和章节仍遵循现有访问规则。撤回不会删除它们，也不会授予访问权限。",
+  "studio_withdraw_confirm": "我要将此精确的当前发布版本从发现列表中撤回。",
+  "studio_withdraw_action": "撤回已审阅的图书",
+  "studio_withdraw_reviewing": "正在审阅图书撤回",
+  "studio_withdraw_pending": "正在撤回已审阅的图书",
+  "studio_withdraw_done": "图书已从当前发现列表中撤回。",
+  "studio_withdraw_receipt": "已确认撤回版本 {revision}。此书已从当前发现列表中移除，草稿仍然保留。"
 }

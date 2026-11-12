@@ -11960,5 +11960,17 @@
   "knowledge_lifecycle_missing": "Ce document ne peut plus être restauré à cette adresse. Le délai a peut-être expiré ou vos droits d’accès ont changé.",
   "knowledge_lifecycle_unavailable": "L’état du document est indisponible. Réessayez sur cette page privée.",
   "knowledge_lifecycle_uncertain": "Le résultat de l’opération est inconnu. Réessayez exactement la même opération pour obtenir son résultat avant de lancer une autre action.",
-  "knowledge_lifecycle_reread": "Relire l’état du document"
+  "knowledge_lifecycle_reread": "Relire l’état du document",
+  "studio_withdraw_review": "Examiner le retrait du livre…",
+  "studio_withdraw_heading": "Examiner le retrait du livre",
+  "studio_withdraw_release": "Publication actuelle : {revision}",
+  "studio_withdraw_discovery": "Le retrait supprime ce livre de la découverte actuelle.",
+  "studio_withdraw_drafts": "Vos brouillons et la table des matières sont conservés. Sélectionnez des chapitres enregistrés et examinez la publication pour publier une nouvelle version plus tard.",
+  "studio_withdraw_history": "Les versions et chapitres historiques exacts conservent leurs règles d’accès. Le retrait ne les efface pas et n’accorde aucun accès.",
+  "studio_withdraw_confirm": "Je souhaite retirer cette publication actuelle exacte de la découverte.",
+  "studio_withdraw_action": "Retirer le livre examiné",
+  "studio_withdraw_reviewing": "Examen du retrait du livre",
+  "studio_withdraw_pending": "Retrait du livre examiné",
+  "studio_withdraw_done": "Le livre a été retiré de la découverte actuelle.",
+  "studio_withdraw_receipt": "Retrait {revision} confirmé. Ce livre est supprimé de la découverte actuelle ; vos brouillons sont conservés."
 }

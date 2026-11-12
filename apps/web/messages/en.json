@@ -11960,5 +11960,17 @@
   "knowledge_lifecycle_missing": "This document is no longer available for recovery at this address. It may have expired or your access may have changed.",
   "knowledge_lifecycle_unavailable": "Document status is unavailable. Retry this private visit.",
   "knowledge_lifecycle_uncertain": "The command outcome is unknown. Retry the exact command to recover its result before starting another action.",
-  "knowledge_lifecycle_reread": "Read document status again"
+  "knowledge_lifecycle_reread": "Read document status again",
+  "studio_withdraw_review": "Review Book withdrawal…",
+  "studio_withdraw_heading": "Review Book withdrawal",
+  "studio_withdraw_release": "Current release: {revision}",
+  "studio_withdraw_discovery": "Withdrawing removes this Book from current discovery.",
+  "studio_withdraw_drafts": "Your drafts and table of contents remain. Select saved chapters and review publication to publish a new release later.",
+  "studio_withdraw_history": "Historical exact releases and chapters keep their existing access rules. Withdrawal does not erase them or grant access.",
+  "studio_withdraw_confirm": "I want to withdraw this exact current release from discovery.",
+  "studio_withdraw_action": "Withdraw reviewed Book",
+  "studio_withdraw_reviewing": "Reviewing Book withdrawal",
+  "studio_withdraw_pending": "Withdrawing reviewed Book",
+  "studio_withdraw_done": "The Book was withdrawn from current discovery.",
+  "studio_withdraw_receipt": "Withdrawal release {revision} confirmed. This Book is removed from current discovery; your drafts remain."
 }

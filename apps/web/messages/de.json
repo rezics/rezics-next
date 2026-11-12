@@ -11960,5 +11960,17 @@
   "knowledge_lifecycle_missing": "Dieses Dokument kann unter dieser Adresse nicht mehr wiederhergestellt werden. Die Frist ist möglicherweise abgelaufen oder Ihr Zugriff hat sich geändert.",
   "knowledge_lifecycle_unavailable": "Der Dokumentstatus ist nicht verfügbar. Versuchen Sie es auf dieser privaten Seite erneut.",
   "knowledge_lifecycle_uncertain": "Das Ergebnis ist unbekannt. Wiederholen Sie exakt denselben Vorgang, um das Ergebnis abzurufen, bevor Sie eine andere Aktion starten.",
-  "knowledge_lifecycle_reread": "Dokumentstatus erneut laden"
+  "knowledge_lifecycle_reread": "Dokumentstatus erneut laden",
+  "studio_withdraw_review": "Rücknahme des Buchs prüfen…",
+  "studio_withdraw_heading": "Rücknahme des Buchs prüfen",
+  "studio_withdraw_release": "Aktuelle Veröffentlichung: {revision}",
+  "studio_withdraw_discovery": "Durch die Rücknahme wird dieses Buch aus der aktuellen Suche und Entdeckung entfernt.",
+  "studio_withdraw_drafts": "Deine Entwürfe und das Inhaltsverzeichnis bleiben erhalten. Wähle gespeicherte Kapitel und prüfe die Veröffentlichung, um später eine neue Ausgabe zu veröffentlichen.",
+  "studio_withdraw_history": "Für frühere genaue Ausgaben und Kapitel gelten weiterhin die bestehenden Zugriffsregeln. Die Rücknahme löscht sie nicht und gewährt keinen Zugriff.",
+  "studio_withdraw_confirm": "Ich möchte genau diese aktuelle Ausgabe aus der Entdeckung zurücknehmen.",
+  "studio_withdraw_action": "Geprüftes Buch zurücknehmen",
+  "studio_withdraw_reviewing": "Rücknahme des Buchs wird geprüft",
+  "studio_withdraw_pending": "Geprüftes Buch wird zurückgenommen",
+  "studio_withdraw_done": "Das Buch wurde aus der aktuellen Entdeckung zurückgenommen.",
+  "studio_withdraw_receipt": "Rücknahme-Ausgabe {revision} bestätigt. Das Buch ist aus der aktuellen Entdeckung entfernt; deine Entwürfe bleiben erhalten."
 }
