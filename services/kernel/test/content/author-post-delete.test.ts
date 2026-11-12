@@ -289,7 +289,9 @@ test('an author deletes their own post: removed slots preserve replies and clean
     if (statement === 'COMMIT' || statement === 'ROLLBACK') {
       if (phase?.includes(readScope.sql))
         phases.push(
-          phase.filter((sql) => [readScope.sql, readOwnCompletion.sql, readReceipt.sql, erase.sql].includes(sql)),
+          phase.filter((sql) =>
+            [readScope.sql, readOwnCompletion.sql, readReceipt.sql, erase.sql].some((expected) => expected === sql),
+          ),
         );
       active.delete(connectionId);
     }
