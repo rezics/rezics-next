@@ -1250,6 +1250,10 @@ most the preceding bucket. The original 2,979 and 4,266 values and 7,245 observe
 history: no permitted original delivery source provided exact UTC labels or provenance, so no bucket is fabricated
 and 10,232 is not used.
 
+Decision: Native attribution excludes only newly reachable side history from first-parent merges whose tree exactly
+matches their first parent; source-bearing merges and later landings remain countable, incomplete history is unknown,
+and the path filter advances to v2.
+
 The private duty keeps its existing hourly sleep boundary, inbox alarm, and Telegram sender. After the source is
 promoted, the controller replaces the existing `.temp/goal/watch/hourly-report.sh` bridge in place at its ordinary
 post-send boundary. Remove its `lines()` helper and the `n=$(lines ...)` / `n2=$(lines ...)` calls. Keep its current

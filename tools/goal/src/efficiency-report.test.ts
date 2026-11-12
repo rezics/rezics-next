@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { migrate, openDb } from './db.ts';
@@ -10,6 +10,7 @@ import {
   efficiencyReportMigrations,
   measureProductLineObservation,
   parseUtcHour,
+  PRODUCT_LINE_FILTER_VERSION,
   readFrozenHourlyEfficiencyReport,
   renderHourlyEfficiencyReport,
   sendHourlyEfficiencyReport,
@@ -510,11 +511,12 @@ test('hourly rendering and notifier output use caller limits, including tiny UTF
   }
 });
 
-test('late commits and integrations remain backfill after the first measured bucket capture', async () => {
+test('source-neutral propagation stays out of attribution while real and late landings remain visible', async () => {
   const h = fixture();
   const repository = join(h.directory.path, 'dev');
-  const bucket = '2026-10-31T01:00:00.000Z';
-  const capturedAt = new Date('2026-10-31T02:15:00.000Z');
+  const previousBucket = '2026-10-30T23:00:00.000Z';
+  const bucket = '2026-10-31T00:00:00.000Z';
+  const capturedAt = new Date('2026-10-31T01:15:00.000Z');
   try {
     mkdirSync(repository);
     git(repository, ['init', '-q']);
@@ -527,30 +529,96 @@ test('late commits and integrations remain backfill after the first measured buc
     );
     git(repository, ['add', '.']);
     git(repository, ['commit', '-q', '-m', 'initial product source'], {
-      GIT_AUTHOR_DATE: '2026-10-31T01:10:00Z',
-      GIT_COMMITTER_DATE: '2026-10-31T01:10:00Z',
+      GIT_AUTHOR_DATE: '2026-10-30T23:10:00Z',
+      GIT_COMMITTER_DATE: '2026-10-30T23:10:00Z',
     });
     git(repository, ['branch', '-M', 'dev']);
 
+    const previousMeasurement = measureProductLineObservation(
+      repository,
+      previousBucket,
+      new Date('2026-10-31T00:15:00.000Z'),
+    );
+    expect(previousMeasurement.productLines).toBe(2);
+    const previous = captureHourlyEfficiencyObservation(h.db, {
+      bucket: previousBucket,
+      now: new Date('2026-10-31T00:15:00.000Z'),
+      productLineMeasurement: previousMeasurement,
+    });
+
     const firstMeasurement = measureProductLineObservation(repository, bucket, capturedAt);
-    expect(firstMeasurement.productLines).toBe(2);
+    expect(firstMeasurement.productLines).toBe(0);
+    expect(previous.snapshot.observation.sourceRevision).toBe(firstMeasurement.sourceRevision);
+    expect(firstMeasurement.filterVersion).toBe(PRODUCT_LINE_FILTER_VERSION);
     const first = captureHourlyEfficiencyObservation(h.db, {
       bucket,
       now: capturedAt,
       productLineMeasurement: firstMeasurement,
     });
     expect(first.snapshot.report).toContain(
-      `Product lines added in UTC bucket: 2 (attribution measured; dev@${firstMeasurement.sourceRevision}`,
+      `Product lines added in UTC bucket: 0 (attribution measured; dev@${firstMeasurement.sourceRevision}`,
     );
 
+    writeFileSync(
+      join(repository, 'services/demo/src/older-dev.ts'),
+      'export const firstOlderLanding = true;\nexport const secondOlderLanding = true;\n',
+    );
+    git(repository, ['add', '.']);
+    git(repository, ['commit', '-q', '-m', 'older real dev landing'], {
+      GIT_AUTHOR_DATE: '2026-10-30T23:40:00Z',
+      GIT_COMMITTER_DATE: '2026-10-30T23:40:00Z',
+    });
+
+    git(repository, ['switch', '-c', 'cp-sync', firstMeasurement.sourceRevision!]);
+    writeFileSync(
+      join(repository, 'services/demo/src/historical.ts'),
+      'export const oldOne = 1;\nexport const oldTwo = 2;\nexport const oldThree = 3;\nexport const oldFour = 4;\n',
+    );
+    git(repository, ['add', '.']);
+    git(repository, ['commit', '-q', '-m', 'historical propagated product source'], {
+      GIT_AUTHOR_DATE: '2026-10-30T23:50:00Z',
+      GIT_COMMITTER_DATE: '2026-10-30T23:50:00Z',
+    });
+    rmSync(join(repository, 'services/demo/src/historical.ts'));
+    git(repository, ['add', '-A']);
+    git(repository, ['commit', '-q', '-m', 'historical source removed before propagation'], {
+      GIT_AUTHOR_DATE: '2026-10-30T23:55:00Z',
+      GIT_COMMITTER_DATE: '2026-10-30T23:55:00Z',
+    });
+    git(repository, ['switch', 'dev']);
+    git(
+      repository,
+      ['merge', '--no-ff', '-s', 'ours', 'cp-sync', '-m', 'source-neutral history propagation'],
+      {
+        GIT_AUTHOR_DATE: '2026-10-31T00:20:00Z',
+        GIT_COMMITTER_DATE: '2026-10-31T00:20:00Z',
+      },
+    );
+    expect(git(repository, ['rev-parse', 'HEAD^{tree}']).trim()).toBe(
+      git(repository, ['rev-parse', 'HEAD^1^{tree}']).trim(),
+    );
+
+    git(repository, ['switch', '-c', 'late-worker']);
     writeFileSync(join(repository, 'services/demo/src/late.ts'), 'export const late = true;\n');
     git(repository, ['add', '.']);
-    git(repository, ['commit', '-q', '-m', 'late integration source'], {
-      GIT_AUTHOR_DATE: '2026-10-31T01:40:00Z',
-      GIT_COMMITTER_DATE: '2026-10-31T01:40:00Z',
+    git(repository, ['commit', '-q', '-m', 'late worker source'], {
+      GIT_AUTHOR_DATE: '2026-10-31T00:40:00Z',
+      GIT_COMMITTER_DATE: '2026-10-31T00:40:00Z',
     });
+    git(repository, ['switch', 'dev']);
+    git(
+      repository,
+      ['merge', '--no-ff', 'late-worker', '-m', 'source-bearing late landing'],
+      {
+        GIT_AUTHOR_DATE: '2026-10-31T00:50:00Z',
+        GIT_COMMITTER_DATE: '2026-10-31T00:50:00Z',
+      },
+    );
+    expect(git(repository, ['rev-parse', 'HEAD^{tree}']).trim()).not.toBe(
+      git(repository, ['rev-parse', 'HEAD^1^{tree}']).trim(),
+    );
     const lateMeasurement = measureProductLineObservation(repository, bucket, capturedAt);
-    expect(lateMeasurement.productLines).toBe(3);
+    expect(lateMeasurement.productLines).toBe(1);
     expect(lateMeasurement.sourceRevision).not.toBe(firstMeasurement.sourceRevision);
 
     task(h.db, 'late-integration', 'integrated', 'web');
@@ -559,7 +627,7 @@ test('late commits and integrations remain backfill after the first measured buc
       attempt: 1,
       stage: 'integration',
       action: 'integrated',
-      at: '2026-10-31T02:10:00.000Z',
+      at: '2026-10-31T01:10:00.000Z',
       detail: JSON.stringify({ integrationTarget: 'integration' }),
     });
     const retry = captureHourlyEfficiencyObservation(h.db, {
@@ -571,38 +639,54 @@ test('late commits and integrations remain backfill after the first measured buc
     expect(retry.attribution).toBe('conflicting');
     expect(retry.snapshot.reportRef).toBe(first.snapshot.reportRef);
     expect(retry.snapshot.report).toBe(first.snapshot.report);
-    expect(retry.snapshot.observation.productLines).toBe(2);
+    expect(retry.snapshot.observation.productLines).toBe(0);
     expect(retry.snapshot.conflict).toMatchObject({
       reportRef: first.snapshot.reportRef,
-      productLines: 3,
+      productLines: 1,
       attribution: 'measured',
       sourceRevision: lateMeasurement.sourceRevision,
     });
 
-    const nextBucket = '2026-10-31T02:00:00.000Z';
+    const nextBucket = '2026-10-31T01:00:00.000Z';
     const nextMeasurement = measureProductLineObservation(
       repository,
       nextBucket,
-      new Date('2026-10-31T03:15:00.000Z'),
+      new Date('2026-10-31T02:15:00.000Z'),
       firstMeasurement.sourceRevision,
     );
     expect(nextMeasurement.productLines).toBe(0);
-    expect(nextMeasurement.backfillProductLines).toBe(1);
+    expect(nextMeasurement.backfillProductLines).toBe(3);
     expect(nextMeasurement.backfillFromRevision).toBe(firstMeasurement.sourceRevision);
     const backfill = captureHourlyEfficiencyObservation(h.db, {
       bucket: nextBucket,
-      now: new Date('2026-10-31T03:15:00.000Z'),
+      now: new Date('2026-10-31T02:15:00.000Z'),
       productLineMeasurement: nextMeasurement,
     });
     expect(backfill.snapshot.report).toContain(
-      'Landing identities: late-integration#1 at 2026-10-31T02:10:00.000Z (dev).',
+      'Landing identities: late-integration#1 at 2026-10-31T01:10:00.000Z (dev).',
     );
     expect(backfill.snapshot.report).toContain(
-      'Late integration backfill in this bucket: 1 additions newly visible since',
+      'Late integration backfill in this bucket: 3 additions newly visible since',
     );
     expect(backfill.snapshot.report).toContain('Late integrations remain visible in their integration bucket');
-    expect(backfill.snapshot.observation.backfillProductLines).toBe(1);
-    expect(backfill.snapshot.rolling).toEqual({ productLines: 2, attribution: 'measured' });
+    expect(backfill.snapshot.observation.backfillProductLines).toBe(3);
+    expect(backfill.snapshot.rolling).toEqual({ productLines: 0, attribution: 'measured' });
+
+    writeFileSync(join(repository, '.git', 'shallow'), `${git(repository, ['rev-parse', 'HEAD^1']).trim()}\n`);
+    const incompleteHistory = measureProductLineObservation(
+      repository,
+      nextBucket,
+      new Date('2026-10-31T02:15:00.000Z'),
+      firstMeasurement.sourceRevision,
+    );
+    expect(incompleteHistory).toMatchObject({
+      productLines: null,
+      attribution: 'unknown',
+      backfillProductLines: null,
+      backfillAttribution: 'unknown',
+      sourceRevision: lateMeasurement.sourceRevision,
+      filterVersion: PRODUCT_LINE_FILTER_VERSION,
+    });
   } finally {
     h.close();
   }
