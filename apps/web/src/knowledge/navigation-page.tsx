@@ -192,7 +192,7 @@ function KnowledgeNavigationRows({
     <section
       ref={focus}
       tabIndex={-1}
-      className="min-w-0 space-y-6"
+      className="min-w-0 space-y-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       aria-label={m.knowledge_navigation_reading({}, options)}
       aria-busy={snapshot.state === 'preparing'}
     >

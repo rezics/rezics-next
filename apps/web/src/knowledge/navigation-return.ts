@@ -34,6 +34,23 @@ export class KnowledgeNavigationReturn {
     if (!pending || pending.binding !== binding || pending.expires <= this.now()) return { expired: true };
     return { frontier: pending.frontier, expired: false };
   }
+  retireForAddress(binding: string, address: KnowledgePrivateAddress) {
+    if (
+      this.pending &&
+      (this.pending.binding !== binding ||
+        this.pending.address.notebookId !== address.notebookId ||
+        this.pending.address.documentId !== address.documentId)
+    )
+      this.clear();
+  }
+  leave(pathname: string) {
+    if (!this.pending) return;
+    const path = pathname.replace(/\/$/, '');
+    const { notebookId, documentId } = this.pending.address;
+    if (path.endsWith(`/knowledge/notebooks/${notebookId}/documents/${documentId}`)) return;
+    if (this.intent && path.endsWith(`/knowledge/notebooks/${this.intent.notebookId}`)) return;
+    this.clear();
+  }
   retireUnless(binding: string) {
     if (this.pending && this.pending.binding !== binding) this.clear();
   }

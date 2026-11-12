@@ -14,11 +14,12 @@ import {
 } from './navigation-page';
 import type { KnowledgeNavigationAddress } from './navigation-read';
 import { knowledgeNavigationBinding } from './navigation-return';
-import { knowledgeNavigationReturn } from './navigation-return-link';
+import { useKnowledgeNavigationReturn } from './navigation-return-link';
 
 /** Public SSR renders preparation only. Account-private operands start after browser session/exposure admission. */
 export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }) {
   const client = useQueryClient();
+  const returning = useKnowledgeNavigationReturn();
   const session = useSession();
   const source = readerSessionSource(client);
   const sessionRevision = useSyncExternalStore(source.subscribe, source.snapshot, source.serverSnapshot);
@@ -97,7 +98,7 @@ export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }
       binding={binding}
       access={access}
       operations={operations}
-      returning={knowledgeNavigationReturn(client)}
+      returning={returning}
       retryAccess={() => {
         void client.invalidateQueries({ queryKey: ['session'], exact: true });
         if (exposureKey) void client.invalidateQueries({ queryKey: exposureKey, exact: true });
