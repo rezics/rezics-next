@@ -125,7 +125,7 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
             : null;
         return { state: 'ready', value: { ...release, items, nextCursor } };
       },
-      async resolve(_id, occurrenceId, query) {
+      async metadata(_id, occurrenceId, query) {
         const row = [part, nested, first, reused].find((item) => item.occurrenceId === occurrenceId);
         if (!row) return { state: 'not-found' };
         const revision = query.revisionId === ids.release ? release : current;
@@ -135,7 +135,19 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
             : row;
         return {
           state: 'ready',
-          value: { ...revision, occurrence, document: row.kind === 'chapter' ? exactDocument : null },
+          value: { ...revision, occurrence },
+        };
+      },
+      async resolve(id, occurrenceId, query) {
+        const metadata = await api.metadata(id, occurrenceId, query);
+        if (metadata.state !== 'ready') return metadata;
+        const row = metadata.value.occurrence;
+        return {
+          state: 'ready',
+          value: {
+            ...metadata.value,
+            document: row.availability === 'available' && row.kind === 'chapter' ? exactDocument : null,
+          },
         };
       },
       async navigate(_id, occurrenceId, query) {

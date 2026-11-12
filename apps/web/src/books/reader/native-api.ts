@@ -32,9 +32,9 @@ const pageSchema = v.strictObject({
   items: v.pipe(v.array(occurrence), v.maxLength(20)),
   nextCursor: v.nullable(v.pipe(v.string(), v.maxLength(4096))),
 });
+const metadataSchema = v.strictObject({ ...revision, occurrence });
 const resolutionSchema = v.strictObject({
-  ...revision,
-  occurrence,
+  ...metadataSchema.entries,
   document: v.nullable(
     v.strictObject({
       encoding: v.literal('base64'),
@@ -49,6 +49,7 @@ type CatalogueResource = ReturnType<KernelClient['hostedCatalogues']>;
 type OccurrenceResource = ReturnType<CatalogueResource['occurrences']>;
 export type HostedRevision = NonNullable<Awaited<ReturnType<CatalogueResource['get']>>['data']>;
 export type HostedPage = NonNullable<Awaited<ReturnType<CatalogueResource['children']['get']>>['data']>;
+export type HostedMetadata = NonNullable<Awaited<ReturnType<OccurrenceResource['metadata']['get']>>['data']>;
 export type HostedResolution = NonNullable<Awaited<ReturnType<OccurrenceResource['get']>>['data']>;
 export type HostedOccurrence = HostedPage['items'][number];
 export type HostedFailure = { state: 'denied' | 'not-found' | 'unavailable' | 'changed' };
@@ -64,6 +65,7 @@ export type HostedQuery = Readonly<{
 export type HostedCatalogueApi = Readonly<{
   catalogue(id: string, query: HostedQuery): Promise<HostedRead<HostedRevision>>;
   children(id: string, query: HostedQuery): Promise<HostedRead<HostedPage>>;
+  metadata(id: string, occurrenceId: string, query: HostedQuery): Promise<HostedRead<HostedMetadata>>;
   resolve(id: string, occurrenceId: string, query: HostedQuery): Promise<HostedRead<HostedResolution>>;
   navigate(
     id: string,
@@ -109,6 +111,10 @@ export function createHostedCatalogueApi(
     const result = v.safeParse(pageSchema, data);
     return result.success ? result.output : null;
   };
+  const decodeMetadata = (data: unknown): HostedMetadata | null => {
+    const result = v.safeParse(metadataSchema, data);
+    return result.success ? result.output : null;
+  };
   const decodeResolution = (data: unknown): HostedResolution | null => {
     const result = v.safeParse(resolutionSchema, data);
     return result.success ? result.output : null;
@@ -117,6 +123,15 @@ export function createHostedCatalogueApi(
     catalogue: (id, query) => read(() => client.hostedCatalogues({ id }).get({ ...options, query }), decodeRevision),
     children: (id, query) =>
       read(() => client.hostedCatalogues({ id }).children.get({ ...options, query }), decodePage),
+    metadata: (id, occurrenceId, query) =>
+      read(
+        () =>
+          client
+            .hostedCatalogues({ id })
+            .occurrences({ occurrenceId })
+            .metadata.get({ ...options, query }),
+        decodeMetadata,
+      ),
     resolve: (id, occurrenceId, query) =>
       read(
         () =>

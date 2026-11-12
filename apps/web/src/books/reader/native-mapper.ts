@@ -19,6 +19,7 @@ import {
 import type {
   HostedCatalogueApi,
   HostedFailure,
+  HostedMetadata,
   HostedOccurrence,
   HostedPage,
   HostedQuery,
@@ -207,10 +208,18 @@ export async function readHostedBook(
     )
       return { state: 'changed' };
     const currentQuery = { kind: 'publication', revisionId: now.revisionId } as const;
-    async function resolve(occurrenceId: string, revision: HostedRevision, query: HostedQuery) {
-      const value = await read(() => api.resolve(publication.id, occurrenceId, query));
+    // Metadata and body observations use the same occurrence identity and release authority fence.
+    async function occurrence<T extends HostedMetadata>(
+      occurrenceId: string,
+      revision: HostedRevision,
+      operation: () => Promise<HostedRead<T>>,
+    ): Promise<T> {
+      const value = await read(operation);
       requireCondition(sameRevision(value, revision) && value.occurrence.occurrenceId === occurrenceId);
       return value;
+    }
+    async function metadata(occurrenceId: string, revision: HostedRevision, query: HostedQuery) {
+      return occurrence(occurrenceId, revision, () => api.metadata(publication.id, occurrenceId, query));
     }
     async function ancestors(parentId: string | null): Promise<BookAncestor[]> {
       const path: BookAncestor[] = [];
@@ -218,9 +227,9 @@ export async function readHostedBook(
       while (parentId !== null) {
         requireCondition(path.length < request.ancestorLimit && !seen.has(parentId));
         seen.add(parentId);
-        const value = await resolve(parentId, now, currentQuery);
+        const value = await metadata(parentId, now, currentQuery);
         const row = value.occurrence;
-        requireCondition(row.availability === 'available' && row.kind === 'part' && value.document === null);
+        requireCondition(row.availability === 'available' && row.kind === 'part');
         path.push({
           occurrenceId: row.occurrenceId,
           title: row.title,
@@ -230,24 +239,25 @@ export async function readHostedBook(
       }
       return path.reverse();
     }
-    async function selectedOccurrence(selection: BookSelection) {
-      const exact = await resolve(selection.occurrenceId, frozen, selectedQuery);
+    async function selectedOccurrence(selection: BookSelection, exact: HostedMetadata) {
       requireCondition(sameSelection(selectionOf(exact.occurrence), selection));
       const currentOccurrence = sameRevision(now, frozen)
         ? exact
-        : await resolve(selection.occurrenceId, now, currentQuery);
+        : await metadata(selection.occurrenceId, now, currentQuery);
       requireCondition(
         currentOccurrence.occurrence.kind === 'chapter' && currentOccurrence.occurrence.availability === 'available',
       );
-      return { exact, currentOccurrence };
+      return currentOccurrence.occurrence;
     }
     let result: BookReadResult;
     if (address.kind === 'chapter') {
       const selection = address.selection;
-      const selected = await selectedOccurrence(selection);
-      const row = selected.currentOccurrence.occurrence;
+      const exact = await occurrence(selection.occurrenceId, frozen, () =>
+        api.resolve(publication.id, selection.occurrenceId, selectedQuery),
+      );
+      const row = await selectedOccurrence(selection, exact);
       requireCondition(row.availability === 'available');
-      const document = await decodeHostedBookDocument(selected.exact, selection);
+      const document = await decodeHostedBookDocument(exact, selection);
       live();
       requireCondition(document);
       const path = await ancestors(row.parentId);
@@ -279,7 +289,7 @@ export async function readHostedBook(
           publicationTitle,
           currentStructureRevisionId: now.sourceRevisionId!,
           currentReleaseRevisionId: now.revisionId,
-          title: selected.exact.occurrence.availability === 'available' ? selected.exact.occurrence.title : row.title,
+          title: exact.occurrence.availability === 'available' ? exact.occurrence.title : row.title,
           ancestors: path,
           language: null,
           direction: 'auto',
@@ -307,7 +317,7 @@ export async function readHostedBook(
       let title = publicationTitle;
       let parentId: string | null = null;
       if (address.parentOccurrenceId !== null) {
-        const parent = await resolve(address.parentOccurrenceId, now, currentQuery);
+        const parent = await metadata(address.parentOccurrenceId, now, currentQuery);
         requireCondition(parent.occurrence.availability === 'available' && parent.occurrence.kind === 'part');
         title = parent.occurrence.title;
         parentId = parent.occurrence.parentId;
@@ -317,8 +327,8 @@ export async function readHostedBook(
       let selected: BookContentsPage['selected'] = null;
       if (address.selection !== null) {
         try {
-          const value = await selectedOccurrence(address.selection);
-          const row = value.currentOccurrence.occurrence;
+          const exact = await metadata(address.selection.occurrenceId, frozen, selectedQuery);
+          const row = await selectedOccurrence(address.selection, exact);
           requireCondition(row.availability === 'available');
           selected = {
             state:

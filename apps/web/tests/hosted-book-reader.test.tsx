@@ -12,7 +12,7 @@ import {
   illustrativePublication,
 } from '../src/books/reader/illustrative-source';
 import { createHostedCatalogueApi } from '../src/books/reader/native-api';
-import { readHostedBook } from '../src/books/reader/native-mapper';
+import { decodeHostedBookDocument, readHostedBook } from '../src/books/reader/native-mapper';
 import type { BookAddress, BookReadRequest, BookReadResult, HostedBookSource } from '../src/books/reader/source';
 
 const window = new Window({ url: 'https://reader.test/en/', width: 390, height: 844 });
@@ -409,58 +409,115 @@ test('a progress owner rendering failure leaves exact reading available; all eig
   }
 });
 
-test('installed generated operations carry exact release, occurrence and cursor without reflection or fixture transport', async () => {
-  const book = createIllustrativeHostedBook();
-  const { api } = await book.ready;
-  const urls: URL[] = [];
-  const transport: typeof fetch = async (input, init) => {
-    const request = new Request(input, init);
-    const url = new URL(request.url);
-    urls.push(url);
-    expect(request.headers.get('authorization')).toBe('Bearer prepared-viewer');
-    const query = Object.fromEntries(url.searchParams) as Parameters<typeof api.children>[1];
-    const occurrence = url.pathname.split('/occurrences/')[1]?.split('/')[0];
-    const result = url.pathname.endsWith('/children')
-      ? await api.children(ids.catalogue, query)
-      : url.pathname.endsWith('/navigation')
-        ? await api.navigate(ids.catalogue, occurrence!, {
-            ...query,
-            direction: url.searchParams.get('direction') as 'previous' | 'next',
-          })
-        : occurrence
-          ? await api.resolve(ids.catalogue, occurrence, query)
-          : await api.catalogue(ids.catalogue, query);
-    return Response.json(result.state === 'ready' ? result.value : {}, {
-      status: result.state === 'ready' ? 200 : 503,
+test.each(['nested', 'moved'] as const)(
+  'installed generated operations keep %s structure body-free and open exact bytes once',
+  async (state) => {
+    const book = createIllustrativeHostedBook(state);
+    const { api } = await book.ready;
+    const urls: URL[] = [];
+    const transport: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      urls.push(url);
+      expect(request.headers.get('authorization')).toBe('Bearer prepared-viewer');
+      expect(request.cache).toBe('no-store');
+      expect(request.redirect).toBe('manual');
+      const query = Object.fromEntries(url.searchParams) as Parameters<typeof api.children>[1];
+      const occurrence = url.pathname.split('/occurrences/')[1]?.split('/')[0];
+      const result = url.pathname.endsWith('/children')
+        ? await api.children(ids.catalogue, query)
+        : url.pathname.endsWith('/navigation')
+          ? await api.navigate(ids.catalogue, occurrence!, {
+              ...query,
+              direction: url.searchParams.get('direction') as 'previous' | 'next',
+            })
+          : url.pathname.endsWith('/metadata')
+            ? await api.metadata(ids.catalogue, occurrence!, query)
+            : occurrence
+              ? await api.resolve(ids.catalogue, occurrence, query)
+              : await api.catalogue(ids.catalogue, query);
+      return Response.json(result.state === 'ready' ? result.value : {}, {
+        status: result.state === 'ready' ? 200 : 503,
+      });
+    };
+    const native = createHostedCatalogueApi(
+      createKernelClient('https://kernel.test', { fetch: transport }),
+      'Bearer prepared-viewer',
+      new AbortController().signal,
+    );
+    const chapter = await book.chapter();
+    const request: BookReadRequest = { address: chapter, locale: 'en', limit: 40, ancestorLimit: 24 };
+    const contents = await readHostedBook(
+      native,
+      {
+        ...request,
+        address: { ...book.contents(ids.nested), selection: chapter.selection },
+      },
+      'Native book',
+      new AbortController().signal,
+    );
+    expect(contents.state === 'ready' && contents.page.kind === 'contents' && contents.page.selected?.state).toBe(
+      state === 'moved' ? 'moved' : 'here',
+    );
+    expect(urls.filter((url) => /\/occurrences\/[^/]+$/.test(url.pathname))).toHaveLength(0);
+    expect(
+      urls
+        .filter((url) => url.pathname.endsWith(`/occurrences/${ids.first}/metadata`))
+        .map((url) => url.searchParams.get('revisionId')),
+    ).toEqual(state === 'moved' ? [ids.release, ids.currentRelease] : [ids.release]);
+    urls.length = 0;
+    const result = await readHostedBook(native, request, 'Native book', new AbortController().signal);
+    expect(result.state).toBe('ready');
+    if (result.state !== 'ready' || result.page.kind !== 'chapter') throw new Error('Expected exact chapter');
+    expect(result.page.address).toEqual(chapter);
+    const exact = await api.resolve(ids.catalogue, ids.first, { kind: 'publication', revisionId: ids.release });
+    if (exact.state !== 'ready' || !exact.value.document) throw new Error('Expected exact bytes');
+    expect(result.page.body.document).toEqual(JSON.parse(atob(exact.value.document.canonicalBytes)));
+    expect(
+      await decodeHostedBookDocument(
+        { ...exact.value, document: { ...exact.value.document, canonicalBytes: btoa('{}') } },
+        chapter.selection,
+      ),
+    ).toBeNull();
+    expect(
+      urls.filter((url) => /\/occurrences\/[^/]+$/.test(url.pathname)).map((url) => url.searchParams.get('revisionId')),
+    ).toEqual([ids.release]);
+    expect(
+      urls
+        .filter((url) => url.pathname.endsWith(`/occurrences/${ids.first}/metadata`))
+        .map((url) => url.searchParams.get('revisionId')),
+    ).toEqual(state === 'moved' ? [ids.currentRelease] : []);
+    expect(urls.filter((url) => url.pathname.endsWith(`/occurrences/${ids.first}`))).toHaveLength(1);
+    expect(
+      urls.filter((url) => url.pathname.endsWith('/navigation')).map((url) => url.searchParams.get('limit')),
+    ).toEqual(['1', '1']);
+    expect(urls.every((url) => url.searchParams.get('kind') === 'publication')).toBe(true);
+    urls.length = 0;
+    await native.children(ids.catalogue, {
+      kind: 'publication',
+      revisionId: ids.release,
+      parentId: ids.nested,
+      cursor: illustrativeBookCursor,
+      limit: '20',
     });
-  };
-  const native = createHostedCatalogueApi(
-    createKernelClient('https://kernel.test', { fetch: transport }),
-    'Bearer prepared-viewer',
-    new AbortController().signal,
-  );
-  const chapter = await book.chapter();
-  const request: BookReadRequest = { address: chapter, locale: 'en', limit: 40, ancestorLimit: 24 };
-  const result = await readHostedBook(native, request, 'Native book', new AbortController().signal);
-  expect(result.state).toBe('ready');
-  if (result.state !== 'ready' || result.page.kind !== 'chapter') throw new Error('Expected exact chapter');
-  expect(result.page.address).toEqual(chapter);
-  expect(urls.filter((url) => url.pathname.endsWith(`/occurrences/${ids.first}`))).toHaveLength(1);
-  expect(
-    urls.filter((url) => url.pathname.endsWith('/navigation')).map((url) => url.searchParams.get('limit')),
-  ).toEqual(['1', '1']);
-  expect(urls.every((url) => url.searchParams.get('kind') === 'publication')).toBe(true);
-  urls.length = 0;
-  await native.children(ids.catalogue, {
-    kind: 'publication',
-    revisionId: ids.release,
-    parentId: ids.nested,
-    cursor: illustrativeBookCursor,
-    limit: '20',
-  });
-  expect(urls).toHaveLength(1);
-  expect(urls[0]!.searchParams.get('cursor')).toBe(illustrativeBookCursor);
-  expect(urls[0]!.searchParams.get('revisionId')).toBe(illustrativePublication.releaseRevisionId);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]!.searchParams.get('cursor')).toBe(illustrativeBookCursor);
+    expect(urls[0]!.searchParams.get('revisionId')).toBe(illustrativePublication.releaseRevisionId);
+  },
+);
+
+test('metadata strictly rejects body-bearing responses and malformed chapter targets', async () => {
+  const { api } = await createIllustrativeHostedBook().ready;
+  const result = await api.metadata(ids.catalogue, ids.first, { kind: 'publication' });
+  if (result.state !== 'ready') throw new Error('Expected metadata');
+  for (const payload of [
+    { ...result.value, document: null },
+    { ...result.value, occurrence: { ...result.value.occurrence, target: null } },
+  ]) {
+    const client = createKernelClient('https://kernel.test', { fetch: async () => Response.json(payload) });
+    const native = createHostedCatalogueApi(client, null, new AbortController().signal);
+    expect(await native.metadata(ids.catalogue, ids.first, { kind: 'publication' })).toEqual({ state: 'unavailable' });
+  }
 });
 
 test('native mount does not invent host admission or call Content while the host is unavailable', async () => {
@@ -490,7 +547,8 @@ test('native host resolves published defaults and frozen exact targets; route op
   const { api } = await book.ready;
   const catalogue = mock(api.catalogue);
   const resolve = mock(api.resolve);
-  const native = { ...api, catalogue, resolve };
+  const metadata = mock(api.metadata);
+  const native = { ...api, catalogue, resolve, metadata };
   const visit = await observeHostedBookVisit(
     native,
     {
@@ -521,8 +579,10 @@ test('native host resolves published defaults and frozen exact targets; route op
     { kind: 'publication' },
     { kind: 'publication', revisionId: ids.release },
   ]);
-  expect(resolve).toHaveBeenCalledTimes(1);
-  expect(resolve.mock.calls[0]![1]).toBe(ids.first);
+  expect(resolve).not.toHaveBeenCalled();
+  expect(metadata.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+    [ids.first, { kind: 'publication', revisionId: ids.release }],
+  ]);
   const denied = await observeHostedBookVisit(
     { ...api, catalogue: async () => ({ state: 'denied' }) },
     {

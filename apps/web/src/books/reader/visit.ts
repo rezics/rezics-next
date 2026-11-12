@@ -46,7 +46,7 @@ export async function observeHostedBookVisit(
     return { state: 'unavailable' };
   let selection: BookSelection | null = null;
   if (search.occurrence) {
-    const resolved = await api.resolve(catalogueId, search.occurrence, {
+    const resolved = await api.metadata(catalogueId, search.occurrence, {
       kind: 'publication',
       revisionId: frozen.value.revisionId,
     });

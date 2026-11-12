@@ -73,7 +73,7 @@ navigation remain different states. Returning to contents retains the exact sele
 present, otherwise the heading; a moved selection retains an exact chapter return and current-location control.
 
 `native-api.ts` calls the generated `KernelClient.hostedCatalogues` catalogue, children, occurrence and navigation
-operations. Response types derive from those operations; runtime schemas validate external responses. Canonical
+operations, including occurrence metadata. Response types derive from those operations; runtime schemas validate external responses. Canonical
 bytes are decoded, digest-checked and passed to the existing Document validator. The [Content owner](../../../../../services/kernel/src/content/hosted-chapters.md)
 owns release immutability, unavailable slots, cursor binding, target admission and native limits. Each private BFF
 read prepares the real session and checks that it still matches the admitted anonymous/session subject.
@@ -86,8 +86,14 @@ by visit/connection/request checks before dispatch, completion and focus. A page
 reopen refreshes its native host admission. Explicit source reads check current release/structure and target access;
 there is no background access polling or claim of a native cross-request transaction.
 
-The native mapper observes frozen and current releases, resolves exact selection/current occurrence, reads only
-its bounded ancestor path and at most one neighbour per direction, then rechecks both releases. Current context
+Decision: route selection, Contents selection, parents, ancestors and historical currentness use the generated
+occurrence metadata operation with strict response decoding and no body fallback. Only an opened chapter calls the
+body resolver, once for its frozen exact selection, retaining canonical byte and digest verification. When that
+response also proves the current release, it supplies currentness without duplicate occurrence metadata. Historical
+and current releases may differ; current admission never replaces the frozen target.
+
+The native mapper observes frozen and current releases, checks occurrence identity against each selected revision,
+reads only its bounded ancestor path and at most one neighbour per direction, then rechecks both releases. Current context
 uses the current public release, never a private Studio draft. Children/neighbours use the frozen release. A
 current parent absent from the frozen release may be unavailable; no alternative body/tree is substituted.
 
@@ -173,3 +179,7 @@ Integration then uses the existing Root seeded page-data/capture lane for native
 draft privacy,
 progress/Continue and return. Served revision, native seed and actual phone/desktop light/dark evidence are
 unverified here; source, typing, native execution, visual review and promotion remain separate.
+
+Deferred transport acceptance: `hosted-book-reader.test.tsx` must prove zero body requests for Contents (including
+selected and moved chapters) and route admission, and one exact body request per opened chapter with unchanged
+byte/digest validation. Mounted native, browser, Storybook and broad checks run later in the dev verifier.
