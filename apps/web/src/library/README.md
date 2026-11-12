@@ -55,10 +55,11 @@ mounted reader independently rechecks access. External response decoding checks 
 and rejects mismatched occurrence or target revision/digest associations before showing titles.
 
 The native owner is [hosted-reading](../../../../services/kernel/src/library/contract/hosted-reading.ts).
-`hosted-checkpoint-source.ts` owns wire decoding and the one-read transport seam; its pending binding returns explicit
-unavailable until the installed generated Client includes the native checkpoints operation. No handwritten HTTP
-endpoint or assertion around a stale Client declaration substitutes for that binding. Focused receiving, link and
-retirement regressions run in the dev verifier; native, browser and Storybook acceptance remain deferred.
+Decision: saved Books use the installed generated `client.libraryHostedReading.checkpoints.get(options)` operation
+for one authenticated GET with limit 20, an unchanged opaque cursor and no-store/manual transport. Query and response
+types derive from that operation; `hosted-checkpoint-source.ts` owns strict external decoding and the injectable
+transport seam. Focused generated-fetch, link and retirement regressions run in the dev verifier; native, browser and
+Storybook acceptance remain deferred.
 
 ## My uploaded media
 

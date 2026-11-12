@@ -4,6 +4,10 @@ import type { Locale } from '../paraglide/runtime.js';
 
 export const HOSTED_CHECKPOINT_LIMIT = 20;
 export const HOSTED_CHECKPOINT_PREDECESSORS = 8;
+type HostedCheckpointGet = KernelClient['libraryHostedReading']['checkpoints']['get'];
+type HostedCheckpointQuery = NonNullable<NonNullable<Parameters<HostedCheckpointGet>[0]>['query']>;
+export type HostedCheckpointPage = NonNullable<Awaited<ReturnType<HostedCheckpointGet>>['data']>;
+
 const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
 const digest = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/));
 const cursor = v.pipe(v.string(), v.minLength(1), v.maxLength(4096));
@@ -37,7 +41,7 @@ const metadata = v.variant('availability', [
     kind: v.picklist(['chapter', 'part', 'unknown']),
   }),
 ]);
-/** Mirrors the landed native list contract, without importing Kernel implementation into Web. */
+/** Decode the external response against the installed generated checkpoints operation. */
 export const hostedCheckpointPageSchema = v.strictObject({
   items: v.pipe(
     v.array(
@@ -52,8 +56,7 @@ export const hostedCheckpointPageSchema = v.strictObject({
     v.maxLength(HOSTED_CHECKPOINT_LIMIT),
   ),
   nextCursor: v.nullable(cursor),
-});
-export type HostedCheckpointPage = v.InferOutput<typeof hostedCheckpointPageSchema>;
+}) satisfies v.GenericSchema<HostedCheckpointPage>;
 export const hostedCheckpointViewerSchema = id;
 export const hostedCheckpointCursorSchema = cursor;
 
@@ -73,7 +76,7 @@ export type HostedCheckpointResult =
   | { state: 'signed-out' }
   | { state: 'denied' }
   | { state: 'stale' }
-  | { state: 'unavailable'; reason?: 'client-pending' };
+  | { state: 'unavailable' };
 export type HostedCheckpointRequest = { viewer: string; locale: Locale; cursor?: string };
 export type HostedCheckpointRead = (
   input: HostedCheckpointRequest,
@@ -128,11 +131,14 @@ export function hostedCheckpointHref(
 export type HostedCheckpointTransport = (
   client: KernelClient,
   options: {
-    query: { limit: number; cursor?: string };
+    query: HostedCheckpointQuery;
     headers: { authorization: string };
     fetch: { signal: AbortSignal; cache: 'no-store'; redirect: 'manual' };
   },
 ) => Promise<{ status: number; error: unknown; data: unknown }>;
+
+const nativeHostedCheckpointTransport: HostedCheckpointTransport = (client, options) =>
+  client.libraryHostedReading.checkpoints.get(options);
 
 /** One native list read; no per-Book resolution or fallback chapter reads. */
 export async function readHostedCheckpointPage(
@@ -140,12 +146,9 @@ export async function readHostedCheckpointPage(
   authorization: string,
   input: { cursor?: string },
   signal: AbortSignal,
-  transport?: HostedCheckpointTransport,
+  transport: HostedCheckpointTransport = nativeHostedCheckpointTransport,
 ): Promise<HostedCheckpointResult> {
   signal.throwIfAborted();
-  // The installed generated declaration predates the native checkpoints operation.
-  // Keep the binding explicit until Client publishes the landed native list contract.
-  if (!transport) return { state: 'unavailable', reason: 'client-pending' };
   const response = await transport(client, {
     query: { limit: HOSTED_CHECKPOINT_LIMIT, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) },
     headers: { authorization },

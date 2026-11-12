@@ -120,10 +120,34 @@ test('one bounded native read forwards the opaque cursor and private transport p
       .state,
   ).toBe('loaded');
   expect(reads).toBe(1);
-  expect(await readHostedCheckpointPage(client, 'Bearer owner', {}, signal())).toEqual({
-    state: 'unavailable',
-    reason: 'client-pending',
+});
+
+test('the default generated Client reads one private checkpoint page with the exact opaque cursor', async () => {
+  const calls: Request[] = [];
+  const currentSignal = signal();
+  const page: HostedCheckpointPage = { items: [row(1)], nextCursor: 'opaque+/next==' };
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      calls.push(new Request(input, init));
+      expect(init?.signal).toBe(currentSignal);
+      return Response.json(page);
+    }) as typeof fetch,
   });
+  const result = await readHostedCheckpointPage(client, 'Bearer owner', { cursor: 'opaque+/cursor==' }, currentSignal);
+  expect(result).toEqual(presentHostedCheckpoints(page));
+  expect(calls).toHaveLength(1);
+  const request = calls[0]!;
+  const url = new URL(request.url);
+  expect(request.method).toBe('GET');
+  expect(url.origin).toBe('https://kernel.test');
+  expect(url.pathname).toBe('/v1/libraryHostedReading/checkpoints');
+  expect([...url.searchParams]).toEqual([
+    ['limit', '20'],
+    ['cursor', 'opaque+/cursor=='],
+  ]);
+  expect(request.headers.get('authorization')).toBe('Bearer owner');
+  expect(request.cache).toBe('no-store');
+  expect(request.redirect).toBe('manual');
 });
 
 test('successful empty, sign-out, denied, stale and unavailable responses remain distinct', async () => {
