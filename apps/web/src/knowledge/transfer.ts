@@ -179,13 +179,14 @@ export async function copyKnowledgeTransfer(
   intent: KnowledgeCopyIntent,
   authorization: string,
 ): Promise<KnowledgeCopyResult> {
+  const headers = { authorization, 'idempotency-key': JSON.stringify(intent.idempotencyKey) };
   const result = await client.knowledge.notebooks({ id: intent.notebookId }).documents.$copy.post(
     {
       source: intent.source,
       expectedStructureRevisionId: intent.expectedStructureRevisionId,
       parentPlacementId: intent.parentPlacementId,
     },
-    { headers: { authorization, 'idempotency-key': JSON.stringify(intent.idempotencyKey) }, fetch: fetchOptions },
+    { headers, fetch: fetchOptions },
   );
   if (!result.response || result.status >= 500) return { state: 'uncertain' };
   if (result.status === 412 || result.status === 409) return { state: 'conflict' };

@@ -69,7 +69,7 @@ export const browserKnowledgeTransferSaver: KnowledgeTransferSaver = (bytes, fil
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
-      document.body.append(link);
+      document.body.appendChild(link);
       try {
         link.click();
       } finally {
