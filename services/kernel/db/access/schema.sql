@@ -6054,13 +6054,6 @@ CREATE INDEX resource_role_provenance_delivery ON access.resource_role_provenanc
 
 
 --
--- Name: resource_role_provenance_source_lookup; Type: INDEX; Schema: access; Owner: -
---
-
-CREATE INDEX resource_role_provenance_source_lookup ON access.resource_role_provenance USING btree (route, resource_id, account_id, grant_role, source_transaction) WHERE (side = 'new'::text);
-
-
---
 -- Name: workflow_approval_expiry; Type: INDEX; Schema: access; Owner: -
 --
 
