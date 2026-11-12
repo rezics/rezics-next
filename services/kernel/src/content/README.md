@@ -4643,6 +4643,12 @@ Decision: receive the shared receipt keys and thirty-second test request budget 
 erasure, native-operation HTTP, admission HTTP and native growth suites. Batch post/parent attribution remains
 the exact-point assembly contract; fixture setup failures remain distinct from its assertions.
 
+Decision: direct Content test Kernels use the shared thirty-second request budget. Thread and disclosure drivers wait
+for started fixture operations before stopping their real Auth hosts and pools, and teardown releases every owned
+resource even when one cleanup step fails. Thread traces identify the native outbox fence from its executed CTE shape,
+retain the exact SQL observed for fault injection, and use the declared fence parameter order without inventing a
+command stage.
+
 Decision: the ordinary exact post point read receives the public Accounts attribution contract. Native author IDs
 remain required by authorization; `ContributedPostResponseSchema` publishes the separately typed serialization.
 Explicit deletion removes `authorId` and supplies the id-free deletion label. Missing/pending attribution remains null;

@@ -7,6 +7,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let fixture: Awaited<ReturnType<typeof standingFixture>>;
@@ -14,8 +15,10 @@ let app: ReturnType<typeof createKernel>;
 const credentials = new Map<string, string>();
 const boardId = newId(0x4321);
 const day = 86400000;
+const pendingCalls = new Set<Promise<unknown>>();
+let fixtureClosing: Promise<void> | undefined;
 
-beforeAll(async () => {
+async function initializeFixture(): Promise<void> {
   db = await openGrowthDatabase();
   fixture = await standingFixture(['account:read']);
   await fixture.reset();
@@ -34,6 +37,7 @@ beforeAll(async () => {
     fixture.access.authenticate = authenticate;
   }
   app = createKernel({
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(17),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) },
@@ -51,26 +55,59 @@ beforeAll(async () => {
   );
   await fixture.grant(fixture.actor, 'thread:create', { route: routeOf(boardId)!, id: boardId });
   await fixture.grant(fixture.actor, 'account:read', { route: routeOf(fixture.actor)!, id: fixture.actor });
+}
+
+async function closeFixture(): Promise<void> {
+  fixtureClosing ??= (async () => {
+    const errors: unknown[] = [];
+    const pending = await Promise.allSettled([...pendingCalls]);
+    errors.push(...pending.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
+    const cleanup = await Promise.allSettled([
+      Promise.resolve().then(() => fixture?.close()),
+      Promise.resolve().then(() => db?.close()),
+    ]);
+    errors.push(...cleanup.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
+    if (errors.length) throw new AggregateError(errors, 'Tombstone fixture cleanup failed');
+  })();
+  return fixtureClosing;
+}
+
+beforeAll(async () => {
+  try {
+    await initializeFixture();
+  } catch (error) {
+    try {
+      await closeFixture();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Tombstone fixture setup and cleanup failed');
+    }
+    throw error;
+  }
 });
 
-afterAll(async () => {
-  await fixture?.close();
-  await db?.close();
-});
+afterAll(() => closeFixture());
 
 async function call(method: string, path: string, account: string | null, body?: unknown) {
-  const response = await app.handle(
-    new Request(`http://kernel.test/v1${path}`, {
-      method,
-      headers: {
-        ...(account === null ? {} : { authorization: `Bearer ${credentials.get(account)}` }),
-        ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(randomUUID()) }),
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }),
-  );
-  return { response, body: response.status === 204 ? null : await response.json() };
+  const operation = (async () => {
+    const response = await app.handle(
+      new Request(`http://kernel.test/v1${path}`, {
+        method,
+        headers: {
+          ...(account === null ? {} : { authorization: `Bearer ${credentials.get(account)}` }),
+          ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(randomUUID()) }),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+    return { response, body: response.status === 204 ? null : await response.json() };
+  })();
+  pendingCalls.add(operation);
+  try {
+    return await operation;
+  } finally {
+    pendingCalls.delete(operation);
+  }
 }
 
 async function create() {

@@ -43,6 +43,7 @@ import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSyst
 import { observeSql, permissionResourceId, type SqlObserver } from './support/sql-observer.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 
 const AUDIENCE = 'https://content.test';
 const MEASURED_KEYS = 24;
@@ -56,7 +57,9 @@ const suiteWriteRateOverrides = JSON.stringify({
 /** Case-owned SQL observers stop before measured growth starts a host on its observed pool. */
 async function releaseSuiteDrivers(): Promise<void> {
   const drivers = [...suiteDrivers];
-  await Promise.all(drivers.map((driver) => driver.close()));
+  const settled = await Promise.allSettled(drivers.map((driver) => driver.close()));
+  const errors = settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (errors.length) throw new AggregateError(errors, 'Content thread fixture cleanup failed');
 }
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -186,13 +189,55 @@ function instant(value: unknown): string {
 }
 
 function isOutboxFence(statement: string): boolean {
+  const normalized = statement.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (normalized === fenceStatement.sql.replace(/\s+/g, ' ').trim().toLowerCase()) return true;
+
   return (
-    statement === fenceStatement.sql ||
-    (statement.includes('UPDATE core.partition') &&
-      statement.includes('INSERT INTO core.outbox') &&
-      statement.includes('INSERT INTO core.receipt') &&
-      statement.includes('RETURNING epoch, position'))
+    normalized.includes('update core.partition') &&
+    normalized.includes('insert into core.outbox') &&
+    normalized.includes('insert into core.receipt') &&
+    normalized.includes('returning core.partition.partition_no, core.partition.epoch, core.partition.position') &&
+    /select\s+epoch\s*,\s*position\s+from\s+fence\b/.test(normalized)
   );
+}
+
+/** Wait for each started driver operation before fixture teardown closes its pools. */
+function trackDriverOperations<T extends object>(driver: T): () => Promise<void> {
+  const pending = new Set<Promise<unknown>>();
+  for (const key of Object.keys(driver)) {
+    if (key === 'close') continue;
+    const operation = Reflect.get(driver, key);
+    if (typeof operation !== 'function') continue;
+    Object.defineProperty(driver, key, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: (...args: unknown[]) => {
+        const result = Reflect.apply(operation, driver, args) as unknown;
+        if (
+          result === null ||
+          (typeof result !== 'object' && typeof result !== 'function') ||
+          typeof (result as { then?: unknown }).then !== 'function'
+        )
+          return result;
+        const pendingOperation = Promise.resolve(result);
+        pending.add(pendingOperation);
+        void pendingOperation.then(
+          () => pending.delete(pendingOperation),
+          () => pending.delete(pendingOperation),
+        );
+        return pendingOperation;
+      },
+    });
+  }
+  return async () => {
+    const errors: unknown[] = [];
+    while (pending.size) {
+      const settled = await Promise.allSettled([...pending]);
+      errors.push(...settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
+    }
+    if (errors.length) throw new AggregateError(errors, 'Content thread fixture operations failed');
+  };
 }
 
 function isPermissionCheck(statement: string): boolean {
@@ -328,6 +373,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
   let authCreated = false;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let closing: Promise<void> | undefined;
+  const pendingRequests = new Set<Promise<Response>>();
   const close = () =>
     (closing ??= (async () => {
       const errors: unknown[] = [];
@@ -338,6 +384,8 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
           errors.push(error);
         }
       };
+      const requests = await Promise.allSettled([...pendingRequests]);
+      errors.push(...requests.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
       if (host) await release(() => host!.stop());
       await release(() => authPool.end());
       if (authCreated) await release(() => dropTestDatabase(maintainer, authName));
@@ -357,6 +405,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
     const clock = () => new Date();
     let nativeAuth: AuthService;
     const kernel = createKernel({
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       receiptKeys: testReceiptKeys(),
       pool: database.pool,
       routeKey,
@@ -555,7 +604,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
         if (db.pool !== database.pool) throw new Error('Measured thread create must use the observed growth pool');
         const key = keys[repetition];
         if (!key) throw new Error('Measured thread key was not anchored');
-        const response = await kernel.handle(
+        const request = kernel.handle(
           new Request(`${AUDIENCE}/v1/threads`, {
             method: 'POST',
             headers: {
@@ -573,6 +622,13 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
             }),
           }),
         );
+        pendingRequests.add(request);
+        let response: Response;
+        try {
+          response = await request;
+        } finally {
+          pendingRequests.delete(request);
+        }
         if (response.status !== 201) {
           throw new Error(`Measured thread create failed (${response.status}): ${await response.text()}`);
         }
@@ -610,25 +666,50 @@ export async function initializeContentThreadSystem(): Promise<void> {
 
 /** Close shared suite resources after the per-case SQL observers have stopped. */
 export async function closeContentThreadSystem(): Promise<void> {
-  await releaseSuiteDrivers();
-  const system = await suiteSystemPromise?.catch(() => undefined);
+  const errors: unknown[] = [];
+  try {
+    await releaseSuiteDrivers();
+  } catch (error) {
+    errors.push(error);
+  }
+  const systemPromise = suiteSystemPromise;
   suiteSystemPromise = undefined;
-  await system?.close();
+  if (systemPromise) {
+    const [settled] = await Promise.allSettled([systemPromise]);
+    if (settled?.status === 'rejected') errors.push(settled.reason);
+    else if (settled?.status === 'fulfilled') {
+      try {
+        await settled.value.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'Content thread system cleanup failed');
 }
 
 export async function createContentThreadDriver(): Promise<ContentThreadDriver> {
   const system = await threadOutcomeSystem();
-  let driver: ContentThreadDriver;
-  try {
-    driver = bindDriver(system);
-  } catch (error) {
-    throw error;
-  }
+  const driver = bindDriver(system);
+  const settleOperations = trackDriverOperations(driver);
   let closing: Promise<void> | undefined;
   const stop = driver.close.bind(driver);
   driver.close = () => {
     suiteDrivers.delete(driver);
-    return (closing ??= stop());
+    return (closing ??= (async () => {
+      const errors: unknown[] = [];
+      try {
+        await settleOperations();
+      } catch (error) {
+        errors.push(error);
+      }
+      try {
+        await stop();
+      } catch (error) {
+        errors.push(error);
+      }
+      if (errors.length) throw new AggregateError(errors, 'Content thread driver cleanup failed');
+    })());
   };
   suiteDrivers.add(driver);
   return driver;
@@ -725,30 +806,41 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
 
   const driver: ContentThreadDriver = {
     async close() {
-      if (suspendedActorId) {
-        const governance = await pool.query<{ account_id: string }>(
-          `SELECT account_id::text AS account_id FROM access.governance_bootstrap WHERE route=0 AND resource_id=$1`,
-          [PLATFORM_RESOURCE.id],
-        );
-        const accountId = governance.rows[0]?.account_id;
-        if (!accountId) throw new Error('Governance bootstrap account is missing');
-        const credential = await system.auth.issue({
-          accountId,
-          clientId: system.auth.ordinaryClient.id,
-          scopes,
-        });
-        const response = await send(
-          'POST',
-          `/v1/accounts/${routedId(suspendedActorId)}:reinstate`,
-          personaOf(credential),
-          { key: JSON.stringify(crypto.randomUUID()), body: { reason: 'Restore shared thread fixture' } },
-        );
-        if (response.status !== 200) {
-          throw new Error(`Account reinstatement failed (${response.status}): ${await response.text()}`);
+      const errors: unknown[] = [];
+      const release = async (operation: () => Promise<unknown> | void) => {
+        try {
+          await operation();
+        } catch (error) {
+          errors.push(error);
         }
-        suspendedActorId = undefined;
+      };
+      if (suspendedActorId) {
+        await release(async () => {
+          const governance = await pool.query<{ account_id: string }>(
+            `SELECT account_id::text AS account_id FROM access.governance_bootstrap WHERE route=0 AND resource_id=$1`,
+            [PLATFORM_RESOURCE.id],
+          );
+          const accountId = governance.rows[0]?.account_id;
+          if (!accountId) throw new Error('Governance bootstrap account is missing');
+          const credential = await system.auth.issue({
+            accountId,
+            clientId: system.auth.ordinaryClient.id,
+            scopes,
+          });
+          const response = await send(
+            'POST',
+            `/v1/accounts/${routedId(suspendedActorId!)}:reinstate`,
+            personaOf(credential),
+            { key: JSON.stringify(crypto.randomUUID()), body: { reason: 'Restore shared thread fixture' } },
+          );
+          if (response.status !== 200) {
+            throw new Error(`Account reinstatement failed (${response.status}): ${await response.text()}`);
+          }
+          suspendedActorId = undefined;
+        });
       }
-      await observer.close();
+      await release(() => observer.close());
+      if (errors.length) throw new AggregateError(errors, 'Content thread driver cleanup failed');
     },
     async provision() {
       await refreshCaseCredentials();

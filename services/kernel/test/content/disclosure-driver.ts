@@ -64,6 +64,7 @@ import {
   textFromBytea,
 } from './support/disclosure-fixtures.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 
 const READ_ACTION = { board: 'board:read', thread: 'thread:read', post: 'post:read' } as const;
 const OWNER_ROLE = {
@@ -151,7 +152,62 @@ type HttpCall = {
 const suiteDrivers = new Set<ContentDisclosureDriver>();
 
 async function releaseSuiteDrivers(): Promise<void> {
-  await Promise.all([...suiteDrivers].map((driver) => driver.close()));
+  const settled = await Promise.allSettled([...suiteDrivers].map((driver) => driver.close()));
+  const errors = settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (errors.length) throw new AggregateError(errors, 'Content disclosure fixture cleanup failed');
+}
+
+/** Let every started scenario finish before its driver closes the native system. */
+function trackDriverOperations<T extends { close(): Promise<void> }>(driver: T): T {
+  const pending = new Set<Promise<unknown>>();
+  for (const key of Object.keys(driver)) {
+    if (key === 'close') continue;
+    const operation = Reflect.get(driver, key);
+    if (typeof operation !== 'function') continue;
+    Object.defineProperty(driver, key, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: (...args: unknown[]) => {
+        const result = Reflect.apply(operation, driver, args) as unknown;
+        if (
+          result === null ||
+          (typeof result !== 'object' && typeof result !== 'function') ||
+          typeof (result as { then?: unknown }).then !== 'function'
+        )
+          return result;
+        const pendingOperation = Promise.resolve(result);
+        pending.add(pendingOperation);
+        void pendingOperation.then(
+          () => pending.delete(pendingOperation),
+          () => pending.delete(pendingOperation),
+        );
+        return pendingOperation;
+      },
+    });
+  }
+  const stop = driver.close;
+  let closing: Promise<void> | undefined;
+  Object.defineProperty(driver, 'close', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: () =>
+      (closing ??= (async () => {
+        const errors: unknown[] = [];
+        while (pending.size) {
+          const settled = await Promise.allSettled([...pending]);
+          errors.push(...settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
+        }
+        try {
+          await stop.call(driver);
+        } catch (error) {
+          errors.push(error);
+        }
+        if (errors.length) throw new AggregateError(errors, 'Content disclosure operations and cleanup failed');
+      })()),
+  });
+  return driver;
 }
 
 function asRecord(value: unknown, label: string): Record<string, unknown> {
@@ -191,7 +247,11 @@ export async function createContentDisclosureDriver(): Promise<ContentDisclosure
   try {
     driver = bindDisclosure(system);
   } catch (error) {
-    await system.close();
+    try {
+      await system.close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Content disclosure driver setup and cleanup failed');
+    }
     throw error;
   }
   let closing: Promise<void> | undefined;
@@ -211,6 +271,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
   let trustedInstant: number | undefined;
   const clock = () => new Date(trustedInstant ?? Date.now());
   const kernel = createKernel({
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
     receiptKeys: testReceiptKeys(),
     pool,
     routeKey: system.routeKey,
@@ -1372,7 +1433,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
       };
       if (workerStop) await release(workerStop);
       else if (workerAbort) await release(workerAbort);
-      await workerStarting?.catch(() => {});
+      if (workerStarting) await release(() => workerStarting!);
       await release(() => {
         storageServer?.stop(true);
       });
@@ -1386,7 +1447,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     return closing;
   }
 
-  return {
+  const driver: ContentDisclosureDriver = {
     close,
     board,
     publish,
@@ -1445,6 +1506,7 @@ function bindDisclosure(system: NativeContentSystem): ContentDisclosureDriver {
     inspectReports,
     observe,
   };
+  return trackDriverOperations(driver);
 }
 
 export async function openMeasuredDisclosure(database: GrowthDatabase): Promise<{
@@ -1462,6 +1524,7 @@ export async function openMeasuredDisclosure(database: GrowthDatabase): Promise<
   let authCreated = false;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let closing: Promise<void> | undefined;
+  const pendingRequests = new Set<Promise<Response>>();
   const close = () =>
     (closing ??= (async () => {
       const errors: unknown[] = [];
@@ -1472,6 +1535,8 @@ export async function openMeasuredDisclosure(database: GrowthDatabase): Promise<
           errors.push(error);
         }
       };
+      const requests = await Promise.allSettled([...pendingRequests]);
+      errors.push(...requests.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
       if (host) await release(() => host!.stop());
       await release(() => authPool.end());
       if (authCreated) await release(() => maintainer.query(`DROP DATABASE ${authName}`));
@@ -1490,6 +1555,7 @@ export async function openMeasuredDisclosure(database: GrowthDatabase): Promise<
     const clock = () => new Date();
     let nativeAuth: AuthService;
     const kernel = createKernel({
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       receiptKeys: testReceiptKeys(),
       pool: database.pool,
       routeKey,
@@ -1647,9 +1713,16 @@ export async function openMeasuredDisclosure(database: GrowthDatabase): Promise<
       },
       async operation(db, _scale, _repetition) {
         if (db.pool !== database.pool) throw new Error('Measured disclosure list must use the observed growth pool');
-        const response = await kernel.handle(
+        const request = kernel.handle(
           new Request(`${AUDIENCE}/v1/boards/${boardId}/threads?limit=10`, { method: 'GET' }),
         );
+        pendingRequests.add(request);
+        let response: Response;
+        try {
+          response = await request;
+        } finally {
+          pendingRequests.delete(request);
+        }
         const payload = await response.text();
         if (response.status !== 200)
           throw new Error(`Measured disclosure list failed (${response.status}): ${payload}`);
