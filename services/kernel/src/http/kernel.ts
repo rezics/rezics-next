@@ -82,6 +82,9 @@ import { LIBRARY_OPERATION_DECLARATIONS } from '../library/operation-declaration
 import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
 import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
+import { hostedReadingRoutes } from '../library/hosted-reading-routes.ts';
+import { bindHostedReadingPort } from '../library/hosted-reading-bind.ts';
+import { createNativeHostedReadingPort } from '../content/adapters/hosted-reading.ts';
 import { createSessionCommands } from '../library/sessions.ts';
 import {
   createRatingModule,
@@ -756,6 +759,28 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       return contentAccess;
     },
   };
+  bindHostedReadingPort(
+    createNativeHostedReadingPort({
+      pool: dependencies.pool,
+      tokens,
+      clock,
+      get access() {
+        return contentDependencies.access;
+      },
+      ...(dependencies.content?.disclosureBarrier === undefined
+        ? {}
+        : { disclosureBarrier: dependencies.content.disclosureBarrier }),
+      ...(dependencies.content?.pageDisclosureBarrier === undefined
+        ? {}
+        : { pageDisclosureBarrier: dependencies.content.pageDisclosureBarrier }),
+    }),
+  );
+  let hostedReading: ReturnType<typeof hostedReadingRoutes>;
+  hostedReading = hostedReadingRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(hostedReading), realmRoleReader }),
+  });
   const mounted = declared.mount(
     searched as unknown as Parameters<typeof mountContentHttp>[0],
     app as unknown as Parameters<typeof mountContentHttp>[1],
@@ -1119,6 +1144,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof progressRoutes> &
   ReturnType<typeof readingInsightsRoutes> &
   ReturnType<typeof yearlyCompletionGoalRoutes> &
+  ReturnType<typeof hostedReadingRoutes> &
   ReturnType<typeof diaryRoutes> &
   ReturnType<typeof contextRoutes> &
   ReturnType<typeof providerReviewQueueRoutes>;

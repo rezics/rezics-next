@@ -89,6 +89,21 @@ Decision: an activated public Collection output is retained through its original
 
 The ordinary page formula is `c = min(600, 6L + 3)`: a fixed 64-row/16-point/16-witness/3-seek/12-statement/80-KiB term plus `c` repetitions of 16 rows, 8 points, 8 witnesses and 5,120 bytes. The fixed term includes initial/final Source preparation and currentness, identity and authority checks, and transaction controls; the per-candidate term includes canonical membership and negative/order work. The existing plan caps pages at three prefix rounds, 100 groups per prefix, 100 aliases per canonical group and six Source drivers. FULL adds at most 100 repetitions of its 32-row/2-identity-row/8-point/12-statement/64-KiB facts term. `engineRequests` is zero for this SQL-only Library plan; the adapter rejects a nonzero value rather than folding it into the older eight-axis SQL observer. `owner-filter-growth.test.ts` is the named growth oracle; this declaration does not claim native acceptance.
 
+Decision: hosted Book resume is a private `hosted_reading` checkpoint, not Progress. Save/get/clear are
+owner-private CAS facts at `PUT|GET /v1/libraryHostedReading` and `POST /v1/libraryHostedReading:clear`.
+They store catalogueId, publication revision, occurrenceId, exact target revision/digest and optional
+bounded document position (block id plus offset). Content validates the selection before save and
+rechecks current catalogue/target Access on get. Get returns the saved address and an explicit
+unavailable resume when current authority withholds bytes; it never silently changes the selection.
+TOC withdrawal removes current `for_subject` discovery; historical exact reads remain on Content
+resolve. Ordinary Entry/Progress keep Book page units. Private facts grant no read access and join
+account erasure. The v4 Library export decoder stays frozen for Web, so checkpoints ride the next
+export format; `readHostedReadingExportPage` is the installed hook. Fewest tests: current discovery
+and empty TOC, CAS save/get/clear, withheld resume keeping the address, position bounds.
+
+Acceptance choice: focused source fixtures pin those states; native/browser acceptance stays in the
+dev verifier.
+
 Library contract owns Continue session and page vocabulary. `adapters/continue-page.ts` owns the closed Continue
 HTTP schema and the native Continue adapter Content binds at composition. The page schema stays a TypeBox object
 so Feed can compose `.properties`; the Continue list operation pins that object to the disclosed page. Progress session schemas remain on `transport-contract.ts`. Wire/security metadata comes from the declarations composed by createKernel; native

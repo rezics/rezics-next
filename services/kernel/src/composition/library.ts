@@ -17,6 +17,10 @@ import { createResourcePublicEligibility } from '../access/public-eligibility.ts
 import { observeLibrarySpaceSummary } from '../community/adapters/index.ts';
 import { nativeFollowCountRuntime } from './library-follow-counts.ts';
 import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/adapters/index.ts';
+import { createNativeHostedReadingPort } from '../content/adapters/hosted-reading.ts';
+import { bindHostedReadingPort } from '../library/hosted-reading-bind.ts';
+import type { HostedDependencies } from '../content/index.ts';
+import type { HostedReadingPort } from '../library/contract/hosted-reading.ts';
 /** Library process composition. Binds native SQL and foreign Access/Search/Semantic/Content adapters. */
 
 import { commandAccessContext } from '../access/command-admission.ts';
@@ -474,6 +478,11 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
     preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,
     scopeWork: options.scopeWork ?? previous?.scopeWork ?? nativeLibraryScopeWork,
   });
+}
+
+/** Content owns the mapper; Library consumes this port for save validation and resume. */
+export function composeHostedReading(deps: HostedDependencies): HostedReadingPort {
+  return bindHostedReadingPort(createNativeHostedReadingPort(deps));
 }
 
 export { peekLibraryDomain, bindLibraryDomain, requireLibraryDomain, unbindLibraryDomain };

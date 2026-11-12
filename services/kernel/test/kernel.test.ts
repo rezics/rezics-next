@@ -169,6 +169,7 @@ const typed = [
   'GET /v1/hostedCatalogues/:id/children',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation',
+  'GET /v1/subjects/:subjectId/hostedCatalogues',
   'GET /v1/knowledge/documents/:id',
   'GET /v1/knowledge/documents/:id/export',
   'GET /v1/subjects/:id/knowledgeDocuments',
@@ -531,6 +532,7 @@ const typed = [
   'GET /v1/libraryReadingInsightsAssessments',
   'GET /v1/libraryReadingInsightsProfiles',
   'GET /v1/libraryYearlyCompletionGoal',
+  'GET /v1/libraryHostedReading',
   'GET /v1/me/classification-assessments',
   'GET /v1/me/moderation-directory',
   'GET /v1/media/avatar-upload-advice',
@@ -579,6 +581,8 @@ const typed = [
   'POST /v1/libraryShelfTitlePreparation',
   'PUT /v1/libraryEntries/:subjectId/annotations',
   'PUT /v1/libraryYearlyCompletionGoal',
+  'PUT /v1/libraryHostedReading',
+  'POST /v1/libraryHostedReading/$clear',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : `Unlisted route: ${Missing}` = true;

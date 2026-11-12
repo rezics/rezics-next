@@ -79,6 +79,7 @@ export const OWNED_PHASES = [
   'yearly_completion_goals',
   'copy_loan',
   'copy_loan_generation',
+  'hosted_reading',
 ] as const;
 function childQueries(): {
   units: typeof units;

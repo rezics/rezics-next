@@ -20,6 +20,12 @@ export {
   readingPageCapabilities,
   type ReadingPageCapabilities,
 } from './reading-page-bind.ts';
+export {
+  createNativeHostedReadingPort,
+  hostedReadingPositionIsBounded,
+  hostedReadingSelectionShape,
+  hostedReadingUnavailable,
+} from './hosted-reading.ts';
 export { createNativeReadingPageCapabilities, type ContentReadingAccess } from './reading-page.ts';
 export {
   createNativeContentRealmApplication,

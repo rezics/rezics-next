@@ -414,9 +414,11 @@
         "services/kernel/src/content/review-discovery.ts",
         "services/kernel/src/content/access-capabilities.ts",
         "services/kernel/src/content/adapters/index.ts",
+        "services/kernel/src/content/adapters/hosted-reading.ts",
         "services/kernel/src/content/adapters/subject-document.ts",
         "services/kernel/src/content/adapters/bind.ts",
         "services/kernel/src/content/adapters/ambient.ts",
+        "services/kernel/src/content/hosted-catalogue-subject.ts",
         "services/kernel/src/content/cover-reference.ts",
         "services/kernel/src/content/cover-reference-read.ts",
         "services/kernel/src/content/imported-contract.ts",
@@ -613,7 +615,8 @@
         "services/kernel/src/library/contract/index.ts",
         "services/kernel/src/library/contract/collection-policy.ts",
         "services/kernel/src/library/contract/members-preparation.ts",
-        "services/kernel/src/library/contract/semantic-observation.ts"
+        "services/kernel/src/library/contract/semantic-observation.ts",
+        "services/kernel/src/library/contract/hosted-reading.ts"
       ],
       "allowedDependencies": ["progress-contract"],
       "capabilities": []
@@ -684,7 +687,10 @@
         "services/kernel/src/library/collection-kind-work-admission.ts",
         "services/kernel/src/library/collection-publication-work-admission.ts",
         "services/kernel/src/library/access-port.ts",
-        "services/kernel/src/library/semantic-observation.ts"
+        "services/kernel/src/library/semantic-observation.ts",
+        "services/kernel/src/library/hosted-reading.ts",
+        "services/kernel/src/library/hosted-reading-routes.ts",
+        "services/kernel/src/library/hosted-reading-bind.ts"
       ],
       "allowedDependencies": [
         "access-policy",

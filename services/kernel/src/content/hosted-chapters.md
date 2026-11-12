@@ -31,7 +31,8 @@ independently saved target Post. No manuscript bodies are retained together duri
 
 Publication selects an ancestor-closed subset of the expected current structure. It stores a separate immutable
 manifest, with dense positions and preorder preserving the selected relative order, and advances the publication
-pointer in the same transaction. An empty selection withdraws the current TOC. It does not publish any Post body:
+pointer in the same transaction. An empty selection withdraws the current TOC and removes the catalogue from
+`hosted_catalogue.for_subject`. It does not publish any Post body:
 ordinary Post publication and target disclosure remain necessary. Published bytes are selected by exact revision
 and digest, never replaced with the current head. Later draft edits do not change a release. The three registered
 events contain only catalogue/revision identities; no private target selections enter the outbox.
@@ -44,12 +45,20 @@ events contain only catalogue/revision identities; no private target selections 
 | `hosted_catalogue.children` | `GET /v1/hostedCatalogues/{id}/children`                              | selection, optional `parentId`, `limit`, `cursor` |
 | `hosted_catalogue.resolve`  | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
 | `hosted_catalogue.navigate` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor`         |
+| `hosted_catalogue.for_subject` | `GET /v1/subjects/{subjectId}/hostedCatalogues`                    | optional `limit`, `cursor`                        |
 
 Selection accepts optional `revisionId` and `kind` (`structure` or `publication`). Without either, it chooses the
 current release. `kind=structure` chooses the current draft head, including a catalogue that has never released.
 An exact revision remains addressable after moves, removals, later releases or withdrawal; an accompanying kind
 must match it. Private structures require current `post:revise` as well as ordinary catalogue Post disclosure.
 Metadata contains `catalogueId`, selected `revisionId`, `kind` and nullable `sourceRevisionId`.
+
+`hosted_catalogue.for_subject` lists current public publications associated with an
+existing Subject. Candidates come from indexed `subject_thread` rows and same-route
+published catalogue-post subject references. Each page inspects at most 21 raw
+catalogues, discloses at most 20, and never refills concealed slots. Empty
+publications are absent. Historical exact occurrence reads stay on
+`hosted_catalogue.resolve` and still obey current catalogue and target Access.
 
 Every read retains native catalogue disclosure and repeats it before returning. Chapter disclosure independently
 retains the exact native target Post, Board, Realm and ancestor checks. Erased, concealed, missing or changed
@@ -80,8 +89,10 @@ Changed query bindings, invalid tokens and replaced partition epochs return 400.
 Mutations validate at most 512 placements and read each distinct exact selected target through the existing native
 reader. They write one snapshot and bounded placement/identity inserts under the catalogue home transaction.
 Publication reads the bounded source structure and processes only its selected attachments. Reads perform exact
-catalogue and revision probes, at most one parent/origin probe and one indexed page query of at most 21 rows. Each
-selected target has an initial and final native disclosure; catalogue disclosure also repeats at completion.
+catalogue and revision probes, at most one parent/origin probe and one indexed page query of at most 21 rows.
+Subject discovery seeks at most 21 indexed `subject_thread` and same-route catalogue-post candidates, then
+discloses at most 20 current publications. Each selected target has an initial and final native disclosure;
+catalogue disclosure also repeats at completion.
 Pages retain metadata and authority handles, not manuscript bodies. Resolution serializes one canonical body.
 All nested native Access, Accounts, Board, Realm, partition, transaction, serialization and body work remains charged.
 

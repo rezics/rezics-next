@@ -40,6 +40,7 @@ import purgeAniList from './list-import-anilist-erase.sql';
 import purgeDiaryNavigation from './erasure-owned-diary-navigation.sql';
 import purgeCopyLoan from './erasure-owned-copy-loan.sql';
 import purgeCopyLoanGeneration from './erasure-owned-copy-loan-generation.sql';
+import purgeHostedReading from './erasure-owned-hosted-reading.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
 export function ownedQueries(): {
@@ -84,6 +85,7 @@ export function ownedQueries(): {
   readonly diary_navigation: typeof purgeDiaryNavigation;
   readonly copy_loan: typeof purgeCopyLoan;
   readonly copy_loan_generation: typeof purgeCopyLoanGeneration;
+  readonly hosted_reading: typeof purgeHostedReading;
 } {
   return memoizedValue(
     ownedQueries,
@@ -131,6 +133,7 @@ export function ownedQueries(): {
         diary_navigation: purgeDiaryNavigation,
         copy_loan: purgeCopyLoan,
         copy_loan_generation: purgeCopyLoanGeneration,
+        hosted_reading: purgeHostedReading,
       }) as const,
   );
 }

@@ -29,6 +29,10 @@ export const LIBRARY_EVENTS = {
     { year: Type.Integer({ minimum: 1, maximum: 9999 }), revision: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }) },
     { additionalProperties: false },
   ),
+  'com.rezics.library.hosted-reading.changed.v1': Type.Object(
+    { subjectId: id, revision: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.account-graph.purged.v1': Type.Object(
     {
       accountId: id,

@@ -35,6 +35,9 @@ import { withRealmDisclosureWork } from '../search/adapters/index.ts';
 import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { readVisibleRatingQuestion, STANDARD_QUESTION_ID } from '../rating/index.ts';
 import type { ContentAmbient, ContentApplication } from '../content/contract/index.ts';
+import { createNativeHostedReadingPort } from '../content/adapters/hosted-reading.ts';
+import { bindHostedReadingPort } from '../library/hosted-reading-bind.ts';
+import type { HostedDependencies } from '../content/index.ts';
 
 /** This process root chooses each foreign supplier. No supplier performs I/O at installation. */
 export function composeContentFeed(): FeedProducerCapabilities {
@@ -102,6 +105,11 @@ export function composeContentFeed(): FeedProducerCapabilities {
 export function composeContentReading(): void {
   bindContentAccess(createNativeContentAccess());
   bindReadingPageCapabilities(createNativeReadingPageCapabilities(createNativeAccessReadingPorts()));
+}
+
+/** Library hosted-reading save/get consume this Content mapper. Kernel supplies live hosted deps. */
+export function composeHostedReadingPort(deps: HostedDependencies) {
+  return bindHostedReadingPort(createNativeHostedReadingPort(deps));
 }
 
 /** Ordinary server and worker composition bind the actual independent owner producers. */

@@ -207,6 +207,28 @@ export * from './presentation.ts';
 export type { BuiltinMemberCapability, BuiltinMemberOptions } from './builtin-presentation.ts';
 
 export type {
+  HostedReadingAddress,
+  HostedReadingClearInput,
+  HostedReadingClearResult,
+  HostedReadingDocument,
+  HostedReadingDocumentPosition,
+  HostedReadingNoneView,
+  HostedReadingPort,
+  HostedReadingResume,
+  HostedReadingSaveInput,
+  HostedReadingSaveResult,
+  HostedReadingSavedView,
+  HostedReadingSelection,
+  HostedReadingValidation,
+  HostedReadingView,
+} from './hosted-reading.ts';
+export {
+  HOSTED_READING_CHANGED_EVENT,
+  HOSTED_READING_POSITION_BLOCK_MAX,
+  HOSTED_READING_POSITION_OFFSET_MAX,
+} from './hosted-reading.ts';
+
+export type {
   ContinueActor,
   ContinueListQuery,
   ContinuePage,

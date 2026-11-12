@@ -23,7 +23,10 @@ drafts stay private. Later body or structure edits do not change a released revi
 selection withdraws the current TOC; explicit historical manifests still obey current catalogue and target Access.
 
 The mounted `/v1/hostedCatalogues` operations create, revise, publish, read metadata, page children and resolve
-an occurrence at an explicit structure or publication revision. Omitted read revision selects the current release;
+an occurrence at an explicit structure or publication revision. `GET /v1/subjects/{id}/hostedCatalogues`
+(`hosted_catalogue.for_subject`) lists current public publications for an existing Subject from indexed
+`subject_thread` candidates and same-route published catalogue-post subject references. Empty publications
+leave that page; historical exact reads stay on resolve and still obey current Access. Omitted read revision selects the current release;
 `kind=structure` selects the current draft head for Studio resume. An explicit `revisionId` pins either kind;
 an accompanying kind must match. Private structure revisions additionally require current `post:revise`. Every read retains and finally rechecks
 the ordinary catalogue Post disclosure. Chapter rows and bytes additionally retain the exact target Post read,
@@ -33,6 +36,12 @@ canonical Document bytes, SHA-256, original Post author and licence. No bodies a
 
 Decision: books and columns share ordinary Post ownership and publication boundaries; the book profile adds immutable
 placements and release snapshots, and a release never publishes a target Post or grants draft access.
+
+Decision: `hosted_catalogue.for_subject` lists current public publications for an existing Subject from indexed
+`subject_thread` rows and same-route published catalogue-post subject references. Empty publications leave that
+page. Content's hosted-reading adapter validates exact publication selections for Library and rechecks current
+Access on resume. Historical exact reads stay on resolve. Fewest tests: current discovery SQL/page bounds,
+position bounds, withheld resume keeping the saved address.
 
 Children and directional chapter navigation inspect at most 20 raw occurrences per page. Continuations bind the
 catalogue, selected revision, parent/direction, original frontier and actor; sparse results never refill or lose

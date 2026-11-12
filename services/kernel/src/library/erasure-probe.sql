@@ -10,6 +10,7 @@ probe AS (
   SELECT
     EXISTS (SELECT 1 FROM library.bangumi_upload WHERE route=input.route AND account_id=input.account_id) AS bangumi_upload,
     EXISTS (SELECT 1 FROM library.diary_navigation WHERE route=input.route AND account_id=input.account_id) AS diary_navigation,
+    EXISTS (SELECT 1 FROM library.hosted_reading WHERE route=input.route AND account_id=input.account_id) AS hosted_reading,
     EXISTS (SELECT 1 FROM library.collection_archive_recovery WHERE route=input.route AND account_id=input.account_id)
       OR EXISTS (SELECT 1 FROM library.collection_archive_recovery_record WHERE route=input.route AND account_id=input.account_id)
       AS collection_archive_recovery,
@@ -66,6 +67,7 @@ SELECT stores.store
 FROM probe
 CROSS JOIN LATERAL (VALUES
   (diary_navigation, 'diary_navigation'::text),
+  (hosted_reading, 'hosted_reading'::text),
   (members_preparation_owner, 'members_preparation_owner'::text),
   (members_preparation, 'members_preparation'::text),
   (members_preparation_result, 'members_preparation_result'::text),

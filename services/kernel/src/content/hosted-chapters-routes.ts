@@ -35,6 +35,12 @@ import {
   resolveHostedOccurrence,
 } from './hosted-chapters-reads.ts';
 import { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
+import { listHostedCataloguesForSubject } from './hosted-catalogue-subject.ts';
+import {
+  HostedSubjectCataloguePageSchema,
+  HostedSubjectCatalogueQuerySchema,
+  HostedSubjectParamsSchema,
+} from './hosted-catalogue-subject-schemas.ts';
 import {
   HostedIdSchema,
   HostedCreateSchema,
@@ -138,7 +144,11 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
   app.wrap((handle) => async (request) => {
     const response = await handle(request);
     const path = new URL(request.url).pathname;
-    if (path.startsWith('/v1/hostedCatalogues') || /^\/v1\/accounts\/[^/]+\/hostedCatalogues(?:\/|$)/.test(path))
+    if (
+      path.startsWith('/v1/hostedCatalogues') ||
+      /^\/v1\/accounts\/[^/]+\/hostedCatalogues(?:\/|$)/.test(path) ||
+      /^\/v1\/subjects\/[^/]+\/hostedCatalogues(?:\/|$)/.test(path)
+    )
       response.headers.set('cache-control', 'private, no-store');
     return response;
   });
@@ -337,6 +347,35 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
               deps,
               id,
               { ...selection, occurrenceId, ...(limit === undefined ? {} : { limit: Number(limit) }) },
+              { actor, deadline: job.deadline },
+            ),
+          ),
+        );
+        for (const anchor of result.anchors)
+          session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
+        set.headers['cache-control'] = 'private, no-store';
+        return { ...result.value, items: [...result.value.items] };
+      },
+    )
+    .get(
+      '/v1/subjects/:subjectId/hostedCatalogues',
+      {
+        params: HostedSubjectParamsSchema,
+        query: strictContentSchema(HostedSubjectCatalogueQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(HostedSubjectCataloguePageSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: { ...readDetail, operationId: 'hosted_catalogue.for_subject' },
+      },
+      async ({ actor, params: { subjectId }, query, admission, job, session, set }) => {
+        const { limit, ...rest } = query;
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            listHostedCataloguesForSubject(
+              deps,
+              subjectId,
+              { ...rest, ...(limit === undefined ? {} : { limit: Number(limit) }) },
               { actor, deadline: job.deadline },
             ),
           ),

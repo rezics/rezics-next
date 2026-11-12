@@ -104,6 +104,15 @@ export function createLibraryIdentityEpochReceiver({
   });
 }
 export { libraryIdentityFootprint } from './identity-native-planner-work.ts';
+export {
+  createHostedReadingCommands,
+  createHostedReadingReads,
+  readHostedReadingExportPage,
+  validateHostedReadingClear,
+  validateHostedReadingSave,
+} from './hosted-reading.ts';
+export { hostedReadingRoutes } from './hosted-reading-routes.ts';
+export { bindHostedReadingPort, requireHostedReadingPort } from './hosted-reading-bind.ts';
 
 export { createCollectionBulkOperations } from './collection-bulk-operation.ts';
 export { readLibraryScopeEffectsPageWithWork } from './identity-scope-effects.ts';

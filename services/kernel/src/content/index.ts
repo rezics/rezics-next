@@ -33,7 +33,14 @@ export {
   resolveHostedOccurrence,
 } from './hosted-chapters-reads.ts';
 export { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
+export { listHostedCataloguesForSubject } from './hosted-catalogue-subject.ts';
 export type {
+  HostedSubjectCatalogueItem,
+  HostedSubjectCataloguePage,
+  HostedSubjectCatalogueQuery,
+} from './hosted-catalogue-subject-model.ts';
+export type {
+  HostedDependencies,
   HostedCreateInput,
   HostedReviseInput,
   HostedPublishInput,
