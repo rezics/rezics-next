@@ -28,6 +28,7 @@ export function createSourceCaptureApplication(capabilities: { sourceCapture: So
       deadline: number;
       at: unknown;
       allowance: WorkAllowance;
+      source?: Pick<CollectionSource, 'prepare'>;
       logical?: boolean;
       ordinaryPage?: boolean;
     }): Promise<SourceCaptureResult> {
@@ -37,6 +38,7 @@ export function createSourceCaptureApplication(capabilities: { sourceCapture: So
         deadline: input.deadline,
         at: input.at,
         allowance: input.allowance,
+        ...(input.source ? { source: input.source } : {}),
         ...(input.logical !== undefined ? { logical: input.logical } : {}),
         ...(input.ordinaryPage !== undefined ? { ordinaryPage: input.ordinaryPage } : {}),
       });
