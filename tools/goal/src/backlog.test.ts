@@ -127,7 +127,11 @@ async function backlogDisposition(
   try {
     await runIntegration(
       ['backlog', 'disposition', goal, action],
-      { db: f.db, stateDirectory: f.state } as unknown as Parameters<typeof runIntegration>[1],
+      {
+        db: f.db,
+        stateDirectory: f.state,
+        managerServices: { policy: undefined },
+      } as unknown as Parameters<typeof runIntegration>[1],
     );
     return lines[0]!;
   } finally {
