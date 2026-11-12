@@ -4265,6 +4265,13 @@ CREATE INDEX hosted_placement_navigation_idx ON content.hosted_placement USING b
 
 
 --
+-- Name: hosted_structure_revision_history_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_structure_revision_history_idx ON content.hosted_structure_revision USING btree (route, catalogue_id, created_at DESC, revision_id DESC) INCLUDE (kind, source_revision_id);
+
+
+--
 -- Name: knowledge_notebook_owner_page; Type: INDEX; Schema: content; Owner: -
 --
 
