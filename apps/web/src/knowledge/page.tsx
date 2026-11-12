@@ -58,8 +58,8 @@ function KnowledgeCitation({
   clipboard,
 }: {
   href: string;
-  origin?: string;
-  clipboard?: KnowledgeCitationClipboard | null;
+  origin?: string | undefined;
+  clipboard?: KnowledgeCitationClipboard | null | undefined;
 }) {
   const statusId = useId();
   const fieldId = useId();
