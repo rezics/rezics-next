@@ -5,6 +5,7 @@ import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } f
 import { policyOwnerConflictGit } from './owner-conflict.ts';
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager } from './priority-authority.ts';
+import { CONTINUATION_DIRECTORY } from './continuation.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -1402,11 +1403,24 @@ export function rebaseOnto(
   // Files the worker's own commits touched: a squash may change these outside the allowed paths, never a file only
   // the target's history changed, which a wrong upstream would replay or revert.
   const own = new Set(git(cwd, 'log', '--name-only', '--format=', `${base}..${head}`).split('\n').filter(Boolean));
+  const trackedContinuations = [...own].filter(
+    (path) => path === CONTINUATION_DIRECTORY || path.startsWith(`${CONTINUATION_DIRECTORY}/`),
+  );
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
-  const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy, mergePolicy);
-  if (typeof initialConflict === 'boolean') return initialConflict;
+  if (trackedContinuations.length) {
+    // This train tree is disposable. Remove tracked continuation bytes before reparenting product changes so no
+    // commit that contains worker-local state enters the published candidate's ancestry.
+    git(cwd, 'rm', '-r', '-f', '--ignore-unmatch', '--', CONTINUATION_DIRECTORY);
+    appendFileSync(
+      logPath,
+      `Clean-source squash omitted tracked continuations from published history: ${trackedContinuations.join(', ')}\n`,
+    );
+  } else {
+    const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy, mergePolicy);
+    if (typeof initialConflict === 'boolean') return initialConflict;
+    git(cwd, 'rebase', '--abort');
+  }
 
-  git(cwd, 'rebase', '--abort');
   git(cwd, 'reset', '--soft', upstream);
   const message = [
     'Squash worker branch changes',
