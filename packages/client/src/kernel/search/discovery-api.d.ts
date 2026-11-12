@@ -11,7 +11,7 @@ import type { MatchEvidence, MatchEvidenceQuery } from './match-evidence.ts';
 import type { SearchRequest } from './service-contract.ts';
 import type { SearchFreshness } from './search-context.ts';
 import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
-import type { IndexedSubject, SubjectSource } from './source.ts';
+import type { IndexedSubject, RelationFacetMatch, SubjectSource } from './source.ts';
 import type { TextNode } from './text.ts';
 export type DiscoveryKey = {
     owner: 'semantic';
@@ -277,7 +277,7 @@ export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'a
     languages?: readonly string[];
     collectionQuery?: import('../library/collection-discovery-source.ts').CollectionDiscoveryQuery;
     descriptions?: boolean;
-    currentTextMatches?: (subject: IndexedSubject, query: TextNode) => Promise<boolean>;
+    currentTextMatches?: (subject: IndexedSubject, query: TextNode) => Promise<RelationFacetMatch>;
     textQuery?: TextNode;
     /** Credited-creator text verifies each candidate's engine evidence against the producer, not its names. */
     textField?: 'credited_creator';

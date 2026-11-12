@@ -6,7 +6,7 @@ import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { type MixedDiscoveryRequest } from './discovery-request.ts';
 import type { DiscoveryPage, DiscoveryReadContext, DiscoveryRegistry, DiscoveryOwnerRegistry, DiscoveryKey } from './discovery.ts';
 import type { DiscoverySearch } from './discovery-api.ts';
-import type { IndexedSubject } from './source.ts';
+import type { IndexedSubject, RelationFacetMatch } from './source.ts';
 import type { PublicFilterConsumerJob, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import { type SearchDisclosureApplication } from './disclosure-application.ts';
 type Principal = 'anonymous' | `account:${string}`;
@@ -37,7 +37,7 @@ type DiscoveryConfiguration = {
         limit: number;
         countCandidateLimit: number;
     }>): Promise<ConceptFilterExecution | undefined>;
-    currentTextMatches?: (physicalTarget: string, subject: IndexedSubject, query: TextNode) => Promise<boolean>;
+    currentTextMatches?: (physicalTarget: string, subject: IndexedSubject, query: TextNode) => Promise<RelationFacetMatch>;
     prepare?(job: PublicFilterConsumerJob): Promise<void>;
 };
 /** The public completed search and retained readers use the same native execution. The

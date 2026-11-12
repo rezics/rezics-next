@@ -36,7 +36,7 @@ export declare function checkHits<NativeHit extends Hit>(source: SubjectSource, 
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
     conceptFilter?: ConceptFilterExecution;
     /** Re-evaluate a stale indexed text hint against the current native Subject projection. */
-    currentText?: (subject: IndexedSubject) => Promise<boolean>;
+    currentText?: (subject: IndexedSubject) => Promise<RelationFacetMatch>;
 }): Promise<{
     passed: {
         hit: NativeHit;
@@ -44,4 +44,6 @@ export declare function checkHits<NativeHit extends Hit>(source: SubjectSource, 
     }[];
     dropped: number;
     relationRejected?: true;
+    /** An eligible candidate has undecidable text; it cannot certify counts or a consumed continuation. */
+    textRejected?: true;
 }>;

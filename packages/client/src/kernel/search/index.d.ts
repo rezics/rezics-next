@@ -25,7 +25,7 @@ export declare function createNativeSearchDisclosure(search: OpenSearch): {
     finishDiscoveryDisclosure: typeof import("./disclosure-application.ts").finishDiscoveryDisclosure;
     prepareConceptFilter: typeof import("./disclosure-application.ts").prepareConceptDisclosure;
     currentText: (index: string) => {
-        matchesText: (subject: import("./source.ts").IndexedSubject, query: import("@rezics/search-text").TextNode) => Promise<boolean>;
-        matchesPrefix: (subject: import("./source.ts").IndexedSubject, prefix: string) => Promise<boolean>;
+        matchesText: (subject: import("./source.ts").IndexedSubject, query: import("@rezics/search-text").TextNode) => Promise<import("./source.ts").RelationFacetMatch>;
+        matchesPrefix: (subject: import("./source.ts").IndexedSubject, prefix: string) => Promise<import("./source.ts").RelationFacetMatch>;
     };
 };
