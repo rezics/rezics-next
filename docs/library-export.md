@@ -4,7 +4,9 @@ The authenticated native API exports current owner facts independently of public
 Decision: use a fifteen-minute fenced, replayable page stream with no retained private artifact; a source change
 after a completed stream requires a new request identity. Local delivery is single-flight per visit; false or thrown
 save failures retry the exact completed bytes under the same capture. Installed import evidence joins this fence;
-expiring MAL or VNDB evidence makes the original capture stale.
+a supported Bangumi or MAL member, or a V4 VNDB member, that expires after capture makes the original capture stale.
+Decision: a Bangumi upload expiring between its header and evidence sections invalidates the live capture even when the
+source generation is unchanged; the later evidence page is never delivered under that capture.
 Decision: version 2 appends independent `annotations`, `provenance` and `journals` sections; version 1 retains its
 original coverage, and reviewed V2 annotation/journal date/reflection recovery is owned by the existing archive consumer.
 Decision: version 3 adds the private occurrence assessment to each journal record. Version 4 appends VNDB and AniList
@@ -144,8 +146,9 @@ assessment adoption or archive writer.
 V1/V2 absence never establishes an assessment. Their serialized journals stay unchanged.
 
 The same owner source generation covers VNDB parent and indexed evidence rows, plus every AniList header/source/
-review mutation, cancellation, pruning and deletion. Indexed MAL/VNDB expiry probes run before and after each page,
-and on status and original create replay. Expiry needs no row write to make collecting or completed captures stale.
+review mutation, cancellation, pruning and deletion. Owner/expiry-indexed MAL and Bangumi probes, plus the V4 VNDB
+probe, run before and after each page and on status and original create replay. Expiry needs no row write to make
+collecting or completed captures stale.
 The final page rechecks current owner, source and time under the existing account barrier and source lock; no GET
 repairs, replacements, partial success or new request identities occur. Erasure still owns the export control row;
 VNDB parent deletion cascades its source-owned parsed row index, and existing AniList erasure deletes its rows.
@@ -157,8 +160,9 @@ Let P=16 and S<=17 be candidates, Uv<=4 retained VNDB uploads, Ua<=5 retained An
 preparation/locks/receipt work and native section counters remain on the existing Library request payer.
 Each page adds no account-wide discovery: direct metadata uses one owner-indexed P+1 seek; provider evidence uses
 at most one owner/upload parent seek and one owner/upload/ordinal P+1 seek. Header-only AniList's partial index
-avoids reading unrelated rows. Expiry uses two owner/expiry-indexed existence probes per currentness check (MAL and
-VNDB); each page does two currentness checks, each with one exact control-row lock and one source-generation lock.
+avoids reading unrelated rows. Expiry uses owner/expiry-indexed existence probes for MAL and Bangumi, plus V4 VNDB,
+per currentness check; each page does two currentness checks, each with one exact control-row lock and one
+source-generation lock.
 Create uses the existing command receipt/transaction, exact owner capture lock/upsert, generation lock, then status
 currentness. Status and cancel each use one currentness check, with cancel's exact update. Original retries repeat
 these bounded checks; R retries add R times the respective caller work, never a refreshed lifetime.

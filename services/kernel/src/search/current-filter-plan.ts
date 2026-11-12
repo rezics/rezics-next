@@ -45,13 +45,19 @@ export function currentConceptStatementsMatch(
   statements: readonly Readonly<{ membership: RelationFacetMatch; witness: RelationFacetMatch }>[],
   complete: boolean,
 ): RelationFacetMatch {
-  const matches = statements.map(({ membership, witness }) => allMatch([membership, witness]));
+  const matches = statements.map(({ membership, witness }) => allCurrentMatch([membership, witness]));
   return anyCurrentMatch(complete ? matches : [...matches, 'not_proven']);
 }
 
-function allMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
+/** AND current evidence; a complete negative decides even when another operand is unknown. */
+export function allCurrentMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
   if (values.includes(false)) return false;
   return values.includes('not_proven') ? 'not_proven' : true;
+}
+
+/** Negation cannot turn missing current evidence into a positive witness. */
+export function notCurrentMatch(value: RelationFacetMatch): RelationFacetMatch {
+  return value === 'not_proven' ? value : !value;
 }
 
 function normalizedQualifiers(qualifiers: readonly FilterQualifier[] = []): FilterQualifier[] {
@@ -143,7 +149,7 @@ function compileCurrentPlan<Leaf>(
   function visit(node: DiscoveryFilterDocument, negated = false): Evaluate {
     if ('and' in node) {
       const children = node.and.map((child) => visit(child, negated));
-      return (values) => allMatch(children.map((child) => child(values)));
+      return (values) => allCurrentMatch(children.map((child) => child(values)));
     }
     if ('or' in node) {
       const children = node.or.map((child) => visit(child, negated));
@@ -152,8 +158,7 @@ function compileCurrentPlan<Leaf>(
     if ('not' in node) {
       const child = visit(node.not, !negated);
       return (values) => {
-        const result = child(values);
-        return result === 'not_proven' ? result : !result;
+        return notCurrentMatch(child(values));
       };
     }
     if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');

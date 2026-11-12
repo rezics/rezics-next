@@ -296,6 +296,8 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
         await tx.query(
           `SELECT 1 WHERE EXISTS (SELECT 1 FROM library.list_import_mal WHERE route=$1 AND account_id=$2
         AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)
+        OR EXISTS (SELECT 1 FROM library.bangumi_upload WHERE route=$1 AND account_id=$2
+          AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)
         ${
           capture.format_version === 4
             ? `OR EXISTS (SELECT 1 FROM library.vndb_import WHERE route=$1 AND account_id=$2

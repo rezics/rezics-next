@@ -78,6 +78,40 @@ test('visible hits pass in their original order with the current subject state',
   ]);
 });
 
+test('unknown current text withholds only undecided hits and flags both disclosure branches', async () => {
+  const fake = createFakeSource();
+  const subjects = [book(1), book(2), book(3)];
+  subjects.forEach((subject) => fake.put(subject));
+  for (const filter of [undefined, { type: { in: ['schema:Book'] } }]) {
+    const result = await checkHits(
+      fake,
+      subjects.map((subject) => hit(subject)),
+      none,
+      {
+        ...(filter ? { filter } : {}),
+        currentText: async (subject) =>
+          subject.id === subjects[0]!.id ? true : subject.id === subjects[1]!.id ? false : 'not_proven',
+      },
+    );
+    expect(result.passed.map(({ subject }) => subject.id)).toEqual([subjects[0]!.id]);
+    expect(result.dropped).toBe(2);
+    expect(result.textRejected).toBe(true);
+  }
+  const decided = await checkHits(
+    fake,
+    subjects.map((subject) => hit(subject)),
+    none,
+    {
+      filter: { type: { in: ['schema:Recipe'] } },
+      currentText: async () => {
+        throw new Error('A false catalogue predicate already decides the candidate');
+      },
+    },
+  );
+  expect(decided.passed).toEqual([]);
+  expect(decided.textRejected).toBeUndefined();
+});
+
 test('hidden, taken-down, redirected, missing and re-secured hits are dropped', async () => {
   const fake = createFakeSource();
   const subjects = [1, 2, 3, 4, 5, 6].map((n) => book(n));

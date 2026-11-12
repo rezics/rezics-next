@@ -33,6 +33,10 @@ export declare function currentConceptStatementsMatch(statements: readonly Reado
     membership: RelationFacetMatch;
     witness: RelationFacetMatch;
 }>[], complete: boolean): RelationFacetMatch;
+/** AND current evidence; a complete negative decides even when another operand is unknown. */
+export declare function allCurrentMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch;
+/** Negation cannot turn missing current evidence into a positive witness. */
+export declare function notCurrentMatch(value: RelationFacetMatch): RelationFacetMatch;
 /** The existing disclosure clause key, including set-normalized values and qualifier clauses. */
 export declare function currentClauseKey(clause: FactClause): string;
 /** Tagged native keys preserve exact owner pins; only state.in has set semantics. */
