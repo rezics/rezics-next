@@ -4586,7 +4586,7 @@ CREATE TABLE library.follow (
     CONSTRAINT follow_reason_check CHECK ((reason = ANY (ARRAY['explicit'::text, 'library'::text, 'membership'::text]))),
     CONSTRAINT follow_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT follow_state_check CHECK ((state = ANY (ARRAY['following'::text, 'unfollowed'::text]))),
-    CONSTRAINT follow_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text])))
+    CONSTRAINT follow_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text, 'zone'::text])))
 );
 
 
@@ -4730,7 +4730,7 @@ CREATE TABLE library.follow_count_source (
     CONSTRAINT follow_count_source_check1 CHECK (((NOT desired_eligible) OR source_following)),
     CONSTRAINT follow_count_source_revision_check CHECK ((revision > 0)),
     CONSTRAINT follow_count_source_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT follow_count_source_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text])))
+    CONSTRAINT follow_count_source_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text, 'zone'::text])))
 );
 
 
@@ -4788,7 +4788,7 @@ CREATE TABLE library.follow_count_total (
     target_type text NOT NULL,
     target_id uuid NOT NULL,
     total bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT follow_count_total_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text]))),
+    CONSTRAINT follow_count_total_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text, 'zone'::text]))),
     CONSTRAINT follow_count_total_total_check CHECK ((total >= 0))
 );
 

@@ -19,7 +19,7 @@ import {
   FollowCountUnavailableError,
   type FollowCountRuntime,
   type CountDestination,
-  type FollowCountTarget,
+  type CountKey,
 } from '../library/contract/index.ts';
 
 export function nativeFollowCountRuntime(): FollowCountRuntime {
@@ -34,7 +34,10 @@ export function nativeFollowCountRuntime(): FollowCountRuntime {
       return (await readSpace(client, id, at)) !== null;
     },
   };
-  async function destination(pool: object, target: FollowCountTarget): Promise<CountDestination> {
+  async function destination(
+    pool: object,
+    target: Pick<CountKey, 'targetType' | 'targetId'>,
+  ): Promise<CountDestination> {
     let targetId = target.targetId,
       epoch: bigint | null = null;
     if (target.targetType === 'subject') {

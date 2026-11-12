@@ -313,3 +313,5 @@ export type {
   ViewerPersonalActionsPage,
   ViewerPersonalFact,
 } from './viewer-personal-actions.ts';
+
+export type { FollowDestination, NativeFollowProjection, NativeFollowTargetAdapter } from './follow-targets.ts';

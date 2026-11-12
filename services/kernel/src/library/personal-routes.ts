@@ -119,6 +119,7 @@ type Dependencies = {
   shelfTypeDigest?: ShelfTypeDigest;
   titleSource?: ShelfTitleSource;
   typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
+  followTargets?: readonly import('./contract/index.ts').NativeFollowTargetAdapter[];
   followingSpaceTargets?: (
     actor: Actor,
     ids: readonly string[],
@@ -376,7 +377,7 @@ function copyListContextSchema() {
 const followSchema = t.Object(
   {
     targetId: id,
-    targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]),
+    targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space'), t.Literal('zone')]),
     state: t.Union([t.Literal('following'), t.Literal('unfollowed')]),
     reason: t.Union([t.Literal('explicit'), t.Literal('library'), t.Literal('membership')]),
     updatedAt: id,
@@ -706,6 +707,7 @@ const followResponse = t.Object({ follow: followSchema }, closed);
 const followDestinationSchema = t.Union([
   t.Object({ kind: t.Literal('space'), spaceId: id, address: t.String() }, closed),
   t.Object({ kind: t.Literal('realm'), realmId: id }, closed),
+  t.Object({ kind: t.Literal('zone'), zoneId: id }, closed),
   t.Object({ kind: t.Literal('unavailable') }, closed),
 ]);
 const followActionsSchema = t.Union([
@@ -1790,7 +1792,6 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                   params.copyId,
                   languageRanges(request.headers.get('accept-language')),
                   async (copy, presentation, disclosure) => {
-                    const editing = presentation.statusEditing;
                     const value = {
                       ...copyView(copy),
                       presentation: copyPresentationView(presentation),
@@ -2205,6 +2206,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                 deadline: job.deadline,
                 ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
                 follow: true,
+                ...(dependencies.followTargets ? { nativeFollowTargets: dependencies.followTargets } : {}),
               },
             );
             const sourceWithheld = query.view === 'FULL' && shown.follow.target === null;
@@ -2224,7 +2226,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         query: t.Object(
           {
             ...pageQuery(),
-            targetType: t.Optional(t.Enum({ subject: 'subject', collection: 'collection', space: 'space' } as const)),
+            targetType: t.Optional(
+              t.Enum({ subject: 'subject', collection: 'collection', space: 'space', zone: 'zone' } as const),
+            ),
           },
           closed,
         ),
@@ -2312,6 +2316,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                   {
                     deadline: job.deadline,
                     follow: true,
+                    ...(dependencies.followTargets ? { nativeFollowTargets: dependencies.followTargets } : {}),
                     ...(dependencies.followingSpaceTargets
                       ? { followingSpaces: dependencies.followingSpaceTargets }
                       : {}),

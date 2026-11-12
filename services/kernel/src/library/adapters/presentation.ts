@@ -178,6 +178,7 @@ export function createNativeLibraryPresentation(ports: NativeLibraryPresentation
         deadline: number;
         follow?: true;
         withholdChangedSource?: true;
+        nativeFollowTargets?: readonly import('../contract/index.ts').NativeFollowTargetAdapter[];
         followingSpaces?: (
           actor: Actor,
           ids: readonly string[],
@@ -220,6 +221,9 @@ export function createNativeLibraryPresentation(ports: NativeLibraryPresentation
       });
       return full(view, body, {
         withholdChangedSource,
+        ...(options.nativeFollowTargets
+          ? { nativeFollowTargets: { adapters: options.nativeFollowTargets, actor, deadline } }
+          : {}),
         ...(options.followingSpaces
           ? {
               followingSpaces: (ids: readonly string[]) => options.followingSpaces!(actor, ids, deadline),

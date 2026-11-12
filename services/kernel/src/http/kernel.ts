@@ -36,7 +36,9 @@ import {
   readReceiptKeyRing,
 } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
-import { zoneRoutes } from '../zones/http.ts';
+import { zoneRoutes, requireZoneResourceRuntime } from '../zones/index.ts';
+import { pickZoneName } from '@rezics/composition';
+import { createZoneFollowTargetAdapter } from '../library/domain.ts';
 import { zoneViewerActionResource } from '../zones/viewer-actions.ts';
 import type { Elysia } from 'elysia';
 import { ProblemError } from './problem.ts';
@@ -857,6 +859,24 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+    followTargets: [
+      createZoneFollowTargetAdapter(async (actor, id, deadline) => {
+        try {
+          const runtime = requireZoneResourceRuntime({
+            pool: dependencies.pool,
+            tokens,
+            clock,
+            access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+          });
+          const { zone } = await runtime.reads.read(actor, id, false, deadline);
+          const label = pickZoneName(zone, zone.primaryLanguage ?? '').text;
+          return label ? { id: zone.id, revision: zone.revision, visibility: zone.visibility, label } : null;
+        } catch (error) {
+          if (error instanceof ProblemError && (error.code === 'not_found' || error.code === 'forbidden')) return null;
+          throw error;
+        }
+      }),
+    ],
     followingSpaceTargets: (actor, ids, deadline) => {
       if (!viewerResources || !viewerBindings) throw new ProblemError('dependency_unavailable');
       return followingSpaceTargets(
