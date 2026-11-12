@@ -33,6 +33,8 @@ const access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   owner: 'session-1/exposure-1',
   read: 'available',
   createNotebook: 'available',
+  listNotebooks: 'available',
+  readOutline: 'available',
   createDocument: 'available',
   revise: 'available',
   publication: 'available',
@@ -65,6 +67,8 @@ function fixture(select?: KnowledgePrivateOperations['selectPublication']) {
       head: structuredClone(head),
     }),
     createNotebook: async () => ({ state: 'unavailable', status: 503 }),
+    listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+    readOutline: async () => ({ state: 'unavailable', status: 503 }),
     createDocument: async () => ({ state: 'unavailable', status: 503 }),
     revise: async (intent) => {
       head = {
@@ -323,6 +327,8 @@ async function harness() {
       prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
       read: async () => ({ state: 'unavailable', status: 503 }),
       createNotebook: async () => ({ state: 'unavailable', status: 503 }),
+      listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+      readOutline: async () => ({ state: 'unavailable', status: 503 }),
       createDocument: async () => ({ state: 'unavailable', status: 503 }),
       revise: async () => ({ state: 'unavailable', status: 503 }),
     },

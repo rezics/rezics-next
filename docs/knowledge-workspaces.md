@@ -151,8 +151,12 @@ contracts after that source is admitted. They do not become the content or permi
 
 On a readable subject, the signed-in user can see public contributions and their authorized personal material in the
 same page. A private area is labelled Only you; public contributions identify their author and publication state.
-Creating a document defaults to private. Templates supply editable starting titles and structure; Inspiration and
-Character arc are templates, not privileged database fields or new backend branches.
+Creating a document defaults to private. Templates supply editable starting titles and structure; Inspiration,
+Character arc and Scene are templates, not privileged database fields or new backend branches. An owner continues an
+existing notebook from the private creation visit: explicit inventory selection retains the native notebook row, one
+Open/More/Retry reads one replacing outline page at root or a chosen parent, and at most 32 visited breadcrumbs are
+kept without reconstructing ancestry. Creation sends the observed structure revision and an explicit parent placement.
+Later move and reorder remain Content-owned native work.
 
 The subject API may compose both areas in one bounded viewer-aware response. This design requires no separate URL,
 service or HTTP request for private content. The response identifies the audience and independent continuation of
