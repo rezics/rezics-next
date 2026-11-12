@@ -38,6 +38,8 @@ import {
 
 import { KnowledgePublicationPanel } from './publication-panel';
 import type { KnowledgePublicationIntent, KnowledgePublicationResult } from './publication';
+import { KnowledgeNavigationReturnLink } from './navigation-return-link';
+import { knowledgeNavigationBinding } from './navigation-return';
 
 const controlClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -1362,6 +1364,19 @@ export function KnowledgePrivatePage({
   };
   return (
     <AuthoringDepartureBoundary sessionBound>
+      {address.kind === 'resume' && access.state === 'ready' && (
+        <KnowledgeNavigationReturnLink
+          address={address}
+          locale={locale}
+          binding={knowledgeNavigationBinding(
+            access.viewer,
+            access.csrfToken,
+            sessionRevision,
+            exposureRevision,
+            locale,
+          )}
+        />
+      )}
       {access.state === 'ready' ? (
         <PrivateKnowledgeEditorOwner
           owner={owner}
