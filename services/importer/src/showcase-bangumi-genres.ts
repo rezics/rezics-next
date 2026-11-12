@@ -254,8 +254,6 @@ export async function prepareShowcaseBangumiGenres(input: {
       });
       diagnostics.delete(row.key);
     }
-    if (!acknowledgements.some((ack) => ack.command.source.external_id === row.key))
-      diagnostics.set(row.key, { sourceKey: row.key, code: 'source-claim-unavailable' });
   }
 
   const candidateIds = [...new Set(acknowledgements.map((ack) => ack.candidateId!).filter(Boolean))].sort();

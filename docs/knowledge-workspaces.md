@@ -91,6 +91,8 @@ Decision: the native first loop uses account-home notebooks, a 32-placement ance
 publication pointers for direct anonymous reads; Subject useful-page discovery waits for Search's bounded
 candidate-preparation API, and erasure retains only eligible selected revisions in deidentified form.
 
+Decision: Knowledge route metadata comes from the public Content adapter; imported schemas are memoized when routes mount.
+
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its
 children. Their placement IDs remain different. First-release reuse uses ordinary document references. A deep copy

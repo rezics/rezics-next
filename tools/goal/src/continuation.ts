@@ -30,7 +30,7 @@ import {
 import { classifyTask } from './routing.ts';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task } from './types.ts';
-import { git } from './merge.ts';
+import { policyGit } from './merge.ts';
 
 /** Where a worker writes the rest of an outcome that does not fit its attempt, inside its own worktree. */
 export const CONTINUATION_DIRECTORY = '.temp/continuation';
@@ -548,6 +548,79 @@ function preserveFailedContinuation(
   return destination;
 }
 
+const GIT_COMMIT_ID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
+
+function continuationRootName(path: string): string | undefined {
+  const prefix = `${CONTINUATION_DIRECTORY}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length).split('/')[0] : undefined;
+}
+
+function continuationRootNames(paths: string): Set<string> {
+  const names = new Set<string>();
+  for (const path of paths.split('\0')) {
+    const name = continuationRootName(path);
+    if (name) names.add(name);
+  }
+  return names;
+}
+
+function attemptContinuationSources(store: WorkerStore, task: Task, ref: AttemptRef): Set<string> {
+  const sources = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && GIT_COMMIT_ID.test(value)) sources.add(value.toLowerCase());
+  };
+  add(task.base);
+  for (const event of store.events(ref.taskId, ref.attempt)) {
+    if (!['worker-run-started', 'worker-source-baseline'].includes(event.kind)) continue;
+    try {
+      const body = JSON.parse(event.body) as { branchHead?: unknown; workerCommit?: unknown; controllerHead?: unknown };
+      if (event.kind === 'worker-run-started') add(body.branchHead);
+      else {
+        add(body.workerCommit);
+        add(body.controllerHead);
+      }
+    } catch {
+      // Older imported records may not contain a JSON object.
+    }
+  }
+  return sources;
+}
+
+function directMergeParents(worktree: string, commit: string, policy: ControlPolicy['merge'] | undefined): string[] {
+  const parents = policyGit(worktree, ['rev-list', '--parents', '-n', '1', commit], policy)
+    .trim()
+    .split(/\s+/)
+    .slice(1);
+  return parents.length > 1
+    ? parents.filter((parent) => GIT_COMMIT_ID.test(parent)).map((parent) => parent.toLowerCase())
+    : [];
+}
+
+function continuationNamesInTree(worktree: string, commit: string, policy: ControlPolicy['merge'] | undefined) {
+  return continuationRootNames(
+    policyGit(worktree, ['ls-tree', '-r', '--name-only', '-z', commit, '--', CONTINUATION_DIRECTORY], policy),
+  );
+}
+
+/** Historical path-only evidence from the prepared source, recorded launch trees, and direct merge parents. */
+function inheritedContinuationNames(
+  store: WorkerStore,
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy['merge'] | undefined,
+): Set<string> {
+  const names = continuationRootNames(
+    policyGit(task.worktree, ['ls-files', '-z', '--', CONTINUATION_DIRECTORY], policy),
+  );
+  const sources = attemptContinuationSources(store, task, ref);
+  const trees = new Set(sources);
+  // Merge-conflict preparation records the exact worker and admitted controller source commits.
+  for (const source of sources)
+    for (const parent of directMergeParents(task.worktree, source, policy)) trees.add(parent);
+  for (const tree of trees) for (const name of continuationNamesInTree(task.worktree, tree, policy)) names.add(name);
+  return names;
+}
+
 /**
  * Move the continuation briefs an attempt left under `.temp/continuation/` into its Goal's backlog, where they are
  * dispatched like any other brief. A brief must parse with the ordinary brief parser and keep the task's goal and
@@ -577,12 +650,7 @@ export function harvestContinuations(
   }
   // Settlement must not turn a clean source dirty by harvesting inherited repository files. Protect containing
   // directories too: dropping a non-Markdown directory recursively must not remove a tracked descendant.
-  const trackedNames = new Set(
-    git(task.worktree, 'ls-files', '-z', '--', CONTINUATION_DIRECTORY)
-      .split('\0')
-      .filter(Boolean)
-      .map((path) => path.slice(CONTINUATION_DIRECTORY.length + 1).split('/')[0]),
-  );
+  const trackedNames = inheritedContinuationNames(store, task, ref, settings.policy?.merge);
   const known = new Set(store.taskIds());
   let ownership: RiskOwnership | undefined;
   try {

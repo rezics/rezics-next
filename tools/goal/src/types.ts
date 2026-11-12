@@ -297,7 +297,7 @@ export type PriorityGrant = {
   revokedBy?: string;
 };
 export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
-export type DevVerifierResult = 'pass' | 'fail' | 'infrastructure';
+export type DevVerifierResult = 'pass' | 'fail' | 'infrastructure' | 'skipped' | 'unknown';
 export type DevVerifierCause = 'compiler' | 'product-runtime' | 'setup' | 'transport' | 'cleanup';
 export type DevVerifierCommand = { argv: string[]; cwd?: string };
 export type DevVerifierDiagnosticLocation = {
@@ -323,14 +323,29 @@ export type DevVerifierEvidence = {
   /** Classification of the executed check; older cached evidence may not have this field. */
   result?: DevVerifierResult;
   cwd?: string;
+  /** Ephemeral references consumed by the enclosing round summary. */
+  commandRunIds?: string[];
+};
+export type DevVerifierExecutionReceipt = {
+  id: string;
+  roundId: string;
+  cacheKey: string;
+  status: 'running' | 'terminal';
+  outcome: DevVerifierResult;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs: number | null;
 };
 export type DevVerifierRun = {
   key: string;
   createdAt: string;
   evidence: DevVerifierEvidence;
+  /** Command executions use their own round-scoped identity; older cache entries have no receipt. */
+  execution?: DevVerifierExecutionReceipt;
   round?: DevVerifierRoundSummary;
 };
 export type DevVerifierRoundSummary = {
+  roundId?: string;
   baseCommit: string;
   headCommit: string;
   startedAt: string;
@@ -340,7 +355,10 @@ export type DevVerifierRoundSummary = {
   passed: number;
   failed: number;
   unknown: number;
+  skipped?: number;
   fullSuite: boolean;
+  /** Durable command receipt keys used by this round, including reused prior receipts. */
+  commandRunIds?: string[];
   pendingChecks: { command: string[]; closure: string[]; taskId?: string; cwd?: string }[];
 };
 export type DevVerifierFinding = {

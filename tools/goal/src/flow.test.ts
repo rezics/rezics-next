@@ -319,6 +319,28 @@ test('bounded flow reports use half-open UTC windows and pair terminal operation
   db.close();
 });
 
+test('verifier command flow completions retain their operation identity across UTC midnight and reject duplicates', () => {
+  const db = openDb(':memory:');
+  ensureFlow(db);
+  const event = {
+    taskId: 'dev-verifier-round:round-id',
+    attempt: 1,
+    stage: 'check' as const,
+    action: 'command-completed',
+    at: '2026-11-12T00:00:01.010Z',
+    detail: JSON.stringify({ startedAt: '2026-11-11T23:59:58.990Z', durationMs: 2020 }),
+    operationId: 'command-run-id',
+  };
+  recordFlow(db, event);
+
+  expect(readFlow(db, '2026-11-11T00:00:00.000Z', '2026-11-12T00:00:00.000Z')).toHaveLength(0);
+  expect(readFlow(db, '2026-11-12T00:00:00.000Z', '2026-11-13T00:00:00.000Z')).toMatchObject([
+    { taskId: event.taskId, stage: 'check', action: 'command-completed', at: event.at, operationId: event.operationId },
+  ]);
+  expect(() => recordFlow(db, event)).toThrow(/UNIQUE constraint failed/);
+  db.close();
+});
+
 test('goal report --flow gives per stage and per Goal totals and percentiles, efficiency, queues, bottleneck and attempts', () => {
   const events: any[] = [];
   const add = (stage: string, action: string, minute: number, attempt = 0) =>

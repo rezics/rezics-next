@@ -617,6 +617,10 @@ inside the same admission permit; completing the command does not start a fresh 
 route regression observes these inputs at the summary reader and retains the existing native assertions.
 Continue, Feed, native growth and rendered seeded journeys remain unaccepted pending a whole-feature outcome.
 
+Decision: mounted Progress HTTP acceptance creates Semantic subjects through `/v1/subjects` with the existing
+signed credential fixture, preserving producer-owned Access and command-history evidence. Parser witnesses keep
+an invalid subject paired with a valid mode and test invalid mode separately, without asserting validation order.
+
 The existing Progress and Continue descriptors retain their native session commands and response contracts.
 An operation declaration describes work; it supplies neither owner authority nor evidence of execution.
 Native owner admission still precedes receipt lookup. A completed mutation receipt and its current presentation

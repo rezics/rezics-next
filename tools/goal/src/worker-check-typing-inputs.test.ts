@@ -12,6 +12,7 @@ import {
   qualifyTypingInputs,
   kernelClientTypingPipeline,
   isKnownTypingCompiler,
+  isDirectKernelTypingCompiler,
   resolveTypingCompilerCommand,
 } from './worker-check-typing-inputs.ts';
 import {
@@ -499,6 +500,96 @@ function standardFixture() {
   }
   return root;
 }
+
+test('a retained conservative receipt qualifies for the installed direct Kernel owner only on exact source and prepared identity', () => {
+  const root = standardFixture();
+  const command = ['bun', 'services/kernel/scripts/typecheck.ts'];
+  write(root, '.gitignore', `${readFileSync(join(root, '.gitignore'), 'utf8')}node_modules/\n`);
+  write(
+    root,
+    'services/kernel/package.json',
+    JSON.stringify({
+      name: '@rezics/kernel',
+      scripts: { typecheck: 'bun scripts/typecheck.ts' },
+      dependencies: { '@fixture/types': 'workspace:*' },
+    }),
+  );
+  write(root, 'services/kernel/scripts/typecheck.ts', 'export {};');
+  write(root, 'services/kernel/src/index.ts', "import note from '../../../docs/ledger.md'; export default note;");
+  write(root, 'packages/fixture/package.json', JSON.stringify({ name: '@fixture/types', scripts: {} }));
+  write(root, 'services/kernel/node_modules/@fixture/types/package.json', '{"version":"1"}');
+  write(root, 'docs/remote-only.md', '# Unconsumed remote document\n');
+  for (const file of ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'])
+    write(root, file, 'remote preparation marker');
+  execFileSync(
+    'git',
+    [
+      'add',
+      '-f',
+      '.temp/continuation/owner.md',
+      '.temp/search-walk/persona.log',
+      '.temp/search-walk/census.json',
+      'docs/remote-only.md',
+      '.preparation-started',
+      '.remote-check-supervisor',
+      'preparation-install.json',
+    ],
+    { cwd: root },
+  );
+
+  expect(isDirectKernelTypingCompiler(root, command)).toBe(true);
+  const current = captureTypingInputs(root, command);
+  expect(current.profile).toBe('configured-typescript');
+  expect(current.excludedDocuments).not.toContain('docs/ledger.md');
+  expect(isKnownTypingCompiler(root, ['bun', 'services/kernel/scripts/custom-typecheck.ts'])).toBe(false);
+  expect(isKnownTypingCompiler(root, [...command, '--emit-client'])).toBe(false);
+
+  const legacy = captureTypingInputs(root, ['bun', 'unknown-compiler.ts']);
+  expect(legacy.profile).toBe('conservative');
+  legacy.prepared = current.prepared;
+  const receiptPath = `.temp/goal/checks/typing-inputs/${physical}.json`;
+  write(
+    root,
+    receiptPath,
+    JSON.stringify({
+      version: 1,
+      physicalRunId: physical,
+      command,
+      compilerCommand: command,
+      started: legacy,
+      completed: legacy,
+      sourceStable: true,
+      exitCode: 0,
+    }),
+  );
+  const receipt = readTypingInputReceipt(root, physical, command)!;
+  expect(qualifyTypingInputs(root, receipt)).toBe('matched');
+
+  const helpCommand = ['bun', '--cwd', 'services/kernel', 'run', 'typecheck'];
+  const helpSnapshot = captureTypingInputs(root, helpCommand);
+  expect(
+    qualifyTypingInputs(root, {
+      version: 1,
+      physicalRunId: physical,
+      command: helpCommand,
+      compilerCommand: helpCommand,
+      started: helpSnapshot,
+      completed: helpSnapshot,
+      sourceStable: true,
+      exitCode: 0,
+    }),
+  ).toBe('evidence-unavailable');
+
+  write(root, 'docs/remote-only.md', '# Still outside the configured Kernel graph\n');
+  write(root, '.temp/search-walk/persona.log', 'new remote-only operational content');
+  expect(qualifyTypingInputs(root, receipt)).toBe('matched');
+  write(root, 'services/kernel/node_modules/@fixture/types/package.json', '{"version":"2"}');
+  expect(qualifyTypingInputs(root, receipt)).toBe('prepared-changed');
+  write(root, 'services/kernel/node_modules/@fixture/types/package.json', '{"version":"1"}');
+
+  write(root, 'docs/ledger.md', '# Changed imported compiler input\n');
+  expect(qualifyTypingInputs(root, receipt)).toBe('source-changed');
+});
 
 test('typing recovery canonicalizes only a recognized misordered workspace compiler intent', () => {
   const root = standardFixture();

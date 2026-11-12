@@ -344,6 +344,10 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
       sourceKey: '884',
       code: 'reviewed-binding-unavailable',
     });
+    expect(interrupted.bangumiGenrePublication!.diagnostics).not.toContainEqual({
+      sourceKey: '884',
+      code: 'source-claim-unavailable',
+    });
     const interruptedSession = new ImportSession(statePath);
     let firstCandidate: string | undefined;
     try {
@@ -353,6 +357,11 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
           const command = (JSON.parse(candidate.bytes) as { commands: BatchCommand[] }).commands[0];
           return command?.op === 'propose' && command.statement.property.id === 'schema:keywords';
         });
+      if (!keyword) throw new Error('Sealed selected keyword candidate identity is missing');
+      expect(interruptedSession.bindings.claim({ source: 'bangumi_cross_media', external_id: '884' })).toEqual({
+        state: 'bound',
+        subject: keyword.subject,
+      });
       firstCandidate = keyword?.candidate;
     } finally {
       interruptedSession.close();

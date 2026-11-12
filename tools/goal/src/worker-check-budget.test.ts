@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -35,6 +36,8 @@ import {
   settleWorkerCheckHostBudget,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostAttemptCheckCustody,
+  workerCheckHostTypingCheckIds,
   workerCheckHostCommandReached,
   workerCheckHostContentTree,
   workerCheckHostRunsUsed,
@@ -597,6 +600,285 @@ async function settleSuccessWithHostCheck(
   );
   return { task, ref: { taskId: task.id, attempt: attempt.attempt }, landings };
 }
+
+const directKernelCompiler = ['bun', 'services/kernel/scripts/typecheck.ts'];
+
+function prepareDirectKernelCompiler(worktree: string): void {
+  mkdirSync(join(worktree, 'services/kernel/scripts'), { recursive: true });
+  mkdirSync(join(worktree, 'services/kernel/src'), { recursive: true });
+  writeFileSync(
+    join(worktree, 'services/kernel/package.json'),
+    JSON.stringify({ name: '@rezics/kernel', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+  );
+  writeFileSync(join(worktree, 'services/kernel/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+  writeFileSync(join(worktree, 'services/kernel/scripts/typecheck.ts'), 'export {};');
+  writeFileSync(join(worktree, 'services/kernel/src/index.ts'), 'export const ready = true;');
+}
+
+function writeDirectKernelStamp(budget: string, worktree: string, stamp: string, exitCode: number, log: string): void {
+  const physicalRunId = randomUUID();
+  const env = {
+    REZICS_TYPING_INPUTS_PHYSICAL: physicalRunId,
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(directKernelCompiler)).toString('base64'),
+  };
+  const complete = beginTypingInputReceipt(worktree, env, directKernelCompiler);
+  if (!complete) throw new Error('direct Kernel owner did not capture compiler inputs');
+  complete(exitCode);
+  const receipt = readTypingInputReceipt(worktree, physicalRunId, directKernelCompiler);
+  if (!receipt) throw new Error('direct Kernel owner did not return its physical receipt');
+  const file = join(budget, stamp);
+  const previous = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+  writeFileSync(
+    file,
+    JSON.stringify({
+      ...previous,
+      exitCode,
+      includedTypecheck: true,
+      typecheckFailed: exitCode !== 0,
+      log,
+      typingRequest: { physicalRunId, command: directKernelCompiler, localPrepared: [], capture: 'physical-command' },
+      typingInputs: receipt,
+    }),
+  );
+}
+
+function writeLaterCancelledCheck(
+  worktree: string,
+  authorizationDirectory: string,
+  taskId: string,
+  attempt: number,
+  checkId: string,
+  physicalRunId: string,
+): { finishPhysicalCustody: (terminal: boolean) => void; authorizationPath: string; authorizationBytes: string } {
+  const root = join(worktree, '.temp/goal/checks');
+  const resultDirectory = join(root, 'results');
+  const custody = join(root, 'custody');
+  const historyDirectory = join(custody, 'history');
+  const cancelledDirectory = join(custody, 'cancelled');
+  mkdirSync(resultDirectory, { recursive: true });
+  mkdirSync(historyDirectory, { recursive: true });
+  mkdirSync(cancelledDirectory, { recursive: true });
+  const result = JSON.stringify({
+    id: checkId,
+    cwd: worktree,
+    argv: directKernelCompiler,
+    ownership: { taskId, attempt },
+    status: 'running',
+    physicalRunId,
+  });
+  const authorizationPath = join(authorizationDirectory, `${checkId}.cancellation-authorization.json`);
+  const authorizationBytes = JSON.stringify({
+    records: [{ id: checkId, taskId, attempt, argv: directKernelCompiler }],
+  });
+  writeFileSync(authorizationPath, authorizationBytes);
+  writeFileSync(join(resultDirectory, `${checkId}.json`), result);
+  writeFileSync(
+    join(cancelledDirectory, `${checkId}.json`),
+    JSON.stringify({
+      version: 1,
+      checkId,
+      ownership: { taskId, attempt },
+      disposition: 'logically-cancelled-physical-cleanup-unknown',
+      physicalRunId,
+      recordSha256: createHash('sha256').update(result).digest('hex'),
+      receiptReference: authorizationPath,
+      receiptSha256: createHash('sha256').update(authorizationBytes).digest('hex'),
+      createdAt: new Date().toISOString(),
+    }),
+  );
+  return {
+    authorizationPath,
+    authorizationBytes,
+    finishPhysicalCustody: (terminal) => {
+      writeFileSync(
+        join(historyDirectory, `${checkId}.${physicalRunId}.json`),
+        JSON.stringify({
+          version: 1,
+          id: checkId,
+          cwd: worktree,
+          argv: directKernelCompiler,
+          ownership: { taskId, attempt },
+          physicalRunId,
+          status: terminal ? 'unknown' : 'running',
+          remoteExpected: false,
+          ...(terminal
+            ? { terminalProof: { local: true, remote: null, resultKnown: false, observedAt: new Date().toISOString() } }
+            : {}),
+        }),
+      );
+    },
+  };
+}
+
+test('a retained Kernel pass waits for later cancellation custody and then reuses the original attempt without another run', async () => {
+  const h = harness();
+  try {
+    const retained = await settleSuccessWithHostCheck(h, 'kernel typecheck completed', (_budget, worktree) => {
+      prepareDirectKernelCompiler(worktree);
+    });
+    const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, 1);
+    const successfulLog = join(h.settings.stateDirectory, 'retained-kernel-typecheck.log');
+    writeFileSync(successfulLog, '');
+    writeDirectKernelStamp(budget, retained.task.worktree, '1', 0, successfulLog);
+    const firstStampPath = join(budget, '1');
+    const firstStamp = JSON.parse(readFileSync(firstStampPath, 'utf8')) as Record<string, unknown>;
+    const retainedReceipt = firstStamp.typingInputs as Record<string, unknown>;
+    const settlement = () =>
+      workerCheckHostTypingSettlement({ directory: budget, worktree: retained.task.worktree, limit: 2 });
+    firstStamp.typingInputs = { ...retainedReceipt, physicalRunId: randomUUID() };
+    writeFileSync(firstStampPath, JSON.stringify(firstStamp));
+    expect(settlement()).toMatchObject({
+      ok: false,
+      kind: 'evidence-unavailable',
+    });
+    firstStamp.typingInputs = retainedReceipt;
+    writeFileSync(firstStampPath, JSON.stringify(firstStamp));
+    expect(settlement()).toEqual({ ok: true });
+
+    const later = admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: retained.task.worktree });
+    expect(later).toMatchObject({ ok: true, used: 2, stamp: '2' });
+    const laterPhysical = randomUUID();
+    const checkId = randomUUID();
+    const laterStampPath = join(budget, '2');
+    const laterStamp = JSON.parse(readFileSync(laterStampPath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(
+      laterStampPath,
+      JSON.stringify({
+        ...laterStamp,
+        includedTypecheck: true,
+        typingRequest: {
+          physicalRunId: laterPhysical,
+          command: directKernelCompiler,
+          localPrepared: [],
+          capture: 'physical-command',
+        },
+        typingRecovery: { token: randomUUID(), checkId, physicalRunId: laterPhysical },
+      }),
+    );
+    const laterCustody = writeLaterCancelledCheck(
+      retained.task.worktree,
+      h.settings.stateDirectory,
+      retained.task.id,
+      retained.ref.attempt,
+      checkId,
+      laterPhysical,
+    );
+    h.store.updateAttempt(retained.ref, (attempt) => {
+      attempt.checks = [];
+    });
+    laterCustody.finishPhysicalCustody(false);
+    expect(
+      workerCheckHostAttemptCheckCustody(
+        retained.task.worktree,
+        retained.task.id,
+        1,
+        workerCheckHostTypingCheckIds(budget, []),
+      ),
+    ).toBe('unknown');
+    const waiting = await recoverWorkerTyping(h.tasks, { enqueue: () => {} }, retained.ref);
+    expect(waiting).toMatchObject({
+      status: 'pending',
+      result: expect.stringContaining('no additional compiler run was authorized'),
+    });
+    expect(workerCheckHostRunsUsed(budget)).toBe(2);
+    expect(existsSync(join(budget, 'typing-recovery'))).toBe(false);
+
+    laterCustody.finishPhysicalCustody(true);
+    expect(
+      workerCheckHostAttemptCheckCustody(
+        retained.task.worktree,
+        retained.task.id,
+        1,
+        workerCheckHostTypingCheckIds(budget, []),
+      ),
+    ).toBe('terminal');
+    writeFileSync(laterCustody.authorizationPath, `${laterCustody.authorizationBytes} `);
+    expect(
+      workerCheckHostAttemptCheckCustody(
+        retained.task.worktree,
+        retained.task.id,
+        1,
+        workerCheckHostTypingCheckIds(budget, []),
+      ),
+    ).toBe('unknown');
+    writeFileSync(laterCustody.authorizationPath, laterCustody.authorizationBytes);
+    const landings: unknown[] = [];
+    const recovered = await recoverWorkerTyping(h.tasks, { enqueue: (value) => landings.push(value) }, retained.ref);
+    expect(recovered.status).toBe('landing');
+    expect(landings).toHaveLength(1);
+    expect(workerCheckHostRunsUsed(budget)).toBe(2);
+    expect(existsSync(join(budget, 'typing-recovery'))).toBe(false);
+    expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
+  } finally {
+    await h.disposeAsync();
+  }
+}, 20_000);
+
+test('a newer genuine direct Kernel compiler failure supersedes an older retained pass', () => {
+  const controller = temporaryDirectory();
+  const worktree = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    prepareDirectKernelCompiler(worktree.path);
+    const budget = workerCheckBudgetDirectory(controller.path, 'kernel-failure', 1);
+    expect(admitWorkerCheckHostRun({ directory: budget, worktree: worktree.path, limit: 2 }).ok).toBe(true);
+    const successLog = join(controller.path, 'kernel-success.log');
+    writeFileSync(successLog, '');
+    writeDirectKernelStamp(budget, worktree.path, '1', 0, successLog);
+
+    expect(admitWorkerCheckHostRun({ directory: budget, worktree: worktree.path, limit: 2 }).ok).toBe(true);
+    const failureLog = join(controller.path, 'kernel-failure.log');
+    writeFileSync(failureLog, 'src/index.ts(1,1): error TS2322: real compiler failure\n');
+    writeDirectKernelStamp(budget, worktree.path, '2', 1, failureLog);
+    const result = workerCheckHostTypingSettlement({ directory: budget, worktree: worktree.path, limit: 2 });
+    expect(result).toMatchObject({ ok: false, kind: 'typing-failure' });
+    if (result.ok) throw new Error('a newer compiler failure must remain authoritative');
+    expect(result.result).toContain('error TS2322: real compiler failure');
+    expect(workerCheckHostRunsUsed(budget)).toBe(2);
+  } finally {
+    controller.close();
+    worktree.close();
+  }
+});
+
+test('a later unresolved Kernel check cannot borrow an older legacy content-only pass', () => {
+  const worktree = temporaryDirectory();
+  const controller = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    prepareDirectKernelCompiler(worktree.path);
+    const budget = join(controller.path, 'budget');
+    mkdirSync(budget, { recursive: true });
+    writeFileSync(
+      join(budget, '1'),
+      JSON.stringify({
+        content: workerCheckHostContentTree(worktree.path),
+        includedTypecheck: true,
+        exitCode: 0,
+      }),
+    );
+    writeFileSync(
+      join(budget, '2'),
+      JSON.stringify({
+        includedTypecheck: true,
+        typingRequest: {
+          physicalRunId: randomUUID(),
+          command: directKernelCompiler,
+          localPrepared: [],
+          capture: 'physical-command',
+        },
+      }),
+    );
+
+    expect(workerCheckHostTypingSettlement({ directory: budget, worktree: worktree.path, limit: 2 })).toMatchObject({
+      ok: false,
+      kind: 'evidence-unavailable',
+    });
+  } finally {
+    worktree.close();
+    controller.close();
+  }
+});
 
 test('an ordinary product check is the typecheck of changed workspaces; test, native, browser and growth commands are refused', () => {
   expect(classifyOrdinaryProductCommand(['bun', 'run', '--cwd', 'tools/goal', 'typecheck'])).toBe('typecheck');

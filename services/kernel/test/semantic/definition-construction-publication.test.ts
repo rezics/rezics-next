@@ -29,6 +29,7 @@ beforeAll(async () => {
 const input = await Bun.stdin.json();
 let historical;
 let pool;
+let kernel;
 try {
   let validateRelease, releaseDigest;
   if (input.original) {
@@ -55,7 +56,7 @@ try {
     KERNEL_RECEIPT_KEYS: runtime.receiptKeys,
     KERNEL_WRITE_RATE_SECRET: 'construction-cold-http-secret-with-at-least-32-bytes',
   }, auth: { issuer: runtime.authIssuer, audience: runtime.authAudience, jwksUrl: runtime.authJwksUrl } });
-  const kernel = createKernel({ ...defaults, pool, routeKey: Buffer.from(runtime.routeKey, 'base64url') });
+  kernel = createKernel({ ...defaults, pool, routeKey: Buffer.from(runtime.routeKey, 'base64url') });
   const headers = new Headers(input.headers);
   if (input.bearer) headers.set('authorization', 'Bearer ' + input.bearer);
   if (input.body !== undefined) headers.set('content-type', 'application/json');
@@ -69,8 +70,16 @@ try {
     etag: response.headers.get('etag'), session: response.headers.get('rezics-session-token'),
     validation, digest, points, historical }));
 } finally {
-  if (pool) await pool.end();
-  historical?.close();
+  try {
+    // The child owns the compiled HTTP host as well as its database pool.
+    await kernel?.stop(true);
+  } finally {
+    try {
+      if (pool) await pool.end();
+    } finally {
+      historical?.close();
+    }
+  }
 }
 `,
   );

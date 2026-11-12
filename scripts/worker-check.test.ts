@@ -1528,6 +1528,30 @@ test('stack-free placement: native command still reaches existing remote admissi
   }
 });
 
+test('remote custody accepts a bounded compiler capture argument and rejects an oversized argument', () => {
+  const fixture = workerFixture();
+  const checkId = randomUUID();
+  const physicalRunId = randomUUID();
+  const argv = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+  const remoteArgv = ['bun', '-e', 'x'.repeat(38_000)];
+  const custodyFile = remoteRunCustodyPath(fixture.root, physicalRunId);
+
+  initializeRemoteRunCustody(fixture.root, physicalRunId, { checkId, argv, remoteArgv });
+
+  const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    binding: { argv: string[]; remoteArgv: string[] };
+  };
+  expect(custody.binding).toEqual({ checkId, argv, remoteArgv });
+  expect(Buffer.byteLength(JSON.stringify(custody))).toBeLessThan(64 * 1024);
+  expect(() =>
+    initializeRemoteRunCustody(fixture.root, randomUUID(), {
+      checkId,
+      argv,
+      remoteArgv: ['bun', '-e', 'x'.repeat(48 * 1024 + 1)],
+    }),
+  ).toThrow('worker-check: invalid remote custody binding');
+});
+
 test('managed remote command starts only after its exact wrapper and physical custody is durable', async () => {
   const fixture = workerFixture();
   const hosts = writeHosts(fixture);

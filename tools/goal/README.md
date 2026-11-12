@@ -2143,9 +2143,11 @@ Decision: A control-plane release gate failure remains an ordinary gate failure 
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
-harvests only untracked regular files created after that attempt started (creation time, not modification time).
-Decision: preserve tracked continuation files and directories containing them so harvesting cannot dirty retained
-source or remove another outcome's briefs. Older untracked files
+harvests only regular Markdown created after that attempt started (creation time, not modification time), and only
+when its top-level path was not tracked in the live index, prepared source, recorded launch trees or direct parents of
+recorded merge commits. Those commit lookups read path names only under `.temp/continuation`.
+Decision: preserve paths tracked in the live index, prepared source, recorded launch trees and direct merge parents;
+query only names under `.temp/continuation`, and leave inherited local bytes in place. Older untracked files
 are dropped with a recorded reason, including files inherited from another attempt. Valid briefs keep the source
 Goal and manager; a foreign Goal is dropped with its reason. Before a brief becomes ready, its remaining paths and
 normalized title are compared with the same Goal's ready, running, held, landing and stopped tasks and its ready, held
@@ -2869,6 +2871,15 @@ Decision: recover recognized workspace compiler intent with `bun run --cwd <work
 recovery grant only after the previous exact check proves terminal SIGTERM before command start, preserving its stamp
 and physical custody.
 
+Decision: recognize only the installed direct Kernel argv `bun services/kernel/scripts/typecheck.ts` and bind it to
+the same configured Kernel dependency graph as its manifest typecheck script. A retained conservative Kernel receipt
+qualifies only when every current source input and prepared dependency identity matches; projection omits only
+unconsumed documents and operational files the configured owner already excludes. Reuse an earlier Kernel pass across
+later stamps only after every same-attempt check has terminal physical custody. A cancellation tombstone must bind the
+exact result bytes and referenced Root authorization bytes/row, and its physical history must prove terminality;
+unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer real compiler failure
+remains authoritative. Web recovery is unchanged.
+
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
 known stop, terminal custody for every same-attempt check and one exact installed Web compiler grant. Permit one
@@ -3083,6 +3094,20 @@ verification. Product attempts retain the typing-only rule; their other acceptan
 Decision: verifier rounds coalesce changed Dev into the newest captured head, start with boot smoke, select affected
 checks from the previous round head, carry deadline backlog, report current-head failures in one urgent batch per
 owning Goal, and always advance `dev-verified` at round end.
+
+Decision: each verifier command execution has one durable identity tied to its captured head and round. Record its
+actual start. Commit its terminal result, error class, end time and matching flow event in one SQLite transaction.
+Replay of that execution emits no duplicate receipt; a real retry gets a new identity. Round summaries reference
+command runs. Keep product failure, infrastructure, skipped and unknown distinct; missing timing remains unknown.
+Decision: retain the existing head/check cache key separately from round-scoped attempt keys, write one `check`
+completion event per command identity, and represent a missing boot-smoke file or a tree without `package.json` as
+skipped with no start time.
+
+Measure the first two full UTC days after deployment against the
+[delivery-step audit](reports/daily-step-audit-2026-11-11.md#one-structural-change-and-its-measure): all terminal command
+runs have matching result and flow receipts with valid boundaries, no duplicate terminal receipts, and no non-passing
+outcomes reported as passed. Compare round time and integrations at comparable work supply. Timing coverage alone
+does not establish a delivery or allowance saving. This uses the existing verifier and does not run additional checks.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to

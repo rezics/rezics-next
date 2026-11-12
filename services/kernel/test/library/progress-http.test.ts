@@ -3,15 +3,14 @@ import { createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { type Access } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject as createSemanticSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const issuer = 'https://auth.progress.test';
@@ -63,25 +62,13 @@ async function request(
   return { response, body: (await response.json()) as Record<string, any> };
 }
 
-async function createSubject(accountId = owner): Promise<string> {
-  const requestKey = randomUUID();
-  const created = await createSemanticSubject(db.pool, {
-    actor: {
-      kind: 'account',
-      accountId,
-      clientId: 'web',
-      scopes,
-      requestedBy: null,
-      authnEpoch: 1,
-    },
-    target: subjectTarget(new Uint8Array(32).fill(23), accountId, requestKey),
-    idempotencyKey: requestKey,
-    digest: createHash('sha256').update(requestKey).digest(),
-    item: { type: 'schema:Book', labels: { en: `Progress subject ${serial}` } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
+async function createSubject(as: 'owner' | 'other' | 'suspended' = 'owner'): Promise<string> {
+  const created = await request(as, 'POST', '/v1/subjects', {
+    type: 'schema:Book',
+    labels: { en: `Progress subject ${serial}` },
   });
-  return created.subject.id;
+  expect(created.response.status).toBe(201);
+  return created.body.subject.id as string;
 }
 
 async function start(
@@ -709,7 +696,7 @@ test('owner discovery pages exact occurrences across subjects and rejects stale 
 });
 
 test('owner discovery request cost stays bounded as a private library grows to 4096 sessions', async () => {
-  const subjectId = await createSubject(other);
+  const subjectId = await createSubject('other');
   const template = await start(subjectId, 'scalar_amount', 'minute', {}, 'other');
   const route = routeOf(other)!;
   const measurements: {

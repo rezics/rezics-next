@@ -81,12 +81,18 @@ export const flowMigrations = [
       );
       CREATE INDEX landing_operations_terminal_window ON landing_operations(terminal_at, operation_id);`,
   },
+  {
+    module: 'flow',
+    version: 9,
+    sql: `CREATE UNIQUE INDEX flow_verifier_command_completion ON flow_events(operation_id)
+      WHERE operation_id IS NOT NULL AND stage='check' AND action='command-completed';`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);
 }
-export function recordFlow(db: Database, event: FlowEvent): void {
-  ensureFlow(db);
+/** Insert into an already-migrated flow table while the caller owns the enclosing SQLite transaction. */
+export function recordFlowInTransaction(db: Database, event: FlowEvent): void {
   db.query('INSERT INTO flow_events(task_id,attempt,stage,action,at,detail,operation_id) VALUES (?,?,?,?,?,?,?)').run(
     event.taskId,
     event.attempt,
@@ -96,6 +102,10 @@ export function recordFlow(db: Database, event: FlowEvent): void {
     event.detail ?? null,
     event.operationId ?? null,
   );
+}
+export function recordFlow(db: Database, event: FlowEvent): void {
+  ensureFlow(db);
+  recordFlowInTransaction(db, event);
 }
 
 function canonicalUtc(value: string): string {

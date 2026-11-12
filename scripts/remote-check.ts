@@ -107,7 +107,13 @@ import {
   hostDumpExtractScript,
 } from './cross-media-dump-cache.ts';
 import { crossMediaDumpCacheRoot } from './datasets/fetch-dumps.ts';
-import { readJsonFile, writeAtomicJson, type CheckRemoteAttempt, type CheckRemoteRunCustody } from './check-custody.ts';
+import {
+  remoteRunCustodyUpdateLimit,
+  readJsonFile,
+  writeAtomicJson,
+  type CheckRemoteAttempt,
+  type CheckRemoteRunCustody,
+} from './check-custody.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
 export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
@@ -8210,6 +8216,11 @@ export function remoteCheckCustodyCallbacks(
   const physicalRunId = process.env.REZICS_CHECK_PHYSICAL_RUN_ID;
   if (file === undefined && checkId === undefined && physicalRunId === undefined) return {};
   if (!file || !checkId || !physicalRunId) throw new Error('remote-check: incomplete per-physical custody binding');
+  const admitted = readJsonFile<CheckRemoteRunCustody>(file);
+  if (!admitted || admitted.physicalRunId !== physicalRunId || admitted.binding?.checkId !== checkId) {
+    throw new Error('remote-check: per-physical custody was not admitted before host reservation');
+  }
+  const updateLimitCharacters = remoteRunCustodyUpdateLimit(admitted);
   const update = (
     operation: (current: CheckRemoteRunCustody, attempts: CheckRemoteAttempt[]) => CheckRemoteAttempt[],
   ): void => {
@@ -8237,13 +8248,18 @@ export function remoteCheckCustodyCallbacks(
       : attempts.some((attempt) => attempt.status === 'uncertain')
         ? 'uncertain'
         : 'running';
-    writeAtomicJson(file, {
-      ...current,
-      binding: { ...current.binding, hostsFile, returns: [...returns] },
-      status,
-      attempts,
-      updatedAt: new Date().toISOString(),
-    });
+    writeAtomicJson(
+      file,
+      {
+        ...current,
+        binding: { ...current.binding, hostsFile, returns: [...returns] },
+        status,
+        attempts,
+        updatedAt: new Date().toISOString(),
+      },
+      true,
+      updateLimitCharacters,
+    );
   };
   const findAttempt = (attempts: CheckRemoteAttempt[], physical: { host: string; run: string }): number => {
     const index = attempts.findIndex((attempt) => attempt.host === physical.host && attempt.id === physical.run);

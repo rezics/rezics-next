@@ -1,5 +1,6 @@
 /** Compiler evidence is narrower than budget/source custody. Unknown runners retain the complete source tree. */
 import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import {
@@ -112,6 +113,14 @@ const GENERATOR_SCRIPTS = new Set([
 ]);
 type CompilerGraph = { workspaces: Set<string>; executables: Set<string> };
 
+function directKernelOwnerCommand(argv: readonly string[]): boolean {
+  return (
+    argv.length === 2 &&
+    (argv[0] === 'bun' || argv[0]?.endsWith('/bun') === true) &&
+    argv[1] === 'services/kernel/scripts/typecheck.ts'
+  );
+}
+
 /** Recognize only the owning manifest scripts and fail-fast sequences of their standard argv. */
 function compilerGraph(root: string, argv: readonly string[], files: readonly string[]): CompilerGraph | undefined {
   const manifests = new Map(
@@ -132,6 +141,15 @@ function compilerGraph(root: string, argv: readonly string[], files: readonly st
   if (kernelClientTypingPipeline(root, argv)) {
     selected.add('services/kernel');
     selected.add('packages/client');
+  } else if (directKernelOwnerCommand(argv)) {
+    const kernel = manifests.get('services/kernel');
+    if (
+      kernel?.name !== '@rezics/kernel' ||
+      kernel.scripts?.typecheck !== 'bun scripts/typecheck.ts' ||
+      !files.includes('services/kernel/scripts/typecheck.ts')
+    )
+      return undefined;
+    selected.add('services/kernel');
   } else {
     const shell = argv.length === 3 && ['sh', 'bash'].includes(argv[0]!) && argv[1] === '-c';
     const commands = shell
@@ -193,16 +211,26 @@ export function isKnownTypingCompiler(root: string, command: readonly string[]):
   return compilerGraph(root, command, gitFiles(root)) !== undefined;
 }
 
-/** Resolve a recognized workspace intent to its installed script form during typing-only recovery. */
-export function resolveTypingCompilerCommand(root: string, command: readonly string[]): string[] | undefined {
-  const canonical =
+/** The direct installed Kernel entrypoint has the same configured graph as its manifest typecheck owner. */
+export function isDirectKernelTypingCompiler(root: string, command: readonly string[]): boolean {
+  return directKernelOwnerCommand(command) && isKnownTypingCompiler(root, command);
+}
+
+function misorderedWorkspaceTypecheckIntent(command: readonly string[]): boolean {
+  return (
     command.length === 5 &&
-    (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
+    (command[0] === 'bun' || command[0]?.endsWith('/bun') === true) &&
     command[1] === '--cwd' &&
     command[3] === 'run' &&
     command[4] === 'typecheck'
-      ? [command[0]!, 'run', '--cwd', command[2]!, 'typecheck']
-      : [...command];
+  );
+}
+
+/** Resolve a recognized workspace intent to its installed script form during typing-only recovery. */
+export function resolveTypingCompilerCommand(root: string, command: readonly string[]): string[] | undefined {
+  const canonical = misorderedWorkspaceTypecheckIntent(command)
+    ? [command[0]!, 'run', '--cwd', command[2]!, 'typecheck']
+    : [...command];
   return isKnownTypingCompiler(root, canonical) ? canonical : undefined;
 }
 
@@ -440,11 +468,10 @@ function stableSource(started: TypingInputs, completed: TypingInputs, outputs: r
 
 /** Capture every admitted physical command, including workspace runners predating compiler receipt support. */
 export function typingInputCommand(command: readonly string[]): string[] {
-  // Carry the current standalone capture implementation through argv: old frozen worktrees need no source rewrite.
-  // Keep each transferred argument under remote custody's 4096-character bound.
-  const payload = Buffer.from(
+  // Carry the standalone capture implementation through argv for old frozen worktrees, compressed to fit custody.
+  const payload = deflateSync(
     JSON.stringify({
-      captureModule: readFileSync(import.meta.path).toString('base64'),
+      captureModule: readFileSync(import.meta.path).toString(),
       command,
     }),
   ).toString('base64');
@@ -453,12 +480,14 @@ export function typingInputCommand(command: readonly string[]): string[] {
     'bun',
     '-e',
     `
+import { inflateSync } from 'node:zlib';
 const payload = process.argv.slice(1).join('');
-const { captureModule, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+const { captureModule, command } = JSON.parse(inflateSync(Buffer.from(payload, 'base64')).toString('utf8'));
 let complete;
 let readReceipt;
 try {
-  const inputs = await import('data:text/typescript;base64,' + captureModule);
+  const source = Buffer.from(captureModule, 'utf8').toString('base64');
+  const inputs = await import('data:text/typescript;base64,' + source);
   readReceipt = inputs.readTypingInputReceipt;
   complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, command);
 } catch (error) { console.error('typing inputs unavailable before compilation: ' + error); }
@@ -573,12 +602,44 @@ export function readTypingInputReceipt(
 
 export type TypingInputQualification = 'matched' | 'source-changed' | 'prepared-changed' | 'evidence-unavailable';
 
+const REMOTE_PREPARATION_MARKERS = new Set([
+  '.preparation-started',
+  '.remote-check-supervisor',
+  'preparation-install.json',
+]);
+
+/**
+ * A pre-recognition direct Kernel receipt captured the conservative inventory. Project only that legacy snapshot
+ * onto the current configured inventory: all admitted source paths still bind exactly, while documents are
+ * omitted only when the installed Kernel graph proves they are unconsumed.
+ */
+function retainedKernelSourceMatches(completed: TypingInputs, current: TypingInputs): boolean {
+  if (completed.profile !== 'conservative' || current.profile !== 'configured-typescript') return false;
+  const compiled = new Map(completed.source.map((entry) => [entry.path, entry.digest]));
+  if (compiled.size !== completed.source.length) return false;
+  const currentPaths = new Set(current.source.map((entry) => entry.path));
+  if (currentPaths.size !== current.source.length) return false;
+  for (const entry of current.source) if (compiled.get(entry.path) !== entry.digest) return false;
+
+  const excludedDocuments = new Set(current.excludedDocuments);
+  for (const entry of completed.source) {
+    if (currentPaths.has(entry.path)) continue;
+    if (excludedDocuments.has(entry.path)) continue;
+    if (entry.path.startsWith('.temp/')) continue;
+    if (REMOTE_PREPARATION_MARKERS.has(entry.path)) continue;
+    return false;
+  }
+  return true;
+}
+
 /** Qualify producer outputs through the existing atomic tree publication; unavailable transport is not a source error. */
 export function qualifyTypingInputs(
   root: string,
   receipt: TypingInputReceipt,
   localPrepared: readonly TypingInput[] = [],
 ): TypingInputQualification {
+  // Bun prints usage for `bun --cwd <workspace> run <script>`; the installed owner requires `bun run --cwd`.
+  if (misorderedWorkspaceTypecheckIntent(receipt.compilerCommand)) return 'evidence-unavailable';
   const pipeline = kernelClientTypingPipeline(root, receipt.compilerCommand);
   if (!receipt.sourceStable) {
     // Earlier capture knew the exact pipeline but did not declare generation. Never reinterpret it as a pass.
@@ -589,7 +650,11 @@ export function qualifyTypingInputs(
   if (receipt.exitCode !== 0) return 'source-changed';
   const current = captureTypingInputs(root, receipt.compilerCommand);
   if (current.runtime !== receipt.completed.runtime) return 'evidence-unavailable';
-  if (!same(current.source, receipt.completed.source)) return 'source-changed';
+  const retainedKernelReceipt =
+    directKernelOwnerCommand(receipt.compilerCommand) && retainedKernelSourceMatches(receipt.completed, current);
+  if (!same(current.source, receipt.completed.source) && !retainedKernelReceipt) return 'source-changed';
+  // This legacy pass is reused only when every installed dependency and generated input remains identical.
+  if (retainedKernelReceipt && !same(current.prepared, receipt.completed.prepared)) return 'prepared-changed';
   if (receipt.outputs?.includes('kernel-client-v1')) {
     try {
       const require = createRequire(import.meta.url);

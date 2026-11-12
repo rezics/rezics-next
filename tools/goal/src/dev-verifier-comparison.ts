@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -160,8 +160,7 @@ export function makeFinding(
 function verifierExecution(options: DevVerifierOptions): DevVerifierExecution {
   return {
     settings: options.settings,
-    readRun: (key) => options.store.devVerifierRun?.(key)?.evidence,
-    saveRun: (run) => options.store.saveDevVerifierRun?.(run),
+    store: options.store,
   };
 }
 
@@ -174,6 +173,7 @@ export async function runChecksAtHead(
   deadline: number,
   signal: AbortSignal,
   bootSmokeCount = 0,
+  roundId: string = randomUUID(),
 ): Promise<RoundChecks> {
   const settings = options.settings;
   const execution = verifierExecution(options);
@@ -193,7 +193,7 @@ export async function runChecksAtHead(
 
   const runOne = async (check: IndexedCheck, gate: typeof runner) => {
     const key = runCacheKey(settings, head, check, selection);
-    const evidence = await executeCheck(execution, gate, check, head, tree, key, undefined, signal);
+    const evidence = await executeCheck(execution, gate, check, head, tree, key, undefined, signal, roundId);
     attempted.add(check.index);
     results.push({ check, evidence });
   };

@@ -1983,6 +1983,9 @@ published-digest point, followed by ordinary fresh command authorization before 
 uses new-publication caps. Pattern aggregate HTTP refusal and its reached-defect/same-pattern-excess tie remain
 pending in the parent CPU contract; these shape limits do not supply that producer.
 
+Decision: cold HTTP publication fixtures stop their compiled Kernel before ending the owned pool and removing a
+pinned historical graph; same-key conflicts keep the ordinary fresh-authorized Definitions command and 422 mapping.
+
 The [remaining composition plan](../../../../packages/definitions/src/publication-construction-contract.md#remaining-publication-composition)
 owns the residual valid-body algorithm, live graph accounting and exact source handoffs. Semantic binds one
 immutable snapshot to both existing digest domains, historical same-pool existence and the native command.

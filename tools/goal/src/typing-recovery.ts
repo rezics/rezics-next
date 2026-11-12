@@ -14,6 +14,9 @@ import {
   isTypingEvidenceUnavailableResult,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostAttemptCheckCustody,
+  workerCheckHostHasDirectKernelTypingRun,
+  workerCheckHostTypingCheckIds,
   workerCheckHostHasTypecheckRun,
   workerCheckHostTypingSettlement,
   workerCheckHostTypingReceiptMatches,
@@ -89,6 +92,21 @@ export async function recoverWorkerTyping(
       worktree: task.worktree,
       limit: workerCheckHostBudgetLimit(task, ref.attempt),
     });
+    if (
+      workerCheckHostHasDirectKernelTypingRun(directory, task.worktree) &&
+      workerCheckHostAttemptCheckCustody(
+        task.worktree,
+        task.id,
+        ref.attempt,
+        workerCheckHostTypingCheckIds(directory, attempt.checks ?? []),
+      ) !== 'terminal'
+    )
+      return {
+        ...ref,
+        status: 'pending' as const,
+        result:
+          'Retained Kernel compiler evidence is waiting for terminal custody of every same-attempt check. Existing check ownership stays fenced; no additional compiler run was authorized.',
+      };
     if (store.retryIntent(ref)?.status === 'pending')
       store.updateRetryIntent(ref, (intent) => {
         intent.status = 'abandoned';

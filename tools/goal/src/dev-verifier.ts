@@ -32,7 +32,7 @@ import {
   isAuthDatabasePlacementFailure,
   type DiagnosticWorkspaceContext,
 } from './dev-verifier-diagnostics.ts';
-import { installDependenciesCached } from './dev-verifier-execution.ts';
+import { installDependenciesCached, recordSkippedCommand } from './dev-verifier-execution.ts';
 import {
   countSourceIntervalCommits,
   createFullVerifierChecks,
@@ -162,13 +162,19 @@ function uniqueChecks(checks: readonly Check[]): Check[] {
   return [...result.values()];
 }
 
-function bootSmokeChecks(settings: Settings, commit: string): Check[] {
+function bootSmokePlan(settings: Settings, commit: string): { checks: Check[]; skipped: Check[] } {
   const tracked = trackedFilesAt(settings.mainCheckout, commit);
-  return (settings.bootSmoke?.tests ?? [])
-    .filter((test) => tracked.has(test))
-    .flatMap((test) =>
-      placeBootSmokeCheck({ command: ['bun', 'test', test], closure: ['**'] }, tracked, settings.mainCheckout),
-    );
+  const tests = [...new Set(settings.bootSmoke?.tests ?? [])];
+  return {
+    checks: tests
+      .filter((test) => tracked.has(test))
+      .flatMap((test) =>
+        placeBootSmokeCheck({ command: ['bun', 'test', test], closure: ['**'] }, tracked, settings.mainCheckout),
+      ),
+    skipped: tests
+      .filter((test) => !tracked.has(test))
+      .map((test) => ({ command: ['bun', 'test', test], closure: ['**'] })),
+  };
 }
 
 function isAncestor(cwd: string, base: string, target: string): boolean {
@@ -177,7 +183,12 @@ function isAncestor(cwd: string, base: string, target: string): boolean {
 
 const CHANGED_DEV_CHECK_INTERVAL_MS = 10 * 60_000;
 
-function shouldRunRound(previous: DevVerifierRun | undefined, target: string, now: number, intervalMs: number): boolean {
+function shouldRunRound(
+  previous: DevVerifierRun | undefined,
+  target: string,
+  now: number,
+  intervalMs: number,
+): boolean {
   if (!previous?.round) return true;
   const { completedAt, headCommit, pendingChecks, unknown } = previous.round;
   const changed = headCommit !== target;
@@ -536,16 +547,21 @@ export function recordVerifierResults(
   base: string,
   target: string,
   runs: readonly CheckRun[],
-): { testsRun: number; passed: number; failed: number; unknown: number; repairs: TestFailure[] } {
+): { testsRun: number; passed: number; failed: number; unknown: number; skipped: number; repairs: TestFailure[] } {
   let passed = 0;
   let failed = 0;
   let unknown = 0;
+  let skipped = 0;
   const repairs: TestFailure[] = [];
   const currentRevision = head(options.settings.mainCheckout, options.settings.integrationBranch ?? 'dev');
   for (const { check, evidence } of runs) {
     const outcome = classifyRun(evidence, options.settings.policy?.verifier);
     if (outcome === 'pass') {
       passed++;
+      continue;
+    }
+    if (outcome === 'skipped') {
+      skipped++;
       continue;
     }
     if (outcome === 'fail') failed++;
@@ -746,13 +762,13 @@ export function recordVerifierResults(
       );
     }
   }
-  return { testsRun: runs.length, passed, failed, unknown, repairs: mergeRepeatedNamedTestFailures(repairs) };
+  return { testsRun: runs.length, passed, failed, unknown, skipped, repairs: mergeRepeatedNamedTestFailures(repairs) };
 }
 
 function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundSummary): void {
   const result = summary.failed ? 'fail' : summary.unknown ? 'infrastructure' : 'pass';
   const record: DevVerifierRun = {
-    key: 'dev-verifier-round:' + summary.startedAt + ':' + randomUUID(),
+    key: 'dev-verifier-round:' + summary.startedAt + ':' + (summary.roundId ?? randomUUID()),
     createdAt: summary.completedAt,
     evidence: {
       commit: summary.headCommit,
@@ -764,6 +780,7 @@ function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundS
         passed: summary.passed,
         failed: summary.failed,
         unknown: summary.unknown,
+        skipped: summary.skipped ?? 0,
         durationMs: summary.durationMs,
       }),
       logPath: '',
@@ -774,9 +791,14 @@ function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundS
   saveRun(options.store, record, options.settings.policy?.verifier);
 }
 
-async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | undefined, captured: string): Promise<void> {
+async function runRound(
+  options: DevVerifierOptions,
+  previous: DevVerifierRun | undefined,
+  captured: string,
+): Promise<void> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
+  const roundId = randomUUID();
   const startedMs = Date.now();
   const startedAt = new Date(startedMs).toISOString();
   let verified: string;
@@ -791,7 +813,8 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   const firstRound = !previous?.round;
   let fullSuite = firstRound || !isAncestor(checkout, previousHead, captured);
   let freshChecks: Check[];
-  const bootChecks = bootSmokeChecks(settings, captured);
+  const bootPlan = bootSmokePlan(settings, captured);
+  const bootChecks = bootPlan.checks;
   const bootPaths = settings.bootSmoke?.tests ?? [];
   if (!fullSuite) {
     const changedCommits = countSourceIntervalCommits(checkout, previousHead, captured);
@@ -814,20 +837,50 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   const tree = join(settings.worktreeRoot, 'dev-verify-round-' + randomUUID());
   mkdirSync(settings.worktreeRoot, { recursive: true });
   mkdirSync(settings.stateDirectory, { recursive: true });
+  const execution = {
+    settings,
+    store: options.store,
+    roundId,
+  };
+  const skippedCommandRunIds = bootPlan.skipped.map((check) =>
+    recordSkippedCommand(
+      execution,
+      captured,
+      roundId,
+      check,
+      'boot-smoke-skipped:' + captured + ':' + check.command.at(-1),
+      `Boot smoke file ${check.command.at(-1)} is not tracked at the captured head.`,
+    ),
+  );
+  let skippedCommandCount = skippedCommandRunIds.length;
+  let commandRunIds = [...skippedCommandRunIds];
   let treeAdded = false;
-  let counts = { testsRun: 0, passed: 0, failed: 0, unknown: 0, repairs: [] as TestFailure[] };
+  let counts = {
+    testsRun: 0,
+    passed: 0,
+    failed: 0,
+    unknown: 0,
+    skipped: skippedCommandCount,
+    repairs: [] as TestFailure[],
+  };
   let pendingChecks: Check[] = checks;
   try {
     git(checkout, 'worktree', 'add', '--detach', tree, captured);
     treeAdded = true;
-    const execution = {
-      settings,
-      readRun: (key: string) => options.store.devVerifierRun?.(key)?.evidence,
-      saveRun: (run: DevVerifierRun) => saveRun(options.store, run, settings.policy?.verifier),
-    };
     const installed = installDependenciesCached(execution, captured, tree, dependencySetupKey(settings, captured));
+    skippedCommandCount += installed.commandRunIds.filter(
+      (id) => options.store.devVerifierRun?.(id)?.execution?.outcome === 'skipped',
+    ).length;
+    commandRunIds = [...new Set([...commandRunIds, ...installed.commandRunIds])];
     if (!installed.passed) {
-      counts = { testsRun: checks.length, passed: 0, failed: 0, unknown: checks.length, repairs: [] };
+      counts = {
+        testsRun: checks.length,
+        passed: 0,
+        failed: 0,
+        unknown: checks.length,
+        skipped: skippedCommandCount,
+        repairs: [],
+      };
     } else if (checks.length) {
       const executionResult = await runChecksAtHead(
         options,
@@ -837,9 +890,17 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
         deadline,
         controller.signal,
         bootChecks.length,
+        roundId,
       );
       pendingChecks = executionResult.pending;
-      counts = recordVerifierResults(options, previousHead, captured, executionResult.results);
+      const results = recordVerifierResults(options, previousHead, captured, executionResult.results);
+      counts = { ...results, skipped: results.skipped + skippedCommandCount };
+      commandRunIds = [
+        ...new Set([
+          ...commandRunIds,
+          ...executionResult.results.flatMap((result) => result.evidence.commandRunIds ?? []),
+        ]),
+      ];
     } else pendingChecks = [];
   } finally {
     clearTimeout(deadlineTimer);
@@ -850,6 +911,7 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   dispatchTestRepairs(options, counts.repairs, captured);
   const completedAt = new Date().toISOString();
   const summary: DevVerifierRoundSummary = {
+    roundId,
     baseCommit: previousHead,
     headCommit: captured,
     startedAt,
@@ -859,7 +921,9 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
     passed: counts.passed,
     failed: counts.failed,
     unknown: counts.unknown,
+    skipped: counts.skipped,
     fullSuite,
+    commandRunIds,
     pendingChecks,
   };
   saveRoundRecord(options, summary);
