@@ -8,6 +8,9 @@ import {
   hostedId,
   hostedKey,
   hostedOwnerBookResponse,
+  sameHostedViewer,
+  type HostedOwnerBinding,
+  type HostedOwnerViewer,
   hostedOwnerInventoryResponse,
   hostedPage,
   hostedPublish,
@@ -38,6 +41,8 @@ function failure(status: number, mutation: boolean): StudioResult<never> {
     return hostedFailure('denied', 'Your current session cannot perform this book action.');
   if (status === 404)
     return hostedFailure('unavailable', 'This book or one of its exact chapter versions is unavailable.');
+  if (status === 409)
+    return hostedFailure('stale', 'The book inventory continuation is no longer valid. Reopen your books.');
   if (status === 412)
     return hostedFailure('stale', 'The structure or publication changed. Reload before preparing another operation.');
   if (status === 400 || status === 413 || status === 422)
@@ -142,52 +147,52 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative {
       return unavailable();
     }
   }
-  async function listOwn(accountId: string, cursor: string | null, signal: AbortSignal) {
-    if (!v.is(hostedId, accountId) || (cursor !== null && (cursor.length < 1 || cursor.length > 4096)))
-      return hostedFailure('invalid', 'The book inventory address is invalid.');
+  async function listOwn(accountId: string, cursor: string | null, signal: AbortSignal, expected?: HostedOwnerBinding) {
+    if (signal.aborted) return unavailable();
     try {
       const response = await client.accounts({ accountId }).hostedCatalogues.get(
         queryOptions(signal, {
-          scope: 'same-home',
+          scope: expected?.scope.kind ?? 'all-homes',
           limit: '20',
-          ...(cursor ? { cursor } : {}),
+          ...(cursor === null ? {} : { cursor }),
         }),
       );
+      if (signal.aborted) return unavailable();
+      if (response.status === 400)
+        return hostedFailure('stale', 'This book page is no longer available. Reopen your books.');
       if (response.error || response.status !== 200) return failure(response.status, false);
       const parsed = v.safeParse(hostedOwnerInventoryResponse, response.data);
-      if (!parsed.success || parsed.output.viewer.accountId !== accountId) return unavailable();
-      return {
-        ok: true as const,
-        value: {
-          accountId,
-          authnEpoch: parsed.output.viewer.authnEpoch,
-          items: parsed.output.items,
-          nextCursor: parsed.output.nextCursor,
-        },
-      };
+      if (!parsed.success) return unavailable();
+      const page = parsed.output;
+      if (page.viewer.accountId !== accountId || (expected && !sameHostedViewer(page.viewer, expected.viewer)))
+        return hostedFailure('denied', 'The author session changed. Reopen your books.');
+      if (expected && (page.scope.kind !== expected.scope.kind || page.scope.route !== expected.scope.route))
+        return hostedFailure('stale', 'The inventory scope changed. Reopen your books.');
+      return { ok: true as const, value: page };
     } catch {
       return unavailable();
     }
   }
-  async function readOwn(accountId: string, catalogueId: string, signal: AbortSignal) {
-    if (!v.is(hostedId, accountId) || !v.is(hostedId, catalogueId))
-      return hostedFailure('invalid', 'The book address is invalid.');
+  async function readOwn(
+    accountId: string,
+    catalogueId: string,
+    signal: AbortSignal,
+    expectedViewer?: HostedOwnerViewer,
+  ) {
+    if (signal.aborted) return unavailable();
     try {
       const response = await client
         .accounts({ accountId })
         .hostedCatalogues({ id: catalogueId })
-        .get({
-          fetch: fetchOptions(signal),
-        });
+        .get({ fetch: fetchOptions(signal) });
+      if (signal.aborted) return unavailable();
       if (response.error || response.status !== 200) return failure(response.status, false);
       const parsed = v.safeParse(hostedOwnerBookResponse, response.data);
-      if (
-        !parsed.success ||
-        parsed.output.viewer.accountId !== accountId ||
-        parsed.output.item.catalogueId !== catalogueId
-      )
-        return unavailable();
-      return { ok: true as const, value: parsed.output.item };
+      if (!parsed.success || parsed.output.item.catalogueId !== catalogueId) return unavailable();
+      const owned = parsed.output;
+      if (owned.viewer.accountId !== accountId || (expectedViewer && !sameHostedViewer(owned.viewer, expectedViewer)))
+        return hostedFailure('denied', 'The author session changed. Reopen the book.');
+      return { ok: true as const, value: owned };
     } catch {
       return unavailable();
     }

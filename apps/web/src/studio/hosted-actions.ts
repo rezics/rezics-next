@@ -9,14 +9,14 @@ import type { StudioResult } from './contract';
 import {
   hostedCreate,
   hostedId,
+  hostedOwnerBinding,
+  hostedOwnerViewer,
   hostedKey,
   hostedPublish,
   hostedRevise,
   hostedSelection,
   type HostedBook,
   type HostedBookNative,
-  type HostedOwnerBook,
-  type HostedOwnerInventory,
 } from './hosted-contract';
 import { createHostedBookNative, hostedFailure } from './hosted-native';
 
@@ -98,6 +98,7 @@ async function admittedOwner<T>(
 
 const ownerInventoryRequest = v.strictObject({
   accountId: v.optional(hostedId),
+  expected: v.optional(hostedOwnerBinding),
   cursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
 });
 export const listHostedBooks = createServerFn({ method: 'GET' })
@@ -106,27 +107,35 @@ export const listHostedBooks = createServerFn({ method: 'GET' })
     admittedOwner((native, accountId, signal) =>
       data.accountId && data.accountId !== accountId
         ? Promise.resolve(hostedFailure('denied', 'This book inventory belongs to a different account.'))
-        : native.listOwn(accountId, data.cursor, signal),
+        : native.listOwn(accountId, data.cursor, signal, data.expected),
     ),
   );
 
 export const readOwnedHostedBook = createServerFn({ method: 'GET' })
   .validator((input: unknown) =>
-    v.parse(v.strictObject({ accountId: v.optional(hostedId), catalogueId: hostedId }), input),
+    v.parse(
+      v.strictObject({
+        accountId: v.optional(hostedId),
+        catalogueId: hostedId,
+        expectedViewer: v.optional(hostedOwnerViewer),
+      }),
+      input,
+    ),
   )
   .handler(({ data }) =>
     admittedOwner((native, accountId, signal) =>
       data.accountId && data.accountId !== accountId
         ? Promise.resolve(hostedFailure('denied', 'This book belongs to a different account.'))
-        : native.readOwn(accountId, data.catalogueId, signal),
+        : native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer),
     ),
   );
 
 /** Browser callers receive admitted data only. Credentials remain inside the ordinary BFF session boundary. */
 export const hostedBookNative: HostedBookNative = {
   read: (data, signal) => readHostedBook({ data, signal }),
-  listOwn: (accountId, cursor, signal) => listHostedBooks({ data: { accountId, cursor }, signal }),
-  readOwn: (accountId, catalogueId, signal) => readOwnedHostedBook({ data: { accountId, catalogueId }, signal }),
+  listOwn: (accountId, cursor, signal, expected) => listHostedBooks({ data: { accountId, cursor, expected }, signal }),
+  readOwn: (accountId, catalogueId, signal, expectedViewer) =>
+    readOwnedHostedBook({ data: { accountId, catalogueId, expectedViewer }, signal }),
   create: (body, idempotencyKey, signal) => createHostedBook({ data: { body, idempotencyKey }, signal }),
   revise: (catalogueId, body, idempotencyKey, signal) =>
     reviseHostedBook({ data: { catalogueId, body, idempotencyKey }, signal }),

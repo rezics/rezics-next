@@ -11910,5 +11910,21 @@
   "knowledge_organization_reordered": "Dokumente neu geordnet",
   "knowledge_organization_baseline": "Ausgangsstand",
   "knowledge_organization_notebook_created": "Notizbuch erstellt",
-  "knowledge_organization_legacy": "Frühere Struktur"
+  "knowledge_organization_legacy": "Frühere Struktur",
+  "studio_books_heading": "Deine gehosteten Bücher",
+  "studio_books_intro": "Öffne ein Buch, um Entwürfe zu ordnen und die aktuelle Veröffentlichung zu prüfen.",
+  "studio_books_loading": "Deine Bücher werden geladen…",
+  "studio_books_ended": "Deine Autorensitzung hat sich geändert. Öffne deine Bücher erneut.",
+  "studio_books_retry": "Diese Seite erneut laden",
+  "studio_books_complete": "Bücher aus allen Homes werden angezeigt.",
+  "studio_books_partial": "Einige Homes werden noch indexiert. Weitere Bücher können später erscheinen.",
+  "studio_books_same_home": "Nur Bücher aus deinem aktuellen Home sind verfügbar. Andere Homes können derzeit nicht erfasst werden.",
+  "studio_books_open": "Buch · {id}",
+  "studio_books_draft": "Privater Entwurf",
+  "studio_books_protected": "Geschützt",
+  "studio_books_published": "Veröffentlicht",
+  "studio_books_empty": "Du hast keine gehosteten Bücher.",
+  "studio_books_empty_page": "Auf dieser Seite sind keine Bücher verfügbar.",
+  "studio_books_more": "Weitere Bücher",
+  "studio_books_reopen": "Deine Bücher erneut öffnen"
 }

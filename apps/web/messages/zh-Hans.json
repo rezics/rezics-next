@@ -11910,5 +11910,21 @@
   "knowledge_organization_reordered": "已调整文档顺序",
   "knowledge_organization_baseline": "基准版本",
   "knowledge_organization_notebook_created": "已创建笔记本",
-  "knowledge_organization_legacy": "较早的结构"
+  "knowledge_organization_legacy": "较早的结构",
+  "studio_books_heading": "你的托管书籍",
+  "studio_books_intro": "打开书籍，继续整理草稿或查看当前出版内容。",
+  "studio_books_loading": "正在加载书籍…",
+  "studio_books_ended": "作者会话已更改。请重新打开书籍列表。",
+  "studio_books_retry": "重试此页",
+  "studio_books_complete": "正在显示所有归属地的书籍。",
+  "studio_books_partial": "部分归属地仍在建立索引，稍后可能会显示更多书籍。",
+  "studio_books_same_home": "目前仅显示当前归属地的书籍，跨归属地内容暂不可用。",
+  "studio_books_open": "书籍 · {id}",
+  "studio_books_draft": "私密草稿",
+  "studio_books_protected": "受保护",
+  "studio_books_published": "已发布",
+  "studio_books_empty": "你还没有托管书籍。",
+  "studio_books_empty_page": "此页没有可用的书籍。",
+  "studio_books_more": "更多书籍",
+  "studio_books_reopen": "重新打开书籍列表"
 }

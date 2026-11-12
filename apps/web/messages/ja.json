@@ -11910,5 +11910,21 @@
   "knowledge_organization_reordered": "文書の順序を変更",
   "knowledge_organization_baseline": "基準",
   "knowledge_organization_notebook_created": "ノートブックを作成",
-  "knowledge_organization_legacy": "以前の構造"
+  "knowledge_organization_legacy": "以前の構造",
+  "studio_books_heading": "ホスト中のブック",
+  "studio_books_intro": "ブックを開いて下書きを整理し、現在の公開版を確認できます。",
+  "studio_books_loading": "ブックを読み込み中…",
+  "studio_books_ended": "著者セッションが変わりました。ブック一覧を開き直してください。",
+  "studio_books_retry": "このページを再試行",
+  "studio_books_complete": "すべてのホームのブックを表示しています。",
+  "studio_books_partial": "一部のホームはインデックス作成中です。後から他のブックが表示される場合があります。",
+  "studio_books_same_home": "現在のホームのブックのみ表示しています。他のホームは確認できません。",
+  "studio_books_open": "ブック · {id}",
+  "studio_books_draft": "非公開の下書き",
+  "studio_books_protected": "保護済み",
+  "studio_books_published": "公開済み",
+  "studio_books_empty": "ホスト中のブックはありません。",
+  "studio_books_empty_page": "このページに表示できるブックはありません。",
+  "studio_books_more": "他のブック",
+  "studio_books_reopen": "ブック一覧を開き直す"
 }

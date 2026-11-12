@@ -11910,5 +11910,21 @@
   "knowledge_organization_reordered": "Documents reordered",
   "knowledge_organization_baseline": "Baseline",
   "knowledge_organization_notebook_created": "Notebook created",
-  "knowledge_organization_legacy": "Earlier structure"
+  "knowledge_organization_legacy": "Earlier structure",
+  "studio_books_heading": "Your hosted books",
+  "studio_books_intro": "Open a book to continue organizing drafts and reviewing its current publication.",
+  "studio_books_loading": "Loading your books…",
+  "studio_books_ended": "Your author session changed. Reopen your books to continue.",
+  "studio_books_retry": "Retry this page",
+  "studio_books_complete": "Showing books across all homes.",
+  "studio_books_partial": "Some homes are still being indexed. More books may become available.",
+  "studio_books_same_home": "Only books in your current home are available. Cross-home coverage is unavailable.",
+  "studio_books_open": "Book · {id}",
+  "studio_books_draft": "Private draft",
+  "studio_books_protected": "Protected",
+  "studio_books_published": "Published",
+  "studio_books_empty": "You have no hosted books.",
+  "studio_books_empty_page": "No books are available on this page.",
+  "studio_books_more": "More books",
+  "studio_books_reopen": "Reopen your books"
 }

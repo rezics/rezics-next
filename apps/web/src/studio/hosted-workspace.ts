@@ -7,9 +7,8 @@ import type {
   PublicationTarget,
 } from './contract';
 import type { StudioWorkspaceProps } from './workspace';
-import type { HostedBook, HostedBookNative, HostedTargetResolver } from './hosted-contract';
+import type { HostedBook, HostedBookNative, HostedOwnedBook, HostedTargetResolver } from './hosted-contract';
 import { HostedBookAdapter } from './hosted-adapter';
-import { hostedBookNative } from './hosted-actions';
 import { hostedFailure } from './hosted-native';
 import { bookTocRows } from './book-toc';
 import { hostedBookStructure } from './hosted-structure';
@@ -112,28 +111,52 @@ export async function openHostedStudio(
     resolveTarget: HostedTargetResolver;
     isCurrent: () => boolean;
     native?: HostedBookNative;
+    owner?: HostedOwnedBook;
   },
   signal: AbortSignal,
 ): Promise<StudioResult<HostedStudioBinding>> {
   const { input, documents } = options;
-  const native = options.native ?? hostedBookNative;
+  const native = options.native ?? (await import('./hosted-actions')).hostedBookNative;
   const current = () => options.isCurrent() && documents.isCurrent();
-  const book = new HostedBookAdapter(native, current, options.resolveTarget);
-  const loaded = await book.load(options.catalogueId, signal);
-  if (!loaded.ok) return loaded;
-  if (!current() || signal.aborted) return hostedFailure('denied', 'This Studio visit has ended.');
-
-  const owner = await native.readOwn(options.accountId, options.catalogueId, signal);
+  const ended = () => hostedFailure('denied', 'This Studio visit has ended.');
+  if (!current() || signal.aborted) return ended();
+  const owner = await native.readOwn(options.accountId, options.catalogueId, signal, options.owner?.viewer);
+  if (!current() || signal.aborted) return ended();
   if (!owner.ok) return owner;
-  if (owner.value.catalogueId !== options.catalogueId || owner.value.headRevisionId !== loaded.value.revision)
+  const selected = owner.value.item;
+  if (
+    options.owner &&
+    (options.owner.item.postRevisionId !== selected.postRevisionId ||
+      options.owner.item.postVisibility !== selected.postVisibility ||
+      options.owner.item.headRevisionId !== selected.headRevisionId ||
+      options.owner.item.publicationId !== selected.publicationId)
+  )
+    return hostedFailure('stale', 'The book changed while it was opening. Reopen the book.');
+  const viewer = owner.value.viewer;
+  const book = new HostedBookAdapter(native, current, options.resolveTarget);
+  const loaded = await book.load(options.catalogueId, signal, selected.headRevisionId);
+  if (!loaded.ok) return loaded;
+  if (!current() || signal.aborted) return ended();
+  if (selected.headRevisionId !== loaded.value.revision)
     return hostedFailure('stale', 'The book changed while it was opening. Reload the workspace.');
-  let publicationId = owner.value.publicationId;
+  let publicationId = selected.publicationId;
   let currentPublication: PublicationRecord | null = null;
   if (publicationId) {
-    const publication = await book.readPublication(options.catalogueId, signal);
+    const publication = await book.readPublication(options.catalogueId, signal, publicationId);
+    if (!current() || signal.aborted) return ended();
     if (!publication.ok) return publication;
     currentPublication = publicationRecord(publicationId, publication.value);
   }
+  const confirmed = await native.readOwn(options.accountId, options.catalogueId, signal, viewer);
+  if (!current() || signal.aborted) return ended();
+  if (!confirmed.ok) return confirmed;
+  if (
+    confirmed.value.item.headRevisionId !== selected.headRevisionId ||
+    confirmed.value.item.publicationId !== selected.publicationId ||
+    confirmed.value.item.postRevisionId !== selected.postRevisionId ||
+    confirmed.value.item.postVisibility !== selected.postVisibility
+  )
+    return hostedFailure('stale', 'The book changed while it was opening. Reopen the book.');
 
   async function documentOperation<T>(
     projectId: string,
@@ -166,11 +189,12 @@ export async function openHostedStudio(
         return hostedFailure('denied', 'This Studio visit has ended.');
       const structure = book.currentStructure();
       if (!structure) return hostedFailure('stale', 'Reload the book structure before reviewing publication.');
-      const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal);
+      const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal, viewer);
+      if (!current() || requestSignal.aborted) return ended();
       if (!freshOwner.ok) return freshOwner;
-      if (freshOwner.value.headRevisionId !== structure.revision)
+      if (freshOwner.value.item.headRevisionId !== structure.revision)
         return hostedFailure('stale', 'The book changed. Reload the structure before reviewing publication.');
-      publicationId = freshOwner.value.publicationId;
+      publicationId = freshOwner.value.item.publicationId;
       const review = reviewFor(structure, request.target, publicationId);
       return review
         ? { ok: true, value: review }
@@ -192,18 +216,19 @@ export async function openHostedStudio(
         requestSignal,
       );
       if (!result.ok) return result;
-      const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal);
+      const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal, viewer);
+      if (!current() || requestSignal.aborted) return ended();
       if (!freshOwner.ok)
         return hostedFailure(
           'uncertain',
           'The release was accepted but its current publication could not be refreshed. Retry to recover it.',
         );
-      if (!freshOwner.value.publicationId)
+      if (!freshOwner.value.item.publicationId)
         return hostedFailure(
           'uncertain',
           'The release was accepted but the owner read did not expose its publication. Retry to recover it.',
         );
-      const nextPublicationId = freshOwner.value.publicationId;
+      const nextPublicationId = freshOwner.value.item.publicationId;
       const record = publicationRecord(nextPublicationId, result.value);
       if (
         record.entries.length !== review.entries.length ||

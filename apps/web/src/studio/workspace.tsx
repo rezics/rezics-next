@@ -10,7 +10,8 @@ import { BookOrganizer } from './book-organizer';
 import { ExactVersionDetails, StudioVersions } from './revisions';
 import { StudioPublication } from './publication';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
+import { HostedInventoryVisit, hostedOwnerBookHref } from './hosted-inventory';
 import './studio.css';
 
 export type StudioWorkspaceProps = {
@@ -570,5 +571,92 @@ function NativeDraftComposer({ controller, disabled }: { controller: StudioContr
         {m.studio_account_create({}, { locale })}
       </Button>
     </form>
+  );
+}
+
+/** The existing Book inventory remains a bounded list beside the account-draft workspace. */
+export function HostedBookInventory({ visit, locale }: { visit: HostedInventoryVisit; locale: Locale }) {
+  const state = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
+  const page = state.kind === 'ready' ? state.page : null;
+  const reopen = localizeHref('/studio?books=1', { locale });
+  return (
+    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8">
+      <header className="space-y-2">
+        <h1 className="text-3xl font-semibold">Studio</h1>
+        <p>{m.studio_books_intro({}, { locale })}</p>
+        <a className="studio-skip" href={localizeHref('/studio', { locale })}>
+          {m.studio_account_return({}, { locale })}
+        </a>
+      </header>
+      <section className="studio-stack" aria-labelledby="studio-books-heading" aria-busy={state.kind === 'loading'}>
+        <h2 id="studio-books-heading">{m.studio_books_heading({}, { locale })}</h2>
+        {state.kind === 'loading' ? <p role="status">{m.studio_books_loading({}, { locale })}</p> : null}
+        {state.kind === 'ended' ? (
+          <p role="alert">{m.studio_books_ended({}, { locale })}</p>
+        ) : state.kind === 'failed' ? (
+          <div className="studio-stack" role="alert">
+            <p>{state.error.message}</p>
+            {state.error.kind === 'unavailable' ? (
+              <Button type="button" variant="outline" onClick={() => void visit.load()}>
+                {m.studio_books_retry({}, { locale })}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        {page ? (
+          <>
+            <p className="studio-help" role="status">
+              {page.scope.crossHome === 'complete'
+                ? m.studio_books_complete({}, { locale })
+                : page.scope.crossHome === 'partial'
+                  ? m.studio_books_partial({}, { locale })
+                  : m.studio_books_same_home({}, { locale })}
+            </p>
+            {page.items.length ? (
+              <ol className="studio-draft-list">
+                {page.items.map((book) => (
+                  <li key={book.catalogueId}>
+                    <a
+                      className="studio-toc-open"
+                      href={localizeHref(hostedOwnerBookHref(book, page.viewer), { locale })}
+                    >
+                      {m.studio_books_open({ id: book.catalogueId }, { locale })}
+                    </a>
+                    <span className="studio-help">
+                      {book.postVisibility === 'draft'
+                        ? m.studio_books_draft({}, { locale })
+                        : book.postVisibility === 'protected'
+                          ? m.studio_books_protected({}, { locale })
+                          : m.studio_books_published({}, { locale })}
+                      {' · '}
+                      <time dateTime={book.createdAt}>{new Date(book.createdAt).toLocaleDateString(locale)}</time>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p>
+                {page.scope.crossHome === 'complete' &&
+                state.kind === 'ready' &&
+                state.cursor === null &&
+                page.nextCursor === null
+                  ? m.studio_books_empty({}, { locale })
+                  : m.studio_books_empty_page({}, { locale })}
+              </p>
+            )}
+            {page.nextCursor !== null ? (
+              <Button type="button" variant="outline" onClick={() => void visit.next()}>
+                {m.studio_books_more({}, { locale })}
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+        {state.kind === 'ended' || state.kind === 'failed' || (page && page.scope.crossHome !== 'complete') ? (
+          <a className="studio-skip" href={reopen}>
+            {m.studio_books_reopen({}, { locale })}
+          </a>
+        ) : null}
+      </section>
+    </main>
   );
 }

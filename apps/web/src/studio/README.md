@@ -31,3 +31,34 @@ implementation stays in Content and Studio remains the receiving owner.
 
 Decision: The shared book/article Studio puts the active document first, collapses outline and drafts into a compact
 phone disclosure, and separates its wide navigation without an outer frame.
+
+## Hosted author inventory
+
+Decision: Book Studio requests the installed owner list with `scope=all-homes` through the existing session-bound
+BFF. It retains the native scope, account and authentication epoch. Only a native `same-home` response enables
+same-home continuation; errors never trigger an inferred fallback. A page contains at most 20 visible books.
+Coverage is shown independently of rows and pagination: `partial` means indexing can still reveal books,
+`unavailable` means only the reported home is covered, and `complete` is a native census claim rather than an
+inference from an empty page. Empty sparse pages retain their native continuation.
+
+The mounted inventory owns its page and opaque continuation, with no global store. Paging keeps the native scope
+and viewer binding, and retry repeats the failed cursor. A repeated continuation, changed scope/home, denied access
+or changed native viewer cannot expose the previous page as current. Browser session replacement permanently retires
+the visit, aborts its request and removes its rows, including replacement by the same account. Reopening starts a new
+observation; it never silently replaces a rejected cursor with the first page.
+
+Exact selection carries only the native catalogue ID and viewer comparison operands. The BFF derives the acting
+account from the session; URL account/epoch values provide no authority. Owner get resolves the actual home. The
+existing organizer opens the admitted exact structure head and current publication, then confirms the owner
+metadata before exposing the workspace. Publication review keeps its selected manifest and uncertain-command
+recovery. Neither catalogue IDs nor account IDs establish cross-home completeness or new authoring authority.
+
+Sources read before design: this owner document, the installed client owner-list/get declarations, the current Studio
+native/BFF/route/organizer callers, and Content’s [hosted author inventory](../../../../services/kernel/src/content/hosted-chapters.md#author-inventory)
+contract. Native production is already present on the base; no merge, cherry-pick or backend query is needed.
+
+Later acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-inventory.test.ts tests/studio-hosted-inventory-view.test.tsx tests/studio-hosted-publication.test.ts`. Focused cases pin cross-home
+and native same-home decoding, coverage versus empty pages, sparse continuation and exact retry, changed viewer or
+scope/cursor/access, session replacement during reads, and exact organizer/publication opening. Existing publication
+selection assertions remain unchanged. Mounted browser/native/Storybook and broader acceptance are deferred to the
+dev verifier; implementation verification is changed-file formatting and the affected Web typecheck only.

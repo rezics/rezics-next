@@ -11910,5 +11910,21 @@
   "knowledge_organization_reordered": "Documentos reordenados",
   "knowledge_organization_baseline": "Estado inicial",
   "knowledge_organization_notebook_created": "Cuaderno creado",
-  "knowledge_organization_legacy": "Estructura anterior"
+  "knowledge_organization_legacy": "Estructura anterior",
+  "studio_books_heading": "Tus libros alojados",
+  "studio_books_intro": "Abre un libro para organizar borradores y revisar su publicación actual.",
+  "studio_books_loading": "Cargando tus libros…",
+  "studio_books_ended": "Tu sesión de autor ha cambiado. Vuelve a abrir tus libros para continuar.",
+  "studio_books_retry": "Reintentar esta página",
+  "studio_books_complete": "Se muestran libros de todos los hogares.",
+  "studio_books_partial": "Algunos hogares aún se están indexando. Es posible que aparezcan más libros.",
+  "studio_books_same_home": "Solo están disponibles los libros de tu hogar actual. No se puede consultar la cobertura de otros hogares.",
+  "studio_books_open": "Libro · {id}",
+  "studio_books_draft": "Borrador privado",
+  "studio_books_protected": "Protegido",
+  "studio_books_published": "Publicado",
+  "studio_books_empty": "No tienes libros alojados.",
+  "studio_books_empty_page": "No hay libros disponibles en esta página.",
+  "studio_books_more": "Más libros",
+  "studio_books_reopen": "Volver a abrir tus libros"
 }

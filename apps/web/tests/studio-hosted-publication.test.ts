@@ -53,16 +53,26 @@ const ok = <T>(value: T): StudioResult<T> => ({ ok: true, value });
 test('hosted Book publication freezes only selected exact chapter occurrences and required ancestors', async () => {
   let sent: HostedPublish | null = null;
   const native: HostedBookNative = {
-    listOwn: async () => ok({ accountId: catalogueId, authnEpoch: 1, items: [], nextCursor: null }),
+    listOwn: async () =>
+      ok({
+        scope: { kind: 'same-home', route: 0, crossHome: 'unavailable' },
+        viewer: { accountId: catalogueId, authnEpoch: 1 },
+        items: [],
+        nextCursor: null,
+      }),
     readOwn: async () =>
       ok({
-        catalogueId,
-        threadId,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        postRevisionId: firstPostRevisionId,
-        postVisibility: 'draft',
-        headRevisionId: structureRevisionId,
-        publicationId: null,
+        scope: { kind: 'same-home', route: 0, crossHome: 'unavailable' },
+        viewer: { accountId: catalogueId, authnEpoch: 1 },
+        item: {
+          catalogueId,
+          threadId,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          postRevisionId: firstPostRevisionId,
+          postVisibility: 'draft',
+          headRevisionId: structureRevisionId,
+          publicationId: null,
+        },
       }),
     read: async ({ kind }) => ok(kind === 'structure' ? structure : publication),
     create: async () => ok(structure),

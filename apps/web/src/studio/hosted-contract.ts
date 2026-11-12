@@ -86,15 +86,24 @@ const hostedOwnerBook = v.strictObject({
   headRevisionId: hostedId,
   publicationId: nullableId,
 });
-const hostedOwnerScope = v.strictObject({
-  kind: v.literal('same-home'),
-  route: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  crossHome: v.literal('unavailable'),
-});
-const hostedOwnerViewer = v.strictObject({
+// Coverage belongs to the native census, never to the number of visible rows.
+export const hostedOwnerScope = v.variant('kind', [
+  v.strictObject({
+    kind: v.literal('same-home'),
+    route: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(65535)),
+    crossHome: v.literal('unavailable'),
+  }),
+  v.strictObject({
+    kind: v.literal('all-homes'),
+    route: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(65535)),
+    crossHome: v.picklist(['partial', 'complete']),
+  }),
+]);
+export const hostedOwnerViewer = v.strictObject({
   accountId: hostedId,
-  authnEpoch: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  authnEpoch: v.pipe(v.number(), v.integer(), v.minValue(0)),
 });
+export const hostedOwnerBinding = v.strictObject({ scope: hostedOwnerScope, viewer: hostedOwnerViewer });
 export const hostedOwnerInventoryResponse = v.strictObject({
   scope: hostedOwnerScope,
   viewer: hostedOwnerViewer,
@@ -115,17 +124,31 @@ export type HostedRevise = v.InferOutput<typeof hostedRevise>;
 export type HostedPublish = v.InferOutput<typeof hostedPublish>;
 export type HostedBook = Readonly<{ revision: HostedRevision; placements: readonly HostedPlacement[] }>;
 export type HostedOwnerBook = v.InferOutput<typeof hostedOwnerBook>;
-export type HostedOwnerInventory = Readonly<{
-  accountId: string;
-  authnEpoch: number;
-  items: readonly HostedOwnerBook[];
-  nextCursor: string | null;
-}>;
+export type HostedOwnerScope = v.InferOutput<typeof hostedOwnerScope>;
+export type HostedOwnerViewer = v.InferOutput<typeof hostedOwnerViewer>;
+export type HostedOwnerBinding = v.InferOutput<typeof hostedOwnerBinding>;
+export type HostedOwnerInventory = v.InferOutput<typeof hostedOwnerInventoryResponse>;
+export type HostedOwnedBook = v.InferOutput<typeof hostedOwnerBookResponse>;
+
+/** Expected viewer metadata is a comparison operand, never an authorization credential. */
+export function sameHostedViewer(left: HostedOwnerViewer, right: HostedOwnerViewer): boolean {
+  return left.accountId === right.accountId && left.authnEpoch === right.authnEpoch;
+}
 
 /** Reads admit the complete bounded tree or fail; redacted slots never become editable empty chapters. */
 export interface HostedBookNative {
-  listOwn(accountId: string, cursor: string | null, signal: AbortSignal): Promise<StudioResult<HostedOwnerInventory>>;
-  readOwn(accountId: string, catalogueId: string, signal: AbortSignal): Promise<StudioResult<HostedOwnerBook>>;
+  listOwn(
+    accountId: string,
+    cursor: string | null,
+    signal: AbortSignal,
+    expected?: HostedOwnerBinding,
+  ): Promise<StudioResult<HostedOwnerInventory>>;
+  readOwn(
+    accountId: string,
+    catalogueId: string,
+    signal: AbortSignal,
+    expectedViewer?: HostedOwnerViewer,
+  ): Promise<StudioResult<HostedOwnedBook>>;
   read(input: HostedSelection, signal: AbortSignal): Promise<StudioResult<HostedBook>>;
   create(input: HostedCreate, key: string, signal: AbortSignal): Promise<StudioResult<HostedBook>>;
   revise(catalogueId: string, input: HostedRevise, key: string, signal: AbortSignal): Promise<StudioResult<HostedBook>>;

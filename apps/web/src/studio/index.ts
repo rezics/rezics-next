@@ -1,4 +1,4 @@
-export { StudioWorkspace, type StudioWorkspaceProps } from './workspace';
+export { HostedBookInventory, StudioWorkspace, type StudioWorkspaceProps } from './workspace';
 export { createStudioAccountPort } from './account-port';
 export { createPostDocumentPort } from './post-document-port';
 export { listHostedBooks, readOwnedHostedBook } from './hosted-actions';
@@ -41,6 +41,9 @@ export {
 export type {
   HostedBook,
   HostedOwnerBook,
+  HostedOwnedBook,
+  HostedOwnerViewer,
+  HostedOwnerBinding,
   HostedOwnerInventory,
   HostedBookNative,
   HostedCreate,
@@ -52,3 +55,5 @@ export type {
   HostedTarget,
   HostedTargetResolver,
 } from './hosted-contract';
+
+export { HostedInventoryVisit } from './hosted-inventory';

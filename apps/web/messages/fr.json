@@ -11910,5 +11910,21 @@
   "knowledge_organization_reordered": "Documents réordonnés",
   "knowledge_organization_baseline": "État initial",
   "knowledge_organization_notebook_created": "Carnet créé",
-  "knowledge_organization_legacy": "Structure antérieure"
+  "knowledge_organization_legacy": "Structure antérieure",
+  "studio_books_heading": "Vos livres hébergés",
+  "studio_books_intro": "Ouvrez un livre pour organiser les brouillons et consulter sa publication actuelle.",
+  "studio_books_loading": "Chargement de vos livres…",
+  "studio_books_ended": "Votre session auteur a changé. Rouvrez vos livres pour continuer.",
+  "studio_books_retry": "Réessayer cette page",
+  "studio_books_complete": "Livres de tous les foyers affichés.",
+  "studio_books_partial": "Certains foyers sont encore en cours d’indexation. D’autres livres peuvent apparaître.",
+  "studio_books_same_home": "Seuls les livres de votre foyer actuel sont disponibles. La couverture des autres foyers est indisponible.",
+  "studio_books_open": "Livre · {id}",
+  "studio_books_draft": "Brouillon privé",
+  "studio_books_protected": "Protégé",
+  "studio_books_published": "Publié",
+  "studio_books_empty": "Vous n’avez aucun livre hébergé.",
+  "studio_books_empty_page": "Aucun livre disponible sur cette page.",
+  "studio_books_more": "Plus de livres",
+  "studio_books_reopen": "Rouvrir vos livres"
 }

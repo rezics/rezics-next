@@ -7,7 +7,9 @@ import {
   createStudioAccountPort,
   hostedFailure,
   hostedId,
-  listHostedBooks,
+  HostedBookInventory,
+  HostedInventoryVisit,
+  hostedBookNative,
   openHostedStudio,
   readOwnedHostedBook,
   StudioWorkspace,
@@ -16,8 +18,7 @@ import {
   type StudioInput,
   type StudioResult,
   type StudioSelection,
-  type HostedOwnerBook,
-  type HostedOwnerInventory,
+  type HostedOwnedBook,
   type HostedStudioInput,
   type HostedTarget,
 } from '../studio';
@@ -41,10 +42,26 @@ const searchSchema = v.pipe(
     catalogueId: v.optional(hostedId),
     postId: v.optional(hostedId),
     books: v.optional(v.literal('1')),
+    ownerAccount: v.optional(hostedId),
+    ownerEpoch: v.optional(
+      v.pipe(
+        v.string(),
+        v.regex(/^(0|[1-9][0-9]*)$/),
+        v.transform(Number),
+        v.integer(),
+        v.minValue(0),
+        v.maxValue(Number.MAX_SAFE_INTEGER),
+      ),
+    ),
     cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
     draftCursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(32768))),
   }),
   v.check((value) => !(value.catalogueId && value.postId) && !(value.books && (value.catalogueId || value.postId))),
+  v.check(
+    (value) =>
+      (value.ownerAccount === undefined && value.ownerEpoch === undefined) ||
+      (value.catalogueId !== undefined && value.ownerAccount !== undefined && value.ownerEpoch !== undefined),
+  ),
 );
 
 export const Route = createFileRoute('/studio')({
@@ -52,6 +69,10 @@ export const Route = createFileRoute('/studio')({
   validateSearch: (search: unknown) => v.parse(searchSchema, search),
   loaderDeps: ({ search }) => ({
     catalogueId: search.catalogueId ?? null,
+    expectedViewer:
+      search.ownerAccount !== undefined && search.ownerEpoch !== undefined
+        ? { accountId: search.ownerAccount, authnEpoch: search.ownerEpoch }
+        : undefined,
     postId: search.postId ?? null,
     books: search.books ?? null,
     cursor: search.cursor ?? null,
@@ -59,20 +80,17 @@ export const Route = createFileRoute('/studio')({
   }),
   loader: ({ deps }) =>
     deps.catalogueId
-      ? readOwnedHostedBook({ data: { catalogueId: deps.catalogueId } })
-      : deps.books
-        ? listHostedBooks({ data: { ...(deps.cursor ? { cursor: deps.cursor } : {}) } })
-        : Promise.resolve(null),
+      ? readOwnedHostedBook({ data: { catalogueId: deps.catalogueId, expectedViewer: deps.expectedViewer } })
+      : Promise.resolve(null),
   head: ({ match }) => pageHead({ title: 'Studio', robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: StudioRoute,
 });
 
-type InventoryRead = Awaited<ReturnType<typeof listHostedBooks>>;
 type OwnerBookRead = Awaited<ReturnType<typeof readOwnedHostedBook>>;
 
 function StudioRoute() {
   const search = Route.useSearch();
-  const loaded = Route.useLoaderData() as InventoryRead | OwnerBookRead | null;
+  const loaded = Route.useLoaderData() as OwnerBookRead | null;
   const session = useSession();
   const queryClient = useQueryClient();
   const [source, setSource] = useState<HistoricalReaderSource | null>(null);
@@ -86,7 +104,7 @@ function StudioRoute() {
       return <StudioMessage message={loaded && 'ok' in loaded ? loaded.error.message : 'This book is unavailable.'} />;
     return (
       <BookStudioVisit
-        book={loaded.value as HostedOwnerBook}
+        owner={loaded.value}
         source={source}
         accountId={session.subject ?? null}
         csrfToken={session.csrfToken}
@@ -95,12 +113,13 @@ function StudioRoute() {
     );
   }
   if (search.books) {
-    if (!loaded || !('ok' in loaded) || !loaded.ok)
-      return (
-        <StudioMessage message={loaded && 'ok' in loaded ? loaded.error.message : 'Hosted books are unavailable.'} />
-      );
     return (
-      <StudioLibrary inventory={loaded.value as HostedOwnerInventory} cursor={search.cursor ?? null} locale={locale} />
+      <StudioBooksVisit
+        source={source}
+        accountId={session.subject ?? null}
+        cursor={search.cursor ?? null}
+        locale={locale}
+      />
     );
   }
   return (
@@ -125,66 +144,29 @@ function StudioMessage({ message }: { message: string }) {
   );
 }
 
-function StudioLibrary({
-  inventory,
+function StudioBooksVisit({
+  source,
+  accountId,
   cursor,
   locale,
 }: {
-  inventory: HostedOwnerInventory;
+  source: HistoricalReaderSource | null;
+  accountId: string | null;
   cursor: string | null;
   locale: Locale;
 }) {
-  return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8">
-      <header className="space-y-2">
-        <p className="studio-eyebrow">Author workspace</p>
-        <h1 className="text-3xl font-semibold">Studio</h1>
-        <p>Hosted books keep their independent organizer and frozen publication workflow.</p>
-        <a className="studio-skip" href={localizeHref('/studio', { locale })}>
-          {m.studio_account_return({}, { locale })}
-        </a>
-      </header>
-      <section className="studio-stack" aria-labelledby="studio-books-heading">
-        <h2 id="studio-books-heading">Your hosted books</h2>
-        {inventory.items.length ? (
-          <ol className="studio-draft-list">
-            {inventory.items.map((book) => (
-              <li key={book.catalogueId}>
-                <a
-                  className="studio-toc-open"
-                  href={localizeHref(
-                    `/studio?catalogueId=${encodeURIComponent(book.catalogueId)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
-                    { locale },
-                  )}
-                >
-                  Book · {book.catalogueId}
-                </a>
-                <span className="studio-help">
-                  {book.postVisibility === 'draft'
-                    ? 'Private draft'
-                    : book.postVisibility === 'protected'
-                      ? 'Protected'
-                      : 'Published'}
-                  {' · '}Created{' '}
-                  <time dateTime={book.createdAt}>{new Date(book.createdAt).toLocaleDateString(locale)}</time>
-                </span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p>No hosted books are available for this account.</p>
-        )}
-        {inventory.nextCursor ? (
-          <a
-            className="studio-skip"
-            href={localizeHref(`/studio?books=1&cursor=${encodeURIComponent(inventory.nextCursor)}`, { locale })}
-          >
-            More books
-          </a>
-        ) : null}
-      </section>
-    </main>
-  );
+  const [visit, setVisit] = useState<HostedInventoryVisit | null>(null);
+  useEffect(() => {
+    if (!source || !accountId) {
+      setVisit(null);
+      return;
+    }
+    const next = new HostedInventoryVisit(hostedBookNative, source, accountId, cursor);
+    setVisit(next);
+    void next.load();
+    return next.dispose;
+  }, [source, accountId, cursor]);
+  return visit ? <HostedBookInventory visit={visit} locale={locale} /> : waitForSession();
 }
 
 type AccountWorkspaceState =
@@ -392,24 +374,37 @@ function documentRow(selection: StudioSelection, fallbackState: StudioDocument['
 }
 
 function BookStudioVisit({
-  book,
+  owner,
   source,
   accountId,
   csrfToken,
   locale,
 }: {
-  book: HostedOwnerBook;
+  owner: HostedOwnedBook;
   source: HistoricalReaderSource | null;
   accountId: string | null | undefined;
   csrfToken: string | null;
   locale: Locale;
 }) {
+  const book = owner.item;
   const [workspace, setWorkspace] = useState<Parameters<typeof StudioWorkspace>[0] | null>(null);
   const [result, setResult] = useState<StudioResult<unknown> | null>(null);
   useEffect(() => {
+    setWorkspace(null);
+    setResult(null);
     if (!source || !accountId) return;
+    if (owner.viewer.accountId !== accountId) {
+      setResult(hostedFailure('denied', m.studio_books_ended({}, { locale })));
+      return;
+    }
     const controller = new AbortController();
     const origin = source.read();
+    const unsubscribe = source.subscribe(() => {
+      if (isCurrent()) return;
+      controller.abort();
+      setWorkspace(null);
+      setResult(hostedFailure('denied', m.studio_books_ended({}, { locale })));
+    });
     const admittedPosts = new Map<string, string>([[book.catalogueId, book.threadId]]);
     const isCurrent = () => {
       const now = source.read();
@@ -462,7 +457,7 @@ function BookStudioVisit({
         canCreateDraft: false,
       };
       const bound = await openHostedStudio(
-        { catalogueId: book.catalogueId, accountId, input, documents, resolveTarget, isCurrent },
+        { catalogueId: book.catalogueId, accountId, input, documents, resolveTarget, isCurrent, owner },
         controller.signal,
       );
       if (!isCurrent()) return;
@@ -472,8 +467,11 @@ function BookStudioVisit({
       setWorkspace(bound.value.workspace);
     };
     void run();
-    return () => controller.abort();
-  }, [book, source, accountId, csrfToken, locale]);
+    return () => {
+      unsubscribe();
+      controller.abort();
+    };
+  }, [owner, book, source, accountId, csrfToken, locale]);
   if (workspace)
     return (
       <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">

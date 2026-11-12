@@ -11910,5 +11910,21 @@
   "knowledge_organization_reordered": "已調整文件順序",
   "knowledge_organization_baseline": "基準版本",
   "knowledge_organization_notebook_created": "已建立筆記本",
-  "knowledge_organization_legacy": "較早的結構"
+  "knowledge_organization_legacy": "較早的結構",
+  "studio_books_heading": "你的託管書籍",
+  "studio_books_intro": "開啟書籍，繼續整理草稿或檢視目前的出版內容。",
+  "studio_books_loading": "正在載入書籍…",
+  "studio_books_ended": "作者工作階段已變更。請重新開啟書籍清單。",
+  "studio_books_retry": "重試此頁",
+  "studio_books_complete": "正在顯示所有歸屬地的書籍。",
+  "studio_books_partial": "部分歸屬地仍在建立索引，稍後可能會顯示更多書籍。",
+  "studio_books_same_home": "目前僅顯示目前歸屬地的書籍，跨歸屬地內容暫時無法使用。",
+  "studio_books_open": "書籍 · {id}",
+  "studio_books_draft": "私人草稿",
+  "studio_books_protected": "受保護",
+  "studio_books_published": "已發布",
+  "studio_books_empty": "你還沒有託管書籍。",
+  "studio_books_empty_page": "此頁沒有可用的書籍。",
+  "studio_books_more": "更多書籍",
+  "studio_books_reopen": "重新開啟書籍清單"
 }

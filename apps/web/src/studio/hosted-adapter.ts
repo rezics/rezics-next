@@ -89,12 +89,15 @@ export class HostedBookAdapter implements BookOrganizerPort {
     }
   }
 
-  load = (catalogueId: string, signal: AbortSignal): Promise<StudioResult<BookStructure>> =>
+  load = (catalogueId: string, signal: AbortSignal, revisionId?: string): Promise<StudioResult<BookStructure>> =>
     this.exclusive(signal, async () => {
       if (this.hasUnresolvedCommand())
         return hostedFailure('uncertain', 'Recover the pending book command before reloading.');
       this.book = null;
-      const result = await this.native.read({ catalogueId, kind: 'structure' }, signal);
+      const result = await this.native.read(
+        { catalogueId, kind: 'structure', ...(revisionId ? { revisionId } : {}) },
+        signal,
+      );
       if (!result.ok) return result;
       if (result.value.revision.catalogueId !== catalogueId || result.value.revision.kind !== 'structure')
         return invalid();
