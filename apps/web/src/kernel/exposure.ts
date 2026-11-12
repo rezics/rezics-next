@@ -11,6 +11,8 @@ export const operationGroups = {
   'knowledge_document.copy': 'knowledge_document.copy',
   'knowledge_notebook.owned_list': 'knowledge_notebook.owned_list',
   'knowledge_notebook.outline': 'knowledge_notebook.outline',
+  'knowledge_notebook.move_placement': 'knowledge_notebook.move_placement',
+  'knowledge_notebook.structure_history': 'knowledge_notebook.structure_history',
   'knowledge_document.private_read': 'knowledge_document.private_read',
   'knowledge_document.history': 'knowledge_document.history',
   'knowledge_document.compare': 'knowledge_document.compare',

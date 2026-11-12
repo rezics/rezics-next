@@ -187,3 +187,9 @@ export function KnowledgeDocumentCaller({
 
 export { KnowledgeNavigationRoute } from './navigation-route';
 export { knowledgeNavigation } from './navigation';
+
+export { isKnowledgeId } from './private-knowledge';
+export { KnowledgeNavigationEntry } from './navigation-page';
+export type { KnowledgeNavigationOperations } from './navigation-page';
+export type { OrganizationOperations, OrganizationRequest } from './organization-read';
+export { organizationCopy } from './organization-copy';

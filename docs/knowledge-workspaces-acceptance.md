@@ -210,3 +210,15 @@ No hand-written replacement OpenAPI, ad hoc permission check, direct importer SQ
 
 Later gates are concrete extension points, not launch requirements. Their implementation may revise physical storage
 while keeping existing document identity, exact citations, audiences, publication and exports meaningful.
+
+### Owned notebook organization interface
+
+The focused organization wire and mounted regressions cover root/nested movement, same-parent before-sibling/end
+ordering, exact unchanged document/editor links, immutable uncertain retry, conflict with preserved choice and fresh
+source/destination review, and native acknowledgement separated from fresh current reading. History tests distinguish
+unavailable history from empty results, historical placement from current command authority, sparse continuation,
+attempted-cursor retry, explicit stale-parent restart and session/source/locale/address retirement of rows and late work.
+Illustrative `Pages/Knowledge/Organization` stories show MoveReview, Moved, StructureChanged, HistoricalOutline and
+Unavailable for the owner, phone390/desktop1280, both themes and every launch locale. They are authored fixtures,
+not native, mounted keyboard, visual or promotion evidence. Execute organization and existing navigation/private
+suites through Web's focused runner after integration; those acceptance gates remain separate from source typing.

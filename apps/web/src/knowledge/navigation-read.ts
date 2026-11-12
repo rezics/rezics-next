@@ -97,7 +97,7 @@ export function admitKnowledgeNavigationPage(
       row.parentPlacementId !== request.parentPlacementId ||
       !text(row.title, 512) ||
       typeof row.position !== 'string' ||
-      !/^(?:0|[1-9][0-9]{0,18})$/.test(row.position)
+      !/^(?:0|[1-9][0-9]{0,37})$/.test(row.position)
     )
       return { state: 'unavailable' };
     placements.push({

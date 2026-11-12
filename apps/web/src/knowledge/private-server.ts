@@ -1,4 +1,11 @@
 import {
+  parseOrganizationRequest,
+  readOrganization,
+  moveOrganizationPlacement,
+  type OrganizationReadResult,
+  type OrganizationMoveResult,
+} from './organization-read';
+import {
   copyKnowledgeTransfer,
   exportKnowledgeTransfer,
   parseKnowledgeTransferSource,
@@ -658,4 +665,70 @@ export const readKnowledgeCopyRequest = createServerFn({ method: 'POST' })
     const identity = currentFor(data.expected, await currentIdentity());
     if ('state' in identity) return { state: identity.state };
     return readKnowledgeCopy(kernelClient(), data.receipt, identity.viewer, identity.authorization);
+  });
+
+export const prepareKnowledgeOrganizationVisit = createServerFn({ method: 'POST' })
+  .validator(expectedSession)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data, await currentIdentity());
+    if ('state' in identity) return { state: identity.state };
+    return {
+      state: 'ready' as const,
+      binding: {
+        viewer: identity.viewer,
+        csrfToken: identity.csrfToken,
+        credential: await captureCredential(getRequest(), identity),
+      },
+    };
+  });
+
+export const readKnowledgeOrganizationVisit = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge organization read');
+    const request = parseOrganizationRequest(value.request);
+    if (!request) throw new Error('Invalid Knowledge organization address');
+    return { request, expected: expectedSession(value.expected) };
+  })
+  .handler(async ({ data }): Promise<OrganizationReadResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return { state: identity.state };
+    try {
+      return await readOrganization(kernelClient(), {
+        request: data.request,
+        accountId: identity.viewer,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable' };
+      throw error;
+    }
+  });
+
+export const moveKnowledgeOrganizationPlacement = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value) || !record(value.binding)) throw new Error('Invalid Knowledge move');
+    return {
+      notebookId: boundedId(value.notebookId, 'notebook'),
+      placementId: boundedId(value.placementId, 'placement'),
+      expectedStructureRevisionId: boundedId(value.expectedStructureRevisionId, 'structure revision'),
+      destinationParentPlacementId: parentPlacement(value.destinationParentPlacementId),
+      beforePlacementId: parentPlacement(value.beforePlacementId),
+      binding: commandBinding({ ...value.binding, idempotencyKey: value.idempotencyKey }),
+    };
+  })
+  .handler(async ({ data }): Promise<OrganizationMoveResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = await commandIdentity(data.binding);
+    if ('state' in identity) return { state: identity.state };
+    try {
+      return await moveOrganizationPlacement(kernelClient(), {
+        ...data,
+        idempotencyKey: data.binding.idempotencyKey,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      return isPlatformClosedError(error) ? { state: 'unavailable' } : { state: 'uncertain' };
+    }
   });

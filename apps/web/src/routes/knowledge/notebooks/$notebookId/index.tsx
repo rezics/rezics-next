@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, useParams } from '@tanstack/react-router';
-import { KnowledgeNavigationRoute } from '../../../../knowledge/route';
-import { isKnowledgeId } from '../../../../knowledge/private-knowledge';
+import { KnowledgeNavigationRoute, isKnowledgeId } from '../../../../knowledge/route';
 import { m } from '../../../../paraglide/messages.js';
 import { pageHead } from '../../../../shell/head';
 import { pageHeadContext } from '../../../../shell/head-context';

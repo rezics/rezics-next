@@ -1,3 +1,5 @@
+import { KnowledgeOrganizationOwner } from './organization-page';
+import type { OrganizationOperations } from './organization-read';
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -17,6 +19,7 @@ import { knowledgeNavigationControl, knowledgeNavigationLink } from './navigatio
 export type KnowledgeNavigationAccess = 'available' | 'preparing' | 'denied' | 'unavailable' | 'signed-out';
 export type KnowledgeNavigationOperations = Readonly<{
   read: KnowledgeNavigationReader;
+  organization?: OrganizationOperations;
   current?: () => boolean;
   subscribeRetirement?: (retire: () => void) => () => void;
 }>;
@@ -137,6 +140,7 @@ function KnowledgeNavigationOwner({
   operations: KnowledgeNavigationOperations;
   returning?: KnowledgeNavigationReturn | undefined;
 }) {
+  const [initialized, setInitialized] = useState(false);
   const initial = useRef<{ frontier: KnowledgeNavigationFrontier; expired: boolean }>(null);
   const [reading, setReading] = useState<KnowledgeNavigationReading>();
   useLayoutEffect(() => {
@@ -149,6 +153,11 @@ function KnowledgeNavigationOwner({
       };
     }
     const { frontier, expired } = initial.current;
+    if (operations.organization && address.kind === 'outline') {
+      setReading(undefined);
+      setInitialized(true);
+      return;
+    }
     const current = new KnowledgeNavigationReading(operations.read, frontier, expired, operations.current);
     const stop = operations.subscribeRetirement?.(() => current.retire());
     setReading(current);
@@ -161,6 +170,19 @@ function KnowledgeNavigationOwner({
       current.retire();
     };
   }, [JSON.stringify(address), binding, operations, returning]);
+  if (operations.organization && initialized && initial.current && address.kind === 'outline')
+    return (
+      <KnowledgeOrganizationOwner
+        frontier={initial.current.frontier}
+        expired={initial.current.expired}
+        locale={locale}
+        binding={binding}
+        operations={operations.organization}
+        current={operations.current}
+        subscribeRetirement={operations.subscribeRetirement}
+        returning={returning}
+      />
+    );
   if (!reading) return <p role="status">{m.knowledge_navigation_preparing({}, { locale: locale as never })}</p>;
   return <KnowledgeNavigationRows reading={reading} locale={locale} binding={binding} returning={returning} />;
 }
