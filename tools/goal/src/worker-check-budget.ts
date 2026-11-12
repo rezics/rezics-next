@@ -279,6 +279,41 @@ function readCheckEvidence(path: string): CheckEvidence | undefined {
   }
 }
 
+type OptionalCheckEvidence =
+  | { state: 'absent' }
+  | { state: 'invalid' }
+  | { state: 'present'; value: CheckEvidence };
+
+/** Distinguish a missing legacy file from a present but unreadable newer record. */
+function readOptionalCheckEvidence(path: string): OptionalCheckEvidence {
+  try {
+    if (!lstatSync(path).isFile()) return { state: 'invalid' };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { state: 'absent' };
+    if (code === 'EACCES' || code === 'EPERM' || code === 'ENOTDIR' || code === 'ELOOP')
+      return { state: 'invalid' };
+    throw error;
+  }
+
+  try {
+    const value = readCheckEvidence(path);
+    return value ? { state: 'present', value } : { state: 'invalid' };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (
+      code === 'ENOENT' ||
+      code === 'EACCES' ||
+      code === 'EPERM' ||
+      code === 'EISDIR' ||
+      code === 'ENOTDIR' ||
+      code === 'ELOOP'
+    )
+      return { state: 'invalid' };
+    throw error;
+  }
+}
+
 function terminalPhysicalHistory(worktree: string, checkId: string, physicalRunId: string, exitCode?: number): boolean {
   const history = readCheckEvidence(
     join(worktree, '.temp', 'goal', 'checks', 'custody', 'history', `${checkId}.${physicalRunId}.json`),
@@ -318,7 +353,7 @@ function checkEvidenceArgv(value: unknown): value is string[] {
   );
 }
 
-/** Legacy finished checks may retain a native remote exit receipt without the later terminalProof field. */
+/** Legacy finished checks may use a native result receipt when newer remote custody is genuinely absent. */
 function retainedNativeExitReceiptTerminal(
   worktree: string,
   taskId: string,
@@ -379,55 +414,59 @@ function retainedNativeExitReceiptTerminal(
   )
     return false;
 
-  const custody = readCheckEvidence(remoteRunCustodyPath(worktree, record.physicalRunId));
-  const binding = custody?.binding;
-  const attempts = custody?.attempts;
-  if (
-    !custody ||
-    custody.version !== 1 ||
-    custody.physicalRunId !== record.physicalRunId ||
-    custody.status !== 'terminal' ||
-    !binding ||
-    binding.checkId !== record.id ||
-    binding.ownership?.taskId !== taskId ||
-    binding.ownership.attempt !== attempt ||
-    !checkEvidenceArgv(binding.argv) ||
-    !isDeepStrictEqual(binding.argv, record.argv) ||
-    !checkEvidenceArgv(binding.remoteArgv) ||
-    !isDeepStrictEqual(binding.remoteArgv, physical.remoteArgv) ||
-    !Array.isArray(attempts) ||
-    attempts.some(
-      (item) =>
-        !item ||
-        typeof item !== 'object' ||
-        Array.isArray(item) ||
-        !['terminal', 'not-started'].includes(String((item as CheckEvidence).status)),
-    )
-  )
-    return false;
-
-  const managedAttempts = attempts as CheckEvidence[];
-  const completed = managedAttempts.filter((item) => item.status === 'terminal');
-  if (completed.length !== 1) return false;
-  const managed = completed[0]!;
-  if (
-    typeof managed.host !== 'string' ||
-    !/^[a-z][a-z0-9-]{0,62}$/.test(managed.host) ||
-    typeof managed.id !== 'string' ||
-    !/^[a-zA-Z0-9-]{1,96}$/.test(managed.id)
-  )
-    return false;
-  const receipt = parseRemotePhysicalRunReceipt(managed.native);
   const resultReceipt = parseRemotePhysicalRunReceipt(record.physicalRun);
+  const custodyState = readOptionalCheckEvidence(remoteRunCustodyPath(worktree, record.physicalRunId));
+  if (custodyState.state === 'invalid' || !resultReceipt) return false;
+
+  let receipt = resultReceipt;
+  if (custodyState.state === 'present') {
+    const custody = custodyState.value;
+    const binding = custody.binding;
+    const attempts = custody.attempts;
+    if (
+      custody.version !== 1 ||
+      custody.physicalRunId !== record.physicalRunId ||
+      custody.status !== 'terminal' ||
+      !binding ||
+      binding.checkId !== record.id ||
+      binding.ownership?.taskId !== taskId ||
+      binding.ownership.attempt !== attempt ||
+      !checkEvidenceArgv(binding.argv) ||
+      !isDeepStrictEqual(binding.argv, record.argv) ||
+      !checkEvidenceArgv(binding.remoteArgv) ||
+      !isDeepStrictEqual(binding.remoteArgv, physical.remoteArgv) ||
+      !Array.isArray(attempts) ||
+      attempts.some(
+        (item) =>
+          !item ||
+          typeof item !== 'object' ||
+          Array.isArray(item) ||
+          !['terminal', 'not-started'].includes(String((item as CheckEvidence).status)),
+      )
+    )
+      return false;
+
+    const managedAttempts = attempts as CheckEvidence[];
+    const completed = managedAttempts.filter((item) => item.status === 'terminal');
+    if (completed.length !== 1) return false;
+    const managed = completed[0]!;
+    if (
+      typeof managed.host !== 'string' ||
+      !/^[a-z][a-z0-9-]{0,62}$/.test(managed.host) ||
+      typeof managed.id !== 'string' ||
+      !/^[a-zA-Z0-9-]{1,96}$/.test(managed.id)
+    )
+      return false;
+    const managedReceipt = parseRemotePhysicalRunReceipt(managed.native);
+    if (!managedReceipt || managed.host !== managedReceipt.host || managed.id !== managedReceipt.run) return false;
+    receipt = managedReceipt;
+  }
+
   const historyReceipt =
     physical.physicalRun === undefined ? undefined : parseRemotePhysicalRunReceipt(physical.physicalRun);
   if (
-    !receipt ||
-    !resultReceipt ||
     !isDeepStrictEqual(receipt, resultReceipt) ||
     (physical.physicalRun !== undefined && (!historyReceipt || !isDeepStrictEqual(receipt, historyReceipt))) ||
-    managed.host !== receipt.host ||
-    managed.id !== receipt.run ||
     receipt.exitCode !== record.exitCode ||
     receipt.lifetimeFailure !== null ||
     !receipt.resources ||
