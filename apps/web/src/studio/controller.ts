@@ -20,11 +20,12 @@ import {
   type StudioPort,
   type StudioResult,
   type StudioRevision,
+  type StudioRevisionHeader,
   type StudioSelection,
   type NativeDraftCreate,
 } from './contract';
 
-export type VersionSummary = Omit<StudioRevision, 'body' | 'mediaIds'>;
+export type VersionSummary = StudioRevisionHeader;
 export type WorkingDocument = Readonly<{
   source: StudioSelection;
   title: string;

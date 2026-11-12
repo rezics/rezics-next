@@ -27,7 +27,7 @@ export type HistoricalReadTarget =
       credentialMode: ReadCredentialMode;
     }
   | {
-      kind: 'post-history';
+      kind: 'post-history' | 'post-revision-headers';
       postId: string;
       cursor: string | null;
       locale: string;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '../document-body';
+import { m } from '../paraglide/messages.js';
 import type { ExactDocument, StudioPresentation, StudioRevision } from './contract';
 import type { StudioController, StudioState } from './controller';
 
@@ -88,7 +89,9 @@ export function StudioVersions({
               </li>
             ))}
           </ol>
-          {!state.versions.items.length ? <p>No earlier versions are available.</p> : null}
+          {!state.versions.items.length ? (
+            <p>{state.versions.nextCursor ? m.thread_history_page_empty() : m.thread_history_empty()}</p>
+          ) : null}
           {state.versions.nextCursor ? (
             <Button
               type="button"
@@ -96,7 +99,7 @@ export function StudioVersions({
               disabled={blocked}
               onClick={() => void controller.loadVersions(true)}
             >
-              Next versions
+              {m.thread_history_more()}
             </Button>
           ) : null}
         </>

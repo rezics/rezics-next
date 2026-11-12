@@ -32,6 +32,32 @@ implementation stays in Content and Studio remains the receiving owner.
 Decision: The shared book/article Studio puts the active document first, collapses outline and drafts into a compact
 phone disclosure, and separates its wide navigation without an outer frame.
 
+## Post revision headers
+
+Decision: Book chapter and column Studio enumerate saved versions with the installed native
+`GET /v1/posts/{id}/revision-headers` operation, one metadata page per request. Rows contain only native
+`recordedAt` and exact Post/revision/digest; the API has no historical title. Timestamp precision and opaque
+continuations survive projection unchanged. An empty page with a continuation remains progress, with a next-page
+control and a page-empty label rather than terminal absence. Selected comparison bodies still use the existing
+exact `post.revision` reader. Public thread history and hosted-catalogue structure history keep their own readers.
+
+The private no-store BFF prepares the actual session and binds each response to the viewer, mounted visit,
+currentness generation, Post, locale, cursor and distinct `post-revision-headers` projection. The existing adapter
+retires credentials permanently on session replacement, including replacement by the same account, and discards
+late results. Native failures remain unavailable; no fallback or enrichment request supplies missing metadata.
+Foreign Post identities and malformed digests are rejected before exposing selectable exact versions.
+
+Sources read before design: this owner document, `post-document-port.ts`, `contract.ts`, `controller.ts`,
+`revisions.tsx`, Threads' `reads.ts`, `historical-reader-provenance.ts`, `studio-document.ts`, the installed client's
+revision-header operation and schema, and Content's [metadata-only revision headers](../../../../services/kernel/src/content/README.md#metadata-only-revision-headers).
+The generated operation is present on the base; no merge or backend change is needed.
+
+Later acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-post-revision-headers.test.tsx`.
+Cases pin metadata-only request count, native timestamp/cursor projection, sparse progress, exact comparison,
+projection/reader mismatch, malformed external identities and credential retirement during reads. Existing exact
+body assertions remain unchanged. Native, browser, Storybook and broader suites remain deferred; source verification
+uses changed-file formatting and the affected Web typecheck.
+
 ## Hosted author inventory
 
 Decision: Book Studio requests the installed owner list with `scope=all-homes` through the existing session-bound
