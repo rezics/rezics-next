@@ -152,6 +152,14 @@ async function insertAccount(accountId: string, handle: string): Promise<Account
   return account;
 }
 
+async function nextPartitionPosition(admin: GrowthDatabase['admin'], partition: number): Promise<bigint> {
+  const result = await admin.query<{ position: string }>(
+    'SELECT position::text AS position FROM core.partition WHERE partition_no=$1',
+    [partition],
+  );
+  return BigInt(result.rows[0]!.position) + 1n;
+}
+
 // prettier-ignore
 async function makeAnchor(options: { partition?: number; tag?: string } = {}): Promise<Fixture> {
   const tag = options.tag ?? randomUUID().replaceAll('-', '').slice(0, 12), seedSource = `growth_${tag}`;
@@ -186,12 +194,10 @@ async function makeAnchor(options: { partition?: number; tag?: string } = {}): P
     ? { 'x-resource-types': ['content.post'] as const }
     : {}) }])) });
   const admitted = await authenticateAccount(access, { pool: db!.pool, deadline: Date.now() + 290_000 }, actor);
-  const position = await db!.admin.query<{ position: string }>(
-    'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [partition]);
   const fixture: Fixture = { tag, prefix: `growth-media:${tag}:`, seedClient: 'rezics-website',
     seedSource, sourceExternalId, sourceRoute, sourcePartition,
     partition, route, actor: admitted, boardId, threadId, postId, revisionId, accounts, access, storage: new Storage(),
-    basePosition: BigInt(position.rows[0]!.position) + 1n, baseOrdinal: 0 };
+    basePosition: await nextPartitionPosition(db!.admin, partition), baseOrdinal: 0 };
   await createPostAnchor(fixture);
   return fixture;
 }
@@ -393,9 +399,7 @@ async function runMediaGrowth(fixture: Fixture, name: string,
   const population = await growthPopulation(fixture, { ...options,
     sourceNeighbourCount: indexedHistory + ordinalsPerScale * scales[2] });
   const seedHistory = async (database: GrowthDatabase, from: number, to: number) => {
-    const position = await database.admin.query<{ position: string }>(
-      'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [fixture.partition]);
-    fixture.basePosition = BigInt(position.rows[0]!.position) + 1n;
+    fixture.basePosition = await nextPartitionPosition(database.admin, fixture.partition);
     fixture.baseOrdinal = from;
     await seed({ pool: database.pool, admin: database.admin }, population, { from, to });
   };
@@ -517,13 +521,19 @@ async function selectCollectable(pool: GrowthDatabase['pool'], partition: number
 
 // prettier-ignore
 async function resetGrowthData(): Promise<void> {
-  // The disposable database holds only these fixtures; truncate rows and checkpoint to recycle its WAL between checks.
+  // Clear disposable sample rows and recycle WAL without rewinding committed partition tails.
+  const committedTails = await db!.admin.query<{ partition_no: number; position: string }>(
+    'SELECT partition_no, position::text AS position FROM core.partition ORDER BY partition_no',
+  );
   await db!.admin.query(`TRUNCATE TABLE access.account, access.membership_inverse, access.resource_grant, access.resource_role_grant,
     access.resource_initialization, access.resource_denial, content.board, content.thread, content.post, content.revision,
     content.media, content.media_variant, content.source_fences, core.receipt, core.outbox, editorial.write_basis CASCADE`);
-  await db!.admin.query('UPDATE core.partition SET position=0');
   partitions.clear();
   await db!.admin.query('CHECKPOINT');
+  const resetTails = await db!.admin.query<{ partition_no: number; position: string }>(
+    'SELECT partition_no, position::text AS position FROM core.partition ORDER BY partition_no',
+  );
+  expect(resetTails.rows).toEqual(committedTails.rows);
 }
 
 // prettier-ignore
