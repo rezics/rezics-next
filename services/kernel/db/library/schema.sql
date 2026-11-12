@@ -4810,6 +4810,7 @@ CREATE TABLE library.hosted_reading (
     document_offset integer,
     revision bigint NOT NULL,
     changed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    activity_sequence bigint NOT NULL,
     CONSTRAINT hosted_reading_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT hosted_reading_block_check CHECK (((document_block_id IS NULL) OR ((char_length(document_block_id) >= 1) AND (char_length(document_block_id) <= 128)))),
     CONSTRAINT hosted_reading_offset_check CHECK (((document_offset IS NULL) OR ((document_offset >= 0) AND (document_offset <= 2097152)))),
@@ -4818,6 +4819,25 @@ CREATE TABLE library.hosted_reading (
     CONSTRAINT hosted_reading_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT hosted_reading_target_sha256_check CHECK ((octet_length(target_sha256) = 32))
 );
+
+
+--
+-- Name: hosted_reading_activity_sequence; Type: SEQUENCE; Schema: library; Owner: -
+--
+
+CREATE SEQUENCE library.hosted_reading_activity_sequence
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: hosted_reading_activity_sequence; Type: SEQUENCE OWNED BY; Schema: library; Owner: -
+--
+
+ALTER SEQUENCE library.hosted_reading_activity_sequence OWNED BY library.hosted_reading.activity_sequence;
 
 
 --
@@ -7014,6 +7034,13 @@ CREATE TABLE library.yearly_completion_goal (
     CONSTRAINT yearly_completion_goal_target_check CHECK (((target >= 1) AND (target <= 1000))),
     CONSTRAINT yearly_completion_goal_year_check CHECK (((year >= 1) AND (year <= 9999)))
 );
+
+
+--
+-- Name: hosted_reading activity_sequence; Type: DEFAULT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.hosted_reading ALTER COLUMN activity_sequence SET DEFAULT nextval('library.hosted_reading_activity_sequence'::regclass);
 
 
 --
@@ -9506,6 +9533,13 @@ CREATE INDEX follow_count_source_pending ON library.follow_count_source USING bt
 --
 
 CREATE INDEX follow_count_terminal_source_pending ON library.follow_count_terminal_source USING btree (partition_no, oldest_pending_at, account_id) WHERE (NOT local_complete);
+
+
+--
+-- Name: hosted_reading_activity_idx; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX hosted_reading_activity_idx ON library.hosted_reading USING btree (route, account_id, activity_sequence DESC, subject_id) INCLUDE (changed_at, revision, catalogue_id, publication_revision_id, occurrence_id, target_revision_id, target_sha256, document_block_id, document_offset);
 
 
 --
