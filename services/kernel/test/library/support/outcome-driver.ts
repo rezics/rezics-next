@@ -284,49 +284,57 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
   const commandTrace = new NativeLabelCommandTrace();
 
   const cleanup = async () => {
-    commandTrace.close();
-    stateReferenceRepair?.close();
-    await typePauses.close();
+    const failures: unknown[] = [];
+    const attempt = async (operation: () => unknown) => {
+      try {
+        await operation();
+      } catch (error) {
+        failures.push(error);
+      }
+    };
+    await attempt(() => commandTrace.close());
+    if (stateReferenceRepair) await attempt(() => stateReferenceRepair!.close());
+    await attempt(() => typePauses.close());
     if (child) {
-      child.kill('SIGCONT');
-      child.kill('SIGTERM');
-      await child.exited.catch(() => undefined);
+      const running = child;
+      await attempt(() => running.kill('SIGCONT'));
+      await attempt(() => running.kill('SIGTERM'));
+      await attempt(() => running.exited);
       child = undefined;
     }
-    restorePoolInstrumentation?.();
+    if (restorePoolInstrumentation) await attempt(() => restorePoolInstrumentation!());
     restorePoolInstrumentation = undefined;
-    restoreDatabaseClock?.();
+    if (restoreDatabaseClock) await attempt(() => restoreDatabaseClock!());
     restoreDatabaseClock = undefined;
-    await authServer?.stop(true).catch(() => undefined);
+    if (authServer) await attempt(() => authServer!.stop(true));
     authServer = undefined;
-    await workClient?.close().catch(() => undefined);
+    if (workClient) await attempt(() => workClient!.close());
     workClient = undefined;
     if (composedDomain && peekLibraryDomain() === composedDomain) {
-      if (previousDomain) bindLibraryDomain(previousDomain);
-      else {
-        unbindLibraryDomain();
-        if (previousPresentation) bindLibraryPresentation(previousPresentation);
-      }
+      await attempt(() => {
+        if (previousDomain) bindLibraryDomain(previousDomain);
+        else {
+          unbindLibraryDomain();
+          if (previousPresentation) bindLibraryPresentation(previousPresentation);
+        }
+      });
       composedDomain = undefined;
     }
-    await accountHost?.close().catch(() => undefined);
+    if (accountHost) await attempt(() => accountHost!.close());
     accountHost = undefined;
-    await authPool?.end().catch(() => undefined);
+    if (authPool) await attempt(() => authPool!.end());
     authPool = undefined;
-    await db?.close().catch(() => undefined);
+    if (db) await attempt(() => db!.close());
     db = undefined;
     if (owner && !dropped) {
       for (const database of [authName, kernelName]) {
-        try {
-          await dropTestDatabase(owner, database);
-        } catch {
-          // Preserve the original setup/test error while still attempting both drops.
-        }
+        await attempt(() => dropTestDatabase(owner!, database));
       }
       dropped = true;
     }
-    await owner?.end().catch(() => undefined);
+    if (owner) await attempt(() => owner!.end());
     owner = undefined;
+    if (failures.length) throw new AggregateError(failures, 'Library fixture cleanup failed');
   };
 
   try {
@@ -340,7 +348,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     configureTestReceiptKeys(db.admin);
     restoreDatabaseClock = bindDatabaseClock(db.pool, scenarioNow);
 
-    authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
+    authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 8 });
     authPool.on('error', () => {});
     authPool.on('connect', (client) => client.on('error', () => {}));
 
@@ -451,7 +459,12 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
       tokens.set(person.id, registered.credential);
       return person;
     }
-    for (const person of knownPeople) await provisionAccount(person);
+    for (let offset = 0; offset < knownPeople.length; offset += 4) {
+      const settled = await Promise.allSettled(knownPeople.slice(offset, offset + 4).map(provisionAccount));
+      const failures = settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) throw new AggregateError(failures, 'Native fixture account setup failed');
+    }
 
     async function consent(account: Anchor, requestedScopes: readonly string[]): Promise<string> {
       return (await accountHost!.signIn(account.id, requestedScopes)).credential;
@@ -1452,14 +1465,24 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
       },
       async close() {
         tokens.clear();
-        await cleanup();
-        dropped = true;
+        try {
+          await cleanup();
+        } finally {
+          dropped = true;
+        }
       },
     };
     await startExecutor();
     return driver;
   } catch (error) {
-    await cleanup();
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      dropped = true;
+      throw new AggregateError([error, cleanupError], 'Library fixture construction and cleanup failed', {
+        cause: error,
+      });
+    }
     dropped = true;
     throw error;
   }

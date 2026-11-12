@@ -34,6 +34,26 @@ const route = (id: string) => {
   if (value === null) throw new TypeError('Native Follow fixture requires a routed identity');
   return value;
 };
+const GROWTH_CONCURRENCY = 4;
+
+async function runGrowthRange(from: number, to: number, work: (index: number) => Promise<void>): Promise<void> {
+  let next = from;
+  const failures: unknown[] = [];
+  const workers = Array.from({ length: Math.min(GROWTH_CONCURRENCY, to - from) }, async () => {
+    while (next < to && failures.length === 0) {
+      const index = next++;
+      try {
+        await work(index);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+  });
+  const settled = await Promise.allSettled(workers);
+  failures.push(...settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, 'Native Follow growth seeding failed');
+}
 
 /** TEST binding only. Work, authority, revisions, totals and acknowledgements stay native. */
 export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriver> {
@@ -64,6 +84,10 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
       throw new Error('Native Follow growth exhausted distinct fixture partition placements');
     };
     const steward: Principal = { accountId: world.native.steward.id, credential: world.native.token('steward') };
+    const independentCreator: Principal = {
+      accountId: world.accounts.other.id,
+      credential: world.native.token('other'),
+    };
     const request: FollowCountsDriver['request'] = (credential, path, init) =>
       world.native.bearerRequest(credential, path, init);
     const write = (as: Principal, method: string, path: string, body?: unknown) =>
@@ -228,7 +252,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
       reauthenticate: (as) => world.native.reauthenticate(as.accountId),
       gate: (open) => setGate(world, 'personal_library', open),
       async additionalOutgoing(as) {
-        const target = await collection(await principal());
+        const target = await collection(independentCreator);
         await follow(as, target);
         return target;
       },
@@ -469,25 +493,25 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
         }
         const previous = axes.get(axis) ?? 0;
         if (scale < previous) throw new Error('Native growth is cumulative');
-        for (let i = 128 * previous; i < 128 * scale; i++) {
+        await runGrowthRange(128 * previous, 128 * scale, async () => {
           if (axis === 'target_followers') {
             const as = await principal();
             await follow(as, fixture.target);
             await driver.reconcile(as, fixture.target);
           } else if (axis === 'unrelated_followers') {
             const as = await principal();
-            const target = await collection(await principal());
+            const target = await collection(fixture.manager);
             await follow(as, target);
             await driver.reconcile(as, target);
           } else {
-            const target = await collection(await principal());
+            const target = await collection(fixture.manager);
             if (axis === 'history') {
               await follow(fixture.follower, target);
               await follow(fixture.follower, target, false);
               await driver.reconcile(fixture.follower, target);
             }
           }
-        }
+        });
         axes.set(axis, scale);
       },
       async measure(read) {
@@ -532,7 +556,13 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
     }
     return driver;
   } catch (error) {
-    await world.close();
+    try {
+      await world.close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Native Follow driver construction and cleanup failed', {
+        cause: error,
+      });
+    }
     throw error;
   }
 }
