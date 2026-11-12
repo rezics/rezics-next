@@ -389,8 +389,7 @@ function retainedNativeExitReceiptTerminal(
     physical.ownership.attempt !== attempt ||
     physical.exitCode !== record.exitCode ||
     !checkEvidenceArgv(physical.argv) ||
-    !isDeepStrictEqual(physical.argv, record.argv) ||
-    !checkEvidenceArgv(physical.remoteArgv)
+    !isDeepStrictEqual(physical.argv, record.argv)
   )
     return false;
 
@@ -433,6 +432,7 @@ function retainedNativeExitReceiptTerminal(
       binding.ownership.attempt !== attempt ||
       !checkEvidenceArgv(binding.argv) ||
       !isDeepStrictEqual(binding.argv, record.argv) ||
+      !checkEvidenceArgv(physical.remoteArgv) ||
       !checkEvidenceArgv(binding.remoteArgv) ||
       !isDeepStrictEqual(binding.remoteArgv, physical.remoteArgv) ||
       !Array.isArray(attempts) ||
