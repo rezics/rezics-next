@@ -2,7 +2,8 @@ import type { ContentCommandDependencies } from './commands.ts';
 import type { ContentReadDependencies } from './reads.ts';
 export declare const KNOWLEDGE_ANCESTOR_LIMIT = 31;
 export declare const KNOWLEDGE_REFERENCE_LIMIT = 64;
-export declare const KNOWLEDGE_PAGE_LIMIT = 20;
+export declare const KNOWLEDGE_PAGE_LIMIT = 50;
+export declare const KNOWLEDGE_OUTLINE_SCAN_LIMIT = 128;
 export type KnowledgeDependencies = ContentCommandDependencies & ContentReadDependencies;
 export type KnowledgeCommandContext = Readonly<{
     idempotencyKey: string;
@@ -12,6 +13,13 @@ export type KnowledgeCommandContext = Readonly<{
 export type KnowledgeReadContext = Readonly<{
     actor: import('../request/access.ts').Actor;
     deadline: number;
+}>;
+export type KnowledgePageInput = Readonly<{
+    limit?: number;
+    cursor?: string;
+}>;
+export type KnowledgeOutlinePageInput = KnowledgePageInput & Readonly<{
+    parentPlacementId?: string;
 }>;
 export type KnowledgeDocumentInput = Readonly<{
     title: string;
@@ -47,6 +55,7 @@ export type KnowledgeCommandValue = Readonly<{
 export type KnowledgeDocumentView = Readonly<{
     documentId: string;
     notebookId: string;
+    publicationId: string | null;
     revisionId: string;
     title: string;
     language: string | null;
@@ -55,7 +64,7 @@ export type KnowledgeDocumentView = Readonly<{
     licence: string;
     subjectIds: readonly string[];
 }>;
-export type KnowledgePublicDocumentView = Omit<KnowledgeDocumentView, 'notebookId'> & Readonly<{
+export type KnowledgePublicDocumentView = Omit<KnowledgeDocumentView, 'notebookId' | 'publicationId'> & Readonly<{
     publicationId: string;
     subjectId: string;
     publishedAt: string;
@@ -65,6 +74,12 @@ export declare class KnowledgeNotFoundError extends Error {
     constructor();
 }
 export declare class KnowledgeInvalidInputError extends Error {
+    constructor();
+}
+export declare class KnowledgeInvalidCursorError extends Error {
+    constructor();
+}
+export declare class KnowledgeStaleCursorError extends Error {
     constructor();
 }
 /** One bounded currentness pass covers the notebook's anchor and this revision's managed Subject references. */
