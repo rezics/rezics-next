@@ -5,7 +5,8 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { CollectionPresentationFields } from '../library/collection-editor';
 import { collectionStoryMembers } from '../kernel/fake/collection-stories';
 import { subjectOf } from '../library/reads';
-import { readCollectionTypeOptions } from '../library/collection-presentation';
+import { pickText } from '@rezics/composition';
+import { getLocale } from '../paraglide/runtime.js';
 import { parseListPresentation } from '@rezics/ui/cover';
 import definitions from '../kernel/recorded/definitions-release.json';
 import { CollectionPreview, type CollectionBrowseRecord } from '../library/collection-browser';
@@ -85,15 +86,13 @@ function PresentationReviewExample() {
   const replacementCover = members[3]!.subject!.cover!;
   const [kind, setKind] = useState<string | null>('schema:Movie');
   const [cover, setCover] = useState<string | null>(replacementCover.media);
-  const types = readCollectionTypeOptions(definitions.release)
-    .filter((type) => type.id === 'schema:Book' || type.id === 'schema:Movie')
-    .map((type) => ({
-      ...type,
-      label:
-        type.id === 'schema:Book'
-          ? 'Books with annotations · 注釈付きの本と多言語の版情報 · Livres avec annotations'
-          : type.label,
-    }));
+  const types = (['schema:Book', 'schema:Movie'] as const).map((id) => ({
+    id,
+    label:
+      id === 'schema:Book'
+        ? 'Books with annotations · 注釈付きの本と多言語の版情報 · Livres avec annotations'
+        : pickText(definitions.release.types[id].labels, getLocale()).text,
+  }));
   const listPresentations = {
     'schema:Book': parseListPresentation(definitions.release.types['schema:Book'].listPresentation)!,
     'schema:Movie': parseListPresentation(definitions.release.types['schema:Movie'].listPresentation)!,
