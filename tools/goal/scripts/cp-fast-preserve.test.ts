@@ -33,9 +33,19 @@ function fixture() {
   const published = git(checkout, 'rev-parse', 'main');
   const stateFile = join(checkout, '.temp/goal/watch/cp-fast-state.json');
   const notices: PreservationConflict[] = [];
-  const options = { checkout, stateFile, notify: (conflict: PreservationConflict) => { notices.push(conflict); } };
+  const options = {
+    checkout,
+    stateFile,
+    notify: (conflict: PreservationConflict) => {
+      notices.push(conflict);
+    },
+  };
   return {
-    ...options, options, notices, published, source,
+    ...options,
+    options,
+    notices,
+    published,
+    source,
     commit(branch: string, file: string, contents: string) {
       git(checkout, 'checkout', '-q', branch);
       writeFileSync(join(checkout, file), contents);
@@ -48,7 +58,9 @@ function fixture() {
       git(checkout, 'commit', '-qm', `control-plane: fast sync from dev ${source.slice(0, 10)}`);
       checkpointFastPublication(checkout, stateFile, 'main', source);
     },
-    dispose() { rmSync(checkout, { recursive: true, force: true }); },
+    dispose() {
+      rmSync(checkout, { recursive: true, force: true });
+    },
   };
 }
 
@@ -78,20 +90,26 @@ test('a main-only hotfix survives the next full snapshot alongside concurrent di
     f.publish(later.dev);
     expect(readFileSync(join(f.checkout, 'resident.ts'), 'utf8')).toContain('second fix');
     expect(readFileSync(join(f.checkout, 'product.ts'), 'utf8')).toContain('another feature');
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });
 
 test('adoption works with a main history hook without permitting main deletion', async () => {
   const f = fixture();
   try {
-    writeFileSync(join(f.checkout, '.git/hooks/reference-transaction'), `#!/bin/sh
+    writeFileSync(
+      join(f.checkout, '.git/hooks/reference-transaction'),
+      `#!/bin/sh
 [ "$1" = prepared ] || exit 0
 while read -r old new ref; do
   [ "$ref" = refs/heads/main ] || continue
   [ "$old" = "$new" ] && continue
   git merge-base --is-ancestor "$old" "$new" || exit 1
 done
-`, { mode: 0o755 });
+`,
+      { mode: 0o755 },
+    );
     f.commit('main', 'resident.ts', 'const resident = "retained";\n');
     const main = git(f.checkout, 'rev-parse', 'main');
     const result = await preserveMainHotfixes(f.options);
@@ -101,7 +119,9 @@ done
     const deletion = spawnSync('git', ['update-ref', '-d', 'refs/heads/main', main], { cwd: f.checkout });
     expect(deletion.status).not.toBe(0);
     expect(git(f.checkout, 'rev-parse', 'main')).toBe(main);
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });
 
 test('a genuine overlap holds only publication, leaves current main/dev intact, and asks the owner once until reconciled', async () => {
@@ -128,7 +148,9 @@ test('a genuine overlap holds only publication, leaves current main/dev intact, 
     f.publish(reconciled.dev);
     expect(readFileSync(join(f.checkout, 'resident.ts'), 'utf8')).toContain('hotfix');
     expect(readFileSync(join(f.checkout, 'product.ts'), 'utf8')).toContain('work continues');
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });
 
 test('an explicit merge preserves a manual resolution without replaying the old conflict', async () => {
@@ -145,16 +167,22 @@ test('an explicit merge preserves a manual resolution without replaying the old 
     git(f.checkout, 'commit', '-qm', 'Resolve overlap');
     const dev = git(f.checkout, 'rev-parse', 'dev');
     git(f.checkout, 'checkout', '-q', 'main');
-    writeFileSync(join(f.checkout, '.git/hooks/reference-transaction'), `#!/bin/sh
+    writeFileSync(
+      join(f.checkout, '.git/hooks/reference-transaction'),
+      `#!/bin/sh
 [ "$1" = prepared ] || exit 0
 while read -r old new ref; do
   [ "$ref" != refs/heads/main ] || [ "$old" = "$new" ] || exit 1
 done
-`, { mode: 0o755 });
+`,
+      { mode: 0o755 },
+    );
     expect(await preserveMainHotfixes(f.options)).toEqual({ status: 'ready', main, dev });
     expect(JSON.parse(readFileSync(f.stateFile, 'utf8')).adoptedMain).toBe(main);
     expect(f.notices).toHaveLength(1);
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });
 
 test('checkpoint verifies the entire source tree and bootstrap rejects forged snapshot metadata', async () => {
@@ -165,7 +193,9 @@ test('checkpoint verifies the entire source tree and bootstrap rejects forged sn
     git(f.checkout, 'commit', '--allow-empty', '-qm', `control-plane: fast sync from dev ${f.source.slice(0, 10)}`);
     await expect(preserveMainHotfixes(f.options)).rejects.toThrow('source tree');
     expect(git(f.checkout, 'show', 'main:resident.ts')).toContain('hotfix');
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });
 
 test('cp-sync uses only an exact fast-snapshot checkpoint with diverged commit identity', async () => {
@@ -180,8 +210,12 @@ test('cp-sync uses only an exact fast-snapshot checkpoint with diverged commit i
       checks: [{ name: 'fixture', argv: [process.execPath, '-e', 'process.exit(0)'], timeoutMs: 60_000 }],
     };
     expect(f.published).not.toBe(f.source);
-    expect(git(f.checkout, 'rev-parse', `${f.published}^{tree}`)).toBe(git(f.checkout, 'rev-parse', `${f.source}^{tree}`));
-    expect(spawnSync('git', ['merge-base', '--is-ancestor', f.published, 'dev'], { cwd: f.checkout }).status).not.toBe(0);
+    expect(git(f.checkout, 'rev-parse', `${f.published}^{tree}`)).toBe(
+      git(f.checkout, 'rev-parse', `${f.source}^{tree}`),
+    );
+    expect(spawnSync('git', ['merge-base', '--is-ancestor', f.published, 'dev'], { cwd: f.checkout }).status).not.toBe(
+      0,
+    );
     expect(await sync(options)).toBe(0);
     expect(git(f.checkout, 'rev-parse', 'main')).toBe(f.published);
     expect(git(f.checkout, 'rev-parse', 'dev')).not.toBe(f.source);
@@ -198,7 +232,9 @@ test('cp-sync uses only an exact fast-snapshot checkpoint with diverged commit i
       `${JSON.stringify({ publication: { main: changedMain, source: f.source }, adoptedMain: changedMain })}\n`,
     );
     await expect(sync(options)).rejects.toThrow('has commits dev lacks');
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });
 
 test('a crash after the adoption ref update can replay without making a duplicate commit', async () => {
@@ -211,7 +247,9 @@ test('a crash after the adoption ref update can replay without making a duplicat
     writeFileSync(f.stateFile, before);
     expect(await preserveMainHotfixes(f.options)).toEqual(result);
     expect(git(f.checkout, 'rev-parse', 'dev')).toBe(result.dev);
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });
 
 test('the timer CLI surfaces an overlap once through the native owner inbox without a manager login', () => {
@@ -224,17 +262,25 @@ test('the timer CLI surfaces an overlap once through the native owner inbox with
     const databasePath = join(stateDirectory, 'goal.sqlite');
     openDb(databasePath).close();
     for (let call = 0; call < 2; call++) {
-      const result = spawnSync(process.execPath, [join(import.meta.dir, 'cp-fast-preserve.ts'), 'prepare', 'fixture-owner'], {
-        cwd: f.checkout, encoding: 'utf8',
-        env: { ...process.env, GOAL_MAIN_CHECKOUT: f.checkout, GOAL_STATE_DIRECTORY: stateDirectory },
-      });
+      const result = spawnSync(
+        process.execPath,
+        [join(import.meta.dir, 'cp-fast-preserve.ts'), 'prepare', 'fixture-owner'],
+        {
+          cwd: f.checkout,
+          encoding: 'utf8',
+          env: { ...process.env, GOAL_MAIN_CHECKOUT: f.checkout, GOAL_STATE_DIRECTORY: stateDirectory },
+        },
+      );
       expect(result.stderr).toBe('');
       expect(result.status).toBe(2);
       expect(result.stdout).toBe('');
     }
     const db = new Database(databasePath, { readonly: true });
     try {
-      const rows = db.query('SELECT event, delivery_count FROM manager_inbox').all() as { event: string; delivery_count: number }[];
+      const rows = db.query('SELECT event, delivery_count FROM manager_inbox').all() as {
+        event: string;
+        delivery_count: number;
+      }[];
       expect(rows).toHaveLength(1);
       const event = JSON.parse(rows[0]!.event);
       expect(event.managerId).toBe('fixture-owner');
@@ -242,7 +288,11 @@ test('the timer CLI surfaces an overlap once through the native owner inbox with
       expect(event.summary).toContain('resident.ts');
       expect(event.evidencePath).toBe(join(stateDirectory, 'watch/cp-fast-conflict.json'));
       expect(rows[0]!.delivery_count).toBe(1);
-    } finally { db.close(); }
+    } finally {
+      db.close();
+    }
     expect(git(f.checkout, 'show', 'main:resident.ts')).toContain('hotfix');
-  } finally { f.dispose(); }
+  } finally {
+    f.dispose();
+  }
 });

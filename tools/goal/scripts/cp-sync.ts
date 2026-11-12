@@ -663,8 +663,7 @@ export async function sync(options: Options = {}): Promise<number> {
         source,
         (ancestor, descendant) => isAncestor(checkout, ancestor, descendant),
       );
-      if (!hasAncestry)
-        throw new Refusal(`${MAIN} ${short(main)} has commits ${DEV} lacks; syncing would drop them.`);
+      if (!hasAncestry) throw new Refusal(`${MAIN} ${short(main)} has commits ${DEV} lacks; syncing would drop them.`);
       if (paths.every((path) => object(checkout, main, path) === object(checkout, source, path))) {
         print(`cp-sync: ${MAIN} already has ${DEV}'s ${paths.join(', ')}; nothing to do.`);
         return 0;
