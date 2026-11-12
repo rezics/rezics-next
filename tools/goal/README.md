@@ -1150,8 +1150,11 @@ Its `chain` section counts offers, chained and unchained
 tasks (integrated, landed lines, worker-hours and lines per worker-hour) and declined offers by reason; see
 [Chained briefs](#chained-briefs). Decision: after one stable sort, `flowReport`
 builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
-reports stage/Goal totals, efficiency, attempts per integrated task, and live queue length and age from each task's
-current attempt when available. Post-integration promotion requests retain their own attempt. Alarm examples come
+reports stage/Goal totals, efficiency, distinct task/attempt generations per integrated task, separate worker process
+launches (including resumes), and live queue length and age from each task's current attempt when available. An
+integration event proves its own generation when the worker start is outside the bounded event read; recorded attempt
+zero remains a distinct legacy generation identity; urgent tasks remain excluded from the ratio. Post-integration
+promotion requests retain their own attempt. Alarm examples come
 from the breached queue and name distinct tasks; broader alarms use distinct tasks from the oldest queues. A later
 worker start settles a legacy start request for the same attempt, but does not supply a synthetic start-stage
 duration. Its guard ledger prices registered attempt endings and landing refusals over seven days by firings,
@@ -1304,8 +1307,13 @@ another alarm; the same task entering a waiting queue again still rearms it. Act
 alarms keep their configured periodic escalation, and hourly flow reports continue to record the same metrics. Flow
 alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the configured
 supermanager; priority grants and scope decisions remain with the supermanager.
-The historical attempts-per-integrated ratio rearms only when its displayed value changes or it recovers and breaches
-again. Waiting task rotation does not change that history; actual queue age keeps its own alert.
+The worker retry alarm uses integrations from the trailing seven days and names that window, integrated-task sample,
+and attempt-generation sample. It rearms when the sampled ratio changes or recovers and breaches again; older history,
+waiting-task rotation, and same-attempt resumes do not rearm it. Actual queue age keeps its own alert.
+
+Decision: Flow attempt ratios count distinct task/generation pairs and add each integrated generation from its
+authoritative integration event; process launches stay separate, while retry alarms use the named trailing-seven-day
+integration cohort.
 
 Once per UTC day the manager host dispatches the research brief at
 [`templates/daily-step-audit.md`](templates/daily-step-audit.md), unless a daily audit task is already open. It

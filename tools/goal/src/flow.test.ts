@@ -371,6 +371,64 @@ test('goal report --flow gives per stage and per Goal totals and percentiles, ef
   expect(result.flowEfficiency).toBeGreaterThan(0);
   expect(result.queues.find((q) => q.stage === 'landing')?.length).toBe(0);
   expect(result.attemptsPerIntegrated).toBe(1);
+  expect(result.workerProcessLaunches).toBe(1);
+});
+
+test('attempt ratios count distinct generations, exclude urgent work and keep launches separate', () => {
+  const result = flowReport(
+    [
+      { taskId: 'ordinary', attempt: 1, stage: 'worker', action: 'started', at: date(1) },
+      { taskId: 'ordinary', attempt: 1, stage: 'worker', action: 'started', at: date(2) },
+      { taskId: 'ordinary', attempt: 2, stage: 'worker', action: 'started', at: date(3) },
+      { taskId: 'ordinary', attempt: 2, stage: 'integration', action: 'integrated', at: date(4) },
+      { taskId: 'legacy', attempt: 0, stage: 'integration', action: 'integrated', at: date(5) },
+      { taskId: 'urgent', attempt: 1, stage: 'worker', action: 'started', at: date(5) },
+      { taskId: 'urgent', attempt: 1, stage: 'worker', action: 'started', at: date(6) },
+      { taskId: 'urgent', attempt: 1, stage: 'integration', action: 'integrated', at: date(7) },
+    ],
+    [task('ordinary'), task('legacy'), { id: 'urgent', brief: { goal: 'sample', urgent: true } }],
+    Date.parse(date(20)),
+  );
+  expect(result.attemptsPerIntegrated).toBe(1.5);
+  expect(result.workerProcessLaunches).toBe(5);
+  expect(result.attemptsPerIntegratedSample).toMatchObject({
+    window: 'trailing 7 days',
+    integratedTasks: 2,
+    attemptGenerations: 3,
+    attemptsPerIntegrated: 1.5,
+  });
+  const empty = flowReport([], [], Date.parse(date(20)));
+  expect(empty.attemptsPerIntegrated).toBeNull();
+  expect(empty.workerProcessLaunches).toBe(0);
+});
+
+test('the bounded retry sample counts integrations in its half-open window and proves missing launches', () => {
+  const now = Date.parse('2026-11-05T00:00:00.000Z');
+  const cutoff = now - 7 * 24 * 60 * 60 * 1000;
+  const reportSince = now - 2 * 24 * 60 * 60 * 1000;
+  const at = (timestamp: number) => new Date(timestamp).toISOString();
+  const result = flowReport(
+    [
+      { taskId: 'before', attempt: 1, stage: 'integration', action: 'integrated', at: at(cutoff - 1) },
+      { taskId: 'boundary', attempt: 2, stage: 'worker', action: 'started', at: at(reportSince - 1) },
+      { taskId: 'boundary', attempt: 2, stage: 'integration', action: 'integrated', at: at(reportSince) },
+      { taskId: 'inside', attempt: 3, stage: 'integration', action: 'integrated', at: at(cutoff + 1) },
+      { taskId: 'report', attempt: 1, stage: 'worker', action: 'started', at: at(now - 60_000) },
+      { taskId: 'report', attempt: 1, stage: 'integration', action: 'integrated', at: at(now - 30_000) },
+      { taskId: 'end', attempt: 4, stage: 'integration', action: 'integrated', at: at(now) },
+    ],
+    [],
+    now,
+    { reportSince: at(reportSince) },
+  );
+  expect(result.workerProcessLaunches).toBe(1);
+  expect(result.attemptsPerIntegrated).toBe(1);
+  expect(result.attemptsPerIntegratedSample).toMatchObject({
+    window: 'trailing 7 days',
+    integratedTasks: 3,
+    attemptGenerations: 3,
+    attemptsPerIntegrated: 1,
+  });
 });
 
 test('flow reports count over-budget worker and manager launches once per layer', () => {
@@ -544,6 +602,12 @@ test('the manager host evaluates absolute thresholds and sends one supermanager 
     queues: [{ stage: 'landing', length: 1, oldestAgeMs: 4_000_000, tasks: ['a', 'b', 'c', 'd'] }],
     stages: [{ stage: 'landing', p90Ms: 2_000_000 }],
     attemptsPerIntegrated: 2,
+    attemptsPerIntegratedSample: {
+      window: 'trailing 7 days',
+      integratedTasks: 1,
+      attemptGenerations: 2,
+      attemptsPerIntegrated: 2,
+    },
   };
   const sent: string[] = [];
   const thresholds = {
@@ -818,12 +882,20 @@ test('unchanged global alarms with no waiting tasks stay quiet after delivery, w
   }
 });
 
-test('an unchanged historical attempt ratio does not rearm as waiting tasks rotate', () => {
+test('the recent retry alarm ignores older history and same-attempt launches but rearms on a changed ratio', () => {
   const db = openDb(':memory:');
   const policy = readControlPolicy({ flow: { alertEveryMs: 10_000 } });
   const now = Date.parse(date(0));
   const report = flowReport([], [], now);
+  const sample = (integratedTasks: number, attemptGenerations: number) => ({
+    window: 'trailing 7 days',
+    windowMs: 7 * 24 * 60 * 60 * 1000,
+    integratedTasks,
+    attemptGenerations,
+    attemptsPerIntegrated: attemptGenerations / integratedTasks,
+  });
   report.attemptsPerIntegrated = 3.67;
+  report.attemptsPerIntegratedSample = sample(3, 11);
   const empty = report.queues[1]!;
   const waiting = { stage: 'check' as const, length: 1, oldestAgeMs: 1, tasks: ['waiting-task'] };
   const sent: string[] = [];
@@ -832,17 +904,22 @@ test('an unchanged historical attempt ratio does not rearm as waiting tasks rota
   try {
     report.queues[1] = waiting;
     expect(run(0)).toEqual(['attempts-per-integrated']);
+    expect(sent[0]).toContain('trailing 7 days (3 integrated tasks; 11 attempt generations)');
     report.queues[1] = empty;
     expect(run(1)).toEqual([]);
     report.queues[1] = { ...waiting, tasks: ['next-task'] };
     expect(run(2)).toEqual([]);
+    report.attemptsPerIntegrated = 99;
+    report.workerProcessLaunches++;
+    report.attemptsPerIntegratedSample = sample(6, 22);
+    expect(run(3)).toEqual([]);
     const changes = db.query('SELECT total_changes() AS changes').get();
-    expect(run(10_002)).toEqual([]);
+    expect(run(10_003)).toEqual([]);
     expect(db.query('SELECT total_changes() AS changes').get()).toEqual(changes);
     expect(sent).toHaveLength(1);
-    expect(report.attemptsPerIntegrated).toBe(3.67);
-    report.attemptsPerIntegrated = 3.68;
-    expect(run(10_003)).toEqual(['attempts-per-integrated']);
+    expect(report.attemptsPerIntegrated).toBe(99);
+    report.attemptsPerIntegratedSample = sample(6, 24);
+    expect(run(10_004)).toEqual(['attempts-per-integrated']);
   } finally {
     db.close();
   }

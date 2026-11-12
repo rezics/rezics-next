@@ -425,6 +425,7 @@ export async function runWorkerCommand(
               `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
               `Over-budget launches by layer: ${JSON.stringify(result.overBudgetLaunchesByLayer)}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
+              `Worker process launches (including resumes): ${result.workerProcessLaunches}`,
               ...(landingOperationLine ? [landingOperationLine] : []),
               `Chained: ${result.chain.chained.tasks} tasks, ${result.chain.chained.integrated} integrated, ${result.chain.chained.linesPerWorkerHour === null ? 'unknown' : result.chain.chained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; unchained: ${result.chain.unchained.tasks} tasks, ${result.chain.unchained.integrated} integrated, ${result.chain.unchained.linesPerWorkerHour === null ? 'unknown' : result.chain.unchained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; offers ${result.chain.offered}, declined ${JSON.stringify(result.chain.declined)}`,
               `Dev landing transpile: ${result.devTranspile.successfulChecks} passed, ${result.devTranspile.repairHandbacks} repair handbacks, ${result.devTranspile.unavailable} unavailable; ${result.devTranspile.measuredChecks} measured checks, ${result.devTranspile.totalMs === null ? 'cost unavailable' : `${result.devTranspile.totalMs}ms total`}.`,

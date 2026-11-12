@@ -16,6 +16,8 @@ export const FLOW_STAGES = [
   'integration',
   'promotion',
 ] as const;
+export const FLOW_RETRY_ALARM_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+export const FLOW_RETRY_ALARM_WINDOW = 'trailing 7 days';
 type LifecycleStage = (typeof FLOW_STAGES)[number];
 export type FlowStage = LifecycleStage | 'manager' | 'chain';
 export type FlowEvent = {
@@ -713,11 +715,16 @@ export type FlowReportOptions = {
   historical?: boolean;
   landingOperations?: readonly LandingOperation[];
   window?: { since: string; until: string };
+  /** Keep live flow metrics on their configured history while loading enough events for the retry alarm sample. */
+  reportSince?: string;
 };
 
 export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now(), options: FlowReportOptions = {}) {
   const historical = options.historical === true;
-  const ordered = [...events].sort((a, b) => a.at.localeCompare(b.at));
+  const allOrdered = [...events].sort((a, b) => a.at.localeCompare(b.at));
+  const reportSince = options.reportSince === undefined ? undefined : Date.parse(options.reportSince);
+  const ordered =
+    reportSince === undefined ? allOrdered : allOrdered.filter((event) => Date.parse(event.at) >= reportSince);
   const currentAttempts = new Map<string, number>();
   for (const task of historical ? [] : tasks)
     if (typeof task.currentAttempt === 'number' && Number.isSafeInteger(task.currentAttempt))
@@ -800,15 +807,63 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
         };
       });
   const urgent = new Set(tasks.filter((t) => t.brief.urgent).map((t) => t.id));
-  const integrated = new Set(
-    ordered
-      .filter((e) => e.stage === 'integration' && e.action === 'integrated' && !urgent.has(e.taskId))
-      .map((e) => e.taskId),
+  const integrationAttempts = (cohort: readonly FlowEvent[]) => {
+    const integrated = new Map<string, { attempt: number; at: string }>();
+    for (const event of cohort) {
+      if (event.stage !== 'integration' || event.action !== 'integrated' || urgent.has(event.taskId)) continue;
+      // Preserve the last authoritative integration generation when a legacy task has repeated records.
+      integrated.set(event.taskId, { attempt: event.attempt, at: event.at });
+    }
+    return integrated;
+  };
+  const generationTotals = (
+    cohort: readonly FlowEvent[],
+    integrations: ReadonlyMap<string, { attempt: number; at: string }>,
+  ) => {
+    const generations = new Map<string, Set<number>>();
+    for (const event of cohort) {
+      const integration = integrations.get(event.taskId);
+      if (
+        event.stage !== 'worker' ||
+        event.action !== 'started' ||
+        !integration ||
+        Date.parse(event.at) > Date.parse(integration.at) ||
+        event.attempt > integration.attempt
+      )
+        continue;
+      let taskGenerations = generations.get(event.taskId);
+      if (!taskGenerations) generations.set(event.taskId, (taskGenerations = new Set()));
+      taskGenerations.add(event.attempt);
+    }
+    for (const [taskId, integration] of integrations) {
+      let taskGenerations = generations.get(taskId);
+      if (!taskGenerations) generations.set(taskId, (taskGenerations = new Set()));
+      // Integration proves its generation even when its worker start predates the bounded event read.
+      taskGenerations.add(integration.attempt);
+    }
+    const attemptGenerations = [...generations.values()].reduce((total, attempts) => total + attempts.size, 0);
+    return {
+      integratedTasks: integrations.size,
+      attemptGenerations,
+      attemptsPerIntegrated: integrations.size ? attemptGenerations / integrations.size : null,
+    };
+  };
+  const integrated = integrationAttempts(ordered);
+  const attempts = generationTotals(ordered, integrated);
+  const recentStart = now - FLOW_RETRY_ALARM_WINDOW_MS;
+  const recentIntegrations = integrationAttempts(
+    allOrdered.filter((event) => {
+      if (event.stage !== 'integration' || event.action !== 'integrated') return false;
+      const at = Date.parse(event.at);
+      return at >= recentStart && at < now;
+    }),
   );
-  const attemptCounts = new Map<string, number>();
-  for (const e of ordered)
-    if (e.stage === 'worker' && e.action === 'started')
-      attemptCounts.set(e.taskId, (attemptCounts.get(e.taskId) ?? 0) + 1);
+  const attemptsPerIntegratedSample = {
+    window: FLOW_RETRY_ALARM_WINDOW,
+    windowMs: FLOW_RETRY_ALARM_WINDOW_MS,
+    ...generationTotals(allOrdered, recentIntegrations),
+  };
+  const workerProcessLaunches = ordered.filter((event) => event.stage === 'worker' && event.action === 'started').length;
   const overBudgetLaunchesByLayer: Record<string, number> = {};
   for (const event of ordered) {
     if (!['worker', 'manager'].includes(event.stage) || event.action !== 'started' || !event.detail) continue;
@@ -984,9 +1039,9 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     flowEfficiency: eligible.length
       ? eligible.reduce((n, t) => n + (t.workingMs ?? 0), 0) / eligible.reduce((n, t) => n + (t.elapsedMs ?? 0), 0)
       : null,
-    attemptsPerIntegrated: integrated.size
-      ? [...integrated].reduce((n, id) => n + (attemptCounts.get(id) ?? 0), 0) / integrated.size
-      : null,
+    attemptsPerIntegrated: attempts.attemptsPerIntegrated,
+    workerProcessLaunches,
+    attemptsPerIntegratedSample,
     overBudgetLaunchesByLayer,
     pageDataRuns: pageDataFlowRuns(ordered),
     devTranspile: {
@@ -1055,11 +1110,16 @@ export function checkFlowAlarms(
   const landing = report.stages.find((s) => s.stage === 'landing');
   if (landing?.p90Ms !== null && landing?.p90Ms !== undefined && landing.p90Ms > thresholds.landingP90Ms)
     breaches.push(['landing-p90', 'landing', `p90 ${Math.round(landing.p90Ms / 60000)} min`]);
-  if (report.attemptsPerIntegrated !== null && report.attemptsPerIntegrated > thresholds.attemptsPerIntegrated)
+  const retrySample = report.attemptsPerIntegratedSample;
+  if (
+    retrySample.attemptsPerIntegrated !== null &&
+    retrySample.attemptsPerIntegrated > thresholds.attemptsPerIntegrated
+  )
     breaches.push([
       'attempts-per-integrated',
       'worker',
-      `attempts per integrated task ${report.attemptsPerIntegrated.toFixed(2)}`,
+      `attempts per integrated task ${retrySample.attemptsPerIntegrated.toFixed(2)} over ${retrySample.window} ` +
+        `(${retrySample.integratedTasks} integrated tasks; ${retrySample.attemptGenerations} attempt generations)`,
     ]);
   const sent: string[] = [];
   const activeThresholds = new Set(breaches.map(([key]) => key));
@@ -1077,9 +1137,13 @@ export function checkFlowAlarms(
       fingerprint: string | null;
       active: number;
     } | null;
-    const measurementFingerprint = flowAlarmMeasurementFingerprint(key, measurement);
-    const historicalRatio = key === 'attempts-per-integrated';
-    const fingerprint = `${measurementFingerprint}:${historicalRatio ? 'history' : queueFingerprint}`;
+    const fingerprintMeasurement =
+      key === 'attempts-per-integrated' && retrySample.attemptsPerIntegrated !== null
+        ? `attempts per integrated task ${retrySample.attemptsPerIntegrated.toFixed(2)}`
+        : measurement;
+    const measurementFingerprint = flowAlarmMeasurementFingerprint(key, fingerprintMeasurement);
+    const retryCohort = key === 'attempts-per-integrated';
+    const fingerprint = `${measurementFingerprint}:${retryCohort ? retrySample.window : queueFingerprint}`;
     const isRecent = old !== null && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs;
     const legacyCooldown = isRecent && (old?.fingerprint === null || old?.fingerprint?.startsWith('v1:'));
     const globalMetric = !key.startsWith('queue-');
@@ -1087,11 +1151,11 @@ export function checkFlowAlarms(
     const recovered = old?.active === 0;
     const unchangedGlobal =
       globalMetric &&
-      (historicalRatio || !hasWaitingTasks) &&
+      (retryCohort || !hasWaitingTasks) &&
       old?.active === 1 &&
       old.fingerprint?.startsWith(`${measurementFingerprint}:`);
     if (unchangedGlobal) {
-      // Remember a drained queue for live metrics; a historical ratio ignores queue churn.
+      // Remember a drained queue for live metrics; the retry cohort ignores queue churn.
       if (old.fingerprint !== fingerprint)
         db.query('UPDATE flow_alarm_sends SET fingerprint=? WHERE threshold=?').run(fingerprint, key);
       continue;
