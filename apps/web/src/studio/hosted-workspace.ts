@@ -40,7 +40,13 @@ function publicationRecord(id: string, book: HostedBook): PublicationRecord {
         ]
       : [],
   );
-  return { publicationId: id, revision: book.revision.revisionId, publishedAt: null, state: book.placements.length === 0 ? 'withdrawn' : 'published', entries };
+  return {
+    publicationId: id,
+    revision: book.revision.revisionId,
+    publishedAt: null,
+    state: book.placements.length === 0 ? 'withdrawn' : 'published',
+    entries,
+  };
 }
 
 function reviewFor(
@@ -204,11 +210,7 @@ export async function openHostedStudio(
     async reviewWithdrawal(request, requestSignal) {
       if (!current() || requestSignal.aborted || request.projectId !== input.projectId) return ended();
       const structure = book.currentStructure();
-      if (
-        !structure ||
-        request.catalogueId !== options.catalogueId ||
-        request.structureRevision !== structure.revision
-      )
+      if (!structure || request.catalogueId !== options.catalogueId || request.structureRevision !== structure.revision)
         return hostedFailure('stale', 'Reload the current book before reviewing withdrawal.');
       const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal, viewer);
       if (!current() || requestSignal.aborted) return ended();
@@ -232,7 +234,12 @@ export async function openHostedStudio(
         value: {
           reviewId: crypto.randomUUID(),
           authority: 'hosted',
-          target: { kind: 'book', catalogueId: options.catalogueId, structureRevision: structure.revision, chapters: [] },
+          target: {
+            kind: 'book',
+            catalogueId: options.catalogueId,
+            structureRevision: structure.revision,
+            chapters: [],
+          },
           withdrawal: { publicationId, revision: release.value.revision.revisionId },
           expectedPublicationRevision: publicationId,
           expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
@@ -244,7 +251,8 @@ export async function openHostedStudio(
     },
     async publish(request, requestSignal) {
       const review = request.review;
-      const recovering = pendingPublication?.key === request.idempotencyKey && pendingPublication.reviewId === review.reviewId;
+      const recovering =
+        pendingPublication?.key === request.idempotencyKey && pendingPublication.reviewId === review.reviewId;
       if (
         !current() ||
         requestSignal.aborted ||
@@ -301,7 +309,10 @@ export async function openHostedStudio(
           visible.value.revision.sourceRevisionId !== review.target.structureRevision ||
           visible.value.placements.length !== 0
         )
-          return hostedFailure('uncertain', 'The withdrawal was accepted but the current empty release could not be confirmed. Retry to recover it.');
+          return hostedFailure(
+            'uncertain',
+            'The withdrawal was accepted but the current empty release could not be confirmed. Retry to recover it.',
+          );
       }
       const record = publicationRecord(nextPublicationId, result.value);
       if (

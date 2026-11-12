@@ -21,7 +21,16 @@ const failure = (kind: 'unavailable' | 'uncertain' | 'stale' | 'denied'): Studio
 });
 const structure: HostedBook = {
   revision: { catalogueId, revisionId: structureId, kind: 'structure', sourceRevisionId: null },
-  placements: [{ occurrenceId, parentId: null, position: 0, title: 'Opening', kind: 'chapter', target: { ...exact, threadId: id(9) } }],
+  placements: [
+    {
+      occurrenceId,
+      parentId: null,
+      position: 0,
+      title: 'Opening',
+      kind: 'chapter',
+      target: { ...exact, threadId: id(9) },
+    },
+  ],
 };
 const release: HostedBook = {
   ...structure,
@@ -54,15 +63,19 @@ async function fixture(visibility: 'draft' | 'published' = 'published', initial:
     scope: { kind: 'all-homes', route: 0, crossHome: 'complete' },
     viewer: { accountId: catalogueId, authnEpoch: 1 },
     item: {
-      catalogueId, threadId: id(9), createdAt: '2026-01-01T00:00:00Z', postRevisionId: id(10),
-      postVisibility: visibilityNow, headRevisionId: structureId,
-      publicationId: nullPointer ? null : live?.revision.revisionId ?? null,
+      catalogueId,
+      threadId: id(9),
+      createdAt: '2026-01-01T00:00:00Z',
+      postRevisionId: id(10),
+      postVisibility: visibilityNow,
+      headRevisionId: structureId,
+      publicationId: nullPointer ? null : (live?.revision.revisionId ?? null),
     },
   });
   const native: HostedBookNative = {
     listHistory: async () => ok({ catalogueId, items: [], nextCursor: null }),
     listOwn: async () => ok({ ...owned(), items: [], nextCursor: null }),
-    readOwn: async () => ownerUnavailable ? failure('unavailable') : ok(owned()),
+    readOwn: async () => (ownerUnavailable ? failure('unavailable') : ok(owned())),
     read: async (selection) => {
       reads.push(selection);
       if (selection.kind === 'structure') return ok(structure);
@@ -79,7 +92,12 @@ async function fixture(visibility: 'draft' | 'published' = 'published', initial:
       let result = receipts.get(key);
       if (!result) {
         result = {
-          revision: { catalogueId, revisionId: body.occurrenceIds.length ? id(5) : withdrawalId, kind: 'publication', sourceRevisionId: structureId },
+          revision: {
+            catalogueId,
+            revisionId: body.occurrenceIds.length ? id(5) : withdrawalId,
+            kind: 'publication',
+            sourceRevisionId: structureId,
+          },
           placements: body.occurrenceIds.length ? structure.placements : [],
         };
         receipts.set(key, result);
@@ -89,28 +107,61 @@ async function fixture(visibility: 'draft' | 'published' = 'published', initial:
     },
   };
   const signal = new AbortController().signal;
-  const opened = await openHostedStudio({
-    catalogueId, accountId: catalogueId, native, documents, isCurrent: () => current,
-    resolveTarget: async () => failure('unavailable'),
-    input: {
-      visitKey: 'withdrawal-test', projectId: catalogueId, title: 'Book',
-      documents: { items: [], nextCursor: null }, publications: { items: [], nextCursor: null }, canCreateDraft: true,
+  const opened = await openHostedStudio(
+    {
+      catalogueId,
+      accountId: catalogueId,
+      native,
+      documents,
+      isCurrent: () => current,
+      resolveTarget: async () => failure('unavailable'),
+      input: {
+        visitKey: 'withdrawal-test',
+        projectId: catalogueId,
+        title: 'Book',
+        documents: { items: [], nextCursor: null },
+        publications: { items: [], nextCursor: null },
+        canCreateDraft: true,
+      },
     },
-  }, signal);
+    signal,
+  );
   if (!opened.ok) throw new Error(opened.error.message);
   const { input, port, bookPort } = opened.value.workspace;
   const controller = new StudioController(input, port, bookPort);
   const disconnect = controller.connect();
   return {
-    controller, port, book: opened.value.book, commands, reads, signal, disconnect,
-    end: () => { current = false; },
-    visibility: (value: typeof visibility) => { visibilityNow = value; },
-    ownerUnavailable: (value: boolean) => { ownerUnavailable = value; },
-    currentUnavailable: (value: boolean) => { currentUnavailable = value; },
-    nullPointer: (value: boolean) => { nullPointer = value; },
-    loseReceipt: (value: boolean) => { loseReceipt = value; },
-    stale: () => { stale = true; },
-    beforePublish: (run: () => Promise<void>) => { beforePublish = run; },
+    controller,
+    port,
+    book: opened.value.book,
+    commands,
+    reads,
+    signal,
+    disconnect,
+    end: () => {
+      current = false;
+    },
+    visibility: (value: typeof visibility) => {
+      visibilityNow = value;
+    },
+    ownerUnavailable: (value: boolean) => {
+      ownerUnavailable = value;
+    },
+    currentUnavailable: (value: boolean) => {
+      currentUnavailable = value;
+    },
+    nullPointer: (value: boolean) => {
+      nullPointer = value;
+    },
+    loseReceipt: (value: boolean) => {
+      loseReceipt = value;
+    },
+    stale: () => {
+      stale = true;
+    },
+    beforePublish: (run: () => Promise<void>) => {
+      beforePublish = run;
+    },
   };
 }
 
@@ -131,7 +182,11 @@ test('explicit Book withdrawal reviews the exact release, confirms current remov
   expect(html).toContain('existing access rules');
   expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Withdraw reviewed Book/);
   expect(await f.controller.publish()).toBe(true);
-  expect(f.commands[0]?.body).toEqual({ expectedRevisionId: structureId, expectedPublicationId: releaseId, occurrenceIds: [] });
+  expect(f.commands[0]?.body).toEqual({
+    expectedRevisionId: structureId,
+    expectedPublicationId: releaseId,
+    occurrenceIds: [],
+  });
   expect(f.reads.at(-1)).toEqual({ catalogueId, kind: 'publication' });
   expect(f.controller.snapshot().published?.state).toBe('withdrawn');
   expect(f.controller.snapshot().structure?.placements).toHaveLength(1);
@@ -141,7 +196,11 @@ test('explicit Book withdrawal reviews the exact release, confirms current remov
   await f.controller.reviewPublication();
   expect(f.controller.snapshot().review?.withdrawal).toBeUndefined();
   expect(await f.controller.publish()).toBe(true);
-  expect(f.commands[1]?.body).toEqual({ expectedRevisionId: structureId, expectedPublicationId: withdrawalId, occurrenceIds: [occurrenceId] });
+  expect(f.commands[1]?.body).toEqual({
+    expectedRevisionId: structureId,
+    expectedPublicationId: withdrawalId,
+    occurrenceIds: [occurrenceId],
+  });
   expect(f.controller.canWithdrawBook()).toBe(true);
   f.disconnect();
 });
@@ -152,12 +211,29 @@ test('ordinary empty publication cannot withdraw; never-published, withdrawn and
   expect(f.controller.snapshot().review).toBeNull();
   await f.controller.reviewWithdrawal();
   const { withdrawal: _, ...review } = f.controller.snapshot().review!;
-  expect((await f.port.publish({ projectId: catalogueId, review, idempotencyKey: crypto.randomUUID() }, f.signal)).ok).toBe(false);
-  expect((await f.book.publish({ target: review.target as Extract<PublicationReview['target'], { kind: 'book' }>, expectedPublicationId: releaseId, idempotencyKey: crypto.randomUUID() }, f.signal)).ok).toBe(false);
+  expect(
+    (await f.port.publish({ projectId: catalogueId, review, idempotencyKey: crypto.randomUUID() }, f.signal)).ok,
+  ).toBe(false);
+  expect(
+    (
+      await f.book.publish(
+        {
+          target: review.target as Extract<PublicationReview['target'], { kind: 'book' }>,
+          expectedPublicationId: releaseId,
+          idempotencyKey: crypto.randomUUID(),
+        },
+        f.signal,
+      )
+    ).ok,
+  ).toBe(false);
   expect(f.commands).toHaveLength(0);
   f.disconnect();
   const withdrawn = { ...release, placements: [] };
-  for (const [visibility, release] of [['published', null], ['published', withdrawn], ['draft', undefined]] as const) {
+  for (const [visibility, release] of [
+    ['published', null],
+    ['published', withdrawn],
+    ['draft', undefined],
+  ] as const) {
     const visit = await fixture(visibility, release);
     expect(visit.controller.canWithdrawBook()).toBe(false);
     expect(markup(visit.controller)).not.toContain('Review Book withdrawal');
@@ -198,7 +274,10 @@ test('missing owner pointer, failed current read and lost receipt remain uncerta
     expect(f.controller.snapshot().published).toBeNull();
     expect(f.controller.snapshot().issue?.kind).toBe('uncertain');
     expect(f.controller.hasUnresolvedCommand()).toBe(true);
-    f.nullPointer(false); f.currentUnavailable(false); f.loseReceipt(false); f.ownerUnavailable(false);
+    f.nullPointer(false);
+    f.currentUnavailable(false);
+    f.loseReceipt(false);
+    f.ownerUnavailable(false);
     const clock = spyOn(Date, 'now').mockReturnValue(Date.parse(review.expiresAt) + 1);
     try {
       expect(await f.controller.retry()).toBe(true);
@@ -216,7 +295,12 @@ test('session replacement during withdrawal discards late acknowledgement', asyn
   const f = await fixture();
   await f.controller.reviewWithdrawal();
   let finish!: () => void;
-  f.beforePublish(() => new Promise<void>((resolve) => { finish = resolve; }));
+  f.beforePublish(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
   const publishing = f.controller.publish();
   f.end();
   finish();

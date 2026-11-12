@@ -65,7 +65,10 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
       {unsaved ? <p>Save the current draft before reviewing publication.</p> : null}
       {book && !hasTarget ? <p>Select chapters in the table of contents to prepare a release.</p> : null}
       {review ? (
-        <div className="studio-release-review" aria-label={withdrawal ? m.studio_withdraw_heading({}, { locale }) : 'Review before publishing'}>
+        <div
+          className="studio-release-review"
+          aria-label={withdrawal ? m.studio_withdraw_heading({}, { locale }) : 'Review before publishing'}
+        >
           <h3>{withdrawal ? m.studio_withdraw_heading({}, { locale }) : 'Review this release'}</h3>
           {withdrawal ? (
             <div className="studio-stack">
@@ -74,11 +77,13 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
               <p>{m.studio_withdraw_drafts({}, { locale })}</p>
               <p>{m.studio_withdraw_history({}, { locale })}</p>
             </div>
-          ) : <p>
-            {review.expectedPublicationRevision
-              ? 'This advances the published snapshot.'
-              : 'This creates the first published snapshot.'}
-          </p>}
+          ) : (
+            <p>
+              {review.expectedPublicationRevision
+                ? 'This advances the published snapshot.'
+                : 'This creates the first published snapshot.'}
+            </p>
+          )}
           {review.target.kind === 'book' ? (
             <p className="studio-break">Structure revision: {review.target.structureRevision}</p>
           ) : null}
@@ -154,8 +159,8 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
               {withdrawal
                 ? m.studio_withdraw_confirm({}, { locale })
                 : review.authority === 'local'
-                ? m.studio_account_confirm({}, { locale: getLocale() })
-                : 'I have reviewed these exact versions and want to publish this release.'}
+                  ? m.studio_account_confirm({}, { locale: getLocale() })
+                  : 'I have reviewed these exact versions and want to publish this release.'}
             </span>
           </label>
           <div className="studio-action-row">
@@ -165,7 +170,9 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
               disabled={!confirmed || blocked || expired || Boolean(unsaved)}
               onClick={() => void controller.publish()}
             >
-              {withdrawal ? m.studio_withdraw_action({}, { locale }) : `Publish reviewed ${book ? 'chapters' : 'article'}`}
+              {withdrawal
+                ? m.studio_withdraw_action({}, { locale })
+                : `Publish reviewed ${book ? 'chapters' : 'article'}`}
             </Button>
             <Button type="button" variant="outline" disabled={blocked} onClick={controller.cancelReview}>
               Cancel review
