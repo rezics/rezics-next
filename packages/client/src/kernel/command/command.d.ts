@@ -218,3 +218,12 @@ export type LegacyCommandOptions = {
 };
 export declare function runCommand<T>(pool: Pool, options: LegacyCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
 export declare function runCommand<T>(pool: Pool, options: PrincipalCommandInput, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
+/**
+ * Settle an existing receipt before a command owner performs expensive validation.
+ * `undefined` means authorization succeeded and the key is absent; that read-only
+ * result is committed without a receipt, event, domain write or callback. Callers
+ * must validate and use `runCommand` for a subsequent write, which reauthorizes
+ * and rechecks the receipt.
+ */
+export declare function preflightCommandReceipt<T>(pool: Pool, options: LegacyCommandOptions): Promise<CommandOutcome<T> | undefined>;
+export declare function preflightCommandReceipt<T>(pool: Pool, options: PrincipalCommandInput): Promise<CommandOutcome<T> | undefined>;
