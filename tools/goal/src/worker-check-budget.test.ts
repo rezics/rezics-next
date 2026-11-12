@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
 import { openDb } from './db.ts';
@@ -17,6 +18,7 @@ import {
   typingInputCommand,
 } from './worker-check-typing-inputs.ts';
 import { WorkerStore } from './store.ts';
+import { processIdentity } from './process.ts';
 import { brief, harness, temporaryDirectory } from './test-support.ts';
 import type { Attempt, Settings } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
@@ -1579,38 +1581,114 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       checks: [],
       approaches: [],
     });
-    const previousCheckId = 'a7a7a7a7-7777-4777-8777-777777777777';
-    const previousPhysicalId = 'b8b8b8b8-8888-4888-8888-888888888888';
+    const previousChecks = [
+      {
+        id: 'a7a7a7a7-7777-4777-8777-777777777777',
+        physicalRunId: 'b8b8b8b8-8888-4888-8888-888888888888',
+        remoteRunId: 'retained-web-pass',
+        exitCode: 0,
+      },
+      {
+        id: 'c9c9c9c9-9999-4999-8999-999999999999',
+        physicalRunId: 'd0d0d0d0-0000-4000-8000-000000000000',
+        remoteRunId: 'retained-web-failure',
+        exitCode: 1,
+      },
+    ];
     const checkRoot = join(worktree, '.temp/goal/checks');
     const results = join(checkRoot, 'results');
     const history = join(checkRoot, 'custody/history');
+    const remoteCustody = join(checkRoot, 'custody/remote');
     mkdirSync(results, { recursive: true });
     mkdirSync(history, { recursive: true });
-    writeFileSync(
-      join(results, `${previousCheckId}.json`),
-      JSON.stringify({
-        id: previousCheckId,
-        cwd: worktree,
-        argv: compiler,
-        ownership: { taskId: task.id, attempt: 1 },
-        status: 'finished',
-        exitCode: 0,
-        physicalRunId: previousPhysicalId,
-      }),
-    );
-    writeFileSync(
-      join(history, `${previousCheckId}.${previousPhysicalId}.json`),
-      JSON.stringify({
-        version: 1,
-        id: previousCheckId,
-        cwd: worktree,
-        physicalRunId: previousPhysicalId,
-        status: 'finished',
-        remoteExpected: false,
-        exitCode: 0,
-        terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
-      }),
-    );
+    mkdirSync(remoteCustody, { recursive: true });
+    const oldRunner = {
+      pid: 2_000_000_002,
+      start: '1',
+      boot: '11111111-1111-4111-8111-111111111111',
+      group: 2_000_000_002,
+    };
+    const remoteHost = 'check-b';
+    for (const previous of previousChecks) {
+      const resources = {
+        schema: 1,
+        host: remoteHost,
+        run: previous.remoteRunId,
+        boot: '22222222-2222-4222-8222-222222222222',
+        supervisor: { pid: 1234, start: '10', group: 1234 },
+        cgroup: null,
+        cadenceMs: 5000,
+        startedMonoMs: 100,
+        commandStartedMonoMs: 110,
+        terminalMonoMs: 140,
+        samples: [],
+        sampledMaxCores: null,
+      };
+      const receipt = {
+        schema: 1,
+        host: remoteHost,
+        run: previous.remoteRunId,
+        exitCode: previous.exitCode,
+        lifetimeFailure: null,
+        resources,
+      };
+      const remoteArgv = compiler;
+      writeFileSync(
+        join(results, `${previous.id}.json`),
+        JSON.stringify({
+          id: previous.id,
+          cwd: worktree,
+          argv: compiler,
+          ownership: { taskId: task.id, attempt: 1 },
+          status: 'finished',
+          exitCode: previous.exitCode,
+          physicalRunId: previous.physicalRunId,
+          runnerPid: oldRunner.pid,
+          runnerHost: hostname(),
+          runnerIdentity: oldRunner,
+          physicalRun: receipt,
+        }),
+      );
+      writeFileSync(
+        join(history, `${previous.id}.${previous.physicalRunId}.json`),
+        JSON.stringify({
+          version: 1,
+          id: previous.id,
+          cwd: worktree,
+          argv: compiler,
+          remoteArgv,
+          ownership: { taskId: task.id, attempt: 1 },
+          physicalRunId: previous.physicalRunId,
+          runnerHost: hostname(),
+          runnerIdentity: oldRunner,
+          status: 'finished',
+          remoteExpected: true,
+          exitCode: previous.exitCode,
+        }),
+      );
+      writeFileSync(
+        join(remoteCustody, `${previous.physicalRunId}.json`),
+        JSON.stringify({
+          version: 1,
+          physicalRunId: previous.physicalRunId,
+          binding: {
+            checkId: previous.id,
+            ownership: { taskId: task.id, attempt: 1 },
+            argv: compiler,
+            remoteArgv,
+          },
+          status: 'terminal',
+          attempts: [
+            {
+              host: remoteHost,
+              id: previous.remoteRunId,
+              status: 'terminal',
+              native: receipt,
+            },
+          ],
+        }),
+      );
+    }
     writeFileSync(
       attempt.logPath,
       [
@@ -1663,7 +1741,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       current.exitCode = 0;
       current.failureKind = 'tool';
       current.result = refusal;
-      current.checks = [previousCheckId];
+      current.checks = previousChecks.map((previous) => previous.id);
       current.process = stoppedProcess;
       current.terminationIntent = {
         operation: 'stop',
@@ -1676,11 +1754,102 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       };
     });
 
+    const evidencePaths = previousChecks.map((previous) => [
+      join(results, `${previous.id}.json`),
+      join(history, `${previous.id}.${previous.physicalRunId}.json`),
+      join(remoteCustody, `${previous.physicalRunId}.json`),
+    ]);
+    const savedEvidence = evidencePaths.map((paths) => paths.map((path) => readFileSync(path, 'utf8')));
+    const restoreEvidence = () =>
+      evidencePaths.forEach((paths, row) =>
+        paths.forEach((path, column) => writeFileSync(path, savedEvidence[row]![column]!)),
+      );
+    const updateEvidence = (path: string, update: (value: Record<string, unknown>) => void) => {
+      const value = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+      update(value);
+      writeFileSync(path, JSON.stringify(value));
+    };
+    const secondLegacy = previousChecks[1]!;
+    const [secondResult, secondHistory, secondRemote] = evidencePaths[1]!;
+    const rejectChangedEvidence = async (change: () => void) => {
+      change();
+      await expect(recover()).rejects.toThrow();
+      restoreEvidence();
+    };
+
+    await rejectChangedEvidence(() => updateEvidence(secondResult!, (value) => (value.exitCode = 0)));
+    await rejectChangedEvidence(() =>
+      updateEvidence(secondRemote!, (value) => {
+        const attempts = value.attempts as Record<string, unknown>[];
+        attempts[0]!.native = {
+          host: 'check-b',
+          run: secondLegacy.remoteRunId,
+          exitCode: secondLegacy.exitCode,
+        };
+      }),
+    );
+    await rejectChangedEvidence(() => {
+      updateEvidence(secondResult!, (value) => {
+        const receipt = value.physicalRun as Record<string, unknown>;
+        delete (receipt.resources as Record<string, unknown>).terminalMonoMs;
+      });
+      updateEvidence(secondRemote!, (value) => {
+        const attempts = value.attempts as Record<string, unknown>[];
+        const receipt = attempts[0]!.native as Record<string, unknown>;
+        delete (receipt.resources as Record<string, unknown>).terminalMonoMs;
+      });
+    });
+    await rejectChangedEvidence(() => updateEvidence(secondHistory!, (value) => (value.status = 'unknown')));
+    await rejectChangedEvidence(() => {
+      const cancellationDirectory = join(checkRoot, 'cancellations');
+      mkdirSync(cancellationDirectory, { recursive: true });
+      writeFileSync(join(cancellationDirectory, `${secondLegacy.id}.json`), '{}');
+    });
+    unlinkSync(join(checkRoot, 'cancellations', `${secondLegacy.id}.json`));
+
+    const liveRunner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    if (!liveRunner.pid) throw new Error('fixture local check runner did not start');
+    const stopLiveRunner = async () => {
+      const exited = new Promise<void>((resolveExit) => {
+        if (liveRunner.exitCode !== null || liveRunner.signalCode !== null) resolveExit();
+        else liveRunner.once('exit', () => resolveExit());
+      });
+      liveRunner.kill('SIGKILL');
+      await exited;
+    };
+    const liveIdentity = processIdentity(liveRunner.pid);
+    if (!liveIdentity) {
+      await stopLiveRunner();
+      throw new Error('fixture local check runner identity was unavailable');
+    }
+    try {
+      await rejectChangedEvidence(() => {
+        updateEvidence(secondResult!, (value) => {
+          value.runnerPid = liveIdentity.pid;
+          value.runnerIdentity = liveIdentity;
+        });
+        updateEvidence(secondHistory!, (value) => (value.runnerIdentity = liveIdentity));
+      });
+    } finally {
+      await stopLiveRunner();
+    }
+
     const beforeStop = JSON.stringify(h.store.attempt(retained.ref).terminationIntent);
     const beforeRetry = JSON.stringify(h.store.retryIntent(retained.ref));
 
     const issued = await recover();
     expect(issued.status).toBe('pending');
+    for (const previous of previousChecks) {
+      expect(
+        JSON.parse(readFileSync(join(history, `${previous.id}.${previous.physicalRunId}.json`), 'utf8')).terminalProof,
+      ).toBeUndefined();
+      expect(existsSync(join(checkRoot, 'custody/receipts', `${previous.id}.${previous.physicalRunId}.json`))).toBe(
+        false,
+      );
+    }
     const issuedProof = recoveryProof(issued);
     expect(issuedProof.commands).toHaveLength(1);
     expect(issuedProof.commands[0]?.slice(-compiler.length)).toEqual(compiler);

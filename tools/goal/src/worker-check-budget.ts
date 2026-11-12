@@ -10,13 +10,22 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { Database } from 'bun:sqlite';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { identityLive, sameProcess } from './process.ts';
-import { writeAtomicJson } from '../../../scripts/check-custody.ts';
+import {
+  isCheckId,
+  isPhysicalRunId,
+  remoteRunCustodyPath,
+  validateRunnerIdentity,
+  writeAtomicJson,
+  type RunnerIdentity,
+} from '../../../scripts/check-custody.ts';
+import { parseRemotePhysicalRunReceipt } from '../../../scripts/remote-check.ts';
 import type { AuthenticatedManager } from './priority-authority.ts';
 import type { Task, Attempt, RetryIntent } from './types.ts';
 import {
@@ -231,9 +240,13 @@ type CheckEvidence = {
   checkId?: unknown;
   cwd?: unknown;
   argv?: unknown;
+  remoteArgv?: unknown;
   status?: unknown;
   exitCode?: unknown;
   physicalRunId?: unknown;
+  runnerHost?: unknown;
+  runnerPid?: unknown;
+  runnerIdentity?: unknown;
   disposition?: unknown;
   recordSha256?: unknown;
   receiptReference?: unknown;
@@ -243,6 +256,15 @@ type CheckEvidence = {
     exitCode?: unknown;
     resources?: { commandStartedMonoMs?: unknown } | null;
   };
+  binding?: {
+    checkId?: unknown;
+    ownership?: { taskId?: unknown; attempt?: unknown };
+    argv?: unknown;
+    remoteArgv?: unknown;
+  };
+  attempts?: unknown;
+  host?: unknown;
+  native?: unknown;
   remoteExpected?: unknown;
   terminalProof?: { local?: unknown; resultKnown?: unknown; remote?: unknown };
 };
@@ -275,6 +297,147 @@ function terminalPhysicalHistory(worktree: string, checkId: string, physicalRunI
       ? history.terminalProof?.remote === true
       : history.remoteExpected === false && history.terminalProof?.remote === null),
   );
+}
+
+function ownedRunnerIdentity(value: unknown): RunnerIdentity | undefined {
+  try {
+    const identity = validateRunnerIdentity(value);
+    return identity.group === identity.pid ? identity : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function checkEvidenceArgv(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= 1024 &&
+    value.every((part) => typeof part === 'string' && part.length <= 4096 && !part.includes('\0')) &&
+    Buffer.byteLength(JSON.stringify(value)) <= 56 * 1024
+  );
+}
+
+/** Legacy finished checks may retain a native remote exit receipt without the later terminalProof field. */
+function retainedNativeExitReceiptTerminal(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  record: CheckEvidence,
+): boolean {
+  if (
+    record.status !== 'finished' ||
+    typeof record.id !== 'string' ||
+    !isCheckId(record.id) ||
+    typeof record.physicalRunId !== 'string' ||
+    !isPhysicalRunId(record.physicalRunId) ||
+    record.cwd !== worktree ||
+    record.ownership?.taskId !== taskId ||
+    record.ownership.attempt !== attempt ||
+    !checkEvidenceArgv(record.argv) ||
+    !Number.isInteger(record.exitCode)
+  )
+    return false;
+
+  const root = join(worktree, '.temp', 'goal', 'checks');
+  const physical = readCheckEvidence(join(root, 'custody', 'history', `${record.id}.${record.physicalRunId}.json`));
+  if (
+    !physical ||
+    physical.version !== 1 ||
+    physical.id !== record.id ||
+    physical.cwd !== worktree ||
+    physical.physicalRunId !== record.physicalRunId ||
+    physical.status !== 'finished' ||
+    physical.terminalProof !== undefined ||
+    physical.remoteExpected !== true ||
+    physical.ownership?.taskId !== taskId ||
+    physical.ownership.attempt !== attempt ||
+    physical.exitCode !== record.exitCode ||
+    !checkEvidenceArgv(physical.argv) ||
+    !isDeepStrictEqual(physical.argv, record.argv) ||
+    !checkEvidenceArgv(physical.remoteArgv)
+  )
+    return false;
+
+  const runner = ownedRunnerIdentity(record.runnerIdentity);
+  const physicalRunner = ownedRunnerIdentity(physical.runnerIdentity);
+  if (
+    !runner ||
+    !physicalRunner ||
+    !isDeepStrictEqual(runner, physicalRunner) ||
+    record.runnerPid !== runner.pid ||
+    record.runnerHost !== hostname() ||
+    physical.runnerHost !== record.runnerHost ||
+    identityLive(runner)
+  )
+    return false;
+
+  if (
+    existsSync(join(root, 'cancellations', `${record.id}.json`)) ||
+    existsSync(join(root, 'custody', 'cancelled', `${record.id}.json`)) ||
+    existsSync(join(root, 'custody', 'stopping', `${record.id}.${record.physicalRunId}.json`))
+  )
+    return false;
+
+  const custody = readCheckEvidence(remoteRunCustodyPath(worktree, record.physicalRunId));
+  const binding = custody?.binding;
+  const attempts = custody?.attempts;
+  if (
+    !custody ||
+    custody.version !== 1 ||
+    custody.physicalRunId !== record.physicalRunId ||
+    custody.status !== 'terminal' ||
+    !binding ||
+    binding.checkId !== record.id ||
+    binding.ownership?.taskId !== taskId ||
+    binding.ownership.attempt !== attempt ||
+    !checkEvidenceArgv(binding.argv) ||
+    !isDeepStrictEqual(binding.argv, record.argv) ||
+    !checkEvidenceArgv(binding.remoteArgv) ||
+    !isDeepStrictEqual(binding.remoteArgv, physical.remoteArgv) ||
+    !Array.isArray(attempts) ||
+    attempts.some(
+      (item) =>
+        !item ||
+        typeof item !== 'object' ||
+        Array.isArray(item) ||
+        !['terminal', 'not-started'].includes(String((item as CheckEvidence).status)),
+    )
+  )
+    return false;
+
+  const managedAttempts = attempts as CheckEvidence[];
+  const completed = managedAttempts.filter((item) => item.status === 'terminal');
+  if (completed.length !== 1) return false;
+  const managed = completed[0]!;
+  if (
+    typeof managed.host !== 'string' ||
+    !/^[a-z][a-z0-9-]{0,62}$/.test(managed.host) ||
+    typeof managed.id !== 'string' ||
+    !/^[a-zA-Z0-9-]{1,96}$/.test(managed.id)
+  )
+    return false;
+  const receipt = parseRemotePhysicalRunReceipt(managed.native);
+  const resultReceipt = parseRemotePhysicalRunReceipt(record.physicalRun);
+  const historyReceipt =
+    physical.physicalRun === undefined ? undefined : parseRemotePhysicalRunReceipt(physical.physicalRun);
+  if (
+    !receipt ||
+    !resultReceipt ||
+    !isDeepStrictEqual(receipt, resultReceipt) ||
+    (physical.physicalRun !== undefined && (!historyReceipt || !isDeepStrictEqual(receipt, historyReceipt))) ||
+    managed.host !== receipt.host ||
+    managed.id !== receipt.run ||
+    receipt.exitCode !== record.exitCode ||
+    receipt.lifetimeFailure !== null ||
+    !receipt.resources ||
+    receipt.resources.commandStartedMonoMs === null ||
+    receipt.resources.commandStartedMonoMs <= 0 ||
+    receipt.resources.terminalMonoMs <= 0
+  )
+    return false;
+
+  return true;
 }
 
 /** Exact structured worker outcome needed to recover completed source after its retry was withdrawn. */
@@ -375,6 +538,7 @@ export function workerCheckHostWithdrawnRetryIsRecoverable(input: {
     attempt.attempt,
     attempt.checks ?? [],
     input.currentCheck,
+    true,
   );
 }
 
@@ -385,6 +549,7 @@ export function workerCheckHostAttemptChecksTerminal(
   attempt: number,
   checkIds: readonly string[],
   currentCheck?: { id: string; physicalRunId: string },
+  allowRetainedNativeExitReceipt = false,
 ): boolean {
   const root = join(worktree, '.temp', 'goal', 'checks');
   const recordDirectory = join(root, 'results');
@@ -410,7 +575,12 @@ export function workerCheckHostAttemptChecksTerminal(
     )
       return false;
     if (expectedCurrent && record.status === 'running') continue;
-    if (record.status !== 'finished' || !terminalPhysicalHistory(worktree, record.id, record.physicalRunId))
+    const currentTerminal =
+      record.status === 'finished' && terminalPhysicalHistory(worktree, record.id, record.physicalRunId);
+    if (
+      !currentTerminal &&
+      !(allowRetainedNativeExitReceipt && retainedNativeExitReceiptTerminal(worktree, taskId, attempt, record))
+    )
       return false;
   }
   return checkIds.every((id) => found.has(id));

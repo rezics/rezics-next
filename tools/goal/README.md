@@ -361,6 +361,7 @@ failure on that final run, or a success report after a failed host typecheck, is
 retries instead of landing. Stale or unavailable zero-exit evidence retains the completed source pending typing-only
 proof. The landing train and the dev verifier still check every candidate.
 Decision: ordinary attempts get one final verification check-host run after the budgeted pair when the worktree changed; settlement refuses success when the last host typecheck failed or the tree changed after it. Tests that pin those edges live in `worker-check-budget.test.ts`.
+Decision: only the existing authenticated withdrawn Web retry gate may use a complete retained native remote exit receipt when legacy history lacks `terminalProof` and the exact local runner and owned group are gone. This proves command end only; cleanup remains separate and one installed Web typecheck is still required for the retained final source.
 Decision: a live worker slot holds a session that is writing code; check-host placement parks on the wrapper the way
 acceptance already does.
 Decision: a check waiting on a full upload host moves after two minutes when another performance host can start it now;
