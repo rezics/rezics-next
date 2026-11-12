@@ -1,4 +1,4 @@
-import { seal, unseal, type KeyRing } from './seal.ts';
+import { MAX_TOKEN_LENGTH, seal, unseal, type KeyRing } from './seal.ts';
 
 export type CursorBinding = {
   operation: string;
@@ -53,7 +53,9 @@ function validateInput(input: CursorInput, now: number): void {
 export function encodeCursor(ring: KeyRing, binding: CursorBinding, cursor: CursorInput, now = Date.now()): string {
   const scope = cursorScope(binding);
   validateInput(cursor, now);
-  return seal(ring, scope, { e: cursor.epoch, a: cursor.after, t: now });
+  const token = seal(ring, scope, { e: cursor.epoch, a: cursor.after, t: now });
+  if (token.length > MAX_TOKEN_LENGTH) throw new RangeError('Encoded cursor exceeds decoder limit');
+  return token;
 }
 
 export function decodeCursor(ring: KeyRing, binding: CursorBinding, token: string, now = Date.now()): CursorResult {

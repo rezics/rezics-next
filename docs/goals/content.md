@@ -136,6 +136,8 @@ Semantic supplies native adapters through composition. Rating owns exact readbac
 immutable review operands. Extend vote-review for original actor/Pool/deadline/transaction handoff, receive installed
 repair/default-worker acceptance, and leave native/browser/growth receiving to sole Goal walks. See the [Rating boundary](../../services/kernel/src/rating/README.md#vote-and-semantic-application-boundary).
 
+Decision: Legacy HMAC cursors are emitted only when their sealed length fits unseal's existing 4,096-character bound; ASCII, multibyte UTF-8 and JSON-escaped boundary cases pin the direct codec defect without asserting route reachability.
+
 ## Dependencies
 
 Requires Accounts membership, role, ban, preference and lifecycle ports; Access authorization and resource grants;
