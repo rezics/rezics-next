@@ -1448,12 +1448,14 @@ export function pageDataCheckScopeUnit(invocation: string): string {
 }
 
 const PAGE_DATA_SCOPE_RUNNER = [
-  '"$@"',
-  'status=$?',
   'cgroup=',
   'while IFS=: read -r hierarchy controllers path; do',
   '  if [ "$hierarchy" = 0 ] && [ -z "$controllers" ]; then cgroup=$path; break; fi',
   'done < /proc/self/cgroup',
+  'REZICS_PAGE_DATA_SCOPE_CGROUP=$cgroup',
+  'export REZICS_PAGE_DATA_SCOPE_CGROUP',
+  '"$@"',
+  'status=$?',
   'oom_kills=unavailable',
   'if [ -n "$cgroup" ] && [ -r "/sys/fs/cgroup$cgroup/memory.events" ]; then',
   '  oom_kills=0',

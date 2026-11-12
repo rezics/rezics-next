@@ -222,6 +222,7 @@ export type RunOptions = {
   queryCount?: (text: string, values: readonly string[]) => Promise<number>;
   fetch?: typeof fetch;
   browser?: Browser;
+  browserScopeAdmission?: (browser: Browser) => Promise<string | undefined>;
   pageTimeoutMs?: number;
   readerTimeoutMs?: number;
   requestTimeoutMs?: number;
@@ -231,6 +232,78 @@ export type RunOptions = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function pageDataBrowserLaunchOptions(
+  environment: NodeJS.ProcessEnv = process.env,
+): Parameters<typeof chromium.launch>[0] {
+  return {
+    headless: true,
+    args: ['--disable-dev-shm-usage'],
+    env: { ...environment, DBUS_SESSION_BUS_ADDRESS: 'unix:path=/dev/null' },
+  };
+}
+
+export function unifiedCgroupPath(contents: string): string | undefined {
+  const line = contents.split(/\r?\n/u).find((entry) => entry.startsWith('0::'));
+  const path = line?.slice(3);
+  return path?.startsWith('/') && !path.includes('\0') ? path : undefined;
+}
+
+type ChromiumProcessInfo = { id: number; type: string };
+
+export function parseChromiumProcessInfo(value: unknown): ChromiumProcessInfo[] | undefined {
+  if (!isRecord(value) || !Array.isArray(value.processInfo)) return undefined;
+  const processes: ChromiumProcessInfo[] = [];
+  for (const entry of value.processInfo) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.id !== 'number' ||
+      !Number.isSafeInteger(entry.id) ||
+      entry.id < 2 ||
+      typeof entry.type !== 'string'
+    )
+      return undefined;
+    processes.push({ id: entry.id, type: entry.type });
+  }
+  return processes;
+}
+
+export function browserScopeAdmissionFailure(
+  expectedCgroup: string | undefined,
+  processInfo: readonly ChromiumProcessInfo[] | undefined,
+  cgroupForPid: (pid: number) => string | undefined,
+): string | undefined {
+  if (!expectedCgroup?.startsWith('/')) return 'the owned page-data check cgroup is unavailable';
+  if (!processInfo) return 'Chromium process information is unavailable';
+  const browserProcess = processInfo.find(({ type }) => type === 'browser');
+  if (!browserProcess) return 'the Chromium browser PID is unavailable';
+  const actualCgroup = cgroupForPid(browserProcess.id);
+  if (!actualCgroup) return `Chromium browser PID ${browserProcess.id} cgroup is unavailable`;
+  if (actualCgroup !== expectedCgroup)
+    return `Chromium browser PID ${browserProcess.id} cgroup=${actualCgroup}; expected=${expectedCgroup}`;
+  return undefined;
+}
+
+function processCgroupPath(pid: number): string | undefined {
+  try {
+    return unifiedCgroupPath(readFileSync(`/proc/${pid}/cgroup`, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+async function inspectPageDataBrowserScope(browser: Browser): Promise<string | undefined> {
+  const configuredCgroup = process.env.REZICS_PAGE_DATA_SCOPE_CGROUP;
+  const expectedCgroup =
+    configuredCgroup === undefined ? processCgroupPath(process.pid) : unifiedCgroupPath(`0::${configuredCgroup}`);
+  const session = await browser.newBrowserCDPSession();
+  try {
+    const processInfo = parseChromiumProcessInfo(await session.send('SystemInfo.getProcessInfo'));
+    return browserScopeAdmissionFailure(expectedCgroup, processInfo, processCgroupPath);
+  } finally {
+    await session.detach();
+  }
 }
 
 export function redact(value: string): string {
@@ -1630,10 +1703,13 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
   }
 
   const ownedBrowser = options.browser === undefined;
+  const browserScopeAdmission =
+    options.browserScopeAdmission ?? (ownedBrowser ? inspectPageDataBrowserScope : undefined);
+  let browserScopeChecked = browserScopeAdmission === undefined;
   let browser = options.browser;
   if (!browser) {
     try {
-      browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
+      browser = await chromium.launch(pageDataBrowserLaunchOptions());
     } catch (error) {
       incomplete = true;
       report(`Browser unavailable: ${displayError(error)}`);
@@ -1686,10 +1762,31 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 : {}),
             });
             page = await context.newPage();
-            if (persona === 'member' && signIn && !options.memberStorageState)
+            if (browser && !browserScopeChecked && browserScopeAdmission) {
+              browserScopeChecked = true;
+              let admissionFailure: string | undefined;
+              try {
+                admissionFailure = await browserScopeAdmission(browser);
+              } catch (error) {
+                admissionFailure = `scope observation failed: ${displayError(error)}`;
+              }
+              if (admissionFailure) {
+                incomplete = true;
+                report(`Browser scope admission failed: ${admissionFailure}; browser readers remain unrun`);
+                await close(`${persona} setup page`, page);
+                page = undefined;
+                await close(`${persona} context`, context);
+                context = undefined;
+                await close('Browser', browser);
+                browser = undefined;
+              }
+            }
+            if (page && persona === 'member' && signIn && !options.memberStorageState)
               await signInBrowser(page, base, signIn, pageTimeout, report);
-            documentTracker = pageDocumentTracker(page);
-            serverFunctionTracker = browserServerFunctionTracker(page, base.origin);
+            if (page) {
+              documentTracker = pageDocumentTracker(page);
+              serverFunctionTracker = browserServerFunctionTracker(page, base.origin);
+            }
           } catch (error) {
             incomplete = true;
             report(`${persona} browser setup unavailable: ${displayError(error)}`);
