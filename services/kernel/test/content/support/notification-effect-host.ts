@@ -167,6 +167,7 @@ async function runWorker(): Promise<void> {
     { registerEffects, effectWorkflowId },
     { readBatch },
     { installNativeHistory },
+    { composeContentReading },
   ] = await Promise.all([
     import('@dbos-inc/dbos-sdk'),
     import('pg'),
@@ -177,6 +178,7 @@ async function runWorker(): Promise<void> {
     import('../../../src/events/effects.ts'),
     import('../../../src/events/log.ts'),
     import('../../../src/composition/history.ts'),
+    import('../../../src/composition/content.ts'),
   ]);
   // This child is a plain bun process, not `bun test`, so bunfig test preloads
   // do not install History or bind receipt keys. Enqueue and effect.run both call
@@ -185,90 +187,107 @@ async function runWorker(): Promise<void> {
   const databaseUrl = process.env.NOTIFICATION_EFFECT_DATABASE_URL;
   if (!databaseUrl) throw new Error('NOTIFICATION_EFFECT_DATABASE_URL is required');
   const pool = new Pool({ connectionString: databaseUrl, max: 12 });
-  configureReceiptKeys(pool, readReceiptKeyRing());
-  const workClient = await createWorkClient(databaseUrl, pool);
-  let effectTime = new Date();
-  const access = createContentWorkAccess(() => new Date(effectTime), pool);
-  const effects = [
-    ...contentEffects(pool, workClient, readTestRealmSubjectIdentityMappings),
-    ...contentNoticeEffects(pool, access),
-  ];
-  const registered = registerEffects(effects, pool);
-  await launchWork({
-    databaseUrl,
-    ...(process.env.NOTIFICATION_EFFECT_EXECUTOR === undefined
-      ? {}
-      : { executorId: process.env.NOTIFICATION_EFFECT_EXECUTOR }),
-    systemDatabasePool: pool,
-  });
-  process.stdout.write('NOTIFICATION_EFFECT_READY\n');
+  let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+  let stopped = false;
+  try {
+    configureReceiptKeys(pool, readReceiptKeyRing());
+    composeContentReading();
+    workClient = await createWorkClient(databaseUrl, pool);
+    let effectTime = new Date();
+    const access = createContentWorkAccess(() => new Date(effectTime), pool);
+    const effects = [
+      ...contentEffects(pool, workClient, readTestRealmSubjectIdentityMappings),
+      ...contentNoticeEffects(pool, access),
+    ];
+    const registered = registerEffects(effects, pool);
+    await launchWork({
+      databaseUrl,
+      ...(process.env.NOTIFICATION_EFFECT_EXECUTOR === undefined
+        ? {}
+        : { executorId: process.env.NOTIFICATION_EFFECT_EXECUTOR }),
+      systemDatabasePool: pool,
+    });
+    process.stdout.write('NOTIFICATION_EFFECT_READY\n');
 
-  const { createInterface } = await import('node:readline');
-  const input = createInterface({ input: process.stdin });
-  for await (const line of input) {
-    if (line === 'stop') {
-      await shutdownWork();
-      await workClient.close();
-      await pool.end();
-      process.stdout.write('NOTIFICATION_EFFECT_STOPPED\n');
-      return;
-    }
-    let request: WorkerRequest;
+    const { createInterface } = await import('node:readline');
+    const input = createInterface({ input: process.stdin });
     try {
-      request = JSON.parse(line) as typeof request;
-      if (request.command !== 'deliver' || !Array.isArray(request.partitions) || typeof request.at !== 'string')
-        throw new TypeError('Invalid request');
-      const at = new Date(request.at);
-      if (!Number.isFinite(at.getTime())) throw new TypeError('Invalid effect clock');
-      effectTime = at;
-      await deliver(request.consumer, request.partitions);
-      process.stdout.write(
-        `NOTIFICATION_EFFECT_RESULT ${request.id} ${JSON.stringify({ id: request.id, ok: true })}\n`,
-      );
-    } catch (error) {
-      const id = (() => {
-        try {
-          return (JSON.parse(line) as { id?: string }).id ?? 'unknown';
-        } catch {
-          return 'unknown';
+      for await (const line of input) {
+        if (line === 'stop') {
+          stopped = true;
+          break;
         }
-      })();
-      const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
-      process.stdout.write(
-        `NOTIFICATION_EFFECT_RESULT ${id} ${JSON.stringify({ id, ok: false, error: detail.replaceAll('\n', ' | ') })}\n`,
-      );
+        let request: WorkerRequest;
+        try {
+          request = JSON.parse(line) as typeof request;
+          if (request.command !== 'deliver' || !Array.isArray(request.partitions) || typeof request.at !== 'string')
+            throw new TypeError('Invalid request');
+          const at = new Date(request.at);
+          if (!Number.isFinite(at.getTime())) throw new TypeError('Invalid effect clock');
+          effectTime = at;
+          await deliver(request.consumer, request.partitions);
+          process.stdout.write(
+            `NOTIFICATION_EFFECT_RESULT ${request.id} ${JSON.stringify({ id: request.id, ok: true })}\n`,
+          );
+        } catch (error) {
+          const id = (() => {
+            try {
+              return (JSON.parse(line) as { id?: string }).id ?? 'unknown';
+            } catch {
+              return 'unknown';
+            }
+          })();
+          const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+          process.stdout.write(
+            `NOTIFICATION_EFFECT_RESULT ${id} ${JSON.stringify({ id, ok: false, error: detail.replaceAll('\n', ' | ') })}\n`,
+          );
+        }
+      }
+    } finally {
+      input.close();
+    }
+
+    async function deliver(consumer: string, partitions: number[]): Promise<void> {
+      const pending = new Set<string>();
+      let hadWork: boolean;
+      do {
+        hadWork = false;
+        for (const partition of [...new Set(partitions)].sort((left, right) => left - right)) {
+          const result = await readBatch(pool, {
+            consumer,
+            partition,
+            apply: async (envelopes) => {
+              const workflowIds = envelopes.flatMap((envelope) =>
+                envelope.events.flatMap((event, eventSeq) =>
+                  effects
+                    .filter((effect) => effect.types.includes(event.type))
+                    .map((effect) => effectWorkflowId(envelope, eventSeq, effect.name)),
+                ),
+              );
+              await registered.enqueue(envelopes);
+              workflowIds.forEach((id) => pending.add(id));
+            },
+          });
+          if (result.status !== 'read') throw new Error(`Notification effect barrier stopped (${result.status})`);
+          if (result.envelopes > 0) hadWork = true;
+        }
+        const current = [...pending];
+        pending.clear();
+        await Promise.all(current.map((id) => DBOS.retrieveWorkflow(id).getResult()));
+      } while (hadWork);
+    }
+  } finally {
+    try {
+      await shutdownWork();
+    } finally {
+      try {
+        await workClient?.close();
+      } finally {
+        await pool.end();
+      }
     }
   }
-
-  async function deliver(consumer: string, partitions: number[]): Promise<void> {
-    const pending = new Set<string>();
-    let hadWork: boolean;
-    do {
-      hadWork = false;
-      for (const partition of [...new Set(partitions)].sort((left, right) => left - right)) {
-        const result = await readBatch(pool, {
-          consumer,
-          partition,
-          apply: async (envelopes) => {
-            const workflowIds = envelopes.flatMap((envelope) =>
-              envelope.events.flatMap((event, eventSeq) =>
-                effects
-                  .filter((effect) => effect.types.includes(event.type))
-                  .map((effect) => effectWorkflowId(envelope, eventSeq, effect.name)),
-              ),
-            );
-            await registered.enqueue(envelopes);
-            workflowIds.forEach((id) => pending.add(id));
-          },
-        });
-        if (result.status !== 'read') throw new Error(`Notification effect barrier stopped (${result.status})`);
-        if (result.envelopes > 0) hadWork = true;
-      }
-      const current = [...pending];
-      pending.clear();
-      await Promise.all(current.map((id) => DBOS.retrieveWorkflow(id).getResult()));
-    } while (hadWork);
-  }
+  if (stopped) process.stdout.write('NOTIFICATION_EFFECT_STOPPED\n');
 }
 
 if (process.env.NOTIFICATION_EFFECT_WORKER === '1') {
