@@ -1768,6 +1768,8 @@ change.
 
 ### Identity epoch domain composition
 
+Decision: merge journeys retain the initial 202 and pending poll, then use the managed default worker with the fixture's database, route/session keys and Auth endpoints to observe the same operation as published before redirect assertions; production composition stays unchanged because Semantic already registers the coordinator and fixed Search/Library participants.
+
 - Public entries: `semantic/contract/index.ts` (identity, item, subject and domain ports), `semantic/core/index.ts`
   (next-step, receipt and item projection), `semantic/application/index.ts` (installed Semantic domain),
   `semantic/identity-core/index.ts` (mapping and rating-review classifier), `semantic/identity-core/rating-review-bounds.ts`

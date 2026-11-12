@@ -45,6 +45,14 @@ export function admitted(answer: HttpResponse) {
   return { id, location };
 }
 
+/** Advance through the ordinary installed worker, retaining the operation's real HTTP completion response. */
+export async function awaitPublished(d: SemanticOutcomeDriver, id: string) {
+  const answer = await d.advanceIdentityOperation(id);
+  expect(answer.status, `native GET /v1/subjectIdentityOperations/${id}: ${JSON.stringify(answer.body)}`).toBe(200);
+  expect(answer.body).toMatchObject({ operation: { id, done: true } });
+  return answer;
+}
+
 export function concealed(answer: HttpResponse) {
   expect(answer.status).toBe(404);
   const { request_id: _, ...problem } = answer.body;

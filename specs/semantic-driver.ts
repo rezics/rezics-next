@@ -99,6 +99,8 @@ export interface SemanticDriver {
     body?: unknown,
     headers?: Record<string, string>,
   ): Promise<HttpResponse>;
+  /** Start the installed native worker as needed and return only after this admitted operation is published. */
+  advanceIdentityOperation(operationId: string): Promise<HttpResponse>;
   /**
    * Use @rezics/definitions, including its bundled core.yaml, book.yaml,
    * recipe.yaml and rezics.yaml in the source map. root is a schema filename;
