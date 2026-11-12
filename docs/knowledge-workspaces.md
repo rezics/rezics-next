@@ -99,6 +99,8 @@ Decision: Knowledge route metadata comes from the public Content adapter; import
 
 Decision: Web’s first public consumer is the localized `/knowledge/documents/$id` reader, with optional `revisionId`, over `knowledge_document.public_read`. Live and exact addresses stay distinct; null `authorId` is deidentified attribution; the primary Subject link uses the supplied id without a label lookup. The fewest focused Web tests pin live/exact rendering, native outcome states, malformed HTTP, one-read/no-store transport, retry operands, replacement fencing and copy feedback; directory, notebook, visual and browser proof stay with later Goals.
 
+Decision: Web creates a private notebook only after the writer reviews and submits its title, then holds the acknowledged notebook receipt separately while creating a root document. Private bodies, drafts, command intents and receipts live only in the current page visit; exact private heads are read directly by the prepared viewer and revision writes compare against that observed head.
+
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its
 children. Their placement IDs remain different. First-release reuse uses ordinary document references. A deep copy
