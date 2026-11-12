@@ -610,17 +610,17 @@ test('daily audit validation and dispatch failures are durable and reported once
   }
 }, 15_000);
 
-function extractedHostScript(path: string, extras = '') {
+function extractedHostScript(path: string, extras = '', serveOptions = '') {
   const source = (name: string) => JSON.stringify(join(import.meta.dir, name));
   writeFileSync(
     path,
     `
-      import { writeFileSync } from 'node:fs';
+      import { existsSync, writeFileSync } from 'node:fs';
       import { createIntegrationRuntime } from ${source('fixtures/cli-runtime.ts')};
       import { serveManagers } from ${source('manager-host.ts')};
       const runtime = createIntegrationRuntime();
       ${extras}
-      await serveManagers(runtime);
+      await serveManagers(runtime${serveOptions ? `, ${serveOptions}` : ''});
       runtime.db.close();
     `,
   );
@@ -692,6 +692,74 @@ test('extracted host answers while recovery continues and finishes one in-flight
     f.close();
   }
 }, 15_000);
+
+test('host serves socket requests while a chunked terminal process inventory is in progress', async () => {
+  const f = fixture({ FAKE_GOAL_HOST_SWEEP_MS: '25' });
+  const script = join(f.path, 'resource-host.ts');
+  const inventoryStarted = join(f.path, 'inventory-started');
+  const inventoryRelease = join(f.path, 'inventory-release');
+  extractedHostScript(
+    script,
+    `
+      const { defaultPolicy } = await import(${JSON.stringify(join(import.meta.dir, 'policy.ts'))});
+      runtime.managerServices.policy = {
+        ...defaultPolicy,
+        host: { ...defaultPolicy.host, recoveryIntervalMs: 20 },
+        containers: { ...defaultPolicy.containers, cleanupIntervalMs: 60000 },
+      };
+      runtime.db.exec('CREATE TABLE IF NOT EXISTS worker_tasks (id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE, current_attempt INTEGER NOT NULL, body TEXT NOT NULL)');
+      runtime.db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, 1, 0, ?)').run(
+        'terminal-fixture',
+        JSON.stringify({ id: 'terminal-fixture', state: 'integrated', worktree: '/tmp/terminal-fixture' }),
+      );
+      const terminalProcessSweep = {
+        inventory: async owners => {
+          writeFileSync(${JSON.stringify(inventoryStarted)}, String(owners.length));
+          for (let index = 0; index < 128; index++) await new Promise(resolve => setImmediate(resolve));
+          while (!existsSync(${JSON.stringify(inventoryRelease)})) await new Promise(resolve => setImmediate(resolve));
+          return [];
+        },
+        stop: async () => [],
+      };
+    `,
+    '{ terminalProcessSweep }',
+  );
+  let child: ChildProcess | undefined;
+  let exited: Promise<void> | undefined;
+  try {
+    child = spawn(process.execPath, [script], { env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    exited = new Promise<void>((resolve) => child!.once('exit', () => resolve()));
+    await new Promise<void>((resolve, reject) => {
+      const lines = createInterface({ input: child!.stdout! });
+      lines.once('line', (line) => {
+        lines.close();
+        line === 'ready' ? resolve() : reject(new Error(line));
+      });
+      child!.once('exit', (code) => reject(new Error(`resource host exited before ready (${code})`)));
+    });
+    await waitForFlag(inventoryStarted, child, 'terminal process inventory');
+    expect(readFileSync(inventoryStarted, 'utf8')).toBe('1');
+    await expect(
+      hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000),
+    ).rejects.toThrow('Unknown manager');
+    child!.kill('SIGTERM');
+    const exitedBeforeReaper = await Promise.race([
+      exited!.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
+    ]);
+    expect(exitedBeforeReaper).toBe(false);
+    writeFileSync(inventoryRelease, '1');
+    await exited!;
+  } finally {
+    writeFileSync(inventoryRelease, '1');
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      await exited;
+    }
+    await cleanHosted(f.path);
+    f.close();
+  }
+}, 10_000);
 
 test('a host that loaded one tools/goal revision retires once main publishes another, and exits so systemd restarts it', async () => {
   const f = fixture();

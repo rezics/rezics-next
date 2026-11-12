@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   SHARED_KEEP_PREFIXES,
   derivedOwnerGone,
+  createTerminalProcessSweep,
   keepPrefixes,
   nameOwnsTask,
   parseContainerList,
@@ -14,6 +15,7 @@ import {
   selectOwnedContainers,
   selectOwnedVolumes,
   sweepAbandonedResources,
+  type TerminalProcessSweep,
   type DockerInvoke,
   type InventoryContainer,
 } from './attempt-resources.ts';
@@ -211,7 +213,38 @@ test('a five-minute sweep reaps cancelled, stopped, integrated and merged tasks 
       `keep\trezics-kernel-dev\t\t\t\t\t8MB`,
     ].join('\n'),
   });
-  const stoppedTrees: string[] = [];
+  const stoppedPids: number[] = [];
+  let inventoryOwners: string[] = [];
+  let inventoryCalls = 0;
+  const terminalProcessSweep: TerminalProcessSweep = {
+    inventory: async (owners) => {
+      inventoryCalls++;
+      inventoryOwners = owners.map((owner) => owner.id);
+      return [
+        {
+          owner: cancelled,
+          worktree: '/tmp/cancelled',
+          identity: { pid: 9, start: '90', boot: 'test-boot', group: 9 },
+          sizeBytes: 2048,
+        },
+        {
+          owner: stopped,
+          worktree: '/tmp/stopped',
+          identity: { pid: 10, start: '100', boot: 'test-boot', group: 10 },
+          sizeBytes: 4096,
+        },
+      ];
+    },
+    stop: async (candidates, isCurrentOwner) => {
+      const stoppedProcesses = [];
+      for (const candidate of candidates) {
+        if (!(await isCurrentOwner(candidate.owner, candidate.worktree))) continue;
+        stoppedPids.push(candidate.identity.pid);
+        stoppedProcesses.push(candidate);
+      }
+      return stoppedProcesses;
+    },
+  };
   try {
     const counts = await sweepAbandonedResources({
       tasks: [
@@ -225,21 +258,102 @@ test('a five-minute sweep reaps cancelled, stopped, integrated and merged tasks 
       now,
       docker: docker.invoke,
       ownerLive: (pid) => (pid === '4242' ? { start: '100', boot: 'boot' } : null),
-      processes: {
-        list: (directory) => (directory === '/tmp/cancelled' ? [{ pid: 9, sizeBytes: 2048 }] : []),
-        stop: async (directory) => {
-          stoppedTrees.push(directory);
-          return 1;
-        },
-      },
+      terminalProcessSweep,
+      currentTerminalOwner: (owner, worktree) => owner === cancelled && worktree === '/tmp/cancelled',
       log: () => {},
     });
     expect(docker.removed[0]?.slice(3)).toEqual(['can', 'stop', 'int', 'mer', 'dead']);
-    expect(stoppedTrees).toEqual(['/tmp/cancelled', '/tmp/stopped', '/tmp/integrated', '/tmp/merged']);
+    expect(inventoryCalls).toBe(1);
+    expect(inventoryOwners).toEqual([cancelled, stopped, integrated, merged]);
+    expect(stoppedPids).toEqual([9]);
     expect(counts.containers).toBe(5);
     expect(counts.processes).toBe(1);
     expect(defaultPolicy.containers.cleanupIntervalMs).toBe(300_000);
     expect(defaultPolicy.containers.keep).toEqual([...SHARED_KEEP_PREFIXES]);
+  } finally {
+    box.close();
+  }
+});
+
+test('periodic process inventory runs once as terminal task history grows', async () => {
+  const box = stateDir();
+  const docker = dockerScript({});
+  const inventorySizes: number[] = [];
+  let inventoryCalls = 0;
+  const terminalProcessSweep: TerminalProcessSweep = {
+    inventory: async (owners) => {
+      inventoryCalls++;
+      inventorySizes.push(owners.length);
+      await new Promise<void>((done) => setImmediate(done));
+      return [];
+    },
+    stop: async () => [],
+  };
+  try {
+    for (const count of [5, 1000]) {
+      const tasks = Array.from({ length: count }, (_, index) => ({
+        id: `terminal-${count}-${index}`,
+        state: 'integrated',
+        worktree: `/tmp/worktree-${count}-${index}`,
+      }));
+      await sweepAbandonedResources({
+        tasks,
+        stateDirectory: box.directory,
+        docker: docker.invoke,
+        terminalProcessSweep,
+        log: () => {},
+      });
+    }
+    expect(inventoryCalls).toBe(2);
+    expect(inventorySizes).toEqual([5, 1000]);
+  } finally {
+    box.close();
+  }
+});
+
+test('fake proc inventory maps cwd to one terminal isolated owner and ignores shared and ambiguous trees', async () => {
+  const box = stateDir();
+  const procRoot = join(box.directory, 'proc');
+  const bootDirectory = join(procRoot, 'sys/kernel/random');
+  const terminalTree = join(box.directory, 'trees/cancelled');
+  const sharedTree = join(box.directory, 'trees/shared');
+  const ambiguousTree = join(box.directory, 'trees/ambiguous');
+  mkdirSync(bootDirectory, { recursive: true });
+  mkdirSync(join(terminalTree, 'nested'), { recursive: true });
+  mkdirSync(sharedTree, { recursive: true });
+  mkdirSync(ambiguousTree, { recursive: true });
+  writeFileSync(join(bootDirectory, 'boot_id'), 'fixture-boot\n');
+  const proc = (pid: number, cwd: string, start: number) => {
+    const directory = join(procRoot, String(pid));
+    const fields = Array(20).fill('0');
+    fields[0] = 'S';
+    fields[1] = '1';
+    fields[2] = String(pid);
+    fields[19] = String(start);
+    mkdirSync(directory, { recursive: true });
+    symlinkSync(cwd, join(directory, 'cwd'));
+    writeFileSync(join(directory, 'stat'), `${pid} (fake process) ${fields.join(' ')}\n`);
+    writeFileSync(join(directory, 'statm'), '8 2 0 0 0 0 0\n');
+  };
+  proc(8101, terminalTree, 101);
+  proc(8102, join(terminalTree, 'nested'), 102);
+  proc(8103, sharedTree, 103);
+  proc(8104, ambiguousTree, 104);
+  try {
+    const owners = [
+      { id: 'cancelled-owner', worktree: terminalTree },
+      ...Array.from({ length: 1000 }, (_, index) => ({
+        id: `terminal-history-${index}`,
+        worktree: `/history/${index}`,
+      })),
+      { id: 'collision-a', worktree: ambiguousTree },
+      { id: 'collision-b', worktree: ambiguousTree },
+    ];
+    const inventory = await createTerminalProcessSweep(procRoot).inventory(owners);
+    expect(inventory.map(({ owner, identity, sizeBytes }) => [owner, identity.pid, identity.start, sizeBytes])).toEqual([
+      ['cancelled-owner', 8101, '101', 8192],
+      ['cancelled-owner', 8102, '102', 8192],
+    ]);
   } finally {
     box.close();
   }
