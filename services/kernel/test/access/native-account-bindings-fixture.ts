@@ -16,21 +16,38 @@ import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 
 async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
   const name = `native_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
-  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
-  return {
-    url,
-    async close() {
-      const admin = new URL(process.env.DATABASE_URL!);
-      admin.pathname = '/postgres';
-      const owner = new Client({ connectionString: admin.toString() });
+  const drop = async () => {
+    const admin = new URL(process.env.DATABASE_URL!);
+    admin.pathname = '/postgres';
+    const owner = new Client({ connectionString: admin.toString() });
+    const failures: unknown[] = [];
+    try {
       await owner.connect();
-      try {
-        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
-      } finally {
-        await owner.end();
-      }
-    },
+      await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await owner.end();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, 'Native Auth database cleanup failed');
   };
+  try {
+    const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+    return { url, close: drop };
+  } catch (error) {
+    try {
+      await drop();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Native Auth database construction and cleanup failed', {
+        cause: error,
+      });
+    }
+    throw error;
+  }
 }
 
 export const issuer = 'https://ordinary.auth.test';
@@ -71,40 +88,44 @@ export async function nativeFixture(
   },
 ) {
   configureTestReceiptKeys(pool);
-  const database = existing?.database ?? (await cloneAuthDatabase());
-  const pair = existing ? undefined : await generateKeyPair('ES256', { extractable: true });
-  const privateKey = existing?.privateKey ?? { ...(await exportJWK(pair!.privateKey)), kid: 'ordinary-native' };
-  let service: AuthService;
-  let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
-  let bindings: ReturnType<typeof createNativeAccountBindings>;
-  let proofs: ReturnType<typeof createNativeWorkflowProofPorts>;
-  let authPool: Pool;
+  const referenceKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(92)]]) };
   const actions = new Map([
     ...LIFECYCLE_ACTIONS,
     ...INTERNAL_ACTIONS,
     ...actionDeclarations(scopes),
     ...(existing?.actions ?? []),
   ]);
-  const access = createAccess({
-    actions,
-    auth: {
-      issuer,
-      audience: 'https://ordinary.api.test',
-      jwksUrl: `${issuer}/.well-known/jwks.json`,
-      fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
-    },
-  });
-  const referenceKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(92)]]) };
+  const database = existing?.database ?? (await cloneAuthDatabase());
+  let privateKey: (JWK & { kid: string }) | undefined = existing?.privateKey;
+  let service!: AuthService;
+  let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
+  let bindings: ReturnType<typeof createNativeAccountBindings>;
+  let proofs: ReturnType<typeof createNativeWorkflowProofPorts>;
+  let authPool: Pool | undefined;
+  let access!: ReturnType<typeof createAccess>;
+  async function closeResources(closeDatabase: boolean): Promise<void> {
+    const failures: unknown[] = [];
+    const attempt = async (operation: () => unknown) => {
+      try {
+        await operation();
+      } catch (error) {
+        failures.push(error);
+      }
+    };
+    if (host) await attempt(() => host!.stop());
+    if (authPool) await attempt(() => authPool!.end());
+    if (closeDatabase) await attempt(() => database.close());
+    if (failures.length) throw new AggregateError(failures, 'Native Auth fixture cleanup failed');
+  }
   const build = async () => {
-    authPool = openAuthPool?.() ?? new Pool({ connectionString: database.url });
+    const currentPool = openAuthPool?.() ?? new Pool({ connectionString: database.url });
+    authPool = currentPool;
     // The growth harness instruments this pool before any connection is made.
-    authPool.options.connectionString = database.url;
-    if (openAuthPool) {
-      const end = authPool.end.bind(authPool);
-      let ending: Promise<void> | undefined;
-      authPool.end = (() => (ending ??= end())) as Pool['end'];
-    }
-    proofs = createNativeWorkflowProofPorts({ database: authPool });
+    currentPool.options.connectionString = database.url;
+    const end = currentPool.end.bind(currentPool);
+    let ending: Promise<void> | undefined;
+    currentPool.end = (() => (ending ??= end())) as Pool['end'];
+    proofs = createNativeWorkflowProofPorts({ database: currentPool });
     bindings = createNativeAccountBindings({
       pool,
       access,
@@ -114,17 +135,17 @@ export async function nativeFixture(
       auth: () => service,
       proofs: {
         workflow: proofs,
-        provisioning: createProvisioningEvidenceVerifier({ database: authPool }),
-        barriers: createBarrierProofVerifier({ database: authPool }),
+        provisioning: createProvisioningEvidenceVerifier({ database: currentPool }),
+        barriers: createBarrierProofVerifier({ database: currentPool }),
       },
     });
     host = await createAuthHost({
-      database: authPool,
-      systemDatabasePool: authPool,
+      database: currentPool,
+      systemDatabasePool: currentPool,
       issuer,
       audience: 'https://ordinary.api.test',
       secret: 'ordinary-native-persistent-auth-secret-32-bytes',
-      signing: { activeKid: privateKey.kid, privateKeys: [privateKey] },
+      signing: { activeKid: privateKey!.kid, privateKeys: [privateKey!] },
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
       accountOperations: bindings.accountOperations,
@@ -138,10 +159,28 @@ export async function nativeFixture(
     await host.start();
   };
   try {
+    if (!privateKey) {
+      const pair = await generateKeyPair('ES256', { extractable: true });
+      privateKey = { ...(await exportJWK(pair.privateKey)), kid: 'ordinary-native' };
+    }
+    access = createAccess({
+      actions,
+      auth: {
+        issuer,
+        audience: 'https://ordinary.api.test',
+        jwksUrl: `${issuer}/.well-known/jwks.json`,
+        fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+      },
+    });
     await build();
   } catch (error) {
-    await host?.stop().catch(() => {});
-    await database.close();
+    try {
+      await closeResources(true);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Native Auth fixture construction and cleanup failed', {
+        cause: error,
+      });
+    }
     throw error;
   }
   const running = () => {
@@ -168,7 +207,7 @@ export async function nativeFixture(
     pool,
     access,
     database,
-    privateKey,
+    privateKey: privateKey!,
     referenceKeys,
     get COMMANDS() {
       return {
@@ -179,7 +218,7 @@ export async function nativeFixture(
         delegations: bindings.delegations,
       };
     },
-    stop: () => running().stop(),
+    stop: () => closeResources(false),
     request,
     approval,
     get host() {
@@ -195,15 +234,22 @@ export async function nativeFixture(
       return proofs;
     },
     async restart() {
-      await running().stop();
-      await build();
+      await closeResources(false);
+      try {
+        await build();
+      } catch (error) {
+        try {
+          await closeResources(true);
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], 'Native Auth fixture restart and cleanup failed', {
+            cause: error,
+          });
+        }
+        throw error;
+      }
     },
     async close() {
-      try {
-        await host?.stop();
-      } finally {
-        await database.close();
-      }
+      await closeResources(true);
     },
     async person(key: string) {
       const result = await running().workflows.register({

@@ -27,7 +27,11 @@ export async function createLibraryAccountHost(input: {
       scopes: input.scopes,
     });
   } catch (error) {
-    await fixture.stop();
+    try {
+      await fixture.close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Library Auth host setup and cleanup failed', { cause: error });
+    }
     throw error;
   }
   const actingHumans = new Map<string, string>();
