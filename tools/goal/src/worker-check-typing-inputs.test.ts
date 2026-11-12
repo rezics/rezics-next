@@ -21,6 +21,12 @@ import {
   settleWorkerCheckHostBudget,
   workerCheckHostTypingSettlement,
 } from './worker-check-budget.ts';
+import {
+  CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
+  CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  initializeRemoteRunCustody,
+  remoteRunCustodyPath,
+} from '../../../scripts/check-custody.ts';
 import { KERNEL_CLIENT_OUTPUT, outputTreeDigest, restoreOutputTree } from '../../../scripts/check-output-tree.ts';
 
 const roots: string[] = [];
@@ -173,6 +179,14 @@ test.each(['local', 'remote-return'] as const)(
     };
     const captureCommand = typingInputCommand(workspaceCommand);
     expect(captureCommand.every((argument) => argument.length <= 4096)).toBe(true);
+    initializeRemoteRunCustody(root, physical, {
+      checkId: 'b3b3b3b3-3333-4333-8333-333333333333',
+      argv: workspaceCommand,
+      remoteArgv: captureCommand,
+    });
+    expect(readFileSync(remoteRunCustodyPath(root, physical), 'utf8').length).toBeLessThan(
+      CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+    );
     // The exact old entrypoint succeeds without producing the artifact demanded by the wrapper.
     expect(Bun.spawnSync(workspaceCommand, { cwd: root, env: { ...process.env, ...request } }).exitCode).toBe(0);
     expect(readTypingInputReceipt(root, physical, workspaceCommand)).toBeUndefined();

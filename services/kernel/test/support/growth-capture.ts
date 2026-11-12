@@ -51,6 +51,7 @@ type CloseablePool = { end(): Promise<void> };
 export function createGrowthDatabaseLifecycle() {
   const resources = new Map<CloseablePool, string>();
   let closing: Promise<void> | undefined;
+  let admittedChecks = Promise.resolve();
   const assertOpen = () => {
     if (closing) throw new Error('Growth database is closed');
   };
@@ -60,9 +61,22 @@ export function createGrowthDatabaseLifecycle() {
     resources.set(resource, name);
     return resource;
   };
-  const close = (): Promise<void> => {
-    if (closing) return closing;
-    closing = Promise.allSettled(
+  const runExclusiveCheck = <T>(operation: () => Promise<T>): Promise<T> => {
+    assertOpen();
+    const previous = admittedChecks;
+    let release!: () => void;
+    admittedChecks = new Promise<void>((resolve) => (release = resolve));
+    return (async () => {
+      await previous;
+      try {
+        return await operation();
+      } finally {
+        release();
+      }
+    })();
+  };
+  const closeResources = async (): Promise<void> => {
+    const results = await Promise.allSettled(
       Array.from(resources, async ([resource, name]) => {
         try {
           await resource.end();
@@ -78,6 +92,10 @@ export function createGrowthDatabaseLifecycle() {
           `Could not close growth database resources: ${failures.map((error) => asError(error).message).join('; ')}`,
         );
     });
+  };
+  const close = (): Promise<void> => {
+    if (closing) return closing;
+    closing = admittedChecks.then(closeResources);
     return closing;
   };
   const setup = async <T>(operation: () => Promise<T>): Promise<T> => {
@@ -97,7 +115,7 @@ export function createGrowthDatabaseLifecycle() {
       throw primary;
     }
   };
-  return { acquire, assertOpen, close, setup };
+  return { acquire, assertOpen, close, runExclusiveCheck, setup };
 }
 
 export type SeedingCount = { statements: number; rowsWritten: number };
@@ -208,14 +226,14 @@ const workflowAttributions = new Map<string, Attribution>();
 export async function withGrowthCheck<T>(database: GrowthDatabase, operation: () => Promise<T>): Promise<T> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
-  state.lifecycle.assertOpen();
-  if (state.growthCheckActive) throw new Error('A growth check is already active for this database');
-  state.growthCheckActive = true;
-  try {
-    return await operation();
-  } finally {
-    state.growthCheckActive = false;
-  }
+  return state.lifecycle.runExclusiveCheck(async () => {
+    state.growthCheckActive = true;
+    try {
+      return await operation();
+    } finally {
+      state.growthCheckActive = false;
+    }
+  });
 }
 
 type BackendSet = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };

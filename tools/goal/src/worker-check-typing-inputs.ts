@@ -471,7 +471,7 @@ export function typingInputCommand(command: readonly string[]): string[] {
   // Carry the standalone capture implementation through argv for old frozen worktrees, compressed to fit custody.
   const payload = deflateSync(
     JSON.stringify({
-      captureModule: readFileSync(import.meta.path, 'utf8'),
+      captureModuleSource: readFileSync(import.meta.path, 'utf8'),
       command,
     }),
   ).toString('base64');
@@ -482,12 +482,12 @@ export function typingInputCommand(command: readonly string[]): string[] {
     `
 import { inflateSync } from 'node:zlib';
 const payload = process.argv.slice(1).join('');
-const { captureModule, command } = JSON.parse(inflateSync(Buffer.from(payload, 'base64')).toString('utf8'));
+const { captureModuleSource, command } = JSON.parse(inflateSync(Buffer.from(payload, 'base64')).toString('utf8'));
 let complete;
 let readReceipt;
 try {
-  const source = Buffer.from(captureModule, 'utf8').toString('base64');
-  const inputs = await import('data:text/typescript;base64,' + source);
+  const captureModule = Buffer.from(captureModuleSource, 'utf8').toString('base64');
+  const inputs = await import('data:text/typescript;base64,' + captureModule);
   readReceipt = inputs.readTypingInputReceipt;
   complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, command);
 } catch (error) { console.error('typing inputs unavailable before compilation: ' + error); }

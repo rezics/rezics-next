@@ -23,6 +23,7 @@ import {
   trackGrow,
   withGrowthCheck,
   type GrowthDatabase,
+  type MaintenanceTarget,
 } from './growth-capture.ts';
 import {
   addGrowthFailureCause,
@@ -151,6 +152,8 @@ export type GrowthCheck = {
    * checkGrowth settles the database with ANALYZE before the scale's first unmeasured run.
    */
   grow(db: GrowthDatabase, scale: number, previous: number): Promise<void>;
+  /** Relations changed by `grow`; when provided, only these relations are vacuumed and analyzed before warmup. */
+  readonly seededRelations?: readonly MaintenanceTarget[];
   /**
    * One measured run of the operation. `repetition` counts from 0 across all scales and unmeasured runs, shared
    * with `warmup`, for fresh keys.
@@ -1224,7 +1227,10 @@ async function runGrowthCheck(
     failureContext.phase = 'grow';
     const grown = await trackGrow(db, () => check.grow(db, scale, previous));
     const vacuumStart = performance.now();
-    const vacuumMs = await recordedSettle(db, { analyze: true });
+    const vacuumMs = await recordedSettle(db, {
+      analyze: true,
+      ...(check.seededRelations === undefined ? {} : { relations: check.seededRelations }),
+    });
     let settleMs = vacuumMs;
     const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs, settleMs };
     const measuredDatabases = new Set<GrowthDatabase>([db]);
