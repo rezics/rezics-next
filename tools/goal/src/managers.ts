@@ -133,6 +133,58 @@ export function readManagerOperationalStatus(db: Database) {
     };
   });
 }
+
+export type GoalManagerAuthority = {
+  id: string;
+  sessionId: string;
+  kind: string;
+  engine: string | null;
+  goals: string[];
+  supermanager: string | null;
+  goalStatus: string | null;
+};
+
+/** The sole running managed owner of a Goal, including the persisted provider session that authenticates it. */
+export function currentGoalManagerAuthority(db: Database, goal: string): GoalManagerAuthority | undefined {
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get())
+    return undefined;
+  const owners = (db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[]).flatMap(
+    (row) => {
+      let state: ManagerState;
+      try {
+        state = JSON.parse(row.state) as ManagerState;
+      } catch {
+        return [];
+      }
+      if (
+        !state ||
+        typeof state !== 'object' ||
+        Array.isArray(state) ||
+        state.status !== 'running' ||
+        state.kind === 'resident-supermanager' ||
+        (state.kind !== undefined && state.kind !== 'managed')
+      )
+        return [];
+      const goals = ownedGoals(state);
+      if (!(goals.includes(goal) || (goals.length === 0 && row.id === goal))) return [];
+      return [{ id: row.id, state, goals }];
+    },
+  );
+  if (owners.length !== 1) return undefined;
+  const owner = owners[0]!;
+  const state = owner.state;
+  if (typeof state.threadId !== 'string' || !state.threadId) return undefined;
+  return {
+    id: owner.id,
+    sessionId: state.threadId,
+    kind: state.kind ?? 'managed',
+    engine: typeof state.engine === 'string' ? state.engine : null,
+    goals: [...owner.goals],
+    supermanager: typeof state.supermanager === 'string' ? state.supermanager : null,
+    goalStatus: state.goalState?.status ?? null,
+  };
+}
+
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
 export type ManagerServices = {
   policy?: ControlPolicy;

@@ -1,6 +1,11 @@
 import { createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
-import { backlogStatus, formatBacklogStatus } from './backlog.ts';
+import {
+  backlogStatus,
+  clearBacklogNoWorkDisposition,
+  formatBacklogStatus,
+  recordBacklogNoWorkDisposition,
+} from './backlog.ts';
 import { controlPlaneReleaseBrief } from './briefs.ts';
 import { runInboxCommand } from './inbox-cli.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
@@ -213,13 +218,34 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     return 0;
   }
   if (command === 'backlog') {
-    const usage = 'usage: backlog status [--json] | backlog dispatch';
+    const usage =
+      'usage: backlog status [--json] | backlog dispatch | backlog disposition <goal> no-work|clear';
     if (subcommand === 'dispatch') {
       if (id !== undefined || flags.length) throw new Error(usage);
       if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
         throw new Error('Workers cannot use the manager-owned backlog command');
       if (!runtime.backlog) throw new Error('The backlog run is unavailable in this runtime');
       console.log(JSON.stringify({ at: new Date().toISOString(), ...((await runtime.backlog()) as object) }));
+      return 0;
+    }
+    if (subcommand === 'disposition') {
+      if (
+        !id ||
+        !/^[a-z][a-z0-9-]*$/.test(id) ||
+        flags.length !== 1 ||
+        !['no-work', 'clear'].includes(flags[0]!)
+      )
+        throw new Error(usage);
+      if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+        throw new Error('Workers cannot set a backlog disposition');
+      const actor = authenticatedCallingManager(runtime);
+      if (!actor) throw new Error('Backlog disposition requires an authenticated manager session');
+      const result =
+        flags[0] === 'no-work'
+          ? recordBacklogNoWorkDisposition(runtime.db, runtime.stateDirectory, id, actor)
+          : clearBacklogNoWorkDisposition(runtime.db, id, actor);
+      await recordManagerCommand(runtime);
+      console.log(JSON.stringify(result));
       return 0;
     }
     const json = flags.length === 0 && id === '--json';

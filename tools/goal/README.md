@@ -2763,8 +2763,25 @@ host's socket. The host skips the minute while the previous child is still runni
 - **Chained briefs.** Before the dispatch above, each landed session's offer is answered; see
   [Chained briefs](#chained-briefs).
 - **Low backlog.** A running, active Goal manager whose backlog holds fewer than eight ready briefs receives at most
-  one event an hour asking it to keep at least eight. Only non-hidden `*.md` files directly in the Goal's backlog
-  directory count as ready; at eight or more, no low-backlog event is sent.
+  one event an hour asking it to keep at least eight, unless its scoped no-work disposition becomes stale or is
+  cleared. Only non-hidden `*.md` files directly in the Goal's backlog directory count as ready; at eight or more,
+  no low-backlog event is sent.
+
+Decision: `goal backlog disposition <goal> no-work` lets only the authenticated, unique running owner record that no
+additional writable outcome exists for the current scoped Goal evidence. The durable record binds to that owner
+session, ready brief names, contents and modification times, Goal task inventory markers, and typed Goal/task inbox
+sequence markers. An unchanged disposition suppresses repeated low-backlog instructions across hours and host restarts.
+A changed scope or `goal backlog disposition <goal> clear` rearms the next sweep to send if the backlog remains low;
+unrelated Goal and global development activity does not. The command accepts no free-text handoff as authority.
+
+From the owning manager session, record the disposition with:
+
+```sh
+bun tools/goal/src/cli.ts backlog disposition <goal> no-work
+```
+
+Use `bun tools/goal/src/cli.ts backlog disposition <goal> clear` to remove it and rearm the next low-backlog
+instruction. The disposition is one SQLite row per Goal; it is scoped to typed evidence, not elapsed time.
 
 `goal backlog status [--json]` prints ready, dispatched, failed and returned brief counts per Goal. It reads only the
 directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
