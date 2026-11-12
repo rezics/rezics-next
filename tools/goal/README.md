@@ -1617,6 +1617,7 @@ condition and the brief, plus the policy hash and layer measurements; manager se
 measurements. `attempts --json` exports worker manifests.
 Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 Decision: Worker prompts render architecture-map rows for the modules that own the brief's paths and those modules' allowed dependencies, with a one-line pointer to `docs/architecture/modules.json`; a Kernel-only brief carries no web rows. The map is computed from `scripts/architecture-map.ts` without loading oxc-parser.
+Decision: Refresh only the `interface-stories.txt` prompt golden when its generated `wapp` row omits the current `w/knowledge/route.tsx` entry; prompt behavior, budgets and other goldens stay unchanged.
 
 ### Research
 
