@@ -132,6 +132,53 @@ client, delegation, authentication epoch and scope ceiling. They retain the orig
 origin and 15-minute lifetime. A later release or draft edit does not move a continuing page to another revision.
 Changed query bindings, invalid tokens and replaced partition epochs return 400.
 
+## Author history
+
+Decision: `hosted_catalogue.history` is a separate owner-only
+`GET /v1/hostedCatalogues/{id}/history` page over the immutable revision index;
+opening an entry reuses the existing exact-selection reads.
+
+The query accepts only optional `limit` (default and maximum 20) and `cursor`.
+Both structures and publications appear, including an empty withdrawal release.
+Items contain only `catalogueId`, `revisionId`, `kind`, nullable `sourceRevisionId`,
+`createdAt`, `isCurrentDraft` and `isCurrentRelease`. Publication source IDs select
+existing structure revisions. Structure source IDs are null. The current flags
+reflect the catalogue pointers at the final authorization snapshot of each page;
+a withdrawal remains the current release even though its manifest is empty.
+There are no titles, chapter targets, digests, bodies, receipt or transaction IDs,
+counts or nested occurrence reads in the response.
+
+History requires the authenticated acting account to be the native catalogue
+Post author, with current Post disclosure and `post:revise`. It repeats native
+Post, container and revise checks and verifies the catalogue thread and partition
+anchor before returning. Public release access and container management alone do
+not grant history discovery. A continuation always repeats current admission;
+revoked permissions cannot be recovered from a retained token. Cross-home exact
+catalogue identities use their own route and do not depend on the author inventory.
+
+Ordering is `created_at DESC, revision_id DESC`, preserving database microseconds
+and using UUID order to break ties. A covering index on route, catalogue and that
+ordering supports a strict tuple seek on every page, selecting at most `limit+1`
+small records and returning at most `limit`. Newer saves do not invalidate a
+continuation or cause earlier rows to repeat. This is a live history directory,
+not a frozen inventory: each page refreshes the current flags. An exhausted page
+has a null `nextCursor` and never counts or scans all revisions.
+
+Continuations encrypt their raw boundary and bind catalogue, limit, account,
+client, delegation, authentication epoch, scope ceiling and partition epoch.
+They preserve the first page's 15-minute lifetime. Invalid, altered, expired,
+rebound or replaced-partition cursors return 400 after current author admission.
+All responses use private, no-store caching and native session anchors. This
+reader owns its source SQL and index; it has no dependency on the active author
+inventory writer or Commerce checkpoint writer.
+
+Later native acceptance covers mixed history and exact reopening after moves,
+removal and withdrawal; tied timestamps and exhausted pages; current flags after
+new saves; non-author/public denial; revoked authority with retained cursors;
+query/session/epoch binding and fixed expiry; and bounded indexed source reads.
+These tests run in the dev verifier after landing. Client generation remains with
+the controller.
+
 ## Cost and integration boundaries
 
 Mutations validate at most 512 placements and read each distinct exact selected target through the existing native

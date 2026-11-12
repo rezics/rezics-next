@@ -34,6 +34,7 @@ import {
   navigateHostedChapters,
   resolveHostedOccurrence,
 } from './hosted-chapters-reads.ts';
+import { listHostedCatalogueHistory } from './hosted-chapters-history.ts';
 import { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
 import { listHostedCataloguesForSubject } from './hosted-catalogue-subject.ts';
 import {
@@ -47,6 +48,8 @@ import {
   HostedPublishSchema,
   HostedCommandSchema,
   HostedRevisionSchema,
+  HostedHistoryQuerySchema,
+  HostedHistoryPageSchema,
   HostedPageSchema,
   HostedResolutionSchema,
   HostedSelectionSchema,
@@ -282,6 +285,39 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
           session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
         set.headers['cache-control'] = 'private, no-store';
         return result.value;
+      },
+    )
+    .get(
+      '/v1/hostedCatalogues/:id/history',
+      {
+        params: params(),
+        query: strictContentSchema(HostedHistoryQuerySchema),
+        response: { 200: withHeaders(strictContentSchema(HostedHistoryPageSchema), responseHeaders), ...failures() },
+        detail: {
+          'x-exposure': 'public',
+          'x-resource-types': ['content.post'],
+          'x-action': 'post:revise',
+          security: [{ bearerAuth: [] }],
+          operationId: 'hosted_catalogue.history',
+        },
+      },
+      async ({ actor, params: { id }, query, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const { limit, ...paging } = query;
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            listHostedCatalogueHistory(
+              deps,
+              id,
+              { ...paging, ...(limit === undefined ? {} : { limit: Number(limit) }) },
+              { actor, deadline: job.deadline },
+            ),
+          ),
+        );
+        for (const anchor of result.anchors)
+          session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
+        set.headers['cache-control'] = 'private, no-store';
+        return { ...result.value, items: [...result.value.items] };
       },
     )
     .get(

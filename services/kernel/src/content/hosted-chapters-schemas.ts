@@ -143,3 +143,31 @@ export const HostedOwnerInventoryReadSchema = t.Object(
   { scope: ownerScope, viewer: ownerViewer, item: ownerEntry },
   closed,
 );
+
+/** History intentionally has no target, occurrence, title or document fields. */
+export const HostedHistoryQuerySchema = t.Object(
+  {
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+  },
+  closed,
+);
+export const HostedHistoryPageSchema = t.Object(
+  {
+    catalogueId: HostedIdSchema,
+    items: t.Array(
+      t.Object(
+        {
+          ...revision,
+          createdAt: t.String({ format: 'date-time' }),
+          isCurrentDraft: t.Boolean(),
+          isCurrentRelease: t.Boolean(),
+        },
+        closed,
+      ),
+      { maxItems: HOSTED_PAGE_LIMIT },
+    ),
+    nextCursor: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+  },
+  closed,
+);
