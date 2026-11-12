@@ -1,3 +1,4 @@
+import type { KeyRing } from '../../tokens/seal.ts';
 export { FactSchema } from './catalogue.ts';
 import type { DiscoverySearch } from '../discovery-service.ts';
 import type { AccessCheck } from '../../request/access.ts';
@@ -9,7 +10,7 @@ type SearchServiceImplementation = ReturnType<typeof createSearchService>;
 export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
     releaseGroups?: SearchServiceImplementation['releaseGroups'];
 };
-export declare function searchRoutes<App>(app: App, { pool, routeKey, search, discovery, access, gateAccess, clock, }: {
+export declare function searchRoutes<App>(app: App, { pool, routeKey, search, discovery, access, gateAccess, clock, tokens, }: {
     pool: Pool;
     routeKey: Uint8Array;
     search?: SearchService;
@@ -17,6 +18,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
     access?: Access | AccessFactory;
     gateAccess?: () => Access;
     clock?: KernelClock;
+    tokens?: KeyRing;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {
         PublicFigure: import("typebox").TObject<{
@@ -3384,4 +3386,675 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             bearerAuth?: never;
         })[];
     };
-}> & App;
+}> & (import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+    typebox: {};
+    error: [{
+        error: Error;
+        response: {};
+        passes: false;
+        '~return': Response;
+        '~catchAll': true;
+    }];
+}, {
+    schema: {};
+    schemas: {};
+    macro: {};
+    macroFn: {};
+    parser: {};
+    response: {};
+}, {
+    health: {
+        get: {
+            body: unknown;
+            params: {};
+            query: unknown;
+            headers: unknown;
+            response: {
+                200: {
+                    status: 'ok';
+                };
+            };
+            error: never;
+        };
+    };
+}, import("elysia").DefaultEphemeral, {
+    derive: {
+        readonly admission: import("../../http/admission.ts").Admission;
+        readonly job: {
+            deadline: number;
+            signal: AbortSignal;
+        };
+        readonly actor: import("../../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
+        readonly session: {
+            readonly components: import("../../tokens/session.ts").SessionComponent[];
+            record(component: import("../../tokens/session.ts").SessionComponent): void;
+        };
+        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    };
+    schema: {};
+    schemas: {};
+    response: {};
+    error: [];
+}, "get", "/v1/subjects/:id/knowledgeDocuments", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+    params: import("typebox").TObject<{
+        id: import("typebox").TString;
+    }>;
+    query: import("typebox").TObject<{
+        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
+        cursor: import("typebox").TOptional<import("typebox").TString>;
+    }>;
+    response: {
+        200: import("typebox").TObject<{
+            state: import("typebox").TLiteral<"ready">;
+            documents: import("typebox").TArray<import("typebox").TObject<{
+                subjectId: import("typebox").TString;
+                documentId: import("typebox").TString;
+                publicationId: import("typebox").TString;
+                revisionId: import("typebox").TString;
+                publishedAt: import("typebox").TString;
+                title: import("typebox").TString;
+                language: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                licence: import("typebox").TString;
+                sha256: import("typebox").TString;
+            }>>;
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>;
+        202: import("typebox").TObject<{
+            state: import("typebox").TLiteral<"preparing">;
+            next: import("typebox").TString;
+        }>;
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        401: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        404: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        503: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+    };
+    detail: {
+        operationId: string;
+        description: string;
+        'x-exposure': string;
+        'x-action': string;
+        security: ({
+            bearerAuth: never[];
+        } | {
+            bearerAuth?: never;
+        })[];
+    };
+}, {}, "/v1/subjects/:id/knowledgeDocuments">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, authorize, admission, job, actor, set }: {
+    server: import("elysia").Server | null;
+    redirect: import("elysia").redirect;
+    set: {
+        headers: import("elysia").HTTPHeaders;
+        status?: number | keyof import("elysia").StatusMap;
+        cookie?: Record<string, import("elysia").BaseCookie>;
+        redirect?: never;
+    };
+    status: import("elysia").SelectiveStatus<{
+        200: {
+            state: "ready";
+            documents: {
+                subjectId: string;
+                documentId: string;
+                publicationId: string;
+                revisionId: string;
+                publishedAt: string;
+                title: string;
+                language: string | null;
+                licence: string;
+                sha256: string;
+            }[];
+            next: string | null;
+        };
+        202: {
+            state: "preparing";
+            next: string;
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        409: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        503: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+    }>;
+    problem: import("elysia").SelectiveProblem<{
+        200: {
+            state: "ready";
+            documents: {
+                subjectId: string;
+                documentId: string;
+                publicationId: string;
+                revisionId: string;
+                publishedAt: string;
+                title: string;
+                language: string | null;
+                licence: string;
+                sha256: string;
+            }[];
+            next: string | null;
+        };
+        202: {
+            state: "preparing";
+            next: string;
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        409: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        503: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+    }>;
+    defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+        params: import("typebox").TObject<{
+            id: import("typebox").TString;
+        }>;
+        query: import("typebox").TObject<{
+            limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
+            cursor: import("typebox").TOptional<import("typebox").TString>;
+        }>;
+        response: {
+            200: import("typebox").TObject<{
+                state: import("typebox").TLiteral<"ready">;
+                documents: import("typebox").TArray<import("typebox").TObject<{
+                    subjectId: import("typebox").TString;
+                    documentId: import("typebox").TString;
+                    publicationId: import("typebox").TString;
+                    revisionId: import("typebox").TString;
+                    publishedAt: import("typebox").TString;
+                    title: import("typebox").TString;
+                    language: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    licence: import("typebox").TString;
+                    sha256: import("typebox").TString;
+                }>>;
+                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>;
+            202: import("typebox").TObject<{
+                state: import("typebox").TLiteral<"preparing">;
+                next: import("typebox").TString;
+            }>;
+            400: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            401: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            404: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            409: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            503: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+        };
+        detail: {
+            operationId: string;
+            description: string;
+            'x-exposure': string;
+            'x-action': string;
+            security: ({
+                bearerAuth: never[];
+            } | {
+                bearerAuth?: never;
+            })[];
+        };
+    }, {}, "/v1/subjects/:id/knowledgeDocuments">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+        derive: {
+            readonly admission: import("../../http/admission.ts").Admission;
+            readonly job: {
+                deadline: number;
+                signal: AbortSignal;
+            };
+            readonly actor: import("../../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
+            readonly session: {
+                readonly components: import("../../tokens/session.ts").SessionComponent[];
+                record(component: import("../../tokens/session.ts").SessionComponent): void;
+            };
+            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        };
+    }>>) => import("elysia/types").MaybePromise<void>;
+    readonly path: string;
+    route?: string;
+    rid?: string;
+    request: Request;
+    store: {};
+    body: unknown;
+    query: {
+        limit?: number;
+        cursor?: string;
+    };
+    params: {
+        id: string;
+    };
+    headers: Record<string, string | undefined>;
+    cookie: Record<string, import("elysia").Cookie<unknown>>;
+    readonly admission: import("../../http/admission.ts").Admission;
+    readonly job: {
+        deadline: number;
+        signal: AbortSignal;
+    };
+    readonly actor: import("../../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
+    readonly session: {
+        readonly components: import("../../tokens/session.ts").SessionComponent[];
+        record(component: import("../../tokens/session.ts").SessionComponent): void;
+    };
+    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+}) => Promise<import("elysia").ElysiaStatus<200, {
+    state: "ready";
+    documents: {
+        subjectId: string;
+        documentId: string;
+        publicationId: string;
+        revisionId: string;
+        publishedAt: string;
+        title: string;
+        language: string | null;
+        licence: string;
+        sha256: string;
+    }[];
+    next: string | null;
+}, 200> | import("elysia").ElysiaStatus<202, Readonly<{
+    state: 'preparing';
+    next: string;
+}>, 202>>, {
+    params: import("typebox").TObject<{
+        id: import("typebox").TString;
+    }>;
+    query: import("typebox").TObject<{
+        limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
+        cursor: import("typebox").TOptional<import("typebox").TString>;
+    }>;
+    response: {
+        200: import("typebox").TObject<{
+            state: import("typebox").TLiteral<"ready">;
+            documents: import("typebox").TArray<import("typebox").TObject<{
+                subjectId: import("typebox").TString;
+                documentId: import("typebox").TString;
+                publicationId: import("typebox").TString;
+                revisionId: import("typebox").TString;
+                publishedAt: import("typebox").TString;
+                title: import("typebox").TString;
+                language: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                licence: import("typebox").TString;
+                sha256: import("typebox").TString;
+            }>>;
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>;
+        202: import("typebox").TObject<{
+            state: import("typebox").TLiteral<"preparing">;
+            next: import("typebox").TString;
+        }>;
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        401: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        404: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+        503: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
+    };
+    detail: {
+        operationId: string;
+        description: string;
+        'x-exposure': string;
+        'x-action': string;
+        security: ({
+            bearerAuth: never[];
+        } | {
+            bearerAuth?: never;
+        })[];
+    };
+}> & App) & App;

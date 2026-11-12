@@ -17,6 +17,7 @@ export declare let createNativeLibrarySourceCustody: SearchNativePorts['createNa
 export declare let createPublicFilterSourceBinding: SearchNativePorts['createPublicFilterSourceBinding'];
 export declare let createPublicIdentitySourceCapture: SearchNativePorts['createPublicIdentitySourceCapture'];
 export declare let createRealmSubjectSource: SearchNativePorts['createRealmSubjectSource'];
+export declare let createKnowledgeDiscoverySource: SearchNativePorts['createKnowledgeDiscoverySource'];
 export declare let createReviewDiscoverySource: SearchNativePorts['createReviewDiscoverySource'];
 export declare let createSubjectSourceKeyPages: SearchNativePorts['createSubjectSourceKeyPages'];
 export declare let currentReadSnapshot: SearchNativePorts['currentReadSnapshot'];

@@ -414,4 +414,5 @@ export type DiscoveryProducerEntry = Readonly<{
 }>;
 /** Public operation used by Content Home; the service owns admission and current disclosure. */
 export type DiscoverySearch = (principal: 'anonymous' | `account:${string}`, request: MixedDiscoveryRequest, context: DiscoveryReadContext) => Promise<DiscoveryPage>;
-export {};
+/** Subject-scoped current public Knowledge, separate from the mixed catalogue representation. */
+export type { KnowledgeDiscoveryRequest, KnowledgeDiscoveryPage } from './knowledge-discovery.ts';
