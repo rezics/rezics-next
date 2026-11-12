@@ -423,14 +423,14 @@ export async function createProfileEntryFixture(
       await lifecycle.claimHandle({ ...input, key: entryKey(), evidence: proof });
       await lifecycle.activate({ accountId, key: entryKey(), evidence: proof });
       const claims = { accountId, clientId, scopes };
-      // Native growth setup reuses this genuine five-minute test credential across requests.
-      // Each native command still supplies and enforces its own physical operation deadline.
-      // Use wall time, not deadlineFor: a leaked request ALS deadline is the kernel's 30s budget.
-      const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 300_000 }, claims);
       // Partition 0 is the Global question/control home. Sealing it before the first
       // Subject exists leaves later creations past the bootstrap cursor with captured
       // dirty, so catch it up only after createHomeSubject/admitSubjectMerge.
       if (identityHomesReady && (home !== 0 || mappedHomes.has(0))) await catchUpIdentity(home);
+      // Authenticate after provisioning and any home catch-up so the five-minute fixture
+      // identity is current when the caller admits its first native command.
+      // Use wall time, not deadlineFor: a leaked request ALS deadline is the kernel's 30s budget.
+      const actor = await authenticateAccount(access, { pool, deadline: Date.now() + 300_000 }, claims);
       return { actor, bearer: await accountToken(claims) };
     }
     async function refresh(person: { actor: AccountActor; bearer: string }) {

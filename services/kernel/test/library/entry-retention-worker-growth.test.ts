@@ -68,10 +68,20 @@ beforeAll(async () => {
   await work.launch();
 }, 120000);
 afterAll(async () => {
-  await work?.shutdown();
-  await client?.close();
-  await f?.close();
-  await db?.close();
+  const failures: unknown[] = [];
+  for (const release of [
+    async () => work?.shutdown(),
+    async () => client?.close(),
+    async () => f?.close(),
+    async () => db?.close(),
+  ]) {
+    try {
+      await release();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) throw new AggregateError(failures, 'Retention growth fixture failed to settle');
 });
 
 async function runSegment(cutoff: string, start = partition) {

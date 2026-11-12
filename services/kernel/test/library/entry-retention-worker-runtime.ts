@@ -175,7 +175,6 @@ export async function growRetentionPopulation(
   scale: number,
 ) {
   for (let n = previous; n < scale; n++) {
-    if (n % 16 === 0) await renewRetentionIdentities(f);
     const owner = await f.identity(
       ['subject:read', 'library_entry:update', 'library_entry:delete'],
       n % 2 === 0 ? partition : (partition + 1) % 4096,

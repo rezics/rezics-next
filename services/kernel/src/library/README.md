@@ -1341,6 +1341,11 @@ the full `libraryWorkModule`. It passes the same Pool, supplied domain clock and
 `KERNEL_ROUTE_KEY`; crash children preserve their executor and clock-file identity, remove their SIGTERM listener, and
 settle the work runtime, client and Pool on startup failure or graceful shutdown.
 
+Decision: profile worker fixtures use `workerTestEnv` with deterministic workflow-reference keys and the Kernel's
+dedicated receipt ring, overriding ambient route/reference/receipt credentials while preserving `DATABASE_URL`;
+fixture actors are authenticated after provisioning and home catch-up so their five-minute identity is current at
+first native admission, and plain Bun children install `installNativeHistoryPreload()` before Kernel/work composition.
+
 For replacement-safe fresh writes, expose opaque `incarnationId` in entry reads and write results. A revisioned PUT
 body and DELETE query carry `incarnationId` alongside `revision`; the spelling is consistent across both requests.
 A fresh revisioned mutation on a current non-null incarnation requires its exact guard, immediately for both

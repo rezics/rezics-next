@@ -34,8 +34,15 @@ beforeAll(async () => {
   partition = partitionOf(route);
 }, 120000);
 afterAll(async () => {
-  await f?.close();
-  await db?.close();
+  const failures: unknown[] = [];
+  for (const release of [async () => f?.close(), async () => db?.close()]) {
+    try {
+      await release();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) throw new AggregateError(failures, 'Due-command growth fixture failed to settle');
 });
 const purge = (key: DueEntryDeletionKey, deadline?: number) =>
   purgeExpiredEntryDeletion({ pool: db.pool, clock, ...(deadline === undefined ? {} : { deadline }) }, key);
@@ -95,6 +102,7 @@ test('whole native exact due command stays keyed across legal unrelated owners, 
 
 test('native authorization and the delete bind the same immutable exact episode across asynchronous checkout', async () => {
   time = origin;
+  await renewRetentionIdentities(f);
   const first = await archive(f, subject);
   const later = await archive(f, noise);
   time = Date.parse(first.restoreUntil);
@@ -112,6 +120,7 @@ test('native authorization and the delete bind the same immutable exact episode 
 
 test('native supplied budgets expire without renewal, partition fences preserve the archive, and ordinary expiry needs no active owner', async () => {
   time = origin;
+  await renewRetentionIdentities(f);
   const key = await archive(f, subject);
   time = Date.parse(key.restoreUntil);
   for (const deadline of [NaN, Infinity, -Infinity, Date.now() - 1])
