@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { checkSubjectInput } from '@rezics/definitions/validate';
 import { currentRelationFacts } from '../../src/semantic/current-relations.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
@@ -14,6 +14,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 
 const route = 16000;
 const property = 'schema:character';
+const type = 'schema:VideoGame';
 const owner = newId(route);
 const targets = Array.from({ length: 20 }, () => newId(route));
 const routeKey = new Uint8Array(32).fill(29);
@@ -24,12 +25,16 @@ const bodies = targets.map((target) => ({
   qualifiers: [],
   references: [],
 }));
-const facts = itemFacts(
-  owner,
-  { type: 'schema:VideoGame', statements: { [property]: bodies } },
-  'schema:VideoGame',
-  bundledRelease,
-);
+const fragment = { statements: { [property]: bodies } };
+const releasedSubject = { type, labels: { en: 'Current relation growth owner' }, ...fragment };
+const releasedValidation = checkSubjectInput(releasedSubject, bundledRelease);
+if (releasedValidation.violations.length)
+  throw new Error(
+    `Invalid current relation fixture: ${releasedValidation.violations
+      .map(({ pointer, code }) => `${pointer} (${code})`)
+      .join(', ')}`,
+  );
+const facts = itemFacts(owner, fragment, type, bundledRelease);
 const currentFacts = facts.filter((fact) => fact.kind === 'statement');
 let db: GrowthDatabase;
 
@@ -39,8 +44,8 @@ beforeAll(async () => {
   await db.admin.query(
     `INSERT INTO semantic.subject
       (route, subject_id, type, recorded_transaction_id, visibility, security_revision, current_facts, current_release, projection_pending)
-     VALUES ($1,$2,'schema:VideoGame',$3,'visible',0,$4,$5,false)`,
-    [route, owner, transaction, facts.length, bundledDigest],
+     VALUES ($1,$2,$6,$3,'visible',0,$4,$5,false)`,
+    [route, owner, transaction, facts.length, bundledDigest, type],
   );
   await db.admin.query(
     `INSERT INTO semantic.revision (route, subject_id, revision, kind, release, recorded_transaction_id)

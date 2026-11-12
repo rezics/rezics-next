@@ -18,8 +18,12 @@ const notifications = Object.fromEntries(
 const defaultNotifications = Object.fromEntries(
   NOTIFICATION_KINDS.filter(({ optional }) => optional).map(({ kind, default: enabled }) => [kind, enabled]),
 ) as Notifications;
+const preferenceSeededRelations = ['access.account', 'access.account_preferences'] as const;
+const commandSeededRelations = [...preferenceSeededRelations, 'access.resource_grant', 'core.receipt'] as const;
 const route = 0x4567;
 const accountId = newId(route);
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 const maximalShelf = (): Shelf =>
   ({
@@ -51,7 +55,7 @@ const maximalShelf = (): Shelf =>
     ],
   }) as Shelf;
 beforeAll(async () => {
-  db = await openGrowthDatabase();
+  db = await openGrowthDatabase(databaseUrl);
 });
 afterAll(async () => db?.close());
 
@@ -67,6 +71,7 @@ test('preferences read stays constant as accounts with stored preferences grow',
     name: 'account preferences read',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    seededRelations: preferenceSeededRelations,
     async grow(database, scale, previous) {
       if (previous === 0) {
         await database.admin.query(
@@ -153,6 +158,7 @@ test('setting a maximal shelf stays constant as accounts with stored preferences
     name: 'account preferences set',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    seededRelations: commandSeededRelations,
     async grow(database, scale, previous) {
       const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(setRoute));
       await database.admin.query(
@@ -207,6 +213,7 @@ test('preference page projection stays constant as unrelated preference rows and
     name: 'account preference page projection',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    seededRelations: commandSeededRelations,
     async grow(database, scale, previous) {
       if (previous === 0) {
         await database.admin.query(
@@ -262,6 +269,7 @@ test('notificationAllowed stays constant as accounts grow', async () => {
     name: 'notification permission',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    seededRelations: preferenceSeededRelations,
     async grow(database, scale, previous) {
       const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(permissionRoute));
       if (previous === 0) ids.push(recipient);

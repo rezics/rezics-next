@@ -2,6 +2,8 @@
 
 Decision: `search/index.ts` re-exports `DiscoveryProducerCoverageError` and `DiscoveryPopulationCutChangedError` from their native `operation-outcomes.ts` leaf to preserve canonical constructor identity in composition.
 
+Decision: each bounded Account projection redrives stale claim homes once, rereads the Account snapshot and bindings once, and leaves the existing population cursor replayable if claim evidence still lags.
+
 Decision: `adapters/library-preparation.ts` implements Library's native preparation and scope-work capabilities.
 It uses the worker's existing Search runtime, original same-client work definition admission and definition/body
 meters. The ordered Source prepare/prefix/evaluate algorithm retains its exact cursor and partial-evaluation

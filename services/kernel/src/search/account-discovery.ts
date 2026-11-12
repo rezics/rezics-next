@@ -506,16 +506,28 @@ export function createDiscoveryProjection(options: {
     const ids = [...new Set(chunk.map(({ id }) => id))];
     let actions: DiscoveryIndexAction[];
     if (owner === 'accounts') {
-      const snapshot = validateAccountSnapshot(await accounts.source.read(partition, ids), partition, ids, atLeast);
-      const bindings = await readAccountDiscoveryBindings(pool, partition, ids);
-      for (const row of snapshot.accounts) {
-        const binding = bindings.get(row.id);
-        if (!binding || binding.revision !== row.revision || (row.handle !== null && binding.claim === null))
-          throw new Error('Account discovery revision moved; retry');
-        if (binding.claim && binding.consumedClaimRevision < binding.claim.revision) {
-          await redriveAccountDiscovery({ pool }, partitionOf(binding.claim.route));
-          throw new Error('Account claim consumption advanced; resnapshot before projection');
+      let snapshot = validateAccountSnapshot(await accounts.source.read(partition, ids), partition, ids, atLeast);
+      let bindings = await readAccountDiscoveryBindings(pool, partition, ids);
+      const pendingClaimHomes = () => {
+        const homes = new Set<number>();
+        for (const row of snapshot.accounts) {
+          const binding = bindings.get(row.id);
+          if (!binding || binding.revision !== row.revision || (row.handle !== null && binding.claim === null))
+            throw new Error('Account discovery revision moved; retry');
+          if (binding.claim && binding.consumedClaimRevision < binding.claim.revision)
+            homes.add(partitionOf(binding.claim.route));
         }
+        return homes;
+      };
+      const homes = pendingClaimHomes();
+      if (homes.size > 0) {
+        // Redrive once per claim home in this bounded chunk, then pair a fresh owner snapshot
+        // with fresh bindings. If the producer's finite page did not reach these claims, the
+        // caller's persisted population cursor remains replayable for its next maintenance step.
+        for (const home of homes) await redriveAccountDiscovery({ pool }, home);
+        snapshot = validateAccountSnapshot(await accounts.source.read(partition, ids), partition, ids, atLeast);
+        bindings = await readAccountDiscoveryBindings(pool, partition, ids);
+        if (pendingClaimHomes().size > 0) throw new Error('Account discovery revision moved; retry');
       }
       actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined, codec);
       for (const key of chunk)

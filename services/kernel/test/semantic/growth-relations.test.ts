@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { accessCommandAuthorization, type AccountActor, type Actor } from '../../src/request/access.ts';
 import type { Capture, Population } from '../support/growth.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 import { growRelationHistory, readRelationGrowthCardinalities } from '../support/growth-baseline.ts';
@@ -15,13 +16,14 @@ import { FRESHNESS_POLL_MS, FRESHNESS_WAIT_MS, waitForSubjectLinks } from '../..
 import type { SessionComponent } from '../../src/tokens/session.ts';
 import { labelOrderKey } from '../../src/semantic/link-keys.ts';
 import { listSubjectRelations } from '../../src/semantic/links.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import {
   assertUnforcedIndexes,
   logGrowthSeeding,
   seedSemanticPopulation,
   unrelatedSemanticPopulation,
 } from './planner-fixtures.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -68,14 +70,11 @@ const indexProbes = Object.values(probeOperands).reduce((total, value) => total 
 const evidenceDirectory = '.temp/growth-relations';
 const cardinalities: Record<number, Record<string, number>> = {};
 const tokenRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) };
-const actor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-6a0010000001',
-  clientId: 'growth-relations',
-  scopes: ['subject:create', 'subject:read'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
+const editorAccount = '019a1b2c-3d4e-7f00-8a00-6a0010000001';
+const clientId = 'growth-relations';
+const actions = ['subject:create'] as const;
+const globalResource = { route: 0, id: GLOBAL_CONTEXT };
+const deadline = () => Date.now() + 30_000;
 const digest = new Uint8Array(32).fill(31);
 const statement = (target: string) => ({
   property: { id: 'schema:author' },
@@ -90,6 +89,8 @@ const rowsFor = (subject: string, input: unknown, release?: typeof bundledReleas
   itemFacts(subject, input, 'schema:Book', release);
 
 let db: GrowthDatabase;
+let realAccess: Awaited<ReturnType<typeof createRealAccess<{ editor: string }>>>;
+let access: ReturnType<Awaited<ReturnType<typeof createRealAccess<{ editor: string }>>>['access']>;
 let anchor = '';
 let anchorRoute = 0;
 let people: string[] = [];
@@ -202,6 +203,15 @@ function createPopulation(): Population {
   return current;
 }
 
+async function authenticatedEditor(): Promise<AccountActor> {
+  const authenticated: Actor = await access.authenticate(realAccess.bearer('editor'), {
+    pool: db.pool,
+    deadline: deadline(),
+  });
+  if (authenticated.kind !== 'account') throw new TypeError('Relation growth fixture requires an account actor');
+  return authenticated;
+}
+
 // Separate subjects keep the matching anchor's 64/512/4096 degrees intact. Each has two descriptive
 // history rows, one compact relation and two matching provenance/framework envelopes.
 function historyPopulation(): Population {
@@ -228,7 +238,7 @@ function historyPopulation(): Population {
         position: historyPositionBase + 2 * ordinal + index,
         transaction_id,
         principal_kind: 'account',
-        principal_id: actor.accountId,
+        principal_id: editorAccount,
       }));
       return {
         'semantic.subject': [
@@ -315,7 +325,7 @@ function historyPopulation(): Population {
         })),
         'editorial.write_basis': envelopes.map((envelope) => ({
           ...envelope,
-          client_id: actor.clientId,
+          client_id: clientId,
           requested_by: null,
         })),
       };
@@ -532,14 +542,22 @@ async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise
   anchor = newId(BASE_ROUTE);
   anchorRoute = routeOf(anchor)!;
   unrelatedPopulation = unrelatedSemanticPopulation(`growth-relations-${label}`, partitionOf(anchorRoute)).population;
+  const editor = await authenticatedEditor();
   await createSubject(db.pool, {
-    actor,
+    actor: editor,
     target: { route: anchorRoute, id: anchor },
     idempotencyKey: randomUUID(),
     digest,
     item: { type: 'schema:Book', labels: { en: label } },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
+    authorization: await accessCommandAuthorization(
+      access,
+      editor,
+      'subject:create',
+      globalResource,
+      { pool: db.pool, deadline: deadline() },
+      () => new Error('Relation growth fixture authorization denied'),
+    ),
   });
   const head = await actualHead(db);
   historyPositionBase = Number(head.position) + 1_000;
@@ -555,6 +573,10 @@ async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  configureTestReceiptKeys(db.pool);
+  realAccess = await createRealAccess(db.admin, { editor: editorAccount }, actions);
+  access = realAccess.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+  await realAccess.grant(globalResource, 'editor', 'subject:create');
   await bootstrapRelease(db.pool, bundledRelease);
   await activeRelease(db.pool);
   await initializeGrowthAnchor();

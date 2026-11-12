@@ -3257,6 +3257,10 @@ columns) and every optional notification kind overridden, at scales 256, 1024 an
 to avoid tiny-table scans) using the shared harness and default warmups, for both the read and setting a maximal
 shelf and all optional notifications.
 
+Decision: preference growth keeps the original maximal shelf and notification shapes, scales and cost bounds. Each
+check names its seeded relations so the shared harness analyzes only those relations before measurement. Checks sharing
+a database run exclusively in admission order, and closing drains admitted checks before releasing their pools.
+
 Content calls `notificationAllowed(client, { recipient, kind }): Promise<boolean>`, exported from Access, at send
 time. An unknown kind throws `TypeError` before any read. A missing, deleted or pending recipient returns false.
 For any other state, including suspended, a mandatory kind returns true and an optional kind follows its effective
