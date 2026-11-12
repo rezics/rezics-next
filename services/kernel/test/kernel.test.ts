@@ -170,6 +170,7 @@ const typed = [
   'GET /v1/hostedCatalogues/:id/history',
   'GET /v1/hostedCatalogues/:id/children',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId',
+  'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/metadata',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation',
   'GET /v1/subjects/:id/hostedCatalogues',
   'GET /v1/knowledge/documents/:id',

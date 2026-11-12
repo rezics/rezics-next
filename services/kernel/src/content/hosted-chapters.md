@@ -96,13 +96,14 @@ acceptance are deferred for this source sprint; the controller publishes the gen
 
 ## Reading
 
-| Operation ID                   | Method and path                                                       | Query                                             |
-| ------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------- |
-| `hosted_catalogue.get`         | `GET /v1/hostedCatalogues/{id}`                                       | selection                                         |
-| `hosted_catalogue.children`    | `GET /v1/hostedCatalogues/{id}/children`                              | selection, optional `parentId`, `limit`, `cursor` |
-| `hosted_catalogue.resolve`     | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
-| `hosted_catalogue.navigate`    | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor`         |
-| `hosted_catalogue.for_subject` | `GET /v1/subjects/{id}/hostedCatalogues`                              | optional `limit`, `cursor`                        |
+| Operation ID                        | Method and path                                                       | Query                                             |
+| ----------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- |
+| `hosted_catalogue.get`              | `GET /v1/hostedCatalogues/{id}`                                       | selection                                         |
+| `hosted_catalogue.children`         | `GET /v1/hostedCatalogues/{id}/children`                              | selection, optional `parentId`, `limit`, `cursor` |
+| `hosted_catalogue.resolve`          | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
+| `hosted_catalogue.resolve_metadata` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/metadata`   | selection                                         |
+| `hosted_catalogue.navigate`         | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor`         |
+| `hosted_catalogue.for_subject`      | `GET /v1/subjects/{id}/hostedCatalogues`                              | optional `limit`, `cursor`                        |
 
 Selection accepts optional `revisionId` and `kind` (`structure` or `publication`). Without either, it chooses the
 current release. `kind=structure` chooses the current draft head, including a catalogue that has never released.
@@ -114,8 +115,8 @@ Metadata contains `catalogueId`, selected `revisionId`, `kind` and nullable `sou
 existing Subject. Candidates come from indexed `subject_thread` rows and same-route
 published catalogue-post subject references. Each page inspects at most 21 raw
 catalogues, discloses at most 20, and never refills concealed slots. Empty
-publications are absent. Historical exact occurrence reads stay on
-`hosted_catalogue.resolve` and still obey current catalogue and target Access.
+publications are absent. Historical exact occurrence reads use `hosted_catalogue.resolve` or
+`hosted_catalogue.resolve_metadata` and still obey current catalogue and target Access.
 
 Every read retains native catalogue disclosure and repeats it before returning. Chapter disclosure independently
 retains the exact native target Post, Board, Realm and ancestor checks. Erased, concealed, missing or changed
@@ -135,6 +136,18 @@ Decoding the base64 string yields the bytes covered by that digest. The document
 snapshot for the selected Post revision, including its stable block IDs. The native 2 MiB body bound applies. Parts
 and unavailable chapters have a null document. Responses use private, no-store caching and record native session
 anchors.
+
+Decision: expose the existing metadata resolver as `hosted_catalogue.resolve_metadata` for Book occurrence and
+breadcrumb reads. Its closed response contains only `catalogueId`, `revisionId`, `kind`, `sourceRevisionId` and
+`occurrence`, reusing the selection, current Access, session anchors, private/no-store and error semantics of exact
+opening. Available chapters include title and exact target; parts include title and a null target. Unavailable slots
+retain the existing title/target omissions. There is no `document` field and the operation reads zero chapter bodies.
+Exact body opening keeps `hosted_catalogue.resolve` and its canonical digest verification unchanged.
+
+Focused mounted acceptance in `hosted-occurrence-metadata.test.ts` covers current/historical and structure selections,
+parts, concealed slots, boundary errors, session/cache headers and zero metadata body reads alongside exact opening.
+Run it and the route-registration fixture in the dev verifier after landing; mounted native, browser and broad
+acceptance remain deferred. Existing `hosted-navigation-metadata.test.ts` retains exact-body/digest assertions.
 
 Children default to the root; an explicit parent must be a part in the selected revision. Navigation uses preorder
 and returns only chapters, excluding the origin. `direction=next` returns ascending order; `previous` returns

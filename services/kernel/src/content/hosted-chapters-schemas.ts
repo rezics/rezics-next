@@ -65,6 +65,7 @@ export const HostedPageSchema = t.Object(
   },
   closed,
 );
+export const HostedOccurrenceMetadataSchema = t.Object({ ...revision, occurrence }, closed);
 export const HostedResolutionSchema = t.Object(
   {
     ...revision,

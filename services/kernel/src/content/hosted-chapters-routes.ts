@@ -33,6 +33,7 @@ import {
   listHostedChildren,
   navigateHostedChapters,
   resolveHostedOccurrence,
+  resolveHostedOccurrenceMetadata,
 } from './hosted-chapters-reads.ts';
 import { listHostedCatalogueHistory } from './hosted-chapters-history.ts';
 import { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
@@ -52,6 +53,7 @@ import {
   HostedHistoryPageSchema,
   HostedPageSchema,
   HostedResolutionSchema,
+  HostedOccurrenceMetadataSchema,
   HostedSelectionSchema,
   HostedChildrenQuerySchema,
   HostedNavigationQuerySchema,
@@ -358,6 +360,29 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
         const result = await operation(() =>
           admission.run('normal', job, () =>
             resolveHostedOccurrence(deps, id, occurrenceId, query, { actor, deadline: job.deadline }),
+          ),
+        );
+        for (const anchor of result.anchors)
+          session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .get(
+      '/v1/hostedCatalogues/:id/occurrences/:occurrenceId/metadata',
+      {
+        params: occurrenceParams(),
+        query: strictContentSchema(HostedSelectionSchema),
+        response: {
+          200: withHeaders(strictContentSchema(HostedOccurrenceMetadataSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: { ...readDetail, operationId: 'hosted_catalogue.resolve_metadata' },
+      },
+      async ({ actor, params: { id, occurrenceId }, query, admission, job, session, set }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            resolveHostedOccurrenceMetadata(deps, id, occurrenceId, query, { actor, deadline: job.deadline }),
           ),
         );
         for (const anchor of result.anchors)
