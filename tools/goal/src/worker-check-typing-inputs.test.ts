@@ -23,7 +23,8 @@ import {
 } from './worker-check-budget.ts';
 import {
   CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
-  CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
+  custodyJsonCharacters,
   initializeRemoteRunCustody,
   remoteRunCustodyPath,
 } from '../../../scripts/check-custody.ts';
@@ -185,7 +186,29 @@ test.each(['local', 'remote-return'] as const)(
       remoteArgv: captureCommand,
     });
     expect(readFileSync(remoteRunCustodyPath(root, physical), 'utf8').length).toBeLessThan(
-      CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+      CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
+    );
+    const remoteCommand = [
+      'env',
+      `REZICS_TYPING_INPUTS_PHYSICAL=${physical}`,
+      `REZICS_TYPING_INPUTS_COMMAND=${Buffer.from(JSON.stringify(workspaceCommand)).toString('base64')}`,
+      ...captureCommand,
+    ];
+    const custody = {
+      version: 1,
+      physicalRunId: physical,
+      binding: {
+        checkId: physical,
+        ownership: { taskId: physical, attempt: 1 },
+        argv: workspaceCommand,
+        remoteArgv: remoteCommand,
+      },
+      status: 'running',
+      attempts: [],
+      updatedAt: '2026-11-12T00:00:00.000Z',
+    };
+    expect(custodyJsonCharacters(custody)).toBeLessThanOrEqual(
+      CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS - 4096,
     );
     // The exact old entrypoint succeeds without producing the artifact demanded by the wrapper.
     expect(Bun.spawnSync(workspaceCommand, { cwd: root, env: { ...process.env, ...request } }).exitCode).toBe(0);

@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 export const CHECK_RECORD_CUSTODY_VERSION = 1 as const;
 export const CHECK_HISTORY_VERSION = 1 as const;
 export const CHECK_CUSTODY_RECORD_MAX_CHARACTERS = 64 * 1024;
-export const CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS = 12 * 1024;
+export const CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS = 12 * 1024;
 
 export type ControllerProofBindingV1 = Readonly<{
   version: 1;
@@ -143,11 +143,9 @@ export function custodyJsonCharacters(value: unknown): number {
   return serializeCustodyJson(value).length;
 }
 
-export function remoteRunCustodyUpdateLimit(record: CheckRemoteRunCustody): number {
-  return Math.min(
-    CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
-    custodyJsonCharacters(record) + CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
-  );
+/** Terminal settlement retains the native resource samples and adds return and cleanup evidence. */
+export function remoteRunCustodyUpdateLimit(): number {
+  return CHECK_CUSTODY_RECORD_MAX_CHARACTERS;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -726,7 +724,7 @@ export function initializeRemoteRunCustody(
       updatedAt: new Date().toISOString(),
     } satisfies CheckRemoteRunCustody,
     true,
-    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
   );
 }
 

@@ -99,6 +99,9 @@ export interface Evidence {
     id: string;
     partition: number;
     command: string;
+    idempotencyKey: string;
+    eventSequence: number;
+    eventType: string;
     envelope: { threadId: string; itemId: string; revisionId: string; actorId: string };
   }[];
   claims: { id: string; itemId: string }[];
@@ -176,15 +179,17 @@ export interface ContentThreadDriver {
   }>;
   /** Decode and verify the real response session header with production keys. */
   session(response: Response, actor: Persona): Promise<{ token: string; partitions: number[] }>;
-  /**
-   * Test instrumentation of production authorization/transaction boundaries for
-   * the last request. Each parent check is its own anchored statement at T,
-   * before receipt lookup, then body processing. No synthetic policy decisions.
-   */
+  /** Actual SQL executions for the last request, with parent checks decoded from their native query bindings. */
   commandTrace(): Promise<{
-    checks: { action: string; resourceId: string; partition: number; statement: number; at: string }[];
-    stages: ('authorize' | 'receipt' | 'body' | 'write')[];
-    writePartitions: number[];
-    throughRunCommand: boolean;
+    queries: { statement: string; connectionId: number; index: number }[];
+    checks: {
+      action: string;
+      resourceId: string;
+      partition: number;
+      statement: number;
+      connectionId: number;
+      at: string;
+    }[];
+    fences: { partition: number; statement: number; connectionId: number }[];
   }>;
 }
