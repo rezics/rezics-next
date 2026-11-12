@@ -35,6 +35,7 @@ import {
   type SectionConfig,
   dependencyFilesChanged,
   reconcileDedicatedPageDataDefinitions,
+  runPageDataSeedBoundary,
 } from './page-data.ts';
 import type { Settings, Task } from './types.ts';
 import { harness } from './test-support.ts';
@@ -878,6 +879,67 @@ test('page-data reconciliation requires the retained dedicated stack and never c
   } finally {
     h.dispose();
   }
+});
+
+test('the seed boundary reconciles its pinned dev release once and refuses stale or failed reconciliation', async () => {
+  const preparedHead = 'prepared-dev-revision';
+  const bundledDigest = 'bundled-for-prepared-dev';
+  let currentHead = preparedHead;
+  let activeDigest = 'previous-release';
+  let seedJournal = '';
+  const events: string[] = [];
+  const writes: string[] = [];
+  const reconcile = async (head: string) => {
+    events.push(`operator:${head}`);
+    expect(head).toBe(preparedHead);
+    if (activeDigest === bundledDigest) return;
+    writes.push('publish', 'activate');
+    activeDigest = bundledDigest;
+    events.push('publish', 'activate');
+  };
+  const seedOrResume = async () => {
+    if (seedJournal) return seedJournal;
+    events.push('seed');
+    seedJournal = 'retained-seed-journal';
+    return seedJournal;
+  };
+
+  await expect(runPageDataSeedBoundary(preparedHead, () => currentHead, reconcile, seedOrResume)).resolves.toBe(
+    'retained-seed-journal',
+  );
+  expect(events).toEqual([`operator:${preparedHead}`, 'publish', 'activate', 'seed']);
+  expect(writes).toEqual(['publish', 'activate']);
+
+  events.length = 0;
+  writes.length = 0;
+  await runPageDataSeedBoundary(preparedHead, () => currentHead, reconcile, seedOrResume);
+  expect(events).toEqual([`operator:${preparedHead}`]);
+  expect(writes).toEqual([]);
+
+  currentHead = 'newer-dev-revision';
+  events.length = 0;
+  await expect(runPageDataSeedBoundary(preparedHead, () => currentHead, reconcile, seedOrResume)).rejects.toThrow(
+    'refusing stale activation',
+  );
+  expect(events).toEqual([]);
+  expect(seedJournal).toBe('retained-seed-journal');
+
+  currentHead = preparedHead;
+  events.length = 0;
+  await expect(
+    runPageDataSeedBoundary(
+      preparedHead,
+      () => currentHead,
+      async () => {
+        events.push('operator');
+        throw new Error('dedicated identity mismatch');
+      },
+      seedOrResume,
+    ),
+  ).rejects.toThrow('dedicated identity mismatch');
+  expect(events).toEqual(['operator']);
+  expect(writes).toEqual([]);
+  expect(seedJournal).toBe('retained-seed-journal');
 });
 
 test('page-data member authority provenance survives completion without hiding real forbidden defects', () => {
