@@ -31,7 +31,7 @@ function cipherKey(ring: KeyRing, kid: number): Buffer {
 
 /** Encrypt the revision boundary in addition to the ordinary scoped token seal. */
 export function writeHostedHistoryCursor(
-  deps: HostedDependencies,
+  deps: Pick<HostedDependencies, 'tokens' | 'clock'>,
   binding: CursorBinding,
   state: HostedHistoryCursor,
 ): string {
@@ -51,7 +51,7 @@ export function writeHostedHistoryCursor(
 }
 
 export function readHostedHistoryCursor(
-  deps: HostedDependencies,
+  deps: Pick<HostedDependencies, 'tokens' | 'clock'>,
   binding: CursorBinding,
   catalogueId: string,
   epoch: number,
