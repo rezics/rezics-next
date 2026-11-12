@@ -11731,5 +11731,7 @@
   "knowledge_publication_replay": "Exakten Veröffentlichungsbefehl wiederholen",
   "knowledge_publication_reread": "Gespeicherte Version erneut lesen",
   "knowledge_publication_observed": "Ein separater privater Lesevorgang hat die bestätigte Veröffentlichungskennung beobachtet.",
-  "knowledge_publication_changed": "Die gespeicherte Version oder Veröffentlichung hat sich geändert. Prüfe den neuen Stand vor einem weiteren Befehl."
+  "knowledge_publication_changed": "Die gespeicherte Version oder Veröffentlichung hat sich geändert. Prüfe den neuen Stand vor einem weiteren Befehl.",
+  "shell_account_tools": "Kontowerkzeuge",
+  "shell_manage_following": "Abonnements verwalten"
 }

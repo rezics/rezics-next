@@ -11731,5 +11731,7 @@
   "knowledge_publication_replay": "重播確切發佈命令",
   "knowledge_publication_reread": "重讀已儲存版本",
   "knowledge_publication_observed": "一次獨立的私人讀取觀察到了已確認的發佈識別碼。",
-  "knowledge_publication_changed": "已儲存版本或發佈已變更。請審閱新的觀察結果，再確認下一個命令。"
+  "knowledge_publication_changed": "已儲存版本或發佈已變更。請審閱新的觀察結果，再確認下一個命令。",
+  "shell_account_tools": "帳戶工具",
+  "shell_manage_following": "管理追蹤"
 }

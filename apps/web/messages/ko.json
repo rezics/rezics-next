@@ -11731,5 +11731,7 @@
   "knowledge_publication_replay": "동일한 공개 명령 재실행",
   "knowledge_publication_reread": "저장된 버전 다시 읽기",
   "knowledge_publication_observed": "별도의 비공개 읽기에서 응답의 공개 식별자를 확인했습니다.",
-  "knowledge_publication_changed": "저장된 버전 또는 공개가 변경되었습니다. 다른 명령을 확인하기 전에 새 상태를 검토하세요."
+  "knowledge_publication_changed": "저장된 버전 또는 공개가 변경되었습니다. 다른 명령을 확인하기 전에 새 상태를 검토하세요.",
+  "shell_account_tools": "계정 도구",
+  "shell_manage_following": "팔로우 관리"
 }

@@ -11731,5 +11731,7 @@
   "knowledge_publication_replay": "Répéter la commande exacte de publication",
   "knowledge_publication_reread": "Relire la version enregistrée",
   "knowledge_publication_observed": "Une lecture privée distincte a observé l’identité de publication confirmée.",
-  "knowledge_publication_changed": "La version enregistrée ou la publication a changé. Vérifiez la nouvelle observation avant de confirmer une autre commande."
+  "knowledge_publication_changed": "La version enregistrée ou la publication a changé. Vérifiez la nouvelle observation avant de confirmer une autre commande.",
+  "shell_account_tools": "Outils du compte",
+  "shell_manage_following": "Gérer les abonnements"
 }

@@ -2,7 +2,7 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { KernelClient } from '@rezics/client';
+import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import { loadShellCommunities, SHELL_COMMUNITY_LIMIT } from '../src/shell/community-navigation';
 
@@ -115,19 +115,36 @@ test('main and phone navigation mark the current page, and followed communities 
           context={{ locale: 'en', pathname: '/library/collections' }}
           session="signed-in"
           desktop
+          placement="global-sidebar"
           label="Main navigation"
         />
       </NavigationProvider>,
     );
-    for (const label of ['Home', 'Library', 'Collections']) expect(rail).toContain(label);
-    expect(rail).toContain('href="/en/library/collections" aria-current="page"');
+    for (const label of ['Home', 'Books', 'Search', 'Library']) expect(rail).toContain(label);
+    for (const label of ['Collections', 'Orders', 'Drafts', 'Inbox']) expect(rail).not.toContain(label);
+    expect(rail).toContain('href="/en/library" aria-current="page"');
+    const tools = html(
+      <NavigationLinks
+        context={{ locale: 'en', pathname: '/settings' }}
+        session="signed-in"
+        placement="account-tools"
+        label="Account tools"
+      />,
+    );
+    for (const destination of ['/library/collections', '/orders', '/drafts', '/studio', '/moderation/workbench'])
+      expect(tools).toContain(`href="/en${destination}"`);
+    expect(tools).not.toContain('href="/en/inbox"');
     const visitor = html(
       <NavigationProvider>
-        <NavigationLinks context={{ locale: 'en', pathname: '/' }} session="signed-out" label="Main navigation" />
+        <NavigationLinks
+          context={{ locale: 'en', pathname: '/' }}
+          session="signed-out"
+          placement="global-sidebar"
+          label="Main navigation"
+        />
       </NavigationProvider>,
     );
-    expect(visitor).toContain('aria-disabled="true"');
-    for (const label of ['Library', 'Collections']) expect(visitor).toContain(label);
+    for (const label of ['Library', 'Collections']) expect(visitor).not.toContain(label);
     const communities = html(
       <SideNav
         pathname="/en/realms/reading/claims"
@@ -136,16 +153,18 @@ test('main and phone navigation mark the current page, and followed communities 
             id: 'r',
             kind: 'realm',
             title: 'Reading together',
-            path: '/spaces/reading',
-            alternatePath: '/realms/reading',
+            path: '/realms/reading',
           },
           { id: 's', kind: 'space', title: 'Quiet space', path: '/spaces/quiet' },
         ]}
       />,
     );
-    expect(communities).toContain('href="/en/spaces/reading" title="Reading together" aria-current="page"');
-    expect(communities.match(/<a\b[^>]*title="[^"]*"[^>]*><svg\b/g)).toHaveLength(2);
+    expect(communities).toContain('href="/en/realms/reading" title="Reading together" aria-current="page"');
+    expect(communities.match(/<a\b[^>]*title="[^"]*"[^>]*><svg\b/g)).toHaveLength(3);
     expect(communities).toContain('Quiet space');
+    expect(communities.match(/<h2\b/g)).toHaveLength(1);
+    expect(communities.match(/href="\/en\/library\/following"/g)).toHaveLength(1);
+    expect(communities).toContain('focus-visible:ring-ring');
     const phone = html(
       <PhoneNavigationView
         pathname="/library"
@@ -207,57 +226,55 @@ test('Create gives the same session feedback on phone and desktop and preserves 
   expect(home).toContain('/auth/sign-in?return_to=%2Fen');
 });
 
-test('only readable active followed Spaces become navigation, grouped as Realms when readable, with bounded enrichment', async () => {
-  const reads: string[] = [];
-  const client = {
-    follows: {
-      get: async () => ({
-        data: {
-          follows: [
-            { targetId: 'removed', targetType: 'space', state: 'unfollowed', target: {} },
-            { targetId: 'hidden', targetType: 'space', state: 'following', target: null },
-            ...Array.from({ length: 20 }, (_, index) => ({
-              targetId: String(index),
-              targetType: 'space',
-              state: 'following',
-              target: {},
-            })),
-          ],
-          next: 'next',
-        },
-      }),
+test('a native Space-filtered FULL page supplies canonical navigation without point reads', async () => {
+  const paths: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      paths.push(url.pathname);
+      expect(url.pathname).toBe('/v1/follows');
+      expect(url.searchParams.get('targetType')).toBe('space');
+      expect(url.searchParams.get('view')).toBe('FULL');
+      expect(url.searchParams.get('limit')).toBe(String(SHELL_COMMUNITY_LIMIT));
+      expect(request.headers.get('authorization')).toBe('Bearer viewer');
+      expect(request.cache).toBe('no-store');
+      const row = (targetId: string, label: unknown, destination: unknown, state = 'following') => ({
+        targetId,
+        targetType: 'space',
+        state,
+        reason: 'explicit',
+        target: label === null ? null : { id: targetId, type: 'space', label },
+        destination,
+      });
+      // The server returns this Space window even when hundreds of Subject follows precede it.
+      return Response.json({
+        follows: [
+          row('realm-space', { value: '読書会', language: 'ja' }, { kind: 'realm', realmId: 'native-realm' }),
+          row('ordinary', 'Quiet space', { kind: 'space', spaceId: 'ordinary', address: 'quiet room' }),
+          row('hidden', null, { kind: 'unavailable' }),
+          row('withheld', 'Withheld destination', { kind: 'unavailable' }),
+          row('missing-destination', 'No address', undefined),
+          row('removed', 'Removed', { kind: 'space', spaceId: 'removed', address: 'gone' }, 'unfollowed'),
+        ],
+        next: 'next-spaces',
+      });
     },
-    spaces: ({ spaceId }: { spaceId: string }) => ({
-      get: async () => {
-        reads.push(spaceId);
-        return {
-          data: {
-            space: {
-              spaceId,
-              state: spaceId === '2' ? 'taken_down' : 'active',
-              title: `Space ${spaceId}`,
-              address: `space ${spaceId}`,
-              realmId: spaceId === '0' ? 'realm' : null,
-            },
-          },
-        };
-      },
-    }),
-    realms: () => ({
-      get: async () => ({ data: { realm: { realmId: 'realm', spaceId: '0', state: 'active', title: 'A Realm' } } }),
-    }),
-  } as unknown as KernelClient;
-  const result = await loadShellCommunities(client, 'Bearer viewer');
-  expect(reads).toHaveLength(SHELL_COMMUNITY_LIMIT);
-  expect(reads).not.toContain('hidden');
-  expect(result.items[0]).toEqual({
-    id: '0',
-    kind: 'realm',
-    title: 'A Realm',
-    path: '/spaces/space%200',
-    alternatePath: '/realms/realm',
   });
-  expect(result.items.some((item) => item.id === '2')).toBe(false);
-  expect(result.items[1]?.kind).toBe('space');
-  expect(result.more).toBe(true);
+  const result = await loadShellCommunities(client, 'Bearer viewer');
+  expect(paths).toEqual(['/v1/follows']);
+  expect(result).toEqual({
+    items: [
+      { id: 'realm-space', kind: 'realm', title: '読書会', titleLanguage: 'ja', path: '/realms/native-realm' },
+      { id: 'ordinary', kind: 'space', title: 'Quiet space', titleLanguage: undefined, path: '/spaces/quiet%20room' },
+    ],
+    more: true,
+  });
+});
+
+test('a failed native Follow read remains unavailable instead of looking like an empty sidebar', async () => {
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async () => Response.json({ code: 'unavailable' }, { status: 503 }),
+  });
+  await expect(loadShellCommunities(client, 'Bearer viewer')).rejects.toThrow('Community navigation unavailable');
 });

@@ -11731,5 +11731,7 @@
   "knowledge_publication_replay": "Repetir comando exacto de publicación",
   "knowledge_publication_reread": "Volver a leer versión guardada",
   "knowledge_publication_observed": "Una lectura privada separada observó la identidad de publicación confirmada.",
-  "knowledge_publication_changed": "La versión guardada o la publicación cambió. Revisa la nueva observación antes de confirmar otro comando."
+  "knowledge_publication_changed": "La versión guardada o la publicación cambió. Revisa la nueva observación antes de confirmar otro comando.",
+  "shell_account_tools": "Herramientas de la cuenta",
+  "shell_manage_following": "Gestionar seguidos"
 }

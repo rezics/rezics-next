@@ -11731,5 +11731,7 @@
   "knowledge_publication_replay": "同一の公開コマンドを再実行",
   "knowledge_publication_reread": "保存済みの版を再取得",
   "knowledge_publication_observed": "別の非公開読み取りで、応答に含まれる公開識別子を確認しました。",
-  "knowledge_publication_changed": "保存済みの版または公開が変更されました。次のコマンドを確定する前に新しい状態を確認してください。"
+  "knowledge_publication_changed": "保存済みの版または公開が変更されました。次のコマンドを確定する前に新しい状態を確認してください。",
+  "shell_account_tools": "アカウントのツール",
+  "shell_manage_following": "フォローを管理"
 }

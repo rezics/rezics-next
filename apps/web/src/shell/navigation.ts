@@ -37,6 +37,26 @@ export type ResolvedNavigationEntry = Readonly<
 >;
 const groups = { primary: 0, personal: 1, create: 2 } as const;
 
+export type NavigationPlacement = 'global-sidebar' | 'account-tools' | 'contextual';
+const shellEssentials = ['shell.home', 'books.catalogue', 'shell.search', 'shell.library'];
+
+/** Placement is shell presentation, independent of native operation admission. */
+export function navigationForPlacement(
+  entries: readonly NavigationContribution[],
+  placement: NavigationPlacement,
+  session: NavigationSession,
+): readonly NavigationContribution[] {
+  if (placement === 'contextual') return entries;
+  if (placement === 'account-tools')
+    return entries.filter(
+      (entry) => entry.kind === 'navigation' && !shellEssentials.includes(entry.id) && entry.id !== 'shell.inbox',
+    );
+  // TODO: receive user-customized sidebar placement here when its native contract exists.
+  return entries
+    .filter((entry) => shellEssentials.includes(entry.id) && (!entry.signedIn || session === 'signed-in'))
+    .toSorted((a, b) => shellEssentials.indexOf(a.id) - shellEssentials.indexOf(b.id));
+}
+
 /** Copy static metadata into a snapshot; never register request or account state globally. */
 export function createNavigation(contributions: readonly NavigationContribution[]): readonly NavigationContribution[] {
   const ids = new Set<string>();

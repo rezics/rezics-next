@@ -11731,5 +11731,7 @@
   "knowledge_publication_replay": "Replay exact publication command",
   "knowledge_publication_reread": "Reread saved head",
   "knowledge_publication_observed": "A separate private read observed the acknowledged publication identity.",
-  "knowledge_publication_changed": "The saved head or publication changed. Review the new observation before confirming another command."
+  "knowledge_publication_changed": "The saved head or publication changed. Review the new observation before confirming another command.",
+  "shell_account_tools": "Account tools",
+  "shell_manage_following": "Manage following"
 }
