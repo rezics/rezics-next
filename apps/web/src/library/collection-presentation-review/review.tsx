@@ -330,7 +330,7 @@ export function CollectionPresentationFields({
         <section
           id={`${id}-review`}
           aria-labelledby={`${id}-review-heading`}
-          className="min-w-0 space-y-6 rounded-xl border border-border bg-muted/20 p-3 sm:p-5"
+          className="min-w-0 space-y-8 border-t border-border pt-6"
           data-presentation-review
           onKeyDown={(event) => {
             if (event.key === 'Escape' && !event.defaultPrevented) {
@@ -346,38 +346,45 @@ export function CollectionPresentationFields({
             </h3>
             <p className="text-sm text-muted-foreground">{m.collection_choice_preview_limits()}</p>
           </div>
-          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-            <section className="min-w-0 space-y-3 rounded-lg border border-border p-3" data-type-reading="saved">
-              <h4 className="font-semibold">{m.collection_choice_saved_type()}</h4>
-              <TypeChoiceMeaning choice={savedType} />
-            </section>
-            <section className="min-w-0 space-y-3 rounded-lg border border-border p-3" data-type-reading="draft">
-              <h4 className="font-semibold">{m.collection_choice_draft_type()}</h4>
-              <TypeChoiceMeaning choice={draftType} />
-            </section>
-          </div>
-          <div className="flex min-w-0 flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11 whitespace-normal"
-              disabled={disabled}
-              onClick={() => close('kind')}
-            >
-              {m.collection_choice_correct_type()}
-            </Button>
-            {onCoverChange ? (
+          <section className="min-w-0 space-y-4" aria-labelledby={`${id}-type-comparison`} data-type-comparison>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <h4 id={`${id}-type-comparison`} className="min-w-0 font-semibold">
+                {m.library_collection_kind()}
+              </h4>
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 whitespace-normal"
+                className="min-h-11 max-w-full whitespace-normal text-start"
                 disabled={disabled}
-                onClick={() => close('cover')}
+                onClick={() => close('kind')}
+                data-correct-presentation="type"
               >
-                {m.collection_choice_correct_cover()}
+                {m.collection_choice_correct_type()}
               </Button>
-            ) : null}
-          </div>
+            </div>
+            <div className="grid min-w-0 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <section
+                className="grid min-w-0 gap-y-3 sm:row-span-6 sm:grid-rows-subgrid"
+                aria-labelledby={`${id}-saved-type`}
+                data-type-reading="saved"
+              >
+                <h5 id={`${id}-saved-type`} className="font-medium text-muted-foreground">
+                  {m.collection_choice_saved_type()}
+                </h5>
+                <TypeChoiceMeaning choice={savedType} />
+              </section>
+              <section
+                className="grid min-w-0 gap-y-3 border-t border-border pt-4 sm:row-span-6 sm:grid-rows-subgrid sm:border-t-0 sm:border-s sm:pt-0 sm:ps-6"
+                aria-labelledby={`${id}-draft-type`}
+                data-type-reading="draft"
+              >
+                <h5 id={`${id}-draft-type`} className="font-medium text-muted-foreground">
+                  {m.collection_choice_draft_type()}
+                </h5>
+                <TypeChoiceMeaning choice={draftType} />
+              </section>
+            </div>
+          </section>
           <ReleasedTypeChoices
             types={types}
             kind={kind}
@@ -399,6 +406,8 @@ export function CollectionPresentationFields({
                 preview={coverPreview}
                 listPresentations={listPresentations}
                 scope={id}
+                disabled={disabled}
+                onCorrect={() => close('cover')}
               />
               <LoadedCoverGallery
                 options={coverOptions}

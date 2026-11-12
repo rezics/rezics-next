@@ -1,3 +1,4 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { Cover, ReadingDisclosureScope, type CoverSummary } from '@rezics/ui/cover';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -29,7 +30,7 @@ function CollectionCoverFrame({
 }) {
   const presentation = kind ? listPresentations?.[kind] : undefined;
   return (
-    <div className="w-24 shrink-0 sm:w-32">
+    <div className="w-24 shrink-0 self-start sm:w-32">
       <Cover
         subject={{ id: 'collection-presentation-review', title: m.subject_cover(), types: kind ? [kind] : [] }}
         cover={cover}
@@ -53,6 +54,8 @@ export function CoverComparison({
   preview,
   listPresentations,
   scope,
+  disabled,
+  onCorrect,
 }: {
   savedCover: CoverSummary | null;
   savedCoverMediaId: string | null;
@@ -62,15 +65,37 @@ export function CoverComparison({
   preview: DraftCoverPreview;
   listPresentations: CollectionListPresentations | undefined;
   scope: string;
+  disabled: boolean;
+  onCorrect: () => void;
 }) {
   const draftCover =
     preview.kind === 'loaded' ? preview.option.cover : preview.kind === 'automatic' ? preview.nativeCover : null;
   return (
-    <section className="space-y-3" data-cover-comparison>
-      <h4 className="font-semibold">{m.collection_choice_cover_comparison()}</h4>
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <div className="min-w-0 space-y-3 rounded-lg border border-border p-3" data-cover-reading="saved">
-          <h5 className="font-medium">{m.collection_choice_saved_native()}</h5>
+    <section className="min-w-0 space-y-4" aria-labelledby={`${scope}-cover-comparison`} data-cover-comparison>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h4 id={`${scope}-cover-comparison`} className="min-w-0 font-semibold">
+          {m.collection_choice_cover_comparison()}
+        </h4>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 max-w-full whitespace-normal text-start"
+          disabled={disabled}
+          onClick={onCorrect}
+          data-correct-presentation="cover"
+        >
+          {m.collection_choice_correct_cover()}
+        </Button>
+      </div>
+      <div className="grid min-w-0 gap-x-6 gap-y-3 sm:grid-cols-2">
+        <section
+          className="grid min-w-0 gap-y-3 sm:row-span-4 sm:grid-rows-subgrid"
+          aria-labelledby={`${scope}-saved-cover`}
+          data-cover-reading="saved"
+        >
+          <h5 id={`${scope}-saved-cover`} className="font-medium text-muted-foreground">
+            {m.collection_choice_saved_native()}
+          </h5>
           <ReadingDisclosureScope value={`${scope}:saved`}>
             <CollectionCoverFrame cover={savedCover} kind={savedKind} listPresentations={listPresentations} />
           </ReadingDisclosureScope>
@@ -84,9 +109,15 @@ export function CoverComparison({
                 ? m.library_collection_kind_pending()
                 : m.collection_choice_saved_cover_missing()}
           </p>
-        </div>
-        <div className="min-w-0 space-y-3 rounded-lg border border-border p-3" data-cover-reading="draft">
-          <h5 className="font-medium">{m.collection_choice_local_draft()}</h5>
+        </section>
+        <section
+          className="grid min-w-0 gap-y-3 border-t border-border pt-4 sm:row-span-4 sm:grid-rows-subgrid sm:border-t-0 sm:border-s sm:pt-0 sm:ps-6"
+          aria-labelledby={`${scope}-draft-cover`}
+          data-cover-reading="draft"
+        >
+          <h5 id={`${scope}-draft-cover`} className="font-medium text-muted-foreground">
+            {m.collection_choice_local_draft()}
+          </h5>
           <ReadingDisclosureScope value={`${scope}:draft`}>
             <CollectionCoverFrame cover={draftCover} kind={draftKind} listPresentations={listPresentations} />
           </ReadingDisclosureScope>
@@ -108,7 +139,7 @@ export function CoverComparison({
                   ? m.collection_choice_saved_cover_outside_page()
                   : m.collection_choice_draft_cover_outside_page()}
           </p>
-        </div>
+        </section>
       </div>
       <p className="text-sm text-muted-foreground">{m.collection_choice_cover_native_authority()}</p>
     </section>
