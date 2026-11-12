@@ -14,10 +14,12 @@ const address = v.strictObject({
   occurrenceId: id,
   targetRevisionId: id,
   targetSha256: digest,
-  documentPosition: v.nullable(v.strictObject({
-    blockId: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
-    offset: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2097152)),
-  })),
+  documentPosition: v.nullable(
+    v.strictObject({
+      blockId: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
+      offset: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2097152)),
+    }),
+  ),
 });
 const metadata = v.variant('availability', [
   v.strictObject({
@@ -37,13 +39,18 @@ const metadata = v.variant('availability', [
 ]);
 /** Mirrors the landed native list contract, without importing Kernel implementation into Web. */
 export const hostedCheckpointPageSchema = v.strictObject({
-  items: v.pipe(v.array(v.strictObject({
-    subjectId: id,
-    revision,
-    address,
-    activityAt: v.string(),
-    metadata,
-  })), v.maxLength(HOSTED_CHECKPOINT_LIMIT)),
+  items: v.pipe(
+    v.array(
+      v.strictObject({
+        subjectId: id,
+        revision,
+        address,
+        activityAt: v.string(),
+        metadata,
+      }),
+    ),
+    v.maxLength(HOSTED_CHECKPOINT_LIMIT),
+  ),
   nextCursor: v.nullable(cursor),
 });
 export type HostedCheckpointPage = v.InferOutput<typeof hostedCheckpointPageSchema>;
@@ -90,8 +97,12 @@ export function presentHostedCheckpoints(data: unknown): HostedCheckpointResult 
       if (metadata.target.revisionId !== address.targetRevisionId || metadata.target.sha256 !== address.targetSha256)
         return { state: 'unavailable' };
       items.push({
-        availability: 'available', subjectId: row.subjectId, revision: row.revision, title: metadata.title,
-        catalogueId: address.catalogueId, publicationRevisionId: address.publicationRevisionId,
+        availability: 'available',
+        subjectId: row.subjectId,
+        revision: row.revision,
+        title: metadata.title,
+        catalogueId: address.catalogueId,
+        publicationRevisionId: address.publicationRevisionId,
         occurrenceId: address.occurrenceId,
       });
     }
@@ -99,9 +110,16 @@ export function presentHostedCheckpoints(data: unknown): HostedCheckpointResult 
   return { state: 'loaded', items, nextCursor: parsed.output.nextCursor };
 }
 
-export function hostedCheckpointHref(item: Extract<HostedCheckpointItem, { availability: 'available' }>, locale: Locale, href: HostedCheckpointHref) {
+export function hostedCheckpointHref(
+  item: Extract<HostedCheckpointItem, { availability: 'available' }>,
+  locale: Locale,
+  href: HostedCheckpointHref,
+) {
   return href(item.catalogueId, locale, {
-    subject: item.subjectId, release: item.publicationRevisionId, occurrence: item.occurrenceId, view: 'chapter',
+    subject: item.subjectId,
+    release: item.publicationRevisionId,
+    occurrence: item.occurrenceId,
+    view: 'chapter',
   });
 }
 

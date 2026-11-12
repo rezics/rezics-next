@@ -4,21 +4,58 @@ import { HostedCheckpointWindow } from '../src/library/hosted-checkpoint-window'
 import type { HostedCheckpointRequest, HostedCheckpointResult } from '../src/library/hosted-checkpoint-source';
 
 const loaded = (title: string, nextCursor: string | null = null): HostedCheckpointResult => ({
-  state: 'loaded', items: [{ availability: 'available', subjectId: 'book', revision: '1', title, catalogueId: 'catalogue', publicationRevisionId: 'publication', occurrenceId: 'chapter' }], nextCursor,
+  state: 'loaded',
+  items: [
+    {
+      availability: 'available',
+      subjectId: 'book',
+      revision: '1',
+      title,
+      catalogueId: 'catalogue',
+      publicationRevisionId: 'publication',
+      occurrenceId: 'chapter',
+    },
+  ],
+  nextCursor,
 });
 function fixture() {
   let owner: RecoveryObservation = { subject: 'A', csrfToken: 'credential-A', identity: {} };
   const listeners = new Set<() => void>();
-  const observer: RecoveryObserver = { read: () => owner, subscribe: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; } };
-  const calls: { input: HostedCheckpointRequest; signal: AbortSignal; resolve: (result: HostedCheckpointResult) => void }[] = [];
-  const controller = new HostedCheckpointWindow(observer, 'en', (input, signal) => new Promise(resolve => { calls.push({ input, signal, resolve }); }));
+  const observer: RecoveryObserver = {
+    read: () => owner,
+    subscribe: (callback) => {
+      listeners.add(callback);
+      return () => {
+        listeners.delete(callback);
+      };
+    },
+  };
+  const calls: {
+    input: HostedCheckpointRequest;
+    signal: AbortSignal;
+    resolve: (result: HostedCheckpointResult) => void;
+  }[] = [];
+  const controller = new HostedCheckpointWindow(
+    observer,
+    'en',
+    (input, signal) =>
+      new Promise((resolve) => {
+        calls.push({ input, signal, resolve });
+      }),
+  );
   const stop = controller.start();
-  return { controller, calls, stop,
+  return {
+    controller,
+    calls,
+    stop,
     replace(subject: string | null = owner.subject, notify = true) {
       owner = { subject, csrfToken: subject ? `credential-${subject}` : null, identity: {} };
       if (notify) for (const listener of listeners) listener();
     },
-    async settle(result: HostedCheckpointResult, index = calls.length-1) { calls[index]!.resolve(result); await Promise.resolve(); },
+    async settle(result: HostedCheckpointResult, index = calls.length - 1) {
+      calls[index]!.resolve(result);
+      await Promise.resolve();
+    },
   };
 }
 
@@ -46,7 +83,9 @@ test('Books navigation replaces pages, preserves native opaque cursors and retri
     await f.settle({ state: 'loaded', items: [], nextCursor: 'sparse' });
     f.controller.next(f.controller.getSnapshot());
     expect(f.calls[5]!.input.cursor).toBe('sparse');
-  } finally { f.stop(); }
+  } finally {
+    f.stop();
+  }
 });
 
 test('viewer and equal-value credential replacement hide old pages synchronously and reject late A/B/A work', async () => {
@@ -62,8 +101,8 @@ test('viewer and equal-value credential replacement hide old pages synchronously
     expect(f.controller.getSnapshot().result.state).toBe('loading');
     f.replace('B');
     f.replace('A');
-    expect(f.calls.map(call => call.input.viewer)).toEqual(['A','A','B','A']);
-    expect(f.calls.slice(0,-1).every(call => call.signal.aborted)).toBe(true);
+    expect(f.calls.map((call) => call.input.viewer)).toEqual(['A', 'A', 'B', 'A']);
+    expect(f.calls.slice(0, -1).every((call) => call.signal.aborted)).toBe(true);
     await f.settle(loaded('late same A'), 1);
     await f.settle(loaded('late B'), 2);
     expect(f.controller.getSnapshot().result.state).toBe('loading');
@@ -73,11 +112,13 @@ test('viewer and equal-value credential replacement hide old pages synchronously
     expect(f.controller.getSnapshot().result).toEqual({ state: 'signed-out' });
     f.controller.refresh(old);
     expect(f.calls).toHaveLength(4);
-  } finally { f.stop(); }
+  } finally {
+    f.stop();
+  }
 });
 
 test('stale cursors require an explicit first read; denied and signed-out responses remove predecessors', async () => {
-  for (const state of ['stale','denied','signed-out'] as const) {
+  for (const state of ['stale', 'denied', 'signed-out'] as const) {
     const f = fixture();
     try {
       await f.settle(loaded('first', 'next'));
@@ -94,14 +135,16 @@ test('stale cursors require an explicit first read; denied and signed-out respon
         await f.settle({ state: 'loaded', items: [], nextCursor: null });
         expect(f.controller.getSnapshot().first).toBe(false);
       }
-    } finally { f.stop(); }
+    } finally {
+      f.stop();
+    }
   }
 });
 
 test('the window retains only eight predecessors and disposal ignores an outstanding response', async () => {
   const f = fixture();
   for (let page = 0; page <= 10; page++) {
-    await f.settle(loaded(`page ${page}`, `cursor-${page+1}`));
+    await f.settle(loaded(`page ${page}`, `cursor-${page + 1}`));
     if (page < 10) f.controller.next(f.controller.getSnapshot());
   }
   for (let previous = 9; previous >= 2; previous--) {

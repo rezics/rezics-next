@@ -15,7 +15,11 @@ export type HostedCheckpointWindowSnapshot = {
 };
 type Movement = { cursor: string | null; direction: 'first' | 'next' | 'previous' | 'refresh' };
 const withdrawn: HostedCheckpointWindowSnapshot = {
-  result: { state: 'loading' }, busy: true, cursor: null, previous: false, first: false,
+  result: { state: 'loading' },
+  busy: true,
+  cursor: null,
+  previous: false,
+  first: false,
 };
 
 /** A single private replacement page, eight accepted predecessors and one in-flight native read. */
@@ -31,7 +35,11 @@ export class HostedCheckpointWindow {
   private active = false;
   private episode = 0;
 
-  constructor(private readonly observer: RecoveryObserver, private readonly locale: Locale, private readonly read: HostedCheckpointRead) {
+  constructor(
+    private readonly observer: RecoveryObserver,
+    private readonly locale: Locale,
+    private readonly read: HostedCheckpointRead,
+  ) {
     this.owner = observer.read();
   }
 
@@ -41,7 +49,9 @@ export class HostedCheckpointWindow {
   getServerSnapshot = (): HostedCheckpointWindowSnapshot => withdrawn;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
 
   start() {
@@ -90,15 +100,23 @@ export class HostedCheckpointWindow {
     const episode = ++this.episode;
     this.movement = movement;
     this.snapshot = {
-      result: { state: 'loading' }, busy: true, cursor: movement.cursor, previous: false, first: movement.cursor !== null,
+      result: { state: 'loading' },
+      busy: true,
+      cursor: movement.cursor,
+      previous: false,
+      first: movement.cursor !== null,
     };
     this.emit();
     let result: HostedCheckpointResult;
     try {
-      result = await this.read({
-        viewer: owner.subject, locale: this.locale,
-        ...(movement.cursor === null ? {} : { cursor: movement.cursor }),
-      }, request.signal);
+      result = await this.read(
+        {
+          viewer: owner.subject,
+          locale: this.locale,
+          ...(movement.cursor === null ? {} : { cursor: movement.cursor }),
+        },
+        request.signal,
+      );
     } catch (error) {
       if (!this.current(owner, episode) || request.signal.aborted) return;
       // A rejected browser/server transport is a failed read, never an empty page.
@@ -107,7 +125,8 @@ export class HostedCheckpointWindow {
     if (!this.current(owner, episode) || request.signal.aborted) return;
     if (result.state === 'loaded') {
       if (movement.direction === 'first') this.path = [];
-      if (movement.direction === 'next') this.path = [...this.path, this.accepted].slice(-HOSTED_CHECKPOINT_PREDECESSORS);
+      if (movement.direction === 'next')
+        this.path = [...this.path, this.accepted].slice(-HOSTED_CHECKPOINT_PREDECESSORS);
       if (movement.direction === 'previous') this.path = this.path.slice(0, -1);
       this.accepted = movement.cursor;
     } else if (result.state === 'signed-out' || result.state === 'denied' || result.state === 'stale') {
@@ -115,7 +134,9 @@ export class HostedCheckpointWindow {
       this.accepted = null;
     }
     this.snapshot = {
-      result, busy: false, cursor: movement.cursor,
+      result,
+      busy: false,
+      cursor: movement.cursor,
       previous: result.state === 'loaded' && this.path.length > 0,
       first: movement.cursor !== null || result.state === 'stale',
     };
@@ -124,7 +145,12 @@ export class HostedCheckpointWindow {
 
   /** Controls capture the displayed snapshot; callbacks from retired pages cannot navigate a new owner. */
   private canUse(snapshot: HostedCheckpointWindowSnapshot) {
-    return this.active && snapshot === this.snapshot && !snapshot.busy && this.owner.identity === this.observer.read().identity;
+    return (
+      this.active &&
+      snapshot === this.snapshot &&
+      !snapshot.busy &&
+      this.owner.identity === this.observer.read().identity
+    );
   }
   next(snapshot: HostedCheckpointWindowSnapshot) {
     if (!this.canUse(snapshot) || snapshot.result.state !== 'loaded' || !snapshot.result.nextCursor) return;
