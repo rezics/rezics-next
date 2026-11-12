@@ -141,9 +141,44 @@ export function effectiveReserve(pool: Pool, window: PoolReading['windows'][numb
   return Math.min(pool.policy.reservePercent, (perHour * Math.max(0, window.resetsAt - now)) / 3_600_000);
 }
 
+export type AllowanceResetPressure = { unusedPercent: number; hoursToReset: number; urgency: number };
+
+/** A reading is fresh under the same age and provider clock-skew limits used to admit its pool. */
+export function isFreshPoolReading(
+  pool: Pool,
+  reading: PoolReading,
+  now: number,
+  observationClockSkewMs = defaultPolicy.provider.observationClockSkewMs,
+): boolean {
+  if (!reading.observedAt) return false;
+  const observedAt = Date.parse(reading.observedAt);
+  return (
+    Number.isFinite(observedAt) &&
+    now - observedAt <= pool.policy.maxAgeMs &&
+    observedAt <= now + observationClockSkewMs
+  );
+}
+
+/** Unused allowance per hour until its longest window resets, after the pool's reserve. */
+export function allowanceResetPressure(
+  reading: PoolReading,
+  pool: Pool,
+  now: number,
+  options: { resetAt?: number; minimumResetMs?: number } = {},
+): AllowanceResetPressure | undefined {
+  const window = [...reading.windows].sort((a, b) => (b.minutes ?? 0) - (a.minutes ?? 0))[0];
+  const resetAt = options.resetAt ?? window?.resetsAt;
+  if (!window || resetAt === null || resetAt === undefined || !Number.isFinite(resetAt) || resetAt <= now)
+    return undefined;
+  const minimumResetMs = options.minimumResetMs ?? defaultPolicy.pacing.minimumResetMs;
+  const hoursToReset = Math.max(resetAt - now, minimumResetMs) / 3_600_000;
+  const unusedPercent = Math.max(0, 100 - effectiveReserve(pool, window, now) - window.usedPercent);
+  return { unusedPercent, hoursToReset, urgency: unusedPercent / hoursToReset };
+}
+
 type IndexedReading = { reading: PoolReading; history: readonly PoolReading[] };
 type AllowanceIndex = ReadonlyMap<string, readonly IndexedReading[]>;
-type PoolAllowance = { score: number } | null;
+type PoolAllowance = { score: number; resetPressure?: number } | null;
 
 /** Index shared readings and history once by allowance key, then reuse that projection across profile fallbacks. */
 function indexAllowanceReadings(readings: readonly PoolReading[], history: readonly PoolReading[]): AllowanceIndex {
@@ -175,10 +210,7 @@ function assessPool(
   if (pool.policy.maxConcurrent !== undefined && (running[pool.name] ?? 0) >= pool.policy.maxConcurrent) return null;
   const shared = indexedReadings.get(pool.allowanceKey) ?? [];
   const fresh = shared.filter(({ reading }) =>
-    reading.observedAt
-      ? now - Date.parse(reading.observedAt) <= pool.policy.maxAgeMs &&
-        Date.parse(reading.observedAt) <= now + (policy ?? defaultPolicy.provider).observationClockSkewMs
-      : false,
+    isFreshPoolReading(pool, reading, now, (policy ?? defaultPolicy.provider).observationClockSkewMs),
   );
   if (
     fresh.some(
@@ -197,7 +229,15 @@ function assessPool(
   )
     return null;
   const used = Math.max(0, ...fresh.flatMap(({ reading }) => reading.windows.map((window) => window.usedPercent)));
-  return { score: (100 - used) * pool.policy.weight };
+  const latest = fresh.reduce<IndexedReading | undefined>((chosen, item) => {
+    if (!chosen?.reading.observedAt) return item;
+    return Date.parse(item.reading.observedAt!) > Date.parse(chosen.reading.observedAt) ? item : chosen;
+  }, undefined);
+  const pressure = latest ? allowanceResetPressure(latest.reading, pool, now) : undefined;
+  return {
+    score: (100 - used) * pool.policy.weight,
+    ...(pressure === undefined ? {} : { resetPressure: pressure.urgency }),
+  };
 }
 
 function selectPool(
@@ -208,6 +248,7 @@ function selectPool(
   now: number,
   spanMs: number,
   allowanceByPool: Map<Pool, PoolAllowance>,
+  urgency?: (pool: Pool) => number | undefined,
 ): Pool | undefined {
   const candidates = pools.filter(
     (pool) =>
@@ -229,13 +270,26 @@ function selectPool(
           ),
         );
       const allowance = allowanceByPool.get(pool);
-      return allowance ? { pool, score: allowance.score, preferred: pool.name === options.preferred } : null;
+      if (!allowance) return null;
+      const reportedPressure = urgency?.(pool);
+      const resetPressure = reportedPressure ?? allowance.resetPressure;
+      return {
+        pool,
+        score: allowance.score,
+        preferred: pool.name === options.preferred,
+        ...(resetPressure === undefined ? {} : { resetPressure }),
+      };
     })
-    .filter((item): item is NonNullable<typeof item> => item !== null)
-    .sort(
-      (a, b) =>
-        Number(b.preferred) - Number(a.preferred) || b.score - a.score || a.pool.name.localeCompare(b.pool.name),
-    );
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const comparableResetPressure =
+    profile.poolClass !== 'manager' && ranked.length > 1 && ranked.every((item) => item.resetPressure !== undefined);
+  ranked.sort(
+    (a, b) =>
+      Number(b.preferred) - Number(a.preferred) ||
+      (comparableResetPressure ? b.resetPressure! - a.resetPressure! : 0) ||
+      b.score - a.score ||
+      a.pool.name.localeCompare(b.pool.name),
+  );
   return ranked[0]?.pool;
 }
 
@@ -317,19 +371,35 @@ export function findAllowedPool(
   const selection = { ...options, now, spanMs };
   const indexedReadings = indexAllowanceReadings(readings, selection.history ?? []);
   const allowanceByPool = new Map<Pool, PoolAllowance>();
+  const urgencyByPool = new Map<Pool, number | undefined>();
+  const poolUrgency = urgency
+    ? (pool: Pool) => {
+        if (!urgencyByPool.has(pool)) urgencyByPool.set(pool, urgency(pool));
+        return urgencyByPool.get(pool);
+      }
+    : undefined;
   if (urgency && !options.preferred) {
     const choices = [profile, ...fallbacks].flatMap((candidate, order) => {
-      const pool = selectPool(candidate, pools, indexedReadings, selection, now, spanMs, allowanceByPool);
-      return pool ? [{ profile: candidate, pool, order, urgency: urgency(pool) ?? -1 }] : [];
+      const pool = selectPool(candidate, pools, indexedReadings, selection, now, spanMs, allowanceByPool, poolUrgency);
+      return pool ? [{ profile: candidate, pool, order, urgency: poolUrgency!(pool) ?? -1 }] : [];
     });
     choices.sort((a, b) => b.urgency - a.urgency || a.order - b.order);
     if (choices[0]) return { profile: choices[0].profile, pool: choices[0].pool };
   }
-  const primary = selectPool(profile, pools, indexedReadings, selection, now, spanMs, allowanceByPool);
+  const primary = selectPool(profile, pools, indexedReadings, selection, now, spanMs, allowanceByPool, poolUrgency);
   if (primary) return { profile, pool: primary };
   const { preferred: _preferred, ...fallbackOptions } = selection;
   for (const candidate of fallbacks) {
-    const pool = selectPool(candidate, pools, indexedReadings, fallbackOptions, now, spanMs, allowanceByPool);
+    const pool = selectPool(
+      candidate,
+      pools,
+      indexedReadings,
+      fallbackOptions,
+      now,
+      spanMs,
+      allowanceByPool,
+      poolUrgency,
+    );
     if (pool) return { profile: candidate, pool };
   }
   return undefined;

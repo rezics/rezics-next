@@ -576,7 +576,7 @@ fields listed below; the empty policy object deliberately provides no account po
 | `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.                                                              |
 | `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                                                                            |
 | `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events.                                                    |
-| `policy.weight`         | Required positive number for relative pool preference.                                                                                      |
+| `policy.weight`         | Required positive number for static fallback ordering and ties between reset-pressure scores.                                                |
 | `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                                                                        |
 | `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.                                                            |
 | `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                                                                     |
@@ -588,6 +588,8 @@ CLI reports a usage-limit refusal, Goal checks the pool's latest quota reading: 
 than `maxAgeMs` excludes that allowance. A fresh reading with allowance left retries the same pool after three
 minutes. Three usage-limit refusals on one pool within an hour exclude its allowance for one hour. Other native quota
 failures exclude all aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
+
+Decision: eligible ordinary pools within one profile rank by fresh reset pressure (unused allowance above reserve per hour until the longest reset); all need trusted reset evidence or routing falls back to its existing `(100 - usedPercent) * weight` score; that score and then pool name break pressure ties, explicit same-attempt affinity wins first, and manager pools keep static ordering.
 
 Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
 minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A window is the same when its
