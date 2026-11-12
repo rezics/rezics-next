@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { openDb } from './db.ts';
-import { readFlow } from './flow.ts';
+import { ensureFlow, readFlow } from './flow.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { readControlPolicy } from './policy.ts';
 import { checkSignature, runCacheKey, runChecksAtHead, selectionIdentity } from './dev-verifier-comparison.ts';
@@ -1275,6 +1275,7 @@ test('terminal result and UTC-midnight flow completion roll back together when t
     },
   };
   store.saveDevVerifierRun(started);
+  ensureFlow(store.db);
   store.db.exec(`CREATE TRIGGER fail_verifier_receipt BEFORE INSERT ON flow_events
     WHEN NEW.action='command-completed' BEGIN SELECT RAISE(ABORT, 'companion write failed'); END`);
   expect(() => completeCommandRun(store, terminal)).toThrow('companion write failed');
