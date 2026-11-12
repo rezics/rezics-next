@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 import type { CommerceDriver, Inspection, Persona, StripeCreate } from '../../../../../specs/commerce-driver.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
-import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation } from '../../../src/access/bootstrap-governance.ts';
 import { readExposure } from '../../../src/access/gates/catalogue.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
@@ -252,6 +252,9 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   );
   // The measured pool stays out of fixture setup; admin is outside statement capture.
   await bootstrapGovernance(db.admin, governor.id);
+  // Governance does not include board:create. Give the governor its supported
+  // local-showcase authority so it can delegate the seller's ordinary grant.
+  await bootstrapLocalShowcaseBoardCreation(db.admin, governor.id);
   for (const group of ['purchases', 'selling']) {
     const opened = await app.handle(
       new Request(`http://kernel.test/v1/platform/exposure/${group}:open`, {
@@ -306,19 +309,9 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     await grants.create(
       { ...context, actor },
       {
-        resource: PLATFORM_RESOURCE,
-        subject: { kind: 'account', id: seller.id },
-        actions: ['offer:create', 'subject:create'],
-        valid: '(,)',
-        key: Bun.randomUUIDv7(),
-      },
-    );
-    await grants.create(
-      { ...context, actor },
-      {
         resource: { route: 0, id: GLOBAL_CONTEXT },
         subject: { kind: 'account', id: seller.id },
-        actions: ['subject:create', 'board:create'],
+        actions: ['offer:create', 'subject:create', 'board:create'],
         valid: '(,)',
         key: Bun.randomUUIDv7(),
       },

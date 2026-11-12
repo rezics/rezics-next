@@ -517,6 +517,9 @@ Current implementation evidence is narrower than the capability:
   remains a provisional typed unavailable adapter using its closed declarations.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
+- Decision: due-command and default-worker retention growth at 256/1024/4096 uses complete `cost-folded` captures,
+  preserving foreground/background occurrence ownership, failures, relation identity and row/block/cost attribution
+  within the existing budget; retain raw plans only when a test asserts plan documents.
 - Semantic's `identity-epoch-store.ts:identityEpochStore`, admission/receiving custody, native birth mappings and
   bootstrap are implemented. Mapping maintenance, fixed participants, final coordinator and whole-query Source2a
   remain missing runtime producers. Existing point Access/disclosure, `subjectSource` and projection checkpoints
@@ -928,16 +931,22 @@ is not implemented.
 Built-ins have stable deterministic identities and private defaults. Empty logical Everything and owner state
 reference discovery need no stored header or write scope. Dynamic DTOs omit curated count, creation/update times,
 order epoch and occurrence fields; no fake zeros. Every account also has a stable logical Liked that is always private, including
-empty `200`; that adopted meaning does not establish implemented identity or members runtime. First authorized
+empty `200`; the native builtin identity and members reader expose its current reaction-backed membership without
+materializing a Collection header or changing Library state facts. First authorized
 materialization moves revision 0 to 1 atomically with native Collection resource grants and `shareAccount`, without a read-grant override. Denied writes create nothing.
+
+The released-discovery fixture composes the native Library once with Kernel's pool, Access, route key, Search service
+and clock; it advances current owner-index and pin metadata through the registered `library.ownerIndex` workflow.
+Continue fixtures open `personal_library` and `reading_progress` through the ordinary platform gates. Empty eligible
+state siblings use the common owner-authorized header reader and remain unmaterialized.
 
 Library contains Continue, Everything, Liked, pins and All Collections; Following and History are separate
 destinations. State is a tile chip in the profile's wording and a filter; state Collections can be pinned, never
 mandatory navigation tabs. Continue is a bounded native read using active-session/profile-active-state eligibility,
 ranked by session activity, never full-library browser sorting. Liked uses current SUBJECT like/love reactions;
 clearing or another kind removes membership. Thread/post reactions never qualify; reactions alone add neither
-Everything nor explicit state. Content owns the owner-scoped reaction adapter; complete Liked source-version,
-epoch/disclosure coverage and shared members integration remain missing. There is no following feed or public
+Everything nor explicit state. Content owns the owner-scoped reaction adapter, and the native members reader checks
+its current source version and disclosure before returning private Liked results. There is no following feed or public
 follower total. An interim entry-only page is named tracked entries, never Everything.
 
 Stored personal subject IDs and curated occurrences are immutable; new writes target the terminal. Canonical views
@@ -1032,11 +1041,9 @@ separate from identity hold release. Library receives that live frame as an inje
 (`libraryWork(pool, token, deadline)`) in `createLibraryIdentityEpochReceiver` and `createLibraryIdentityNativePlanner`;
 the participant never imports the frame module, so the adapter index keeps only type re-exports and adds no value cycle.
 
-Decision: custody dispatch uses the live caller remainder for each exact SQL reservation. Its closed statement
-multiplicities and literal maxima enforce the operation ceiling, and the transaction holds COMMIT and ROLLBACK before
-checkout. The static composed operation bound remains the caller-facing cost declaration while the same caller frame
-admits literal dispatch and terminal holds. Explicit-output custody fixtures grant all three ordinary
-owner-family reads required by OWNER presence filters: `library_entry:read`, `progress_session:read` and `copy:read`.
+Custody uses the live caller frame for SQL reservations and holds COMMIT and ROLLBACK before checkout.
+Closed statement counts and literal maxima enforce the static operation bound. Explicit-output custody fixtures
+grant the OWNER presence reads: `library_entry:read`, `progress_session:read` and `copy:read`.
 
 Stage order inside one frame call (`stepLibraryIdentityEpochWithSource`): native receiving effects, then source
 scopes, then one follow page, then one canonical store call, then handoff and closure reporting. A follow
@@ -1046,13 +1053,17 @@ Each canonical store call is composed under the frame at its declared per-call c
 store returns. The step reports `closed` only when every stage closes; a foreign follower is recorded as an
 owner handoff with its target in the locator, and it never blocks supported account-backed follows.
 
-Remaining integration is Semantic's prepaid schedule and Source/coordinator composition: it must account for all
-planner steps, source discovery, page/verification and transitive receiving/control operations; drive every saved
-admitted change through first-apply and late-birth closure; invoke follow pages and resolve target/account handoffs;
-and publish the fixed ALL-Library receipt only after current role, owner and follow proof is independently complete.
-The candidate and follow helpers do not stand in for canonical generation rebuild/publication or claim coverage from
-an empty table. State repair must use highest live native `owner_write_seq` and preserve conflicts; null is unbuilt.
-Published undo acceptance also requires the existing Mapping/Search/coordinator composition.
+To close an owner proof, page `readLibraryIdentityCandidatePage` with a durable cursor per (job, owner, canonical).
+Fold the highest live `owner_write_seq` across pages, preserve conflicts, and verify labels against live parents
+using `readOwnerOriginalTruth`. Unready presence or a live state without a pin or sequence keeps the proof pending.
+
+Semantic's prepaid Source schedule must reserve inclusive `WorkDimensions` for each planner, discovery,
+verification and transitive operation, including retry, rollback and receiving/control custody. Each follow page
+must fit the installed statement ceiling; refuse an original partition that cannot be fully funded before I/O.
+Drive saved changes through first-apply and late-birth closure. The coordinator reconciles the fixed Library receipt
+only after all six roles, canonical publication/readback, owner proof, follow partitions, and receiving/control
+custody independently close. Empty queues and owner handoffs do not establish completion. Published undo also
+requires the existing Mapping, Search and coordinator composition.
 
 Retention inventory: `identity_epoch_participant_work` stores exact receiving locators at the account/control home;
 `identity_epoch_participant_scope` stores source-plan cursor/exhaustion; `identity_epoch_participant_handoff` stores
@@ -1070,8 +1081,7 @@ reference exhaustion proves erasure.
 Cost: one exact registered work key, native source/account/gate/receipt points, one source-state mutation and one
 structural directory point per step; zero original fact enumeration, engine calls or history scans. Existing
 command/callback/Source hold/control ACK/replay work and all retained copies remain charged to shared limits.
-No native Cost, positive reversal, full composition or growth pass is claimed. Minimal verification is local
-kernel typing; the existing frozen refusal and later six-driver/custody/growth acceptance remain required.
+Frozen refusal, positive reversal, and six-driver custody and growth acceptance remain required.
 
 ### Native owner state-write sequencing (required; runtime incomplete)
 
@@ -1323,6 +1333,11 @@ and never applies a second live-counter decrement. Register it through existing 
 Library-local timer. Minimize actual Library receipt, event, outbox and workflow payloads at exact locators under
 their shared owners' retention protocols. Open shared-store and external inventory gaps remain explicit; no broader
 physical-erasure claim follows from empty Library tables.
+
+Default-worker acceptance composes native Access and Library through the ordinary profile Kernel before registering
+the full `libraryWorkModule`. It passes the same Pool, supplied domain clock and matching base64url
+`KERNEL_ROUTE_KEY`; crash children preserve their executor and clock-file identity, remove their SIGTERM listener, and
+settle the work runtime, client and Pool on startup failure or graceful shutdown.
 
 For replacement-safe fresh writes, expose opaque `incarnationId` in entry reads and write results. A revisioned PUT
 body and DELETE query carry `incarnationId` alongside `revision`; the spelling is consistent across both requests.

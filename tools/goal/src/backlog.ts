@@ -117,7 +117,11 @@ export type BacklogRuntime = {
   stateDirectory: string;
   inbox: ManagerInbox;
   /** The `goal dispatch` path: create the task and request its first attempt. Returns the new task ID. */
-  dispatch(briefFile: string, actor?: AuthenticatedManager | null): Promise<BacklogDispatchResult>;
+  dispatch(
+    briefFile: string,
+    actor?: AuthenticatedManager | null,
+    proposal?: { goal: string; markdown: string },
+  ): Promise<BacklogDispatchResult>;
   /** Queue a continuation through the existing task retry path. */
   continueTask(goal: string, continuation: BriefContinuation, briefFile: string): Promise<void>;
   /** The `goal cancel` path. */
@@ -985,7 +989,9 @@ async function dispatchReady(
             continue;
           }
         }
-        const dispatchedTask = dispatchResult(await runtime.dispatch(claimed, provenance.actor));
+        const dispatchedTask = dispatchResult(
+          await runtime.dispatch(claimed, provenance.actor, { goal: pick.goal, markdown }),
+        );
         taskId = dispatchedTask.taskId;
         lintWarnings = dispatchedTask.lintWarnings.length
           ? dispatchedTask.lintWarnings

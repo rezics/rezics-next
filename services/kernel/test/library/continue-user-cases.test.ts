@@ -56,6 +56,7 @@ const sessionKeys = [
 async function world(run: (fixture: World) => Promise<void>) {
   const fixture = await createReleasedDiscoveryFixture({ version: 1 });
   try {
+    await fixture.setup.openFeatures(['personal_library', 'reading_progress']);
     await run(fixture);
   } finally {
     await fixture.close();
@@ -150,6 +151,7 @@ function page(response: HttpResponse): Page {
 }
 
 async function read(f: World, query = '', owner: DiscoveryPersona = 'alice') {
+  if (owner === 'alice' || owner === 'bob' || owner === 'outsider') await f.prepareOwnerIndex(owner);
   return page(await f.request(owner, 'GET', `/v1/libraryContinue${query}`));
 }
 

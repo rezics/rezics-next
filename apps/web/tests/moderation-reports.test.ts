@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -275,13 +275,86 @@ test('the reports route is signed-in, noindex, private, and conceals refused rea
   // unavailable/denied page states. Native refusal still conceals all private evidence;
   // the connected campaign exercises those outcomes through the actual loader.
   expect(read).toContain('if (!authorization || !readerOrigin) throw notFound()');
-  expect(read).toContain("[401, 403, 404].includes(status) ? 'denied' : 'error'");
 });
 
-test('the board actions menu exposes moderation only to signed-in viewers', async () => {
+test('the signed-in Board route delegates its localized moderation link to the actions menu', async () => {
   const boardRoute = await Bun.file(new URL('../src/routes/boards/$id.tsx', import.meta.url)).text();
-  expect(boardRoute).toContain("session === 'signed-in' ? (");
-  expect(boardRoute).toContain('href={`/${locale}/boards/${id}/moderation`}');
+  expect(boardRoute).toContain(
+    "overflow={<BoardCommunityMenu boardId={id} signedIn={session.state === 'signed-in'} />}",
+  );
+  const { Window } = await import('happy-dom');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+  const { BoardCommunityMenu } = await import('../src/threads/board-community');
+  const previousLocale = getLocale();
+  setLocale('fr', { reload: false });
+  const browser = new Window({ url: 'https://site.test/fr/', width: 1280, height: 800 });
+  Object.defineProperty(browser, 'matchMedia', {
+    configurable: true,
+    value: (media: string) => ({
+      matches: false,
+      media,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent() {
+        return false;
+      },
+    }),
+  });
+  const globals = {
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    Element: browser.Element,
+    Node: browser.Node,
+    Document: browser.Document,
+    DocumentFragment: browser.DocumentFragment,
+    MutationObserver: browser.MutationObserver,
+    ResizeObserver: browser.ResizeObserver,
+    getComputedStyle: browser.getComputedStyle.bind(browser),
+    requestAnimationFrame: browser.requestAnimationFrame.bind(browser),
+    cancelAnimationFrame: browser.cancelAnimationFrame.bind(browser),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previousGlobals = new Map(
+    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = browser.document.body.appendChild(browser.document.createElement('main'));
+  const boardId = id(1);
+  try {
+    for (const signedIn of [false, true]) {
+      const root = createRoot(host as unknown as HTMLElement);
+      try {
+        await act(async () => root.render(createElement(BoardCommunityMenu, { boardId, signedIn })));
+        const trigger = host.querySelector('button');
+        expect(Boolean(trigger)).toBe(true);
+        if (!trigger) throw new Error('Board actions trigger was missing');
+        await act(async () => {
+          trigger.click();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        const links = [...browser.document.querySelectorAll('a[href]')];
+        expect(links.map((link) => link.getAttribute('href'))).toEqual([
+          `/fr/boards/${boardId}`,
+          ...(signedIn ? [`/fr/boards/${boardId}/moderation`] : []),
+        ]);
+      } finally {
+        await act(async () => root.unmount());
+      }
+    }
+  } finally {
+    browser.happyDOM.abort();
+    for (const [key, descriptor] of previousGlobals)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    setLocale(previousLocale, { reload: false });
+  }
 });
 
 test('a known post queue reads only that post scope and preserves its cursor', async () => {
@@ -740,14 +813,16 @@ test('a late native response retires after any selector, cursor or exact scope c
     expect(reportPageIsCurrent(late, changed)).toBe(false);
 });
 
-test('default native read distinguishes stale selection, denied queue and unavailable transport without private rows', async () => {
+test('default native read maps installed HTTP status to stale, denied and retryable outcomes without private rows', async () => {
   const { createKernelClient } = await import('@rezics/client');
   const { readModerationReportPage } = await import('../src/moderation/reports-read');
   const { m } = await import('../src/paraglide/messages.js');
   for (const [status, code, expected, message] of [
     [400, 'invalid_cursor', 'stale', m.moderation_queue_stale()],
-    [409, 'stale_cursor', 'stale', m.moderation_queue_stale()],
+    [401, 'unauthorized', 'denied', m.moderation_queue_read_denied()],
+    [403, 'forbidden', 'denied', m.moderation_queue_read_denied()],
     [404, 'not_found', 'denied', m.moderation_queue_read_denied()],
+    [409, 'stale_cursor', 'stale', m.moderation_queue_stale()],
     [503, 'dependency_unavailable', 'error', m.moderation_queue_error()],
   ] as const) {
     const client = createKernelClient('https://kernel.test', {
@@ -965,7 +1040,10 @@ test('The default Reports queue dismisses only explicitly selected loaded pendin
     });
     await flush();
     expect(commands.map((command) => command.path)).toEqual([`/v1/reports/${id(1)}:dismiss`]);
-    const firstCard = host.querySelector('[role="article"]')!;
+    const cards = host.querySelectorAll('article[aria-labelledby]');
+    expect(cards.length).toBe(4);
+    const firstCard = cards.item(0);
+    if (!firstCard) throw new Error('First semantic report article was missing');
     for (const element of firstCard.querySelectorAll('button')) {
       if ([m.moderation_dismiss(), m.moderation_take_down()].includes(element.textContent!))
         expect(element.disabled).toBe(true);

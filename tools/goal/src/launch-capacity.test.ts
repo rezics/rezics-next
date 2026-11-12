@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { acquireDirectoryLease } from './lease.ts';
+import { processIdentity } from './process.ts';
+import { StaleAttemptError } from './contracts.ts';
 import { openDb } from './db.ts';
 import {
   awaitHostCapacity,
@@ -12,9 +15,33 @@ import {
 } from './launch.ts';
 import * as launchCapacity from './launch-capacity.ts';
 import { admittedMemoryMiB } from './launch-capacity.ts';
+import type { CapacityLifecycle } from './launch-capacity.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
+
+function capacityStore(
+  lifecycle: Map<string, CapacityLifecycle>,
+  options: {
+    urgentRunning?: number;
+    ordinaryRunning?: number;
+    attempts?: Map<string, { attempt: number; state: 'pending' | 'running' | 'waiting' }[]>;
+  } = {},
+) {
+  return {
+    capacityAttemptsCount: (urgent: boolean) =>
+      urgent ? (options.urgentRunning ?? 0) : (options.ordinaryRunning ?? 0),
+    attempts: (taskId: string) => options.attempts?.get(taskId) ?? [],
+    capacityLifecycle: (taskId: string) => lifecycle.get(taskId),
+    taskGoal: () => 'library',
+    goalInFlightCount: () => 0,
+  };
+}
+function liveTicketBody(value: Record<string, unknown>): string {
+  const identity = processIdentity();
+  if (!identity) throw new Error('test process identity unavailable');
+  return JSON.stringify({ ...identity, ...value });
+}
 
 test('launch.ts re-exports the host-capacity implementation', () => {
   expect(awaitHostCapacity).toBe(launchCapacity.awaitHostCapacity);
@@ -264,6 +291,281 @@ test('a resumed attempt reserves four GiB on its ticket and transfers that charg
     expect(admittedMemoryMiB(directory.path, new Set([JSON.stringify(['other-worker', 1])]))).toBe(4096);
   } finally {
     release?.();
+    directory.close();
+  }
+});
+
+test('an obsolete first-start ticket cannot block an independent urgent repair at width two', async () => {
+  const directory = temporaryDirectory();
+  const lifecycle = new Map<string, CapacityLifecycle>([
+    ['live-worker', { currentAttempt: 1, taskState: 'running', attemptState: 'running' }],
+    ['repair', { currentAttempt: 0, taskState: 'ready' }],
+  ]);
+  const store = capacityStore(lifecycle, { urgentRunning: 1 });
+  let release: (() => void) | undefined;
+  const queue = join(directory.path, 'urgent-capacity-queue');
+  try {
+    writeFileSync(
+      join(directory.path, 'capacity.json'),
+      JSON.stringify({ maxWorkers: 2, urgentSlots: 2, minAvailableMiB: 0 }),
+    );
+    mkdirSync(queue, { recursive: true });
+    const obsolete = `000000000000001-${process.pid}-live-worker`;
+    writeFileSync(join(queue, obsolete), liveTicketBody({ taskId: 'live-worker' }));
+    release = await awaitHostCapacity(store, directory.path, false, 'repair', 1, {
+      urgent: true,
+      pollIntervalMs: 5,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerHeadroomMiB: () => Infinity,
+    });
+    expect(existsSync(join(queue, obsolete))).toBe(false);
+    expect(readdirSync(queue).filter((name) => name.endsWith('.admitted'))).toHaveLength(1);
+    expect(capacityWaiters(directory.path, store)).toEqual(new Set(['repair']));
+  } finally {
+    release?.();
+    directory.close();
+  }
+});
+
+test('legacy live identity keeps an exact parked resume distinct from its superseded first start', () => {
+  const directory = temporaryDirectory();
+  const lifecycle = new Map<string, CapacityLifecycle>([
+    [
+      'parked',
+      {
+        currentAttempt: 1,
+        taskState: 'running',
+        attemptState: 'waiting',
+        attemptStartedAt: '1970-01-01T00:00:00.001Z',
+      },
+    ],
+  ]);
+  const store = capacityStore(lifecycle);
+  const queue = join(directory.path, 'urgent-capacity-queue');
+  try {
+    mkdirSync(queue, { recursive: true });
+    const firstStart = `000000000000001-${process.pid}-parked`;
+    const resume = `000000000000002-${process.pid}-parked.admitted`;
+    const earlierResume = `000000000000002-${process.pid}-parked`;
+    const repeatedResume = `000000000000003-${process.pid}-parked`;
+    writeFileSync(join(queue, firstStart), liveTicketBody({ taskId: 'parked', attempt: 1 }));
+    // Older tickets have no operation payload; the attempt's start time separates the stale start from later wakes.
+    writeFileSync(join(queue, resume), JSON.stringify({ taskId: 'parked', attempt: 1 }));
+    writeFileSync(join(queue, earlierResume), JSON.stringify({ taskId: 'parked', attempt: 1 }));
+    writeFileSync(join(queue, repeatedResume), JSON.stringify({ taskId: 'parked', attempt: 1 }));
+
+    expect(capacityWaiters(directory.path, store)).toEqual(new Set(['parked']));
+    expect(existsSync(join(queue, firstStart))).toBe(false);
+    expect(existsSync(join(queue, resume))).toBe(true);
+    expect(waitersAhead(queue, repeatedResume, store)).toBe(0);
+    expect(launchCapacity.admittedMemoryMiB(directory.path, new Set(), store)).toBe(4096);
+  } finally {
+    directory.close();
+  }
+});
+
+test('overlapping starts share one reservation and the live successor exits when the generation advances', async () => {
+  const directory = temporaryDirectory();
+  const lifecycle = new Map<string, CapacityLifecycle>([['same-task', { currentAttempt: 0, taskState: 'ready' }]]);
+  const attempts = new Map<string, { attempt: number; state: 'pending' | 'running' | 'waiting' }[]>();
+  const store = capacityStore(lifecycle, { attempts });
+  const queue = join(directory.path, 'capacity-queue');
+  let ownerRelease: (() => void) | undefined;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 4, minAvailableMiB: 0 }));
+    const options = {
+      pollIntervalMs: 5,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerHeadroomMiB: () => Infinity,
+    };
+    ownerRelease = await awaitHostCapacity(store, directory.path, false, 'same-task', 1, options);
+    const successor = awaitHostCapacity(store, directory.path, false, 'same-task', 1, options);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(readdirSync(queue).filter((name) => name.endsWith('.admitted'))).toHaveLength(1);
+    expect(readdirSync(queue).filter((name) => !name.endsWith('.admitted'))).toHaveLength(1);
+
+    lifecycle.set('same-task', { currentAttempt: 1, taskState: 'running', attemptState: 'running' });
+    attempts.set('same-task', [{ attempt: 1, state: 'running' }]);
+    await expect(successor).rejects.toBeInstanceOf(StaleAttemptError);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(readdirSync(queue).filter((name) => name.endsWith('.admitted'))).toHaveLength(0);
+  } finally {
+    ownerRelease?.();
+    directory.close();
+  }
+});
+
+test('repeated check wakes for one parked generation keep one reservation and do not strand a stale wake', async () => {
+  const directory = temporaryDirectory();
+  const lifecycle = new Map<string, CapacityLifecycle>([
+    ['parked', { currentAttempt: 1, taskState: 'running', attemptState: 'waiting' }],
+  ]);
+  const attempts = new Map<string, { attempt: number; state: 'pending' | 'running' | 'waiting' }[]>([
+    ['parked', [{ attempt: 1, state: 'waiting' }]],
+  ]);
+  const store = capacityStore(lifecycle, { attempts });
+  const queue = join(directory.path, 'capacity-queue');
+  let ownerRelease: (() => void) | undefined;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 4, minAvailableMiB: 0 }));
+    const options = {
+      resume: true,
+      pollIntervalMs: 5,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerHeadroomMiB: () => 4096,
+    };
+    ownerRelease = await awaitHostCapacity(store, directory.path, false, 'parked', 1, options);
+    const repeatedWake = awaitHostCapacity(store, directory.path, false, 'parked', 1, options);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(readdirSync(queue).filter((name) => name.endsWith('.admitted'))).toHaveLength(1);
+    expect(readdirSync(queue).filter((name) => !name.endsWith('.admitted'))).toHaveLength(1);
+
+    lifecycle.set('parked', { currentAttempt: 1, taskState: 'running', attemptState: 'running' });
+    attempts.set('parked', [{ attempt: 1, state: 'running' }]);
+    await expect(repeatedWake).rejects.toBeInstanceOf(StaleAttemptError);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(readdirSync(queue).filter((name) => name.endsWith('.admitted'))).toHaveLength(0);
+  } finally {
+    ownerRelease?.();
+    directory.close();
+  }
+});
+
+test('a dead ticket owner yields the same operation to its live successor', async () => {
+  const directory = temporaryDirectory();
+  const lifecycle = new Map<string, CapacityLifecycle>([
+    ['recovered', { currentAttempt: 1, taskState: 'running', attemptState: 'pending' }],
+  ]);
+  const attempts = new Map<string, { attempt: number; state: 'pending' | 'running' | 'waiting' }[]>([
+    ['recovered', [{ attempt: 1, state: 'pending' }]],
+  ]);
+  const store = capacityStore(lifecycle, { attempts });
+  const queue = join(directory.path, 'capacity-queue');
+  let release: (() => void) | undefined;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    mkdirSync(queue, { recursive: true });
+    const dead = `000000000000001-2147483000-recovered`;
+    writeFileSync(join(queue, dead), JSON.stringify({ pid: 2147483000, taskId: 'recovered', attempt: 1 }));
+    release = await awaitHostCapacity(store, directory.path, false, 'recovered', 1, {
+      pollIntervalMs: 5,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerHeadroomMiB: () => Infinity,
+    });
+    expect(existsSync(join(queue, dead))).toBe(false);
+    expect(readdirSync(queue).filter((name) => name.endsWith('.admitted'))).toHaveLength(1);
+  } finally {
+    release?.();
+    directory.close();
+  }
+});
+
+test('a bounded reclaim runs outside the admission lease and starts only after headroom is re-sampled', async () => {
+  const directory = temporaryDirectory();
+  let headroom = 0;
+  let samples = 0;
+  let reclaimCount = 0;
+  let lockWasFree = false;
+  let release: (() => void) | undefined;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    const pending = awaitHostCapacity(
+      { capacityAttemptsCount: () => 0, attempts: () => [], taskGoal: () => 'library' },
+      directory.path,
+      false,
+      'reclaim-success',
+      1,
+      {
+        pollIntervalMs: 10,
+        availableMiB: () => Infinity,
+        pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+        workerHeadroomMiB: () => {
+          samples += 1;
+          return headroom;
+        },
+        reclaim: () => {
+          reclaimCount += 1;
+          const lease = acquireDirectoryLease(join(directory.path, 'capacity-admission-lock'));
+          lockWasFree = true;
+          lease.release();
+          headroom = 2048;
+        },
+      },
+    );
+    release = await pending;
+    expect(reclaimCount).toBe(1);
+    expect(lockWasFree).toBe(true);
+    expect(samples).toBeGreaterThanOrEqual(2);
+  } finally {
+    release?.();
+    directory.close();
+  }
+});
+
+test('an ineffective reclaim is coalesced until headroom recovers', async () => {
+  const directory = temporaryDirectory();
+  let headroom = 0;
+  let reclaimCount = 0;
+  let release: (() => void) | undefined;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    const pending = awaitHostCapacity(
+      { capacityAttemptsCount: () => 0, attempts: () => [], taskGoal: () => 'library' },
+      directory.path,
+      false,
+      'reclaim-no-effect',
+      1,
+      {
+        pollIntervalMs: 5,
+        availableMiB: () => Infinity,
+        pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+        workerHeadroomMiB: () => headroom,
+        reclaim: () => {
+          reclaimCount += 1;
+        },
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(reclaimCount).toBe(1);
+    headroom = 2048;
+    release = await pending;
+    expect(reclaimCount).toBe(1);
+  } finally {
+    release?.();
+    directory.close();
+  }
+});
+
+test('PSI pressure prevents cache reclaim even when the finite slice is the only capacity deficit', async () => {
+  const directory = temporaryDirectory();
+  let reclaimCount = 0;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    const pending = awaitHostCapacity(
+      { capacityAttemptsCount: () => 0, attempts: () => [] },
+      directory.path,
+      false,
+      'reclaim-pressure',
+      1,
+      {
+        pollIntervalMs: 5,
+        availableMiB: () => Infinity,
+        pressure: () => ({ memoryFull: 1, ioFull: 0 }),
+        workerHeadroomMiB: () => 0,
+        reclaim: () => {
+          reclaimCount += 1;
+        },
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reclaimCount).toBe(0);
+    rmSync(join(directory.path, 'capacity.json'));
+    (await pending)();
+  } finally {
     directory.close();
   }
 });

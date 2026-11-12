@@ -3,7 +3,8 @@
 `ContentItem` is the shared presentation family for supplied item summaries. Its row root remains a semantic `li` and
 keeps the existing visual, context, title, metadata, preview, state, action and trailing slots. Use it inside the owning
 `ul` or `ol`; the shared row link and control layer keep one primary destination separate from independent links and
-buttons.
+buttons. Titles and supplied context wrap at narrow widths. The control rail moves beside the text only when the
+row has at least 40 rem of width; its width stays bounded so actions cannot consume the title column.
 
 The primary link uses the visible title as its accessible name by default. A caller may supply `primaryLinkLabel` when
 the destination needs additional, noninteractive summary context; a nonblank value becomes the link's exact accessible
@@ -13,7 +14,7 @@ not add secrets, action labels or fabricated facts. Empty or whitespace-only val
 
 ## Independent controls in content slots
 
-`visual`, `context` and `preview` stay in ordinary flow. When they contain a native link, button, disclosure summary or
+`visual`, `context`, `metadata` and `preview` stay in ordinary flow. When they contain a native link, button, disclosure summary or
 form control, the shared row raises that control above its stretched primary link and gives it a visible keyboard-focus
 outline. A form label is raised with its input so its text remains a usable target. Plain preview text stays under the
 primary hit area; do not wrap an entire preview in `ListRowControl` just to raise a disclosure or form field.
@@ -58,7 +59,7 @@ primary hit area; do not wrap an entire preview in `ListRowControl` just to rais
 ```
 
 The row raises each supported control and label individually; it does not raise the whole preview slot. The existing
-`metadata`, `state`, `actions` and `trailing` slots continue to use `ListRowControl` above the primary link. Keep controls
+`state`, `actions` and `trailing` slots continue to use `ListRowControl` above the primary link. Keep controls
 as siblings of the primary anchor in the supplied slot content, use their native keyboard behavior and accessible
 names, and retain visible focus styling for any custom control components.
 
@@ -76,5 +77,5 @@ label and does not render a bar.
 
 Selection remains controlled by the caller. `selectable` makes the tile itself a persistent pressed action, while
 `onSelect` can provide an independent selection checkbox. Optional selection and overflow controls keep separate
-focus targets and preferred 44 px hit areas, including on touch. The adapter does not change caller data, routing,
+focus targets and 44 px hit areas, including on touch. The adapter does not change caller data, routing,
 layout containers or collection semantics.

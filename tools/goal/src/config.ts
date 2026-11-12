@@ -427,11 +427,11 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         policy: settings.policy,
         inbox,
         supermanager: settings.integration.supermanager,
-        async dispatch(brief, actor) {
+        async dispatch(brief, actor, proposal) {
           // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
           // so this short-lived process never waits for host capacity or a worker.
           // Urgent and verification briefs may carry the confirmed Goal owner; ordinary product briefs stay null.
-          const task = tasks.dispatch(brief, actor ?? null);
+          const task = tasks.dispatch(brief, actor ?? null, false, undefined, proposal);
           if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
           return { taskId: task.id, lintWarnings: task.brief.lintWarnings ?? [] };
         },

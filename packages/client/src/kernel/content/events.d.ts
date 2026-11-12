@@ -206,6 +206,13 @@ export declare function CONTENT_EVENTS(): {
         editionId: Type.TString;
         editionRevision: Type.TString;
     }>;
+    readonly 'com.rezics.content.knowledge.publication.changed.v1': Type.TObject<{
+        action: Type.TUnion<[Type.TLiteral<"selected">, Type.TLiteral<"withdrawn">]>;
+        documentId: Type.TString;
+        publicationId: Type.TString;
+        revisionId: Type.TString;
+        subjectId: Type.TString;
+    }>;
     readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
         placeId: Type.TString;
         kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;

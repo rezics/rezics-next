@@ -193,6 +193,19 @@ export function isKnownTypingCompiler(root: string, command: readonly string[]):
   return compilerGraph(root, command, gitFiles(root)) !== undefined;
 }
 
+/** Resolve a recognized workspace intent to its installed script form during typing-only recovery. */
+export function resolveTypingCompilerCommand(root: string, command: readonly string[]): string[] | undefined {
+  const canonical =
+    command.length === 5 &&
+    (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
+    command[1] === '--cwd' &&
+    command[3] === 'run' &&
+    command[4] === 'typecheck'
+      ? [command[0]!, 'run', '--cwd', command[2]!, 'typecheck']
+      : [...command];
+  return isKnownTypingCompiler(root, canonical) ? canonical : undefined;
+}
+
 /** Config parsing uses TypeScript's own include/extends semantics, including ignored generated root files. */
 function configuredInputs(
   root: string,

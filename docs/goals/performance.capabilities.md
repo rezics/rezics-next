@@ -58,41 +58,11 @@ owns the startup-memory repair. Keep all seventeen browser journeys pending and 
 repairs and Auth retention group already assigned to this handle; resume the integrated browser walk when startup
 is repaired. Candidate stack outcomes do not update the current-dev table.
 
-<!-- first-public-journeys:begin -->
+## First-public journey evidence
 
-## Current-dev first-public journeys
-
-Observed source `6d2f788cfe` on base `fd920c9cdb`. Walk command
-`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
-Operands: Web `http://127.0.0.1:20050`, issuer `http://127.0.0.1:20051`, native Auth `http://127.0.0.1:20052`, Kernel `http://127.0.0.1:20053`.
-Kernel/JWKS probe: kernel /v1/definitions HTTP 404; native JWKS HTTP 200; kernel /v1/health HTTP 404.
-Sign-in probe: sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200.
-Cross-media seed: seed exited 1: Import transport request failed. Mixed anonymous paths still ran; Semantic owns importer transport.
-Secret-free evidence is `.temp/goal/performance/evidence.json` in this attempt. Phone and desktop viewports ran for each reached path.
-
-Hourly: **0/17**. Slowest failing path: **P02** (181.891 s FAIL). First causal error: **`waitFor: Timeout 180000ms exceeded. Call log:   - waiting for locator('html[data-hydrated]') `**.
-
-| Path | User-visible journey                                                                   | Persona   |   Elapsed | Result         | First wrong result                                                                                                                                                               | Owner    |
-| ---- | -------------------------------------------------------------------------------------- | --------- | --------: | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| P01  | Settings Profile edit, Save, private readback, leave/return with draft and focus       | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Settings |
-| P02  | Public profile save fields/view flags; read as owner, member and anonymous             | anonymous | 181.891 s | FAIL           | waitFor: Timeout 180000ms exceeded. Call log: - waiting for locator('html[data-hydrated]')                                                                                       | Accounts |
-| P03  | Safety managed-account directory, detail/profile, exact frontier/focus return          | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Accounts |
-| P04  | Settings security into native Auth security page and current-session return            | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Accounts |
-| P05  | Settings rename into native Auth, complete rename, return to current identity          | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Accounts |
-| P06  | Settings deletion into native Auth deletion/recovery                                   | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Accounts |
-| P07  | Sign out, signed-out destination, uncertain-response session read                      | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Accounts |
-| P08  | Safety verification select, submit, revisit, withdraw, return                          | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Accounts |
-| P09  | Notification preferences Save/readback and Reset                                       | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Inbox    |
-| P10  | Reading spoiler/suitability Save/readback, Reset/native defaults                       | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Settings |
-| P11  | Layout type override Save/readback, remove, resulting default                          | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Settings |
-| P12  | Private Collections inventory/privacy Save/readback and version-conflict recovery      | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Settings |
-| P13  | Inbox page reply/mention/moderation, destination, same-range return, acknowledge/badge | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Inbox    |
-| P14  | Follow edge, page Following, target, original-frontier return, remove/replay           | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Accounts |
-| P15  | Labels create/select, assign, FULL assignment/shelf, exact removal/readback            | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Library  |
-| P16  | Active shelf page/session/target/return, complete or retire, updated shelf             | signed-in |   0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200                                                                   | Library  |
-| P17  | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return   | anonymous |   0.207 s | FAIL-unreached | anonymous published-log list HTTP 400 (empty); publish unreached: sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library  |
-
-<!-- first-public-journeys:end -->
+The walk's path inventory and executable assertions define the 17 scenarios. It records results in local Markdown
+and JSON instead of editing this manifest. Compare results on the exact integrated revision; setup that prevents a
+scenario from running is not a pass or a reached product failure.
 
 ### Candidate walk setup attempts
 

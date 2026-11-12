@@ -7,6 +7,7 @@ import { readExposure } from '../../src/access/gates/catalogue.ts';
 import { createSemanticDriver as createOriginalDriver } from './outcome-binding.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
 import { effectsSnapshot } from './support/definition-publication-work.ts';
+import { awaitPublished } from './support/identity-operations-http.ts';
 
 const key = () => ({ 'Idempotency-Key': JSON.stringify(randomUUID()) });
 const groups = ['definition_publication', 'subject_identity'] as const;
@@ -188,6 +189,10 @@ test('original binding grants only named native gates, preserves resource denial
     expect(pending.status).toBe(200);
     expect(pending.body).toEqual({ operation: { id: operationId, done: false } });
     const [survivorId, redirected] = [...subjects].sort() as [string, string];
+    const completion = await awaitPublished(driver, operationId);
+    expect(completion.body).toEqual({
+      operation: { id: operationId, done: true, result: { survivor: survivorId, redirected, revision: 2 } },
+    });
     const redirect = await driver.request('anonymous', 'GET', `/v1/subjects/${redirected}`);
     expect(redirect.status).toBe(308);
     const terminalPath = redirect.headers.get('location');

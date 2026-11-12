@@ -12,7 +12,7 @@ import {
 } from '../src/restore-admission.ts';
 import { installNativeRoleCoverage, reconcileNativeRoleCoveragePage } from '../src/erasure-coverage.ts';
 import { testDatabase } from '../scripts/database.ts';
-import { failNativeQueries, nativeFixture } from './support/erasure-native.ts';
+import { failNativeQueries, nativeFixture, nativeFixtureResources, ownNativePool } from './support/erasure-native.ts';
 
 function closedOptions(database: Pool): AuthServiceOptions {
   return {
@@ -29,9 +29,12 @@ function closedOptions(database: Pool): AuthServiceOptions {
 // Only the unverified declaration is stored: refusal precedes signer/SDK work.
 // A dependency returning a readiness flag cannot bypass the missing Source API.
 test('An explicitly restored Auth generation remains closed before handler issuer workflow and writer admission until exact independent Source obligations and genuine original native progress are reconciled without renewing consent deadlines or claiming backup custody', async () => {
-  const fixture = testDatabase();
-  const database = new Pool({ connectionString: fixture.url });
+  const resources = nativeFixtureResources();
   try {
+    const fixture = testDatabase();
+    resources.own('restored database', () => fixture.close());
+    const database = new Pool({ connectionString: fixture.url });
+    ownNativePool(database, resources, 'restored Auth pool');
     await expect(createAuthService(closedOptions(database))).rejects.toMatchObject({
       name: 'AuthRestoreAdmissionError',
       code: 'database-owner-unavailable',
@@ -52,16 +55,18 @@ test('An explicitly restored Auth generation remains closed before handler issue
     // handler, issuer, workflow runtime or maintenance task to the deployment.
     expect(database.ended).toBe(true);
   } finally {
-    if (!database.ended) await database.end();
-    fixture.close();
+    await resources.close();
   }
 }, 60_000);
 
 test('missing or ambiguous verified lineage refuses construction without reading or logging native payload', async () => {
   for (const pending of ['restore-lineage-unavailable', 'restore-lineage-mismatch'] as const) {
-    const fixture = testDatabase();
-    const database = new Pool({ connectionString: fixture.url });
+    const resources = nativeFixtureResources();
     try {
+      const fixture = testDatabase();
+      resources.own('restored database', () => fixture.close());
+      const database = new Pool({ connectionString: fixture.url });
+      ownNativePool(database, resources, 'restored Auth pool');
       const options = closedOptions(database);
       options.restoredGeneration!.databaseOwner = {
         async verifyRestoredDatabase() {
@@ -79,8 +84,7 @@ test('missing or ambiguous verified lineage refuses construction without reading
         { inventory: null },
       ]);
     } finally {
-      await database.end();
-      fixture.close();
+      await resources.close();
     }
   }
 }, 60_000);
@@ -88,11 +92,16 @@ test('missing or ambiguous verified lineage refuses construction without reading
 // These fixture inventory identities exercise native binding/refusal only.
 // They are NOT a production backup verifier, sealed Source feed or certificate.
 test('recover original committed Auth progress beyond the snapshot, replay bounded native bytes and retain the first consent cutoff and real consumer proof', async () => {
-  const f = await nativeFixture();
-  const copy = testDatabase();
-  const restored = new Pool({ connectionString: copy.url, max: 1 });
+  const resources = nativeFixtureResources();
   let restoreQueries = () => {};
   try {
+    const f = await nativeFixture();
+    resources.own('native fixture', () => f.close());
+    const copy = testDatabase();
+    resources.own('restored database', () => copy.close());
+    const restored = new Pool({ connectionString: copy.url, max: 1 });
+    ownNativePool(restored, resources, 'restored Auth pool');
+    resources.own('native query fault reset', () => restoreQueries());
     const victim = await f.person('admission-victim');
     const living = await f.person('admission-living');
     const oldUsers = (
@@ -288,17 +297,17 @@ test('recover original committed Auth progress beyond the snapshot, replay bound
     ).toEqual({ phase: 0, user_replayed: false });
     expect((await immutable()).rows[0]).toEqual(before);
   } finally {
-    restoreQueries();
-    await restored.end();
-    copy.close();
-    await f.close();
+    await resources.close();
   }
 }, 120_000);
 
 test('missing original Auth tail stays pending even when an old restored image has no native obligation', async () => {
-  const fixture = testDatabase();
-  const database = new Pool({ connectionString: fixture.url });
+  const resources = nativeFixtureResources();
   try {
+    const fixture = testDatabase();
+    resources.own('restored database', () => fixture.close());
+    const database = new Pool({ connectionString: fixture.url });
+    ownNativePool(database, resources, 'restored Auth pool');
     const restored: AuthRestoredGeneration = {
       kind: 'RESTORED',
       generation: 'missing-native-tail',
@@ -327,8 +336,7 @@ test('missing original Auth tail stays pending even when an old restored image h
     expect((await database.query('SELECT 1 FROM auth_erasure LIMIT 1')).rowCount).toBe(0);
     await expect(requireRestoredAuthAdmission(database)).rejects.toMatchObject({ code: 'restore-lineage-unavailable' });
   } finally {
-    await database.end();
-    fixture.close();
+    await resources.close();
   }
 });
 
@@ -459,11 +467,16 @@ async function restoredNativeOwner(
 }
 
 test('Actual native Access obligation page and point bind immutable restored Auth progress and durable bounded checkpoints before admission while unknown original floor Source lineage receiving or live handoff remains closed', async () => {
-  const f = await nativeFixture();
-  const copy = testDatabase();
-  const database = new Pool({ connectionString: copy.url, max: 1 });
+  const resources = nativeFixtureResources();
   let unfault = () => {};
   try {
+    const f = await nativeFixture();
+    resources.own('native fixture', () => f.close());
+    const copy = testDatabase();
+    resources.own('restored database', () => copy.close());
+    const database = new Pool({ connectionString: copy.url, max: 1 });
+    ownNativePool(database, resources, 'restored Auth pool');
+    resources.own('native query fault reset', () => unfault());
     const roots = [];
     for (let i = 0; i < 49; i++) roots.push(await nativeRestoreRoot(f, 15));
     const highRoute = await nativeRestoreRoot(f, 65535);
@@ -589,20 +602,21 @@ test('Actual native Access obligation page and point bind immutable restored Aut
     });
     expect(cuts.size).toBe(1);
   } finally {
-    unfault();
-    await database.end();
-    copy.close();
-    await f.close();
+    await resources.close();
   }
 }, 240_000);
 
 // Fault wrappers below only deny/change actual native reads; none supplies
 // successful Source authority, native original progress or external proof.
 test('native Source point disagreement, exact floor domain and missing original Auth tail never import replacement progress', async () => {
-  const f = await nativeFixture();
-  const copy = testDatabase();
-  const database = new Pool({ connectionString: copy.url, max: 1 });
+  const resources = nativeFixtureResources();
   try {
+    const f = await nativeFixture();
+    resources.own('native fixture', () => f.close());
+    const copy = testDatabase();
+    resources.own('restored database', () => copy.close());
+    const database = new Pool({ connectionString: copy.url, max: 1 });
+    ownNativePool(database, resources, 'restored Auth pool');
     const root = await nativeRestoreRoot(f, 65535);
     const restored = await restoredNativeOwner(f, database, 'point-mismatch-copy');
     const native = restored.obligations!;
@@ -650,17 +664,19 @@ test('native Source point disagreement, exact floor domain and missing original 
     });
     await expect(requireRestoredAuthAdmission(database)).rejects.toMatchObject({ code: 'restore-lineage-unavailable' });
   } finally {
-    await database.end();
-    copy.close();
-    await f.close();
+    await resources.close();
   }
 }, 120_000);
 
 test('native pending original floor and changed Source ownership retain the exact bounded page and never advance past it', async () => {
-  const f = await nativeFixture();
-  const copy = testDatabase();
-  const database = new Pool({ connectionString: copy.url, max: 1 });
+  const resources = nativeFixtureResources();
   try {
+    const f = await nativeFixture();
+    resources.own('native fixture', () => f.close());
+    const copy = testDatabase();
+    resources.own('restored database', () => copy.close());
+    const database = new Pool({ connectionString: copy.url, max: 1 });
+    ownNativePool(database, resources, 'restored Auth pool');
     const accountId = newId(16);
     await f.kernel.query(
       `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -695,8 +711,6 @@ test('native pending original floor and changed Source ownership retain the exac
       code: 'source-consumer-pending',
     });
   } finally {
-    await database.end();
-    copy.close();
-    await f.close();
+    await resources.close();
   }
 }, 120_000);

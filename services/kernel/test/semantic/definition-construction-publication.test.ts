@@ -52,6 +52,7 @@ try {
   };
   const defaults = createKernelRuntimeDefaults({ env: {
     ...process.env, KERNEL_SESSION_KEYS: runtime.sessionKeys,
+    KERNEL_RECEIPT_KEYS: runtime.receiptKeys,
     KERNEL_WRITE_RATE_SECRET: 'construction-cold-http-secret-with-at-least-32-bytes',
   }, auth: { issuer: runtime.authIssuer, audience: runtime.authAudience, jwksUrl: runtime.authJwksUrl } });
   const kernel = createKernel({ ...defaults, pool, routeKey: Buffer.from(runtime.routeKey, 'base64url') });

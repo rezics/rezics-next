@@ -277,6 +277,10 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
     );
     expect(parentId && episodeId && episodeId !== parentId).toBeTruthy();
     expect(parentEdge && value(parentEdge)).toBe(parentId);
+    expect(parentEdge?.statement.qualifiers).toContainEqual({
+      property: { id: 'schema:position' },
+      value: { type: 'value', content: '2' },
+    });
     expect(parentEdge?.statement.qualifiers ?? []).not.toContainEqual(
       expect.objectContaining({ property: { id: 'schema:episodeNumber' } }),
     );

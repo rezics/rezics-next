@@ -41,3 +41,19 @@ unavailable message rather than an indefinite loading placeholder.
 
 Decision: The phone You destination is a real settings link hidden while script runs; noscript CSS reveals it so
 the fallback never prints markup as text.
+
+## Session and navigation continuity
+
+Decision: both Create menus share the same session panel: preparing shows progress, signed-out offers sign-in,
+unavailable explains the failure and offers sign-in recovery, and signed-in shows the current admitted creations.
+The phone Inbox waits while preparation is pending or unavailable. Shell sign-in links receive the router's existing
+localized public URL, including its admitted query and excluding its fragment; they do not rebuild it from pathname.
+Account and unread queries retain their existing owners, private exposure and viewer retirement.
+
+The rail and phone drawer consume the same contributed leaves and creations. Long labels wrap with fixed-size icons;
+page content reserves the measured phone bar height, which already includes the safe-area inset. Query and fragment
+changes preserve the initiating control's focus; a new path focuses the page main without changing scroll position.
+
+Selected source comparison: experiment `7c041ee376` supplied the phone session/return behavior and path-change focus
+behavior. Current Book navigation, Menu dismissal, account controls and unread ownership remain the implementation
+authority. Preparing, signed-out and unavailable phone Create stories supplement the installed application tests.

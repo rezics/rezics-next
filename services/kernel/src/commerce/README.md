@@ -1014,7 +1014,7 @@ The native live-copy purpose extends existing lifecycle coordination; it adds no
 The [Commerce erasure participant](erasure-participant.md) owns the fixed native-test order-retention seam, Checkout
 minimization, deadline purge and separate Access resolution; it distinguishes this fixture policy from unresolved
 production financial retention and remaining shared custody.
-Decision: genuine-order native acceptance uses Content's isolated native system and Access `grant.create`; operator
+Native order acceptance uses Content's isolated native system and Access `grant.create`; operator
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
 Decision: first-public user-visible acceptance is the 26-row seeded walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`;
@@ -1025,7 +1025,7 @@ admitted stacks start a signed Stripe fixture so purchase settles through `check
 Decision: admitted walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNEL_PORT` to the slot. Seed talks to
 that Kernel; an inherited default-port `KERNEL_ORIGIN` is the observed import-transport setup failure. Bun
 `--env-file` does not override an existing `KERNEL_ORIGIN`, so the walker merges persona `seed.env` after the slot
-origins. The finishing register is `docs/goals/commerce.capabilities.md#first-public-journeys-on-dev`.
+origins. [First-public acceptance](../../../../docs/goals/commerce.capabilities.md#first-public-journeys-on-dev).
 Decision: walk stacks always retire leftover seed journals because a new database reuses the slot's PostgreSQL
 identity string. The walker then waits for identity-epoch topology remaining to reach zero, then an importer fence
 and a subject write before seed, and seed bun uses `--no-env-file` so slot `KERNEL_ORIGIN` stays. Fewest
@@ -1053,6 +1053,9 @@ page stays that owner's repair. Financial outcome-driver children use the same l
 the effects consumer to catch up and the 5ms queue poll. Tombstone drain waits for that envelope, not a moving
 partition head. Paid-order checks wait for committed entitlement and settlement rows. After late-pay and deletion
 release their holds, catch-up runs again before SIGKILL so expiry restart does not inherit an in-flight envelope.
+Decision: the outcomes driver bootstraps its governor's local-showcase `board:create` authority, then provisions the
+seller through one ordinary Global grant for `offer:create`, `subject:create` and `board:create`; split grants repeated
+`subject:create` on the same resource, while `platform.governance` does not supply `board:create`.
 Ceiling is 120s.
 The board-read current-role projection stays with Accounts.
 Decision: paid genuine-order settlement uses the parent kernel's Content Access and Auth-database

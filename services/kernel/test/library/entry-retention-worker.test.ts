@@ -50,7 +50,7 @@ test('the default native Library worker automatically discovers original due ent
     pool: f.pool,
     client,
     clock,
-    env: {},
+    env: f.workerEnv,
   });
   await work.launch();
   const schedule = await client.getSchedule(ENTRY_RETENTION_SCHEDULE);

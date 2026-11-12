@@ -61,7 +61,7 @@ beforeAll(async () => {
         },
       },
     ],
-    { pool: db.pool, client, databaseUrl: db.url, clock: () => new Date(time), env: {} },
+    { pool: db.pool, client, databaseUrl: db.url, clock: () => new Date(time), env: f.workerEnv },
   );
   // Isolate the explicitly queued native cost operation from wall-clock cron dispatch.
   await client.pauseSchedule(ENTRY_RETENTION_SCHEDULE);
@@ -144,6 +144,7 @@ test('default registered worker pages charge actual native discovery, core comma
   const report = await checkGrowth(db, {
     name: 'entry retention worker: dense tied first and continuation pages through the actual maintenance queue',
     scales: [256, 1024, 4096],
+    captureMode: 'cost-folded',
     repetitions: 1,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(_db, scale, previous) {

@@ -14,6 +14,9 @@ mount notification and current result state, while page-data diagnostics record 
 response, settlement, failure and pending counts separately from the selected reader DOM. A settled current read
 updates the mounted window; replaced generations still retire and ignore late results.
 
+Decision: A newer ready server seed replaces only the mounted anonymous default Home window, aborts its pending browser
+read and rejects its late result; filtered, returned and signed-in windows keep their own reader ownership.
+
 `FeedResults<T>` is the shared ordered list, availability, empty-state and recovery region. It renders one named
 `section` and an `ol` or `ul` of `ContentItem` rows. It does not add a page landmark. The caller keeps its page
 heading and selects `emptyHeadingLevel` (default 2) for the explained recovery frame.

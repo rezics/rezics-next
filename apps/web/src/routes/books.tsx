@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { BookCataloguePage } from '../books/catalogue/page';
-import { loadBookCatalogue } from '../books/catalogue/server';
+import { BookCataloguePage, loadBookCatalogue } from '../books/catalogue/route';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 

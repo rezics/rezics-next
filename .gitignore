@@ -1,22 +1,5 @@
 # Temporary files at any depth, including workspace-local .temp directories.
 .temp/
-# Retain the named implementation continuation through source landing.
-!/.temp/
-/.temp/*
-!/.temp/continuation/
-/.temp/continuation/*
-!/.temp/continuation/shelf-type-observers.md
-!/.temp/continuation/commerce-financial-expiry-purge.md
-# Retain only the reviewed, secret-free Search census and native receiving evidence.
-!/.temp/search-walk/
-/.temp/search-walk/*
-!/.temp/search-walk/2026-11-07T12-26-23-118Z/
-/.temp/search-walk/2026-11-07T12-26-23-118Z/*
-!/.temp/search-walk/2026-11-07T12-26-23-118Z/census.json
-!/.temp/search-walk/2026-11-07T12-26-23-118Z/persona.log
-!/.temp/search-walk/2026-11-07T12-26-23-118Z/seed.log
-!/.temp/search-walk/2026-11-07T12-26-23-118Z/stack.redacted.log
-!/.temp/search-walk/native-receiving-2026-11-07T15-44-09Z.json
 node_modules/
 /apps/web/.cache/
 /.cache/

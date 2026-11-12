@@ -53,3 +53,25 @@ export type {
   HostedOwnerInventoryEntry,
   HostedOwnerInventoryView,
 } from './hosted-chapters-model.ts';
+
+/** Native notebook commands and current-source reads. Search owns any candidate ordering or usefulness page. */
+export {
+  createKnowledgeNotebook,
+  createKnowledgeDocument,
+  reviseKnowledgeDocument,
+  setKnowledgePublication,
+} from './knowledge-commands.ts';
+export { readKnowledgePrivateDocument, readKnowledgePublicDocument } from './knowledge-reads.ts';
+export type {
+  KnowledgeCommandContext,
+  KnowledgeCommandValue,
+  KnowledgeCreateDocumentInput,
+  KnowledgeCreateNotebookInput,
+  KnowledgeDependencies,
+  KnowledgeDocumentInput,
+  KnowledgeDocumentView,
+  KnowledgePublicationInput,
+  KnowledgePublicDocumentView,
+  KnowledgeReadContext,
+  KnowledgeReviseDocumentInput,
+} from './knowledge-model.ts';

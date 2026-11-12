@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { DocumentSnapshot } from '@rezics/document';
-import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from '../actions';
+import type { CurrentPost, EditFailure, RevisedPost, ThreadCreated, WriteFailure } from '../actions';
 import type { locales } from '../../paraglide/runtime.js';
 import type { SavedWriting } from '../local-writing-draft';
 
@@ -31,6 +31,26 @@ export type OwnDraftWriteInput = Readonly<{
   idempotencyKey: string;
   mediaIds: readonly string[];
 }>;
+export type OwnDraftStudioCreateInput = Readonly<{
+  boardId: string;
+  title: string;
+  body: DocumentSnapshot;
+  licence: string;
+  subjectIds: readonly string[];
+  mediaIds: readonly string[];
+  idempotencyKey: string;
+}>;
+export type OwnDraftStudioRevisionInput = Readonly<{
+  postId: string;
+  body: DocumentSnapshot;
+  revisionId: string;
+  idempotencyKey: string;
+  mediaIds: readonly string[];
+  boardId: string;
+  licence: string;
+  subjectIds: readonly string[];
+  visibility: 'draft' | 'published';
+}>;
 export type OwnDraftEraseInput = Readonly<{
   postId: string;
   threadId: string;
@@ -50,6 +70,14 @@ export type OwnDraftReadback =
   | 'concealed'
   | 'unavailable';
 export type OwnDraftCommands = Readonly<{
+  create?: (
+    input: OwnDraftStudioCreateInput,
+    signal: AbortSignal,
+  ) => Promise<{ ok: true; thread: ThreadCreated['thread'] } | WriteFailure>;
+  revise?: (
+    input: OwnDraftStudioRevisionInput,
+    signal: AbortSignal,
+  ) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
   write: (input: OwnDraftWriteInput, signal: AbortSignal) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
   erase: (input: OwnDraftEraseInput, signal: AbortSignal) => Promise<{ ok: true } | WriteFailure>;
   readback: (postId: string, signal: AbortSignal) => Promise<OwnDraftReadback>;
@@ -69,7 +97,7 @@ export type OwnDraftIdentity = Readonly<{
   callerEpoch: string;
   locale: OwnDraftLocale;
   source: string;
-  address: '/drafts';
+  address: string;
 }>;
 
 export type OwnDraftPageRequest = Readonly<{

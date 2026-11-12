@@ -15,7 +15,7 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 // stopped, which nobody notices from the inside: on 2026-10-26 eight tasks sat in running without a worker for up to
 // three hours, and stabilize stopped reaching dev for over two hours, before anyone looked.
 
-type CheckHost = { name: string; address: string; identity: string };
+type CheckHost = { name: string; address: string; identity: string; performance?: boolean };
 export type CheckHostProbeResult = { status: number | null; stderr: string };
 export type CheckHostProbe = (host: CheckHost, complete: (result: CheckHostProbeResult) => void) => void;
 type State = {
@@ -352,6 +352,20 @@ export function checkHostsInOutage(stateDirectory: string, policy: ControlPolicy
   }
 }
 
+/** A retry waits only when every performance-approved host that can take it is in the watchdog's outage set. */
+export function checkHostsBlockingRetry(stateDirectory: string, policy: ControlPolicy = defaultPolicy): string[] {
+  const eligible = [
+    ...new Set(
+      checkHosts(stateDirectory)
+        .filter((host) => host.performance === true)
+        .map(({ name }) => name),
+    ),
+  ];
+  if (!eligible.length) return [];
+  const outages = new Set(checkHostsInOutage(stateDirectory, policy));
+  return eligible.every((name) => outages.has(name)) ? eligible : [];
+}
+
 function probeCheckHosts(
   state: State,
   stateDirectory: string,
@@ -459,7 +473,8 @@ export function retryWait(
   if (waitingFor.length) return { reason: 'dependencies', waitingFor };
   const until = intent.options?.notBefore;
   if (until && Date.parse(until) > now) return { reason: 'backoff', until };
-  const hosts = intent.options?.awaitCheckHosts && stateDirectory ? checkHostsInOutage(stateDirectory, policy) : [];
+  const hosts =
+    intent.options?.awaitCheckHosts && stateDirectory ? checkHostsBlockingRetry(stateDirectory, policy) : [];
   return hosts.length ? { reason: 'check-hosts', hosts } : null;
 }
 

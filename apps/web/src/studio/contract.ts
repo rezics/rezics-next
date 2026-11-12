@@ -22,10 +22,18 @@ export type StudioDocument = Readonly<{
   revisionId: string;
   updatedAt: string;
   state: 'draft' | 'published' | 'protected' | 'taken_down';
+  openable?: boolean;
 }>;
 export type StudioSelection = Readonly<{
   revision: StudioRevision;
   visibility?: 'draft' | 'published' | 'protected' | 'taken_down';
+  /** Exact native authoring context for account-owned discussion drafts. */
+  native?: Readonly<{
+    threadId: string;
+    boardId: string;
+    licence: string;
+    subjectIds: readonly string[];
+  }>;
   permissions: Readonly<{ edit: boolean; publish: boolean }>;
 }>;
 export type StudioFailure = Readonly<{
@@ -83,10 +91,22 @@ export type PublicationRecord = Readonly<{
   publishedAt: string | null;
   state: 'published' | 'withdrawn';
   entries: readonly { occurrenceId: string | null; title: string; document: ExactDocument }[];
+  /** Present only after account article publication has been acknowledged and read back. */
+  readbackSelection?: StudioSelection;
+}>;
+export type ArticleReviewSnapshot = Readonly<{
+  boardId: string;
+  licence: string;
+  subjectIds: readonly string[];
+  mediaIds: readonly string[];
+  body: DocumentSnapshot;
 }>;
 export type PublicationReview = Readonly<{
   /** Opaque native review binding; never interpreted as a grant by the view. */
   reviewId: string;
+  /** Article review is local acknowledgement of the exact saved revision; Books retain native hosted review. */
+  authority?: 'hosted' | 'local';
+  articleSnapshot?: ArticleReviewSnapshot;
   target: PublicationTarget;
   expectedPublicationRevision: string | null;
   expiresAt: string;
@@ -103,6 +123,20 @@ export type DraftSave = Readonly<{
   body: DocumentSnapshot;
   mediaIds: readonly string[];
   idempotencyKey: string;
+  native?: Readonly<{
+    boardId: string;
+    licence: string;
+    subjectIds: readonly string[];
+    visibility: 'draft';
+  }>;
+}>;
+export type NativeDraftCreate = Readonly<{
+  boardId: string;
+  title: string;
+  body: DocumentSnapshot;
+  licence: string;
+  subjectIds: readonly string[];
+  mediaIds: readonly string[];
 }>;
 export type StudioInput = Readonly<{
   /** Replace on account, authorization epoch, project or route visit replacement. */
@@ -115,6 +149,8 @@ export type StudioInput = Readonly<{
   initialSelection?: StudioSelection;
   publications: StudioPage<PublicationRecord>;
   canCreateDraft: boolean;
+  /** Render native account creation operands and account inventory recovery. */
+  nativeDrafts?: boolean;
   canPublish: boolean;
   /** A missing native publication flow must not render an empty history as an admitted result. */
   publicationUnavailableReason?: string;
@@ -122,7 +158,7 @@ export type StudioInput = Readonly<{
 
 /** All methods recheck current native authority; mutations use exact preconditions and replay-safe keys.
  * Save always writes a private draft revision, including when the Post already has a published version.
- * Publish atomically freezes the reviewed TOC and exact bodies; it never publishes unselected drafts.
+ * Hosted Book publish atomically freezes the reviewed TOC and exact bodies; it never publishes unselected drafts.
  * The mounted route/generated-operation adapter is deliberately supplied by the consumer.
  */
 export interface StudioPort {
@@ -134,6 +170,10 @@ export interface StudioPort {
   open(input: { projectId: string; postId: string }, signal: AbortSignal): Promise<StudioResult<StudioSelection>>;
   createDraft(
     input: { projectId: string; title: string; idempotencyKey: string },
+    signal: AbortSignal,
+  ): Promise<StudioResult<StudioSelection>>;
+  createNativeDraft?(
+    input: NativeDraftCreate & { idempotencyKey: string },
     signal: AbortSignal,
   ): Promise<StudioResult<StudioSelection>>;
   saveDraft(input: DraftSave, signal: AbortSignal): Promise<StudioResult<StudioSelection>>;

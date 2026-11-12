@@ -1,17 +1,22 @@
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
-import { nativeFixture } from './support/erasure-native.ts';
+import { nativeFixture, nativeFixtureResources, ownNativePool } from './support/erasure-native.ts';
 import { createAuthRestoreHost } from '../src/host.ts';
 import { startNativeErasure } from '../src/erasure-native.ts';
 import { importRestoredAuthProgress, requireRestoredAuthAdmission } from '../src/restore-admission.ts';
 import { newId } from '../../kernel/src/route/route.ts';
 
 test('native Source live enrollment retains late deletions while restored Auth waits for original progress and physical receiving closure', async () => {
-  const f = await nativeFixture();
-  const copy = testDatabase();
-  let database = new Pool({ connectionString: copy.url, max: 1 });
+  const resources = nativeFixtureResources();
   try {
+    const f = await nativeFixture();
+    resources.own('native fixture', () => f.close());
+    const copy = testDatabase();
+    resources.own('restored database', () => copy.close());
+    const originalDatabase = new Pool({ connectionString: copy.url, max: 1 });
+    ownNativePool(originalDatabase, resources, 'original restored Auth pool');
+    let database = originalDatabase;
     const restored = f.restoredGeneration(database, 'native-live-copy');
     const ports = restored.obligations!;
     const cutId = crypto.randomUUID();
@@ -93,6 +98,7 @@ test('native Source live enrollment retains late deletions while restored Auth w
     // A consumer restart cannot consume the Source obligation or assert custody.
     await database.end();
     database = new Pool({ connectionString: copy.url, max: 1 });
+    ownNativePool(database, resources, 'restarted restored Auth pool');
     const resumed = f.restoredGeneration(database, restored.generation);
     await expect(importRestoredAuthProgress(database, resumed, accountId)).rejects.toMatchObject({
       code: 'receiving-closure-pending',
@@ -104,25 +110,28 @@ test('native Source live enrollment retains late deletions while restored Auth w
     expect((await database.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(0);
     expect((await database.query('SELECT 1 FROM auth_signing_key')).rowCount).toBe(0);
   } finally {
-    await database.end();
-    copy.close();
-    await f.close();
+    await resources.close();
   }
 }, 120_000);
 
 // Host source binding must use the native trusted Access composition rather
 // than require a second set of feed callbacks in the restore declaration.
 test('isolated host inherits the native obligation feed and records its durable source cursor before replay', async () => {
-  const f = await nativeFixture();
-  const copy = testDatabase();
-  const database = new Pool({ connectionString: copy.url, max: 1 });
-  const { obligations: _feed, ...restored } = f.restoredGeneration(database, 'host-native-feed');
-  const host = createAuthRestoreHost({
-    database,
-    restoredGeneration: restored,
-    trustedAccess: f.bindings.trustedAccess,
-  });
+  const resources = nativeFixtureResources();
   try {
+    const f = await nativeFixture();
+    resources.own('native fixture', () => f.close());
+    const copy = testDatabase();
+    resources.own('restored database', () => copy.close());
+    const database = new Pool({ connectionString: copy.url, max: 1 });
+    ownNativePool(database, resources, 'restored Auth pool');
+    const { obligations: _feed, ...restored } = f.restoredGeneration(database, 'host-native-feed');
+    const host = createAuthRestoreHost({
+      database,
+      restoredGeneration: restored,
+      trustedAccess: f.bindings.trustedAccess,
+    });
+    resources.own('isolated restore host', () => host.stop());
     expect('handler' in host).toBe(false);
     expect('service' in host).toBe(false);
     expect(await host.reconcile()).toEqual({ pending: 'source-consumer-pending' });
@@ -136,27 +145,30 @@ test('isolated host inherits the native obligation feed and records its durable 
     expect((await database.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(0);
     expect((await database.query('SELECT 1 FROM auth_signing_key')).rowCount).toBe(0);
   } finally {
-    await host.stop();
-    copy.close();
-    await f.close();
+    await resources.close();
   }
 }, 120_000);
 
 test('isolated restore lifecycle keeps missing native owners closed and shuts down only its owned pool', async () => {
-  const copy = testDatabase();
-  const database = new Pool({ connectionString: copy.url, max: 1 });
-  const host = createAuthRestoreHost({
-    database,
-    restoredGeneration: { kind: 'RESTORED', generation: 'missing-owner-copy' },
-  });
+  const resources = nativeFixtureResources();
+  let ownedDatabase: Pool | undefined;
   try {
+    const copy = testDatabase();
+    resources.own('restored database', () => copy.close());
+    const database = new Pool({ connectionString: copy.url, max: 1 });
+    ownedDatabase = database;
+    ownNativePool(database, resources, 'restored Auth pool');
+    const host = createAuthRestoreHost({
+      database,
+      restoredGeneration: { kind: 'RESTORED', generation: 'missing-owner-copy' },
+    });
+    resources.own('isolated restore host', () => host.stop());
     expect(await host.reconcile()).toEqual({ pending: 'database-owner-unavailable' });
     await host.start();
     expect((await database.query('SELECT 1 FROM auth_signing_key')).rowCount).toBe(0);
     expect((await database.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(0);
   } finally {
-    await host.stop();
-    copy.close();
+    await resources.close();
   }
-  expect(database.ended).toBe(true);
+  expect(ownedDatabase?.ended).toBe(true);
 });

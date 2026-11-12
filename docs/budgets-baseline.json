@@ -2,10 +2,6 @@
   "version": 1,
   "entries": [
     {
-      "path": ".temp/continuation/**",
-      "bytes": 194053
-    },
-    {
       "path": "apps/auth/README.md",
       "bytes": 79575
     },

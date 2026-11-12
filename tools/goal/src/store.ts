@@ -515,7 +515,9 @@ export class WorkerStore implements AttemptFence {
     return this.db
       .transaction(() => {
         const progress = this.db
-          .query('SELECT process_task_id, process_attempt, processes_complete FROM worker_maintenance_progress WHERE id=1')
+          .query(
+            'SELECT process_task_id, process_attempt, processes_complete FROM worker_maintenance_progress WHERE id=1',
+          )
           .get() as { process_task_id: string; process_attempt: number; processes_complete: number };
         if (progress.processes_complete) return { examined: 0, complete: true };
         const rows = this.db
@@ -631,7 +633,12 @@ export class WorkerStore implements AttemptFence {
           taskId: row.task_id,
           attempt: row.attempt,
           worktree: row.worktree,
-          process: { pid: row.pid, start: row.start, boot: row.boot, group: row.process_group } satisfies ProcessIdentity,
+          process: {
+            pid: row.pid,
+            start: row.start,
+            boot: row.boot,
+            group: row.process_group,
+          } satisfies ProcessIdentity,
         }));
       })
       .immediate();
@@ -641,9 +648,7 @@ export class WorkerStore implements AttemptFence {
     if (!candidates.length) return;
     const terms = candidates.map(() => '(ticket=? AND kind=? AND task_id=? AND attempt=?)').join(' OR ');
     const orderedBindings = candidates.flatMap(({ kind, taskId, attempt, ticket }) => [ticket, kind, taskId, attempt]);
-    this.db
-      .query(`DELETE FROM worker_maintenance_candidates WHERE ${terms}`)
-      .run(...orderedBindings);
+    this.db.query(`DELETE FROM worker_maintenance_candidates WHERE ${terms}`).run(...orderedBindings);
   }
   /** A cheap existence check; it does not decode old blocked-worktree bodies. */
   hasWorktreeCleanupDispositions(): boolean {
@@ -698,9 +703,7 @@ export class WorkerStore implements AttemptFence {
       .immediate();
   }
   worktreeScanComplete(): boolean {
-    return !this.db
-      .query('SELECT 1 FROM worker_maintenance_scan_directories WHERE complete=0 LIMIT 1')
-      .get();
+    return !this.db.query('SELECT 1 FROM worker_maintenance_scan_directories WHERE complete=0 LIMIT 1').get();
   }
   nextWorktreeScanDirectory(): WorktreeScanDirectory | undefined {
     const row = this.db
@@ -723,7 +726,9 @@ export class WorkerStore implements AttemptFence {
       .run(root, path);
   }
   removeWorktreeScanDirectory(root: string, path: string): void {
-    this.db.query('DELETE FROM worker_maintenance_scan_directories WHERE root=? AND path=? AND root<>path').run(root, path);
+    this.db
+      .query('DELETE FROM worker_maintenance_scan_directories WHERE root=? AND path=? AND root<>path')
+      .run(root, path);
   }
   updateWorktreeScanDirectory(
     root: string,
@@ -786,15 +791,15 @@ export class WorkerStore implements AttemptFence {
     if (!candidates.length) return;
     const terms = candidates.map(() => '(ticket=? AND path=?)').join(' OR ');
     const bindings = candidates.flatMap(({ path, ticket }) => [ticket, path]);
-    this.db
-      .query(`DELETE FROM worker_maintenance_strays WHERE ${terms}`)
-      .run(...bindings);
+    this.db.query(`DELETE FROM worker_maintenance_strays WHERE ${terms}`).run(...bindings);
   }
   maintenanceTasksBootstrapped(): boolean {
     return Boolean(
-      (this.db.query('SELECT tasks_complete FROM worker_maintenance_progress WHERE id=1').get() as {
-        tasks_complete: number;
-      }).tasks_complete,
+      (
+        this.db.query('SELECT tasks_complete FROM worker_maintenance_progress WHERE id=1').get() as {
+          tasks_complete: number;
+        }
+      ).tasks_complete,
     );
   }
   hasPendingWorktreeCandidates(): boolean {
@@ -1089,6 +1094,46 @@ export class WorkerStore implements AttemptFence {
       sequence: number;
     } | null;
     return row?.sequence;
+  }
+  /** Current task and attempt states let capacity reconcile old live tickets without reading their worktrees. */
+  capacityLifecycle(taskId: string):
+    | {
+        currentAttempt: number;
+        taskState: string;
+        attemptState?: string;
+        attemptStartedAt?: string;
+        priorityHeadStart?: boolean;
+      }
+    | undefined {
+    const row = this.db
+      .query(`
+        SELECT t.current_attempt AS current_attempt,
+               json_extract(t.body, '$.state') AS task_state,
+               json_extract(a.body, '$.state') AS attempt_state,
+               json_extract(a.body, '$.startedAt') AS attempt_started_at,
+               CASE WHEN json_extract(t.body, '$.taskClass') = 'critical-path'
+                          OR json_extract(t.body, '$.brief.criticalPath') = 1
+                          OR json_extract(t.body, '$.brief.target') = 'stabilize'
+                    THEN 1 ELSE 0 END AS priority_head_start
+        FROM worker_tasks AS t
+        LEFT JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt
+        WHERE t.id=?
+      `)
+      .get(taskId) as {
+      current_attempt: number;
+      task_state: string | null;
+      attempt_state: string | null;
+      attempt_started_at: string | null;
+      priority_head_start: number;
+    } | null;
+    if (!row || typeof row.task_state !== 'string') return undefined;
+    return {
+      currentAttempt: row.current_attempt,
+      taskState: row.task_state,
+      ...(typeof row.attempt_state === 'string' ? { attemptState: row.attempt_state } : {}),
+      ...(typeof row.attempt_started_at === 'string' ? { attemptStartedAt: row.attempt_started_at } : {}),
+      priorityHeadStart: row.priority_head_start === 1,
+    };
   }
   /** Ready, nonurgent tasks accepted earlier than one queued start for the same Goal. */
   goalReadyTaskIdsBefore(goal: string, sequence: number): string[] {
@@ -1391,8 +1436,7 @@ export class WorkerStore implements AttemptFence {
         if (
           owners.some(
             (owner) =>
-              !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
-              this.hasLiveProofOwner(owner),
+              !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) || this.hasLiveProofOwner(owner),
           )
         ) {
           if (requireExitedOwners)
@@ -1934,10 +1978,7 @@ export class WorkerStore implements AttemptFence {
       (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
     if (!retryable) throw new StaleAttemptError(ref, task.currentAttempt);
     if (attempt) {
-      if (
-        !['stopped', 'exited'].includes(attempt.state) ||
-        this.hasLiveProofOwner(attempt)
-      )
+      if (!['stopped', 'exited'].includes(attempt.state) || this.hasLiveProofOwner(attempt))
         throw new StaleAttemptError(ref, task.currentAttempt);
     }
     this.assertProofContract(task, brief);
@@ -2112,6 +2153,7 @@ export class WorkerStore implements AttemptFence {
     paths: { briefPath: string; worktree: string; branch: string; base: string },
     taskClass: Task['taskClass'],
     id: string = crypto.randomUUID(),
+    proofAuthorization?: Task['proofAuthorization'],
   ): Task {
     const task = this.db
       .transaction(() => {
@@ -2136,6 +2178,7 @@ export class WorkerStore implements AttemptFence {
           state,
           currentAttempt: 0,
           createdAt: new Date().toISOString(),
+          ...(proofAuthorization ? { proofAuthorization } : {}),
         };
         this.db.query('INSERT INTO worker_tasks VALUES (?,?,?,?)').run(id, sequence, 0, JSON.stringify(task));
         recordFlow(this.db, { taskId: id, attempt: 0, stage: 'dispatch', action: 'dispatched', at: task.createdAt });
@@ -2380,6 +2423,126 @@ export class WorkerStore implements AttemptFence {
         });
       return attempt;
     });
+  }
+  /** Record the exact operator-authorized check while preserving a stopped attempt's stop tombstone. */
+  recordWithdrawnTypingRecoveryAuthorization(
+    ref: AttemptRef,
+    expectedResult: string,
+    pending: NonNullable<Attempt['typingEvidencePending']>,
+    eventBody: unknown,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (
+          attempt.state !== 'stopped' ||
+          JSON.stringify(pending.command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+        )
+          throw new Error('stopped attempt no longer accepts its exact Web typing recovery grant');
+        attempt.typingEvidencePending = pending;
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-recovery-authorized',
+            new Date().toISOString(),
+            JSON.stringify(eventBody),
+          );
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  /** Move a stopped attempt into ordinary settlement only after exact current Web compiler evidence exists. */
+  beginWithdrawnTypingRecoverySettlement(
+    ref: AttemptRef,
+    expectedResult: string,
+    command: readonly string[],
+    eventBody: unknown,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (
+          JSON.stringify(command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+          (attempt.state !== 'stopped' && attempt.state !== 'exited') ||
+          (attempt.typingEvidencePending?.command !== undefined &&
+            JSON.stringify(attempt.typingEvidencePending.command) !== JSON.stringify(command))
+        )
+          throw new Error('stopped attempt no longer accepts its exact Web typing receipt');
+        attempt.state = 'exited';
+        attempt.typingEvidencePending ??= {
+          result: 'Compiler evidence for the retained Web source is being reconciled.',
+          command: [...command],
+        };
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-evidence-recovery',
+            new Date().toISOString(),
+            JSON.stringify(eventBody),
+          );
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  /** Preserve compiler diagnostics on a stopped source attempt without starting a source-writing retry. */
+  recordWithdrawnTypingRecoveryFailure(
+    ref: AttemptRef,
+    expectedResult: string,
+    result: string,
+    eventBody: unknown,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (attempt.state !== 'stopped') throw new Error('stopped attempt no longer accepts compiler failure evidence');
+        attempt.failureKind = 'tool';
+        attempt.result = result;
+        delete attempt.typingEvidencePending;
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'typing-evidence-failed', new Date().toISOString(), JSON.stringify(eventBody));
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  private withdrawnTypingRecoveryRows(ref: AttemptRef, expectedResult: string): { attempt: Attempt } {
+    const task = decode<Task>(this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(ref.taskId));
+    const attempt = decode<Attempt>(
+      this.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
+    );
+    const retry = decode<RetryIntent>(
+      this.db.query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
+    );
+    const stop = attempt?.terminationIntent;
+    if (
+      !task ||
+      task.currentAttempt !== ref.attempt ||
+      task.state !== 'stopped' ||
+      task.brief.goal !== 'web' ||
+      task.brief.kind !== 'interface' ||
+      !attempt ||
+      attempt.result !== expectedResult ||
+      attempt.exitCode !== 0 ||
+      attempt.failureKind !== 'tool' ||
+      !stop ||
+      stop.operation !== 'stop' ||
+      stop.state !== 'complete' ||
+      stop.processIdentity !== 'known' ||
+      !stop.settledAt ||
+      retry?.status !== 'abandoned' ||
+      retry.abandonedBy !== 'stop' ||
+      retry.nextAttempt !== undefined ||
+      retry.options.escalation !== 'environment'
+    )
+      throw new Error('stopped source or withdrawn retry changed before typing recovery persistence');
+    return { attempt };
   }
   /** Do not publish a replacement while an accepted operator stop still owns this generation. */
   assertRetryAllowed(ref: AttemptRef, explicit = false): void {

@@ -1582,6 +1582,15 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   const operation = await get(`/v1/subjectIdentityOperations/${operationId}`, 'acceptor');
   expect(operation.status).toBe(200);
   expect(operation.body).toEqual({ operation: { id: operationId, done: false } });
+  const completed = await driver.advanceIdentityOperation(operationId);
+  expect(completed.status, JSON.stringify(completed.body)).toBe(200);
+  expect(completed.body).toEqual({
+    operation: {
+      id: operationId,
+      done: true,
+      result: { survivor: survivor!.id, redirected: redirected!.id, revision: 2 },
+    },
+  });
   const redirect = await get(subjectPath(redirected!.id));
   expect(redirect.status).toBe(308);
   expect(redirect.body).toEqual({ redirect: { from: redirected!.id, to: survivor!.id } });

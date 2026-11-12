@@ -1,15 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
-import { StudioWorkspace, type StudioDocument, type StudioInput, type StudioPort, type StudioResult } from '../studio';
-import type { ExactDocument, StudioSelection } from '../studio/contract';
-import { createPostDocumentPort } from '../studio/post-document-port';
-import { openHostedStudio, type HostedStudioInput } from '../studio/hosted-workspace';
-import type { HostedOwnerBook, HostedOwnerInventory, HostedTarget } from '../studio/hosted-contract';
-import { hostedId } from '../studio/hosted-contract';
-import { hostedFailure } from '../studio/hosted-native';
-import { listHostedBooks, readOwnedHostedBook } from '../studio/hosted-actions';
+import {
+  createPostDocumentPort,
+  createStudioAccountPort,
+  hostedFailure,
+  hostedId,
+  listHostedBooks,
+  openHostedStudio,
+  readOwnedHostedBook,
+  StudioWorkspace,
+  type ExactDocument,
+  type StudioDocument,
+  type StudioInput,
+  type StudioResult,
+  type StudioSelection,
+  type HostedOwnerBook,
+  type HostedOwnerInventory,
+  type HostedStudioInput,
+  type HostedTarget,
+} from '../studio';
+import {
+  ownDraftBrowserWritingReader,
+  ownDraftNativeCommandTransport,
+  ownDraftNativeReader,
+  useOwnDraftVisit,
+} from '../threads';
+import { Button } from '@rezics/ui/shadcn/button';
+import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { requireSignedIn } from '../session/guard';
 import { pageHead } from '../shell/head';
@@ -21,9 +40,11 @@ const searchSchema = v.pipe(
   v.strictObject({
     catalogueId: v.optional(hostedId),
     postId: v.optional(hostedId),
+    books: v.optional(v.literal('1')),
     cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+    draftCursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(32768))),
   }),
-  v.check((value) => !(value.catalogueId && value.postId)),
+  v.check((value) => !(value.catalogueId && value.postId) && !(value.books && (value.catalogueId || value.postId))),
 );
 
 export const Route = createFileRoute('/studio')({
@@ -32,14 +53,16 @@ export const Route = createFileRoute('/studio')({
   loaderDeps: ({ search }) => ({
     catalogueId: search.catalogueId ?? null,
     postId: search.postId ?? null,
+    books: search.books ?? null,
     cursor: search.cursor ?? null,
+    draftCursor: search.draftCursor ?? null,
   }),
   loader: ({ deps }) =>
     deps.catalogueId
       ? readOwnedHostedBook({ data: { catalogueId: deps.catalogueId } })
-      : deps.postId
-        ? Promise.resolve(null)
-        : listHostedBooks({ data: { cursor: deps.cursor } }),
+      : deps.books
+        ? listHostedBooks({ data: { ...(deps.cursor ? { cursor: deps.cursor } : {}) } })
+        : Promise.resolve(null),
   head: ({ match }) => pageHead({ title: 'Studio', robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: StudioRoute,
 });
@@ -58,16 +81,6 @@ function StudioRoute() {
   }, [queryClient, session.state, session.subject]);
   const locale = getLocale();
 
-  if (search.postId)
-    return (
-      <ColumnStudioVisit
-        postId={search.postId}
-        source={source}
-        accountId={session.subject ?? null}
-        csrfToken={session.csrfToken}
-        locale={locale}
-      />
-    );
   if (search.catalogueId) {
     if (!loaded || !('ok' in loaded) || !loaded.ok)
       return <StudioMessage message={loaded && 'ok' in loaded ? loaded.error.message : 'This book is unavailable.'} />;
@@ -81,14 +94,25 @@ function StudioRoute() {
       />
     );
   }
-  if (!loaded || !('ok' in loaded) || !loaded.ok)
+  if (search.books) {
+    if (!loaded || !('ok' in loaded) || !loaded.ok)
+      return (
+        <StudioMessage message={loaded && 'ok' in loaded ? loaded.error.message : 'Hosted books are unavailable.'} />
+      );
     return (
-      <StudioMessage
-        message={loaded && 'ok' in loaded ? loaded.error.message : 'Your Studio library is unavailable.'}
-      />
+      <StudioLibrary inventory={loaded.value as HostedOwnerInventory} cursor={search.cursor ?? null} locale={locale} />
     );
+  }
   return (
-    <StudioLibrary inventory={loaded.value as HostedOwnerInventory} cursor={search.cursor ?? null} locale={locale} />
+    <StudioAccountVisit
+      source={source}
+      accountId={session.subject ?? null}
+      csrfToken={session.csrfToken}
+      locale={locale}
+      cursor={search.cursor ?? null}
+      draftCursor={search.draftCursor ?? null}
+      resumePostId={search.postId ?? null}
+    />
   );
 }
 
@@ -115,9 +139,10 @@ function StudioLibrary({
       <header className="space-y-2">
         <p className="studio-eyebrow">Author workspace</p>
         <h1 className="text-3xl font-semibold">Studio</h1>
-        <p>
-          Open a hosted book or continue an existing column draft. Draft creation starts in its owning Content flow.
-        </p>
+        <p>Hosted books keep their independent organizer and frozen publication workflow.</p>
+        <a className="studio-skip" href={localizeHref('/studio', { locale })}>
+          {m.studio_account_return({}, { locale })}
+        </a>
       </header>
       <section className="studio-stack" aria-labelledby="studio-books-heading">
         <h2 id="studio-books-heading">Your hosted books</h2>
@@ -152,25 +177,200 @@ function StudioLibrary({
         {inventory.nextCursor ? (
           <a
             className="studio-skip"
-            href={localizeHref(`/studio?cursor=${encodeURIComponent(inventory.nextCursor)}`, { locale })}
+            href={localizeHref(`/studio?books=1&cursor=${encodeURIComponent(inventory.nextCursor)}`, { locale })}
           >
             More books
           </a>
         ) : null}
       </section>
-      <section className="studio-stack" aria-labelledby="studio-column-heading">
-        <h2 id="studio-column-heading">Continue a column draft</h2>
-        <p>Open an opening post from your drafts page to edit its text, preview it, and compare saved revisions.</p>
-        <a className="studio-skip" href={localizeHref('/drafts', { locale })}>
-          Open my drafts
+    </main>
+  );
+}
+
+type AccountWorkspaceState =
+  | { state: 'loading'; cursor: string | null }
+  | { state: 'failed'; cursor: string | null; message: string }
+  | {
+      state: 'ready';
+      workspace: Parameters<typeof StudioWorkspace>[0];
+      preparing: boolean;
+      resumeIssue: string | null;
+    };
+
+function StudioAccountVisit({
+  source,
+  accountId,
+  csrfToken,
+  locale,
+  cursor,
+  draftCursor,
+  resumePostId,
+}: {
+  source: HistoricalReaderSource | null;
+  accountId: string | null | undefined;
+  csrfToken: string | null;
+  locale: Locale;
+  cursor: string | null;
+  draftCursor: string | null;
+  resumePostId: string | null;
+}) {
+  const localWritingReader = useMemo(() => ownDraftBrowserWritingReader(() => window.localStorage), []);
+  const visit = useOwnDraftVisit(ownDraftNativeReader, localWritingReader, ownDraftNativeCommandTransport, {
+    scope: 'studio-account-drafts',
+    source: 'content',
+    address: '/studio',
+  });
+  const requestedCursor = draftCursor ?? cursor;
+  const [attempt, setAttempt] = useState(0);
+  const [loaded, setLoaded] = useState<AccountWorkspaceState | null>(null);
+  useEffect(() => {
+    if (!source || !accountId || !visit.active || visit.identity.accountId !== accountId) {
+      setLoaded(null);
+      return;
+    }
+    const controller = new AbortController();
+    const origin = source.read();
+    const isCurrent = () => {
+      const now = source.read();
+      return (
+        !controller.signal.aborted &&
+        visit.current() &&
+        now.healthy &&
+        now.sourceId === origin.sourceId &&
+        now.generation === origin.generation &&
+        now.state === 'signed-in' &&
+        now.subject === accountId
+      );
+    };
+    setLoaded({ state: 'loading', cursor: requestedCursor });
+    void (async () => {
+      const page = await visit.reader.list(
+        {
+          accountId,
+          ...(requestedCursor === null ? {} : { cursor: requestedCursor }),
+        },
+        controller.signal,
+      );
+      if (!isCurrent()) return;
+      if (typeof page === 'string') {
+        const message =
+          page === 'denied' ? m.own_drafts_denied({}, { locale }) : m.own_drafts_unavailable({}, { locale });
+        setLoaded({ state: 'failed', cursor: requestedCursor, message });
+        return;
+      }
+      if (page.viewer.accountId !== accountId || page.drafts.length > 20) {
+        setLoaded({ state: 'failed', cursor: requestedCursor, message: m.own_drafts_unavailable({}, { locale }) });
+        return;
+      }
+      const identity = { ...visit.identity, accountId, authnEpoch: page.viewer.authnEpoch };
+      const port = createStudioAccountPort({
+        identity,
+        initialPage: page,
+        reader: visit.reader,
+        ...(visit.commands ? { commands: visit.commands } : {}),
+        source,
+        csrfToken,
+        locale,
+        isCurrent,
+      });
+      const documents: StudioDocument[] = page.drafts.map((entry) => ({
+        postId: entry.id,
+        title: entry.title ?? m.own_drafts_no_title({}, { locale }),
+        revisionId: entry.revisionId,
+        updatedAt: entry.savedAt,
+        state: 'draft',
+        openable: entry.kind === 'discussion' && entry.documentKind === 'opening',
+      }));
+      let initialSelection: StudioSelection | undefined;
+      let resumeIssue: string | null = null;
+      if (resumePostId) {
+        if (!page.drafts.some((entry) => entry.id === resumePostId)) {
+          resumeIssue = m.own_drafts_stale_selection({}, { locale });
+        } else {
+          const opened = await port.open({ projectId: accountId, postId: resumePostId }, controller.signal);
+          if (opened.ok) initialSelection = opened.value;
+          else resumeIssue = opened.error.message;
+        }
+      }
+      if (!isCurrent()) return;
+      const input: StudioInput = {
+        visitKey: JSON.stringify([
+          accountId,
+          page.viewer.authnEpoch,
+          identity.callerEpoch,
+          locale,
+          requestedCursor,
+          resumePostId,
+        ]),
+        projectId: accountId,
+        title: m.own_drafts_title({}, { locale }),
+        profile: { kind: 'articles', seriesTitle: null },
+        documents: { items: documents, nextCursor: page.next },
+        publications: { items: [], nextCursor: null },
+        ...(initialSelection ? { initialSelection } : {}),
+        canCreateDraft: Boolean(visit.commands),
+        nativeDrafts: true,
+        canPublish: Boolean(visit.commands),
+      };
+      setLoaded({
+        state: 'ready',
+        workspace: { input, port },
+        preparing: page.state === 'preparing',
+        resumeIssue,
+      });
+    })().catch(() => {
+      if (isCurrent())
+        setLoaded({ state: 'failed', cursor: requestedCursor, message: m.own_drafts_unavailable({}, { locale }) });
+    });
+    return () => controller.abort();
+  }, [
+    accountId,
+    attempt,
+    csrfToken,
+    locale,
+    requestedCursor,
+    resumePostId,
+    source,
+    visit.active,
+    visit.commands,
+    visit.current,
+    visit.identity,
+    visit.reader,
+  ]);
+
+  return (
+    <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">
+      <nav
+        className="mb-3 flex flex-wrap items-center justify-end"
+        aria-label={m.studio_account_sections({}, { locale })}
+      >
+        <a className="studio-skip" href={localizeHref('/studio?books=1', { locale })}>
+          {m.studio_account_open_books({}, { locale })}
         </a>
-      </section>
+      </nav>
+      {!visit.active || !source || !accountId ? waitForSession() : null}
+      {loaded?.state === 'loading' ? <p role="status">{m.own_drafts_loading({}, { locale })}</p> : null}
+      {loaded?.state === 'failed' ? (
+        <section className="studio-stack" role="alert">
+          <p>{loaded.message}</p>
+          <Button type="button" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+            {m.own_drafts_retry({}, { locale })}
+          </Button>
+        </section>
+      ) : null}
+      {loaded?.state === 'ready' ? (
+        <>
+          {loaded.preparing ? <p role="status">{m.own_drafts_preparing({}, { locale })}</p> : null}
+          {loaded.resumeIssue ? <p role="alert">{loaded.resumeIssue}</p> : null}
+          <StudioWorkspace {...loaded.workspace} />
+        </>
+      ) : null}
     </main>
   );
 }
 
 function waitForSession() {
-  return <p role="status">Preparing your private Studio visit…</p>;
+  return <p role="status">{m.studio_account_preparing({}, { locale: getLocale() })}</p>;
 }
 
 function StudioResultMessage({ result }: { result: StudioResult<unknown> | null }) {
@@ -274,94 +474,6 @@ function BookStudioVisit({
     void run();
     return () => controller.abort();
   }, [book, source, accountId, csrfToken, locale]);
-  if (workspace)
-    return (
-      <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">
-        <StudioWorkspace {...workspace} />
-      </main>
-    );
-  return <StudioResultMessage result={result} />;
-}
-
-function ColumnStudioVisit({
-  postId,
-  source,
-  accountId,
-  csrfToken,
-  locale,
-}: {
-  postId: string;
-  source: HistoricalReaderSource | null;
-  accountId: string | null | undefined;
-  csrfToken: string | null;
-  locale: Locale;
-}) {
-  const [workspace, setWorkspace] = useState<Parameters<typeof StudioWorkspace>[0] | null>(null);
-  const [result, setResult] = useState<StudioResult<unknown> | null>(null);
-  useEffect(() => {
-    if (!source || !accountId) return;
-    const controller = new AbortController();
-    const origin = source.read();
-    const isCurrent = () => {
-      const now = source.read();
-      return (
-        !controller.signal.aborted &&
-        now.healthy &&
-        now.sourceId === origin.sourceId &&
-        now.generation === origin.generation &&
-        now.state === 'signed-in' &&
-        now.subject === accountId
-      );
-    };
-    const documents = createPostDocumentPort({
-      projectId: postId,
-      accountId,
-      locale,
-      source,
-      csrfToken,
-      isCurrent,
-      admitsPost: (candidate) => candidate === postId,
-    });
-    void documents
-      .open({ projectId: postId, postId }, controller.signal)
-      .then((opened) => {
-        if (!isCurrent()) return;
-        if (!opened.ok) {
-          setResult(opened);
-          return;
-        }
-        if (!opened.value.permissions.edit || opened.value.visibility !== 'draft') {
-          setResult(hostedFailure('denied', 'Studio can open only your existing private column drafts.'));
-          return;
-        }
-        const unavailable = async () =>
-          hostedFailure('unavailable', 'Article publication is not available in this workspace.');
-        const port: StudioPort = {
-          ...documents,
-          reviewPublication: unavailable,
-          publish: unavailable,
-          publications: async () => ({ ok: true, value: { items: [], nextCursor: null } }),
-        };
-        const input: StudioInput = {
-          visitKey: JSON.stringify([accountId, origin.generation, postId]),
-          projectId: postId,
-          title: 'Column Studio',
-          profile: { kind: 'articles', seriesTitle: null },
-          documents: { items: [documentRow(opened.value)], nextCursor: null },
-          publications: { items: [], nextCursor: null },
-          initialSelection: opened.value,
-          canCreateDraft: false,
-          canPublish: false,
-          publicationUnavailableReason:
-            'The current Content API has no reviewed article publication operation. Existing draft editing, preview, and exact revision history use the shared Post API.',
-        };
-        if (isCurrent()) setWorkspace({ input, port });
-      })
-      .catch(() => {
-        if (isCurrent()) setResult(hostedFailure('unavailable', 'This column draft could not be opened.'));
-      });
-    return () => controller.abort();
-  }, [postId, source, accountId, csrfToken, locale]);
   if (workspace)
     return (
       <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">

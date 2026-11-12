@@ -213,6 +213,7 @@ test('selection replacement retires the old page and ignores its late response',
   const book = controller.load({ stream: 'home', kind: 'schema:Book' });
   const movie = controller.load({ stream: 'home', kind: 'schema:Movie' });
   expect(requests.get('schema:Book')!.signal.aborted).toBe(true);
+  expect(controller.adoptSeed(page('unrelated-server-seed'))).toBe(false);
   requests.get('schema:Book')!.resolve(page('stale-book'));
   await book;
   expect(controller.snapshot()).toMatchObject({
@@ -225,7 +226,7 @@ test('selection replacement retires the old page and ignores its late response',
   expect(controller.snapshot().result).toEqual(page('current-movie'));
 });
 
-test('the mounted default Home consumer renders current anonymous and prepared member reads after two seconds', async () => {
+test('a mounted anonymous Home adopts a ready server seed and retires its late browser read', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -270,15 +271,23 @@ test('the mounted default Home consumer renders current anonymous and prepared m
     ),
     member: readyPage(rows, 'ready'),
   } satisfies Record<'anonymous' | 'member', HomeFeedResult>;
-  const pending: Array<{ identity: 'anonymous' | 'member'; resolve: (result: HomeFeedResult) => void }> = [];
-  const props = (identity: 'anonymous' | 'member') => ({
-    initial: { state: 'loading' as const, code: 'loading' },
+  const pending: Array<{
+    identity: 'anonymous' | 'member';
+    signal: AbortSignal;
+    resolve: (result: HomeFeedResult) => void;
+  }> = [];
+  const props = (
+    identity: 'anonymous' | 'member',
+    initial: HomeFeedResult = { state: 'loading', code: 'loading' },
+  ) => ({
+    initial,
     locale: 'en',
     signedIn: identity === 'member',
     reader: identity === 'member' ? 'reader' : null,
     credentialEpoch: identity === 'member' ? 'reader:prepared' : null,
     origin: 'https://example.test',
-    read: () => new Promise<HomeFeedResult>((resolve) => pending.push({ identity, resolve })),
+    read: (_input: FeedInput, signal: AbortSignal) =>
+      new Promise<HomeFeedResult>((resolve) => pending.push({ identity, signal, resolve })),
     readKinds: async () => ({ status: 'unavailable' as const }),
     readSpace: async () => ({ status: 'unavailable' as const }),
     readQuestions: async () => ({ status: 'unavailable' as const, code: 'unavailable' }),
@@ -288,6 +297,9 @@ test('the mounted default Home consumer renders current anonymous and prepared m
     await act(async () =>
       root.render(
         <>
+          <div data-identity="seeded">
+            <HomeFeedConsumer {...props('anonymous', results.anonymous)} />
+          </div>
           <div data-identity="anonymous">
             <HomeFeedConsumer {...props('anonymous')} />
           </div>
@@ -299,12 +311,46 @@ test('the mounted default Home consumer renders current anonymous and prepared m
     );
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(pending.map(({ identity }) => identity)).toEqual(['anonymous', 'member']);
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 2_050)));
+    const seededReader = host.querySelector('[data-identity="seeded"] main')!;
+    expect(seededReader.getAttribute('data-home-feed-mounted')).toBe('true');
+    expect(seededReader.getAttribute('aria-busy')).toBe('false');
     for (const identity of ['anonymous', 'member'] as const) {
       const reader = host.querySelector(`[data-identity="${identity}"] main`)!;
       expect(reader.getAttribute('aria-busy')).toBe('true');
       expect(reader.getAttribute('data-home-feed-mounted')).toBe('true');
     }
+    expect(pending).toHaveLength(2);
+    await act(async () =>
+      root.render(
+        <>
+          <div data-identity="seeded">
+            <HomeFeedConsumer {...props('anonymous', results.anonymous)} />
+          </div>
+          <div data-identity="anonymous">
+            <HomeFeedConsumer {...props('anonymous', results.anonymous)} />
+          </div>
+          <div data-identity="member">
+            <HomeFeedConsumer {...props('member')} />
+          </div>
+        </>,
+      ),
+    );
+    const anonymousRead = pending.find(({ identity }) => identity === 'anonymous')!;
+    const memberRead = pending.find(({ identity }) => identity === 'member')!;
+    expect(anonymousRead.signal.aborted).toBe(true);
+    expect(memberRead.signal.aborted).toBe(false);
+    expect(pending).toHaveLength(2);
+    const anonymousReader = host.querySelector('[data-identity="anonymous"] main')!;
+    expect(anonymousReader.getAttribute('aria-busy')).toBe('false');
+    expect(anonymousReader.getAttribute('data-home-feed-state')).toBe('ready');
+    expect(
+      [...anonymousReader.querySelectorAll('[data-feed-id]')].map((item) => item.getAttribute('data-feed-id')),
+    ).toEqual(rows.filter((item) => item.source === 'discovery').map((item) => item.id));
+    await act(async () => {
+      anonymousRead.resolve(page('late-anonymous'));
+      await Promise.resolve();
+    });
+    expect(anonymousReader.getAttribute('data-home-feed-state')).toBe('ready');
     await act(async () => {
       for (const request of pending) request.resolve(results[request.identity]);
       await Promise.resolve();

@@ -21,6 +21,81 @@ export const password = 'native erasure acceptance password';
 export const scopes = ['account:read', 'account:update', 'account:delete', 'account:manage'];
 export type Person = { accountId: string; cookie: string; email: string; bearer: string };
 
+type NativeResourceFailure = { phase: string; cause: unknown };
+
+/** Lifecycle errors name the phase without formatting a driver error or its connection details. */
+export class NativeFixtureLifecycleError extends Error {
+  override readonly name = 'NativeFixtureLifecycleError';
+  constructor(
+    readonly phase: string,
+    cause: unknown,
+    readonly releaseFailures: readonly NativeResourceFailure[] = [],
+  ) {
+    super(`Native fixture lifecycle failed during ${phase}`, { cause });
+  }
+}
+
+/** Own resources as soon as they exist and settle every release in reverse acquisition order. */
+export function nativeFixtureResources() {
+  const entries: {
+    phase: string;
+    release: () => Promise<void>;
+    skip: boolean;
+    failure?: unknown;
+  }[] = [];
+  let closing: Promise<void> | undefined;
+  const own = (phase: string, release: () => void | Promise<void>) => {
+    let pending: Promise<void> | undefined;
+    const entry: (typeof entries)[number] = {
+      phase,
+      skip: false,
+      release: () =>
+        (pending ??= Promise.resolve()
+          .then(release)
+          .catch((cause: unknown) => {
+            entry.failure = cause;
+            throw cause;
+          })),
+    };
+    entries.push(entry);
+    return {
+      release: entry.release,
+      skip() {
+        entry.skip = true;
+      },
+    };
+  };
+  const close = (primary?: NativeResourceFailure): Promise<void> =>
+    (closing ??= (async () => {
+      for (const entry of [...entries].reverse()) {
+        if (entry.skip) continue;
+        try {
+          await entry.release();
+        } catch {
+          // Collect after all owned releases have been attempted.
+        }
+      }
+      const releaseFailures = [...entries]
+        .reverse()
+        .filter((entry) => entry.failure !== undefined)
+        .map(({ phase, failure }) => ({ phase, cause: failure }));
+      if (primary) throw new NativeFixtureLifecycleError(primary.phase, primary.cause, releaseFailures);
+      if (releaseFailures.length)
+        throw new NativeFixtureLifecycleError(releaseFailures[0]!.phase, releaseFailures[0]!.cause, releaseFailures);
+    })());
+  return { own, close };
+}
+
+export function ownNativePool(pool: Pool, resources: ReturnType<typeof nativeFixtureResources>, phase: string) {
+  const end = pool.end.bind(pool);
+  let ending: Promise<void> | undefined;
+  const endOnce = () => (ending ??= Promise.resolve().then(() => end()));
+  // createAuthHost and the fixture share ownership after construction. One end
+  // promise lets either unwind path settle the same pool without ending twice.
+  pool.end = endOnce as Pool['end'];
+  return resources.own(phase, endOnce);
+}
+
 /** Fault a native transaction, preserving both pg checkout overloads. Restoring
  * the hook never changes product state or manufactures a completion marker. */
 export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean, timing: 'before' | 'after' = 'before') {
@@ -94,256 +169,300 @@ export async function attachOperatingOpening(
 
 /** Real Access composition is test-only. Production Auth receives ports and an
  * Auth-only pool, never a kernel module, pool, key or credential. */
-export async function nativeFixture(options: { openPool?: (url: string) => Promise<Pool> } = {}) {
-  const fixture = testDatabase();
-  const kernelFixture = kernelTestDatabase();
-  const kernel = new Pool({ connectionString: kernelFixture.url });
-  // Dedicated receipt material, independent of this fixture's Access reference keys.
-  process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
-  configureTestReceiptKeys(kernel);
-  const pool = options.openPool ? await options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
-  const previous = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = kernelFixture.url;
-  let modules;
+export async function nativeFixture(
+  options: {
+    openPool?: (url: string) => Promise<Pool>;
+    startHost?: (host: Awaited<ReturnType<typeof createAuthHost>>) => Promise<void>;
+  } = {},
+) {
+  const resources = nativeFixtureResources();
+  let phase = 'Auth test database acquisition';
   try {
-    // Reylo must compile Kernel .sql modules before History adapters or Access load. A static History import
-    // evaluates those adapters first and fails with a missing `sql` export.
-    await import(createRequire(new URL('../../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
-    const { installNativeHistoryPreload } = await import('../../../kernel/src/composition/preload.ts');
-    installNativeHistoryPreload();
-    modules = {
-      ...(await import('../../../kernel/src/access/index.ts')),
-      ...(await import('../../../kernel/src/access/native-account-bindings.ts')),
-      ...(await import('../../../kernel/src/access/auth-bindings.ts')),
-      ...(await import('../../../kernel/src/access/workflow-approvals.ts')),
-      ...(await import('../../../kernel/src/access/lifecycle.ts')),
-      ...(await import('../../../kernel/src/access/bootstrap-governance.ts')),
-      ...(await import('../../../kernel/src/route/route.ts')),
+    const fixture = testDatabase();
+    resources.own('Auth test database', () => fixture.close());
+    phase = 'Kernel test database acquisition';
+    const kernelFixture = kernelTestDatabase();
+    resources.own('Kernel test database', () => kernelFixture.close());
+    phase = 'Kernel pool acquisition';
+    const kernel = new Pool({ connectionString: kernelFixture.url });
+    ownNativePool(kernel, resources, 'Kernel pool');
+    const previousReceiptKeys = process.env.KERNEL_RECEIPT_KEYS;
+    const receiptKeysRelease = resources.own('KERNEL_RECEIPT_KEYS restoration', () => {
+      if (previousReceiptKeys === undefined) delete process.env.KERNEL_RECEIPT_KEYS;
+      else process.env.KERNEL_RECEIPT_KEYS = previousReceiptKeys;
+    });
+    // Dedicated receipt material, independent of this fixture's Access reference keys.
+    process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
+    configureTestReceiptKeys(kernel);
+    phase = 'Auth pool acquisition';
+    const pool = options.openPool ? await options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
+    const poolRelease = ownNativePool(pool, resources, 'Auth pool');
+    const previousDatabaseUrl = process.env.DATABASE_URL;
+    const restoreDatabaseUrl = resources.own('DATABASE_URL restoration', () => {
+      if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = previousDatabaseUrl;
+    });
+    process.env.DATABASE_URL = kernelFixture.url;
+    let modules;
+    try {
+      // Reylo must compile Kernel .sql modules before History adapters or Access load. A static History import
+      // evaluates those adapters first and fails with a missing `sql` export.
+      phase = 'Native Access module loading';
+      await import(createRequire(new URL('../../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
+      const { installNativeHistoryPreload } = await import('../../../kernel/src/composition/preload.ts');
+      installNativeHistoryPreload();
+      modules = {
+        ...(await import('../../../kernel/src/access/index.ts')),
+        ...(await import('../../../kernel/src/access/native-account-bindings.ts')),
+        ...(await import('../../../kernel/src/access/auth-bindings.ts')),
+        ...(await import('../../../kernel/src/access/workflow-approvals.ts')),
+        ...(await import('../../../kernel/src/access/lifecycle.ts')),
+        ...(await import('../../../kernel/src/access/bootstrap-governance.ts')),
+        ...(await import('../../../kernel/src/route/route.ts')),
+      };
+    } finally {
+      await restoreDatabaseUrl.release();
+    }
+    await receiptKeysRelease.release();
+    phase = 'Native Auth composition';
+    const actions = new Map(modules.LIFECYCLE_ACTIONS);
+    actions.set('account:manage', { anonymous: false });
+    actions.set('access:grant', { anonymous: false });
+    actions.set('client:manage', { anonymous: false });
+    let host: Awaited<ReturnType<typeof createAuthHost>>;
+    const access = modules.createAccess({
+      actions,
+      auth: {
+        issuer,
+        audience: 'https://native-erasure.api.test',
+        jwksUrl: `${issuer}/.well-known/jwks.json`,
+        fetch: async () => host.service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+      },
+    });
+    const proofs = createNativeWorkflowProofPorts({ database: pool });
+    const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
+    const bindings = modules.createNativeAccountBindings({
+      pool: kernel,
+      access,
+      actions,
+      routeKey: randomBytes(32),
+      referenceKeys,
+      auth: () => host.service,
+      proofs: {
+        workflow: proofs,
+        provisioning: createProvisioningEvidenceVerifier({ database: pool }),
+        barriers: createBarrierProofVerifier({ database: pool }),
+      },
+    });
+    const approvals = modules.createWorkflowApprovals({
+      pool: kernel,
+      access,
+      actions,
+      referenceKeys,
+      creationBinding: proofs.creationBinding,
+    });
+    const context = bindings.accountManagementReads.context;
+    const deliveries: { accountId: string; token: string }[] = [];
+    const key = {
+      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+      kid: 'native-erasure',
+      alg: 'ES256',
     };
-  } finally {
-    if (previous === undefined) delete process.env.DATABASE_URL;
-    else process.env.DATABASE_URL = previous;
-  }
-  const actions = new Map(modules.LIFECYCLE_ACTIONS);
-  actions.set('account:manage', { anonymous: false });
-  actions.set('access:grant', { anonymous: false });
-  actions.set('client:manage', { anonymous: false });
-  let host: Awaited<ReturnType<typeof createAuthHost>>;
-  const access = modules.createAccess({
-    actions,
-    auth: {
+    phase = 'Auth host construction';
+    host = await createAuthHost({
+      database: pool,
+      systemDatabasePool: pool,
       issuer,
       audience: 'https://native-erasure.api.test',
-      jwksUrl: `${issuer}/.well-known/jwks.json`,
-      fetch: async () => host.service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
-    },
-  });
-  const proofs = createNativeWorkflowProofPorts({ database: pool });
-  const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
-  const bindings = modules.createNativeAccountBindings({
-    pool: kernel,
-    access,
-    actions,
-    routeKey: randomBytes(32),
-    referenceKeys,
-    auth: () => host.service,
-    proofs: {
-      workflow: proofs,
-      provisioning: createProvisioningEvidenceVerifier({ database: pool }),
-      barriers: createBarrierProofVerifier({ database: pool }),
-    },
-  });
-  const approvals = modules.createWorkflowApprovals({
-    pool: kernel,
-    access,
-    actions,
-    referenceKeys,
-    creationBinding: proofs.creationBinding,
-  });
-  const context = bindings.accountManagementReads.context;
-  const deliveries: { accountId: string; token: string }[] = [];
-  const key = {
-    ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
-    kid: 'native-erasure',
-    alg: 'ES256',
-  };
-  host = await createAuthHost({
-    database: pool,
-    systemDatabasePool: pool,
-    issuer,
-    audience: 'https://native-erasure.api.test',
-    secret: randomBytes(48).toString('hex'),
-    signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: bindings.trustedAccess,
-    access: bindings.workflowPorts,
-    accountOperations: bindings.accountOperations,
-    accountManagementReads: bindings.accountManagementReads,
-    recoveryDelivery: {
-      async deliver(message) {
-        deliveries.push(message);
-      },
-    },
-    stagingKey: randomBytes(32),
-    executorId: `erasure-${randomUUID()}`,
-    maintenanceSchedule: '* * * * * *',
-  });
-  await host.start();
-  await host.service.internal.registerClient({ clientId: 'erasure-web', firstParty: true, scopes });
-  const call = (path: string, body: unknown, cookie = '') =>
-    host.handler(
-      new Request(`${issuer}${path}`, {
-        method: 'POST',
-        headers: { origin: issuer, 'content-type': 'application/json', cookie },
-        body: JSON.stringify(body),
-      }),
-    );
-  return {
-    fixture,
-    pool,
-    kernel,
-    host,
-    key,
-    bindings,
-    access,
-    bootstrapGovernance: (accountId: string) => modules.bootstrapGovernance(kernel, accountId),
-    approvals,
-    deliveries,
-    context,
-    call,
-    async login(
-      person: Pick<Person, 'accountId' | 'email'>,
-      clientId = 'erasure-web',
-      requested = scopes,
-      secret = password,
-    ): Promise<Person> {
-      const response = await call('/signin', {
-        email: person.email,
-        password: secret,
-        client_id: clientId,
-        scope: requested,
-      });
-      expect(response.status).toBe(200);
-      const cookie = response.headers
-        .getSetCookie()
-        .map((value) => value.split(';')[0])
-        .join('; ');
-      const token = await call('/token', {}, cookie);
-      expect(token.status).toBe(200);
-      return { ...person, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
-    },
-    /** Controlled old-image fixture with independently surviving native Auth
-     * progress and the actual Access producer. This implements no production
-     * backup verification or physical receiving installation. */
-    restoredGeneration(database: Pool, generation: string): AuthRestoredGeneration {
-      const inventory: AuthRestoreInventory = {
-        generation,
-        databaseIdentity: 'isolated-native-auth-fixture',
-        inventoryEntry: generation,
-        inventoryVersion: 'one',
-        sourceCluster: 'native-fixture-cluster',
-        sourceTimeline: 'native-fixture-timeline',
-        sourceLineage: 'independent-current-access',
-        capturePoint: 'before-confirmations',
-        committedNativeTail: 'surviving-native-auth-database',
-      };
-      const recovered = new Map<string, AuthRestoreNativeProgress>();
-      return {
-        kind: 'RESTORED',
-        generation,
-        obligations: modules.createAuthBindings({ pool: kernel }),
-        receiving: bindings.trustedAccess,
-        live: (receiver) => modules.createAuthBindings({ pool: kernel, authErasureLiveReceiver: receiver }),
-        databaseOwner: {
-          async verifyRestoredDatabase(input) {
-            expect(input.database).toBe(database);
-            expect(input.generation).toBe(generation);
-            expect(database.idleCount).toBe(database.totalCount);
-            return inventory;
-          },
-          async recoverCommittedNativeProgress({ accountId }) {
-            expect(database.idleCount).toBe(database.totalCount);
-            if (recovered.has(accountId)) return recovered.get(accountId)!;
-            const row = (await pool.query('SELECT * FROM auth_erasure WHERE account_id=$1', [accountId])).rows[0];
-            if (!row) return { pending: 'original-progress-unavailable' };
-            const progress: AuthRestoreNativeProgress = {
-              source: { accountId, route: modules.routeOf(accountId)!, version: row.kernel_version, at: row.kernel_at },
-              originalNativeId: row.id,
-              checkpoint: inventory.committedNativeTail,
-              floor: row.barrier,
-              acceptedAt: row.accepted_at.toISOString(),
-              applicable: row.applicable,
-              userDeletion: row.user_deleted_at
-                ? {
-                    state: 'established',
-                    deletedAt: row.user_deleted_at.toISOString(),
-                    consentDueAt: row.consent_due_at.toISOString(),
-                    consentCompletedAt: row.consent_completed_at?.toISOString() ?? null,
-                  }
-                : { state: 'never-established' },
-              consumer: row.source_accepted_at
-                ? {
-                    state: 'accepted',
-                    workflowId: row.source_workflow_id,
-                    continuationId: row.source_continuation_id,
-                    receiptId: row.source_receipt_id,
-                    acceptedAt: row.source_accepted_at.toISOString(),
-                    dischargedAt: row.source_discharged_at?.toISOString() ?? null,
-                    publishedAt: row.source_published_at?.toISOString() ?? null,
-                  }
-                : { state: 'pending' },
-            };
-            recovered.set(accountId, progress);
-            return progress;
-          },
+      secret: randomBytes(48).toString('hex'),
+      signing: { activeKid: key.kid, privateKeys: [key] },
+      trustedAccess: bindings.trustedAccess,
+      access: bindings.workflowPorts,
+      accountOperations: bindings.accountOperations,
+      accountManagementReads: bindings.accountManagementReads,
+      recoveryDelivery: {
+        async deliver(message) {
+          deliveries.push(message);
         },
-      };
-    },
-    routeOf: modules.routeOf,
-    async person(name: string): Promise<Person> {
-      const id = randomUUID();
-      const requestKey = `${name}-${id}`;
-      const email = `${requestKey}@native-erasure.test`;
-      const { accountId } = await host.workflows.register({
-        key: requestKey,
-        handle: `native_${id.replaceAll('-', '')}`,
-        email,
-        password,
-      });
-      const response = await call('/signin', { email, password, client_id: 'erasure-web', scope: scopes });
-      expect(response.status).toBe(200);
-      const cookie = response.headers
-        .getSetCookie()
-        .map((value) => value.split(';')[0])
-        .join('; ');
-      const token = await call('/token', {}, cookie);
-      expect(token.status).toBe(200);
-      return { accountId, email, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
-    },
-    async delete(person: Person, key = randomUUID()) {
-      const operation = { kind: 'delete', accountId: person.accountId };
-      const approval = await call('/account-operations/approve', { operationKey: key, operation }, person.cookie);
-      expect(approval.status).toBe(200);
-      const { reference } = (await approval.json()) as { reference: string };
-      const handle = (
-        await kernel.query<{ handle: string | null }>(
-          'SELECT handle FROM access.account WHERE route=$1 AND account_id=$2',
-          [modules.routeOf(person.accountId), person.accountId],
-        )
-      ).rows[0]?.handle;
-      return call(
-        '/account-operations/execute',
-        { operationKey: key, operation, reference, ...(handle ? { confirmation: handle } : {}) },
-        person.cookie,
+      },
+      stagingKey: randomBytes(32),
+      executorId: `erasure-${randomUUID()}`,
+      maintenanceSchedule: '* * * * * *',
+    });
+    const hostRelease = resources.own('Auth workflow host', () => host.stop());
+    phase = 'Auth host startup';
+    await (options.startHost ? options.startHost(host) : host.start());
+    phase = 'Auth fixture client setup';
+    await host.service.internal.registerClient({ clientId: 'erasure-web', firstParty: true, scopes });
+    const call = (path: string, body: unknown, cookie = '') =>
+      host.handler(
+        new Request(`${issuer}${path}`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          body: JSON.stringify(body),
+        }),
       );
-    },
-    async close(options: { keepPool?: boolean } = {}) {
-      if (options.keepPool) await host.workflows.close();
-      else await host.stop();
-      await kernel.end();
-      kernelFixture.close();
-      fixture.close();
-    },
-  };
+    return {
+      fixture,
+      pool,
+      kernel,
+      host,
+      key,
+      bindings,
+      access,
+      bootstrapGovernance: (accountId: string) => modules.bootstrapGovernance(kernel, accountId),
+      approvals,
+      deliveries,
+      context,
+      call,
+      async login(
+        person: Pick<Person, 'accountId' | 'email'>,
+        clientId = 'erasure-web',
+        requested = scopes,
+        secret = password,
+      ): Promise<Person> {
+        const response = await call('/signin', {
+          email: person.email,
+          password: secret,
+          client_id: clientId,
+          scope: requested,
+        });
+        expect(response.status).toBe(200);
+        const cookie = response.headers
+          .getSetCookie()
+          .map((value) => value.split(';')[0])
+          .join('; ');
+        const token = await call('/token', {}, cookie);
+        expect(token.status).toBe(200);
+        return { ...person, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
+      },
+      /** Controlled old-image fixture with independently surviving native Auth
+       * progress and the actual Access producer. This implements no production
+       * backup verification or physical receiving installation. */
+      restoredGeneration(database: Pool, generation: string): AuthRestoredGeneration {
+        const inventory: AuthRestoreInventory = {
+          generation,
+          databaseIdentity: 'isolated-native-auth-fixture',
+          inventoryEntry: generation,
+          inventoryVersion: 'one',
+          sourceCluster: 'native-fixture-cluster',
+          sourceTimeline: 'native-fixture-timeline',
+          sourceLineage: 'independent-current-access',
+          capturePoint: 'before-confirmations',
+          committedNativeTail: 'surviving-native-auth-database',
+        };
+        const recovered = new Map<string, AuthRestoreNativeProgress>();
+        return {
+          kind: 'RESTORED',
+          generation,
+          obligations: modules.createAuthBindings({ pool: kernel }),
+          receiving: bindings.trustedAccess,
+          live: (receiver) => modules.createAuthBindings({ pool: kernel, authErasureLiveReceiver: receiver }),
+          databaseOwner: {
+            async verifyRestoredDatabase(input) {
+              expect(input.database).toBe(database);
+              expect(input.generation).toBe(generation);
+              expect(database.idleCount).toBe(database.totalCount);
+              return inventory;
+            },
+            async recoverCommittedNativeProgress({ accountId }) {
+              expect(database.idleCount).toBe(database.totalCount);
+              if (recovered.has(accountId)) return recovered.get(accountId)!;
+              const row = (await pool.query('SELECT * FROM auth_erasure WHERE account_id=$1', [accountId])).rows[0];
+              if (!row) return { pending: 'original-progress-unavailable' };
+              const progress: AuthRestoreNativeProgress = {
+                source: {
+                  accountId,
+                  route: modules.routeOf(accountId)!,
+                  version: row.kernel_version,
+                  at: row.kernel_at,
+                },
+                originalNativeId: row.id,
+                checkpoint: inventory.committedNativeTail,
+                floor: row.barrier,
+                acceptedAt: row.accepted_at.toISOString(),
+                applicable: row.applicable,
+                userDeletion: row.user_deleted_at
+                  ? {
+                      state: 'established',
+                      deletedAt: row.user_deleted_at.toISOString(),
+                      consentDueAt: row.consent_due_at.toISOString(),
+                      consentCompletedAt: row.consent_completed_at?.toISOString() ?? null,
+                    }
+                  : { state: 'never-established' },
+                consumer: row.source_accepted_at
+                  ? {
+                      state: 'accepted',
+                      workflowId: row.source_workflow_id,
+                      continuationId: row.source_continuation_id,
+                      receiptId: row.source_receipt_id,
+                      acceptedAt: row.source_accepted_at.toISOString(),
+                      dischargedAt: row.source_discharged_at?.toISOString() ?? null,
+                      publishedAt: row.source_published_at?.toISOString() ?? null,
+                    }
+                  : { state: 'pending' },
+              };
+              recovered.set(accountId, progress);
+              return progress;
+            },
+          },
+        };
+      },
+      routeOf: modules.routeOf,
+      async person(name: string): Promise<Person> {
+        const id = randomUUID();
+        const requestKey = `${name}-${id}`;
+        const email = `${requestKey}@native-erasure.test`;
+        const { accountId } = await host.workflows.register({
+          key: requestKey,
+          handle: `native_${id.replaceAll('-', '')}`,
+          email,
+          password,
+        });
+        const response = await call('/signin', { email, password, client_id: 'erasure-web', scope: scopes });
+        expect(response.status).toBe(200);
+        const cookie = response.headers
+          .getSetCookie()
+          .map((value) => value.split(';')[0])
+          .join('; ');
+        const token = await call('/token', {}, cookie);
+        expect(token.status).toBe(200);
+        return { accountId, email, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
+      },
+      async delete(person: Person, key = randomUUID()) {
+        const operation = { kind: 'delete', accountId: person.accountId };
+        const approval = await call('/account-operations/approve', { operationKey: key, operation }, person.cookie);
+        expect(approval.status).toBe(200);
+        const { reference } = (await approval.json()) as { reference: string };
+        const handle = (
+          await kernel.query<{ handle: string | null }>(
+            'SELECT handle FROM access.account WHERE route=$1 AND account_id=$2',
+            [modules.routeOf(person.accountId), person.accountId],
+          )
+        ).rows[0]?.handle;
+        return call(
+          '/account-operations/execute',
+          { operationKey: key, operation, reference, ...(handle ? { confirmation: handle } : {}) },
+          person.cookie,
+        );
+      },
+      async close(options: { keepPool?: boolean } = {}) {
+        if (options.keepPool) {
+          hostRelease.skip();
+          poolRelease.skip();
+          resources.own('Auth workflows with retained pool', () => host.workflows.close());
+        }
+        await resources.close();
+      },
+    };
+  } catch (cause) {
+    try {
+      await resources.close({ phase, cause });
+    } catch (error) {
+      throw error;
+    }
+    throw new NativeFixtureLifecycleError(phase, cause);
+  }
 }
 
 /** Execute the registered retention workflow with an explicit foreground identity.

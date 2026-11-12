@@ -8,8 +8,7 @@ export function testReceiptKeys(): KeyRing {
 }
 
 /** Composed entries sharing native fixture receipts must retain the same keys. */
-export function testReceiptKeysEnv(): { KERNEL_RECEIPT_KEYS: string } {
-  const ring = testReceiptKeys();
+export function testReceiptKeysEnv(ring: KeyRing = testReceiptKeys()): { KERNEL_RECEIPT_KEYS: string } {
   return {
     KERNEL_RECEIPT_KEYS: [...ring.keys]
       .map(([version, bytes]) => `${version}:${Buffer.from(bytes).toString('base64url')}`)
@@ -17,6 +16,6 @@ export function testReceiptKeysEnv(): { KERNEL_RECEIPT_KEYS: string } {
   };
 }
 
-export function configureTestReceiptKeys(pool: Pool): void {
-  configureReceiptKeys(pool, testReceiptKeys());
+export function configureTestReceiptKeys(pool: Pool, ring: KeyRing = testReceiptKeys()): void {
+  configureReceiptKeys(pool, ring);
 }

@@ -11,6 +11,7 @@ import { createReviewedCatalogueApplication } from '../src/reviewed-catalogue-ap
 import { sameStatementProvenance } from '../src/statement-provenance.ts';
 import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
 import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
+import { ShowcaseJournal } from '../src/showcase-journal.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
 test('statement provenance admits data descriptors before projecting semantic fields', () => {
@@ -252,8 +253,35 @@ test('constructed reviewed application seeds, binds and independently reads curr
 test('default cross-media seed binds the exact editor tag and resumes unchanged facts across a current-binding outage', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-genre-'));
   const statePath = join(directory, 'state.sqlite');
+  const showcaseJournalPath = join(directory, 'showcase.sqlite');
+  let showcaseJournal = new ShowcaseJournal(showcaseJournalPath);
   const port = fakePort();
   let unavailable = false;
+  let sourceConcept: string | undefined;
+  let failFirstContinuation = true;
+  const paginatedCandidateIds = Array.from({ length: 100 }, () => randomUUID());
+  const fillerStatement: BatchStatement = {
+    property: { id: 'schema:keywords' },
+    value: { type: 'value', content: '00000000-0000-4000-8000-000000000099' },
+    references: [],
+  };
+  const fillerCandidates = paginatedCandidateIds.map((id, index) => ({
+    id,
+    source: {
+      source: 'bangumi_cross_media',
+      external_id: `other:${index + 1}`,
+      record_revision: '1',
+      digest: 'a'.repeat(64),
+      converter_revision: 'bangumi@17',
+      field_group: 'facts' as const,
+    },
+    statement: fillerStatement,
+    decision: 'pending',
+    rank: null,
+    retracted: null,
+    retraction: null,
+    head: null,
+  }));
   const reviewedPort = {
     ...port,
     async reviewedCandidates(
@@ -262,7 +290,31 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
       signal?: AbortSignal,
     ) {
       if (unavailable) throw new TypeError('Current reviewed candidate read unavailable');
-      return port.reviewedCandidates(id, query, signal);
+      const page = (await port.reviewedCandidates(id, query, signal)) as {
+        candidates: Record<string, unknown>[];
+        next: string | null;
+        adoption: unknown;
+      };
+      const selectedKeywordListing =
+        sourceConcept !== undefined &&
+        query.property === 'schema:keywords' &&
+        page.candidates.some((candidate) => {
+          const source = candidate.source as { external_id?: unknown } | null;
+          return source?.external_id === '884';
+        });
+      if (!selectedKeywordListing) return page as never;
+      if (query.cursor === 'selected-keyword-next') {
+        if (failFirstContinuation) {
+          failFirstContinuation = false;
+          throw new TypeError('Interrupted selected keyword candidate listing');
+        }
+        return page as never;
+      }
+      return {
+        ...page,
+        candidates: fillerCandidates,
+        next: 'selected-keyword-next',
+      } as never;
     },
   } as ReviewedCataloguePort;
   const actualSelectedRecord = {
@@ -277,14 +329,37 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
   plan.members.push({ source: 'bangumi', key: '884', kind: 'work', membership: 'family', franchise: 'steins-gate' });
   try {
     const reviewed = await seedReviewedCatalogue({ path: statePath, port: reviewedPort });
+    sourceConcept = reviewed.subjects['source-harem'];
     const seed = () =>
       seedCrossMedia(
         plan,
         statePath,
         port,
         { origin: 'https://fixture.test' },
-        { providers: ['bangumi'], bangumiGenrePort: reviewedPort },
+        { providers: ['bangumi'], bangumiGenrePort: reviewedPort, showcaseJournal },
       );
+    const interrupted = await seed();
+    expect(interrupted.bangumiGenrePublication!.candidateIds).toEqual([]);
+    expect(interrupted.bangumiGenrePublication!.diagnostics).toContainEqual({
+      sourceKey: '884',
+      code: 'reviewed-binding-unavailable',
+    });
+    const interruptedSession = new ImportSession(statePath);
+    let firstCandidate: string | undefined;
+    try {
+      const keyword = interruptedSession.bindings
+        .candidates({ source: 'bangumi_cross_media', external_id: '884' }, 'facts', { limit: 100 })
+        .find((candidate) => {
+          const command = (JSON.parse(candidate.bytes) as { commands: BatchCommand[] }).commands[0];
+          return command?.op === 'propose' && command.statement.property.id === 'schema:keywords';
+        });
+      firstCandidate = keyword?.candidate;
+    } finally {
+      interruptedSession.close();
+    }
+    if (!firstCandidate) throw new Error('Sealed selected keyword candidate identity is missing');
+    showcaseJournal.close();
+    showcaseJournal = new ShowcaseJournal(showcaseJournalPath);
     const first = await seed();
     const firstKeyword = first.bangumiGenrePublication!.acknowledgements.find(
       (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:keywords',
@@ -295,12 +370,11 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
     expect(firstKeyword.command.statement.qualifiers).toEqual([
       { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '0', unit: '1' } } },
     ]);
-    const firstCandidate = firstKeyword.candidateId;
-    if (!firstCandidate) throw new Error('Exact keyword candidate identity is missing');
-    const firstSession = new ImportSession(statePath);
+    expect(firstKeyword.candidateId).toBe(firstCandidate);
+    const titleSession = new ImportSession(statePath);
     let titleId: string | undefined;
     try {
-      const title = firstSession.bindings
+      const title = titleSession.bindings
         .candidates({ source: 'bangumi_cross_media', external_id: '884' }, 'facts', { limit: 100 })
         .find((candidate) => {
           const command = (JSON.parse(candidate.bytes) as { commands: BatchCommand[] }).commands[0];
@@ -309,7 +383,7 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
       if (!title) throw new Error('Independent title candidate is missing');
       titleId = title.candidate;
     } finally {
-      firstSession.close();
+      titleSession.close();
     }
     if (!titleId) throw new Error('Independent title candidate identity is missing');
     const independentTitleId = titleId;
@@ -343,6 +417,7 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
         .map((entry) => entry.candidateId),
     ).toEqual([firstCandidate]);
   } finally {
+    showcaseJournal.close();
     await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);

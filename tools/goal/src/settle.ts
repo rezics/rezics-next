@@ -4,7 +4,7 @@ import {
   HOST_INTERRUPTION_RETAINED,
   primaryWorkerStderr,
 } from './worker-host-custody.ts';
-import { readProofObservation, proofSourceStatus, nativeCheckId } from './verification.ts';
+import { readProofObservation, proofSourceStatus, nativeCheckId, registeredProof } from './verification.ts';
 import { createHash } from 'node:crypto';
 import { parseAgentExit } from './agents.ts';
 import type { LandingQueue } from './contracts.ts';
@@ -37,7 +37,10 @@ import { defaultPolicy } from './policy.ts';
 import {
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostBudgetRefusalReport,
+  workerCheckHostTypingReceiptMatches,
   workerCheckHostTypingSettlement,
+  workerCheckHostWithdrawnRetryIsRecoverable,
 } from './worker-check-budget.ts';
 
 function readAttemptStderr(logPath: string): string {
@@ -53,6 +56,20 @@ function unchangedSource(task: Task, head: string): boolean {
   return !git(task.worktree, ['diff', '--name-only', '-z', task.base, head])
     .split('\0')
     .some((path) => path && !frozen.has(path));
+}
+
+function proofObservationCheckId(
+  observation: Awaited<ReturnType<typeof readProofObservation>> | undefined,
+): string | undefined {
+  if (
+    !observation ||
+    !observation.record ||
+    typeof observation.record !== 'object' ||
+    Array.isArray(observation.record)
+  )
+    return undefined;
+  const id = (observation.record as { id?: unknown }).id;
+  return typeof id === 'string' && nativeCheckId.test(id) ? id : undefined;
 }
 
 const SQLITE_CONTENTION = /SQLITE_(?:BUSY|LOCKED)|database (?:table )?is locked/i;
@@ -101,6 +118,7 @@ export async function settle(
   worker: Pick<RunningWorker, 'attempt' | 'exited' | 'logStartOffset' | 'resuming'>,
   landing: LandingQueue,
   startTrain: () => Promise<void> = async () => {},
+  recovery?: { withdrawnBudgetRecovery: { previousResult: string; command: string[] } },
 ): Promise<void> {
   const ref = worker.attempt;
   const policy = tasks.settings.policy ?? defaultPolicy;
@@ -147,13 +165,22 @@ export async function settle(
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
     });
     const pendingChecks = initialMeasurement.waitingChecks;
-    const proofTask = store.task(ref.taskId).brief.kind === 'verification';
+    const proofTaskRecord = store.task(ref.taskId);
+    const proofTask = proofTaskRecord.brief.kind === 'verification';
     const proofObservation = proofTask
       ? await readProofObservation(
           store.task(ref.taskId),
           pendingChecks?.length ? pendingChecks : currentAttempt.checks,
         )
       : undefined;
+    const proofCheckId = proofObservationCheckId(proofObservation);
+    const ownedOrdinaryProofPass = Boolean(
+      proofTask &&
+      !proofTaskRecord.proofRun &&
+      registeredProof(proofTaskRecord.brief, proofTaskRecord.proofAuthorization) &&
+      proofObservation?.status === 'terminal' &&
+      proofObservation.passed,
+    );
     const currentBoot = processIdentity()?.boot ?? null;
     const bootCustody = currentAttempt.process
       ? workerBootCustody(currentAttempt.process, runMetadata.workerHost, currentBoot)
@@ -263,7 +290,8 @@ export async function settle(
         });
     }
     // A check still pending may be running in this directory, so it outlives this settlement.
-    if (!pendingChecks?.length) releaseWorkerTemporaryDirectory(ref.taskId);
+    if (!pendingChecks?.length && !(proofObservation?.status === 'running' && proofCheckId))
+      releaseWorkerTemporaryDirectory(ref.taskId);
     let queued = false;
     let finished = false;
     let exited = false;
@@ -348,17 +376,19 @@ export async function settle(
         nativeCheckId.test(proofExit.checks[0])
           ? proofExit.checks[0]
           : undefined;
+      const lostReportWaitingId =
+        proofTask && proofExit === null && proofObservation?.status === 'running' ? proofCheckId : undefined;
+      const proofWaitingId = waitingId ?? lostReportWaitingId;
       if (
-        pendingChecks?.length &&
+        (pendingChecks?.length || lostReportWaitingId) &&
         (!proofTask ||
-          (waitingId &&
-            pendingChecks.length === 1 &&
-            pendingChecks[0] === waitingId &&
+          (proofWaitingId &&
+            (!pendingChecks?.length || (pendingChecks.length === 1 && pendingChecks[0] === proofWaitingId)) &&
             (proofObservation?.status === 'running' || proofObservation?.status === 'terminal')))
       ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
-          attempt.checks = pendingChecks;
+          attempt.checks = pendingChecks?.length ? pendingChecks : [proofWaitingId!];
           attempt.process = null;
           attempt.driver = null;
           attempt.exitCode = code;
@@ -469,6 +499,58 @@ export async function settle(
         maxLogBytes: policy.worker.logTailBytes,
         ...(logStartOffset !== undefined ? { logStartOffset } : {}),
       });
+      if (recovery?.withdrawnBudgetRecovery) {
+        const { previousResult, command } = recovery.withdrawnBudgetRecovery;
+        const retry = store.retryIntent(ref);
+        const directory = workerCheckBudgetDirectory(tasks.settings.stateDirectory, ref.taskId, ref.attempt);
+        const progressEvent = store
+          .events(ref.taskId, ref.attempt)
+          .findLast((event) => event.kind === 'attempt-progress');
+        let progress: { endHead?: unknown; uncommitted?: unknown } | undefined;
+        try {
+          progress = progressEvent ? (JSON.parse(progressEvent.body) as typeof progress) : undefined;
+        } catch {
+          progress = undefined;
+        }
+        if (
+          task.brief.goal !== 'web' ||
+          task.brief.kind !== 'interface' ||
+          (current.state !== 'stopped' &&
+            !(
+              current.state === 'exited' &&
+              JSON.stringify(current.typingEvidencePending?.command) ===
+                JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+            )) ||
+          current.result !== previousResult ||
+          !workerCheckHostBudgetRefusalReport(current.result) ||
+          JSON.stringify(command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+          !workerCheckHostTypingReceiptMatches(directory, command) ||
+          !workerCheckHostTypingSettlement({
+            directory,
+            worktree: task.worktree,
+            limit: workerCheckHostBudgetLimit(task, ref.attempt),
+          }).ok ||
+          !workerCheckHostWithdrawnRetryIsRecoverable({
+            task,
+            attempt: current,
+            ...(retry ? { retry } : {}),
+            ...(progress ? { progress } : {}),
+          })
+        )
+          throw new Error('Withdrawn retry source no longer has exact terminal Web compiler evidence');
+        finalMeasurement.result = JSON.stringify({
+          status: 'success',
+          summary:
+            'Retained source passed the installed owning Web typecheck; remaining acceptance stays with integration.',
+          blocker: null,
+          checks: [],
+          approaches: [],
+        });
+        finalMeasurement.blocker = null;
+        finalMeasurement.failureKind = null;
+        finalMeasurement.waitingChecks = null;
+      }
+      const noReportProofPass = ownedOrdinaryProofPass && parseAgentExit(finalMeasurement.result, adapter) === null;
       if (pool)
         try {
           agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath, policy.worker.logTailBytes));
@@ -477,7 +559,14 @@ export async function settle(
         }
       // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
       // Preserve that launch failure on the attempt and keep it out of the landing queue.
-      if (!finalMeasurement.session && code !== null && code !== 0 && !finalMeasurement.failureKind && !committed) {
+      if (
+        !noReportProofPass &&
+        !finalMeasurement.session &&
+        code !== null &&
+        code !== 0 &&
+        !finalMeasurement.failureKind &&
+        !committed
+      ) {
         // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
         finalMeasurement.failureKind = adapter.signals?.(stderr).allowance ? 'pool-exhausted' : 'tool';
         finalMeasurement.result =
@@ -488,7 +577,8 @@ export async function settle(
       if (
         !finalMeasurement.failureKind &&
         !finalMeasurement.blocker &&
-        !reportsSuccess(finalMeasurement.result, adapter)
+        !reportsSuccess(finalMeasurement.result, adapter) &&
+        !noReportProofPass
       ) {
         const parsed = parseAgentExit(finalMeasurement.result, adapter);
         const errorLine = lastNonemptyLine(stderr);
@@ -565,13 +655,14 @@ export async function settle(
             : sourceStatus === 'integration-not-current'
               ? '; capture is not current integration'
               : '';
+        const ordinaryNoReportPass =
+          noReportProofPass && proofObservation.status === 'terminal' && proofObservation.passed;
         const observedPass =
           !finalMeasurement.failureKind &&
           !finalMeasurement.blocker &&
-          code === 0 &&
-          structured &&
           proofObservation.status === 'terminal' &&
-          proofObservation.passed;
+          proofObservation.passed &&
+          (ordinaryNoReportPass || (code === 0 && structured));
         const verified = observedPass && unchanged;
         const captureOnly = observedPass && sourceStatus === 'integration-not-current';
         const proofRecord = makeRecord(task, attempt, finalMeasurement, verified ? 'verified' : 'stopped');
@@ -591,6 +682,7 @@ export async function settle(
           sourceStatus,
           unchanged,
           structured,
+          ordinaryNoReportPass,
         });
         return;
       }

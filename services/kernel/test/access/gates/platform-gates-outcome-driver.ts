@@ -37,9 +37,11 @@ const { customMethodPath } = await import('../../../src/http/custom-method.ts');
 const appModule = await import('../../../src/http/app.ts');
 const { actorFixture } = await import('../actor-side-fixture.ts');
 const { openGrowthDatabase, seed: seedGrowthData } = await import('../../support/growth.ts');
+const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
 
 const password = 'native platform gates fixture password';
 const FIXTURE_GROUP = 'spec_fixture';
+const receiptKeys = testReceiptKeys();
 const FIXTURE_TABLES = new Map<string, string>();
 
 type FixtureRoute = {
@@ -266,6 +268,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
       pool: livePool(),
       routeKey,
       tokens,
+      receiptKeys,
       clock: () => new Date(clockTime),
       writeRate: {
         async spend() {
@@ -331,6 +334,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
     pool = createPool(databaseUrl);
+    configureTestReceiptKeys(pool);
     instrumentFixtureReads(pool, readCounts);
     await pool.query(`CREATE SCHEMA "${schema}"`);
     schemaCreated = true;
@@ -426,6 +430,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     // Bootstrapping is deployment-only authority; its own pool keeps it outside the fixture's statement counting.
     const bootstrapPool = createPool(process.env.DATABASE_URL!);
     try {
+      configureTestReceiptKeys(bootstrapPool);
       await bootstrapGovernance(bootstrapPool, accountId);
     } catch (error) {
       throw new Error(
@@ -697,6 +702,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     const growthPath = `/v1/platform-gate-growth/${growthTag}`;
 
     try {
+      configureTestReceiptKeys(database.pool);
       const base = await actorFixture(database.pool, database.admin);
       actorId = base.actorId;
       const accountRoute = routeOf(actorId);
@@ -833,6 +839,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
         growthKernel = createKernel({
           pool: database.pool,
           routeKey: growthRouteKey,
+          receiptKeys,
           clock: () => new Date(growthTime),
           writeRate: {
             async spend() {

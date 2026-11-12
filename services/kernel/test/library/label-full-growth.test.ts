@@ -33,8 +33,11 @@ beforeAll(async () => {
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
 }, 120000);
 afterAll(async () => {
-  await f?.close();
-  await db?.close();
+  try {
+    await f?.close();
+  } finally {
+    await db?.close();
+  }
 });
 async function json(bearer: string, method: string, path: string, status: number, body?: unknown) {
   const response = await f.send(bearer, method, path, body);
@@ -322,6 +325,9 @@ test('FULL label HTTP charges all native pools at 64 512 4096 catalogue entries 
       );
     },
     async warmup(_database, scale) {
+      // Seeding and the checker's settlement happen after this bearer is minted. Refresh the same account
+      // outside the measured HTTP operations so its five-minute test credential and auth observation stay live.
+      await f.refresh(owner);
       for (let i = 0; i < 6; i++) await operation();
       const measured = await captureWithFoldedCost(db, operation);
       const folded = measured.capture;

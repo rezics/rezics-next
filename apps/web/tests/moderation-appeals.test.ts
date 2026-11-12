@@ -115,6 +115,43 @@ test('pages of five and twenty appeals read the page and each distinct target on
   }
 });
 
+test('installed appeal HTTP statuses preserve closed, stale and unavailable outcomes and the exact cursor', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readModerationAppealPage } = await import('../src/moderation/appeals-read');
+  for (const [status, code, expected] of [
+    [400, 'invalid_cursor', 'stale'],
+    [401, 'unauthorized', 'closed'],
+    [403, 'forbidden', 'closed'],
+    [404, 'not_found', 'closed'],
+    [409, 'stale_cursor', 'stale'],
+    [503, 'dependency_unavailable', 'unavailable'],
+  ] as const) {
+    let requested: Request | undefined;
+    const detail = `NEVER DISCLOSE ${status}`;
+    const client = createKernelClient('https://kernel.test', {
+      fetch: Object.assign(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          requested = new Request(input, init);
+          return Response.json({ code, detail }, { status });
+        },
+        { preconnect() {} },
+      ),
+    });
+    const page = await readModerationAppealPage(
+      client,
+      { boardId: id(1), cursor: 'opaque+failed/page==' },
+      'Bearer reviewer',
+      id(900),
+    );
+    expect(requested?.url).toContain('/v1/boards/' + id(1) + '/appeals');
+    expect(new URL(requested!.url).searchParams.get('cursor')).toBe('opaque+failed/page==');
+    expect(page.state).toBe(expected);
+    expect(page.appeals.length).toBe(0);
+    expect(page.next).toBeNull();
+    expect(JSON.stringify(page)).not.toContain(detail);
+  }
+});
+
 test('uphold and reverse post the chosen outcome and moderator statement', async () => {
   const calls: { path: string; body: unknown }[] = [];
   await resolveModerationAppeal(
@@ -527,7 +564,14 @@ test('The default private Appeals route recovers bounded reads and retires priva
     await render({ page: reset, input: first });
     expect(new URL(calls.at(-1)!.url).searchParams.has('cursor')).toBe(false);
     expect(host.textContent).toContain(m.moderation_appeals_empty());
-    expect(host.querySelector('button')).toBeNull();
+    expect(host.querySelectorAll('li').length).toBe(0);
+    const buttonLabels = [...host.querySelectorAll('button')].map((button) => button.textContent?.trim() ?? '');
+    expect(buttonLabels.includes(m.moderation_queue_refresh())).toBe(true);
+    expect(
+      buttonLabels.some((label) =>
+        [m.moderation_appeal_uphold_action(), m.moderation_appeal_reverse_action()].includes(label),
+      ),
+    ).toBe(false);
 
     for (const value of ['sparse', 'closed'] as const) {
       mode = value;

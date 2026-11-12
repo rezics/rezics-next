@@ -24,7 +24,7 @@ export type StartThreadInput = StartThreadBase &
   (
     | { kind: 'review'; subjectId: string; subjectIds?: never; voteCitation?: VoteCitation }
     | { kind: 'rules'; licence: 'LicenseRef-rezics-terms'; subjectIds?: never; subjectId?: never; voteCitation?: never }
-    | ({ kind?: undefined; voteCitation?: undefined } & (
+    | ({ kind?: undefined; voteCitation?: undefined; licence?: string; visibility?: 'published' | 'draft' } & (
         | { subjectIds: string[]; subjectId?: never }
         | { subjectId?: string; subjectIds?: never }
       ))
@@ -75,7 +75,12 @@ export async function startThreadRequest(
         boardId: input.boardId,
         title: input.title,
         body: input.body,
-        licence: input.kind === 'rules' ? input.licence : 'LicenseRef-rezics-terms',
+        licence:
+          input.kind === 'rules'
+            ? input.licence
+            : 'licence' in input
+              ? (input.licence ?? 'LicenseRef-rezics-terms')
+              : 'LicenseRef-rezics-terms',
         ...(input.kind === 'review'
           ? {
               kind: 'review' as const,
@@ -83,7 +88,7 @@ export async function startThreadRequest(
               ...(input.voteCitation ? { voteCitation: input.voteCitation } : {}),
             }
           : { subjectIds }),
-        visibility: 'published',
+        visibility: input.kind === undefined ? (input.visibility ?? 'published') : 'published',
         ...(input.mediaIds === undefined || input.mediaIds.length === 0 ? {} : { mediaIds: input.mediaIds }),
       },
       {
@@ -120,6 +125,10 @@ export type RevisePostInput = {
   idempotencyKey: string;
   mediaIds?: string[];
   licence?: string;
+  subjectIds?: string[];
+  boardId?: string;
+  title?: string;
+  visibility?: 'draft' | 'published';
 };
 
 export type ErasePostInput = { postId: string; idempotencyKey: string };
@@ -146,6 +155,10 @@ export async function revisePostRequest(
         body: input.body,
         mediaIds: input.mediaIds ?? [],
         ...(input.licence === undefined ? {} : { licence: input.licence }),
+        ...(input.subjectIds === undefined ? {} : { subjectIds: input.subjectIds }),
+        ...(input.boardId === undefined ? {} : { boardId: input.boardId }),
+        ...(input.title === undefined ? {} : { title: input.title }),
+        ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
       },
       {
         headers: {

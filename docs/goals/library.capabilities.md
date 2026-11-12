@@ -125,7 +125,7 @@ points from the worktree root; they are listed as evidence entry points and were
 | Entry Undo and terminal lifecycle support | Existing Kernel command, Undo, incarnation, participant, owned-graph and custody suites                  | bun run --cwd services/kernel check test/library/entry-lifecycle-command.test.ts test/library/entry-undo-http.test.ts test/library/entry-incarnation.test.ts test/library/entry-incarnation-precondition.test.ts test/library/erasure-participant.test.ts test/library/erasure-owned-graph.test.ts test/library/native-source-custody.test.ts |
 | Entry state history and recovery          | Focused owner history, restore, continuation, incarnation and account-purge scenarios                    | bun run --cwd services/kernel check test/library/personal-http.test.ts test/library/account-fact-purge.test.ts                                                                                                                                                                                                                                |
 | Served Web personal outcomes              | apps/web/tests/native/web-personal-driver.host.test.ts binds specs/web-personal-outcomes.test.ts         | bun apps/web/scripts/check.ts --personal-host                                                                                                                                                                                                                                                                                                 |
-| Web visual capture                        | Web screenshots use the existing Storybook runner and exact source exports                               | bun run --cwd apps/web screenshots --story 'pages-library-*' --width 390 --width 1280 --out .temp/library-page-review/pages                                                                                                                                                                                                                   |
+| Web visual capture                        | Web screenshots use the existing Storybook runner and exact source exports                               | bun run --cwd apps/web screenshots --story 'pages-library-*' --width 390 --width 1280                                                                                                                                                                                                                                                         |
 
 The Web personal host and focused hosts under apps/web/tests/native/ exist as nested files. The generic host selection
 uses only top-level tests/*.host.test.ts and therefore does not discover those nested suites by file presence.
@@ -672,9 +672,8 @@ Explicit reviewed presentation now defaults to mixed or admits an actual current
 meaning and distinguishing alternatives. Immutable review digests bind the choice/current release and original native
 create operands/key; stale new creation is refused, exact receipts replay and later stored-choice fallback persists.
 The actual route schema exposes preview/review/confirmation/result additions with `fullRestoration:false`.
-The library schema snapshot is refreshed from the actual migrated database; retained client declarations await
-the existing producer after the unchanged Community compiler errors are resolved; see the [transport continuation](../../.temp/continuation/collection-presentation-client.md).
-Native64/512/4096 and browser/full-kernel acceptance remains unexecuted by this change.
+The [presentation contract](../library-archive-collection-recovery.md#explicit-receiving-presentation)
+owns the generated transport fields and acceptance boundary.
 Only one curated Collection is supported; recovery preserves duplicate occurrences, valid archived ordinal order,
 and distinct empty/cleared/missing note outcomes while creating fresh private native IDs. The 24-hour expiry is an
 absolute admission cut: a live lease cannot admit another native step, while one already-admitted effect retains its
@@ -705,14 +704,10 @@ Archive Entry/label confirmation declares generator-visible upload/preview/revie
 effects; accepted keys, canonical operands and receipts survive retries. Focused native coverage is
 `services/kernel/test/library/library-archive-merge.test.ts`. Client transport coverage in
 `packages/client/tests/library-archive-merge.test.ts` preserves original JSON text and envelope upload through preview.
-The complete typed journey must add review and exact returned-revision apply together with refreshed declarations.
-The retained generated upload body is `unknown`, preview/review omit `reviewRevision`, and apply accepts
-`{ordinals: number[]}`. Regeneration and the typed `{items: {ordinal: number; reviewRevision: number}[]}` confirmation
-journey remain required before Web file admission; see
-[the generated transport continuation](../../.temp/continuation/archive-client-installation.md). Source-checked emission
-now precedes full workspace compiler/construct checks and includes independent public type exports; publication still
-requires every check. The canonical Web archive
-consumer8bb owns file/recovery UI integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
+The typed journey uses the [generated upload, review and exact returned-revision apply contract](../library-archive-merge.md#current-native-journey).
+[Kernel declaration output](../../services/kernel/README.md#client-declaration-output-placement) owns publication;
+the [Web archive visit](../../apps/web/src/library/archive-entry-recovery.md) owns file admission and recovery UI.
+Frozen acceptance and composed native cost measurements remain required.
 
 ### Native archive progress recovery
 

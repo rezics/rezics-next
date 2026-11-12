@@ -78,6 +78,10 @@ remains separate and pending; no fixture installs custody or a terminal acknowle
 subscription prove enrollment only. `restore-erasure-contract.test.ts` covers source identity, original progress,
 crash recovery and writer fences; `restore-live.test.ts` covers native live enrollment and host feed binding.
 
+Fixture lifecycle decision: register each environment restoration, database, pool and exact host generation as soon as
+acquired, unwind in reverse while attempting every release, and preserve first phase/cause evidence without changing
+global DBOS ownership.
+
 ### Current receiving closure provenance
 
 The private `auth.receiving-closure/v1` factory accepts an exact obligation key and rereads its original accepted

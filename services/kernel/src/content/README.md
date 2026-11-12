@@ -4645,3 +4645,33 @@ assembly and its native growth and current-reader acceptance; source publication
 Decision: reuse the native erasure suite for the exact point response and its shared disclosure worker's dedicated
 receipt-key fixture, matching the native HTTP fixture. Existing projection tests cover unknown/deleted identities;
 workspace declaration publication covers compiler-only query annotations without adding a mirrored runtime test.
+
+## Native Knowledge first loop
+
+`knowledgeRoutes` mounts the first native notebook path on the ordinary Content HTTP application. An account can
+create an account-home notebook, attach stable private document resources, save immutable canonical revisions,
+select one exact revision for public use, and withdraw the current selection. Writes use native command receipts,
+account `account:update` authority and compare-and-swap against the structure, document head and current publication.
+Private document reads use the owner's `account:read` authority and admit the complete stable placement chain.
+
+`GET /v1/knowledge/documents/{id}?revisionId=...` reads bytes from the current publication pointer. It checks
+anonymous Subject read authority for the notebook Subject and selected revision references before re-reading that
+pointer and its immutable digest. An unselected revision, private sibling or withdrawn document has no public row.
+The response omits notebook and account identity. Public reads are source-current and do not require Search to have
+processed the publication event; withdrawing while Search is paused removes Content's direct read immediately.
+
+The first slice admits at most 32 placement rows on one path (including the selected document) and at most 64
+revision Subject references, plus the notebook Subject in the bounded currentness pass. Notebook document count is
+not capped, and hosted-book placement limits do
+not apply. Primary structure versions and per-parent positions allow single-node attachment without loading all
+siblings. Canonical bytes are capped by the existing 2 MiB Content document validator.
+
+The public selection route records `com.rezics.content.knowledge.publication.changed.v1` with selection and
+withdrawal only; indexing remains a Search-owned consumer. Search's current Content source port does not yet expose
+a Knowledge candidate page or retained useful-page preparation API. The direct public read is complete; Subject
+contribution discovery remains a Search-owned handoff, not a local Content adapter or editor DTO.
+
+Native acceptance coverage is in `test/content/knowledge-first-loop.test.ts`: two private siblings, exact older
+revision selection, anonymous exact bytes, private-owner isolation, same-key replay, stale compare-and-swap,
+immediate withdrawal without Search processing, and the 32-ancestor/64-reference bounds. The controller runs this
+suite after landing. The implementation worker does not run native suites.

@@ -24,6 +24,7 @@ async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void
 }
 
 await import('reylo/register');
+const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
 const { createAuthBindings } = await import('../../../src/access/auth-bindings.ts');
 const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-governance.ts');
 const { createRegistrationPorts } = await import('../../support/registration-ports.ts');
@@ -46,6 +47,7 @@ const audience = 'https://gate-admission.api.test';
 const password = 'native platform gate registration password';
 const routeKey = new Uint8Array(32).fill(91);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(92)]]) };
+const receiptKeys = testReceiptKeys();
 const operationAction = 'fixture:create';
 const groupAction = 'gate:fixture_group';
 const group = 'fixture_group';
@@ -158,6 +160,7 @@ async function delegatedBearer(actor: Person, principalId: string): Promise<stri
 }
 
 beforeAll(async () => {
+  configureTestReceiptKeys(pool);
   const original = appModule.createApp;
   const composition = spyOn(appModule, 'createApp').mockImplementation((dependencies) => {
     const app = original(dependencies);
@@ -189,6 +192,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys,
     clock: () => new Date(clockTime),
     writeRate: {
       async spend() {

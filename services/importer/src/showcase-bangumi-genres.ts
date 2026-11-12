@@ -8,6 +8,8 @@ import { releasedReviewedVocabulary } from './reviewed-vocabulary-port.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
 import { ImportTransportError, type ReviewedCandidatePage } from './import-client.ts';
+import { readCurrentCandidatePages } from './showcase-current-reads.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import {
   type ShowcaseAcknowledgement,
@@ -17,7 +19,6 @@ import {
 import { showcaseDigest } from './showcase-contract.ts';
 
 const HAREM_EDITOR_TAG = '后宫';
-const globalContext = '00000000-0000-8000-8000-000000000000';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const bindingKeys = new Set(['source-scheme', 'source-harem', 'canonical-scheme', 'canonical-harem']);
 type CurrentReviewedCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
@@ -137,6 +138,7 @@ export async function prepareShowcaseBangumiGenres(input: {
   bindings: Pick<RecordBindings, 'claim' | 'candidates'>;
   port: ReviewedCataloguePort;
   lookupDiagnostics: readonly BangumiGenreDiagnostic[];
+  journal?: ShowcaseJournal;
 }): Promise<BangumiGenrePublication> {
   const tagged = input.records.filter(hasReviewedTag);
   const ownerKeys = input.records.map((row) => row.key);
@@ -212,13 +214,11 @@ export async function prepareShowcaseBangumiGenres(input: {
         }
       });
       if (!exact.length) continue;
-      let page: ReviewedCandidatePage;
+      let page: Awaited<ReturnType<typeof readCurrentCandidatePages>>;
       try {
-        page = await input.port.reviewedCandidates(claim.subject, {
-          property: 'schema:keywords',
-          target: current.evidence.binding.sourceConcept,
-          context: globalContext,
-          limit: 100,
+        page = await readCurrentCandidatePages(input.port, claim.subject, 'schema:keywords', {
+          ...(input.journal ? { journal: input.journal } : {}),
+          intent: 'showcase-bangumi-genres-current-candidates-v1',
         });
       } catch (error) {
         if (error instanceof ImportTransportError || error instanceof TypeError) {
@@ -227,21 +227,23 @@ export async function prepareShowcaseBangumiGenres(input: {
         }
         throw error;
       }
-      if (page.next !== null) {
+      if (!page.complete) {
         diagnostics.set(row.key, { sourceKey: row.key, code: 'reviewed-binding-unavailable' });
         continue;
       }
-      const live = page.candidates.filter(
-        (candidate): candidate is CurrentReviewedCandidate =>
-          'statement' in candidate &&
+      const live = page.candidates.filter((candidate) => {
+        const currentCandidate = candidate as CurrentReviewedCandidate;
+        return (
+          'statement' in currentCandidate &&
           exact.some((entry) => entry.candidate.candidate === candidate.id) &&
-          isDeepStrictEqual(candidate.source, proposal.source) &&
-          isDeepStrictEqual(candidate.statement, proposal.statement) &&
-          candidate.retracted === null &&
-          candidate.retraction === null &&
-          candidate.decision !== 'rejected' &&
-          candidate.rank !== 'deprecated',
-      );
+          isDeepStrictEqual(currentCandidate.source, proposal.source) &&
+          isDeepStrictEqual(currentCandidate.statement, proposal.statement) &&
+          currentCandidate.retracted === null &&
+          currentCandidate.retraction === null &&
+          currentCandidate.decision !== 'rejected' &&
+          currentCandidate.rank !== 'deprecated'
+        );
+      });
       if (live.length !== 1) continue;
       const owned = exact.find((entry) => entry.candidate.candidate === live[0]!.id)!;
       acknowledgements.push({

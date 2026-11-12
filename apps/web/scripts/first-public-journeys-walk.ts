@@ -3,16 +3,15 @@
  * Anonymous portions of mixed paths use real pages and kernel readback even when the importer
  * seed writes no `result.json`. Content ce33 integrated `ea7dc5fe59`: signed-in paths resume on a
  * stack that contains it. Issuer, JWKS, launcher and importer-seed failures are recorded causes;
- * this walk does not repair startup or seed transport. Evidence stays under
- * `.temp/goal/performance/` and never records secrets. The walk writes the 17-row table in
- * `docs/goals/performance.capabilities.md`.
+ * this walk does not repair startup or seed transport. The 17-row report and its evidence stay under
+ * `.temp/goal/performance/` and never record secrets.
  */
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
-import { CAPABILITIES_BEGIN, CAPABILITIES_END, capabilitiesTableMarkdown } from './first-public-journeys-table.ts';
+import { capabilitiesTableMarkdown } from './first-public-journeys-table.ts';
 import {
   FIRST_PUBLIC_JOURNEY_PATHS,
   type JourneyAuth,
@@ -41,7 +40,6 @@ let hydrateBudgetMs = 180_000;
 
 export const SIGN_IN_STARTUP_CAUSE =
   'issuer JWKS origin differs from native Auth JWKS after ce33 ea7dc5fe59; recorded, not repaired here';
-const capabilitiesPath = join(root, 'docs/goals/performance.capabilities.md');
 
 type Json = Record<string, unknown>;
 type Stack = { web: string; issuer: string; native: string; kernel: string };
@@ -283,7 +281,7 @@ async function gitRevision(args: string[]): Promise<string> {
   return text;
 }
 
-async function writeCapabilitiesTable(
+async function writeWalkReport(
   source: string,
   devRevision: string,
   base: string,
@@ -298,13 +296,8 @@ async function writeCapabilitiesTable(
     hydration?: { ok: boolean; detail: string; elapsedMs: number };
   } = {},
 ): Promise<void> {
-  const text = await readFile(capabilitiesPath, 'utf8');
-  const begin = text.indexOf(CAPABILITIES_BEGIN);
-  const end = text.indexOf(CAPABILITIES_END);
-  if (begin < 0 || end < 0 || end < begin)
-    throw new Error('docs/goals/performance.capabilities.md is missing first-public-journeys markers');
   const section = capabilitiesTableMarkdown(source, base, results, { ...extras, devRevision });
-  await writeFile(capabilitiesPath, `${text.slice(0, begin)}${CAPABILITIES_BEGIN}\n\n${section}${text.slice(end)}`);
+  await writeFile(join(evidenceDir, 'first-public-journeys.md'), section);
 }
 
 async function developerPassword(): Promise<string> {
@@ -897,7 +890,7 @@ async function writeEvidence(
       2,
     )}\n`,
   );
-  await writeCapabilitiesTable(source, devRevision, base, results, {
+  await writeWalkReport(source, devRevision, base, results, {
     ...(stack === undefined ? {} : { stack }),
     ...(seed === undefined ? {} : { seed }),
     ...extras,

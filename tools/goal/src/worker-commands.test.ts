@@ -222,12 +222,7 @@ test('global status summarizes large history while retaining full single-task br
     approaches: [],
   });
   const create = (id: string, goal: string, markdown: string, after: string[] = []) =>
-    h.store.createTask(
-      { ...brief(), goal, manager: 'owner', after, markdown },
-      location(id),
-      'implementation',
-      id,
-    );
+    h.store.createTask({ ...brief(), goal, manager: 'owner', after, markdown }, location(id), 'implementation', id);
 
   try {
     const archive = create('archive', 'history', largeBrief);
@@ -250,9 +245,7 @@ test('global status summarizes large history while retaining full single-task br
       task.state = 'running';
     });
     const active = create('live-held', 'live', largeBrief, [dependency.id]);
-    h.store.nextAttempt({ taskId: active.id, attempt: 0 }, (attempt) =>
-      makeAttempt(active.id, attempt, 'exited'),
-    );
+    h.store.nextAttempt({ taskId: active.id, attempt: 0 }, (attempt) => makeAttempt(active.id, attempt, 'exited'));
     h.store.updateTask({ taskId: active.id, attempt: 1 }, (task) => {
       task.state = 'held';
     });
@@ -284,6 +277,26 @@ test('global status summarizes large history while retaining full single-task br
     writeFileSync(h.settings.routingFile, JSON.stringify(routing));
     const fixturePool = h.settings.pools![0]!;
     h.settings.pools = [{ ...fixturePool, policy: { ...fixturePool.policy, allowUnknown: false } }];
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    h.store.db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run(
+      'mail-manager',
+      JSON.stringify({
+        kind: 'managed',
+        goal: 'live',
+        status: 'running',
+        threadId: 'thread-mail',
+        activeTurnId: null,
+        waitingForInbox: true,
+        turnDisposition: {
+          threadId: 'thread-mail',
+          turnId: 'turn-housekeeping',
+          status: 'interrupted',
+          intent: 'controller-park',
+          at: 1,
+        },
+        goalState: { status: 'paused' },
+      }),
+    );
 
     const attemptRead = spyOn(h.store, 'attempt');
     const globalOutput: string[] = [];
@@ -324,6 +337,18 @@ test('global status summarizes large history while retaining full single-task br
       terminationRequest: { operation: 'stop', state: 'requested', processIdentity: 'known' },
     });
     expect(status.pools).toContainEqual(expect.objectContaining({ name: 'fixture', waiting: 1 }));
+    expect(status.managers).toContainEqual(
+      expect.objectContaining({
+        id: 'mail-manager',
+        goals: ['live'],
+        operation: 'waiting-for-inbox',
+        threadId: 'thread-mail',
+        activeTurnId: null,
+        waitingForInbox: true,
+        nativeGoalStatus: 'paused',
+        turnDisposition: expect.objectContaining({ intent: 'controller-park', status: 'interrupted' }),
+      }),
+    );
     expect(attemptRead).toHaveBeenCalledTimes(2);
 
     attemptRead.mockClear();

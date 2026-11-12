@@ -35,7 +35,7 @@ test('every bundled item property declares how it reads in both directions', () 
     'rezics:spinOffOf': ['wdt:P2512', 'derivation', 'name'],
     'wdt:P8646': ['rezics:expansion', 'derivation', 'name'],
     'wdt:P361': ['wdt:P527', 'membership', 'name'],
-    'schema:isPartOf': ['schema:hasPart', 'membership', 'name'],
+    'schema:isPartOf': ['schema:hasPart', 'membership', 'position'],
     'wdt:P179': ['rezics:seriesMember', 'membership', 'position'],
     'wdt:P1433': ['rezics:publicationContains', 'membership', 'name'],
   };
@@ -44,6 +44,7 @@ test('every bundled item property declares how it reads in both directions', () 
     expect(properties[inverse!]).toBeUndefined();
     for (const type of Object.values(types)) expect(type.properties).not.toContain(inverse);
   }
+  expect(properties['schema:isPartOf']?.qualifiers).toContain('schema:position');
   for (const term of [
     'wdt:P155',
     'wdt:P144',

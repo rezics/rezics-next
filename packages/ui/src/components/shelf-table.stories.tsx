@@ -29,9 +29,19 @@ const labels: Record<ShelfColumnId, string> = {
   finished: 'Finished',
   lastActivity: 'Last activity',
 };
-const meta = { title: 'Components/Shelf Table', component: ShelfTable, decorators: [withSurface] } satisfies Meta<
-  typeof ShelfTable
->;
+const meta = {
+  title: 'Components/Shelf Table',
+  component: ShelfTable,
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'Illustrative supplied shelf records and local interactions; native and visual acceptance is separate.',
+      },
+    },
+  },
+  decorators: [withSurface],
+} satisfies Meta<typeof ShelfTable>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Editable: Story = {
@@ -41,6 +51,16 @@ export const Editable: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Title' }));
     await expect(canvas.getByRole('columnheader', { name: 'Title' })).toHaveAttribute('aria-sort', 'ascending');
+    await expect(canvasElement.querySelector('[data-slot="shelf-sort-direction"]')).toHaveAttribute(
+      'data-direction',
+      'asc',
+    );
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('columnheader', { name: 'Title' })).toHaveAttribute('aria-sort', 'descending');
+    await expect(canvasElement.querySelector('[data-slot="shelf-sort-direction"]')).toHaveAttribute(
+      'data-direction',
+      'desc',
+    );
     await userEvent.click(canvas.getByRole('link', { name: subject.title }));
     await expect(canvas.getByRole('checkbox', { name: 'Select book' })).toBeChecked();
     await userEvent.click(canvas.getAllByRole('button', { name: 'Show' })[0]!);

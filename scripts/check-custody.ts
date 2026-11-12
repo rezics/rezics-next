@@ -87,9 +87,13 @@ export type CheckCleanupReceipt = {
 export type CheckRemoteAttempt = {
   host: string;
   id: string;
-  status: 'running' | 'terminal' | 'uncertain';
+  status: 'running' | 'terminal' | 'uncertain' | 'not-started';
   startedAt: string;
   endedAt?: string;
+  native?: unknown;
+  settlement?: unknown;
+  cleanup?: unknown;
+  reason?: string;
 };
 
 export type CheckRemoteObservation = {
@@ -102,6 +106,15 @@ export type CheckRemoteObservation = {
 export type CheckRemoteRunCustody = {
   version: 1;
   physicalRunId: string;
+  binding?: {
+    checkId: string;
+    ownership?: CheckOwnership;
+    argv: string[];
+    remoteArgv: string[];
+    hostsFile?: string;
+    returns?: string[];
+    expectedSourceSha256?: string;
+  };
   status: 'running' | 'terminal' | 'uncertain';
   attempts: CheckRemoteAttempt[];
   observations?: CheckRemoteObservation[];
@@ -642,6 +655,44 @@ export function cancellationPath(root: string, checkId: string): string {
 
 export function remoteRunCustodyPath(root: string, physicalRunId: string): string {
   return join(custodyDirectory(root), 'remote', `${physicalRunId}.json`);
+}
+
+export function initializeRemoteRunCustody(
+  root: string,
+  physicalRunId: string,
+  binding: NonNullable<CheckRemoteRunCustody['binding']>,
+): void {
+  if (
+    !isPhysicalRunId(physicalRunId) ||
+    !isCheckId(binding.checkId) ||
+    !Array.isArray(binding.argv) ||
+    binding.argv.length === 0 ||
+    binding.argv.some(
+      (argument) => typeof argument !== 'string' || argument.length > 4096 || argument.includes('\0'),
+    ) ||
+    !Array.isArray(binding.remoteArgv) ||
+    binding.remoteArgv.length === 0 ||
+    binding.remoteArgv.some(
+      (argument) => typeof argument !== 'string' || argument.length > 4096 || argument.includes('\0'),
+    )
+  )
+    throw new Error('worker-check: invalid remote custody binding');
+  if (binding.ownership !== undefined) validateOwnership(binding.ownership);
+  const file = remoteRunCustodyPath(root, physicalRunId);
+  if (existsSync(file)) throw new Error('worker-check: remote custody already exists for physical run');
+  writeAtomicJson(file, {
+    version: 1,
+    physicalRunId,
+    binding: {
+      checkId: binding.checkId,
+      ...(binding.ownership === undefined ? {} : { ownership: validateOwnership(binding.ownership) }),
+      argv: [...binding.argv],
+      remoteArgv: [...binding.remoteArgv],
+    },
+    status: 'running',
+    attempts: [],
+    updatedAt: new Date().toISOString(),
+  } satisfies CheckRemoteRunCustody);
 }
 
 export function runnerReadyPath(root: string, checkId: string, physicalRunId: string): string {

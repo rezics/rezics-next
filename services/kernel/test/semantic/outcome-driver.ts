@@ -10,6 +10,8 @@ import { compileCatalogue } from '@rezics/definitions/compile';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
@@ -30,7 +32,7 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys, testReceiptKeysEnv } from '../support/receipt-keys.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -41,6 +43,7 @@ import { setupSemantic } from '../../src/semantic/setup.ts';
 import { setupContent } from '../../src/content/setup.ts';
 import { sharedAuth, type OwnedResourceObserver } from './outcome-auth.ts';
 import { isolatedOutcomeAuth } from './isolated-outcome-auth.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 type Account = { accountId: string; bearer: string };
 export const releasedDiscoveryFeatures = Object.freeze([
@@ -65,6 +68,120 @@ function databaseUrl(source: URL, name: string): string {
   const value = new URL(source);
   value.pathname = `/${name}`;
   return value.href;
+}
+
+type SemanticWorkerRuntime = {
+  databaseUrl: string;
+  routeKey: string;
+  sessionKeys: string;
+  authIssuer: string;
+  authAudience: string;
+  authJwksUrl: string;
+};
+
+type ManagedSemanticWorker = {
+  isRunning(): boolean;
+  diagnostics(): string;
+  stop(): Promise<void>;
+};
+
+const SEMANTIC_WORKER_START_MS = 30_000;
+const IDENTITY_OPERATION_ADVANCE_MS = 30_000;
+const IDENTITY_OPERATION_POLL_MS = 100;
+
+/** Run the production worker entrypoint in its own process so it has its own DBOS host and outbox relay. */
+async function startManagedSemanticWorker(runtime: SemanticWorkerRuntime): Promise<ManagedSemanticWorker> {
+  const child = Bun.spawn([process.execPath, fileURLToPath(new URL('../../src/worker.ts', import.meta.url))], {
+    cwd: resolve(import.meta.dir, '../..'),
+    env: workerTestEnv({
+      ...process.env,
+      DATABASE_URL: runtime.databaseUrl,
+      KERNEL_ROUTE_KEY: runtime.routeKey,
+      KERNEL_SESSION_KEYS: runtime.sessionKeys,
+      KERNEL_EXECUTOR_ID: `semantic-outcome-${randomUUID()}`,
+      AUTH_ISSUER: runtime.authIssuer,
+      AUTH_AUDIENCE: runtime.authAudience,
+      AUTH_JWKS_URL: runtime.authJwksUrl,
+    }),
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  let output = '';
+  let errors = '';
+  let ready = false;
+  let streamFailure: unknown;
+  let resolveReady!: () => void;
+  let rejectReady!: (error: unknown) => void;
+  let stopping: Promise<void> | undefined;
+  const readySignal = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  const retain = (current: string, chunk: string) => (current + chunk).slice(-32_768);
+  const pump = async (stream: ReadableStream<Uint8Array>, accept: (chunk: string) => void, ended: () => void) => {
+    const decoder = new TextDecoder();
+    for await (const chunk of stream) accept(decoder.decode(chunk, { stream: true }));
+    accept(decoder.decode());
+    ended();
+  };
+  const stdout = pump(
+    child.stdout as ReadableStream<Uint8Array>,
+    (chunk) => {
+      output = retain(output, chunk);
+      if (!ready && output.includes('Worker ready')) {
+        ready = true;
+        resolveReady();
+      }
+    },
+    () => {
+      if (!ready) rejectReady(new Error('Kernel worker closed stdout before becoming ready'));
+    },
+  );
+  const stderr = pump(
+    child.stderr as ReadableStream<Uint8Array>,
+    (chunk) => {
+      errors = retain(errors, chunk);
+    },
+    () => {},
+  );
+  const drained = Promise.all([stdout, stderr]).catch((error: unknown) => {
+    streamFailure = error;
+    rejectReady(error);
+  });
+  const diagnostics = () => `stdout:\n${output}\nstderr:\n${errors}`;
+  const stop = (): Promise<void> =>
+    (stopping ??= (async () => {
+      if (child.exitCode === null) {
+        child.kill('SIGTERM');
+        const graceful = await Promise.race([child.exited.then(() => true), Bun.sleep(10_000).then(() => false)]);
+        if (!graceful) {
+          child.kill('SIGKILL');
+          await child.exited;
+        }
+      } else {
+        await child.exited;
+      }
+      await drained;
+      if (streamFailure) throw streamFailure;
+    })());
+  const timeout = setTimeout(
+    () => rejectReady(new Error(`Kernel worker did not become ready within ${SEMANTIC_WORKER_START_MS} ms`)),
+    SEMANTIC_WORKER_START_MS,
+  );
+  try {
+    await readySignal;
+  } catch (error) {
+    try {
+      await stop();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], `Kernel worker startup and cleanup failed\n${diagnostics()}`);
+    }
+    throw new Error(`Kernel worker did not become ready\n${diagnostics()}`, { cause: error });
+  } finally {
+    clearTimeout(timeout);
+  }
+  return { isRunning: () => child.exitCode === null, diagnostics, stop };
 }
 
 async function assertDatabaseNameAvailable(owner: Pool, name: string): Promise<void> {
@@ -118,6 +235,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       databaseUrl: string;
       routeKey: string;
       sessionKeys: string;
+      receiptKeys: string;
       authIssuer: string;
       authAudience: string;
       authJwksUrl: string;
@@ -195,6 +313,7 @@ async function startDriver(
   let runtimePool: Pool | undefined;
   let release: (() => void | Promise<void>) | undefined;
   let relays: ReturnType<typeof startRelays> | undefined;
+  let nativeWorker: Promise<ManagedSemanticWorker> | undefined;
   let completion: Promise<void> | undefined;
   const close = () => {
     if (completion) return completion;
@@ -209,6 +328,11 @@ async function startDriver(
         }
       };
       await attempt(async () => options.beforeClose?.());
+      if (nativeWorker)
+        await attempt(async () => {
+          const worker = await nativeWorker!.catch(() => undefined);
+          await worker?.stop();
+        });
       await attempt(async () => release?.());
       await attempt(async () => relays?.stop());
       if (runtimePool && runtimePool !== pool) await attempt(() => runtimePool!.end());
@@ -239,15 +363,13 @@ async function startDriver(
     owned.push(kernelName);
     await owner.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     const kernelUrl = databaseUrl(source, kernelName);
-    pool = createPool(kernelUrl);
-    configureTestReceiptKeys(pool);
-    runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
-    const receiptKeyEnv = [...testReceiptKeys().keys]
-      .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
-      .join(',');
+    const receiptKeys = testReceiptKeys();
+    const receiptKeyEnv = testReceiptKeysEnv(receiptKeys).KERNEL_RECEIPT_KEYS;
     process.env.KERNEL_RECEIPT_KEYS = receiptKeyEnv;
-    configureTestReceiptKeys(pool);
-    if (runtimePool !== pool) configureTestReceiptKeys(runtimePool);
+    pool = createPool(kernelUrl);
+    configureTestReceiptKeys(pool, receiptKeys);
+    runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
+    if (runtimePool !== pool) configureTestReceiptKeys(runtimePool, receiptKeys);
     timer.mark('kernel database');
 
     if (!nativePreloadInstalled) {
@@ -257,7 +379,6 @@ async function startDriver(
 
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
-    const receiptKeys = testReceiptKeys();
     const auth = options.isolatedAuth
       ? await isolatedOutcomeAuth(source, kernelUrl, routeKey, sessionKeys, receiptKeys, options.onOwnedResource)
       : await sharedAuth(source, options.onOwnedResource, options.strictCleanup ?? false);
@@ -686,6 +807,36 @@ async function startDriver(
         if (persona === 'anonymous') return send(null, method, path, body, headers);
         return send(accounts[persona], method, path, body, headers, persona);
       },
+      async advanceIdentityOperation(operationId) {
+        if (completion) throw new Error('Semantic outcome fixture is closed');
+        const worker = await (nativeWorker ??= startManagedSemanticWorker({
+          databaseUrl: kernelUrl,
+          routeKey: Buffer.from(routeKey).toString('base64url'),
+          sessionKeys: [...sessionKeys.keys]
+            .map(([id, value]) => `${id}:${Buffer.from(value).toString('base64url')}`)
+            .join(','),
+          authIssuer: required(runtimeAuth?.issuer, 'Kernel did not construct Access with the Auth issuer'),
+          authAudience: required(runtimeAuth?.audience, 'Kernel did not construct Access with the Auth audience'),
+          authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),
+        }));
+        const path = `/v1/subjectIdentityOperations/${operationId}`;
+        const deadline = Date.now() + IDENTITY_OPERATION_ADVANCE_MS;
+        let answer: HttpResponse | undefined;
+        while (Date.now() < deadline) {
+          answer = await send(accounts.acceptor, 'GET', path, undefined, undefined, 'acceptor');
+          if (answer.status !== 200 || (answer.body.operation as { done?: unknown } | undefined)?.done !== false)
+            return answer;
+          if (!worker.isRunning())
+            throw new Error(
+              `Kernel worker exited before publishing identity operation ${operationId}\n${worker.diagnostics()}`,
+            );
+          const remaining = deadline - Date.now();
+          if (remaining > 0) await Bun.sleep(Math.min(IDENTITY_OPERATION_POLL_MS, remaining));
+        }
+        throw new Error(
+          `Kernel worker did not publish identity operation ${operationId} within ${IDENTITY_OPERATION_ADVANCE_MS} ms: ${JSON.stringify(answer?.body)}\n${worker.diagnostics()}`,
+        );
+      },
       async compile(root, schemas, presentation) {
         const bundled = bundledSources();
         const mergedPresentation = { ...bundled.presentation };
@@ -764,6 +915,7 @@ async function startDriver(
           sessionKeys: [...sessionKeys.keys]
             .map(([id, key]) => `${id}:${Buffer.from(key).toString('base64url')}`)
             .join(','),
+          receiptKeys: receiptKeyEnv,
           authIssuer: required(runtimeAuth?.issuer, 'Kernel did not construct Access with the Auth issuer'),
           authAudience: required(runtimeAuth?.audience, 'Kernel did not construct Access with the Auth audience'),
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),

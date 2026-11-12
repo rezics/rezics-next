@@ -40,6 +40,10 @@ function failureFingerprint(file: string): string {
   return createHash('sha256').update(readFileSync(file)).digest('hex');
 }
 
+function proposalFingerprint(markdown: string): string {
+  return createHash('sha256').update(markdown).digest('hex');
+}
+
 function finishInterruptedFailure(
   failed: string,
   file: string,
@@ -112,15 +116,34 @@ function taskHasDispatchArchive(goalDirectory: string, taskId: string): boolean 
 function unarchivedTasksForBrief(runtime: BacklogClaimRuntime, goal: string, markdown: string): string[] {
   if (!tableExists(runtime.db, 'worker_tasks')) return [];
   const goalDirectory = backlogDirectory(runtime.stateDirectory, goal);
+  const proposalSha256 = proposalFingerprint(markdown);
   const ids: string[] = [];
   for (const row of runtime.db.query('SELECT id, body FROM worker_tasks').all() as { id: string; body: string }[]) {
-    let brief: { goal?: string; markdown?: string } | undefined;
+    let task: {
+      brief?: {
+        goal?: string;
+        markdown?: string;
+        kind?: string;
+        proof?: { sourceTasks?: string[] };
+      };
+      proofAuthorization?: {
+        backlogProposal?: { proposalSha256?: string; sourceTasks?: string[] };
+      };
+    };
     try {
-      brief = (JSON.parse(row.body) as { brief?: { goal?: string; markdown?: string } }).brief;
+      task = JSON.parse(row.body) as typeof task;
     } catch {
       continue;
     }
-    if (brief?.goal !== goal || brief.markdown !== markdown) continue;
+    const brief = task.brief;
+    if (brief?.goal !== goal) continue;
+    const admission = task.proofAuthorization?.backlogProposal;
+    const sameProposal =
+      brief.markdown === markdown ||
+      (brief.kind === 'verification' &&
+        admission?.proposalSha256 === proposalSha256 &&
+        JSON.stringify(admission.sourceTasks) === JSON.stringify(brief.proof?.sourceTasks));
+    if (!sameProposal) continue;
     if (taskHasDispatchArchive(goalDirectory, row.id)) continue;
     ids.push(row.id);
   }

@@ -65,11 +65,10 @@ Decision: guard rewrite and landed shares use observed immediate next attempts f
 
 Decision: the trailing-seven-day guard ledger builds call-local attempt indexes once and aggregates each record's distinct known guards in one pass; the firing window and immediate-next metrics remain unchanged.
 
-Guards are written into briefs before they are written into code: most control-plane refusals were specified by
-brief writers after one incident, and workers built exactly what they were asked. Prohibitions in briefs and prompts
-turn mismatches into stopped attempts. The evidence is in the
-[defensive programming research](../research/gpt-defensive-programming-opus-5-5.md). The efficiency owner prices
-every guard from the guard ledger each day.
+Price a guard before briefing it; a prohibition can turn a repairable mismatch into a lost attempt. Keep
+fingerprints that prove required identity or avoid more work than they add and change a real decision. Avoid
+scaffolding for states outside supported behavior. Review the guard ledger against the
+[defensive programming evidence](../research/gpt-defensive-programming-opus-5-5.md).
 
 Make one structural change per day aimed at the current bottleneck stage: identify it, exploit its capacity,
 subordinate other stages to it, then elevate it where needed. Measure before and after on comparable work and
@@ -107,10 +106,9 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   the maintainer. It reports the decision afterwards.
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
   one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
-- At each hourly review, check ready repairs, occupied coding slots and running checks separately. A check blocks only
-  work that needs its result. Keep a concrete independent repair ready while checks run, and dispatch it when an
-  existing coding slot and allowance permit. If the coding queue is empty, report whether no independent repair is
-  ready, planning missed one, or admission is limiting starts. Use existing telemetry and the hourly review.
+- Advance each delivered result without waiting for unrelated checks: resume retained source or route the exact
+  failure. Keep independent repairs ready. At hourly review, separate ready work, writing and check waits. An empty
+  queue means no ready repair, missed planning or limited admission; identify which and act within current allowance.
 - The supermanager initiates efficiency work without a maintainer prompt. In the existing hourly review, identify the
   largest evidenced avoidable loss, take the smallest action that addresses its cause, and report the action and
   observed effect or the next measurement. When evidence is insufficient, name what is missing and collect the

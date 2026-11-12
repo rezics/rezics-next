@@ -125,11 +125,6 @@
       "path": ".temp/**",
       "kind": "file",
       "bytes": 0
-    },
-    {
-      "path": ".temp/continuation/**",
-      "kind": "directory",
-      "bytes": 0
     }
   ]
 }

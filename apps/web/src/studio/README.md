@@ -1,26 +1,28 @@
 # Studio
 
-`/studio` mounts one authoring workspace for novel chapters and columns. It reuses the Studio document editor,
-preview, saved revision comparison, and private draft revision writer. The route opens hosted books from the signed-in
-owner inventory and opens an existing column draft from **Open in Studio** on the drafts page.
+`/studio` is the signed-in account workspace for private discussion drafts. It consumes the bounded Content
+own-drafts inventory, opens only an explicitly selected discussion opening, and uses the existing Studio editor,
+revision history and comparison. The inventory is account scoped; it does not imply project membership. Each page
+contains at most 20 rows, keeps its opaque continuation, and retries the exact failed cursor.
 
-Books add the hosted catalogue's complete bounded table of contents and its current publication. Structure edits use
-the generated hosted catalogue create/revise operations. Publication review freezes the selected exact chapter
-revisions and required ancestor parts; the generated publish operation checks the expected structure and current
-publication in one native command. The review shown by the browser is local selection context, not a server-issued
-review token. A successful publication is re-read through the owner resource and compared with the reviewed selection.
-The native API does not provide publication timestamps or a publication history list, so Studio shows only the current
-publication and leaves its timestamp empty.
+Studio creates a private discussion with the selected board, nonempty body, title, licence, subjects and media IDs.
+The generated `thread.create` operation receives draft visibility and one stable idempotency key. Acknowledged drafts
+use the current exact-resume reader and the conditional revision writer for later edits. The editor retains one
+selection and one working document; it does not add a second body store.
 
-The existing Post API supplies current document reads, exact revision reads/history, and conditional private draft
-revision writes. A Post's conversation title cannot be changed through that revision writer. Content does not yet
-provide project document inventory or title-only draft creation, so Studio opens only owner-admitted existing drafts;
-draft creation remains in the owning Content flow. Reviewed article publication is also unavailable in the current
-Content API. Studio states this limitation instead of treating an empty publication list as complete history.
+Before account publication, Studio freezes the acknowledged Post revision and digest, body, board, licence, subjects
+and media IDs in a local review. Editing retires that review. Publication uses the installed conditional revision
+command with the exact `If-Match`, captured session credential and original idempotency key. An uncertain outcome
+retries that same intent; a new observation is a separate action. Studio reports publication only after an exact
+current-post readback agrees with the acknowledged body and operands.
 
-The native adapter calls the installed generated `KernelClient` routes directly and validates their external responses.
-Generated clients are not hand-edited. Remaining producer obligations are: add Content project inventory and
-title-only draft creation for in-workspace document creation, add a reviewed article publication operation, and expose
-hosted publication history with timestamps if Studio needs those records.
+Hosted Books stay on `/studio?books=1`. Their selected-manifest review and hosted publish command remain independent
+and atomic. The manifest freezes exact chapter bodies and required table-of-contents ancestors; later draft edits and
+unselected drafts do not enter the release.
 
-Decision: one mounted Studio flow uses the native Hosted Catalogue structure and atomic book publication with shared Post revision editing; Content inventory, draft creation and reviewed column publication, plus hosted publication history timestamps, remain producer obligations.
+The route uses public Threads and Content entries and the installed generated operations. Native authorization,
+session retirement, producer recordings and the mounted native/browser acceptance remain separate verification
+responsibilities. `studio-native-drafts.stories.tsx` labels its supplied outcomes as illustrations, not native proof.
+
+Decision: Studio owns one account-draft inventory and private creation flow, composes the existing exact-resume and
+revision lifecycle, and keeps local acknowledged-revision publication separate from hosted Book publication.

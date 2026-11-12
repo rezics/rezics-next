@@ -11,12 +11,9 @@ links with declared freshness, one-hop redirects, all required personas, main an
 
 ## First-public-scope dev journeys
 
-This finishing table follows the two Semantic-owned **In** rows in [public scope](../scope.md): catalogue,
-editorial contributions, identity resolution, definitions and vertical editors; and Zones. One row is one
-user-visible path. The single Semantic walk executes every row on current dev by **2026-11-07 00:30 UTC**,
-then repeats hourly toward **09:30 UTC**. It replaces Pending with Passing or Failing, recording the dev revision,
-UTC time, native/browser evidence and first failing transition/repair owner. Pending is not a pass. A shared setup
-failure marks every dependent row Failing with that cause; it supplies no downstream success.
+The [public scope](../scope.md) determines the Semantic and Zone paths. Execute each path on current dev and
+record the revision, UTC time, native/browser evidence and first failure with its owner. Mark a shared setup
+failure against each dependent row; it supplies no downstream success.
 
 | Journey                         | User-visible path                                                                                                                                          | Dev result                                                                                                                                                           |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -62,8 +59,6 @@ The finishing denominator excludes custom definition publication, advanced ident
 seeds, measured-input expansion, advanced Search/facets and personal dynamic queries. Zones count configured static
 routes without source reads; saved-scope/mounted-Collection unions, direct catalogue targets and retained preparation
 remain grant-closed. These scope boundaries do not erase the broader Goal's retained acceptance obligations below.
-After the first walk, dispatch complete repairs only for failing first-public journeys (same-day net-new violation
-repairs continue). Hourly reporting is one line: passing/31 and slowest failing journey with its causal owner.
 
 Decision: fewest tests pin the 31 user-visible first-public paths: one kernel native suite over bundled Types, proposals,
 Contexts and static Zones, plus one admitted seeded walk that executes every row with independent native readback and
@@ -264,14 +259,17 @@ Released fixture: Real adopted Concept/scheme and edition relations; more-than-p
 
 Scenarios and binding: Existing relation/reference suites; TO-FREEZE subject-traversal composed page plus Details/history journey, reusing existing route coverage.
 
-Decision: a failed selected Work relation group retries the same node, property, direction and native cursor through
-its current page address, restoring that group's heading without switching to the overview.
-Concept filter edits and selected Work retries retain the complete current catalogue selection and outer return;
-focused regression assertions cover these repairs, while broad native/browser acceptance follows integration.
+Extend the [native comparative fixture](../../services/kernel/test/semantic/comparative-work-native.test.ts)
+through [Work identity](../../services/kernel/src/semantic/identity-epoch-contract.md). Adopt a cited Book to
+VideoGame comparison, merge and unmerge an eligible same-type Work, and observe real Search and Library receiving.
+The citation remains auditable, forward and inverse pages agree on one canonical edge without redirected-holder
+duplicates, and both endpoints resolve correctly after unmerge.
 
-Stages: Declared: yes. Partial bound/exposed: relation and reference APIs; composed traversal open. API-passed: unrecorded; promoted: no.
+A failed Work relation group retries the same node, property, direction and cursor, and restores its heading.
+Concept edits and Work retries retain current catalogue selection and the outer return.
 
-Native acceptance for the existing bound slice (full pending job is not claimed by this command):
+Relation and reference APIs are bound; composed traversal and comparative identity acceptance remain open.
+Native acceptance for the bound slice:
 
 ```sh
 bun run --cwd services/kernel check test/semantic/relations-uncapped.test.ts test/semantic/subject-reference-access.test.ts test/semantic/context-relations.test.ts
@@ -645,11 +643,13 @@ Released fixture: Actual contribution/Context/Zone lifecycle and account erasure
 | Mounted Zone             | Owned Zone/source lifecycle obeys current policy; durable publication/import work checks fence before effects.                               |
 | Configured TypeList      | Pages/history preserve only eligible public skeletons and de-identified citations; private Content documents and caches follow owner policy. |
 
-Scenarios and binding: Existing native semantic account-agent/lifecycle and Content erasure operation suites; TO-FREEZE terminal-erasure-graph with every owner participant and durable replay controls. Accounts coordinates; each store owns its cleanup.
+Accounts coordinates the terminal erasure graph; each store owns its cleanup. Exercise the actual
+[Zone owner operation and continuation](../zones.md#deletion-restoration-withholding-and-durable-cleanup) under
+held consumer release, replay, late registration or effects, failed or archived copies, stale CAS, protection
+changes, and unrelated survivors. Independently read selected grant keys, original source custody, disclosure
+fences, physical copies and durable completion without writing the effects or acknowledgements being observed.
 
-Stages: Declared: yes. Bound: native owner slices. Exposed: complete terminal graph/custody integration remains open. API-passed: no; promoted: no.
-
-Native acceptance for the existing bound slice (full pending job is not claimed by this command):
+Native acceptance for the bound owner slices; the full graph remains open:
 
 ```sh
 bun run --cwd services/kernel check test/semantic/account-agent-erasure.test.ts test/semantic/deletion-contract.test.ts test/content/erasure-operation-outcomes.test.ts

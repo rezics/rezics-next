@@ -9,7 +9,9 @@ import {
   type CoverSummary,
 } from '../src/components/cover.tsx';
 import { CoverCard, CoverGrid } from '../src/components/cover-card.tsx';
-import { MemberListRow } from '../src/components/list-presentation.tsx';
+import { ShelfListRow } from '@rezics/ui/shelf-list';
+import { ShelfTable } from '@rezics/ui/shelf-table';
+import { MemberListRow, MemberReadingItem } from '../src/components/list-presentation.tsx';
 
 test('Every default catalogue kind uses a portrait cover frame while landscape artwork remains whole', () => {
   const wide: CoverSummary = {
@@ -67,4 +69,83 @@ test('Every default catalogue kind uses a portrait cover frame while landscape a
       }
     }
   }
+});
+
+test('Shelf adapters leave explicit and configured cover geometry to Cover for image and fallback states', () => {
+  const subject: CoverSubject = { id: 'supplied', title: 'A supplied work', types: ['schema:Book'] };
+  const image: CoverSummary = {
+    media: 'supplied-art',
+    width: 1600,
+    height: 900,
+    variants: [{ format: 'webp', width: 640 }],
+    placeholder: { color: '#465c72', thumbhash: '' },
+    focalPoint: null,
+    credit: null,
+  };
+  for (const imageAspect of [undefined, 'square', 'landscape'] as const) {
+    const expectedRatio = imageAspect === 'square' ? '1:1' : '16:9';
+    for (const cover of [image, { ...image, withheld: 'suitability' as const }, null]) {
+      const props = {
+        subject,
+        cover,
+        src: () => '/supplied-art',
+        ratio: '16:9' as const,
+        ...(imageAspect ? { listPresentation: { imageAspect, keyFacts: [] } } : {}),
+      };
+      const surfaces = [
+        <ul>
+          <ShelfListRow
+            href="/supplied"
+            title={subject.title}
+            cover={props}
+            labels={{ select: 'Select', menu: 'More' }}
+          />
+        </ul>,
+        <ShelfTable
+          columns={[{ id: 'cover', label: 'Cover', visible: true }]}
+          rows={[{ id: subject.id, href: '/supplied', title: subject.title, cover: props }]}
+          onSort={() => {}}
+        />,
+      ];
+      for (const surface of surfaces) {
+        const html = renderToStaticMarkup(surface);
+        expect(html).toContain(`data-ratio="${expectedRatio}"`);
+        expect(html).not.toContain('overflow-hidden rounded');
+        expect(html).not.toContain('pointer-events-none w-');
+        expect(html).toContain(
+          cover?.withheld ? 'data-state="withheld"' : cover ? 'data-state="loading"' : 'data-state="placeholder"',
+        );
+        if (cover?.withheld) {
+          expect(html).toContain('min-h-11 min-w-11');
+          expect(html).toContain('aria-label="Show cover"');
+          expect(html).not.toContain('<img');
+        }
+      }
+    }
+  }
+});
+
+test('Collection reading rows keep wrapped identity and Inspect in measured flow', () => {
+  const title = 'A supplied long title '.repeat(16);
+  const html = renderToStaticMarkup(
+    <ul>
+      <MemberReadingItem
+        layout="list"
+        occurrenceLabel="Supplied occurrence"
+        detailId="supplied-detail"
+        expanded={false}
+        href="/supplied"
+        title={title}
+        position="One of the supplied occurrences"
+        inspectLabel="Inspect supplied occurrence"
+        onInspect={() => {}}
+        metadata={<p>A supplied summary that remains bounded to four lines.</p>}
+      />
+    </ul>,
+  );
+  expect(html).toContain(title);
+  expect(html).toContain('Inspect supplied occurrence');
+  expect(html).toContain('line-clamp-4');
+  expect(html).not.toContain('max-h-48');
+  expect(html).not.toContain('overflow-y-auto');
 });

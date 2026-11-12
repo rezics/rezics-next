@@ -1768,6 +1768,8 @@ change.
 
 ### Identity epoch domain composition
 
+Decision: merge journeys retain the initial 202 and pending poll, then use the managed default worker with the fixture's database, route/session keys and Auth endpoints to observe the same operation as published before redirect assertions; production composition stays unchanged because Semantic already registers the coordinator and fixed Search/Library participants.
+
 - Public entries: `semantic/contract/index.ts` (identity, item, subject and domain ports), `semantic/core/index.ts`
   (next-step, receipt and item projection), `semantic/application/index.ts` (installed Semantic domain),
   `semantic/identity-core/index.ts` (mapping and rating-review classifier), `semantic/identity-core/rating-review-bounds.ts`
@@ -2268,12 +2270,16 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
 
 #### Candidate page and disclosure owner checks
 
-- Touches: one bounded batch joining each returned proposal candidate to its exact revision transaction, editorial
-  principal and Access account primary key; direct Content disclosure checks use the same exact candidate and owner
-  evidence. Missing owner evidence fails closed on candidate pages.
+- Decision: candidate owner reads use the candidate row's exact revision transaction when expanded, or the latest
+  authored assertion transaction from the compact fact index when no candidate row exists. Both paths retain the
+  same write-basis, account, audience, fence and erasure checks; missing owner evidence fails closed.
+- Touches: one bounded batch resolving each returned proposal or authored compact candidate to its revision
+  transaction, editorial principal and Access account primary key; direct Content disclosure checks use the same
+  exact candidate and owner evidence.
 - Bound: one additional statement for a candidate page with at most the requested page size plus one indexed
-  transaction and account join per candidate; one additional indexed join for a point disclosure read. Rows are
-  O(page size), independent of unrelated subjects and account count. No subject or history sweep is used.
+  candidate or compact-fact lookup, transaction join and account join per candidate; one additional indexed join
+  for a point disclosure read. Rows are O(page size), independent of unrelated subjects and account count. No
+  subject or history sweep is used.
 - Growth check: `test/semantic/account-erasure-user-cases.test.ts`: `native T fences a live moderator private candidate overlay while retaining the communal subject` and
   `native T fences disclosed personal consent at the Semantic source before consumer catchup`.
 

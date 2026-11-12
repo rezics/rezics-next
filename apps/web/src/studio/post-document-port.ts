@@ -25,7 +25,7 @@ import {
 } from './contract';
 import { readPostDocumentHead } from './post-document-read';
 
-/** Compose with the catalogue owner's ports; Content has no project inventory or title-only draft creator. */
+/** Compose exact Post reads and conditional revisions; account inventory and private creation have their own owner. */
 export type PostDocumentPort = Pick<
   StudioPort,
   'isCurrent' | 'documents' | 'open' | 'createDraft' | 'saveDraft' | 'versions' | 'revision'
@@ -160,6 +160,12 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
             publish: false,
           },
           visibility: post.visibility,
+          native: {
+            threadId: post.threadId,
+            boardId: post.boardId,
+            licence: post.licence,
+            subjectIds: [...post.subjectIds],
+          },
         },
       };
     } catch {
@@ -192,6 +198,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         input.title,
         serializeDocument(input.body),
         input.mediaIds,
+        input.native ?? null,
       ]);
       if (attempt?.key === input.idempotencyKey && attempt.intent !== intent)
         return failure('invalid', 'A save key cannot be reused for different edits.');
@@ -203,8 +210,6 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
         if (current.value.revision.exact.revisionId !== input.expectedRevisionId) return stale();
         if (!current.value.permissions.edit)
           return failure('unavailable', 'Only existing private drafts can be saved privately.');
-        if (current.value.revision.title !== input.title)
-          return failure('unavailable', 'The existing Post editor cannot change the conversation title.');
         attempt = { key: input.idempotencyKey, intent, title: current.value.revision.title };
       }
       if (!admitted(input.projectId, input.postId, signal)) return unavailable();
@@ -217,6 +222,15 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
             revisionId: input.expectedRevisionId,
             body: input.body,
             mediaIds: [...input.mediaIds],
+            ...(input.title === command.title ? {} : { title: input.title }),
+            ...(input.native
+              ? {
+                  boardId: input.native.boardId,
+                  licence: input.native.licence,
+                  subjectIds: [...input.native.subjectIds],
+                  visibility: input.native.visibility,
+                }
+              : { visibility: 'draft' as const }),
             idempotencyKey: input.idempotencyKey,
           },
           headers: { 'X-CSRF-Token': visit.csrfToken },
@@ -237,17 +251,23 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           post.authorId !== visit.accountId
         )
           return uncertain();
-        const revision = await projectRevision(post, command.title);
+        const currentHead = await open(input, signal);
         if (
-          !revision ||
-          serializeDocument(revision.body) !== serializeDocument(input.body) ||
-          revision.mediaIds.length !== input.mediaIds.length ||
-          !revision.mediaIds.every((id, index) => id === input.mediaIds[index]) ||
+          !currentHead.ok ||
+          currentHead.value.revision.exact.revisionId !== post.revisionId ||
+          currentHead.value.revision.title !== input.title ||
+          serializeDocument(currentHead.value.revision.body) !== serializeDocument(input.body) ||
+          currentHead.value.revision.mediaIds.length !== input.mediaIds.length ||
+          !currentHead.value.revision.mediaIds.every((id, index) => id === input.mediaIds[index]) ||
+          (input.native &&
+            (currentHead.value.native?.boardId !== input.native.boardId ||
+              currentHead.value.native?.licence !== input.native.licence ||
+              JSON.stringify(currentHead.value.native?.subjectIds) !== JSON.stringify(input.native.subjectIds))) ||
           !admitted(input.projectId, input.postId, signal)
         )
           return uncertain();
         attempt = null;
-        return { ok: true, value: { revision, visibility: 'draft', permissions: { edit: true, publish: false } } };
+        return { ok: true, value: currentHead.value };
       } catch {
         return uncertain();
       }

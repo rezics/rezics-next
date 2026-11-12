@@ -122,21 +122,25 @@ function validateThreadDraft(input: unknown): StartThreadInput {
   )
     throw new Error('Invalid thread draft');
   const base = { ...draft, boardId: input.boardId, title: input.title };
+  const licence = validateLicence(input);
+  const visibility = validateThreadVisibility(input);
   if ('kind' in input && input.kind === 'rules') {
     if (
       'subjectIds' in input ||
       'subjectId' in input ||
       'voteCitation' in input ||
-      !('licence' in input) ||
-      input.licence !== 'LicenseRef-rezics-terms'
+      licence !== 'LicenseRef-rezics-terms' ||
+      visibility !== undefined
     )
       throw new Error('Invalid rules draft');
-    return { ...base, kind: 'rules', licence: input.licence };
+    return { ...base, kind: 'rules', licence: 'LicenseRef-rezics-terms' };
   }
   if ('kind' in input && input.kind !== undefined) {
     if (
       input.kind !== 'review' ||
       'subjectIds' in input ||
+      licence !== undefined ||
+      visibility !== undefined ||
       !('subjectId' in input) ||
       typeof input.subjectId !== 'string' ||
       !uuid.test(input.subjectId)
@@ -154,6 +158,8 @@ function validateThreadDraft(input: unknown): StartThreadInput {
   const subjectIds = discussionSubjectIds(input);
   return {
     ...base,
+    ...(licence === undefined ? {} : { licence }),
+    ...(visibility === undefined ? {} : { visibility }),
     ...('subjectIds' in input
       ? { subjectIds }
       : 'subjectId' in input && typeof input.subjectId === 'string'
@@ -247,6 +253,18 @@ function validateLicence(input: object): string | undefined {
   return input.licence;
 }
 
+function validateThreadVisibility(input: object): 'published' | 'draft' | undefined {
+  if (!('visibility' in input) || input.visibility === undefined) return undefined;
+  if (input.visibility !== 'published' && input.visibility !== 'draft') throw new Error('Invalid thread visibility');
+  return input.visibility;
+}
+
+function validateRevisionVisibility(input: object): 'published' | 'draft' | undefined {
+  if (!('visibility' in input) || input.visibility === undefined) return undefined;
+  if (input.visibility !== 'published' && input.visibility !== 'draft') throw new Error('Invalid revision visibility');
+  return input.visibility;
+}
+
 function validateEdit(input: unknown): {
   postId: string;
   revisionId: string;
@@ -254,6 +272,10 @@ function validateEdit(input: unknown): {
   idempotencyKey: string;
   mediaIds?: string[];
   licence?: string;
+  subjectIds?: string[];
+  boardId?: string;
+  title?: string;
+  visibility?: 'draft' | 'published';
 } {
   const draft = validateDraft(input);
   const postId = validatePostId(input).postId;
@@ -267,7 +289,34 @@ function validateEdit(input: unknown): {
   )
     throw new Error('Invalid post revision');
   const licence = validateLicence(input);
-  return { ...draft, postId, revisionId: input.revisionId, ...(licence === undefined ? {} : { licence }) };
+  const subjectIds = 'subjectIds' in input ? discussionSubjectIds(input) : undefined;
+  let boardId: string | undefined;
+  if ('boardId' in input && input.boardId !== undefined) {
+    if (typeof input.boardId !== 'string' || input.boardId.length === 0 || input.boardId.length > 128)
+      throw new Error('Invalid post board');
+    boardId = input.boardId;
+  }
+  let title: string | undefined;
+  if ('title' in input && input.title !== undefined) {
+    if (
+      typeof input.title !== 'string' ||
+      input.title.trim().length === 0 ||
+      input.title.length > threadTitleCodeUnitLimit
+    )
+      throw new Error('Invalid post title');
+    title = input.title;
+  }
+  const visibility = validateRevisionVisibility(input);
+  return {
+    ...draft,
+    postId,
+    revisionId: input.revisionId,
+    ...(licence === undefined ? {} : { licence }),
+    ...(subjectIds === undefined ? {} : { subjectIds }),
+    ...(boardId === undefined ? {} : { boardId }),
+    ...(title === undefined ? {} : { title }),
+    ...(visibility === undefined ? {} : { visibility }),
+  };
 }
 
 export const revisePost = createServerFn({ method: 'POST' })

@@ -55,7 +55,10 @@ row retains its independent report or appeal ID and selected queue snapshot. Cat
 `moderation:read_reports`; the catalogue has no native appeal queue. The queue reads installed native list declarations
 only. It does not hydrate target documents or reported revisions. Private evidence and appeal statements appear only
 when that list returned them. Denied, unavailable and retired reads render no cases. Viewer or session replacement
-retires the mounted private owner.
+retires the mounted private owner. Installed list failures use the numeric top-level HTTP status: 400/409 cursor
+failures remain stale, 401/403/404 deny Reports or close Appeals, and 503 keeps Reports retryable and Appeals
+unavailable. The Board actions menu delegates its signed-in gate to the localized Reports destination; a ready empty
+Appeals page retains Refresh without rows or resolution actions.
 
 The local public directory contract in `workbench-queue/directory.ts` is a consumer seam only; it neither mounts an
 HTTP route nor supplies a native source. The production scope directory is unavailable, so unselected discovery

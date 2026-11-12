@@ -11,6 +11,8 @@ import {
   captureTypingInputs,
   qualifyTypingInputs,
   kernelClientTypingPipeline,
+  isKnownTypingCompiler,
+  resolveTypingCompilerCommand,
 } from './worker-check-typing-inputs.ts';
 import {
   admitWorkerCheckHostRun,
@@ -366,9 +368,12 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
     PATH: `${join(root, '.temp/bin')}:${process.env.PATH}`,
     REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(clientPipeline)).toString('base64'),
   };
+  const fixtureEnv: NodeJS.ProcessEnv = { ...process.env, ...env };
+  delete fixtureEnv.REZICS_CHECK_ARTIFACTS_DIR;
+  delete fixtureEnv.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
   const result = Bun.spawnSync([process.execPath, ...typingInputCommand(clientPipeline).slice(1)], {
     cwd: root,
-    env: { ...process.env, ...env },
+    env: fixtureEnv,
   });
   if (result.exitCode !== 0)
     throw new Error(new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr));
@@ -492,6 +497,27 @@ function standardFixture() {
   }
   return root;
 }
+
+test('typing recovery canonicalizes only a recognized misordered workspace compiler intent', () => {
+  const root = standardFixture();
+  const misordered = ['bun', '--cwd', 'services/kernel', 'run', 'typecheck'];
+  expect(isKnownTypingCompiler(root, misordered)).toBe(false);
+  expect(resolveTypingCompilerCommand(root, misordered)).toEqual([
+    'bun',
+    'run',
+    '--cwd',
+    'services/kernel',
+    'typecheck',
+  ]);
+  expect(resolveTypingCompilerCommand(root, ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'])).toEqual([
+    'bun',
+    'run',
+    '--cwd',
+    'services/kernel',
+    'typecheck',
+  ]);
+  expect(resolveTypingCompilerCommand(root, ['bun', '--cwd', 'unknown', 'run', 'typecheck'])).toBeUndefined();
+});
 
 test.each(['services/kernel', 'services/auth', 'apps/web', 'chain'])(
   'standard %s typing ignores only unconsumed operational state and retains real inputs',

@@ -166,54 +166,59 @@ function expectPointProbes(plans: readonly unknown[], page: number): void {
 }
 
 test('active probes stay bounded behind private session history', async () => {
-  for (const page of [1, 48]) {
-    const route = 0x6a30 + page,
-      owner = newId(route),
-      other = newId(route);
-    const subjects = Array.from({ length: page }, () => newId(0x7b20));
-    const winners = new Map<string, string>();
-    for (const subject of subjects) winners.set(subject, await insert(db.admin, route, owner, subject));
-    const operation = async () => {
-      const got = await withReadTransaction(db.pool, (client) => reader.sessions(client, route, owner, subjects));
-      expect([...got].map(([subject, session]) => [subject, session.id])).toEqual([...winners]);
-    };
-    const report = await checkGrowth(db, {
-      name: `active probes, ${page} subjects`,
-      scales: [256, 1024, 4096],
-      warmups: 1,
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      grow: async (_db, scale, previous) => {
-        // Each subject has both terminal histories plus another owner's active history. All are newer than the winner.
-        await db.admin.query(
-          `INSERT INTO library.progress_session
-             (route, session_id, account_id, subject_id, mode, unit, completed_unit_count, state,
-              revision, started_at, completed_at, transaction_id, last_changed_at)
-           SELECT $1, ('10000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') ||
-                       lpad(to_hex(((subject_no - 1) * 3 + kind_no) * 4096 + n), 8, '0'))::uuid,
-                  CASE WHEN kind = 'active' THEN $3::uuid ELSE $2::uuid END,
-                  subject_id, 'scalar_amount', 'page', 0, kind, 1, '2026-10-28',
-                  CASE WHEN kind = 'completed' THEN '2026-10-29'::timestamptz END,
-                  $2::uuid, '2026-10-29'
-           FROM unnest($4::uuid[]) WITH ORDINALITY AS subjects(subject_id, subject_no)
-           CROSS JOIN generate_series($5::int + 1, $6::int) AS history(n)
-           CROSS JOIN unnest(ARRAY['completed','abandoned','active']) WITH ORDINALITY AS kinds(kind, kind_no)`,
-          [route, owner, other, subjects, previous, scale],
-        );
-      },
-      warmup: async () => {
-        const measured = await capture(db, operation);
-        expect(costOf(measured.capture).statements).toBe(1);
-        expectPointProbes(measured.capture.plans, page);
-      },
-      operation,
-    });
-    for (const sample of report.samples) {
-      for (const cost of sample.repetitions) {
-        expect(cost.statements).toBe(1);
-        expect(cost.rows).toBeLessThanOrEqual(page * 4);
-        expect(cost.relations['library.progress_session']!.rows).toBe(page);
-        expect(cost.relations['library.progress_session']!.sequentialScans).toBe(0);
-      }
+  const page = 48;
+  const route = 0x6a30 + page,
+    owner = newId(route),
+    other = newId(route);
+  const subjects = Array.from({ length: page }, () => newId(0x7b20));
+  const winners = new Map<string, string>();
+  for (const subject of subjects) winners.set(subject, await insert(db.admin, route, owner, subject));
+  async function read(limit: number) {
+    return withReadTransaction(db.pool, (client) => reader.sessions(client, route, owner, subjects.slice(0, limit)));
+  }
+  const operation = async () => {
+    const first = await read(1);
+    expect([...first].map(([subject, session]) => [subject, session.id])).toEqual([...winners].slice(0, 1));
+    const full = await read(page);
+    expect([...full].map(([subject, session]) => [subject, session.id])).toEqual([...winners]);
+  };
+  const report = await checkGrowth(db, {
+    name: `active probes, 1 and ${page} subjects`,
+    scales: [64, 512, 4096],
+    warmups: 1,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_db, scale, previous) => {
+      // Each subject has both terminal histories plus another owner's active history. All are newer than the winner.
+      await db.admin.query(
+        `INSERT INTO library.progress_session
+           (route, session_id, account_id, subject_id, mode, unit, completed_unit_count, state,
+            revision, started_at, completed_at, transaction_id, last_changed_at)
+         SELECT $1, ('10000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') ||
+                     lpad(to_hex(((subject_no - 1) * 3 + kind_no) * 4096 + n), 8, '0'))::uuid,
+                CASE WHEN kind = 'active' THEN $3::uuid ELSE $2::uuid END,
+                subject_id, 'scalar_amount', 'page', 0, kind, 1, '2026-10-28',
+                CASE WHEN kind = 'completed' THEN '2026-10-29'::timestamptz END,
+                $2::uuid, '2026-10-29'
+         FROM unnest($4::uuid[]) WITH ORDINALITY AS subjects(subject_id, subject_no)
+         CROSS JOIN generate_series($5::int + 1, $6::int) AS history(n)
+         CROSS JOIN unnest(ARRAY['completed','abandoned','active']) WITH ORDINALITY AS kinds(kind, kind_no)`,
+        [route, owner, other, subjects, previous, scale],
+      );
+    },
+    warmup: async () => {
+      const measured = await capture(db, operation);
+      expect(costOf(measured.capture).statements).toBe(2);
+      expectPointProbes(measured.capture.plans.slice(0, 1), 1);
+      expectPointProbes(measured.capture.plans.slice(1), page);
+    },
+    operation,
+  });
+  for (const sample of report.samples) {
+    for (const cost of sample.repetitions) {
+      expect(cost.statements).toBe(2);
+      expect(cost.rows).toBeLessThanOrEqual((page + 1) * 4);
+      expect(cost.relations['library.progress_session']!.rows).toBe(page + 1);
+      expect(cost.relations['library.progress_session']!.sequentialScans).toBe(0);
     }
   }
 }, 240_000);

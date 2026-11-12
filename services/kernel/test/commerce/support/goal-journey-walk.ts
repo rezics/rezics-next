@@ -1164,32 +1164,6 @@ export function summarizeWalk(revision: string, rows: JourneyWalkRow[]): WalkRep
   };
 }
 
-export function formatCapabilitiesWalkCells(row: JourneyWalkRow): { latest: string; evidence: string } {
-  const latest = `${row.result} ${row.revision.slice(0, 12)} ${row.utc} ${row.persona}`;
-  const evidence = row.firstDiffering
-    ? `${row.evidence} ${row.elapsedSeconds}s; ${row.firstDiffering.command} → ${row.firstDiffering.observed.slice(0, 180)}`
-    : `${row.evidence} ${row.elapsedSeconds}s`;
-  return { latest, evidence };
-}
-
-export function applyWalkResults(markdown: string, rows: JourneyWalkRow[]): string {
-  let next = markdown;
-  for (const row of rows) {
-    const cells = formatCapabilitiesWalkCells(row);
-    const pattern = new RegExp(
-      `(\\| ${row.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\| [^|]+ \\| )[^|]+(\\| )[^|]+(\\|)`,
-    );
-    next = next.replace(pattern, `$1${cells.latest} $2${cells.evidence} $3`);
-  }
-  const report = summarizeWalk(rows[0]?.revision ?? '', rows);
-  const slowest = report.slowestFailing;
-  const observed = (slowest?.firstDiffering?.observed ?? '').replace(/`/g, "'").slice(0, 180);
-  const summary = slowest
-    ? `Latest measured result: **${report.passing}/26**. Slowest failing path: ${slowest.title} (${slowest.persona}, ${slowest.elapsedSeconds}s); first differing command \`${slowest.firstDiffering?.command ?? 'unknown'}\` / result \`${observed}\`.`
-    : `Latest measured result: **${report.passing}/26**.`;
-  return next.replace(/Latest measured result: \*\*\d+\/26\*\*\.[^\n]*/, summary);
-}
-
 /** Seed import writes wait until topology remaining is zero, not only until one subject POST succeeds. */
 export async function waitUntilIdentityBootstrapRemainingZero(
   remaining: () => Promise<number | string>,

@@ -110,10 +110,10 @@ export async function postPublicationFixture() {
       title: 'Publication',
       visibility: 'published',
     });
-    async function thread(visibility: 'draft' | 'published' = 'published') {
+    async function thread(visibility: 'draft' | 'published' = 'published', body = fromPlainText('Opening')) {
       const { thread } = await command('/v1/threads', {
         title: 'Publication',
-        body: fromPlainText('Opening'),
+        body,
         licence: 'MIT',
         subjectIds: [],
         boardId: board.id,

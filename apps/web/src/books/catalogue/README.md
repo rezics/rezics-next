@@ -1,7 +1,8 @@
 # Book catalogue entry
 
 Decision: retain the installed canonical typed Search handoff and separate-tab exact-type Library/reader visits;
-extend their native composition and currentness assertions, with native/browser acceptance in the dev verifier.
+extend their native composition and currentness assertions, with native/browser acceptance in the dev verifier. Route
+composition imports the declared `route.tsx` facade, which re-exports the existing page and loader owners.
 
 `/{locale}/books` is the public Book Library entry. Its owner navigation contribution is installed in the shared
 shell, including phone navigation. Interface copy covers all eight launch locales. The entry offers Book,

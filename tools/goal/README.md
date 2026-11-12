@@ -56,6 +56,10 @@ ordinary edits.
 Decision: shared Git templates live in test-support; the suite runner owns file isolation, parallelism and the
 integration split. Cloned fixtures set a local `user.name`/`user.email` and ignore `node_modules`, so a check host
 without a global Git identity or gitignore can still commit and recreate a task worktree from its branch.
+Decision: historical reader fixtures fetch the producer checkout's exact `HEAD` commit object and the explicit
+historical producer SHA, preserving complete captured-closure validation while supporting detached checkouts.
+Decision: check-wake timing fixtures use the complete configured pool identity when adding alternate pools; the
+runtime pacing behavior and existing assertions remain unchanged.
 
 `goal dispatch --urgent <brief>` (or `urgent: true` in its front matter) starts repair work through a separate
 host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
@@ -85,6 +89,20 @@ stand in for an unidentified current writer. Check wakes use the existing capaci
 the active minimum before launch. That ticket's memory charge transfers to the reconciled current writer's scope;
 pending or unreconciled launches keep their ticket charge until start or explicit release. Memory floors, PSI,
 worker caps and check slots remain independent limits.
+Decision: Admission folds tickets by task generation and operation, and may request one bounded reclaim from clean
+inactive file cache per slice-deficit episode.
+Every new ticket records its target attempt and whether it starts a new generation or resumes the exact parked one.
+The oldest live, lifecycle-valid ticket owns the operation; duplicates remain successors without consuming FIFO
+positions or a second reservation. When its process ends, the next valid ticket takes over. Old tickets remain
+readable: a missing generation denotes the initial start. For a legacy ticket targeting the current waiting attempt,
+its queue timestamp is compared with that attempt's start time so an older first-start ticket is discarded while a
+later check wake remains its exact resume. A ticket for an already advanced start is discarded from the task's
+current-attempt projection, without consulting worktree presence or clearing another generation's reservation.
+If host limits, system memory and PSI permit admission but a finite worker-slice reserve alone blocks it, the host
+may request up to 4 GiB from clean inactive file pages with `swappiness=0`. Dirty and writeback pages are excluded.
+The shared admission lease is released before the request; the host re-samples slice headroom before launching. One
+durable latch coalesces requests until headroom recovers for a heavy worker. Unsupported or unwritable reclaim is
+ignored, and ordinary memory, PSI, lane and Goal limits continue to gate starts.
 Urgent admission enforces its limits even without `capacity.json`; ordinary admission retains its opt-in behaviour.
 `status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
 ordinary throughput. Resource usage totals still include urgent work.
@@ -1652,7 +1670,8 @@ The watchdog runs with reminder delivery and reports running tasks, or ready tas
 have had no worker for ten minutes after an attempt ended and its recorded driver identity is no longer live. A reused
 PID does not count as the same driver. A live driver may still be settling the attempt, including running affected tests
 or waiting for a check-host slot. A pending retry that waits by design is not reported: one whose `after` dependencies
-are not yet integrated, whose backoff time has not come, or that waits out a check-host outage. When a backoff expires,
+are not yet integrated, whose backoff time has not come, or that waits while every performance-approved check host is
+in outage. When a backoff expires,
 the missing-starter clock begins at that deadline if it is later than the attempt end. `goal status` shows
 such a retry's `pendingRetry` reason (`dependencies`, `backoff`, `check-hosts`, or `start` when it waits only for a
 starter or capacity). It also reports a `stabilize` branch that has stayed out of the integration branch for
@@ -1670,7 +1689,9 @@ When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every 
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
 watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
-While a listed host is in outage, retries of check-host transport failures stay pending instead of relaunching.
+Decision: check wakes use their original pool after live occupancy and allowance admission; check-host retries wait
+only when every performance-approved host is in outage, while started remote runs stay on their recorded host and
+identity and new runs use existing probes to select a responding approved host.
 
 ## Integration, promotion, culprit isolation and attempt fencing
 
@@ -2068,10 +2089,10 @@ Every other tool failure, including a CLI that fails before a session, a silent 
 failure, resumes the same session after a backoff by its fingerprint: the failure's first line with worktree paths,
 numbers, hashes and identifiers removed. The first sighting of a fingerprint across all tasks in the last hour waits two minutes, the second
 ten and later ones thirty; each sighting is a `tool-blocker-retry` event. The delay is persisted as the retry intent's
-`notBefore`, so a restarted host honours it. A check-host transport failure also waits while the watchdog's probes
-show a listed check host in outage (two failed probes in a row, cleared by a success; see [Watchdog](#watchdog)), and
-every relaunch waits for [host capacity](#host-capacity-admission); the manager host's recovery sweep tries the pending
-retry again every minute. When three distinct tasks end on the same normalized line within 20 minutes, Goal opens one
+`notBefore`, so a restarted host honours it. A check-host transport failure also waits when the watchdog's probes show
+every performance-approved host in outage (two failed probes in a row, cleared by a success; see [Watchdog](#watchdog)),
+and every relaunch waits for [host capacity](#host-capacity-admission); the manager host's recovery sweep tries the
+pending retry again every minute. When three distinct tasks end on the same normalized line within 20 minutes, Goal opens one
 environment incident, holds retries for those tasks and new tasks that hit the line, and sends one `blocker` to the
 supermanager with the line, count, example tasks and the first tracked source match from `git grep`. Goal retries one
 affected task every 10 minutes. An affected launch recorded after the incident's trigger failure becomes its probe;
@@ -2824,16 +2845,42 @@ bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>
 The task lease and current generation fence cover reconciliation and re-settlement into the ordinary landing queue.
 A queued source retry for missing compiler evidence uses this same reconciliation boundary. If the original unchanged
 evidence suffices, the existing completed attempt lands. Otherwise the command returns `pending` with the exact
-worktree, ownership environment and smallest typing-only wrapper commands. Run those commands through the returned
-current control-plane wrapper, wait for their real results, then repeat `typing-recover`. Required money/native checks
+worktree, ownership environment and smallest typing-only wrapper commands. Recognized workspace intents use the
+installed owner command `bun run --cwd <workspace> typecheck`; a workspace-scoped intent never falls back to a full
+workspace check. Run those commands through the returned current control-plane wrapper, wait for their real results,
+then repeat `typing-recover`. Required money/native checks
 remain recorded and required; they are not substituted by this proof request. Authenticated recovery grants one
 compiler-only physical run per exact task, attempt, source commit, compiler-input identity and command. It keeps the
 original budget limit and stamps, records the additional work in the next numbered stamp, and reuses the same check
-identity on replay. The grant has no clock expiry: input drift requires fresh authenticated authority, and a changed
-current attempt or completed/cancelled recovery invalidates it. Workers cannot mint grants; unauthenticated controller
-reconciliation can describe pending proof but grants no additional admission. Cancelled tasks and attempts retain
-their existing exclusion from typing recovery. Real source typing failures remain source
-failures. Provider, model CLI and allowance failures keep their separate handling.
+identity on replay. One new grant is permitted only after the previous recovery check has an exact terminal result,
+matching terminal physical custody, a SIGTERM exit before the compiler command started, no competing same-attempt check
+and no explicit cancellation. The old grant, stamp and physical history remain intact; active, uncertain, post-entry and
+already-replaced checks keep their original identity and admission fence. The grant has no clock expiry: input drift
+requires fresh authenticated authority, and a changed current attempt or completed/cancelled recovery invalidates it.
+Workers cannot mint grants; unauthenticated controller reconciliation can describe pending proof but grants no
+additional admission. Cancelled tasks and attempts retain their existing exclusion from typing recovery. Real source
+typing failures remain source failures. Provider, model CLI and allowance failures keep their separate handling.
+
+Decision: recover recognized workspace compiler intent with `bun run --cwd <workspace> typecheck`, and issue one fresh
+recovery grant only after the previous exact check proves terminal SIGTERM before command start, preserving its stamp
+and physical custody.
+
+Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
+environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
+known stop, terminal custody for every same-attempt check and one exact installed Web compiler grant. Permit one
+replacement grant only when the original recovery check has proven terminal before compiler entry; preserve both
+grant tombstones and physical custody. Keep the withdrawn retry and stop tombstones intact; only a terminal Web
+receipt for the current inputs may land that same attempt.
+
+For this stopped Web-source case, use the same `typing-recover <task> --expected-attempt <n>` command. It returns only
+`bun run --cwd apps/web typecheck` through the authorized wrapper when a matching successful receipt is absent. Run the
+returned wrapper once and repeat `typing-recover` after its physical result is terminal. An exact current-source Web
+receipt lands without another run. Unknown process or check custody, source drift, explicit cancellation, a live check,
+or a compiler diagnostic keeps the attempt fenced; recovery never restores the withdrawn source retry.
+
+After this recovery path is live, settle a retained numeric task with
+`bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <attempt>`, run only the returned exact wrapper
+command, then repeat `typing-recover` after its actual result. For the current retained numeric task, use attempt 1.
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
 allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_BROWSERS_PATH`, and `TZ`), the Git tree
@@ -2952,6 +2999,8 @@ cache, concrete Codex/Claude session requests, viewer argv and window prompt/res
 accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,
 retired-thread notifications, once-per-identity start, interrupt fallback, reconnect after a failed connect, and close
 flushing pending work.
+Decision: manager thread resume omits `latestTurn` when provider history has no recognized disposition; recognized
+`inProgress`, `completed`, `interrupted` and `failed` dispositions are preserved.
 Every Codex manager `turn/start` pins `gpt-6.1-sol` and the manager's configured effort, including the opening,
 idle inbox wakes, and renewed continuation threads. The app-server `turn/steer` request accepts input and an
 `expectedTurnId`, but no model or effort override, so steering keeps the active turn's pinned settings. Recovery and
@@ -3044,28 +3093,37 @@ retries every `policy.manager.renewalRetryMs` (ten minutes by default) until the
 `manager renew` accepts `renewal-failed` as well as `paused`. Window lookups pass `-u` to every tmux invocation and
 accept the underscore field separators tmux prints when the host has no locale.
 
-Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
-The control plane's manager wakeup path is event-driven: the opening tells a manager to end the turn when no decision
-is pending. When an event is delivered, the host steers it into the manager's active turn or starts a new turn on the
-persisted thread; if the app-server has not loaded that thread, the host resumes it once, then steers an already active
-turn or starts a new one. The opening also states the manager's outputs (ready briefs in its backlog and decisions),
-the stopped-task hour, the message limits, and that the brief and continuation are read once per session. The host
-counts `clock.sleep` items per manager and UTC hour;
-the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. The
-turns-without-decision limit counts consecutive completed turns. A turn in which a ready brief in the Goal's backlog was
-written or moved back (by modification or status time), or a brief the backlog run dispatched was written, counts as a
-decision, as any control-plane command already does; a decision resets the count to zero.
-For Codex managers, the host persists idle intent and pauses the existing native Goal after each matched completed turn.
-The managed manager remains running on the same thread with its objective, token budget and usage. A real inbox event
-is held unread while the existing pool policy and retained allowance history refuse a new model turn; the current
-inbox tick retries that admission without querying the provider. Once admitted, the host reactivates the parked Goal
-and delivers through the existing start-or-steer path. If Goal activation starts the turn first, the host rejoins that
-turn and steers the event into it. Completion parks autonomy again; empty wakeups and host recovery do not resume an
-idle thread. Managed user pauses and Goal budget/guard states stay distinct and are never reactivated by an inbox
-event. Focused fake-app-server tests pin idle parking, preserved mail, same-thread delivery and the start/steer race;
-they do not exercise provider scheduling. See the
-[official OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
-for native continuation behavior.
+Manager events commit to SQLite; filesystem signals are wakeup hints. Managers end their turn when no decision is
+pending. Real mail steers the active turn or starts one on the same thread; an unloaded thread is resumed once before
+start or steer. The existing inbox cadence retries undelivered mail. Empty wakeups start no turn. The host counts
+`clock.sleep` items per UTC hour; the eleventh sends the supermanager an `environment` alarm and the manager a correction.
+Consecutive completed work turns count toward the turns-without-decision limit. Control-plane commands and ready
+briefs written or moved back since the turn began count as decisions and reset that limit.
+
+For Codex managers, matched work completion persists inbox-wait intent and pauses native Goal autonomy. The manager
+remains running on the same thread with its objective, budget and usage. Real mail waits unread during pool or allowance
+holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. Activation can
+start the turn first; the host rejoins and steers it. User pauses and native budget, usage, blocked and complete states
+retain their meaning. Blocked Goals accept admitted explicit inbox turns without reactivation. Empty wakeups and
+recovery leave idle threads parked. See the
+[OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
+
+Public `status` keeps manager lifecycle separate from `operation`: `waiting-for-inbox`, `active-turn`, `idle`,
+`turn-interrupted` or `turn-failed`, with native Goal status and the current turn disposition alongside it. Interrupt
+intent (`controller-park` or `controller-stop`) is persisted against the exact thread and turn before provider effects,
+including an interrupt retry's discovered turn. Late housekeeping continuations count as neither work nor failure.
+Retired threads, duplicate terminal events and recently retired turn starts are ignored; only one disposition and a
+bounded identity replay fence are retained per session.
+
+Decision: Bind expected park/stop interrupts to the exact current thread and turn, and report a current work
+interruption/failure once only when wakeable mail remains and native Goal/admission permit the existing same-thread
+recovery path.
+
+An unexpected current work interruption or failure remains visible instead of becoming an idle park. The existing
+inbox cadence reports it once to the supermanager when undelivered waking mail remains, the native Goal permits work
+and allowance admits a turn. Unread mail already delivered, quiet events and UI interruption toasts do not establish
+stranded work. Explicit stops and expected parks stay quiet. Recovery uses the existing same-thread inbox path;
+no mail means no synthetic prompt, automatic renewal or new turn.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it
@@ -3537,8 +3595,16 @@ with identical raw prefixes, including cwd/env arguments. Service file lists inc
 after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
 integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
 Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
-the captured Git tree before execution can be granted. Registration captures current integration. A queued proof keeps
-its authorized source while that commit remains in integration history, even when other work lands before it starts.
+the captured Git tree before execution can be granted. Direct registration requires the submitted source to equal
+the current integration head. A declared Goal backlog claim is still only a proposal: its first authenticated
+registration captures the current head under the integration train lease, then binds ancestry, per-command-file
+preflight, authorization and the task worktree to that same commit. The accepted task brief records that capture;
+the original claim remains unchanged in the dispatch archive, and authorization retains its digest, original source
+commit and sourceTasks so interrupted archive recovery can find it once. A registered proof keeps its authorized
+source while that commit remains in integration history, even when other work lands before it starts. The retained
+membership Auth/Kernel original may use exactly two finite explicit service file checks, Auth then Kernel, joined
+with `&&`; each service's files are preflighted from its own working directory. Other shell operators and expansion
+remain outside the accepted command grammar.
 Once proof preparation records `proof-command-ready`, launch and same-session resume check the registered fingerprint
 and exact clean captured HEAD/tree. A result on an earlier snapshot cannot verify the new integration head.
 
@@ -3648,9 +3714,16 @@ Authenticated registered verification receives its original-command protocol ahe
 exact ordinary wrapper once and returns the actual bare UUID while active. Goal waits and wakes the same session
 with the actual wrapper result; unknown/missing/nonzero results remain non-green. The wrapper record must name the
 current task, attempt, cwd and exact original command (the recorded child for an already wrapped original), with
-one invocation only. No producer token, physical receipt or terminal cleanup chain is needed to verify an ordinary
-wrapper's successful exit. Terminal zero, unchanged captured source and structured worker success with `checks: []`
-settle as `verified`, without a source commit, landing or main advancement. Optional native evidence stays separate.
+one invocation only. No producer token or optional native-proof adapter is needed for ordinary wrapper success.
+Terminal zero, unchanged captured source and structured worker success with `checks: []` settle as `verified`,
+without a source commit, landing or main advancement. If the worker exits without its report, the exact owned
+ordinary wrapper record may settle the same proof once when its terminal result is zero and the captured source is
+unchanged. A still-running wrapper is awaited by its exact UUID even when the worker's logical release omitted linked
+check IDs; duplicate wakes read that same record. Missing, mismatched or ambiguous ownership remains unknown and
+keeps custody. Optional native evidence retains its separate, strict acceptance path.
+
+Disposition: fb066745 attempt 1 is unknown and custody stays retained because no durable authoritative host/run
+binding exists; do not reconstruct it from logs, signal or replay Auth, infer success, or fabricate a receipt.
 Reports count `verifiedProofs` separately from landed source tasks; verification does not complete a Goal. Failures
 retain exact assertion/setup evidence and log references for a separate owner product fix.
 

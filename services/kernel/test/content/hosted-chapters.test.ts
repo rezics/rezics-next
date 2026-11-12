@@ -21,10 +21,14 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   const secondId = f.newOccurrenceId();
   const protectedId = f.newOccurrenceId();
   const draftId = f.newOccurrenceId();
-  const firstThread = await f.native.thread();
+  const submittedDocument = fromPlainText('Opening');
+  const initialBytes = Buffer.from(serializeDocument(submittedDocument), 'utf8');
+  const initialSha256 = createHash('sha256').update(initialBytes).digest('hex');
+  const firstThread = await f.native.thread('published', submittedDocument);
   const secondThread = await f.native.thread();
   const draftThread = await f.native.thread('draft');
   const first = f.target(firstThread);
+  expect(first.sha256).toBe(initialSha256);
   const second = f.target(secondThread);
   const draft = f.target(draftThread);
   const protectedTarget = await f.protectedChapter();
@@ -112,7 +116,6 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   });
   expect(emptyChildren.value.items).toEqual([]);
 
-  const originalBytes = Buffer.from(serializeDocument(fromPlainText('Opening')), 'utf8');
   const opened = await f.native.call(
     'GET',
     `${path}/occurrences/${firstId}?revisionId=${published.value.revisionId}`,
@@ -122,8 +125,8 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   expect(opened.status).toBe(200);
   expect(opened.value.document).toEqual({
     encoding: 'base64',
-    canonicalBytes: originalBytes.toString('base64'),
-    sha256: createHash('sha256').update(originalBytes).digest('hex'),
+    canonicalBytes: initialBytes.toString('base64'),
+    sha256: initialSha256,
     authorId: f.native.author.actor.accountId,
     licence: 'MIT',
   });
@@ -176,8 +179,16 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
     undefined,
     { anonymous: true },
   );
-  expect(frozen.value.document.canonicalBytes).toBe(originalBytes.toString('base64'));
-  expect(frozen.value.document.sha256).toBe(first.sha256);
+  const frozenBytes = Buffer.from(serializeDocument(submittedDocument), 'utf8');
+  const frozenSha256 = createHash('sha256').update(frozenBytes).digest('hex');
+  expect(frozenSha256).toBe(first.sha256);
+  expect(frozen.value.document).toEqual({
+    encoding: 'base64',
+    canonicalBytes: frozenBytes.toString('base64'),
+    sha256: frozenSha256,
+    authorId: f.native.author.actor.accountId,
+    licence: 'MIT',
+  });
 
   const movedPlacements = [
     placements[0],

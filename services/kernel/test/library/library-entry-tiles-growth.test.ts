@@ -30,8 +30,11 @@ beforeAll(async () => {
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
 }, 120000);
 afterAll(async () => {
-  await f?.close();
-  await db?.close();
+  try {
+    await f?.close();
+  } finally {
+    await db?.close();
+  }
 });
 
 type Node = Record<string, unknown>;
@@ -58,7 +61,25 @@ function assertPlans(raw: Capture, present: number, requested: number) {
     }
   }
   expect(all.some((n) => ['progress_unit', 'progress_change'].includes(String(n['Relation Name'])))).toBe(false);
-  expect(all.some((n) => String(n['Node Type']).includes('Sort'))).toBe(false);
+  for (const sort of all.filter((node) => String(node['Node Type']).includes('Sort'))) {
+    const children = (sort.Plans as Node[] | undefined) ?? [];
+    expect(children).toHaveLength(1);
+    const input = children[0]!;
+    const inputRows = Number(input['Actual Rows']);
+    const inputLoops = Number(input['Actual Loops']);
+    expect(Number.isFinite(inputRows)).toBe(true);
+    expect(Number.isFinite(inputLoops)).toBe(true);
+    const libraryInput = nodes(input).some((node) => node.Schema === 'library');
+    if (libraryInput) {
+      // Library rows may only be sorted inside a one-row point probe per requested subject.
+      expect(inputRows).toBeLessThanOrEqual(1);
+      expect(inputLoops).toBeLessThanOrEqual(requested);
+    } else {
+      // Sorting request keys is bounded by the distinct, <=100 subject input.
+      expect(nodes(input).filter((node) => typeof node['Relation Name'] === 'string')).toHaveLength(0);
+      expect(inputRows * inputLoops).toBeLessThanOrEqual(requested);
+    }
+  }
   expect(costOf(raw).statements).toBe(requested === 0 ? 0 : present === 0 ? 1 : 2);
 }
 

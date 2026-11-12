@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export type PressureSample = { memoryFull: number; ioFull: number };
@@ -24,6 +24,7 @@ export function readHostPressure(): PressureSample {
 }
 export const CODE_WORKER_MIB = 2048;
 export const HEAVY_WORKER_MIB = 4096;
+export const MAX_RECLAIM_MIB = 4096;
 const MIB = 1024 ** 2;
 export const WORKER_SLICE_ROOT = `/sys/fs/cgroup/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/rezics.slice/rezics-workers.slice`;
 /** Initial working-set reservation; hard safety limits are deliberately not expected working sets. */
@@ -69,5 +70,42 @@ export function workerHeadroomMiB(
     return Number.isFinite(reserved) ? Math.max(0, maximum - reserved) / MIB : 0;
   } catch {
     return 0; // A known finite budget with unreadable usage cannot admit another reservation.
+  }
+}
+
+/** Clean inactive file cache is the only evidence used to size a bounded cgroup reclaim request. */
+export function reclaimableFileMiB(root = WORKER_SLICE_ROOT): number {
+  const values = new Map<string, number>();
+  for (const line of readFileSync(join(root, 'memory.stat'), 'utf8').split('\n')) {
+    const [key, raw] = line.trim().split(/\s+/, 2);
+    if (key && /^\d+$/.test(raw ?? '')) values.set(key, Number(raw));
+  }
+  const inactive = values.get('inactive_file') ?? 0;
+  const dirty = (values.get('file_dirty') ?? 0) + (values.get('file_writeback') ?? 0);
+  return Math.max(0, Math.floor((inactive - dirty) / MIB));
+}
+
+/** Request at most the slice deficit, 4 GiB, and clean inactive-file evidence. Unsupported writes are ignored. */
+export function reclaimCleanFileCache(deficitMiB: number, root = WORKER_SLICE_ROOT): number {
+  if (!Number.isFinite(deficitMiB) || deficitMiB <= 0) return 0;
+  let cleanMiB: number;
+  try {
+    cleanMiB = reclaimableFileMiB(root);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (['EACCES', 'EPERM', 'EROFS', 'EINVAL', 'ENOSYS', 'EOPNOTSUPP', 'ENOTSUP', 'ENOENT'].includes(code ?? ''))
+      return 0;
+    throw error;
+  }
+  const requestedMiB = Math.floor(Math.min(deficitMiB, MAX_RECLAIM_MIB, cleanMiB));
+  if (requestedMiB < 1) return 0;
+  try {
+    writeFileSync(join(root, 'memory.reclaim'), `${requestedMiB * MIB} swappiness=0`);
+    return requestedMiB;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (['EACCES', 'EPERM', 'EROFS', 'EINVAL', 'ENOSYS', 'EOPNOTSUPP', 'ENOTSUP', 'ENOENT'].includes(code ?? ''))
+      return 0;
+    throw error;
   }
 }

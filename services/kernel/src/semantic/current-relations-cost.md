@@ -29,14 +29,19 @@ results, `ceil(U / 256)` provenance statements, and up to `ceil(U / 100)` source
 external sources. Queries stay on the caller's repeatable-read client; this function opens no connection and adds no
 transaction controls. Expanded fallback adds the existing slot/adoption/selection statements and at most 32
 acceptance point statements per inherited slot. For actual
-page completion, `currentRelationStatements` repeats the keyed current read once per source partition represented in
-the page. `readAnchoredFences` opens one checkout per distinct source partition and 100-tuple batch, with BEGIN and
-COMMIT controls; those batches are independent of Subject population.
+page completion, `currentRelationStatements` sends all selected candidates in one keyed current-read statement,
+including the source home on each key. One authoritative partition-metadata batch binds those homes on the same
+repeatable-read snapshot; every SQL locator retains its exact home range. `readAnchoredFences` still opens one checkout
+per distinct source partition and 100-tuple batch, with BEGIN and COMMIT controls; those batches are independent of
+Subject population.
 
 Decision: HTTP relation and link reads carry the original request deadline through release resolution and page reads.
 Read snapshot and source-fence checkout and SQL obey that deadline. Freshness polling uses at most half the remaining
 request time; if it expires, the response reports `caught_up: false` and leaves the remaining budget for the current
 page read.
+
+Decision: a relation page verifies all selected source homes in one batch and hydrates current statements in one
+same-snapshot keyed read. Each key retains its route and home range; disclosure and source-fence checks remain current.
 
 Input bytes are linear in `U`: route integers, UUID keys, property/context IDs and bounded defaults. Provenance batches
 carry at most 256 route/Subject/candidate/slot UUID tuples. Expanded output carries at most 32 selected statement

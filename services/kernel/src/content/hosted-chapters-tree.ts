@@ -7,6 +7,22 @@ import {
   type OrderedHostedPlacement,
 } from './hosted-chapters-model.ts';
 
+export type StableAncestor = Readonly<{ placementId: string; parentId: string | null }>;
+
+/** A full parent path stays useful across Content consumers with different tree-size policies. */
+export function isCompleteStableAncestorPath(path: readonly StableAncestor[], maximumAncestors: number): boolean {
+  if (!Number.isSafeInteger(maximumAncestors) || maximumAncestors < 0 || path.length === 0) return false;
+  if (path.length > maximumAncestors + 1) return false;
+  const seen = new Set<string>();
+  for (let index = 0; index < path.length; index++) {
+    const item = path[index]!;
+    if (seen.has(item.placementId)) return false;
+    seen.add(item.placementId);
+    if (item.parentId !== (path[index + 1]?.placementId ?? null)) return false;
+  }
+  return true;
+}
+
 /** Whole-tree validation is bounded before any native attachment read or write. */
 export function orderHostedPlacements(
   route: number,

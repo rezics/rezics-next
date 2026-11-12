@@ -9,10 +9,9 @@ import {
 import type { DueEntryDeletionKey } from '../../src/library/entry-due-store.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
-  capture,
+  captureWithFoldedCost,
   catalogStatementBound,
   checkGrowth,
-  costOf,
   openGrowthDatabase,
   type GrowthDatabase,
 } from '../support/growth.ts';
@@ -70,6 +69,7 @@ test('whole native exact due command stays keyed across legal unrelated owners, 
   const report = await checkGrowth(db, {
     name: 'entry retention: exact native due authorization, absent, effect, replay and concurrent envelopes',
     scales: [256, 1024, 4096],
+    captureMode: 'cost-folded',
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 1,
     async grow(_db, scale, previous) {
@@ -86,10 +86,10 @@ test('whole native exact due command stays keyed across legal unrelated owners, 
   });
   expect(report.samples).toHaveLength(3);
   await prepare();
-  const proof = await capture(db, operation, { includeBackends: true });
+  const proof = await captureWithFoldedCost(db, operation, { includeBackends: true });
   const classification = catalogStatementBound(proof.capture);
   expect(classification.catalogStatements).toBeLessThanOrEqual(classification.allowedStatements);
-  expect(costOf(proof.capture).rows).toBeGreaterThan(0);
+  expect(proof.capture.cost.rows).toBeGreaterThan(0);
   expect(proof.capture.statements.some((sql) => /FOR UPDATE/.test(sql) && /entry_deleted/.test(sql))).toBe(true);
 }, 900000);
 

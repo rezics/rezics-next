@@ -206,6 +206,13 @@ export declare function contentDeclaredEvents(): Readonly<{
         editionId: import("typebox").TString;
         editionRevision: import("typebox").TString;
     }>;
+    'com.rezics.content.knowledge.publication.changed.v1': import("typebox").TObject<{
+        action: import("typebox").TUnion<[import("typebox").TLiteral<"selected">, import("typebox").TLiteral<"withdrawn">]>;
+        documentId: import("typebox").TString;
+        publicationId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        subjectId: import("typebox").TString;
+    }>;
     'com.rezics.content.thread.created.v1': import("typebox").TObject<{
         placeId: import("typebox").TString;
         kind: import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>;
