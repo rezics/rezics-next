@@ -1,11 +1,14 @@
-import { HOSTED_PAGE_LIMIT, type HostedRevisionView } from './hosted-chapters-model.ts';
+import { HOSTED_PAGE_LIMIT } from './hosted-chapters-model.ts';
 
 export { HOSTED_PAGE_LIMIT };
 
-export type HostedSubjectCatalogueItem = HostedRevisionView &
-  Readonly<{
-    threadId: string;
-  }>;
+export type HostedSubjectCatalogueItem = Readonly<{
+  catalogueId: string;
+  revisionId: string;
+  kind: 'publication';
+  sourceRevisionId: string | null;
+  threadId: string;
+}>;
 
 export type HostedSubjectCataloguePage = Readonly<{
   subjectId: string;

@@ -74,6 +74,9 @@ function ownerReadParams() {
     t.Object({ accountId: HostedIdSchema, id: HostedIdSchema }, { additionalProperties: false }),
   );
 }
+function subjectParams() {
+  return memoizedValue(subjectParams, () => HostedSubjectParamsSchema);
+}
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const responseHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
 function failures() {
@@ -360,7 +363,7 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .get(
       '/v1/subjects/:subjectId/hostedCatalogues',
       {
-        params: HostedSubjectParamsSchema,
+        params: subjectParams(),
         query: strictContentSchema(HostedSubjectCatalogueQuerySchema),
         response: {
           200: withHeaders(strictContentSchema(HostedSubjectCataloguePageSchema), responseHeaders),

@@ -84,8 +84,11 @@ test('stored rows round-trip the exact address without substituting a later publ
 
 test('CAS write statements compare the expected revision and do not rewrite on conflict', () => {
   expect(insertSql).toContain('ON CONFLICT (route, account_id, subject_id) DO NOTHING');
+  expect(insertSql).toContain(':document_block_id::nullable(text)');
+  expect(insertSql).toContain(':document_offset::nullable(integer)');
   expect(updateSql).toContain('stored.revision = input.expected_revision');
   expect(updateSql).toContain('revision = stored.revision + 1');
+  expect(updateSql).toContain(':document_block_id::nullable(text)');
 });
 
 test('erasure and export hooks page owner-private checkpoints without granting read access', () => {
