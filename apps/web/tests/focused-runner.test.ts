@@ -13,7 +13,6 @@ import { webTestPrivateNetworkEnvName } from '../scripts/with-dev-server.ts';
 import {
   resolveWebTestSelection,
   writeWebTestSelectionContext,
-  type WebTestSelectionContext,
 } from '../scripts/selection.ts';
 
 const workspace = resolve(import.meta.dir, '../..');
@@ -36,24 +35,16 @@ async function runFocused(appDirectory: string, command: string[]): Promise<{ st
   return { status, output };
 }
 
-async function runPublicFocusedCli(
-  args: string[],
-  env: NodeJS.ProcessEnv,
-): Promise<{ status: number; output: string }> {
+function runPublicFocusedCli(args: string[], env: NodeJS.ProcessEnv): { status: number; output: string } {
   const runner = resolve(import.meta.dir, '../scripts/focused.ts');
-  const child = Bun.spawn([process.execPath, runner, ...args], {
+  const result = Bun.spawnSync([process.execPath, runner, ...args], {
     cwd: workspace,
     env,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const [status, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { status, output: `${stdout}${stderr}` };
+  return { status: result.exitCode, output: `${result.stdout.toString()}${result.stderr.toString()}` };
 }
 
 function command(source: string, args: string[] = []): string[] {
@@ -139,30 +130,20 @@ test('the focused argv boundary normalizes Bun separators and retains command bi
     '--',
     'opaque test argument',
   ];
-  const ordinary = { command, privateNetwork: false };
-  const privateNetwork = { command, privateNetwork: true };
+  for (const [args, privateNetwork] of [
+    [command, false],
+    [['--', ...command], false],
+    [['--private-network', ...command], true],
+    [['--private-network', '--', ...command], true],
+  ] as const)
+    expect(parseFocusedArguments(args)).toEqual({ command, privateNetwork });
 
-  expect(parseFocusedArguments(command)).toEqual(ordinary);
-  expect(parseFocusedArguments(['--', ...command])).toEqual(ordinary);
-  expect(parseFocusedArguments(['--private-network', ...command])).toEqual(privateNetwork);
-  expect(parseFocusedArguments(['--private-network', '--', ...command])).toEqual(privateNetwork);
-
-  const resolvedSelection = resolveWebTestSelection(command, {
+  const selection = resolveWebTestSelection(command, {
     rootDirectory: workspace,
     appDirectory: resolve(workspace, 'apps/web'),
     invocationDirectory: workspace,
     source: 'apps/web/scripts/focused.ts',
   });
-  const selection: WebTestSelectionContext = {
-    version: resolvedSelection.version,
-    source: resolvedSelection.source,
-    invocationCwd: resolvedSelection.invocationCwd,
-    executionCwd: resolvedSelection.executionCwd,
-    originalArgv: resolvedSelection.originalArgv,
-    normalizedArgv: resolvedSelection.normalizedArgv,
-    selectedFiles: resolvedSelection.selectedFiles,
-    selectors: resolvedSelection.selectors,
-  };
   expect(selection.originalArgv).toEqual(command);
   expect(selection.normalizedArgv).toEqual([
     'bun',
@@ -177,19 +158,18 @@ test('the focused argv boundary normalizes Bun separators and retains command bi
     'opaque test argument',
   ]);
   const routedEnvironment = writeWebTestSelectionContext(selection, {});
-  expect(parseFocusedArguments(['--routed-selection'], routedEnvironment)).toEqual({
-    command: selection.normalizedArgv,
-    privateNetwork: false,
-    selectionContext: selection,
-  });
-  expect(parseFocusedArguments(['--private-network', '--routed-selection'], routedEnvironment)).toEqual({
-    command: selection.normalizedArgv,
-    privateNetwork: true,
-    selectionContext: selection,
-  });
+  for (const [args, privateNetwork] of [
+    [['--routed-selection'], false],
+    [['--private-network', '--routed-selection'], true],
+  ] as const)
+    expect(parseFocusedArguments(args, routedEnvironment)).toEqual({
+      command: selection.normalizedArgv,
+      privateNetwork,
+      selectionContext: selection,
+    });
 });
 
-test('public Bun CLI reaches the focused execution path with consumed and retained separators', async () => {
+test('public Bun CLI reaches the focused execution path with consumed and retained separators', () => {
   const fixtureSource = [
     "const fs = require('node:fs');",
     "fs.appendFileSync(process.env.FOCUSED_BOUNDARY_MARKER, JSON.stringify(process.argv.slice(2)) + '\\n');",
@@ -204,7 +184,7 @@ test('public Bun CLI reaches the focused execution path with consumed and retain
   ] as const) {
     const marker = join(temporary, `public-cli-${name}.txt`);
     rmSync(marker, { force: true });
-    const result = await runPublicFocusedCli(args, { ...process.env, FOCUSED_BOUNDARY_MARKER: marker });
+    const result = runPublicFocusedCli(args, { ...process.env, FOCUSED_BOUNDARY_MARKER: marker });
 
     expect(result.status, result.output).toBe(0);
     expect(result.output.match(/FOCUSED_BOUNDARY_FIXTURE_EXECUTED/g)).toHaveLength(1);
