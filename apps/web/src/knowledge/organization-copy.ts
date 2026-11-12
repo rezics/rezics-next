@@ -1,0 +1,40 @@
+import { m } from '../paraglide/messages.js';
+
+export function organizationCopy(locale: string) {
+  const options = { locale: locale as never };
+  return {
+    choose: m.knowledge_organization_choose({}, options),
+    selected: m.knowledge_organization_selected({}, options),
+    destination: m.knowledge_organization_destination({}, options),
+    end: m.knowledge_organization_end({}, options),
+    before: m.knowledge_organization_before({}, options),
+    review: m.knowledge_organization_review({}, options),
+    confirm: m.knowledge_organization_confirm({}, options),
+    cancel: m.knowledge_organization_cancel({}, options),
+    preparing: m.knowledge_organization_preparing({}, options),
+    sending: m.knowledge_organization_sending({}, options),
+    uncertain: m.knowledge_organization_uncertain({}, options),
+    retry_move: m.knowledge_organization_retry_move({}, options),
+    changed: m.knowledge_organization_changed({}, options),
+    reselect: m.knowledge_organization_reselect({}, options),
+    rejected: m.knowledge_organization_rejected({}, options),
+    moved: m.knowledge_organization_moved({}, options),
+    receipt: m.knowledge_organization_receipt({}, options),
+    current: m.knowledge_organization_current({}, options),
+    parent: m.knowledge_organization_parent({}, options),
+    history: m.knowledge_organization_history({}, options),
+    historical: m.knowledge_organization_historical({}, options),
+    history_unavailable: m.knowledge_organization_history_unavailable({}, options),
+    revision: m.knowledge_organization_revision({}, options),
+    empty_history: m.knowledge_organization_empty_history({}, options),
+    source: m.knowledge_organization_source({}, options),
+    order: m.knowledge_organization_order({}, options),
+    readback_note: m.knowledge_organization_readback_note({}, options),
+    added: m.knowledge_organization_added({}, options),
+    moved_kind: m.knowledge_organization_moved_kind({}, options),
+    reordered: m.knowledge_organization_reordered({}, options),
+    baseline: m.knowledge_organization_baseline({}, options),
+    notebook_created: m.knowledge_organization_notebook_created({}, options),
+    legacy: m.knowledge_organization_legacy({}, options),
+  };
+}

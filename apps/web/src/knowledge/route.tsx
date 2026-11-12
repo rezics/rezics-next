@@ -171,3 +171,5 @@ export function KnowledgeDocumentCaller({
 
 export { KnowledgeNavigationRoute } from './navigation-route';
 export { knowledgeNavigation } from './navigation';
+
+export { isKnowledgeId } from './private-knowledge';

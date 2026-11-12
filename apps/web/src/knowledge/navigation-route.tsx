@@ -6,7 +6,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { readerSessionSource } from '../reader/lifetime';
 import { useSession } from '../session/query';
 import { isKnowledgeId } from './private-knowledge';
-import { readKnowledgeNavigationVisit } from './private-server';
+import { readKnowledgeNavigationVisit, readKnowledgeOrganizationVisit, prepareKnowledgeOrganizationVisit, moveKnowledgeOrganizationPlacement } from './private-server';
 import {
   KnowledgeNavigationEntry,
   type KnowledgeNavigationAccess,
@@ -27,6 +27,8 @@ export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }
   const exposure = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot, lifetime.getServerSnapshot);
   const owned = useOperationAdmission('knowledge_notebook.owned_list');
   const outline = useOperationAdmission('knowledge_notebook.outline');
+  const move = useOperationAdmission('knowledge_notebook.move_placement');
+  const history = useOperationAdmission('knowledge_notebook.structure_history');
   const admission = notebookId === undefined ? owned : outline;
   const locale = getLocale();
   const viewer = session.state === 'signed-in' ? session.subject : null;
@@ -68,6 +70,11 @@ export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }
           data: { request, expected: { viewer, csrfToken } },
           headers: { 'X-CSRF-Token': csrfToken ?? '' },
         }),
+      ...(notebookId !== undefined && move === 'available' && history === 'available' ? { organization: {
+        read: (request: import('./organization-read').OrganizationRequest) => readKnowledgeOrganizationVisit({ data: { request, expected: { viewer, csrfToken } }, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        prepare: () => prepareKnowledgeOrganizationVisit({ data: { viewer, csrfToken }, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        move: (intent: import('./organization-read').OrganizationIntent) => moveKnowledgeOrganizationPlacement({ data: intent, headers: { 'X-CSRF-Token': intent.binding.csrfToken } }),
+      } } : {}),
       current: () => source.snapshot() === sessionRevision && revision() === exposureRevision && getLocale() === locale,
       subscribeRetirement: (retire) => {
         const stopSession = source.subscribe(retire);
@@ -85,7 +92,7 @@ export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }
         };
       },
     }),
-    [binding],
+    [binding, notebookId, move, history],
   );
   const address = useMemo<KnowledgeNavigationAddress>(
     () => (notebookId === undefined ? { kind: 'owned' } : { kind: 'outline', notebookId, parentPlacementId: null }),
