@@ -86,6 +86,37 @@ function fixture() {
   return { root, settings, source, registry, db, git };
 }
 
+function definitionsReleaseFixture(h: ReturnType<typeof fixture>) {
+  const file = 'packages/definitions/release/rezics.json';
+  const preparedFile = join(h.root, 'prepared', file);
+  const currentFile = join(h.settings.mainCheckout, file);
+  const declaration = 'packages/client/src/kernel/search/account-discovery.d.ts';
+  const declarationFile = join(h.settings.mainCheckout, declaration);
+  const release = Buffer.from('{"types":{}}\n');
+  mkdirSync(join(h.root, 'prepared', 'packages/definitions/release'), { recursive: true });
+  mkdirSync(join(h.settings.mainCheckout, 'packages/definitions/release'), { recursive: true });
+  mkdirSync(join(h.settings.mainCheckout, 'packages/client/src/kernel/search'), { recursive: true });
+  writeFileSync(preparedFile, release);
+  writeFileSync(currentFile, release);
+  writeFileSync(declarationFile, 'export type Discovery = string;\n');
+  h.git('add', file, declaration);
+  h.git('commit', '-m', 'prepared Definitions bundle');
+  const preparedHead = h.git('rev-parse', 'HEAD');
+  writeFileSync(declarationFile, 'export type Discovery = string | undefined;\n');
+  h.git('add', declaration);
+  h.git('commit', '-m', 'unrelated generated declaration');
+  const captureCurrentRelease = () => {
+    const result = spawnSync('git', ['show', `refs/heads/dev:${file}`], {
+      cwd: h.settings.mainCheckout,
+      encoding: null,
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(result.stderr.toString('utf8').trim() || 'current release is unavailable');
+    return result.stdout;
+  };
+  return { file, preparedFile, currentFile, preparedHead, captureCurrentRelease };
+}
+
 const section = (className: PageDataSection['class']): PageDataSection => ({
   page: 'home',
   persona: 'anonymous',
@@ -883,65 +914,95 @@ test('page-data reconciliation requires the retained dedicated stack and never c
   }
 });
 
-test('the seed boundary reconciles its pinned dev release once and refuses stale or failed reconciliation', async () => {
-  const preparedHead = 'prepared-dev-revision';
-  const bundledDigest = 'bundled-for-prepared-dev';
-  let currentHead = preparedHead;
-  let activeDigest = 'previous-release';
-  let seedJournal = '';
-  const events: string[] = [];
-  const writes: string[] = [];
-  const reconcile = async (head: string) => {
-    events.push(`operator:${head}`);
-    expect(head).toBe(preparedHead);
-    if (activeDigest === bundledDigest) return;
-    writes.push('publish', 'activate');
-    activeDigest = bundledDigest;
-    events.push('publish', 'activate');
-  };
-  const seedOrResume = async () => {
-    if (seedJournal) return seedJournal;
-    events.push('seed');
-    seedJournal = 'retained-seed-journal';
-    return seedJournal;
-  };
+test('the seed boundary accepts an unrelated dev advance with equal release bytes and skips current activation', async () => {
+  const h = fixture();
+  try {
+    const { preparedFile, preparedHead, captureCurrentRelease } = definitionsReleaseFixture(h);
+    expect(h.git('rev-parse', 'HEAD')).not.toBe(preparedHead);
+    const bundledDigest = 'bundled-for-prepared-dev';
+    let activeDigest = 'previous-release';
+    let seedJournal = '';
+    const events: string[] = [];
+    const writes: string[] = [];
+    const reconcile = async (head: string) => {
+      events.push(`operator:${head}`);
+      expect(head).toBe(preparedHead);
+      if (activeDigest === bundledDigest) return;
+      writes.push('publish', 'activate');
+      activeDigest = bundledDigest;
+      events.push('publish', 'activate');
+    };
+    const seedOrResume = async () => {
+      if (seedJournal) return seedJournal;
+      events.push('seed');
+      seedJournal = 'retained-seed-journal';
+      return seedJournal;
+    };
 
-  await expect(runPageDataSeedBoundary(preparedHead, () => currentHead, reconcile, seedOrResume)).resolves.toBe(
-    'retained-seed-journal',
-  );
-  expect(events).toEqual([`operator:${preparedHead}`, 'publish', 'activate', 'seed']);
-  expect(writes).toEqual(['publish', 'activate']);
+    await expect(
+      runPageDataSeedBoundary(preparedHead, preparedFile, captureCurrentRelease, reconcile, seedOrResume),
+    ).resolves.toBe('retained-seed-journal');
+    expect(events).toEqual([`operator:${preparedHead}`, 'publish', 'activate', 'seed']);
+    expect(writes).toEqual(['publish', 'activate']);
 
-  events.length = 0;
-  writes.length = 0;
-  await runPageDataSeedBoundary(preparedHead, () => currentHead, reconcile, seedOrResume);
-  expect(events).toEqual([`operator:${preparedHead}`]);
-  expect(writes).toEqual([]);
+    events.length = 0;
+    writes.length = 0;
+    await runPageDataSeedBoundary(preparedHead, preparedFile, captureCurrentRelease, reconcile, seedOrResume);
+    expect(events).toEqual([`operator:${preparedHead}`]);
+    expect(writes).toEqual([]);
 
-  currentHead = 'newer-dev-revision';
-  events.length = 0;
-  await expect(runPageDataSeedBoundary(preparedHead, () => currentHead, reconcile, seedOrResume)).rejects.toThrow(
-    'refusing stale activation',
-  );
-  expect(events).toEqual([]);
-  expect(seedJournal).toBe('retained-seed-journal');
+    events.length = 0;
+    await expect(
+      runPageDataSeedBoundary(
+        preparedHead,
+        preparedFile,
+        captureCurrentRelease,
+        async () => {
+          events.push('operator');
+          throw new Error('dedicated identity mismatch');
+        },
+        async () => {
+          events.push('seed');
+          return seedJournal;
+        },
+      ),
+    ).rejects.toThrow('dedicated identity mismatch');
+    expect(events).toEqual(['operator']);
+  } finally {
+    h.db.close();
+  }
+});
 
-  currentHead = preparedHead;
-  events.length = 0;
-  await expect(
-    runPageDataSeedBoundary(
-      preparedHead,
-      () => currentHead,
-      async () => {
-        events.push('operator');
-        throw new Error('dedicated identity mismatch');
-      },
-      seedOrResume,
-    ),
-  ).rejects.toThrow('dedicated identity mismatch');
-  expect(events).toEqual(['operator']);
-  expect(writes).toEqual([]);
-  expect(seedJournal).toBe('retained-seed-journal');
+test('the seed boundary refuses changed and unavailable releases before activation or importer work', async () => {
+  const h = fixture();
+  try {
+    const { file, preparedFile, currentFile, preparedHead, captureCurrentRelease } = definitionsReleaseFixture(h);
+    const events: string[] = [];
+    const reconcile = async () => {
+      events.push('activate');
+    };
+    const importSeed = async () => {
+      events.push('importer');
+    };
+    const refuse = (reason: string) =>
+      expect(
+        runPageDataSeedBoundary(preparedHead, preparedFile, captureCurrentRelease, reconcile, importSeed),
+      ).rejects.toThrow(reason);
+
+    writeFileSync(currentFile, '{"types":{"changed":true}}\n');
+    h.git('add', file);
+    h.git('commit', '-m', 'changed Definitions release');
+    await refuse('release changed before reconciliation');
+    expect(events).toEqual([]);
+
+    rmSync(currentFile);
+    h.git('add', '-u', file);
+    h.git('commit', '-m', 'remove Definitions release');
+    await refuse('could not capture current dev release');
+    expect(events).toEqual([]);
+  } finally {
+    h.db.close();
+  }
 });
 
 test('page-data member authority provenance survives completion without hiding real forbidden defects', () => {
