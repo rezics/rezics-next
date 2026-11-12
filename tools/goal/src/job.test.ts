@@ -140,7 +140,7 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
   let recovery: Promise<void> | undefined;
   try {
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8')) as {
-      pools: Array<{ policy: Record<string, unknown> }>;
+      pools: typeof h.settings.pools;
     };
     local.pools[0]!.policy = { ...local.pools[0]!.policy, allowUnknown: false, maxBurnPerHour: 0.6, maxConcurrent: 1 };
     writeFileSync(h.settings.localFile, JSON.stringify(local));
