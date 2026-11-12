@@ -127,6 +127,15 @@ association observation after finite source mutation stops. A capped sample is n
 empty response. Preparation failure stays failure/unavailable, not permanent successful preparing with no progress.
 Unacknowledged publication indexing may delay discovery but cannot delay source withdrawal.
 
+Web transfer acceptance uses `knowledge-transfer-wire.test.ts`, `knowledge-transfer.test.ts` and
+`knowledge-transfer-mounted.test.tsx` alongside the existing reader/private/navigation suites. Verify exact
+public/authoring export requests, unchanged native envelope bytes and local save retry, independent copied
+identity/provenance from a separate exact read, replacing 20-row destination pages, conflict refresh/review,
+immutable uncertain retry and complete retirement. The six illustrative `Pages/Knowledge/Transfer` stories are
+PublicExport, OwnExport, CopyReview, Copied, StructureChanged and Unavailable; inspect 390/1280px, both themes and
+eight locales. These authored fixtures do not substitute for native authorization/source-withdrawal, mounted
+return, visual/accessibility or promoted-revision proof.
+
 ## Native cost evidence
 
 Use the constants in the product contract rather than repeating new numeric authorities. Measure returned and

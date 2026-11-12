@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '../document-body';
 import { m } from '../paraglide/messages.js';
@@ -24,6 +24,7 @@ export type KnowledgeDocumentPageProps = {
   retrying?: boolean;
   clipboard?: KnowledgeCitationClipboard | null;
   origin?: string;
+  transfer?: (document: KnowledgePublicDocument, onSourceLost: () => void) => ReactNode;
 };
 
 function publicationTime(value: string, locale: string): string {
@@ -135,10 +136,12 @@ export function KnowledgeDocumentPage({
   retrying = false,
   clipboard,
   origin,
+  transfer,
 }: KnowledgeDocumentPageProps) {
   const locale = getLocale();
   const exact = request.revisionId !== null;
-  const document = admittedDocument(request, page);
+  const [lostPage, setLostPage] = useState<KnowledgeReadState | null>(null);
+  const document = lostPage === page ? null : admittedDocument(request, page);
   const displayed: KnowledgeReadState =
     page.state === 'ready' && !document ? { state: 'unavailable', status: 502 } : page;
   const preparing = displayed.state === 'preparing' || retrying;
@@ -243,6 +246,7 @@ export function KnowledgeDocumentPage({
             locale={locale}
           />
           <KnowledgeCitation href={exactHref} origin={origin} clipboard={clipboard} />
+          {transfer?.(document, () => setLostPage(page))}
           {exact ? (
             <a
               href={liveHref}

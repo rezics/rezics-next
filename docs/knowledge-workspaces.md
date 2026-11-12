@@ -494,3 +494,14 @@ and computational parity. The source code and native proof gaps in those reports
 The architectural extension is an authored knowledge capability over existing owners. It does not adopt a separate
 graph database, another permissions framework, a workspace-wide CRDT, automatic recursive publication or private
 facts in public search. Cross-domain APIs are installed through existing module contracts and composition roots.
+
+Decision: Web transfer pins the admitted public or saved authoring revision. An unsaved editor must save first;
+public actions retain the public representation even for the author. Export captures the native canonical JSON
+response unchanged, keeps bytes and a revocable download URL only in this visit, and distinguishes another local
+save from a fresh admitted export. Private copy reviews one owned notebook and a current root/parent outline;
+each explicit request replaces at most 20 rows in native order. A structure conflict keeps the choices but needs
+refresh, review and confirmation. An unknown result keeps the exact source, destination, key and prepared
+credential for explicit replay. A separate exact copied-revision readback precedes editor resume. Source loss,
+session/CSRF/exposure replacement, locale/address change and departure retire callbacks, selections and bytes.
+The fewest transfer wire and mounted tests pin these boundaries; illustrative Transfer stories cover the six named
+states. Native authorization, return, browser, visual/accessibility and promotion proof remain verifier work.
