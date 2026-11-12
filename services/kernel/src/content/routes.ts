@@ -1480,7 +1480,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           ...readFailures(),
         },
         detail: {
-          operationId: 'post.historyMetadata',
+          operationId: 'post.history_metadata',
           'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:read',

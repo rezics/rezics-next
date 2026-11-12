@@ -387,7 +387,7 @@ no-store and do not change heads, replies, reactions or review votes.
 ### Metadata-only revision headers
 
 Decision: Studio and column history use additive `GET /v1/posts/{id}/revision-headers`
-(`post.historyMetadata`); exact bodies remain a separate fetch. The closed response is
+(`post.history_metadata`); exact bodies remain a separate fetch. The closed response is
 `{ revisions: PostRevisionHeader[], next: string | null }`, default 20, limit 1–100.
 Each header contains `postId`, `threadId`, `revisionId`, `sha256`, `recordedAt`, immutable
 `authorId`, exact stored `licence` and `subjectIds`, conversation `kind` and
