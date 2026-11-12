@@ -901,15 +901,15 @@ test('retry alarms stay active through drift and rearm only after a measured rec
     if (taskId) report.queues[1] = { stage: 'check', length: 1, oldestAgeMs: 1, tasks: [taskId] };
     return checkFlowAlarms(db, report, (summary) => sent.push(summary), new Date(now + offset), undefined, policy);
   };
-  const active = () =>
-    db.query('SELECT active FROM flow_alarm_sends WHERE threshold=?').get('attempts-per-integrated');
+  const active = () => db.query('SELECT active FROM flow_alarm_sends WHERE threshold=?').get('attempts-per-integrated');
   const sentAt = new Date(now - 60_000).toISOString();
   try {
     expect(run(3, 11, 0)).toEqual(['attempts-per-integrated']);
     expect(sent[0]).toContain('trailing 7 days (3 integrated tasks; 11 attempt generations)');
-    db
-      .query('UPDATE flow_alarm_sends SET sent_at=?,fingerprint=NULL WHERE threshold=?')
-      .run(sentAt, 'attempts-per-integrated');
+    db.query('UPDATE flow_alarm_sends SET sent_at=?,fingerprint=NULL WHERE threshold=?').run(
+      sentAt,
+      'attempts-per-integrated',
+    );
     expect(run(6, 24, 10_001, 'next-task')).toEqual([]);
     expect(run(0, 0, 10_002, 'rotated-task')).toEqual([]);
     expect(active()).toEqual({ active: 1 });
