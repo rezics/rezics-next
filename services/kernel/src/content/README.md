@@ -3061,9 +3061,12 @@ Cost per operation:
 
 Decision: author-erasure receipt evidence uses `nativeReceiptKeyCandidates` with the original command kind,
 account principal and raw key; every caller-owned workflow and growth pool retains the same dedicated fixture
-ring as initiation. Point erasure keeps discovery receipt preflight and actual-command scope currentness in
-separate native transactions. Tests assert one scope observation in each phase, exact committed receipts and
-bounded cleanup; fixture repairs alone establish no production erasure defect.
+ring as initiation. Receipt-free fixture transaction wrappers explicitly bind that ring before invoking native
+receipt readers; pool configuration alone does not bind a wrapper. Point erasure keeps discovery receipt preflight
+and actual-command scope currentness in separate native transactions. SQL observations retain the exact driver text;
+expectations for Reylo `.run()` use its Standard Query text, including dispatch comments. Tests assert one scope
+observation in each phase, the original receipt operands, exact committed receipts and bounded cleanup; fixture
+repairs alone establish no production erasure defect.
 
 Authenticated `GET /v1/threads/{id}` adds the private optional envelope field
 `authorErasure: { authorId: string, mayErase: boolean }`. Anonymous reads omit it. The acting account supplies
