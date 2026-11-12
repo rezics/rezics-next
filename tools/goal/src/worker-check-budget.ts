@@ -739,6 +739,7 @@ function withdrawnRetryChecksHaveBoundTerminalResults(
       continue;
     if (
       record.status !== 'finished' ||
+      typeof record.exitCode !== 'number' ||
       !Number.isInteger(record.exitCode) ||
       (!terminalPhysicalHistory(worktree, record.id, record.physicalRunId, record.exitCode) &&
         !retainedNativeExitReceiptTerminal(worktree, taskId, attempt, record))
@@ -1301,7 +1302,14 @@ function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): Wo
       }
       const retainedReport =
         task && attempt
-          ? retainedWithdrawnBudgetOriginReport({ db, grant, task, attempt, progress, directory })
+          ? retainedWithdrawnBudgetOriginReport({
+              db,
+              grant,
+              task,
+              attempt,
+              ...(progress ? { progress: { endHead: progress.endHead } } : {}),
+              directory,
+            })
           : undefined;
       const eligibilityAttempt = retainedReport && attempt ? { ...attempt, result: retainedReport } : attempt;
       const withdrawnRetry =

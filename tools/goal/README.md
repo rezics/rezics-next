@@ -2849,6 +2849,8 @@ Authenticated owning or operations managers reconcile that same attempt without 
 
 Decision: when local `integration.operationsManager` is absent, typing-recovery event checks admit the owning task manager only; the nonempty actor session and retained source checks remain required.
 
+Decision: terminal receipt matching narrows the external exit code to a number before checking it is an integer, and retained-origin reconstruction passes only defined end-head progress to its source validator.
+
 ```sh
 bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>
 ```
