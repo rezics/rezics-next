@@ -1135,6 +1135,12 @@ export declare function EVENT_TYPES(): Readonly<{
         editionId: Type.TString;
         editionRevision: Type.TString;
     }>;
+    readonly 'com.rezics.content.knowledge.lifecycle.changed.v1': Type.TObject<{
+        documentId: Type.TString;
+        notebookId: Type.TString;
+        generation: Type.TString;
+        action: Type.TUnion<[Type.TLiteral<"trash">, Type.TLiteral<"restore">]>;
+    }>;
     readonly 'com.rezics.content.knowledge.publication.changed.v1': Type.TObject<{
         action: Type.TUnion<[Type.TLiteral<"selected">, Type.TLiteral<"withdrawn">]>;
         documentId: Type.TString;

@@ -207,6 +207,12 @@ export declare function contentDeclaredEvents(): Readonly<{
         editionId: import("typebox").TString;
         editionRevision: import("typebox").TString;
     }>;
+    'com.rezics.content.knowledge.lifecycle.changed.v1': import("typebox").TObject<{
+        documentId: import("typebox").TString;
+        notebookId: import("typebox").TString;
+        generation: import("typebox").TString;
+        action: import("typebox").TUnion<[import("typebox").TLiteral<"trash">, import("typebox").TLiteral<"restore">]>;
+    }>;
     'com.rezics.content.knowledge.publication.changed.v1': import("typebox").TObject<{
         action: import("typebox").TUnion<[import("typebox").TLiteral<"selected">, import("typebox").TLiteral<"withdrawn">]>;
         documentId: import("typebox").TString;
