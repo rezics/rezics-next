@@ -109,23 +109,22 @@ export function installNativeRoleProducer(pool: Pool): void {
       release(error as Error);
       throw error;
     }
+    // Keep the driver's physical client identity. Native adapters cache their
+    // connection by this object, and pg methods can return it to their caller.
+    // A facade would give those paths different release hooks for one lease.
+    // pg installs a fresh release on every checkout; capture and replace only
+    // that lease's hook, including when an adapter reuses its cached connection.
     let released = false;
-    return new Proxy(client, {
-      get(target, property) {
-        if (property === 'release')
-          return (error?: Error | boolean) => {
-            if (released) return;
-            released = true;
-            if (error) return release(error);
-            return client.query('RESET auth.native_role_producer; RESET auth.native_phase_producer').then(
-              () => release(),
-              (failure: Error) => release(failure),
-            );
-          };
-        const value = Reflect.get(target, property);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
+    client.release = (error?: Error | boolean) => {
+      if (released) return;
+      released = true;
+      if (error) return release(error);
+      return client.query('RESET auth.native_role_producer; RESET auth.native_phase_producer').then(
+        () => release(),
+        (failure: Error) => release(failure),
+      );
+    };
+    return client;
   };
   pool.connect = ((
     callback?: (error: Error | undefined, client?: PoolClient, release?: PoolClient['release']) => void,
