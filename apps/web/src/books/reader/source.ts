@@ -77,9 +77,7 @@ export type BookContentsPage = PageBase &
     title: string;
     rows: readonly BookOccurrence[];
     /** Empty/sparse rows may still have a continuation. The cursor is opaque. */
-    continuation:
-      | Readonly<{ state: 'more'; cursor: string }>
-      | Readonly<{ state: 'end' | 'unavailable' }>;
+    continuation: Readonly<{ state: 'more'; cursor: string }> | Readonly<{ state: 'end' | 'unavailable' }>;
     /** Exact selected body remains selectable when its occurrence has moved out of this level. */
     selected:
       | Readonly<{ state: 'here' | 'moved'; chapter: BookChapterAddress; contents: BookContentsAddress }>
@@ -121,8 +119,9 @@ export const uninstalledHostedBookSource: HostedBookSource = {
 };
 
 export function samePublication(a: BookPublication, b: BookPublication) {
-  return a.id === b.id && a.structureRevisionId === b.structureRevisionId &&
-    a.releaseRevisionId === b.releaseRevisionId;
+  return (
+    a.id === b.id && a.structureRevisionId === b.structureRevisionId && a.releaseRevisionId === b.releaseRevisionId
+  );
 }
 export function sameSelection(a: BookSelection | null, b: BookSelection | null) {
   return a === null || b === null
@@ -143,13 +142,22 @@ export function sameBookAddress(a: BookAddress, b: BookAddress): boolean {
 export function bookAddressWithinBounds(address: BookAddress): boolean {
   const identity = (value: string) => value.length > 0 && value.length <= 1024;
   if (!identity(address.publication.id) || !identity(address.publication.structureRevisionId)) return false;
-  if (address.publication.releaseRevisionId !== undefined && !identity(address.publication.releaseRevisionId)) return false;
+  if (address.publication.releaseRevisionId !== undefined && !identity(address.publication.releaseRevisionId))
+    return false;
   const selection = address.selection;
-  if (selection && (!identity(selection.occurrenceId) || !identity(selection.body.postId) ||
-    !identity(selection.body.revisionId) || !/^[a-f0-9]{64}$/i.test(selection.body.sha256))) return false;
-  return address.kind === 'chapter' ||
+  if (
+    selection &&
+    (!identity(selection.occurrenceId) ||
+      !identity(selection.body.postId) ||
+      !identity(selection.body.revisionId) ||
+      !/^[a-f0-9]{64}$/i.test(selection.body.sha256))
+  )
+    return false;
+  return (
+    address.kind === 'chapter' ||
     ((address.parentOccurrenceId === null || identity(address.parentOccurrenceId)) &&
-      (address.cursor === null || (address.cursor.length > 0 && address.cursor.length <= BOOK_CURSOR_LIMIT)));
+      (address.cursor === null || (address.cursor.length > 0 && address.cursor.length <= BOOK_CURSOR_LIMIT)))
+  );
 }
 
 /** Reject cross-publication and misassociated projections without turning them into another read. */
@@ -166,7 +174,8 @@ export function bookPageMatches(request: BookReadRequest, page: BookPage): boole
       ancestors.has(ancestor.occurrenceId) ||
       !validContents(ancestor.contents) ||
       ancestor.contents.parentOccurrenceId !== ancestor.occurrenceId
-    ) return false;
+    )
+      return false;
     ancestors.add(ancestor.occurrenceId);
   }
   if (page.kind === 'chapter') {
@@ -174,20 +183,31 @@ export function bookPageMatches(request: BookReadRequest, page: BookPage): boole
       !validContents(page.contents) ||
       !sameSelection(page.contents.selection, page.address.selection) ||
       page.contents.parentOccurrenceId !== (page.ancestors.at(-1)?.occurrenceId ?? null)
-    ) return false;
+    )
+      return false;
     return [page.previous, page.next].every(
-      (step) => step.state !== 'available' ||
+      (step) =>
+        step.state !== 'available' ||
         (validChapter(step.address) && step.address.selection.occurrenceId !== page.address.selection.occurrenceId),
     );
   }
   if (page.rows.length > BOOK_CONTENTS_LIMIT || !validContents(page.address)) return false;
-  if (page.continuation.state === 'more' &&
-    (!page.continuation.cursor || page.continuation.cursor.length > BOOK_CURSOR_LIMIT ||
-      page.continuation.cursor === page.address.cursor)) return false;
+  if (
+    page.continuation.state === 'more' &&
+    (!page.continuation.cursor ||
+      page.continuation.cursor.length > BOOK_CURSOR_LIMIT ||
+      page.continuation.cursor === page.address.cursor)
+  )
+    return false;
   const seen = new Set<string>();
   for (const row of page.rows) {
-    if (seen.has(row.occurrenceId) || ancestors.has(row.occurrenceId) ||
-      row.occurrenceId === page.address.parentOccurrenceId || row.parentOccurrenceId !== page.address.parentOccurrenceId) return false;
+    if (
+      seen.has(row.occurrenceId) ||
+      ancestors.has(row.occurrenceId) ||
+      row.occurrenceId === page.address.parentOccurrenceId ||
+      row.parentOccurrenceId !== page.address.parentOccurrenceId
+    )
+      return false;
     seen.add(row.occurrenceId);
     if ('contents' in row && (!validContents(row.contents) || row.contents.parentOccurrenceId !== row.occurrenceId))
       return false;
@@ -195,11 +215,15 @@ export function bookPageMatches(request: BookReadRequest, page: BookPage): boole
       return false;
   }
   if (page.selected && page.selected.state !== 'unavailable') {
-    if (!validChapter(page.selected.chapter) || !validContents(page.selected.contents) ||
+    if (
+      !validChapter(page.selected.chapter) ||
+      !validContents(page.selected.contents) ||
       !sameSelection(page.selected.chapter.selection, page.address.selection) ||
       !sameSelection(page.selected.contents.selection, page.address.selection) ||
-      (page.selected.state === 'here' && !page.rows.some((row) =>
-        'chapter' in row && sameSelection(row.chapter.selection, page.address.selection)))) return false;
+      (page.selected.state === 'here' &&
+        !page.rows.some((row) => 'chapter' in row && sameSelection(row.chapter.selection, page.address.selection)))
+    )
+      return false;
   } else if (page.address.selection !== null && page.selected === null) return false;
   return true;
 }

@@ -11818,5 +11818,17 @@
   "book_reader_selection_unavailable": "所選章節目前無法使用。",
   "book_reader_show_controls": "固定閱讀控制項",
   "book_reader_title": "書籍閱讀器",
-  "book_reader_unavailable": "目前無法閱讀，請重試。"
+  "book_reader_unavailable": "目前無法閱讀，請重試。",
+  "book_reader_open_books": "閱讀託管書籍",
+  "book_reader_catalogues_empty": "目前沒有可閱讀的已出版書籍。",
+  "book_reader_publication": "已出版書籍 {number}",
+  "book_reader_checkpoint_title": "閱讀位置",
+  "book_reader_checkpoint_save": "儲存此章節",
+  "book_reader_checkpoint_clear": "清除閱讀位置",
+  "book_reader_checkpoint_resume": "繼續已儲存的章節",
+  "book_reader_checkpoint_none": "尚未儲存章節。",
+  "book_reader_checkpoint_saved": "已儲存章節。",
+  "book_reader_checkpoint_cleared": "已清除閱讀位置。",
+  "book_reader_checkpoint_uncertain": "無法確認儲存或清除結果。請重試相同請求。",
+  "book_reader_checkpoint_withheld": "目前無法閱讀已儲存的章節。閱讀位置仍會保留。"
 }

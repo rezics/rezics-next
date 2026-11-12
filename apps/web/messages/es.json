@@ -11818,5 +11818,17 @@
   "book_reader_selection_unavailable": "El capítulo seleccionado no está disponible en este momento.",
   "book_reader_show_controls": "Fijar controles de lectura",
   "book_reader_title": "Lector de libros",
-  "book_reader_unavailable": "Esta lectura no está disponible. Inténtalo de nuevo."
+  "book_reader_unavailable": "Esta lectura no está disponible. Inténtalo de nuevo.",
+  "book_reader_open_books": "Leer libros alojados",
+  "book_reader_catalogues_empty": "No hay libros publicados disponibles.",
+  "book_reader_publication": "Libro publicado {number}",
+  "book_reader_checkpoint_title": "Marcador de lectura",
+  "book_reader_checkpoint_save": "Guardar este capítulo",
+  "book_reader_checkpoint_clear": "Borrar marcador",
+  "book_reader_checkpoint_resume": "Retomar el capítulo guardado",
+  "book_reader_checkpoint_none": "Aún no hay ningún capítulo guardado.",
+  "book_reader_checkpoint_saved": "Capítulo guardado.",
+  "book_reader_checkpoint_cleared": "Marcador borrado.",
+  "book_reader_checkpoint_uncertain": "No se pudo confirmar el guardado o el borrado. Reintenta la misma solicitud.",
+  "book_reader_checkpoint_withheld": "El capítulo guardado no está disponible actualmente. Se conserva el marcador."
 }

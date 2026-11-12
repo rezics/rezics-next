@@ -1,3 +1,4 @@
+import type { HostedDiscoveryPage } from './discovery';
 import type { HostedCatalogueApi, HostedFailure } from './native-api';
 import { bookPublicationFromNative } from './native-mapper';
 import type { HostedBookVisitInput } from './address';
@@ -7,8 +8,10 @@ import type { BookAddress, BookContentsAddress, BookSelection } from './source';
 
 export type HostedBookVisit =
   | HostedFailure
+  | Readonly<{ state: 'catalogues'; page: HostedDiscoveryPage }>
   | Readonly<{
       state: 'ready';
+      subjectId?: string;
       address: BookAddress;
       contentsReturn: BookContentsAddress | null;
       admission: Extract<NativeHostedBookAdmission, { state: 'current' }>;
@@ -81,6 +84,7 @@ export async function observeHostedBookVisit(
   const address: BookAddress = chapter && selection ? { kind: 'chapter', publication, selection } : contents;
   return {
     state: 'ready',
+    ...(search.subject ? { subjectId: search.subject } : {}),
     address,
     contentsReturn: chapter
       ? {

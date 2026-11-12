@@ -3,15 +3,23 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { NativeHostedBookReader } from './native-hosted-book-reader';
-import { hostedBookAddressHref } from './address';
+import { hostedBookAddressHref, hostedBookHref, hostedBookSubjectHref } from './address';
+import { HostedBookCheckpoint } from './checkpoint';
 import type { NativeHostedBookAdmissionSource } from './native-source';
+import type { BookPage } from './source';
 import type { BookReaderNavigation } from './reader-state';
 import type { HostedBookReaderProps } from './hosted-book-reader';
 import type { HostedBookVisit } from './visit';
 
 export { readHostedBookVisit } from './native-visit';
-export { parseHostedBookSearch, hostedBookHref, hostedBookAddressHref, hostedBookSearch } from './address';
-export { HostedBookReaderLink } from './link';
+export {
+  parseHostedBookSearch,
+  hostedBookHref,
+  hostedBookAddressHref,
+  hostedBookSearch,
+  hostedBookSubjectHref,
+} from './address';
+export { HostedBookReaderLink, HostedBookSubjectReaderLink } from './link';
 export type { HostedBookSearch } from './address';
 export type { HostedBookVisit } from './visit';
 
@@ -35,10 +43,15 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
   );
   const open = useCallback<BookReaderNavigation>(
     (address, contentsReturn) => {
-      const href = hostedBookAddressHref(address, locale, contentsReturn);
+      const href = hostedBookAddressHref(
+        address,
+        locale,
+        contentsReturn,
+        visit.state === 'ready' ? visit.subjectId : undefined,
+      );
       navigate(href);
     },
-    [locale, navigate],
+    [locale, navigate, visit],
   );
   const focusOnRead = useMemo<HostedBookReaderProps['focusOnRead']>(() => {
     if (visit.state !== 'ready' || typeof document === 'undefined') return undefined;
@@ -54,6 +67,36 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
     };
   }, [visit]);
   const options = { locale };
+  if (visit.state === 'catalogues')
+    return (
+      <section className="mx-auto grid max-w-3xl gap-4 px-4 py-8" lang={locale}>
+        <h1 className="text-2xl font-semibold">{m.book_reader_title({}, options)}</h1>
+        {visit.page.items.length === 0 ? <p role="status">{m.book_reader_catalogues_empty({}, options)}</p> : null}
+        <ol className="grid gap-3">
+          {visit.page.items.map((item, index) => (
+            <li key={item.catalogueId}>
+              <a
+                className="inline-flex min-h-11 items-center underline underline-offset-4"
+                href={hostedBookHref(item.catalogueId, locale, {
+                  subject: visit.page.subjectId,
+                  release: item.revisionId,
+                })}
+              >
+                {m.book_reader_publication({ number: index + 1 }, options)}
+              </a>
+            </li>
+          ))}
+        </ol>
+        {visit.page.nextCursor ? (
+          <a
+            className="inline-flex min-h-11 items-center underline underline-offset-4"
+            href={hostedBookSubjectHref(visit.page.subjectId, locale, visit.page.nextCursor)}
+          >
+            {m.book_reader_more({}, options)}
+          </a>
+        ) : null}
+      </section>
+    );
   if (visit.state !== 'ready')
     return (
       <section className="mx-auto grid max-w-3xl gap-4 px-4 py-8" lang={locale} data-slot="hosted-book-visit">
@@ -73,17 +116,33 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
       </section>
     );
   const origin = visit.address.kind === 'contents' ? visit.address : visit.contentsReturn;
+  const subjectId = visit.subjectId;
+  const viewer = visit.admission.viewer;
   return (
     <NativeHostedBookReader
       address={visit.address}
       contentsReturn={visit.contentsReturn}
       admission={admission}
       locale={locale}
-      hrefForAddress={(address) => hostedBookAddressHref(address, locale, origin)}
+      hrefForAddress={(address) => hostedBookAddressHref(address, locale, origin, visit.subjectId)}
       onNavigate={open}
       onReload={reload}
-      focusOnRead={focusOnRead}
-      renderProgress={renderProgress}
+      {...(focusOnRead !== undefined ? { focusOnRead } : {})}
+      {...(renderProgress !== undefined ? { renderProgress } : {})}
+      {...(subjectId && viewer.kind === 'session'
+        ? {
+            renderCheckpoint: (page: BookPage, isCurrent: () => boolean) => (
+              <HostedBookCheckpoint
+                subjectId={subjectId}
+                viewer={viewer.subject}
+                page={page}
+                locale={locale}
+                isCurrent={isCurrent}
+                reload={reload}
+              />
+            ),
+          }
+        : {})}
     />
   );
 }

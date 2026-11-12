@@ -11818,5 +11818,17 @@
   "book_reader_selection_unavailable": "선택한 장은 현재 사용할 수 없습니다.",
   "book_reader_show_controls": "읽기 컨트롤 고정",
   "book_reader_title": "책 리더",
-  "book_reader_unavailable": "이 읽기를 사용할 수 없습니다. 다시 시도하세요."
+  "book_reader_unavailable": "이 읽기를 사용할 수 없습니다. 다시 시도하세요.",
+  "book_reader_open_books": "호스팅된 책 읽기",
+  "book_reader_catalogues_empty": "읽을 수 있는 출판된 책이 없습니다.",
+  "book_reader_publication": "출판된 책 {number}",
+  "book_reader_checkpoint_title": "읽기 책갈피",
+  "book_reader_checkpoint_save": "이 장 저장",
+  "book_reader_checkpoint_clear": "책갈피 삭제",
+  "book_reader_checkpoint_resume": "저장한 장에서 계속 읽기",
+  "book_reader_checkpoint_none": "아직 저장한 장이 없습니다.",
+  "book_reader_checkpoint_saved": "장을 저장했습니다.",
+  "book_reader_checkpoint_cleared": "책갈피를 삭제했습니다.",
+  "book_reader_checkpoint_uncertain": "저장 또는 삭제 결과를 확인할 수 없습니다. 같은 요청을 다시 시도하세요.",
+  "book_reader_checkpoint_withheld": "저장한 장을 현재 읽을 수 없습니다. 책갈피는 유지됩니다."
 }

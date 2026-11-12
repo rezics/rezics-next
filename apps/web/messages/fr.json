@@ -11818,5 +11818,17 @@
   "book_reader_selection_unavailable": "Le chapitre sélectionné est actuellement indisponible.",
   "book_reader_show_controls": "Épingler les commandes de lecture",
   "book_reader_title": "Lecteur de livres",
-  "book_reader_unavailable": "Cette lecture est indisponible. Réessayez."
+  "book_reader_unavailable": "Cette lecture est indisponible. Réessayez.",
+  "book_reader_open_books": "Lire les livres hébergés",
+  "book_reader_catalogues_empty": "Aucun livre publié disponible.",
+  "book_reader_publication": "Livre publié {number}",
+  "book_reader_checkpoint_title": "Signet de lecture",
+  "book_reader_checkpoint_save": "Enregistrer ce chapitre",
+  "book_reader_checkpoint_clear": "Effacer le signet",
+  "book_reader_checkpoint_resume": "Reprendre le chapitre enregistré",
+  "book_reader_checkpoint_none": "Aucun chapitre enregistré.",
+  "book_reader_checkpoint_saved": "Chapitre enregistré.",
+  "book_reader_checkpoint_cleared": "Signet effacé.",
+  "book_reader_checkpoint_uncertain": "L’enregistrement ou la suppression n’a pas pu être confirmé. Réessayez la même demande.",
+  "book_reader_checkpoint_withheld": "Le chapitre enregistré est actuellement indisponible. Le signet est conservé."
 }

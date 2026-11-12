@@ -8,6 +8,7 @@ import { m } from '../../paraglide/messages.js';
 import type { SessionEnv } from '../../session/client';
 import { carriesSession } from '../../session/csrf';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
+import { readHostedDiscovery } from './discovery';
 import { hostedBookVisitSchema } from './address';
 import { createHostedCatalogueApi } from './native-api';
 import { observeHostedBookVisit, type HostedBookVisit } from './visit';
@@ -25,8 +26,19 @@ export const readHostedBookVisit = createServerFn({ method: 'GET' })
     if (carriesSession(request) && (!authorization || !subject)) return { state: 'unavailable' };
     if (authorization && !subject) return { state: 'denied' };
     if (!hasKernelOrigin()) return { state: 'unavailable' };
+    const client = kernelClient(data.locale, authorization ?? undefined);
+    if (data.search.view === 'catalogues') {
+      const result = await readHostedDiscovery(
+        client,
+        authorization,
+        data.catalogueId,
+        data.search.cursor,
+        request.signal,
+      );
+      return result.state === 'ready' ? { state: 'catalogues', page: result.value } : result;
+    }
     return observeHostedBookVisit(
-      createHostedCatalogueApi(kernelClient(data.locale, authorization ?? undefined), authorization, request.signal),
+      createHostedCatalogueApi(client, authorization, request.signal),
       data,
       subject ? { kind: 'session', subject } : { kind: 'anonymous' },
       m.book_reader_title({}, { locale: data.locale }),

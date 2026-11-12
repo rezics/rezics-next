@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import type { LiteraryWorkIdentity } from './model';
+import { HostedBookSubjectReaderLink } from '../../../books/reader/route';
 import { BookShelfLink } from '../../../books/catalogue/shelf-link';
 
 const linkClass =
@@ -141,6 +142,7 @@ export function LiteraryReader({
             )}
             <p className="max-w-prose text-sm text-muted-foreground">{m.literary_reader_return({}, options)}</p>
             <nav aria-label={m.literary_reader_title({}, options)} className="flex flex-wrap gap-x-5 gap-y-1">
+              <HostedBookSubjectReaderLink subjectId={identity.id} locale={locale} />
               {shelfType && <BookShelfLink locale={locale} type={shelfType} />}
               {editionHref ? (
                 <a className={linkClass} href={editionHref}>

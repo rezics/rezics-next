@@ -394,6 +394,16 @@ test('a progress owner rendering failure leaves exact reading available; all eig
       m.book_reader_selection_unavailable,
       m.book_reader_previous,
       m.book_reader_next,
+      m.book_reader_open_books,
+      m.book_reader_checkpoint_title,
+      m.book_reader_checkpoint_save,
+      m.book_reader_checkpoint_clear,
+      m.book_reader_checkpoint_resume,
+      m.book_reader_checkpoint_none,
+      m.book_reader_checkpoint_saved,
+      m.book_reader_checkpoint_cleared,
+      m.book_reader_checkpoint_uncertain,
+      m.book_reader_checkpoint_withheld,
     ])
       expect(message({}, options).length).toBeGreaterThan(0);
   }
@@ -678,4 +688,222 @@ test('a new native host incarnation can reopen the same address after pagehide w
   expect(freshSource.read).toHaveBeenCalledTimes(1);
   expect(host.querySelector('article')?.textContent).toContain('The keeper opened the eastern shutters.');
   expect(oldSource.read).toHaveBeenCalledTimes(1);
+});
+
+test('Subject discovery keeps sparse continuation and a current publication link in the existing reader route', async () => {
+  const { readHostedDiscovery } = await import('../src/books/reader/discovery');
+  const { HostedBookVisitView, hostedBookSubjectHref } = await import('../src/books/reader/route');
+  const requests: Request[] = [];
+  const page = { subjectId: ids.post, items: [], nextCursor: illustrativeBookCursor };
+  const native = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(page);
+    },
+  });
+  const result = await readHostedDiscovery(
+    native,
+    null,
+    ids.post,
+    illustrativeBookCursor,
+    new AbortController().signal,
+  );
+  expect(result).toEqual({ state: 'ready', value: page });
+  const url = new URL(requests[0]!.url);
+  expect(url.pathname).toBe(`/v1/subjects/${ids.post}/hostedCatalogues`);
+  expect(url.searchParams.get('limit')).toBe('20');
+  expect(url.searchParams.get('cursor')).toBe(illustrativeBookCursor);
+  host = document.createElement('main');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(
+      <HostedBookVisitView visit={{ state: 'catalogues', page }} locale="en" navigate={() => {}} reload={() => {}} />,
+    ),
+  );
+  expect(host.querySelector('a')?.getAttribute('href')).toBe(
+    hostedBookSubjectHref(ids.post, 'en', illustrativeBookCursor),
+  );
+  const populated = {
+    ...page,
+    items: [
+      {
+        catalogueId: ids.catalogue,
+        revisionId: ids.release,
+        sourceRevisionId: ids.structure,
+        kind: 'publication' as const,
+        threadId: ids.thread,
+      },
+    ],
+  };
+  await act(async () =>
+    root!.render(
+      <HostedBookVisitView
+        visit={{ state: 'catalogues', page: populated }}
+        locale="en"
+        navigate={() => {}}
+        reload={() => {}}
+      />,
+    ),
+  );
+  const chapterLink = new URL(host.querySelector('a')!.href);
+  expect(chapterLink.pathname).toBe(`/en/books/${ids.catalogue}/read`);
+  expect(chapterLink.searchParams.get('subject')).toBe(ids.post);
+  expect(chapterLink.searchParams.get('release')).toBe(ids.release);
+});
+
+test('native checkpoints use exact CAS operands, withhold unavailable resume and discard disclosed body bytes', async () => {
+  const { readHostedCheckpoint, writeHostedCheckpoint } = await import('../src/books/reader/checkpoint-api');
+  const book = createIllustrativeHostedBook();
+  const { api } = await book.ready;
+  const chapter = await book.chapter();
+  const resolution = await api.resolve(ids.catalogue, ids.first, { kind: 'publication', revisionId: ids.release });
+  if (
+    resolution.state !== 'ready' ||
+    resolution.value.occurrence.availability !== 'available' ||
+    resolution.value.occurrence.kind !== 'chapter' ||
+    !resolution.value.document
+  )
+    throw new Error('Expected native chapter');
+  const address = {
+    catalogueId: ids.catalogue,
+    publicationRevisionId: ids.release,
+    occurrenceId: ids.first,
+    targetRevisionId: chapter.selection.body.revisionId,
+    targetSha256: chapter.selection.body.sha256,
+    documentPosition: null,
+  };
+  const saved = {
+    state: 'saved' as const,
+    subjectId: ids.post,
+    revision: '2',
+    address,
+    resume: { ...resolution.value.occurrence, document: resolution.value.document },
+  };
+  let response: unknown = saved;
+  const requests: Request[] = [];
+  const native = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      expect(request.headers.get('authorization')).toBe('Bearer member');
+      if (request.method === 'PUT') return Response.json({ subjectId: ids.post, revision: '2', address });
+      if (request.method === 'POST') {
+        response = { state: 'none', subjectId: ids.post };
+        return Response.json({ subjectId: ids.post, cleared: true });
+      }
+      return Response.json(response);
+    },
+  });
+  const signal = new AbortController().signal;
+  const available = await readHostedCheckpoint(native, 'Bearer member', ids.post, signal);
+  expect(available.state === 'ready' && available.value.state === 'saved' && available.value.resume.availability).toBe(
+    'available',
+  );
+  expect(JSON.stringify(available)).not.toContain('canonicalBytes');
+  response = { ...saved, resume: { availability: 'unavailable', occurrenceId: ids.first, kind: 'chapter' } };
+  const withheld = await readHostedCheckpoint(native, 'Bearer member', ids.post, signal);
+  expect(withheld.state === 'ready' && withheld.value.state === 'saved' && withheld.value.address).toEqual(address);
+  expect(withheld.state === 'ready' && withheld.value.state === 'saved' && withheld.value.resume.availability).toBe(
+    'unavailable',
+  );
+  const command = { kind: 'save' as const, subjectId: ids.post, expectedRevision: '1', address };
+  await writeHostedCheckpoint(native, 'Bearer member', command, 'save-same-key', signal);
+  const put = requests.find((request) => request.method === 'PUT')!;
+  expect(put.headers.get('idempotency-key')).toBe('save-same-key');
+  expect(await put.json()).toEqual({ ...address, subjectId: ids.post, expectedRevision: '1' });
+  const cleared = await writeHostedCheckpoint(
+    native,
+    'Bearer member',
+    { kind: 'clear', subjectId: ids.post, expectedRevision: '2' },
+    'clear-key',
+    signal,
+  );
+  expect(cleared).toEqual({ state: 'ready', value: { state: 'none', subjectId: ids.post } });
+  const clear = requests.find((request) => request.method === 'POST')!;
+  expect(await clear.json()).toEqual({ subjectId: ids.post, expectedRevision: '2' });
+  response = {
+    ...saved,
+    resume: { ...saved.resume, target: { ...saved.resume.target, revisionId: ids.currentRelease } },
+  };
+  expect(await readHostedCheckpoint(native, 'Bearer member', ids.post, signal)).toEqual({ state: 'unavailable' });
+});
+
+test('checkpoint controls retry an uncertain command unchanged and retire late private results', async () => {
+  const actual = { ...(await import('../src/books/reader/native-checkpoint')) };
+  const book = createIllustrativeHostedBook();
+  const source = book.source;
+  const reads = mock(async () => ({
+    state: 'ready' as const,
+    csrfToken: 'csrf',
+    value: { state: 'none' as const, subjectId: ids.post },
+  }));
+  let writeCount = 0;
+  const writes = mock(async (input: Parameters<typeof actual.writeNativeHostedCheckpoint>[0]) => {
+    if (++writeCount === 1) throw new TypeError('network unavailable');
+    if (input.data.command.kind !== 'save') return { state: 'conflict' as const };
+    return {
+      state: 'ready' as const,
+      value: {
+        state: 'saved' as const,
+        subjectId: ids.post,
+        revision: '1',
+        address: input.data.command.address,
+        resume: { availability: 'unavailable' as const },
+      },
+    };
+  });
+  mock.module('../src/books/reader/native-checkpoint', () => ({
+    ...actual,
+    readNativeHostedCheckpoint: reads,
+    writeNativeHostedCheckpoint: writes,
+  }));
+  try {
+    const { HostedBookCheckpoint } = await import('../src/books/reader/checkpoint');
+    await mount(source, await book.chapter(), {
+      renderCheckpoint: (page, isCurrent) => (
+        <HostedBookCheckpoint
+          page={page}
+          isCurrent={isCurrent}
+          subjectId={ids.post}
+          viewer={ids.author}
+          locale="en"
+          reload={() => {}}
+        />
+      ),
+    });
+    await click(button(m.book_reader_checkpoint_save()));
+    expect(host.textContent).toContain(m.book_reader_checkpoint_uncertain());
+    await click(button(m.book_reader_retry()));
+    expect(writes.mock.calls[1]![0].data).toEqual(writes.mock.calls[0]![0].data);
+    expect(writes.mock.calls[1]![0].headers).toEqual({ 'X-CSRF-Token': 'csrf' });
+    expect(host.textContent).toContain(m.book_reader_checkpoint_saved());
+    expect(host.textContent).toContain(m.book_reader_checkpoint_withheld());
+    expect([...host.querySelectorAll('a')].some((link) => link.textContent === m.book_reader_checkpoint_resume())).toBe(
+      false,
+    );
+    await click(button(m.book_reader_checkpoint_clear()));
+    expect(host.textContent).toContain(m.book_reader_changed());
+    expect(writes.mock.calls[2]![0].data.command).toEqual({
+      kind: 'clear',
+      subjectId: ids.post,
+      expectedRevision: '1',
+    });
+    let complete!: (value: Awaited<ReturnType<typeof reads>>) => void;
+    reads.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    await click(button(m.book_reader_contents()));
+    await act(async () => book.replace());
+    await settle();
+    await act(async () =>
+      complete({ state: 'ready', csrfToken: 'csrf', value: { state: 'none', subjectId: ids.post } }),
+    );
+    expect(host.textContent).not.toContain(m.book_reader_checkpoint_title());
+  } finally {
+    mock.module('../src/books/reader/native-checkpoint', () => actual);
+  }
 });

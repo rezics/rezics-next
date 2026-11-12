@@ -11818,5 +11818,17 @@
   "book_reader_selection_unavailable": "選択した章は現在利用できません。",
   "book_reader_show_controls": "読書操作を固定",
   "book_reader_title": "ブックリーダー",
-  "book_reader_unavailable": "この閲覧は利用できません。もう一度お試しください。"
+  "book_reader_unavailable": "この閲覧は利用できません。もう一度お試しください。",
+  "book_reader_open_books": "公開書籍を読む",
+  "book_reader_catalogues_empty": "閲覧できる公開書籍はありません。",
+  "book_reader_publication": "公開書籍 {number}",
+  "book_reader_checkpoint_title": "読書のしおり",
+  "book_reader_checkpoint_save": "この章を保存",
+  "book_reader_checkpoint_clear": "しおりを削除",
+  "book_reader_checkpoint_resume": "保存した章から再開",
+  "book_reader_checkpoint_none": "保存した章はありません。",
+  "book_reader_checkpoint_saved": "章を保存しました。",
+  "book_reader_checkpoint_cleared": "しおりを削除しました。",
+  "book_reader_checkpoint_uncertain": "保存または削除の結果を確認できません。同じリクエストを再試行してください。",
+  "book_reader_checkpoint_withheld": "保存した章は現在閲覧できません。しおりは保持されます。"
 }

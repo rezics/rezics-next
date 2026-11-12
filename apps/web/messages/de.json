@@ -11818,5 +11818,17 @@
   "book_reader_selection_unavailable": "Das ausgewählte Kapitel ist derzeit nicht verfügbar.",
   "book_reader_show_controls": "Lesesteuerung anheften",
   "book_reader_title": "Buchleser",
-  "book_reader_unavailable": "Diese Leseansicht ist nicht verfügbar. Versuche es erneut."
+  "book_reader_unavailable": "Diese Leseansicht ist nicht verfügbar. Versuche es erneut.",
+  "book_reader_open_books": "Gehostete Bücher lesen",
+  "book_reader_catalogues_empty": "Keine veröffentlichten Bücher verfügbar.",
+  "book_reader_publication": "Veröffentlichtes Buch {number}",
+  "book_reader_checkpoint_title": "Lesezeichen",
+  "book_reader_checkpoint_save": "Dieses Kapitel speichern",
+  "book_reader_checkpoint_clear": "Lesezeichen löschen",
+  "book_reader_checkpoint_resume": "Gespeichertes Kapitel fortsetzen",
+  "book_reader_checkpoint_none": "Noch kein Kapitel gespeichert.",
+  "book_reader_checkpoint_saved": "Kapitel gespeichert.",
+  "book_reader_checkpoint_cleared": "Lesezeichen gelöscht.",
+  "book_reader_checkpoint_uncertain": "Speichern oder Löschen konnte nicht bestätigt werden. Dieselbe Anfrage erneut versuchen.",
+  "book_reader_checkpoint_withheld": "Das gespeicherte Kapitel ist derzeit nicht verfügbar. Das Lesezeichen bleibt erhalten."
 }

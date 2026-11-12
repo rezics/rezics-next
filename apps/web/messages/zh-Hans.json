@@ -11818,5 +11818,17 @@
   "book_reader_selection_unavailable": "所选章节目前不可用。",
   "book_reader_show_controls": "固定阅读控件",
   "book_reader_title": "书籍阅读器",
-  "book_reader_unavailable": "当前无法阅读，请重试。"
+  "book_reader_unavailable": "当前无法阅读，请重试。",
+  "book_reader_open_books": "阅读托管书籍",
+  "book_reader_catalogues_empty": "目前没有可阅读的已出版书籍。",
+  "book_reader_publication": "已出版书籍 {number}",
+  "book_reader_checkpoint_title": "阅读位置",
+  "book_reader_checkpoint_save": "保存此章节",
+  "book_reader_checkpoint_clear": "清除阅读位置",
+  "book_reader_checkpoint_resume": "继续已保存的章节",
+  "book_reader_checkpoint_none": "尚未保存章节。",
+  "book_reader_checkpoint_saved": "已保存章节。",
+  "book_reader_checkpoint_cleared": "已清除阅读位置。",
+  "book_reader_checkpoint_uncertain": "无法确认保存或清除结果。请重试相同请求。",
+  "book_reader_checkpoint_withheld": "目前无法阅读已保存的章节。阅读位置仍会保留。"
 }

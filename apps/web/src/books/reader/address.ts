@@ -7,7 +7,8 @@ const cursor = v.pipe(v.string(), v.minLength(1), v.maxLength(4096));
 const searchSchema = v.object({
   release: v.optional(hostedId),
   occurrence: v.optional(hostedId),
-  view: v.optional(v.picklist(['chapter', 'contents'])),
+  view: v.optional(v.picklist(['chapter', 'contents', 'catalogues'])),
+  subject: v.optional(hostedId),
   parent: v.optional(hostedId),
   cursor: v.optional(cursor),
   returnParent: v.optional(hostedId),
@@ -57,6 +58,15 @@ export function hostedBookAddressHref(
   address: BookAddress,
   locale: Locale,
   contentsReturn?: BookContentsAddress | null,
+  subjectId?: string,
 ) {
-  return hostedBookHref(address.publication.id, locale, hostedBookSearch(address, contentsReturn));
+  return hostedBookHref(address.publication.id, locale, {
+    ...hostedBookSearch(address, contentsReturn),
+    ...(subjectId ? { subject: subjectId } : {}),
+  });
+}
+
+/** Subject discovery uses the same route; the path operand is a Subject only in this view. */
+export function hostedBookSubjectHref(subjectId: string, locale: Locale, cursor?: string) {
+  return hostedBookHref(subjectId, locale, { view: 'catalogues', ...(cursor ? { cursor } : {}) });
 }

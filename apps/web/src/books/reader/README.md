@@ -6,13 +6,21 @@ Semantic Work, Series and Edition bibliography stays with the [literary catalogu
 
 Decision: mount the retained reader at the localized `/books/$id/read` route; resolve URL release/occurrence selections
 through native public catalogue disclosure and the prepared session, retain bounded return coordinates in links,
-and reread on browser return. Catalogue and Studio consume the declared `books/reader/route.tsx` composition entry.
+and reread on browser return. The current literary Subject view links to the same route's bounded Subject catalogue
+view. The reader uses Library's native hosted-reading checkpoint with explicit save/resume/clear and chapter-level
+positions; no automatic write or ordinary Progress conversion occurs. Hosts use the declared `books/reader/route.tsx`
+composition entry.
 
 ## Production admission and links
 
 `routes/books.$id.read.tsx` follows the existing file-route generator and locale rewrite. It has no public cache,
 preload cache or stale route payload: `staleTime: 0`, `gcTime: 0`, `shouldReload: true` and `sessionReread: true`.
-The default visit is the current public publication's root contents. `readHostedBookVisit` prepares the native Web
+The default catalogue visit is the current public publication's root contents. Subject discovery uses the same
+route with `view=catalogues`; its path ID is then the Subject ID. It calls the generated
+`subjects({id}).hostedCatalogues.get` once with `limit=20` and the optional opaque cursor. Empty and sparse windows
+retain More when supplied, and Retry rereads the same URL. Each row opens its disclosed publication and retains
+`subject` in subsequent exact chapter and contents links. Discovery supplies no catalogue titles, so rows use a
+localized numbered publication label without per-row hydration. `readHostedBookVisit` prepares the native Web
 session, reads the current publication with the installed generated catalogue operation, resolves any frozen
 release and selected occurrence, and produces `NativeHostedBookAdmission` for this visit. A missing catalogue title
 uses the localized Book title; it does not refuse an otherwise readable chapter. Credentials never enter URLs or
@@ -39,7 +47,8 @@ Canonical links use `/{locale}/books/{catalogueId}/read`. Their bounded search c
 | ------------------------------ | ---------------------------------------------------------------------------------- |
 | `release`                      | Frozen native publication revision; omitted only to select the current publication |
 | `occurrence`                   | Stable native placement; exact target is resolved from that frozen publication     |
-| `view`                         | `chapter` or `contents`; no occurrence defaults to contents                        |
+| `view`                         | `chapter`, `contents`, or Subject `catalogues`; no occurrence defaults to contents |
+| `subject`                      | Subject associated with the discovery link; native Library validates every save    |
 | `parent`, `cursor`             | One bounded contents level and its opaque continuation                             |
 | `returnParent`, `returnCursor` | Originating bounded contents position retained by a chapter link                   |
 
@@ -91,16 +100,33 @@ and interactive controls, modifiers, held keys and input methods. Controls wrap 
 area spacing; the document's language/direction is independent of the interface locale. Eight launch locales cover
 controls and recovery: en, zh-Hant, zh-Hans, ja, ko, de, fr and es.
 
-The production composition accepts `renderProgress(page, isCurrent)` only from the existing Commerce owner after
-its own admission. Reads, writes, retry and uncertain outcomes stay there; rendering failure cannot remove the
-chapter. This branch has no Commerce region or native association from a hosted catalogue occurrence to a personal
-progress session/resume destination. That exact association and admitted region remain Commerce-owned. No scalar
-conversion, inferred semantic subject, replacement progress writer or false progress success is supplied.
+`checkpoint.tsx` renders the native Library checkpoint within the admitted page lifetime. It makes one private
+`libraryHostedReading.get` after the chapter or contents is ready, using the prepared session and expected viewer.
+Anonymous and catalogue-only visits perform no private read. Subject discovery links supply the Subject; callers
+may also pass it to `HostedBookReaderLink`. The native save validates the Subject/catalogue association, publication,
+occurrence and exact target, so a URL Subject never creates authority.
+
+Save stores the current exact chapter with `documentPosition: null`. Resume opens the saved publication and
+occurrence at the chapter beginning and reads through the ordinary current Content admission again. It never
+substitutes the current head or another occurrence. Existing checkpoints with a document position retain that fact
+on read; this UI offers chapter-level resume. A withheld resume keeps the exact saved address and clear action,
+without an actionable resume link. The browser receives availability and title, never the checkpoint operation's
+extra disclosed document bytes. The external-response boundary rejects a mismatched occurrence, target revision
+or digest rather than linking to a different saved chapter.
+
+Save and clear use native CAS revisions, idempotency keys and the installed POST BFF's session/CSRF checks. Each
+successful command is followed by one current native get before showing the result. An uncertain delivery keeps
+its exact command and key for Retry. A conflict or changed selection requires a fresh visit; there is no optimistic
+checkpoint success. Reading retirement aborts private requests and fences completion and controls. Ordinary Library
+Progress, page units and Continue remain independent, as owned by [Library](../../../../../services/kernel/src/library/README.md).
+
+The independent `renderProgress(page, isCurrent)` extension remains available for an admitted Commerce region;
+rendering failure cannot remove the chapter. It does not supply or replace the Library checkpoint.
 
 ## Bounds and evidence
 
 One reader retains at most 40 consumer rows (native maximum 20), one chapter, 24 ancestors, two neighbours and one
-contents return. Each host observation makes at most three native operations. Each source observation makes at
+contents return. Each catalogue host observation makes at most three native operations; Subject discovery makes one. Each source observation makes at
 most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + ancestors + selectedResolves`.
 Each operation retains Content's own bounds. Body bytes are at most 2 MiB per resolution; frozen/current resolution
 can read two bodies. Consumer cursors allow 8,192 characters; native/route cursors allow 4,096. There is no growing
@@ -111,29 +137,23 @@ and stories. It is never a production source. Story IDs remain `interfaces-hoste
 `nested-contents`, `exact-chapter`, `sparse-continuation`, `failed-page-recovery`, `moved-occurrence`,
 `unavailable-navigation` and `retired-reading`. Review at 390px/1280px in light/dark and all eight locale globals.
 The incumbent refinement keeps the existing reading measure, wrapping controls, focus rings and safe area spacing.
-The requested Impeccable skill/CLI was not present in the available skill locations; no hook/build was installed.
 
 `tests/hosted-book-reader.test.tsx` retains original bounds, exact operands, reuse, sparse retry, move, focus,
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native
 host observations, public-only selectors, canonical links in eight locales, the actual default file route and
-bounded return through browser Back/Forward. Assertions use explicitly illustrative native-format responses;
+bounded return through browser Back/Forward. New assertions pin sparse Subject discovery, exact CAS save/get/clear,
+withheld resume, response target mismatch, uncertain same-key retry, and retirement of late checkpoint reads. Assertions use explicitly illustrative native-format responses;
 source assertions do not establish native admission or growth acceptance.
 
 Worker acceptance is final-source Web typing and formatting/diff inspection. The dev verifier executes the Web
 owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`. Integration then uses the
 existing Root seeded page-data/capture lane for native nested reading, moved exact links, draft privacy,
 progress/Continue and return. Served revision, native seed and actual phone/desktop light/dark evidence are
-unverified here; source, typing, native execution, visual review and promotion remain separate. Catalogue/Studio
-pages are absent in this branch: their owners must connect the exported link in their delivered surfaces. Commerce's
-missing occurrence-aware admission is recorded above, not described as completed integration.
+unverified here; source, typing, native execution, visual review and promotion remain separate.
 
-Before design, the contract-named sources read were [Web](../../../../../docs/goals/web.md),
-[scope](../../../../../docs/scope.md), this README, [Content hosted chapters](../../../../../services/kernel/src/content/hosted-chapters.md),
-[Threads](../../threads/README.md), [history lifetime](../../threads/post-history-lifetime.md),
-[session](../../session/README.md), [Document](../../../../../packages/document/README.md),
-[UI](../../../../../packages/ui/README.md), [verification](../../../../../docs/development/verification.md),
-the literary reader above, the main checkout's `.reference/INDEX.md` and its read-only production intake
-`.temp/goal/web/production-intake-20261112.md` (absent from this worktree). The read-only
-`legacy-final:apps/web/features/work-page/reader.tsx` and `reader-client.tsx` comparison retains part/chapter context,
-readable body, contents return, mirrored keys and phone controls. Stable occurrence/frozen-body links improve on
-ordinal reading links; legacy scalar progress is not ported.
+Current source orientation: the six retained commits `80ea75c339`, `285f8bb0d2`, `f654556965`, `a5ac14b08e`,
+`6b2ce753d2`, `55fbc8304d`, and the installed `5fb0d0b754` contract and generated client. Before this binding design,
+the owner sources read were this README, [Content hosted chapters](../../../../../services/kernel/src/content/hosted-chapters.md),
+[Library](../../../../../services/kernel/src/library/README.md), its hosted-reading contract and routes,
+[Book catalogue](../catalogue/README.md), the literary reader above, and the reader's exported types, callers and
+acceptance tests. The retained implementation's legacy behavior comparison remains valid for its original revision.

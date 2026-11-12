@@ -22,6 +22,7 @@ import {
   sameSelection,
   uninstalledHostedBookSource,
   type BookAddress,
+  type BookPage,
   type BookChapterPage,
   type BookContentsPage,
   type BookContentsAddress,
@@ -44,6 +45,8 @@ export type HostedBookReaderProps = {
   onNavigate?: BookReaderNavigation;
   onReload?: () => void;
   focusOnRead?: { focus: BookReaderFocus; owner: Element | null };
+  /** Native Library checkpoint controls share the admitted page lifetime. */
+  renderCheckpoint?: (page: BookPage, isCurrent: () => boolean) => ReactNode;
   /** An admitted region rendered by the existing Commerce progress/resume owner. */
   renderProgress?: (page: BookChapterPage, isCurrent: () => boolean) => ReactNode;
 };
@@ -78,7 +81,12 @@ export function HostedBookReader({
       openingAddress,
       locale,
       () => route.current() && session.snapshot() === sessionVersion,
-      { contentsReturn, navigate: onNavigate, reload: onReload, initialFocus: focusOnRead?.focus },
+      {
+        ...(contentsReturn !== undefined ? { contentsReturn } : {}),
+        ...(onNavigate !== undefined ? { navigate: onNavigate } : {}),
+        ...(onReload !== undefined ? { reload: onReload } : {}),
+        ...(focusOnRead !== undefined ? { initialFocus: focusOnRead.focus } : {}),
+      },
     );
   }, [source, addressKey, locale, readingIdentity, session, route, reopening, owner]);
   const previous = useRef(reader);
@@ -100,7 +108,7 @@ export function HostedBookReader({
       {...props}
       reader={reader}
       locale={locale}
-      focusOwner={focusOnRead?.owner}
+      {...(focusOnRead !== undefined ? { focusOwner: focusOnRead.owner } : {})}
       restart={() => {
         if (onReload) {
           onReload();
@@ -112,14 +120,22 @@ export function HostedBookReader({
   );
 }
 
-type ViewProps = Pick<HostedBookReaderProps, 'hrefForAddress' | 'renderProgress'> & {
+type ViewProps = Pick<HostedBookReaderProps, 'hrefForAddress' | 'renderProgress' | 'renderCheckpoint'> & {
   reader: BookReader;
   locale: string;
   restart: () => void;
   focusOwner?: Element | null;
 };
 
-function BookReaderView({ reader, locale, restart, hrefForAddress, renderProgress, focusOwner }: ViewProps) {
+function BookReaderView({
+  reader,
+  locale,
+  restart,
+  hrefForAddress,
+  renderProgress,
+  renderCheckpoint,
+  focusOwner,
+}: ViewProps) {
   const state = useSyncExternalStore(reader.subscribe, reader.getSnapshot, reader.getSnapshot);
   const options = { locale: locale as never };
   const headingId = useId();
@@ -338,6 +354,14 @@ function BookReaderView({ reader, locale, restart, hrefForAddress, renderProgres
           <bdi>{title}</bdi>
         </h1>
       </header>
+      {page && renderCheckpoint ? (
+        <ProgressRegion
+          key={JSON.stringify(page.address)}
+          unavailable={m.book_reader_progress_unavailable({}, options)}
+        >
+          {renderCheckpoint(page, isPageCurrent)}
+        </ProgressRegion>
+      ) : null}
       {page?.kind === 'chapter' ? (
         <>
           <div className="flex flex-wrap items-center gap-2">
