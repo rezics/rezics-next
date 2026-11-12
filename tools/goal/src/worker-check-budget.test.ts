@@ -2093,6 +2093,9 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(h.store.attempt(retained.ref).typingEvidencePending).toBeUndefined();
     expect(h.store.attempt(retained.ref).result).toContain('installed owning Web typecheck');
+    expect(
+      h.store.events(retained.ref.taskId, retained.ref.attempt).some((event) => event.kind === 'typing-evidence-failed'),
+    ).toBe(true);
     expect(h.store.attempt(retained.ref).terminationIntent).toEqual(JSON.parse(beforeStop));
     expect(h.store.retryIntent(retained.ref)).toEqual(JSON.parse(beforeRetry));
     expect(readWorkerCheckHostStamp(budget, '3')).toMatchObject({

@@ -2486,6 +2486,7 @@ export class WorkerStore implements AttemptFence {
     expectedResult: string,
     command: readonly string[],
     eventBody: unknown,
+    restoredBudgetReport?: string,
   ): void {
     this.db
       .transaction(() => {
@@ -2497,6 +2498,88 @@ export class WorkerStore implements AttemptFence {
             JSON.stringify(attempt.typingEvidencePending.command) !== JSON.stringify(command))
         )
           throw new Error('stopped attempt no longer accepts its exact Web typing receipt');
+        if (restoredBudgetReport !== undefined) {
+          const authorizationRow = this.db
+            .query(
+              "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized' ORDER BY sequence DESC LIMIT 1",
+            )
+            .get(ref.taskId, ref.attempt) as Body | null;
+          let authorization: Record<string, unknown> | undefined;
+          try {
+            const parsed: unknown = authorizationRow && JSON.parse(authorizationRow.body);
+            authorization =
+              parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)
+                : undefined;
+          } catch {
+            authorization = undefined;
+          }
+          const failureRow = this.db
+            .query(
+              "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-evidence-failed' ORDER BY sequence DESC LIMIT 1",
+            )
+            .get(ref.taskId, ref.attempt) as Body | null;
+          let failureEvent: Record<string, unknown> | undefined;
+          try {
+            const parsed: unknown = failureRow && JSON.parse(failureRow.body);
+            failureEvent =
+              parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)
+                : undefined;
+          } catch {
+            failureEvent = undefined;
+          }
+          const authorizationActor = authorization?.actor as { id?: unknown; sessionId?: unknown } | undefined;
+          const failureActor = failureEvent?.actor as { id?: unknown; sessionId?: unknown } | undefined;
+          const origin = authorization?.withdrawnBudgetOrigin as WithdrawnTypingRecoveryOrigin | undefined;
+          const trustedReport = readMeasurement(attempt, { policy: this.policy }).result;
+          const progressRow = this.db
+            .query(
+              "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='attempt-progress' ORDER BY sequence DESC LIMIT 1",
+            )
+            .get(ref.taskId, ref.attempt) as Body | null;
+          let sourceHead: unknown;
+          try {
+            sourceHead = progressRow ? (JSON.parse(progressRow.body) as { endHead?: unknown }).endHead : undefined;
+          } catch {
+            sourceHead = undefined;
+          }
+          if (
+            !authorization ||
+            authorization.recoveryKind !== 'withdrawn-budget-stop' ||
+            JSON.stringify(authorization.command) !== JSON.stringify(command) ||
+            Object.keys(failureEvent ?? {}).sort().join(',') !== 'actor,recoveryKind' ||
+            failureEvent?.recoveryKind !== 'withdrawn-budget-stop' ||
+            !authorizationActor ||
+            !failureActor ||
+            typeof authorizationActor.id !== 'string' ||
+            typeof authorizationActor.sessionId !== 'string' ||
+            typeof failureActor.id !== 'string' ||
+            typeof failureActor.sessionId !== 'string' ||
+            failureActor.id !== authorizationActor.id ||
+            failureActor.sessionId !== authorizationActor.sessionId ||
+            !origin ||
+            origin.version !== 1 ||
+            typeof origin.sourceCommit !== 'string' ||
+            !/^[0-9a-f]{40}$/.test(origin.sourceCommit) ||
+            origin.sourceCommit !== sourceHead ||
+            typeof origin.reportSha256 !== 'string' ||
+            !/^[0-9a-f]{64}$/.test(origin.reportSha256) ||
+            typeof origin.failureSha256 !== 'string' ||
+            !/^[0-9a-f]{64}$/.test(origin.failureSha256) ||
+            origin.failureSha256 !== createHash('sha256').update(expectedResult).digest('hex') ||
+            typeof origin.failureStamp !== 'string' ||
+            !/^[1-9]\d*$/.test(origin.failureStamp) ||
+            typeof trustedReport !== 'string' ||
+            trustedReport !== restoredBudgetReport ||
+            createHash('sha256').update(trustedReport).digest('hex') !== origin.reportSha256 ||
+            !(trustedReport.match(/[0-9a-f]{10,40}/gi) ?? []).some((reference) =>
+              origin.sourceCommit.startsWith(reference.toLowerCase()),
+            )
+          )
+            throw new Error('stopped attempt recovery cannot restore an unvalidated originating budget report');
+          attempt.result = trustedReport;
+        }
         attempt.state = 'exited';
         attempt.typingEvidencePending ??= {
           result: 'Compiler evidence for the retained Web source is being reconciled.',

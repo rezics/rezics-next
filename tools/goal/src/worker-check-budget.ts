@@ -625,6 +625,29 @@ function retainedWithdrawnBudgetOriginReport(input: {
     actor.sessionId !== grant.actor.sessionId
   )
     return;
+  const failureRow = db
+    .query(
+      "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-evidence-failed' ORDER BY sequence DESC LIMIT 1",
+    )
+    .get(grant.taskId, grant.attempt) as { body: string } | null;
+  if (!failureRow) return;
+  let failureBody: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(failureRow.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    failureBody = parsed as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  const failureActor = failureBody.actor as { id?: unknown; sessionId?: unknown } | null;
+  if (
+    Object.keys(failureBody).sort().join(',') !== 'actor,recoveryKind' ||
+    failureBody.recoveryKind !== grant.recoveryKind ||
+    !failureActor ||
+    failureActor.id !== grant.actor.id ||
+    failureActor.sessionId !== grant.actor.sessionId
+  )
+    return;
   const origin = body.withdrawnBudgetOrigin as
     | {
         version?: unknown;

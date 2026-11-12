@@ -225,6 +225,7 @@ export async function recoverWorkerTyping(
     const directory = workerCheckBudgetDirectory(settings.stateDirectory, task.id, ref.attempt);
     let eligibilityAttempt = attempt;
     let withdrawnOrigin: WithdrawnTypingRecoveryOrigin | undefined;
+    let withdrawnOriginReport: string | undefined;
     if (
       !workerCheckHostBudgetRefusalReport(attempt.result) &&
       typeof attempt.result === 'string' &&
@@ -252,6 +253,7 @@ export async function recoverWorkerTyping(
       if (recoveredOrigin) {
         eligibilityAttempt = { ...attempt, result: recoveredOrigin.report };
         withdrawnOrigin = recoveredOrigin.origin;
+        withdrawnOriginReport = recoveredOrigin.report;
       }
     }
     const withdrawnRetry = workerCheckHostWithdrawnRetryIsRecoverable({
@@ -350,13 +352,13 @@ export async function recoverWorkerTyping(
         previousResult: attempt.result,
         recoveryKind: 'withdrawn-budget-stop',
         compilerCommand: webCompiler,
-      });
+      }, withdrawnOriginReport);
       await settle(
         tasks,
         { attempt, exited: Promise.resolve({ code: attempt.exitCode ?? 0, signal: null }) },
         landing,
         afterSettle,
-        { withdrawnBudgetRecovery: { previousResult: attempt.result, command: webCompiler } },
+        { withdrawnBudgetRecovery: { previousResult: withdrawnOriginReport ?? attempt.result, command: webCompiler } },
       );
       return {
         ...ref,
