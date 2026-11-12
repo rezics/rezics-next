@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { standingFixture } from './standing-fixture.ts';
+import { standingFixture, type StandingFixtureLifecycle } from './standing-fixture.ts';
 import { createResourceCreationManifest } from '../../src/access/creation-manifest.ts';
 import { parentCreationAuthorization } from '../../src/access/parent-creation.ts';
 import { createAccess } from '../../src/access/permission.ts';
@@ -12,17 +12,22 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 
 let db: GrowthDatabase;
 let f: Awaited<ReturnType<typeof standingFixture>>;
+let fixtureLifecycle: StandingFixtureLifecycle | undefined;
 let actor: Awaited<ReturnType<typeof f.context>>['actor'];
 let access: Access;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
   // reaction:set is a mounted standing action; without it the thread and post templates drop.
-  f = await standingFixture(['reaction:set']);
-  await f.reset();
-  await f.grant(f.actor, 'subject:create');
-  actor = (await f.context()).actor;
-  let account = await readAccount(db.admin, routeOf(f.actor)!, f.actor);
+  f = await standingFixture(['reaction:set'], undefined, (lifecycle) => {
+    fixtureLifecycle = lifecycle;
+  });
+  await fixtureLifecycle!.run('reset standing fixture rows', () => f.reset());
+  await fixtureLifecycle!.run('grant fixture creator', () => f.grant(f.actor, 'subject:create'));
+  actor = (await fixtureLifecycle!.run('issue fixture Auth token', () => f.context())).actor;
+  let account = await fixtureLifecycle!.run('read growth actor', () =>
+    readAccount(db.admin, routeOf(f.actor)!, f.actor),
+  );
   access = createAccess({
     actions: new Map(
       f.actions.map((action) => [
@@ -39,10 +44,17 @@ beforeAll(async () => {
     account = await readAccount(db.pool, routeOf(f.actor)!, f.actor);
     return prepare(...args);
   };
+  fixtureLifecycle!.ready();
 }, 30000);
 afterAll(async () => {
-  await f?.close();
-  await db?.close();
+  const pendingOperation = fixtureLifecycle?.pendingOperation;
+  try {
+    await fixtureLifecycle?.close();
+    if (pendingOperation && pendingOperation !== 'ready')
+      throw new Error(`Standing fixture startup did not complete; pending operation: ${pendingOperation}`);
+  } finally {
+    await db?.close();
+  }
 });
 async function createAndReplay(k: number) {
   const route = f.otherResource.route;
