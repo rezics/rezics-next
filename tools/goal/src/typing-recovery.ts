@@ -81,9 +81,7 @@ function eventActorIsAllowed(
 
 function hasRetainedOverwrittenOrigin(events: readonly { kind: string; body: string }[]): boolean {
   return events.some(
-    (event) =>
-      event.kind === 'typing-recovery-authorized' &&
-      event.body.includes('"withdrawnBudgetOrigin"'),
+    (event) => event.kind === 'typing-recovery-authorized' && event.body.includes('"withdrawnBudgetOrigin"'),
   );
 }
 
@@ -151,7 +149,9 @@ function reconstructOverwrittenOrigin(input: {
   directory: string;
 }): { report: string; origin: WithdrawnTypingRecoveryOrigin } | undefined {
   if (
-    input.events.some((event) => event.kind === 'typing-recovery-authorized' || event.kind === 'typing-evidence-recovery')
+    input.events.some(
+      (event) => event.kind === 'typing-recovery-authorized' || event.kind === 'typing-evidence-recovery',
+    )
   )
     return;
   const failure = input.events.findLast((event) => event.kind === 'typing-evidence-failed');
@@ -347,12 +347,18 @@ export async function recoverWorkerTyping(
       workerCheckHostHasTypecheckRun(directory) &&
       workerCheckHostTypingReceiptMatches(directory, webCompiler);
     if (withdrawnRetry && hasWebReceipt) {
-      store.beginWithdrawnTypingRecoverySettlement(ref, attempt.result, webCompiler, {
-        actor: authority,
-        previousResult: attempt.result,
-        recoveryKind: 'withdrawn-budget-stop',
-        compilerCommand: webCompiler,
-      }, withdrawnOriginReport);
+      store.beginWithdrawnTypingRecoverySettlement(
+        ref,
+        attempt.result,
+        webCompiler,
+        {
+          actor: authority,
+          previousResult: attempt.result,
+          recoveryKind: 'withdrawn-budget-stop',
+          compilerCommand: webCompiler,
+        },
+        withdrawnOriginReport,
+      );
       await settle(
         tasks,
         { attempt, exited: Promise.resolve({ code: attempt.exitCode ?? 0, signal: null }) },

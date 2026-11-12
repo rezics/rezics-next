@@ -2548,7 +2548,9 @@ export class WorkerStore implements AttemptFence {
             !authorization ||
             authorization.recoveryKind !== 'withdrawn-budget-stop' ||
             JSON.stringify(authorization.command) !== JSON.stringify(command) ||
-            Object.keys(failureEvent ?? {}).sort().join(',') !== 'actor,recoveryKind' ||
+            Object.keys(failureEvent ?? {})
+              .sort()
+              .join(',') !== 'actor,recoveryKind' ||
             failureEvent?.recoveryKind !== 'withdrawn-budget-stop' ||
             !authorizationActor ||
             !failureActor ||

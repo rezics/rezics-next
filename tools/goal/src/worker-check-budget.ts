@@ -205,10 +205,7 @@ type TypingStampEvidence = {
   reason?: string;
 };
 
-function typingStampEvidence(
-  worktree: string,
-  source: WorkerCheckHostStampRecord,
-): TypingStampEvidence {
+function typingStampEvidence(worktree: string, source: WorkerCheckHostStampRecord): TypingStampEvidence {
   let receipt = source.typingInputs;
   let rejected = false;
   let reason = source.typingInputsUnavailable;
@@ -607,8 +604,7 @@ function retainedWithdrawnBudgetOriginReport(input: {
     return;
   }
   if (
-    Object.keys(body).sort().join(',') !==
-      'actor,checkId,command,identity,recoveryKind,token,withdrawnBudgetOrigin' ||
+    Object.keys(body).sort().join(',') !== 'actor,checkId,command,identity,recoveryKind,token,withdrawnBudgetOrigin' ||
     body.recoveryKind !== grant.recoveryKind ||
     body.token !== grant.token ||
     body.identity !== grant.identity ||
@@ -678,9 +674,7 @@ function retainedWithdrawnBudgetOriginReport(input: {
   if (
     !workerCheckHostBudgetRefusalReport(report) ||
     createHash('sha256').update(report).digest('hex') !== origin.reportSha256 ||
-    !(report.match(/[0-9a-f]{10,40}/gi) ?? []).some((reference) =>
-      sourceCommit.startsWith(reference.toLowerCase()),
-    )
+    !(report.match(/[0-9a-f]{10,40}/gi) ?? []).some((reference) => sourceCommit.startsWith(reference.toLowerCase()))
   )
     return;
 
@@ -1625,8 +1619,7 @@ export function workerCheckHostStaleTypingFailureSelection(input: {
   for (const name of candidates) {
     const source = readWorkerCheckHostStamp(input.directory, name);
     const failed =
-      source.typecheckFailed === true ||
-      (source.typingInputs !== undefined && source.typingInputs.exitCode !== 0);
+      source.typecheckFailed === true || (source.typingInputs !== undefined && source.typingInputs.exitCode !== 0);
     if (!failed) continue;
     const evidence = typingStampEvidence(input.worktree, source);
     const receipt = evidence.receipt;
@@ -1639,7 +1632,9 @@ export function workerCheckHostStaleTypingFailureSelection(input: {
       input.stamp !== undefined &&
       typechecks.slice(selectedIndex + 1).some((later) => {
         const stamp = readWorkerCheckHostStamp(input.directory, later);
-        return stamp.typecheckFailed === true || (stamp.typingInputs !== undefined && stamp.typingInputs.exitCode !== 0);
+        return (
+          stamp.typecheckFailed === true || (stamp.typingInputs !== undefined && stamp.typingInputs.exitCode !== 0)
+        );
       })
     )
       return;
@@ -1701,11 +1696,13 @@ export function workerCheckHostTypingSettlement(input: {
       }
       if (failed) {
         if (receipt)
-          sourceReason ??= 'Retained compiler input identity differs from current inputs; typing-only proof is required.';
+          sourceReason ??=
+            'Retained compiler input identity differs from current inputs; typing-only proof is required.';
         else if (!receipt && source.typingRequest)
           sourceReason ??= 'Compiler input closure was not returned by the owning compiler.';
         else if (!fullTreeMatches)
-          sourceReason ??= 'Legacy evidence has no retained compiler-input closure; its original full content identity is required.';
+          sourceReason ??=
+            'Legacy evidence has no retained compiler-input closure; its original full content identity is required.';
         unavailableReason ??= sourceReason;
         continue;
       }

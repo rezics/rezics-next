@@ -321,7 +321,11 @@ function gitWorktree(path: string): void {
 
 function countedFailure(env: NodeJS.ProcessEnv, logPath: string, log: string, exitCode = 1, worktree?: string): void {
   writeFileSync(logPath, log);
-  settleWorkerCheckHostBudget(env, exitCode, true, { log: logPath, argv: combinedArgv, ...(worktree ? { worktree } : {}) });
+  settleWorkerCheckHostBudget(env, exitCode, true, {
+    log: logPath,
+    argv: combinedArgv,
+    ...(worktree ? { worktree } : {}),
+  });
 }
 
 test('after two failed runs, one final verification run is admitted when the worktree changed; a second final or unchanged content is refused as today', () => {
@@ -1876,9 +1880,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       .query('UPDATE worker_events SET body=? WHERE sequence=?')
       .run(JSON.stringify({ actor, recoveryKind: 'other' }), failureEvent.sequence);
     await expect(recover()).rejects.toThrow();
-    h.store.db
-      .query('UPDATE worker_events SET body=? WHERE sequence=?')
-      .run(failureEvent.body, failureEvent.sequence);
+    h.store.db.query('UPDATE worker_events SET body=? WHERE sequence=?').run(failureEvent.body, failureEvent.sequence);
     const savedEvidence = evidencePaths.map((paths) => paths.map((path) => readFileSync(path, 'utf8')));
     const restoreEvidence = () =>
       evidencePaths.forEach((paths, row) =>
@@ -2030,7 +2032,9 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       Object.assign(process.env, issuedProof.env);
       expect(() => startWorkerCheck(compiler, worktree, () => {})).toThrow();
     } finally {
-      h.store.db.query('UPDATE worker_events SET body=? WHERE sequence=?').run(authorization!.body, authorization!.sequence);
+      h.store.db
+        .query('UPDATE worker_events SET body=? WHERE sequence=?')
+        .run(authorization!.body, authorization!.sequence);
       for (const key of Object.keys(process.env)) if (!(key in originCheckEnvironment)) delete process.env[key];
       Object.assign(process.env, originCheckEnvironment);
     }
@@ -2094,7 +2098,9 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     expect(h.store.attempt(retained.ref).typingEvidencePending).toBeUndefined();
     expect(h.store.attempt(retained.ref).result).toContain('installed owning Web typecheck');
     expect(
-      h.store.events(retained.ref.taskId, retained.ref.attempt).some((event) => event.kind === 'typing-evidence-failed'),
+      h.store
+        .events(retained.ref.taskId, retained.ref.attempt)
+        .some((event) => event.kind === 'typing-evidence-failed'),
     ).toBe(true);
     expect(h.store.attempt(retained.ref).terminationIntent).toEqual(JSON.parse(beforeStop));
     expect(h.store.retryIntent(retained.ref)).toEqual(JSON.parse(beforeRetry));
