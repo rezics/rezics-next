@@ -4,7 +4,10 @@ import { createServerOnlyFn } from '@tanstack/react-start';
 import type { PagePaths } from '../../shell/head';
 import { locales } from '../../paraglide/runtime.js';
 import { accountHref, subjectHref } from '../../subject/subject-href';
-import { loadSubjectPage, PageReadError, subjectPageTitle, subjectBody, type SubjectPageData } from './subject';
+import { loadSubjectPage, PageReadError } from './subject-page-load';
+import { subjectPageTitle } from './subject-page-summary';
+import { subjectBody } from './subject-read';
+import type { SubjectPageData } from './page-model';
 
 /** Canonical identity uses the same selected reading as the page, never an anonymous Global label probe. */
 export const loadContextSubject = createServerOnlyFn(async function loadContextSubject(

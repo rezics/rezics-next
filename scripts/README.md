@@ -60,6 +60,11 @@ leaves Home mount unobserved. A missing selected section is a selector mismatch 
 true. The action stage distinguishes not started, started, settled and failed, so a native 200 cannot imply that a
 browser action ran. The manifest selectors and shared readiness deadline stay unchanged.
 
+The separate cold-start regression is `apps/web/tests/local-web-startup.test.ts`; it observes `/en` hydration, Home's
+mount marker and an interactive shell control before page-data readers run. Browser mount and native health remain
+independent observations. Keep route loader helpers outside React page modules and install page render bindings only
+from the split view; this prevents a cold route reference from eagerly importing unrelated reader components.
+
 The bounded Chromium fixture suite is `bun test scripts/page-data-check.test.ts`. It covers redirect recovery,
 delayed unrelated resources, context replacement, independently unready sections, redirect deadline expiry, target
 loss and the distinction between genuine empty content and an unrun reader. The fixture uses local Web and Kernel

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test('installed serve composition discovers client dependencies on visits without crawling the server entry', () => {
+test('installed serve composition bounds client dependency optimization without crawling the server entry', () => {
   // Resolve under Node, like the installed Vite CLI. The unmerged app configuration cannot reveal entries added
   // by TanStack and Cloudflare's environment hooks. No server, compiler or native service is started here.
   const result = Bun.spawnSync({
@@ -20,13 +20,23 @@ test('installed serve composition discovers client dependencies on visits withou
         delete process.env.REZICS_TEST_RUNTIME;
         delete process.env.REZICS_WALK_STACK_SLOT;
         const config = await resolveConfig({ logLevel: 'silent' }, 'serve', 'development');
+        assert.ok(
+          config.plugins.some((plugin) => plugin.name === 'tanstack-router:code-splitter:compile-reference-file'),
+          'the installed Web Start serve config enables route code splitting',
+        );
         for (const [name, options] of [
           ['root', config.optimizeDeps],
           ['client', config.environments.client.optimizeDeps],
         ]) {
           assert.deepEqual(options.entries, [], name + ': no startup source crawl');
           assert.equal(options.holdUntilCrawlEnd, false, name + ': on-demand discovery');
-          assert.notEqual(options.noDiscovery, true, name + ': discovery remains enabled');
+          assert.equal(options.noDiscovery, true, name + ': dependency discovery stays bounded');
+          assert.ok(options.include.includes('@base-ui/react/*'), name + ': shell primitives are prebundled');
+          assert.ok(
+            options.include.includes('@base-ui/react/unstable-use-media-query > use-sync-external-store/shim'),
+            name + ': Base UI’s CommonJS external-store shim is prebundled',
+          );
+          assert.ok(options.include.includes('lucide-react'), name + ': navigation icons are prebundled');
         }
         const worker = config.environments.ssr.optimizeDeps;
         assert.deepEqual(worker.entries, []);
@@ -47,6 +57,7 @@ test('installed serve composition discovers client dependencies on visits withou
         try {
           for (const [file, view] of [
             ['index', '/routes/-home'],
+            ['drafts', '/threads/drafts-route'],
             ['editions/new', '/content-editions/edition-create-route'],
             ['editions/index', '/content-editions/creator-editions-route'],
             ['editions/$id', '/content-editions/edition-route'],
@@ -58,6 +69,15 @@ test('installed serve composition discovers client dependencies on visits withou
             const visited = await routes.environments.ssr.transformRequest(path + '?tsr-split=component');
             assert.ok(visited.code.includes(view), file + ': visiting loads the unchanged view');
           }
+          const subjectReference = await routes.environments.ssr.transformRequest(
+            '/src/routes/subjects/$id_.$slug.tsx',
+          );
+          assert.ok(subjectReference.code.includes('lazyRouteComponent'), 'Subject view is lazy');
+          assert.ok(!subjectReference.code.includes('/features/pages/subject.tsx'), 'Subject view stays out of the route reference');
+          assert.ok(
+            !subjectReference.code.includes('/features/catalogue/page-render-binding.tsx'),
+            'route loaders do not import the Subject React binding',
+          );
           const rules = await routes.environments.ssr.transformRequest('/src/community/realm-rules-authoring/panel.tsx');
           assert.ok(rules.code.includes('/paraglide/messages/realm_rules_authoring_open.js'));
           assert.ok(!rules.code.includes('/paraglide/messages.js'), 'rules labels do not load the full catalogue');

@@ -10,7 +10,7 @@ import { RichPrivateEntry } from '../../library/rich-private-entry/view';
 import { useSubjectLibraryObservation } from '../../library/subject-library-current-origin';
 import { ConfiguredProfileControls, isMangaLibrarySubject } from '../../library/configured-profile-controls';
 import type { useSession } from '../../session/query';
-import type { SubjectFrameData } from './subject-frame';
+import type { SubjectFrameData } from './subject-frame-model';
 import { subjectLibraryQuery } from './subject-queries';
 
 type ReaderSession = ReturnType<typeof useSession>;

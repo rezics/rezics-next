@@ -77,6 +77,25 @@ test('the installed Elysia graph fails first on typebox/type and resolves it thr
   );
 });
 
+test('walk client optimization inputs are explicit and part of the shared cache identity', () => {
+  expect(webViteOptimizerIdentity.walkClient.noDiscovery).toBe(true);
+  expect(webViteOptimizerIdentity.walkClient.include).toContain(
+    '@base-ui/react/unstable-use-media-query > use-sync-external-store/shim',
+  );
+  const withoutExternalStore = {
+    ...webViteOptimizerIdentity,
+    walkClient: {
+      ...webViteOptimizerIdentity.walkClient,
+      include: webViteOptimizerIdentity.walkClient.include.filter(
+        (specifier) => specifier !== '@base-ui/react/unstable-use-media-query > use-sync-external-store/shim',
+      ),
+    },
+  };
+  expect(hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: webViteOptimizerIdentity })).not.toBe(
+    hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: withoutExternalStore }),
+  );
+});
+
 test('a lock hash reuses one published cache and a changed lock builds its own directory', async () => {
   const home = cacheHome();
   const workspaceRoot = join(temporary, 'workspace');

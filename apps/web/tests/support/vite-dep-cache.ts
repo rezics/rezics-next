@@ -206,18 +206,44 @@ export function elysiaTypeboxLiveModuleCode(id: string): string | undefined {
 
 /** Full-route optimizer identity used to prebuild the shared test cache before private-network checks. */
 export const webViteClientOptimizeDeps = {
+  noDiscovery: false,
   entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts'],
   holdUntilCrawlEnd: true,
+  include: [] as string[],
   exclude: [...webViteCalendarOptimizeDeps],
 } as const;
 
 /**
- * Interactive and walk servers compile visited pages on demand. Crawling every catalogue route with
- * holdUntilCrawlEnd delayed listen and exhausted Node's 2 GiB heap after `/en` SSR.
+ * Interactive servers keep dependency optimization explicit. Vite's cold scan follows the generated route tree's
+ * dynamic imports, walking every reader and re-optimizing the browser while the first route is loading. These are
+ * the installed dependencies the Web graph asks Vite to bundle; other ESM modules remain loadable on demand.
  */
 export const webViteWalkClientOptimizeDeps = {
+  noDiscovery: true,
   holdUntilCrawlEnd: false,
   entries: [] as string[],
+  include: [
+    '@base-ui/react/*',
+    '@inlang/paraglide-js/urlpattern-polyfill',
+    '@base-ui/react/unstable-use-media-query > use-sync-external-store/shim',
+    '@tanstack/react-query',
+    '@tanstack/react-router > @tanstack/react-store',
+    '@tanstack/react-router-ssr-query',
+    'lucide-react',
+    'openid-client',
+    'react',
+    'react-dom',
+    'react-dom/client',
+    'react/jsx-dev-runtime',
+    'react/jsx-runtime',
+    'typebox',
+    'typebox/compile',
+    'typebox/schema',
+    'typebox/system',
+    'typebox/type',
+    'typebox/value',
+    'valibot',
+  ],
   exclude: [...webViteCalendarOptimizeDeps],
 } as const;
 
@@ -294,6 +320,7 @@ export const webViteWorkerSsrEnvironment = {
 /** Optimizer inputs that decide what is pre-bundled. Worktree paths and serve plugin lists are restamped later. */
 export const webViteOptimizerIdentity = {
   client: webViteClientOptimizeDeps,
+  walkClient: webViteWalkClientOptimizeDeps,
   ssr: {
     noDiscovery: webViteWorkerSsrOptimizeDeps.noDiscovery,
     holdUntilCrawlEnd: webViteWorkerSsrOptimizeDeps.holdUntilCrawlEnd,

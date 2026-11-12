@@ -3,7 +3,8 @@ import { useLocation, useRouter, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { SubjectFrame, subjectFrame, SubjectViewPage } from '../features/pages/subject-frame';
+import { SubjectFrame, SubjectViewPage } from '../features/pages/subject-frame';
+import { subjectFrame } from '../features/pages/subject-frame-model';
 import { SubjectPage, subjectPageTitle, subjectPageType, type SubjectPageData } from '../features/pages/subject';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import {

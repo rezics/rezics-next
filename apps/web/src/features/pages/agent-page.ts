@@ -9,7 +9,8 @@ import { shareCardImage } from '../../shell/share-card';
 import type { ShareCardProjection } from '../../media/share-card';
 import type { AccountProfile } from './account-read';
 import { agentPath, pageProfile } from './agent';
-import { subjectRead, type SubjectPageData } from './subject';
+import { subjectRead } from './subject-read';
+import type { SubjectPageData } from './page-model';
 import type { AccountView } from '../../accounts/public-profile/page-read';
 import { isRecord, pageText, webUrl } from './shared';
 

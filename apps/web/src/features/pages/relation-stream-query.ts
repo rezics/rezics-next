@@ -10,7 +10,8 @@ import {
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { notFound } from '@tanstack/react-router';
-import { pageContext, loadSubjectPage, PageReadError } from './subject';
+import { pageContext } from './page-model';
+import { loadSubjectPage, PageReadError } from './subject-page-load';
 import { validatePageNode, validatePageRealm, validateViewCursor } from './view-cursor';
 import type { Section } from './overview';
 import { relationRetryAfter, sectionFailure } from './relation-retry-admission';

@@ -10,7 +10,7 @@ import { requestLanguages } from '../../kernel/languages';
 import { cataloguePageBody, PageReadError, pageReadError, type NativePageBody } from './page-read-failure';
 import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import { accountOf } from './account-profile-reading';
-import { readTermsPageAuthority, selectSubjectPageProfiles } from './subject-page-application';
+import { readTermsPageAuthority, selectSubjectPageProfiles } from './subject-page-composition';
 import { pageContext, type SubjectPageData } from './page-model';
 import { subjectBody } from './subject-read';
 import { isRecord } from './shared';

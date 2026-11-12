@@ -1,12 +1,5 @@
-import type { KernelClient, SubjectRead } from '@rezics/client';
-import type { Release } from '@rezics/definitions';
 import type { ReactNode } from 'react';
-import { assertSubjectPageReadActive } from './subject-page-read-lifetime';
-import type { SubjectPageData } from './subject';
-import { showcaseWorkKind } from './showcase-work/model';
-type Subject = SubjectRead['subject'];
 import type {
-  GameGroups,
   AlbumCurrentVisitReturnProps,
   CharacterAssociationBridgeProps,
   GameClassificationReturn,
@@ -17,13 +10,12 @@ import type {
   RecipeCurrentVisitReturnProps,
   RecipeOccurrence,
   SemanticRenderPort,
-  TermsPageAuthority,
   WorkTagReadingProps,
 } from './semantic-render-port';
 
 let renderPort: SemanticRenderPort | undefined;
 
-/** Install the concrete catalogue binding once at the Web composition root. */
+/** Install the concrete catalogue binding once at the Subject page composition boundary. */
 export function installSemanticRenderPort(port: SemanticRenderPort): void {
   renderPort = port;
 }
@@ -31,66 +23,6 @@ export function installSemanticRenderPort(port: SemanticRenderPort): void {
 export function semanticRenderPort(): SemanticRenderPort {
   if (!renderPort) throw new Error('Subject page Semantic render port is not installed');
   return renderPort;
-}
-
-/** The page application owns the empty, unsupported, unavailable and released outcomes for the pinned guide read. */
-export async function includeReleasedWorkCatalogue(
-  client: KernelClient,
-  page: SubjectPageData,
-  subject: Pick<Subject, 'type' | 'release'> | undefined,
-  authorization: string | undefined,
-  signal: AbortSignal,
-): Promise<SubjectPageData> {
-  if (page.catalogue || page.account || !subject || !showcaseWorkKind(subject.type)) return page;
-  try {
-    const release = await semanticRenderPort().definitions.readGuideRelease(
-      client,
-      subject.release,
-      authorization ? { authorization } : {},
-      signal,
-    );
-    assertSubjectPageReadActive(signal);
-    const released = Object.hasOwn(release.types, subject.type);
-    return {
-      ...page,
-      catalogue: released
-        ? {
-            state: 'released',
-            type: subject.type,
-            digest: release.digest,
-            definitions: { types: release.types, properties: release.properties },
-          }
-        : { state: 'unsupported', type: subject.type },
-    };
-  } catch (error) {
-    if (!semanticRenderPort().definitions.isGuideReadError(error)) throw error;
-    assertSubjectPageReadActive(signal);
-    return { ...page, catalogue: { state: 'unavailable', type: subject.type } };
-  }
-}
-
-export type SubjectPageProfileSelection = {
-  gameReader: boolean;
-  gameType: boolean;
-  gameGroups: GameGroups;
-  releasedWorkNames: boolean;
-};
-
-/** Select only from the current subject and its current released definitions. */
-export function selectSubjectPageProfiles(input: {
-  type: string;
-  summaryTypes?: readonly string[] | undefined;
-  definitions?: Pick<Release, 'types' | 'properties'> | undefined;
-}): SubjectPageProfileSelection {
-  const port = semanticRenderPort().subjects;
-  const emptyGroups: GameGroups = { credits: [], classification: [], relations: [], facts: [] };
-  const gameType = input.definitions ? port.gameType(input.definitions, input.type) : false;
-  return {
-    gameReader: port.gameReaderEntry(input.type, input.summaryTypes),
-    gameType,
-    gameGroups: gameType && input.definitions ? port.gameGroups(input.definitions, input.type) : emptyGroups,
-    releasedWorkNames: port.supportsReleasedWorkNames(input.type, input.definitions),
-  };
 }
 
 export function gameClassificationDescriptor(address: string): GameClassificationReturn | undefined {
@@ -148,15 +80,6 @@ export function AlbumCurrentVisitReturn(props: AlbumCurrentVisitReturnProps): Re
 
 export function CharacterAssociationBridge(props: CharacterAssociationBridgeProps): ReactNode {
   return semanticRenderPort().components.characterAssociationBridge(props);
-}
-
-export function readTermsPageAuthority(
-  client: KernelClient,
-  viewer: 'signed-in' | 'signed-out' | 'unavailable',
-  authorization?: string,
-  signal?: AbortSignal,
-): Promise<TermsPageAuthority> {
-  return semanticRenderPort().subjects.readTermsPageAuthority(client, viewer, authorization, signal);
 }
 
 export function parseRecipeCurrentReturn(href: string, locale: string): RecipeCurrentReturnInput {
