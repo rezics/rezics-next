@@ -25,6 +25,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   capture,
+  captureWithFoldedCost,
   checkGrowth,
   openGrowthDatabase,
   seed,
@@ -621,11 +622,13 @@ test.serial('a settled protected Realm member reads its boards, threads and post
   const postId = postCreated.value.post.id as string;
 
   const protectedPaths = [
+    [`/v1/realms/${protectedRealm.realmId}/boards`, `/v1/realms/${newId(routeOf(protectedRealm.realmId)!)}/boards`],
+    [`/v1/boards/${board.id}/threads`, `/v1/boards/${newId(board.route)}/threads`],
     [`/v1/boards/${board.id}`, `/v1/boards/${newId(board.route)}`],
     [`/v1/threads/${threadId}`, `/v1/threads/${newId(routeOf(threadId)!)}`],
     [`/v1/posts/${postId}`, `/v1/posts/${newId(routeOf(postId)!)}`],
   ] as const;
-  const capturedThreadRead = await capture(db, () =>
+  const capturedThreadRead = await captureWithFoldedCost(db, () =>
     call('GET', `/v1/threads/${threadId}`, { bearer: protectedMember.bearer }),
   );
   expect(capturedThreadRead.value.response.status).toBe(200);
@@ -781,6 +784,7 @@ test.serial('a settled protected Realm member reads its boards, threads and post
   const report = await checkGrowth(db, {
     name: 'Protected Realm member thread read',
     rule: 'series',
+    captureMode: 'cost-folded',
     // Content/Access Cost: 32 exact content, account/inverse and Realm/head
     // descents, plus 32 temporal role-grant descents for the fixed member and
     // active-accounts keys across preparation and final permission checks.
@@ -813,6 +817,33 @@ test.serial('a settled protected Realm member reads its boards, threads and post
   });
   expect(left.response.status).toBe(202);
   await settleMembership(left.value.workflowId as string);
+  for (const [path, missingPath] of protectedPaths) {
+    await expectHiddenAsMissing(path, missingPath, protectedMember.bearer);
+  }
+
+  const rejoined = await call('POST', `/v1/realms/${protectedRealm.realmId}/members`, {
+    bearer: owner.bearer,
+    key: crypto.randomUUID(),
+    body: { accountId: protectedMember.accountId },
+  });
+  expect(rejoined.response.status).toBe(202);
+  await settleMembership(rejoined.value.workflowId as string);
+  for (const [path] of protectedPaths) {
+    expect((await call('GET', path, { bearer: protectedMember.bearer })).response.status).toBe(200);
+  }
+
+  const banned = await call('PUT', `/v1/realms/${protectedRealm.realmId}/bans/${protectedMember.accountId}`, {
+    bearer: moderator.bearer,
+    key: crypto.randomUUID(),
+    body: { reason: 'Protected reads close before membership cleanup' },
+  });
+  expect(banned.response.status).toBe(200);
+  expect(banned.value.ban.workflowId).toEqual(expect.any(String));
+  // The ban is authoritative before its queued membership removal is awaited.
+  for (const [path, missingPath] of protectedPaths) {
+    await expectHiddenAsMissing(path, missingPath, protectedMember.bearer);
+  }
+  await settleMembership(banned.value.ban.workflowId as string);
   for (const [path, missingPath] of protectedPaths) {
     await expectHiddenAsMissing(path, missingPath, protectedMember.bearer);
   }
@@ -905,24 +936,30 @@ test.serial('board reads authorize with no planner method settings', async () =>
     'ANALYZE access.account, access.membership_inverse, access.resource_grant, access.resource_role_grant, community.realm_member',
   );
 
-  // Seed grants and other member rows at 500 × 8, keeping the protected Realm, board, and page fixed.
-  const reads = await capture(db, async () => {
-    const boardRead = await call('GET', `/v1/boards/${board.id}`, { bearer: member.bearer });
-    const realmBoards = await call('GET', `/v1/realms/${protectedRealm.realmId}/boards`, { bearer: member.bearer });
-    const boardThreads = await call('GET', `/v1/boards/${board.id}/threads`, { bearer: member.bearer });
-    expect(boardRead.response.status).toBe(200);
-    expect(realmBoards.response.status).toBe(200);
-    expect(realmBoards.value.items.map((item: Board) => item.id)).toContain(board.id);
-    expect(boardThreads.response.status).toBe(200);
-    expect(boardThreads.value.threads.map((thread: { id: string }) => thread.id)).toContain(
-      threadCreated.value.thread.id,
-    );
-  });
-
-  expect(reads.capture.statements.join('\n')).not.toMatch(/\b(SET|set_config)\b[^;]*\benable_/is);
-  const grantScans = relationPlanNodes(reads.capture.plans, 'resource_grant');
+  // Retain raw plans only for the point read whose index names are asserted.
+  // The page journeys retain all nested native costs without keeping full plan documents.
+  const boardRead = await capture(db, () => call('GET', `/v1/boards/${board.id}`, { bearer: member.bearer }));
+  expect(boardRead.value.response.status).toBe(200);
+  expect(boardRead.capture.statements.join('\n')).not.toMatch(/\b(SET|set_config)\b[^;]*\benable_/is);
+  const grantScans = relationPlanNodes(boardRead.capture.plans, 'resource_grant');
   expect(grantScans.length).toBeGreaterThan(0);
   expect(grantScans.map((node) => node['Index Name'])).toContain('resource_grant_pkey');
+
+  const realmBoards = await captureWithFoldedCost(db, () =>
+    call('GET', `/v1/realms/${protectedRealm.realmId}/boards`, { bearer: member.bearer }),
+  );
+  expect(realmBoards.value.response.status).toBe(200);
+  expect(realmBoards.value.value.items.map((item: Board) => item.id)).toContain(board.id);
+  expect(realmBoards.capture.statements.join('\n')).not.toMatch(/\b(SET|set_config)\b[^;]*\benable_/is);
+
+  const boardThreads = await captureWithFoldedCost(db, () =>
+    call('GET', `/v1/boards/${board.id}/threads`, { bearer: member.bearer }),
+  );
+  expect(boardThreads.value.response.status).toBe(200);
+  expect(boardThreads.value.value.threads.map((thread: { id: string }) => thread.id)).toContain(
+    threadCreated.value.thread.id,
+  );
+  expect(boardThreads.capture.statements.join('\n')).not.toMatch(/\b(SET|set_config)\b[^;]*\benable_/is);
 });
 
 test.serial(
@@ -1087,6 +1124,7 @@ test.serial(
     // Growth model: grow grants, memberships, other Realms and their boards, and threads on other boards at 500 × scale; keep the listed Realm and page fixed.
     const report = await checkGrowth(db, {
       name: 'Realm board listing',
+      captureMode: 'cost-folded',
       scales: [8, 32, 128],
       repetitions: 3,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },

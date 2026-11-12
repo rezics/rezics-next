@@ -3353,6 +3353,11 @@ current Community presentation through Semantic, so their separate cases retain 
 creation has distinct Realm and Global branches: Realm creation reaches Semantic scheme resolution plus
 Realm/Access authorization; Global creation reaches Concept identity/type and Global Context Access.
 
+Decision: protected Realm member thread-read growth uses the series rule at 8/32/128 with 500× unrelated
+populations and 64 index descents. Aggregate-only Realm/board journeys retain full nested native costs through
+cost-folded capture; raw plans are scoped to the board point read that asserts index names. Closed membership and current bans
+conceal board, thread and post reads; ban concealment precedes asynchronous membership cleanup settlement.
+
 ### Realm Concept board creation
 
 - Touches: native participation, Realm read and `board:create` proofs; current Realm scheme/head; Semantic's
