@@ -3277,7 +3277,9 @@ shelf and all optional notifications.
 
 Decision: preference growth keeps the original maximal shelf and notification shapes, scales and cost bounds. Each
 check names its seeded relations so the shared harness analyzes only those relations before measurement. Checks sharing
-a database run exclusively in admission order, and closing drains admitted checks before releasing their pools.
+a database run exclusively in admission order, and closing drains admitted checks before releasing their pools. Each
+scale stages route-valid IDs once and inserts its account, preference, grant and receipt rows from that set in one
+transaction before the harness begins maintenance.
 
 Content calls `notificationAllowed(client, { recipient, kind }): Promise<boolean>`, exported from Access, at send
 time. An unknown kind throws `TypeError` before any read. A missing, deleted or pending recipient returns false.
