@@ -1955,12 +1955,7 @@ async function runDedicatedPageDataStack(
 
     seedStatus = await runPageDataSeedBoundary(
       head,
-      () =>
-        runGit(settings.mainCheckout, [
-          'rev-parse',
-          '--verify',
-          `refs/heads/${settings.integrationBranch}`,
-        ]),
+      () => runGit(settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${settings.integrationBranch}`]),
       async () => {
         await runCommand(
           bun,
