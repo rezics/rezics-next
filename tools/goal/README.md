@@ -3095,6 +3095,17 @@ Decision: verifier rounds coalesce changed Dev into the newest captured head, st
 checks from the previous round head, carry deadline backlog, report current-head failures in one urgent batch per
 owning Goal, and always advance `dev-verified` at round end.
 
+Decision: each verifier command execution has one durable identity tied to its captured head and round. Record its
+actual start. Commit its terminal result, error class, end time and matching flow event in one SQLite transaction.
+Replay of that execution emits no duplicate receipt; a real retry gets a new identity. Round summaries reference
+command runs. Keep product failure, infrastructure, skipped and unknown distinct; missing timing remains unknown.
+
+Measure the first two full UTC days after deployment against the
+[delivery-step audit](reports/daily-step-audit-2026-11-11.md#one-structural-change-and-its-measure): all terminal command
+runs have matching result and flow receipts with valid boundaries, no duplicate terminal receipts, and no non-passing
+outcomes reported as passed. Compare round time and integrations at comparable work supply. Timing coverage alone
+does not establish a delivery or allowance saving. This uses the existing verifier and does not run additional checks.
+
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
 owner documents, and next actions), without appending to the old file, then message its supermanager with
