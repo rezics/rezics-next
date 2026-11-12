@@ -56,6 +56,10 @@ export async function selectKnowledgePublication(
   client: KernelClient,
   input: KnowledgePublicationCommand,
 ): Promise<KnowledgeCommand<KnowledgePublicationReceipt>> {
+  const headers = {
+    authorization: input.authorization,
+    'idempotency-key': JSON.stringify(input.idempotencyKey),
+  };
   const result = await client.knowledge.documents({ id: input.documentId }).publication.$select.post(
     {
       expectedHeadRevisionId: input.expectedHeadRevisionId,
@@ -63,10 +67,7 @@ export async function selectKnowledgePublication(
       revisionId: input.revisionId,
     },
     {
-      headers: {
-        authorization: input.authorization,
-        'idempotency-key': JSON.stringify(input.idempotencyKey),
-      },
+      headers,
       fetch: { cache: 'no-store', redirect: 'manual' },
     },
   );
