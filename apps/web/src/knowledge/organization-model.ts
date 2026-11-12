@@ -8,10 +8,14 @@ import type {
   OrganizationRequest,
 } from './organization-read';
 
-function withoutCursor<T extends OrganizationRequest>(request: T): T {
-  const address = { ...request };
-  delete address.cursor;
-  return address;
+function atParent(
+  request: Exclude<OrganizationRequest, { kind: 'history' }>,
+  parentPlacementId: string | null,
+): OrganizationRequest {
+  const address = { notebookId: request.notebookId, parentPlacementId };
+  return request.kind === 'historical'
+    ? { ...address, kind: 'historical', revisionId: request.revisionId }
+    : { ...address, kind: 'outline' };
 }
 
 export type OrganizationFrontier = Readonly<{
@@ -228,7 +232,7 @@ export class KnowledgeOrganizationReading {
         const request = snapshot.frontier.request;
         if (request.kind === 'history') return;
         void this.open({
-          request: { ...withoutCursor(request), parentPlacementId: null },
+          request: atParent(request, null),
           breadcrumbs: [],
           ...(snapshot.source ? { structureRevisionId: snapshot.source.structureRevisionId } : {}),
         });
@@ -240,7 +244,7 @@ export class KnowledgeOrganizationReading {
         const breadcrumbs = snapshot.frontier.breadcrumbs.slice(0, index + 1);
         void this.open({
           ...snapshot.frontier,
-          request: { ...withoutCursor(request), parentPlacementId: breadcrumbs.at(-1)!.placementId },
+          request: atParent(request, breadcrumbs.at(-1)!.placementId),
           breadcrumbs,
         });
       },
@@ -251,7 +255,7 @@ export class KnowledgeOrganizationReading {
         if (request.kind === 'history') return;
         void this.open({
           ...snapshot.frontier,
-          request: { ...withoutCursor(request), parentPlacementId: row.placementId },
+          request: atParent(request, row.placementId),
           breadcrumbs: [...snapshot.frontier.breadcrumbs, { placementId: row.placementId, title: row.title }],
         });
       },
