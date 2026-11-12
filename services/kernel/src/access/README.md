@@ -2103,9 +2103,9 @@ Bearer scope claims are bounded once at authenticator creation to 129 characters
 - Bound: `Q`: one formula statement (plus time when not supplied and optional domain verifier); O(1+J) bounded probe rows, O(1) result. Integrated P+Q: constant rows/statements in G, logarithmic blocks at fixed J; at most linear in admitted J through cap1000 per identity. Role expansion adds R-dependent probes, not H/O enumeration. Permission and operator evidence use the shared real-time TTL helper; elapsed evidence returns 503 without effects. No added reads.
 - Growth check: `test/access/growth-evaluator.test.ts`: independent G and K checks, production pool, K through cap1000. `test/access/access-deadlines.test.ts`.
 
-`permissionCheckStatements` in `permission.ts` exposes the exact time and formula SQL literals to callers composing an
-outer native SQL envelope. It grants no prepared evidence or authorization result; the caller retains its own work
-declaration and deadline.
+`permissionCheckStatements` in `permission.ts` exposes the exact time and formula SQL literals through memoized lazy
+properties to callers composing an outer native SQL envelope. Loading Access does not evaluate those SQL imports.
+It grants no prepared evidence or authorization result; the caller retains its own work declaration and deadline.
 
 The Global grant B-tree companion orders subject kind/id/role, action and validity; its partial predicate fixes
 route/resource, which are included for covering reads. Each probe binds the full key, seeks the greatest `valid <= [T,infinity)`, then checks
