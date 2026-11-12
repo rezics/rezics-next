@@ -9,9 +9,11 @@ import initialize from './resource-initialization.sql';
 /** Called INSIDE the owning module's new-resource transaction, after its unique
  * resource INSERT. The parentCreationAuthorization capability fixes the creator,
  * exact child resource, partition and shared attempt T. This writes role IDs,
- * never action copies, and never opens a connection/command. Completion follows
- * successful native writes; finalization rejects missing or failed entries even
- * when the body catches errors.
+ * never action copies, and never opens a connection/command. The SQL carries
+ * inserted grants into provenance by RETURNING because the native grant trigger
+ * cannot see its sibling initialization CTE in the statement snapshot. Completion
+ * follows successful native writes; finalization rejects missing or failed entries
+ * even when the body catches errors.
  * Empty trusted templates (reports/communal subjects) intentionally grant none.
  */
 export async function initializeResourceGrants(
@@ -47,19 +49,6 @@ export async function initializeResourceGrants(
      (route,resource_id,resource_type,original_creator,account_id,grant_role,side,source_transaction)
      VALUES($1,$2,$3,$4,$4,'','creator',$5)`,
     [resource.route, resource.id, type, creator, currentCommand(tx).transactionId],
-  );
-  // Data-modifying CTE siblings share a snapshot: an INSERT trigger on the grant can miss
-  // the initialization inserted by the sibling CTE. Read both native rows in this next statement.
-  await tx.query(
-    `INSERT INTO access.resource_role_provenance
-     (route,resource_id,resource_type,original_creator,account_id,grant_role,valid,side,grant_transaction,source_transaction)
-     SELECT g.route,g.resource_id,i.resource_type,i.creator_id,g.subject_id,g.grant_role,g.valid,'new',g.transaction_id,$3
-     FROM access.resource_role_grant g JOIN access.resource_initialization i USING(route,resource_id)
-     WHERE g.route=$1 AND g.resource_id=$2 AND g.subject_kind='identity' AND g.subject_role=''
-       AND g.transaction_id=$3 AND NOT EXISTS(SELECT 1 FROM access.resource_role_provenance p
-         WHERE p.route=g.route AND p.resource_id=g.resource_id AND p.account_id=g.subject_id
-           AND p.grant_role=g.grant_role AND p.side='new' AND p.source_transaction=$3)`,
-    [resource.route, resource.id, currentCommand(tx).transactionId],
   );
   capability.complete();
 }

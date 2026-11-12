@@ -39,6 +39,7 @@ const audience = 'https://realm-boards.api.test';
 const password = 'realm boards integration password with enough entropy';
 const routeKey = new Uint8Array(32).fill(61);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(62)]]) };
+const receiptKeys = testReceiptKeys();
 const accountRoute = 0x3456;
 const provisioned = new Set<string>();
 const growthBody = Buffer.from(serializeDocument(fromPlainText('Fixed protected Realm read growth body')));
@@ -288,6 +289,7 @@ async function startMembershipWorker() {
     databaseUrl: db.url,
     executorId: 'realm-boards-test-' + process.pid,
     poolSize: 10,
+    receiptKeys,
   };
   worker = await startWorker(config, [createAccountsWorkModule({ realm: membership }), communityWorkModule], {
     AUTH_ISSUER: issuer,
@@ -416,7 +418,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens,
-    receiptKeys: testReceiptKeys(),
+    receiptKeys,
     access: (config) =>
       createAccess({
         ...config,

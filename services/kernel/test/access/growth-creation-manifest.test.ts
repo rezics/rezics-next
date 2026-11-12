@@ -102,7 +102,58 @@ async function createAndReplay(k: number) {
   await runCommand(db.pool, options, body);
   expect((await runCommand(db.pool, options, body)).replayed).toBe(true);
   expect(bodies).toBe(1);
+  return declared;
 }
+
+test('initial role provenance records each exact inserted grant once', async () => {
+  const declared = await createAndReplay(2);
+  const resourceIds = declared.map((entry) => entry.resource.id);
+  const grants = await db.admin.query(
+    `SELECT g.resource_id, g.subject_id, g.grant_role, g.transaction_id::text AS transaction_id,
+            count(p.occurrence)::integer AS provenance_count,
+            min(p.original_creator::text) AS original_creator,
+            min(p.resource_type) AS resource_type,
+            min(p.grant_transaction::text) AS grant_transaction,
+            min(p.source_transaction::text) AS source_transaction
+     FROM access.resource_role_grant g
+     LEFT JOIN access.resource_role_provenance p
+       ON p.route=g.route AND p.resource_id=g.resource_id AND p.account_id=g.subject_id
+       AND p.grant_role=g.grant_role AND p.side='new'
+     WHERE g.route=$1 AND g.resource_id=ANY($2::uuid[])
+       AND g.subject_kind='identity' AND g.subject_role=''
+     GROUP BY g.resource_id, g.subject_id, g.grant_role, g.transaction_id
+     ORDER BY g.resource_id, g.grant_role`,
+    [declared[0]!.resource.route, resourceIds],
+  );
+  expect(grants.rowCount).toBe(2);
+  for (const grant of grants.rows) {
+    const entry = declared.find((candidate) => candidate.resource.id === grant.resource_id)!;
+    expect(Number(grant.provenance_count)).toBe(1);
+    expect(grant.original_creator).toBe(f.actor);
+    expect(grant.resource_type).toBe(entry.type);
+    expect(grant.grant_transaction).toBe(grant.transaction_id);
+    expect(grant.source_transaction).toBe(grant.transaction_id);
+  }
+
+  const creators = await db.admin.query(
+    `SELECT resource_id, account_id, original_creator, grant_role, source_transaction::text AS source_transaction,
+            count(*) OVER (PARTITION BY resource_id)::integer AS occurrence_count
+     FROM access.resource_role_provenance
+     WHERE route=$1 AND resource_id=ANY($2::uuid[]) AND side='creator'
+     ORDER BY resource_id`,
+    [declared[0]!.resource.route, resourceIds],
+  );
+  expect(creators.rowCount).toBe(2);
+  for (const creator of creators.rows) {
+    const grant = grants.rows.find((candidate) => candidate.resource_id === creator.resource_id)!;
+    expect(creator.account_id).toBe(f.actor);
+    expect(creator.original_creator).toBe(f.actor);
+    expect(creator.grant_role).toBe('');
+    expect(Number(creator.occurrence_count)).toBe(1);
+    expect(creator.source_transaction).toBe(grant.transaction_id);
+  }
+});
+
 async function grow(scale: number, previous: number) {
   // Both authority and child partitions grow; the actor's matched principal set stays fixed.
   for (const route of [f.resource.route, f.otherResource.route]) {

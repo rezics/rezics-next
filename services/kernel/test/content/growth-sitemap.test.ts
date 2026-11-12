@@ -240,6 +240,11 @@ for (const feed of ['boards', 'threads'] as const) {
     await seed(db, listed, { from: 0, to: 2048 });
     const cursor = await cursorAtRoute(feed, listedPartition[feed] * 16);
     const firstPage = await page(feed, { limit: String(pageSize), cursor });
+    expect(firstPage.next).toEqual(expect.any(String));
+    const nextPage = await page(feed, { limit: String(pageSize), cursor: firstPage.next! });
+    expect(nextPage.items).toHaveLength(pageSize);
+    expect(nextPage.next).toEqual(expect.any(String));
+    expect(nextPage.next).not.toBe(firstPage.next);
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, listed items`,
       rule: 'series',
@@ -250,6 +255,8 @@ for (const feed of ['boards', 'threads'] as const) {
         expect(result.items).toHaveLength(pageSize);
         expect(result.items).toEqual(firstPage.items);
         expect(result.next).toEqual(expect.any(String));
+        const next = await page(feed, { limit: String(pageSize), cursor: result.next! });
+        expect(next).toEqual(nextPage);
         return result;
       },
     });
@@ -257,7 +264,7 @@ for (const feed of ['boards', 'threads'] as const) {
     const statementCounts = report.samples.map(({ cost }) => cost.statements);
     expect(statementCounts[0]!).toBeGreaterThan(0);
     expect(statementCounts).toEqual(scales.map(() => statementCounts[0]!));
-    expect(statementCounts.every((count) => count <= pageSize * 14 + 6)).toBe(true);
+    expect(statementCounts.every((count) => count <= pageSize * 28 + 12)).toBe(true);
     const relations = ['content.board', 'content.board_thread', 'content.thread', 'content.post', 'content.revision'];
     for (const { scale, cost } of report.samples) {
       for (const relation of relations) {
@@ -275,6 +282,13 @@ for (const feed of ['boards', 'threads'] as const) {
     await seed(db, hidden, { from: 0, to: 2048 });
     // The walk reaches the protected content first, so each page scans only that.
     const cursor = await cursorAtRoute(feed, partition * 16);
+    const firstPage = await page(feed, { limit: String(pageSize), cursor });
+    expect(firstPage.items).toEqual([]);
+    expect(firstPage.next).toEqual(expect.any(String));
+    const nextPage = await page(feed, { limit: String(pageSize), cursor: firstPage.next! });
+    expect(nextPage.items).toEqual([]);
+    expect(nextPage.next).toEqual(expect.any(String));
+    expect(nextPage.next).not.toBe(firstPage.next);
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, protected Realm content`,
       ...(feed === 'boards' ? { rule: 'series' as const } : {}),
@@ -284,6 +298,8 @@ for (const feed of ['boards', 'threads'] as const) {
         const result = await page(feed, { limit: String(pageSize), cursor });
         expect(result.items).toEqual([]);
         expect(result.next).toEqual(expect.any(String));
+        const next = await page(feed, { limit: String(pageSize), cursor: result.next! });
+        expect(next).toEqual(nextPage);
         return result;
       },
     });
@@ -291,17 +307,15 @@ for (const feed of ['boards', 'threads'] as const) {
     const statementCounts = report.samples.map(({ cost }) => cost.statements);
     expect(statementCounts[0]!).toBeGreaterThan(0);
     expect(statementCounts).toEqual(scales.map(() => statementCounts[0]!));
-    expect(statementCounts.every((count) => count <= pageSize * 4 * 20 + 6)).toBe(true);
-    if (feed === 'boards') {
-      const relations = ['content.board', 'community.realm', 'community.realm_revision'];
-      for (const { scale, cost } of report.samples) {
-        for (const relation of relations) {
-          expect(cost.relations[relation]?.sequentialScans, `${feed} scale ${scale} ${relation}`).toEqual(
-            expect.any(Number),
-          );
-        }
+    expect(statementCounts.every((count) => count <= pageSize * 4 * 40 + 12)).toBe(true);
+    const relations = ['content.board', 'content.board_thread', 'community.realm', 'community.realm_revision'];
+    for (const { scale, cost } of report.samples) {
+      for (const relation of relations) {
+        expect(cost.relations[relation]?.sequentialScans, `${feed} scale ${scale} ${relation}`).toEqual(
+          expect.any(Number),
+        );
       }
-      assertGrowthAccessPaths(`Sitemap ${feed} page, protected Realm content`, report.samples, relations);
     }
+    assertGrowthAccessPaths(`Sitemap ${feed} page, protected Realm content`, report.samples, relations);
   }, 180_000);
 }

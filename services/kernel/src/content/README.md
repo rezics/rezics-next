@@ -2476,6 +2476,10 @@ for a thread `board_thread.last_activity_at`; for a board its newest listed thre
 `created_at` if there is none, though thin boards are omitted). Post edits and
 removals do not advance it, and no feed adds a write-path update, index or migration.
 
+Decision: the growth seeder treats each producer ordinal as an atomic related-row family. A row/byte-limited
+transport split keeps the same transaction open until that ordinal's remaining rows are inserted; batches remain
+bounded and streaming, preserving the deferred Space/Realm head-revision check.
+
 ## Reactions
 
 People have one reaction slot per thread, post or subject. Threads and posts accept upvote, downvote, like, love, laugh,
