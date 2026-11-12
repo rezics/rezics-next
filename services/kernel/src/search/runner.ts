@@ -431,7 +431,7 @@ export function startDiscoveryIndexing(options: {
     const relayTargets: (DiscoveryGeneration & { uuid: string })[] = [];
     for (const target of generations) {
       if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
-      if (await discoveryPhysicalTargetMatches(search, target)) relayTargets.push(target);
+      if (await discoveryPhysicalTargetMatches(options.search, target)) relayTargets.push(target);
     }
     const bindings = new Map<number, string>(
       relayTargets.map((target) => [target.generation, target.uuid + ':' + target.incarnation]),
