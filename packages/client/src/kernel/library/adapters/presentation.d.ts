@@ -113,6 +113,7 @@ export declare function createNativeLibraryPresentation(ports: NativeLibraryPres
         deadline: number;
         follow?: true;
         withholdChangedSource?: true;
+        nativeFollowTargets?: readonly import('../contract/index.ts').NativeFollowTargetAdapter[];
         followingSpaces?: (actor: Actor, ids: readonly string[], deadline: number) => Promise<ReadonlyMap<string, FollowingSpaceProjection>>;
     }): Promise<import("../contract/presentation.ts").LibraryEmbedding<T, SubjectSummary, ContributionAttribution>>;
 };

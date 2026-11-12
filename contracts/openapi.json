@@ -139761,7 +139761,8 @@
               "enum": [
                 "subject",
                 "collection",
-                "space"
+                "space",
+                "zone"
               ]
             }
           }
@@ -139879,6 +139880,23 @@
                                 "required": [
                                   "kind",
                                   "realmId"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "zone",
+                                    "type": "string"
+                                  },
+                                  "zoneId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "zoneId"
                                 ],
                                 "type": "object"
                               },
@@ -140127,7 +140145,8 @@
                             "enum": [
                               "subject",
                               "collection",
-                              "space"
+                              "space",
+                              "zone"
                             ],
                             "type": "string"
                           },
@@ -140883,7 +140902,8 @@
                           "enum": [
                             "subject",
                             "collection",
-                            "space"
+                            "space",
+                            "zone"
                           ],
                           "type": "string"
                         },
@@ -141757,6 +141777,23 @@
                               "additionalProperties": false,
                               "properties": {
                                 "kind": {
+                                  "const": "zone",
+                                  "type": "string"
+                                },
+                                "zoneId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "zoneId"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
                                   "const": "unavailable",
                                   "type": "string"
                                 }
@@ -142053,7 +142090,8 @@
                           "enum": [
                             "subject",
                             "collection",
-                            "space"
+                            "space",
+                            "zone"
                           ],
                           "type": "string"
                         },
@@ -142808,7 +142846,8 @@
                           "enum": [
                             "subject",
                             "collection",
-                            "space"
+                            "space",
+                            "zone"
                           ],
                           "type": "string"
                         },

@@ -21,6 +21,7 @@ type Dependencies = {
     shelfTypeDigest?: ShelfTypeDigest;
     titleSource?: ShelfTitleSource;
     typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
+    followTargets?: readonly import('./contract/index.ts').NativeFollowTargetAdapter[];
     followingSpaceTargets?: (actor: Actor, ids: readonly string[], deadline: number) => Promise<ReadonlyMap<string, FollowingSpaceProjection>>;
 };
 /** Private account-owned library transport. Domain commands retain authorization and receipts. */
@@ -11654,7 +11655,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         200: {
                             follow: {
                                 targetId: string;
-                                targetType: "collection" | "space" | "subject";
+                                targetType: "collection" | "space" | "subject" | "zone";
                                 state: "following" | "unfollowed";
                                 reason: "explicit" | "library" | "membership";
                                 updatedAt: string;
@@ -11761,7 +11762,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         200: {
                             follow: {
                                 targetId: string;
-                                targetType: "collection" | "space" | "subject";
+                                targetType: "collection" | "space" | "subject" | "zone";
                                 state: "following" | "unfollowed";
                                 reason: "explicit" | "library" | "membership";
                                 updatedAt: string;
@@ -11914,7 +11915,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     label: string;
                                 } | null;
                                 targetId: string;
-                                targetType: "collection" | "space" | "subject";
+                                targetType: "collection" | "space" | "subject" | "zone";
                                 state: "following" | "unfollowed";
                                 reason: "explicit" | "library" | "membership";
                                 updatedAt: string;
@@ -11926,6 +11927,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 } | {
                                     kind: "realm";
                                     realmId: string;
+                                } | {
+                                    kind: "zone";
+                                    zoneId: string;
                                 } | {
                                     kind: "unavailable";
                                 };
@@ -12051,7 +12055,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
-        targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject"]>>;
+        targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject", "zone"]>>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -12155,7 +12159,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         200: import("typebox").TObject<{
             follows: import("typebox").TArray<import("typebox").TObject<{
                 targetId: import("typebox").TString;
-                targetType: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">]>;
+                targetType: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">, import("typebox").TLiteral<"zone">]>;
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
@@ -12208,6 +12212,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 }>, import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"realm">;
                     realmId: import("typebox").TString;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"zone">;
+                    zoneId: import("typebox").TString;
                 }>, import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"unavailable">;
                 }>]>>;
@@ -12367,7 +12374,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     label: string;
                 } | null;
                 targetId: string;
-                targetType: "collection" | "space" | "subject";
+                targetType: "collection" | "space" | "subject" | "zone";
                 state: "following" | "unfollowed";
                 reason: "explicit" | "library" | "membership";
                 updatedAt: string;
@@ -12379,6 +12386,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 } | {
                     kind: "realm";
                     realmId: string;
+                } | {
+                    kind: "zone";
+                    zoneId: string;
                 } | {
                     kind: "unavailable";
                 };
@@ -12518,7 +12528,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     label: string;
                 } | null;
                 targetId: string;
-                targetType: "collection" | "space" | "subject";
+                targetType: "collection" | "space" | "subject" | "zone";
                 state: "following" | "unfollowed";
                 reason: "explicit" | "library" | "membership";
                 updatedAt: string;
@@ -12530,6 +12540,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 } | {
                     kind: "realm";
                     realmId: string;
+                } | {
+                    kind: "zone";
+                    zoneId: string;
                 } | {
                     kind: "unavailable";
                 };
@@ -12553,7 +12566,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
             limit: import("typebox").TOptional<import("typebox").TInteger>;
-            targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject"]>>;
+            targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject", "zone"]>>;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -12657,7 +12670,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             200: import("typebox").TObject<{
                 follows: import("typebox").TArray<import("typebox").TObject<{
                     targetId: import("typebox").TString;
-                    targetType: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">]>;
+                    targetType: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">, import("typebox").TLiteral<"zone">]>;
                     state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                     reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                     updatedAt: import("typebox").TString;
@@ -12710,6 +12723,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     }>, import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"realm">;
                         realmId: import("typebox").TString;
+                    }>, import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"zone">;
+                        zoneId: import("typebox").TString;
                     }>, import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"unavailable">;
                     }>]>>;
@@ -12767,7 +12783,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         view?: "BASIC" | "FULL";
         cursor?: string;
         limit?: number;
-        targetType?: "collection" | "space" | "subject";
+        targetType?: "collection" | "space" | "subject" | "zone";
     };
     params: {};
     headers: Record<string, string | undefined>;
@@ -12797,7 +12813,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
     } & object & {
         target?: import("./contract/presentation.ts").LibraryTargetSummary | import("../semantic/summaries.ts").SubjectSummary | null;
     } & {
-        destination?: import("./following-space-contract.ts").FollowingSpaceDestination;
+        destination?: import("./contract/follow-targets.ts").FollowDestination;
         actions?: import("./following-space-contract.ts").FollowingSpaceActions;
     })[];
     next: string | null;
@@ -12806,7 +12822,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
-        targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject"]>>;
+        targetType: import("typebox").TOptional<import("typebox").TEnum<["collection", "space", "subject", "zone"]>>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -12910,7 +12926,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         200: import("typebox").TObject<{
             follows: import("typebox").TArray<import("typebox").TObject<{
                 targetId: import("typebox").TString;
-                targetType: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">]>;
+                targetType: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"collection">, import("typebox").TLiteral<"space">, import("typebox").TLiteral<"zone">]>;
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
@@ -12963,6 +12979,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 }>, import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"realm">;
                     realmId: import("typebox").TString;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"zone">;
+                    zoneId: import("typebox").TString;
                 }>, import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"unavailable">;
                 }>]>>;

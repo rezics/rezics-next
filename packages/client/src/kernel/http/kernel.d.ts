@@ -2,7 +2,7 @@ import { type ContentHttpRoutes } from '../content/http.ts';
 import { type CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { type CommunityHttpDeclaration } from '../community/http-declaration.ts';
-import { zoneRoutes } from '../zones/http.ts';
+import { zoneRoutes } from '../zones/index.ts';
 import type { Elysia } from 'elysia';
 import { viewerActionsRoutes, type ViewerActionResources, type ViewerActionBindings } from '../access/viewer-actions.ts';
 import { accessRoutes } from '../access/routes.ts';

@@ -41,3 +41,4 @@ export type { LibraryCursorBinding, LibraryCursorCapability } from './cursor.ts'
 export type { CollectionCurator, CollectionDiscoveryContext, CollectionPresentation, CollectionPreview, CollectionPreviewMember, PublicCollectionDiscoverySummary, } from './collection-discovery.ts';
 export type { ViewerEntryFact, ViewerFact, ViewerFactInput, ViewerFactsPage, ViewerQuestion, ViewerVoteFact, } from './viewer-facts.ts';
 export type { ViewerPersonalAction, ViewerPersonalActionInput, ViewerPersonalActionState, ViewerPersonalActionsPage, ViewerPersonalFact, } from './viewer-personal-actions.ts';
+export type { FollowDestination, NativeFollowProjection, NativeFollowTargetAdapter } from './follow-targets.ts';

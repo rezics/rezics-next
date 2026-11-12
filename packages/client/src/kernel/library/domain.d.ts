@@ -39,3 +39,6 @@ export type MembersPreparationReaderInput = Readonly<{
 }>;
 export type MembersPreparationReaderResult = PreparedMembersRead;
 export type MembersPreparationState = PreparationStepState;
+export { createZoneFollowTargetAdapter } from './adapters/zone-follow-target.ts';
+export type { ReadFollowableZone } from './adapters/zone-follow-target.ts';
+export type { NativeFollowTargetAdapter } from './contract/index.ts';

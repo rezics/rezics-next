@@ -1,12 +1,15 @@
 import type { LibraryAccountActor, LibraryActor } from './actors.ts';
-export type FollowTargetType = 'subject' | 'collection' | 'space';
+import type { FollowTargetType } from './follow-targets.ts';
+export type { FollowTargetType } from './follow-targets.ts';
 export type FollowCountTarget = Readonly<{
-    targetType: FollowTargetType;
+    targetType: Exclude<FollowTargetType, 'zone'>;
     targetId: string;
 }>;
-export type CountKey = FollowCountTarget & {
+export type CountKey = Readonly<{
+    targetType: FollowTargetType;
+    targetId: string;
     accountId: string;
-};
+}>;
 export type CountReplacement = CountKey & {
     revision: string;
     eligible: boolean;
@@ -86,7 +89,7 @@ export interface FollowCountPartitionPorts {
  * the producers; neither application nor compatibility entries import their implementations. */
 export interface FollowCountRuntime {
     reads(pool: object, access: object): FollowCountReads;
-    destination(pool: object, target: FollowCountTarget): Promise<CountDestination>;
+    destination(pool: object, target: Pick<CountKey, 'targetType' | 'targetId'>): Promise<CountDestination>;
     admitIdentity(tx: object, input: Readonly<{
         original: string;
         terminal: string;
