@@ -58,6 +58,11 @@ one path); this bounds the path and Access work without borrowing the hosted-boo
 document-count limit. Sibling pages and mutations use indexed positions and a structure revision rather than
 loading or rewriting every sibling.
 
+Decision: reload navigation pages owned notebooks through the owner index and immediate outline children through the
+parent/order index. The first outline page selects the current structure revision; its encrypted continuation binds
+the owner, notebook, parent and selection, and returns `409 stale_cursor` after a structure change. Each outline
+request examines at most 128 indexed candidates and advances past sparse ineligible rows.
+
 Every saved document revision fixes its validated canonical document bytes, SHA-256 digest, title, language,
 references, authorship and licence. A publication is an immutable record selecting one exact document revision and
 the notebook Subject. The document's current-publication pointer is the only public availability authority. Saving
