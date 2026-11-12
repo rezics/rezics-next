@@ -1850,16 +1850,20 @@ process cleanup.
 
 Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 
-Decision: before a dedicated page-data seed or resume, compare the live active Definitions digest with the bundled
-release. A mismatch stops before importer writes and reports the active head, both digests and the operator command.
-From the controller checkout run `bun tools/goal/src/page-data.ts reconcile-definitions` once after integration.
-It takes the page-data lease, refreshes the existing dedicated checkout to `dev` with the usual dependency reuse,
-and invokes its local Definitions operator. The operator requires development mode, the dedicated container marker
-and its exact loopback database port. It uses the existing developer key, a separate local client requesting only
-`definitions:publish` and `definitions:activate`, and ordinary native HTTP authorization and validation. Activation
-uses the observed exact head; a concurrent change is refused. An already-current pointer makes no publication or
-activation request. Historical releases, database state and seed journals are retained; no seed is run by this command.
-Production startup keeps bootstrap's existing-pointer behaviour.
+Decision: automatically reconcile the active Definitions digest from the prepared `dev` revision at every dedicated
+page-data seed/resume boundary under the cycle's existing lease; refuse if `dev` moved, and preserve the explicit
+operator command. After stack readiness and before checking the seed journal or starting persona/importer work, the
+cycle compares the live `dev` head with its prepared revision and invokes the local Definitions operator in
+`--activate` mode. A moved ref refuses before operator writes. The operator requires development mode, the dedicated
+container marker and its exact loopback database port. It uses the existing developer key, a separate local client
+requesting only `definitions:publish` and `definitions:activate`, and ordinary native HTTP authorization and
+validation. Activation uses the observed exact head; a concurrent change is refused. The active digest is checked
+again before seed work, and an already-current pointer makes no publication or activation request. Any reconciliation
+failure stops before importer work and leaves the seed journal unchanged. Historical releases and database state are
+retained. The supported explicit command remains `bun tools/goal/src/page-data.ts reconcile-definitions` from the
+controller checkout; it takes the page-data lease, refreshes the existing dedicated checkout to `dev` with the usual
+dependency reuse, and invokes the same local operator without running seed. Production startup keeps bootstrap's
+existing-pointer behaviour.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. Without a `target` line it starts from `dev` and lands there mechanically, with unlimited

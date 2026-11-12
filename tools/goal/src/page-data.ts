@@ -213,6 +213,27 @@ export class PageDataStackError extends Error {
   }
 }
 
+function assertPreparedPageDataHead(preparedHead: string, currentHead: string): void {
+  if (preparedHead !== currentHead)
+    throw new PageDataStackError(
+      'boot',
+      `Page-data Definitions source moved before reconciliation: prepared dev head=${preparedHead}; ` +
+        `current dev head=${currentHead}; refusing stale activation`,
+    );
+}
+
+/** Reconcile the exact prepared dev source before resuming a seeded stack or starting importer work. */
+export async function runPageDataSeedBoundary<T>(
+  preparedHead: string,
+  currentHead: () => string,
+  reconcile: (head: string) => Promise<void>,
+  seedOrResume: () => Promise<T>,
+): Promise<T> {
+  assertPreparedPageDataHead(preparedHead, currentHead());
+  await reconcile(preparedHead);
+  return seedOrResume();
+}
+
 const seedArtifactHandoffPrefix = 'Cross-media seed artifact handoff ';
 const pageDataArtifactLimit = 64 * 1024 * 1024;
 
@@ -1932,57 +1953,65 @@ async function runDedicatedPageDataStack(
       stackCapture,
     );
 
-    if (!existsSync(seeded)) {
-      await runCommand(
-        bun,
-        ['services/auth/scripts/dev-stack.ts', 'persona'],
-        worktree,
-        env,
-        policy.seedTimeoutMs,
-        policy.outputBytes,
-        'boot',
-        [0],
-        policy.stopTimeoutMs,
-      );
-      await runCommand(
-        bun,
-        pageDataDefinitionsCommand(false),
-        worktree,
-        env,
-        policy.commandTimeoutMs,
-        policy.outputBytes,
-        'boot',
-        [0],
-        policy.stopTimeoutMs,
-      );
-      env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
-      const seedResult = await runCommand(
-        bun,
-        ['scripts/datasets/cross-media-seed.ts', '--dev'],
-        worktree,
-        env,
-        policy.seedTimeoutMs,
-        policy.outputBytes,
-        'boot',
-        [0, 1],
-        policy.stopTimeoutMs,
-      );
-      seedStatus = pageDataSeedStatus(
-        seedResult.exitCode,
-        commandOutput(seedResult.stdout, seedResult.stderr),
-        resolve(worktree, '.temp/cross-media-seed/result.json'),
-      );
-      if (seedStatus)
-        captureEvent(stackCapture, {
-          kind: 'seed',
-          status: seedStatus.status,
-          omissions: seedStatus.omissions,
-        });
-      if (!seedStatus) {
-        mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
-        writeFileSync(seeded, `${head}\n`, { flag: 'w' });
-      }
-    }
+    seedStatus = await runPageDataSeedBoundary(
+      head,
+      () => runGit(settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${settings.integrationBranch}`]),
+      async () => {
+        await runCommand(
+          bun,
+          pageDataDefinitionsActivationCommand(),
+          worktree,
+          env,
+          policy.commandTimeoutMs,
+          policy.outputBytes,
+          'boot',
+          [0],
+          policy.stopTimeoutMs,
+        );
+      },
+      async () => {
+        if (existsSync(seeded)) return undefined;
+        await runCommand(
+          bun,
+          ['services/auth/scripts/dev-stack.ts', 'persona'],
+          worktree,
+          env,
+          policy.seedTimeoutMs,
+          policy.outputBytes,
+          'boot',
+          [0],
+          policy.stopTimeoutMs,
+        );
+        env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
+        const seedResult = await runCommand(
+          bun,
+          ['scripts/datasets/cross-media-seed.ts', '--dev'],
+          worktree,
+          env,
+          policy.seedTimeoutMs,
+          policy.outputBytes,
+          'boot',
+          [0, 1],
+          policy.stopTimeoutMs,
+        );
+        const status = pageDataSeedStatus(
+          seedResult.exitCode,
+          commandOutput(seedResult.stdout, seedResult.stderr),
+          resolve(worktree, '.temp/cross-media-seed/result.json'),
+        );
+        if (status)
+          captureEvent(stackCapture, {
+            kind: 'seed',
+            status: status.status,
+            omissions: status.omissions,
+          });
+        if (!status) {
+          mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
+          writeFileSync(seeded, `${head}\n`, { flag: 'w' });
+        }
+        return status;
+      },
+    );
 
     checked = await runPageDataScopedCheck(
       invocation,
@@ -2059,9 +2088,9 @@ async function runDedicatedPageDataStack(
   };
 }
 
-/** Seed admission checks; activation is an explicit local operator action. */
-function pageDataDefinitionsCommand(activate: boolean): string[] {
-  return ['services/auth/scripts/dev-stack.ts', 'page-data-definitions', activate ? '--activate' : '--check'];
+/** Use the dedicated local operator for page-data Definitions activation. */
+function pageDataDefinitionsActivationCommand(): string[] {
+  return ['services/auth/scripts/dev-stack.ts', 'page-data-definitions', '--activate'];
 }
 
 export async function reconcileDedicatedPageDataDefinitions(settings: Settings): Promise<void> {
@@ -2073,9 +2102,13 @@ export async function reconcileDedicatedPageDataDefinitions(settings: Settings):
       throw new Error('The dedicated page-data worktree is missing');
     const head = runGit(settings.mainCheckout, ['rev-parse', settings.integrationBranch]);
     const { policy, worktree, env } = await prepareDedicatedPageDataStack(settings, head);
+    assertPreparedPageDataHead(
+      head,
+      runGit(settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${settings.integrationBranch}`]),
+    );
     const result = await runCommand(
       process.execPath,
-      pageDataDefinitionsCommand(true),
+      pageDataDefinitionsActivationCommand(),
       worktree,
       env,
       policy.commandTimeoutMs,
