@@ -64,7 +64,7 @@ export function createKnowledgeDiscovery(options: {
     if (subject !== 'available') restart();
     const limit = request.limit ?? KNOWLEDGE_DISCOVERY_PAGE_LIMIT;
     const binding: SearchCursorBinding = {
-      operation: 'GET /v1/subjects/:subjectId/knowledgeDocuments', request: { subjectId, limit }, principal,
+      operation: 'GET /v1/subjects/:id/knowledgeDocuments', request: { subjectId, limit }, principal,
     };
     let record: KnowledgePreparation;
     let previousRevision: number | null = null;

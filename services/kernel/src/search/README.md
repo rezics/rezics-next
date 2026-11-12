@@ -2523,7 +2523,7 @@ contain no reader state or full indexed text.
 
 ## Current public Knowledge by Subject
 
-Decision: `GET /v1/subjects/:subjectId/knowledgeDocuments` (`knowledge_document.discover`) lists only the original
+Decision: `GET /v1/subjects/:id/knowledgeDocuments` (`knowledge_document.discover`) lists only the original
 Subject's deliberate current public Knowledge selections. It uses `gate:search`, ordinary Subject admission and
 anonymous Content publication/Subject checks even when the caller owns the notebook. It does not open general
 Search exposure or add a mixed-index kind, text query, count or document-transfer operation.

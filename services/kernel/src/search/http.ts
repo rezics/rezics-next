@@ -26,8 +26,8 @@ export function knowledgeDiscoveryRoutes<App>(app: App, options: {
   now: () => number;
 }) {
   const store = createKnowledgeDiscoveryStore(options.pool, options.now);
-  const routed = (app as ReturnType<typeof createApp>).get('/v1/subjects/:subjectId/knowledgeDocuments', {
-    params: t.Object({ subjectId: KnowledgeDiscoveryId }, { additionalProperties: false }),
+  const routed = (app as ReturnType<typeof createApp>).get('/v1/subjects/:id/knowledgeDocuments', {
+    params: t.Object({ id: KnowledgeDiscoveryId }, { additionalProperties: false }),
     query: KnowledgeDiscoveryQuerySchema(),
     response: {
       200: KnowledgeDiscoveryPageSchema(),
@@ -48,9 +48,9 @@ export function knowledgeDiscoveryRoutes<App>(app: App, options: {
     },
   }, async ({ params, query, authorize, admission, job, actor, set }) => {
     set.headers['cache-control'] = 'private, no-store';
-    const route = routeOf(params.subjectId)!;
-    const check = await authorize({ route, id: params.subjectId,
-      eligibility: subjectReadEligibility({ route, id: params.subjectId }) });
+    const route = routeOf(params.id)!;
+    const check = await authorize({ route, id: params.id,
+      eligibility: subjectReadEligibility({ route, id: params.id }) });
     return admission.run('normal', job, async () => {
       if (!(await withConnection(options.pool, (client) => check(client)))) throw new ProblemError('not_found');
       const access = options.access();
@@ -59,7 +59,7 @@ export function knowledgeDiscoveryRoutes<App>(app: App, options: {
       const source = createKnowledgeDiscoverySource({ pool: options.pool, access });
       const discover = createKnowledgeDiscovery({ store, source, tokens: options.tokens, now: options.now });
       return searchHttpExecute(query, async () => {
-        const page = await discover(params.subjectId, searchHttpPrincipal(actor), query, { deadline: job.deadline });
+        const page = await discover(params.id, searchHttpPrincipal(actor), query, { deadline: job.deadline });
         if (page.state === 'unavailable')
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
         if (page.state === 'preparing') return status(202, page);

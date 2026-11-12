@@ -166,7 +166,7 @@ const typed = [
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation',
   'GET /v1/knowledge/documents/:id',
-  'GET /v1/subjects/:subjectId/knowledgeDocuments',
+  'GET /v1/subjects/:id/knowledgeDocuments',
   'POST /v1/hostedCatalogues',
   'POST /v1/hostedCatalogues/:id/$publish',
   'POST /v1/hostedCatalogues/:id/$revise',

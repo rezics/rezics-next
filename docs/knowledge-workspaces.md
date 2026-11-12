@@ -80,7 +80,7 @@ scan of account homes. Direct public resolution is available as soon as the Cont
 not wait for Search acknowledgement. The native first-loop proof selects and reads one exact publication, then
 withdraws it while derived indexing is paused.
 
-Decision: `GET /v1/subjects/:subjectId/knowledgeDocuments` (`knowledge_document.discover`) supplies the native
+Decision: `GET /v1/subjects/:id/knowledgeDocuments` (`knowledge_document.discover`) supplies the native
 Subject candidate page under `gate:search`. Search indexes only explicit current publication identities through
 Content's native publication effect, with existing selected publications seeded at installation. Publication time
 (descending), document ID and publication ID fix ordering. A committed per-Subject receiving cut fixes membership
