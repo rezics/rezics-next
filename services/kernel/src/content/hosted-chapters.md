@@ -60,6 +60,9 @@ catalogues, discloses at most 20, and never refills concealed slots. Empty
 publications are absent. Historical exact occurrence reads stay on
 `hosted_catalogue.resolve` and still obey current catalogue and target Access.
 
+Decision: continuation tokens remain fenced by the Subject partition epoch; each candidate's initial Post, exact
+publication and retained final disclosure are compared only within that catalogue's own partition.
+
 Every read retains native catalogue disclosure and repeats it before returning. Chapter disclosure independently
 retains the exact native target Post, Board, Realm and ancestor checks. Erased, concealed, missing or changed
 targets return an unavailable slot containing only occurrence ID, parent, position, kind and availability. Titles,

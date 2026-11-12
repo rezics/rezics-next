@@ -69,9 +69,9 @@ async function discloseCatalogue(
   deps: HostedDependencies,
   row: HostedSubjectCatalogueRow,
   context: ReadContext,
-  epoch: number,
 ): Promise<{ item: HostedSubjectCatalogueItem; anchor: AnchoredPosition } | null> {
   if (!isCurrentPublicCatalogueCandidate(row) || routeOf(row.catalogue_id) !== row.route) return null;
+  const cataloguePartition = partitionOf(row.route);
   const observation: { current?: Parameters<RetainContentRead<PostEntry>>[0] } = {};
   try {
     const initial = await readPost(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
@@ -80,7 +80,7 @@ async function discloseCatalogue(
     if (
       initial.value?.availability !== 'available' ||
       initial.value.visibility !== 'published' ||
-      initial.anchor.epoch !== epoch ||
+      initial.anchor.partition.partitionNo !== cataloguePartition ||
       !observation.current
     )
       return null;
@@ -93,7 +93,14 @@ async function discloseCatalogue(
   const selected = await snapshot(deps, row.catalogue_id, context, (client) =>
     hostedRevision(client, row.catalogue_id, row.publication_id),
   );
-  if (!selected.value || selected.value.kind !== 'publication' || selected.anchor.epoch !== epoch) return null;
+  if (
+    !selected.value ||
+    selected.value.kind !== 'publication' ||
+    selected.anchor.partition.partitionNo !== cataloguePartition ||
+    selected.anchor.partition.partitionNo !== initial.anchor.partition.partitionNo ||
+    selected.anchor.epoch !== initial.anchor.epoch
+  )
+    return null;
   try {
     const final = await retained(async (client) => {
       const catalogue = await hostedCatalogue(client, row.catalogue_id);
@@ -103,7 +110,9 @@ async function discloseCatalogue(
     if (
       final.value?.availability !== 'available' ||
       final.value.visibility !== 'published' ||
-      final.anchor.epoch !== epoch
+      final.anchor.partition.partitionNo !== cataloguePartition ||
+      final.anchor.partition.partitionNo !== initial.anchor.partition.partitionNo ||
+      final.anchor.epoch !== initial.anchor.epoch
     )
       return null;
     return {
@@ -156,7 +165,7 @@ export async function listHostedCataloguesForSubject(
   const raw = selected.value.rows.slice(0, limit);
   const items: HostedSubjectCatalogueItem[] = [];
   for (const row of raw) {
-    const disclosed = await discloseCatalogue(deps, row, context, selected.value.epoch);
+    const disclosed = await discloseCatalogue(deps, row, context);
     if (!disclosed) continue;
     items.push(disclosed.item);
     anchors.push(disclosed.anchor);
