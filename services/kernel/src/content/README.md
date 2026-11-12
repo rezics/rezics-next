@@ -1252,6 +1252,9 @@ checks. A standalone Space uses its native current head and lifecycle eligibilit
 final disclosure use released snapshots, including a second native read after command authority
 preparation, before receipt lookup. Missing and concealed targets produce the same 404.
 
+Decision: report-list selectors remain scalar query fields; reject repeated selector keys from the
+raw HTTP URL before framework-coerced values reach selection or cursor evaluation.
+
 A submitted report stores its exact native head/lifecycle witness with the original target and
 submitted evidence. This witness is immutable and internal: it never becomes target readership.
 A reporter can retain their submitted record and dismissed outcome after loss of target access;
