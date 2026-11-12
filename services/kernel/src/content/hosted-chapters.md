@@ -37,6 +37,52 @@ ordinary Post publication and target disclosure remain necessary. Published byte
 and digest, never replaced with the current head. Later draft edits do not change a release. The three registered
 events contain only catalogue/revision identities; no private target selections enter the outbox.
 
+## Author inventory
+
+`own_hosted_catalogues.list` (`GET /v1/accounts/{accountId}/hostedCatalogues`) accepts `scope=same-home`
+(the default) or `scope=all-homes`, optional `limit` (1–20), and an opaque `cursor`.
+`own_hosted_catalogues.get` (`GET /v1/accounts/{accountId}/hostedCatalogues/{id}`) resolves an exact owned
+catalogue in its native Post home without a caller-supplied thread. Both require the acting account to match
+`accountId`, including organization actors, with current account admission, delegation and consent.
+
+Decision: preserve same-home behavior and cursor identity; all-homes uses one hosted-membership fact in the existing
+author-item locator, bounded source recovery in the own-drafts maintenance workflow, and native per-home disclosure.
+The inventory never enumerates Posts or account homes on a request. The locator is only a candidate directory:
+each entry repeats current Post, Board, Realm and ancestor disclosure, original author, `post:revise`, and the exact
+catalogue head/release state in that entry's own home. A hidden, erased, changed or no-longer-editable candidate is
+omitted, including all identifiers and unpublished heads. Dependency errors propagate instead of becoming empty pages.
+
+Responses contain `scope`, `viewer`, `items` and `nextCursor`; exact selection returns `item` instead of the page fields.
+Entries contain catalogue/thread IDs, original Post creation time, current Post revision/visibility, structure head and
+nullable publication ID. They contain no titles, manuscript bodies or placement selections. Same-home responses keep
+`scope={kind:'same-home',route:accountRoute,crossHome:'unavailable'}`. All-homes responses use `kind='all-homes'` and
+`crossHome='complete'` only when both initial and final coverage observations prove the native census complete and no
+pending source projection for that author; otherwise `crossHome='partial'`. Exact foreign selection also uses all-homes
+scope and reports current coverage, even when its exact record is already available before recovery finishes.
+
+All-homes pages seek at most `limit+1` hosted author-item keys ordered by original creation time descending, then ID
+ascending, preserving microseconds and ties. At most `limit` sources are hydrated; denied slots are never refilled.
+The encrypted continuation uses the last consumed raw key even for an empty sparse page. It binds the original scope,
+limit, account, client, delegation, authentication epoch, scope ceiling and author partition epoch. A same-home cursor
+cannot continue all-homes, and vice versa. Source anchors use each actual Post partition/epoch, independently of the
+author locator partition. Ordinary private/no-store caching and native session anchors apply.
+
+Native catalogue creation leaves an indexed pending obligation in its Post transaction. Post restoration leaves a new
+obligation because asynchronous erasure may have removed the locator. Each existing own-drafts maintenance step repairs
+at most 20 pending source keys plus 20 catalogue census keys, releasing source checkouts before author commands. It
+projects membership under the existing account-erasure fence and late cleanup protocol, carrying current draft metadata
+when advancing the locator watermark. Only a committed projection may acknowledge the unchanged source head/security
+revision in the same partition epoch. Failure leaves pending work or the census frontier available for retry. The
+initial census is over catalogue primary keys, not all Posts, and completes only after all selected keys are projected.
+New insertions behind its frontier are covered by their native pending obligations. No new watcher or schedule is added.
+
+Later acceptance: run `bun run --cwd services/kernel check test/content/hosted-chapters-owner.test.ts` in the dev
+verifier after landing. Pin native remote-home exact selection before recovery, complete versus partial coverage,
+same-home compatibility, indexed timestamp ties, sparse continuation, cursor scope/session/epoch binding, current
+author/revise/container disclosure, mid-read head/erasure changes, bounded idempotent recovery and restoration.
+Existing hosted reading, HTTP and Subject catalogue assertions remain unchanged. Native/browser/growth and broader
+acceptance are deferred for this source sprint; the controller publishes the generated client.
+
 ## Reading
 
 | Operation ID                   | Method and path                                                       | Query                                             |

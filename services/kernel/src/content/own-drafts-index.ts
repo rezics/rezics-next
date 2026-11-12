@@ -8,6 +8,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { eraseAccountAuthoredItem } from './account-erasure-authored.ts';
 import { markAccountErasureFound } from './account-erasure-progress.ts';
 import { lockErasureFence } from './erasure-fence.ts';
+import { repairHostedCataloguePage } from './hosted-chapters-index.ts';
 
 export type OwnDraftSource = {
   author_account_id: string;
@@ -180,6 +181,7 @@ type Frontier = { after_route: number; after_thread: string; after_post: string;
  * their actual homes. No cross-home SQL join or retained foreign checkout is used.
  */
 export async function repairOwnDraftPage(pool: Pool): Promise<{ complete: boolean; examined: number }> {
+  const hosted = await repairHostedCataloguePage(pool);
   const selected = await withConnection(pool, async (client) => {
     const progress = await client.query<Frontier>('SELECT * FROM content.own_draft_progress WHERE singleton=0');
     const frontier = progress.rows[0];
@@ -193,7 +195,7 @@ export async function repairOwnDraftPage(pool: Pool): Promise<{ complete: boolea
     );
     return { frontier, keys: keys.rows };
   });
-  if (selected.frontier.complete) return { complete: true, examined: 0 };
+  if (selected.frontier.complete) return hosted;
   // Failure leaves the entire source frontier unconsumed. Receiving receipts make
   // previously repaired keys exact retries on the next invocation.
   for (const key of selected.keys) await repairLocator(pool, key.post_id);
@@ -230,5 +232,5 @@ export async function repairOwnDraftPage(pool: Pool): Promise<{ complete: boolea
       return { value: null, events: [{ type: 'com.rezics.content.own-drafts.repaired.v1', data: {} }] };
     },
   );
-  return { complete, examined: selected.keys.length };
+  return { complete: complete && hosted.complete, examined: selected.keys.length + hosted.examined };
 }

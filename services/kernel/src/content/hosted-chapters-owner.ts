@@ -10,7 +10,6 @@ import {
   HOSTED_PAGE_LIMIT,
   InvalidHostedCursorError,
   InvalidHostedStructureError,
-  HostedOwnerInventoryUnavailableError,
   type HostedDependencies,
   type HostedOwnerInventoryInput,
   type HostedOwnerInventoryEntry,
@@ -22,8 +21,13 @@ import {
   hostedOwnedCataloguePage,
   type HostedOwnedCatalogueRow,
 } from './hosted-chapters-store.ts';
+import { hostedLocatorCoverage } from './hosted-chapters-index.ts';
+import locatorPage from './hosted-owned-catalogue-page.sql';
 
-/** As with own drafts, the acting account selects its own home, including an
+type Candidate = { item_id: string; thread_id: string; created_at: string };
+type InventoryKind = NonNullable<HostedOwnerInventoryInput['scope']>;
+
+/** As with own drafts, the acting account selects itself, including an
  * organization. Current account admission enforces session, delegation and scopes. */
 async function ownerAdmission(deps: HostedDependencies, accountId: string, context: ReadContext) {
   const actor = context.actor;
@@ -45,18 +49,26 @@ async function ownerAdmission(deps: HostedDependencies, accountId: string, conte
     return current.anchor;
   };
   const anchor = await verify();
-  const scope: HostedOwnerInventoryScope = { kind: 'same-home', route, crossHome: 'unavailable' };
-  return { actor, route, scope, anchor, verify };
+  return { actor, route, anchor, verify };
 }
 
-function cursorScope(admission: Awaited<ReturnType<typeof ownerAdmission>>, limit: number): CursorBinding {
+function inventoryScope(route: number, kind: InventoryKind, complete: boolean): HostedOwnerInventoryScope {
+  return { kind, route, crossHome: kind === 'same-home' ? 'unavailable' : complete ? 'complete' : 'partial' };
+}
+
+function cursorScope(
+  admission: Awaited<ReturnType<typeof ownerAdmission>>,
+  limit: number,
+  kind: InventoryKind,
+): CursorBinding {
   const { actor, route } = admission;
+  // Preserve the exact original same-home binding and encrypted boundary format.
   return {
     operation: 'content.hosted-catalogue.owner.list',
     parameters: {
       accountId: actor.accountId,
       route,
-      scope: 'same-home',
+      scope: kind,
       limit,
       clientId: actor.clientId,
       requestedBy: actor.requestedBy,
@@ -71,16 +83,19 @@ async function prepareEntry(
   accountId: string,
   row: HostedOwnedCatalogueRow,
   context: ReadContext,
-  epoch: number,
+  source: AnchoredPosition,
+  anchors: AnchoredPosition[],
 ) {
   const observation: { current?: Parameters<RetainContentRead<PostEntry>>[0] } = {};
   const initial = await readPost(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
     observation.current = current;
   });
+  anchors.push(initial.anchor);
   if (
     initial.value?.availability !== 'available' ||
     initial.value.authorId !== accountId ||
-    initial.anchor.epoch !== epoch ||
+    initial.anchor.partition.partitionNo !== source.partition.partitionNo ||
+    initial.anchor.epoch !== source.epoch ||
     !observation.current
   )
     return null;
@@ -92,6 +107,7 @@ async function prepareEntry(
     { pool: deps.pool, deadline: context.deadline },
   );
   const retained = observation.current;
+  const revisionId = initial.value.revisionId;
   // Keep metadata and native authority handles, never a page of document bodies.
   return async () => {
     const final = await retained(async (client) => {
@@ -107,12 +123,15 @@ async function prepareEntry(
       )
         throw new ContentNotFoundError();
     });
+    anchors.push(final.anchor);
     const post = final.value;
     if (
       post?.availability !== 'available' ||
       post.authorId !== accountId ||
       post.threadId !== row.thread_id ||
-      final.anchor.epoch !== epoch ||
+      post.revisionId !== revisionId ||
+      final.anchor.partition.partitionNo !== source.partition.partitionNo ||
+      final.anchor.epoch !== source.epoch ||
       post.visibility === 'taken_down'
     )
       return null;
@@ -125,12 +144,31 @@ async function prepareEntry(
       headRevisionId: row.head_revision_id,
       publicationId: row.publication_id,
     };
-    return { value, anchor: final.anchor };
+    return value;
   };
 }
 
-/** <=21 actual owned catalogue records from one source route, <=20 native
- * disclosures. Denied or changed records consume their slots; never refill. */
+/** A locator candidate contains no head or release claim. Open only its exact
+ * Post home, retain that partition's anchor and recheck current native ownership.
+ * A different source cannot replace the indexed key, thread or creation time. */
+async function prepareCandidate(
+  deps: HostedDependencies,
+  accountId: string,
+  candidate: Candidate,
+  context: ReadContext,
+  anchors: AnchoredPosition[],
+) {
+  const selected = await snapshot(deps, candidate.item_id, context, (client) =>
+    hostedOwnedCatalogue(client, routeOf(candidate.item_id)!, accountId, candidate.item_id),
+  );
+  anchors.push(selected.anchor);
+  const row = selected.value;
+  if (!row || row.thread_id !== candidate.thread_id || row.created_at !== candidate.created_at) return null;
+  return prepareEntry(deps, accountId, row, context, selected.anchor, anchors);
+}
+
+/** <=21 indexed raw candidates, <=20 native disclosures. Hidden or changed
+ * sources consume their slots. The raw encrypted boundary continues sparse pages. */
 export async function listOwnHostedCatalogues(
   deps: HostedDependencies,
   accountId: string,
@@ -138,11 +176,11 @@ export async function listOwnHostedCatalogues(
   input: HostedOwnerInventoryInput = {},
 ) {
   const admission = await ownerAdmission(deps, accountId, context);
-  if (input.scope === 'all-homes') throw new HostedOwnerInventoryUnavailableError();
-  if (input.scope !== undefined && input.scope !== 'same-home') throw new InvalidHostedStructureError();
+  const kind = input.scope ?? 'same-home';
+  if (kind !== 'same-home' && kind !== 'all-homes') throw new InvalidHostedStructureError();
   const limit = input.limit ?? HOSTED_PAGE_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > HOSTED_PAGE_LIMIT) throw new InvalidHostedStructureError();
-  const binding = cursorScope(admission, limit);
+  const binding = cursorScope(admission, limit, kind);
   const now = deps.clock().getTime();
   const selected = await snapshot(deps, accountId, context, async (client) => {
     const partition = await readPartition(client, partitionOf(admission.route));
@@ -154,45 +192,74 @@ export async function listOwnHostedCatalogues(
       } catch {
         throw new InvalidHostedCursorError();
       }
-      if (routeOf(after.itemId) !== admission.route) throw new InvalidHostedCursorError();
+      if (kind === 'same-home' && routeOf(after.itemId) !== admission.route) throw new InvalidHostedCursorError();
     }
-    return hostedOwnedCataloguePage(client, admission.route, accountId, after, limit + 1);
+    if (kind === 'same-home') {
+      const rows = await hostedOwnedCataloguePage(client, admission.route, accountId, after, limit + 1);
+      return {
+        rows,
+        candidates: rows.map((row) => ({
+          item_id: row.catalogue_id, thread_id: row.thread_id, created_at: row.created_at,
+        })),
+        complete: false,
+      };
+    }
+    const parameters = {
+      route: admission.route,
+      account_id: accountId,
+      after_at: after?.createdAt ?? 'infinity',
+      after_id: after?.itemId ?? '00000000-0000-0000-0000-000000000000',
+      limit: limit + 1,
+    };
+    const candidates = await client.query<Candidate>(
+      locatorPage.sql,
+      locatorPage.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    return { rows: null, candidates: candidates.rows, complete: await hostedLocatorCoverage(client, accountId) };
   });
   const anchors: AnchoredPosition[] = [admission.anchor, selected.anchor];
   const prepared: Array<NonNullable<Awaited<ReturnType<typeof prepareEntry>>>> = [];
-  for (const row of selected.value.slice(0, limit)) {
+  for (let index = 0; index < Math.min(limit, selected.value.candidates.length); index++) {
     try {
-      const entry = await prepareEntry(deps, accountId, row, context, selected.anchor.epoch);
+      const row = selected.value.rows?.[index];
+      const entry = row
+        ? await prepareEntry(deps, accountId, row, context, selected.anchor, anchors)
+        : await prepareCandidate(deps, accountId, selected.value.candidates[index]!, context, anchors);
       if (entry) prepared.push(entry);
     } catch (error) {
       if (!(error instanceof ContentNotFoundError)) throw error;
     }
   }
+  let complete = selected.value.complete;
+  if (kind === 'all-homes') {
+    const coverage = await snapshot(deps, accountId, context, (client) => hostedLocatorCoverage(client, accountId));
+    anchors.push(coverage.anchor);
+    complete &&= coverage.value && coverage.anchor.epoch === selected.anchor.epoch;
+  }
   anchors.push(await admission.verify());
   const items: HostedOwnerInventoryEntry[] = [];
+  // Native sources close last, after account and coverage work. Do not hydrate a
+  // replacement page if a catalogue changes during those foreign observations.
   for (const finish of prepared) {
     try {
       const entry = await finish();
-      if (entry) {
-        items.push(entry.value);
-        anchors.push(entry.anchor);
-      }
+      if (entry) items.push(entry);
     } catch (error) {
       if (!(error instanceof ContentNotFoundError)) throw error;
     }
   }
-  const last = selected.value.slice(0, limit).at(-1);
+  const last = selected.value.candidates.slice(0, limit).at(-1);
   const value: HostedOwnerInventoryView = {
-    scope: admission.scope,
+    scope: inventoryScope(admission.route, kind, complete),
     viewer: { accountId, authnEpoch: admission.actor.authnEpoch },
     items,
     // Encrypt the raw boundary: even a withheld candidate's ID and time stay private.
     nextCursor:
-      selected.value.length > limit && last
+      selected.value.candidates.length > limit && last
         ? encodeAuthorItemKey(
             deps.tokens,
             binding,
-            { createdAt: last.created_at, itemId: last.catalogue_id },
+            { createdAt: last.created_at, itemId: last.item_id },
             selected.anchor.epoch,
             now,
           )
@@ -201,9 +268,8 @@ export async function listOwnHostedCatalogues(
   return { value, anchors };
 }
 
-/** Resolve one inventory entry within its declared scope, without a supplied
- * thread or ownership claim. Existing hosted reads still accept known remote IDs;
- * this directory never infers cross-home coverage from those exact reads. */
+/** An exact owner selection needs no locator coverage claim. Native membership,
+ * author and revise authority are proved in the catalogue's own current home. */
 export async function readOwnHostedCatalogue(
   deps: HostedDependencies,
   accountId: string,
@@ -213,17 +279,28 @@ export async function readOwnHostedCatalogue(
   const admission = await ownerAdmission(deps, accountId, context);
   const route = routeOf(catalogueId);
   if (route === null) throw new ContentNotFoundError();
-  if (route !== admission.route) throw new HostedOwnerInventoryUnavailableError();
-  const selected = await snapshot(deps, accountId, context, (client) =>
+  const selected = await snapshot(deps, catalogueId, context, (client) =>
     hostedOwnedCatalogue(client, route, accountId, catalogueId),
   );
-  if (!selected.value || selected.anchor.epoch !== admission.anchor.epoch) throw new ContentNotFoundError();
-  const finish = await prepareEntry(deps, accountId, selected.value, context, selected.anchor.epoch);
-  const accountAnchor = await admission.verify();
+  const anchors = [admission.anchor, selected.anchor];
+  if (!selected.value) throw new ContentNotFoundError();
+  const finish = await prepareEntry(deps, accountId, selected.value, context, selected.anchor, anchors);
+  const kind = route === admission.route ? 'same-home' : 'all-homes';
+  let complete = false;
+  if (kind === 'all-homes') {
+    const coverage = await snapshot(deps, accountId, context, (client) => hostedLocatorCoverage(client, accountId));
+    anchors.push(coverage.anchor);
+    complete = coverage.value;
+  }
+  anchors.push(await admission.verify());
   const entry = await finish?.();
   if (!entry) throw new ContentNotFoundError();
   return {
-    value: { scope: admission.scope, viewer: { accountId, authnEpoch: admission.actor.authnEpoch }, item: entry.value },
-    anchors: [admission.anchor, selected.anchor, accountAnchor, entry.anchor],
+    value: {
+      scope: inventoryScope(admission.route, kind, complete),
+      viewer: { accountId, authnEpoch: admission.actor.authnEpoch },
+      item: entry,
+    },
+    anchors,
   };
 }

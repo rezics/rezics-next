@@ -55,7 +55,7 @@ export async function hostedOwnedCataloguePage(
 }
 
 export async function hostedOwnedCatalogue(client: AccessClient, route: number, accountId: string, id: string) {
-  if (routeOf(accountId) !== route || routeOf(id) !== route) throw new InvalidHostedStructureError();
+  if (routeOf(id) !== route) throw new InvalidHostedStructureError();
   return (
     (
       await client.query<HostedOwnedCatalogueRow>(`${HOSTED_OWNED_SELECT} AND c.catalogue_id=$3`, [

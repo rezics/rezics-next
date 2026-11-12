@@ -103,9 +103,9 @@ export const HostedNavigationQuerySchema = t.Object(
 
 const ownerScope = t.Object(
   {
-    kind: t.Literal('same-home'),
+    kind: t.Union([t.Literal('same-home'), t.Literal('all-homes')]),
     route: t.Integer({ minimum: 0, maximum: 65535 }),
-    crossHome: t.Literal('unavailable'),
+    crossHome: t.Union([t.Literal('unavailable'), t.Literal('partial'), t.Literal('complete')]),
   },
   closed,
 );

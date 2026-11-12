@@ -52,6 +52,7 @@ export function CONTENT_EVENTS() {
           { additionalProperties: false },
         ),
         'com.rezics.content.own-drafts.repaired.v1': Type.Object({}, { additionalProperties: false }),
+        'com.rezics.content.hosted-catalogue.locator-repaired.v1': Type.Object({}, { additionalProperties: false }),
         'com.rezics.content.board.slow-mode.changed.v1': Type.Object(
           { boardId: UUID, intervalSeconds: Type.Integer({ minimum: 0, maximum: 86400 }) },
           { additionalProperties: false },
