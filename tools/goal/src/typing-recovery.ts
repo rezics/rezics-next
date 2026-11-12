@@ -44,10 +44,12 @@ export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: Atte
   const lease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', ref.taskId), settings.policy?.leases);
   try {
     const task = store.task(ref.taskId);
-    if (task.currentAttempt !== ref.attempt || task.state !== 'ready' || task.brief.kind === 'verification') return false;
+    if (task.currentAttempt !== ref.attempt || task.state !== 'ready' || task.brief.kind === 'verification')
+      return false;
     const attempt = store.attempt(ref);
     const retry = store.retryIntent(ref);
-    const pendingEvidence = attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result);
+    const pendingEvidence =
+      attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result);
     if (
       attempt.state !== 'stopped' ||
       !pendingEvidence ||

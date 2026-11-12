@@ -177,9 +177,13 @@ function stoppedTypingRetryFixture(
       settledAt: stopSettledAt,
     };
   });
-  h.store.recordExplicitRetry(ref, (current) => {
-    current.state = 'ready';
-  }, { freshSession: true });
+  h.store.recordExplicitRetry(
+    ref,
+    (current) => {
+      current.state = 'ready';
+    },
+    { freshSession: true },
+  );
   if (options.misclassified)
     h.store.updateRetryIntent(ref, (current) => {
       current.status = 'started';
