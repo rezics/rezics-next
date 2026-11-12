@@ -1252,6 +1252,9 @@ checks. A standalone Space uses its native current head and lifecycle eligibilit
 final disclosure use released snapshots, including a second native read after command authority
 preparation, before receipt lookup. Missing and concealed targets produce the same 404.
 
+Decision: report-list selectors remain scalar query fields; reject repeated selector keys from the
+raw HTTP URL before framework-coerced values reach selection or cursor evaluation.
+
 A submitted report stores its exact native head/lifecycle witness with the original target and
 submitted evidence. This witness is immutable and internal: it never becomes target readership.
 A reporter can retain their submitted record and dismissed outcome after loss of target access;
@@ -4642,6 +4645,12 @@ response rather than introducing another DTO.
 Decision: receive the shared receipt keys and thirty-second test request budget through the existing authored
 erasure, native-operation HTTP, admission HTTP and native growth suites. Batch post/parent attribution remains
 the exact-point assembly contract; fixture setup failures remain distinct from its assertions.
+
+Decision: direct Content test Kernels use the shared thirty-second request budget. Thread and disclosure drivers wait
+for started fixture operations before stopping their real Auth hosts and pools, and teardown releases every owned
+resource even when one cleanup step fails. Thread traces identify the native outbox fence from its executed CTE shape,
+retain the exact SQL observed for fault injection, and use the declared fence parameter order without inventing a
+command stage.
 
 Decision: the ordinary exact post point read receives the public Accounts attribution contract. Native author IDs
 remain required by authorization; `ContributedPostResponseSchema` publishes the separately typed serialization.

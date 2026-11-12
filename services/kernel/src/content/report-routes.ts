@@ -77,6 +77,13 @@ function existingId(id: string): void {
   if (routeOf(id) === null) throw new ProblemError('not_found');
 }
 
+const reportQueryKeys = Object.freeze(Object.keys(ReportPageQuerySchema.properties));
+
+function rejectRepeatedReportQueryKeys(request: Request): void {
+  const search = new URL(request.url).searchParams;
+  if (reportQueryKeys.some((key) => search.getAll(key).length > 1)) throw new ProblemError('invalid_request');
+}
+
 function component(anchor: AnchoredPosition) {
   return { partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position };
 }
@@ -291,12 +298,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         security: [{ bearerAuth: [] }],
       },
     },
-    ({ params: { id }, query, actor, admission, job, session, set }) => {
+    ({ params: { id }, query, request, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       return list(
         { kind: 'board', id },
         { actor, deadline: job.deadline },
         query,
+        request,
         (operation) => admission.run('normal', job, operation),
         session,
       );
@@ -314,12 +322,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         security: [{ bearerAuth: [] }],
       },
     },
-    ({ params: { id }, query, actor, admission, job, session, set }) => {
+    ({ params: { id }, query, request, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       return list(
         { kind: 'thread', id },
         { actor, deadline: job.deadline },
         query,
+        request,
         (operation) => admission.run('normal', job, operation),
         session,
       );
@@ -337,12 +346,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         security: [{ bearerAuth: [] }],
       },
     },
-    ({ params: { id }, query, actor, admission, job, session, set }) => {
+    ({ params: { id }, query, request, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       return list(
         { kind: 'post', id },
         { actor, deadline: job.deadline },
         query,
+        request,
         (operation) => admission.run('normal', job, operation),
         session,
       );
@@ -366,12 +376,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         security: [{ bearerAuth: [] }],
       },
     },
-    ({ params: { id }, query, actor, admission, job, session, set }) => {
+    ({ params: { id }, query, request, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       return list(
         { kind: 'subject', id },
         { actor, deadline: job.deadline },
         query,
+        request,
         (operation) => admission.run('normal', job, operation),
         session,
       );
@@ -390,12 +401,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         security: [{ bearerAuth: [] }],
       },
     },
-    ({ params: { spaceId }, query, actor, admission, job, session, set }) => {
+    ({ params: { spaceId }, query, request, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       return list(
         { kind: 'space', id: spaceId },
         { actor, deadline: job.deadline },
         query,
+        request,
         (operation) => admission.run('normal', job, operation),
         session,
       );
@@ -414,12 +426,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         security: [{ bearerAuth: [] }],
       },
     },
-    ({ params: { realmId }, query, actor, admission, job, session, set }) => {
+    ({ params: { realmId }, query, request, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       return list(
         { kind: 'realm', id: realmId },
         { actor, deadline: job.deadline },
         query,
+        request,
         (operation) => admission.run('normal', job, operation),
         session,
       );
@@ -440,12 +453,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         security: [{ bearerAuth: [] }],
       },
     },
-    ({ query, actor, admission, job, session, set }) => {
+    ({ query, request, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       return list(
         { kind: 'catalogue', id: GLOBAL_CONTEXT },
         { actor, deadline: job.deadline },
         query,
+        request,
         (operation) => admission.run('normal', job, operation),
         session,
       );
@@ -456,9 +470,11 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
     target: ReportTarget | { kind: 'catalogue'; id: string },
     context: Parameters<typeof listSelectedTargetReports>[2],
     query: { cursor?: string; limit?: number } & import('./reports.ts').ReportSelection,
+    request: Request,
     admit: <T>(operation: () => Promise<T>) => Promise<T>,
     session: { record: (value: ReturnType<typeof component>) => void },
   ) {
+    rejectRepeatedReportQueryKeys(request);
     existingId(target.id);
     const authorityId = target.kind === 'subject' || target.kind === 'catalogue' ? GLOBAL_CONTEXT : target.id;
     return reportOperation(
