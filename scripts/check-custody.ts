@@ -657,6 +657,25 @@ export function remoteRunCustodyPath(root: string, physicalRunId: string): strin
   return join(custodyDirectory(root), 'remote', `${physicalRunId}.json`);
 }
 
+const REMOTE_CUSTODY_ARGUMENT_BYTES = 48 * 1024;
+const REMOTE_CUSTODY_ARGUMENTS_BYTES = 56 * 1024;
+const REMOTE_CUSTODY_ARGUMENT_COUNT = 1024;
+
+function validRemoteCustodyArguments(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= REMOTE_CUSTODY_ARGUMENT_COUNT &&
+    value.every(
+      (argument) =>
+        typeof argument === 'string' &&
+        Buffer.byteLength(argument) <= REMOTE_CUSTODY_ARGUMENT_BYTES &&
+        !argument.includes('\0'),
+    ) &&
+    Buffer.byteLength(JSON.stringify(value)) <= REMOTE_CUSTODY_ARGUMENTS_BYTES
+  );
+}
+
 export function initializeRemoteRunCustody(
   root: string,
   physicalRunId: string,
@@ -665,16 +684,10 @@ export function initializeRemoteRunCustody(
   if (
     !isPhysicalRunId(physicalRunId) ||
     !isCheckId(binding.checkId) ||
-    !Array.isArray(binding.argv) ||
-    binding.argv.length === 0 ||
-    binding.argv.some(
-      (argument) => typeof argument !== 'string' || argument.length > 4096 || argument.includes('\0'),
-    ) ||
-    !Array.isArray(binding.remoteArgv) ||
-    binding.remoteArgv.length === 0 ||
-    binding.remoteArgv.some(
-      (argument) => typeof argument !== 'string' || argument.length > 64 * 1024 || argument.includes('\0'),
-    )
+    !validRemoteCustodyArguments(binding.argv) ||
+    binding.argv.some((argument) => argument.length > 4096) ||
+    !validRemoteCustodyArguments(binding.remoteArgv) ||
+    Buffer.byteLength(JSON.stringify([binding.argv, binding.remoteArgv])) > REMOTE_CUSTODY_ARGUMENTS_BYTES
   )
     throw new Error('worker-check: invalid remote custody binding');
   if (binding.ownership !== undefined) validateOwnership(binding.ownership);
