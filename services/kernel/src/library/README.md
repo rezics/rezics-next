@@ -104,6 +104,8 @@ and empty TOC, CAS save/get/clear, withheld resume keeping the address, position
 Acceptance choice: focused source fixtures pin those states; native/browser acceptance stays in the
 dev verifier.
 
+Decision: `hosted_reading.list` orders checkpoints by a per-mutation activity sequence descending and Subject ID ascending, uses a sealed keyset cursor bound to the current account credentials and partition epoch, and asks Content for exact-publication metadata without chapter bodies; current Access controls metadata while the saved address remains unchanged.
+
 Library contract owns Continue session and page vocabulary. `adapters/continue-page.ts` owns the closed Continue
 HTTP schema and the native Continue adapter Content binds at composition. The page schema stays a TypeBox object
 so Feed can compose `.properties`; the Continue list operation pins that object to the disclosed page. Progress session schemas remain on `transport-contract.ts`. Wire/security metadata comes from the declarations composed by createKernel; native

@@ -20,7 +20,7 @@ import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/
 import { createNativeHostedReadingPort } from '../content/adapters/hosted-reading.ts';
 import { bindHostedReadingPort } from '../library/hosted-reading-bind.ts';
 import type { HostedDependencies } from '../content/index.ts';
-import type { HostedReadingPort } from '../library/contract/hosted-reading.ts';
+import type { HostedReadingPort } from '../library/contract/index.ts';
 /** Library process composition. Binds native SQL and foreign Access/Search/Semantic/Content adapters. */
 
 import { commandAccessContext } from '../access/command-admission.ts';
@@ -95,7 +95,6 @@ import {
 import {
   preparedSource,
   type LibraryCapabilities,
-  type LibraryDomain,
   type NativeSourceIdentity,
   type PreparedCollectionSource,
   type PreparedSearchScope,

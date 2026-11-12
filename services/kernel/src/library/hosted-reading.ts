@@ -1,16 +1,23 @@
 import type { Pool } from 'pg';
+import { createHash } from 'node:crypto';
 import { readAccount, deadlineClient, within } from './access-port.ts';
-import type { KernelClock } from '../clock.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
 import type { CommandResult } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import type { Access, Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { readPartition } from '../partition/partition.ts';
+import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
 import {
+  HOSTED_READING_LIST_LIMIT,
   HOSTED_READING_CHANGED_EVENT,
   type HostedReadingAddress,
+  type HostedReadingListQuery,
+  type HostedReadingListView,
   type HostedReadingClearInput,
   type HostedReadingClearResult,
   type HostedReadingPort,
@@ -38,9 +45,11 @@ import insertCheckpoint from './hosted-reading-insert.sql';
 import updateCheckpoint from './hosted-reading-update.sql';
 import deleteCheckpoint from './hosted-reading-delete.sql';
 import exportPage from './hosted-reading-export.sql';
+import checkpointPage from './hosted-reading-page.sql';
 
 export type HostedReadingDependencies = {
   pool: Pool;
+  tokens: KeyRing;
   access?: Access;
   clock?: KernelClock;
   content: HostedReadingPort;
@@ -74,8 +83,156 @@ function storedAddress(row: HostedReadingRow): HostedReadingAddress {
   return addressFromRow(row);
 }
 
+type HostedReadingPageRow = HostedReadingRow &
+  Readonly<{
+    subject_id: string;
+    activity_sequence: string;
+    activity_at: string;
+  }>;
+
+function listCaller(owner: AccountActor): string {
+  return createHash('sha256')
+    .update(JSON.stringify([owner.clientId, owner.requestedBy, owner.authnEpoch, [...new Set(owner.scopes)].sort()]))
+    .digest('hex');
+}
+
+function listBinding(owner: AccountActor, route: number, limit: number): CursorBinding {
+  return {
+    operation: 'library.hosted_reading.list',
+    parameters: { accountId: owner.accountId, route, caller: listCaller(owner), limit },
+  };
+}
+
 export function createHostedReadingReads(dependencies: HostedReadingDependencies) {
   return {
+    async list(
+      actor: Actor,
+      query: HostedReadingListQuery,
+      deadline: number,
+      signal?: AbortSignal,
+    ): Promise<HostedReadingListView> {
+      requireOwner(actor, 'progress_session:list');
+      const owner = actor as AccountActor;
+      const limit = query.limit ?? HOSTED_READING_LIST_LIMIT;
+      if (!Number.isInteger(limit) || limit < 1 || limit > HOSTED_READING_LIST_LIMIT)
+        throw new ProblemError('invalid_request');
+      if (
+        query.cursor !== undefined &&
+        (typeof query.cursor !== 'string' || query.cursor.length < 1 || query.cursor.length > 4096)
+      )
+        throw new ProblemError('invalid_cursor');
+      const route = routeOf(owner.accountId)!;
+      const alive = () => {
+        if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+      };
+      alive();
+      const now = (dependencies.clock ?? systemClock)().getTime();
+      const binding = listBinding(owner, route, limit);
+      const selected = await within(deadline, () =>
+        withConnection(dependencies.pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          let committed = false;
+          try {
+            await client.query('BEGIN');
+            await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+              route,
+              owner.accountId,
+            ]);
+            await authorizeOwner(client, route, owner);
+            const partition = await readPartition(client, partitionOf(route));
+            if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
+              throw new ProblemError('partition_unavailable');
+            let afterSequence: string | null = null;
+            let afterSubjectId: string | null = null;
+            if (query.cursor !== undefined) {
+              const cursor = decodeCursor(dependencies.tokens, binding, query.cursor, now);
+              if (!cursor.ok) throw new ProblemError(cursor.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
+              if (cursor.epoch !== partition.epoch) throw new ProblemError('stale_cursor');
+              const [sequence, subjectId] = cursor.after;
+              if (
+                cursor.after.length !== 2 ||
+                typeof sequence !== 'string' ||
+                !/^[1-9][0-9]{0,18}$/.test(sequence) ||
+                BigInt(sequence) > 9_223_372_036_854_775_807n ||
+                typeof subjectId !== 'string' ||
+                routeOf(subjectId) !== route
+              )
+                throw new ProblemError('invalid_cursor');
+              afterSequence = sequence;
+              afterSubjectId = subjectId;
+            }
+            alive();
+            const rows = await checkpointPage.run(client, {
+              route,
+              account_id: owner.accountId,
+              after_sequence: afterSequence,
+              after_subject_id: afterSubjectId,
+              limit: limit + 1,
+            });
+            await authorizeOwner(client, route, owner);
+            await client.query('COMMIT');
+            committed = true;
+            return { epoch: partition.epoch, rows: rows as HostedReadingPageRow[] };
+          } catch (error) {
+            if (!committed) await connection.query('ROLLBACK');
+            throw error;
+          }
+        }),
+      );
+
+      const shown = selected.rows.slice(0, limit);
+      const items = [];
+      for (const row of shown) {
+        alive();
+        const address = storedAddress(row);
+        const metadata = await dependencies.content.readMetadata(owner, address, deadline);
+        items.push({
+          subjectId: row.subject_id,
+          revision: row.revision,
+          address,
+          activityAt: row.activity_at,
+          metadata,
+        });
+      }
+      alive();
+      await within(deadline, () =>
+        withConnection(dependencies.pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          let committed = false;
+          try {
+            await client.query('BEGIN');
+            await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+              route,
+              owner.accountId,
+            ]);
+            await authorizeOwner(client, route, owner);
+            const partition = await readPartition(client, partitionOf(route));
+            if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
+              throw new ProblemError('partition_unavailable');
+            if (partition.epoch !== selected.epoch) throw new ProblemError('stale_cursor');
+            alive();
+            await client.query('COMMIT');
+            committed = true;
+          } catch (error) {
+            if (!committed) await connection.query('ROLLBACK');
+            throw error;
+          }
+        }),
+      );
+      const last = shown.at(-1);
+      return {
+        items,
+        nextCursor:
+          selected.rows.length > limit && last
+            ? encodeCursor(
+                dependencies.tokens,
+                binding,
+                { epoch: selected.epoch, after: [last.activity_sequence, last.subject_id] },
+                now,
+              )
+            : null,
+      };
+    },
     async get(actor: Actor, subjectId: string, deadline: number, signal?: AbortSignal): Promise<HostedReadingView> {
       if (!hostedReadingUuid(subjectId)) throw new ProblemError('invalid_request');
       requireOwner(actor, 'progress_session:list');

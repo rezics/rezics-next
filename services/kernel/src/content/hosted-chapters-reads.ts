@@ -1,8 +1,14 @@
 import { accessCheck } from './access-port.ts';
 import { routeOf } from '../route/route.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
-import { ContentNotFoundError, readPost, snapshot, type PostEntry, type RetainContentRead } from './reads.ts';
-import { prepareHostedTarget } from './hosted-chapters-disclosure.ts';
+import {
+  ContentNotFoundError,
+  readPostMetadata,
+  snapshot,
+  type NativePostMetadata,
+  type RetainContentRead,
+} from './reads.ts';
+import { discloseHostedTargetMetadata, prepareHostedTarget } from './hosted-chapters-disclosure.ts';
 import {
   HOSTED_PLACEMENT_SELECT,
   hostedCatalogue,
@@ -45,11 +51,11 @@ async function selectCatalogue(
   const initial = await snapshot(deps, catalogueId, context, (client) => hostedCatalogue(client, catalogueId));
   if (!initial.value) throw new ContentNotFoundError();
   const catalogue = initial.value;
-  const observation: { current?: Parameters<RetainContentRead<PostEntry>>[0] } = {};
-  const disclosed = await readPost(deps, catalogue.thread_id, catalogueId, context, undefined, (current) => {
+  const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
+  const disclosed = await readPostMetadata(deps, catalogue.thread_id, catalogueId, context, undefined, (current) => {
     observation.current = current;
   });
-  if (disclosed.value?.availability !== 'available' || !observation.current) throw new ContentNotFoundError();
+  if (!disclosed.value || !observation.current) throw new ContentNotFoundError();
   const revisionId =
     selection.revisionId ?? (selection.kind === 'structure' ? catalogue.head_revision_id : catalogue.publication_id);
   if (!revisionId) throw new ContentNotFoundError();
@@ -75,8 +81,7 @@ async function selectCatalogue(
       const row = await hostedCatalogue(client, catalogueId);
       if (!row || row.thread_id !== catalogue.thread_id) throw new ContentNotFoundError();
     });
-    if (result.value?.availability !== 'available' || result.anchor.epoch !== initial.anchor.epoch)
-      throw new ContentNotFoundError();
+    if (!result.value || result.anchor.epoch !== initial.anchor.epoch) throw new ContentNotFoundError();
     return result.anchor;
   };
   // A private structure cannot expose placement existence before edit authority is checked.
@@ -176,6 +181,30 @@ export async function resolveHostedOccurrence(
   anchors.push(await selected.finish());
   const value: HostedResolutionView = { ...selected.view, occurrence, document };
   return { value, anchors };
+}
+
+/** Resolve the same historical occurrence and current Access as exact opening,
+ * but disclose target metadata without selecting or serializing chapter bytes. */
+export async function resolveHostedOccurrenceMetadata(
+  deps: HostedDependencies,
+  catalogueId: string,
+  occurrenceId: string,
+  selection: HostedReadSelection,
+  context: ReadContext,
+) {
+  const selected = await selectCatalogue(deps, catalogueId, selection, context);
+  const found = await placementAt(deps, catalogueId, selected.view.revisionId, occurrenceId, context);
+  if (!found.value || found.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
+  const placement = found.value;
+  const anchors: AnchoredPosition[] = [found.anchor];
+  let occurrence = available(placement);
+  if (placement.kind === 'chapter') {
+    const disclosed = await discloseHostedTargetMetadata(deps, placement.target, context);
+    if (!disclosed) occurrence = unavailable(placement);
+    else anchors.push(disclosed.anchor);
+  }
+  anchors.push(await selected.finish());
+  return { value: { ...selected.view, occurrence }, anchors };
 }
 
 export function listHostedChildren(

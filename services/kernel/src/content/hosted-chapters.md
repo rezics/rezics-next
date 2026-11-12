@@ -114,6 +114,12 @@ targets return an unavailable slot containing only occurrence ID, parent, positi
 target references, digests, attribution and bytes are withheld. Dependency failures remain failures, not evidence
 that a target is absent. Parts disclose their titles under catalogue authority.
 
+Library checkpoint pages resolve the saved publication revision and occurrence through the same current catalogue
+and target Access checks. Their metadata-only Content binding returns the available title and exact target reference
+without selecting chapter bodies; concealed targets return only unavailable metadata while Library retains the
+owner's saved address. The selected historical publication remains usable after later chapter moves or current TOC
+withdrawal, and opening the checkpoint still uses exact resolution to fetch bytes under current Access.
+
 Resolution returns the selected occurrence and a nullable `document`. Available chapters deliver `encoding=base64`,
 the canonical UTF-8 Document bytes as `canonicalBytes`, lowercase `sha256`, original Post `authorId` and `licence`.
 Decoding the base64 string yields the bytes covered by that digest. The document is the exact submitted canonical

@@ -537,6 +537,7 @@ const typed = [
   'GET /v1/libraryReadingInsightsProfiles',
   'GET /v1/libraryYearlyCompletionGoal',
   'GET /v1/libraryHostedReading',
+  'GET /v1/libraryHostedReading/checkpoints',
   'GET /v1/me/classification-assessments',
   'GET /v1/me/moderation-directory',
   'GET /v1/media/avatar-upload-advice',

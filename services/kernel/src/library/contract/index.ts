@@ -208,10 +208,14 @@ export type { BuiltinMemberCapability, BuiltinMemberOptions } from './builtin-pr
 
 export type {
   HostedReadingAddress,
+  HostedReadingCheckpoint,
   HostedReadingClearInput,
   HostedReadingClearResult,
   HostedReadingDocument,
   HostedReadingDocumentPosition,
+  HostedReadingListQuery,
+  HostedReadingListView,
+  HostedReadingMetadata,
   HostedReadingNoneView,
   HostedReadingPort,
   HostedReadingResume,
@@ -223,6 +227,7 @@ export type {
   HostedReadingView,
 } from './hosted-reading.ts';
 export {
+  HOSTED_READING_LIST_LIMIT,
   HOSTED_READING_CHANGED_EVENT,
   HOSTED_READING_POSITION_BLOCK_MAX,
   HOSTED_READING_POSITION_OFFSET_MAX,

@@ -190,6 +190,16 @@ export type NativeDraftMetadata = Readonly<{
   mediaIds: readonly string[];
   board: { id: string; title: string | null; realmId: string | null };
 }>;
+/** Exact Post identity under ordinary current disclosure, with no revision body selected. */
+export type NativePostMetadata = Readonly<{
+  id: string;
+  threadId: string;
+  revisionId: string;
+  authorId: string;
+  licence: string;
+  sha256: string;
+  visibility: Visibility;
+}>;
 export type { Actor };
 
 type Kind = 'board' | 'thread' | 'post' | 'revision';
@@ -1345,9 +1355,9 @@ async function disclose(
   subjectScope?: { subjectId: string; placeId: string },
   threadReference = threadDetail,
   beforeFinal?: () => Promise<void>,
-  metadataOnly = false,
-  retain?: RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata>,
-): Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | null>> {
+  metadataOnly: false | 'draft' | 'post' = false,
+  retain?: RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata>,
+): Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
       const thread = await point(client, 'thread', threadId);
@@ -1393,7 +1403,7 @@ async function disclose(
   }
   const discloseCurrent = async (
     client: AccessClient,
-  ): Promise<PostEntry | ThreadView | NativeDraftMetadata | null> => {
+  ): Promise<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata | null> => {
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
@@ -1422,7 +1432,7 @@ async function disclose(
         return null;
     }
     if (!current.revision || !current.posts[0]) return null;
-    if (metadataOnly) {
+    if (metadataOnly === 'draft') {
       const post = current.posts[0];
       const revision = current.revision;
       if (
@@ -1448,6 +1458,21 @@ async function disclose(
         subjectIds: revision.subject_ids,
         mediaIds: revision.media_ids,
         board: { id: board.value!.id, title: board.value!.title?.slice(0, 512) ?? null, realmId: board.value!.realmId },
+      };
+    }
+    if (metadataOnly === 'post') {
+      const post = current.posts[0];
+      const revision = current.revision;
+      if (erased || withheld || revision.availability !== 'available') return null;
+      if (revision.sha256 === null) throw new Error('Live revision is missing its body digest');
+      return {
+        id: post.id,
+        threadId,
+        revisionId: revision.id,
+        authorId: post.author_id!,
+        licence: revision.licence,
+        sha256: revision.sha256.toString('hex'),
+        visibility: post.visibility,
       };
     }
     // The receipt names one exact revision. That replay is the erased-metadata
@@ -1519,8 +1544,11 @@ async function disclose(
   // snapshot, including when the pool has only one connection. Bytes and keys
   // leave this function only after both authorities have passed their final check.
   if (disclosed.value && !(await boardObservation!.recheck())) return { ...disclosed, value: null };
-  if (disclosed.value && !('firstPostId' in disclosed.value))
-    disclosed = { ...disclosed, value: await readableCitation(dependencies, context, disclosed.value) };
+  if (metadataOnly === false && disclosed.value && !('firstPostId' in disclosed.value))
+    disclosed = {
+      ...disclosed,
+      value: await readableCitation(dependencies, context, disclosed.value as PostEntry | ThreadView),
+    };
   // History retains the same original source rows and exact Access checks for
   // its final page observation. Each round prepares fresh Realm evidence;
   // cached associations from initial hydration cannot survive revalidation.
@@ -1533,12 +1561,15 @@ async function disclose(
       });
       if (final.anchor.epoch !== observed.anchor.epoch) return { ...final, value: null };
       if (final.value && !(await boardObservation!.recheck())) return { ...final, value: null };
-      if (final.value && !('firstPostId' in final.value))
-        final = { ...final, value: await readableCitation(dependencies, context, final.value) };
+      if (metadataOnly === false && final.value && !('firstPostId' in final.value))
+        final = {
+          ...final,
+          value: await readableCitation(dependencies, context, final.value as PostEntry | ThreadView),
+        };
       return final;
     }),
   );
-  if (disclosed.value && !('firstPostId' in disclosed.value)) {
+  if (metadataOnly === false && disclosed.value && !('firstPostId' in disclosed.value)) {
     const witness = fingerprint(initial)!;
     contentSourceWitnesses.set(disclosed.value, witness);
     if ('firstPost' in disclosed.value) contentSourceWitnesses.set(disclosed.value.firstPost, witness);
@@ -1875,7 +1906,9 @@ export async function readThread(
         true,
         threadReadAdmission.getStore(),
         false,
-        retain as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata> | undefined,
+        retain as unknown as
+          | RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata>
+          | undefined,
       )) as Anchored<ThreadView | null>,
   );
 }
@@ -2075,7 +2108,9 @@ export async function readPost(
         false,
         undefined,
         false,
-        retain as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata> | undefined,
+        retain as unknown as
+          | RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata>
+          | undefined,
       )) as Anchored<PostEntry | null>,
   );
 }
@@ -2104,9 +2139,44 @@ export async function readOwnDraftMetadata(
         undefined,
         false,
         undefined,
-        true,
-        retain as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata> | undefined,
+        'draft',
+        retain as unknown as
+          | RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata>
+          | undefined,
       )) as Anchored<NativeDraftMetadata | null>,
+  );
+}
+
+/** Exact Post metadata follows the same native chain and current Access checks as
+ * ordinary reads, while keeping canonical revision bytes out of the selected row. */
+export async function readPostMetadata(
+  dependencies: ContentReadDependencies,
+  threadId: ThreadId,
+  postId: PostId,
+  context: ReadContext,
+  revisionId?: RevisionId,
+  retain?: RetainContentRead<NativePostMetadata>,
+): Promise<Anchored<NativePostMetadata | null>> {
+  if (route(postId) !== route(threadId) || (revisionId !== undefined && route(revisionId) !== route(threadId)))
+    return snapshot(dependencies, threadId, context, async () => null);
+  return withRealmDisclosureScope(
+    async () =>
+      (await disclose(
+        dependencies,
+        threadId,
+        context,
+        postId,
+        revisionId,
+        false,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        'post',
+        retain as unknown as
+          | RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata>
+          | undefined,
+      )) as Anchored<NativePostMetadata | null>,
   );
 }
 
@@ -2181,7 +2251,9 @@ async function list(
             true,
             undefined,
             false,
-            retainEntry as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata>,
+            retainEntry as unknown as RetainContentRead<
+              PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata
+            >,
           )) as Anchored<PostEntry | null>,
       );
       if (!result.value) continue;

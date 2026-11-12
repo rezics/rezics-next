@@ -1,5 +1,5 @@
-/** Owner-private hosted Book checkpoint vocabulary. Library storage consumes these shapes;
- * Content implements the selection port at composition. */
+/** Owner-private hosted Book checkpoint vocabulary. Library stores exact addresses;
+ * Content supplies current disclosure without transferring document bytes to list pages. */
 
 export type HostedReadingDocumentPosition = Readonly<{
   blockId: string;
@@ -32,7 +32,7 @@ export type HostedReadingDocument = Readonly<{
   licence: string;
 }>;
 
-export type HostedReadingResume =
+export type HostedReadingMetadata =
   | Readonly<{
       availability: 'available';
       occurrenceId: string;
@@ -41,7 +41,6 @@ export type HostedReadingResume =
       kind: 'chapter';
       title: string;
       target: HostedReadingChapterTarget;
-      document: HostedReadingDocument;
     }>
   | Readonly<{
       availability: 'unavailable';
@@ -49,17 +48,23 @@ export type HostedReadingResume =
       kind: 'chapter' | 'part' | 'unknown';
     }>;
 
+export type HostedReadingResume =
+  | (Extract<HostedReadingMetadata, { availability: 'available' }> & Readonly<{ document: HostedReadingDocument }>)
+  | Extract<HostedReadingMetadata, { availability: 'unavailable' }>;
+
 export type HostedReadingValidation =
   | Readonly<{ ok: true; address: HostedReadingAddress }>
   | Readonly<{ ok: false; reason: 'not_found' | 'invalid_selection' | 'unavailable' }>;
 
-/** Content validates save selections and rechecks exact resume Access. Private facts grant no read access. */
+/** Content validates save selections, projects exact current metadata for owner pages,
+ * and rechecks current Access before exact resume. Private facts grant no read access. */
 export type HostedReadingPort = Readonly<{
   validateSelection(
     actor: unknown,
     selection: HostedReadingSelection,
     deadline: number,
   ): Promise<HostedReadingValidation>;
+  readMetadata(actor: unknown, address: HostedReadingAddress, deadline: number): Promise<HostedReadingMetadata>;
   resolveExact(actor: unknown, address: HostedReadingAddress, deadline: number): Promise<HostedReadingResume>;
 }>;
 
@@ -74,6 +79,24 @@ export type HostedReadingSavedView = Readonly<{
 export type HostedReadingNoneView = Readonly<{ state: 'none'; subjectId: string }>;
 
 export type HostedReadingView = HostedReadingSavedView | HostedReadingNoneView;
+
+export type HostedReadingListQuery = Readonly<{
+  limit?: number;
+  cursor?: string;
+}>;
+
+export type HostedReadingCheckpoint = Readonly<{
+  subjectId: string;
+  revision: string;
+  address: HostedReadingAddress;
+  activityAt: string;
+  metadata: HostedReadingMetadata;
+}>;
+
+export type HostedReadingListView = Readonly<{
+  items: readonly HostedReadingCheckpoint[];
+  nextCursor: string | null;
+}>;
 
 export type HostedReadingSaveInput = HostedReadingSelection &
   Readonly<{
@@ -97,6 +120,7 @@ export type HostedReadingClearResult = Readonly<{
   cleared: true;
 }>;
 
+export const HOSTED_READING_LIST_LIMIT = 20;
 export const HOSTED_READING_POSITION_BLOCK_MAX = 128;
 export const HOSTED_READING_POSITION_OFFSET_MAX = 2 * 1024 * 1024;
 export const HOSTED_READING_CHANGED_EVENT = 'com.rezics.library.hosted-reading.changed.v1';

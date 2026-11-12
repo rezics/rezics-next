@@ -778,6 +778,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   let hostedReading: ReturnType<typeof hostedReadingRoutes>;
   hostedReading = hostedReadingRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(hostedReading), realmRoleReader }),
   });

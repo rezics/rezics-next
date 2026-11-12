@@ -12,8 +12,10 @@ import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, Actor } from '../request/access.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
+  HOSTED_READING_LIST_LIMIT,
   HOSTED_READING_POSITION_BLOCK_MAX,
   HOSTED_READING_POSITION_OFFSET_MAX,
   type HostedReadingPort,
@@ -81,6 +83,28 @@ const resume = t.Union([
     closed,
   ),
 ]);
+const metadata = t.Union([
+  t.Object(
+    {
+      availability: t.Literal('available'),
+      occurrenceId: id,
+      parentId: t.Union([id, t.Null()]),
+      position: t.Integer({ minimum: 0, maximum: 511 }),
+      kind: t.Literal('chapter'),
+      title: t.String({ minLength: 1, maxLength: 256 }),
+      target,
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      availability: t.Literal('unavailable'),
+      occurrenceId: id,
+      kind: t.Union([t.Literal('chapter'), t.Literal('part'), t.Literal('unknown')]),
+    },
+    closed,
+  ),
+]);
 
 function getResponse() {
   return memoizedValue(getResponse, () =>
@@ -97,6 +121,30 @@ function getResponse() {
         closed,
       ),
     ]),
+  );
+}
+
+function listResponse() {
+  return memoizedValue(listResponse, () =>
+    t.Object(
+      {
+        items: t.Array(
+          t.Object(
+            {
+              subjectId: id,
+              revision,
+              address: t.Object(address, closed),
+              activityAt: t.String(),
+              metadata,
+            },
+            closed,
+          ),
+          { maxItems: HOSTED_READING_LIST_LIMIT },
+        ),
+        nextCursor: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+      },
+      closed,
+    ),
   );
 }
 
@@ -173,6 +221,7 @@ function mapCommandError(error: unknown): never {
 
 export type HostedReadingRouteDependencies = {
   pool: Pool;
+  tokens: KeyRing;
   access: () => Access;
   clock?: KernelClock;
   content?: HostedReadingPort;
@@ -186,6 +235,7 @@ export function hostedReadingRoutes(
   const reads = () =>
     createHostedReadingReads({
       pool: dependencies.pool,
+      tokens: dependencies.tokens,
       access: dependencies.access(),
       ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
       content: content(),
@@ -193,11 +243,50 @@ export function hostedReadingRoutes(
   const commands = () =>
     createHostedReadingCommands({
       pool: dependencies.pool,
+      tokens: dependencies.tokens,
       access: dependencies.access(),
       ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
       content: content(),
     });
   return app
+    .get(
+      '/v1/libraryHostedReading/checkpoints',
+      {
+        query: t.Object(
+          {
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: HOSTED_READING_LIST_LIMIT })),
+            cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+          },
+          closed,
+        ),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          const query = new URL(request.url).searchParams;
+          if (
+            [...query.keys()].some((key) => key !== 'limit' && key !== 'cursor') ||
+            query.getAll('limit').length > 1 ||
+            query.getAll('cursor').length > 1
+          )
+            throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: listResponse(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          401: unauthorized(),
+          403: forbidden(),
+          409: problemSchema('stale_cursor'),
+          503: unavailable(),
+        },
+        detail: detail('hosted_reading.list', 'progress_session:list'),
+      },
+      async ({ actor, admission, job, query, request }) => {
+        const owner = requireAccount(actor);
+        return admission.run('normal', job, async () => {
+          const page = await reads().list(owner, query, job.deadline, request.signal);
+          return { items: [...page.items], nextCursor: page.nextCursor };
+        });
+      },
+    )
     .get(
       '/v1/libraryHostedReading',
       {

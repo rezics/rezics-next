@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { serializeDocument } from '@rezics/document';
 import type { ReadContext } from './model.ts';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
-import { ContentNotFoundError, readPost, type PostEntry, type RetainContentRead } from './reads.ts';
+import { ContentNotFoundError, readPost, readPostMetadata, type PostEntry, type RetainContentRead } from './reads.ts';
 import type { HostedChapterTarget, HostedDependencies } from './hosted-chapters-model.ts';
 
 type AvailablePost = Extract<PostEntry, { availability: 'available' }>;
@@ -54,4 +54,29 @@ export async function prepareHostedTarget(deps: HostedDependencies, target: Host
       return { ...original, canonicalBytes: bytes.toString('base64'), anchor: result.anchor };
     },
   };
+}
+
+/** Current target disclosure for Library's saved-checkpoint list. This exact read
+ * returns only native metadata and never selects revision.body. */
+export async function discloseHostedTargetMetadata(
+  deps: HostedDependencies,
+  target: HostedChapterTarget,
+  context: ReadContext,
+) {
+  try {
+    const result = await readPostMetadata(deps, target.threadId, target.postId, context, target.revisionId);
+    const post = result.value;
+    if (
+      !post ||
+      post.id !== target.postId ||
+      post.threadId !== target.threadId ||
+      post.revisionId !== target.revisionId ||
+      post.sha256 !== target.sha256
+    )
+      return null;
+    return { authorId: post.authorId, licence: post.licence, anchor: result.anchor };
+  } catch (error) {
+    if (error instanceof ContentNotFoundError) return null;
+    throw error;
+  }
 }

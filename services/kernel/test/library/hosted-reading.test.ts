@@ -21,6 +21,7 @@ const eraseSql = sql('erasure-owned-hosted-reading.sql');
 const exportSql = sql('hosted-reading-export.sql');
 const insertSql = sql('hosted-reading-insert.sql');
 const updateSql = sql('hosted-reading-update.sql');
+const pageSql = sql('hosted-reading-page.sql');
 
 const id = '00000000-0000-7000-8000-000000000001';
 const digest = 'ab'.repeat(32);
@@ -88,7 +89,11 @@ test('CAS write statements compare the expected revision and do not rewrite on c
   expect(insertSql).toContain(':document_offset::nullable(integer)');
   expect(updateSql).toContain('stored.revision = input.expected_revision');
   expect(updateSql).toContain('revision = stored.revision + 1');
+  expect(updateSql).toContain("activity_sequence = nextval('library.hosted_reading_activity_sequence')");
   expect(updateSql).toContain(':document_block_id::nullable(text)');
+  expect(pageSql).toContain('ORDER BY activity_sequence DESC, subject_id ASC');
+  expect(pageSql).toContain('activity_sequence < input.after_sequence');
+  expect(pageSql).toContain('LIMIT (SELECT page_limit FROM input)');
 });
 
 test('erasure and export hooks page owner-private checkpoints without granting read access', () => {
@@ -113,6 +118,9 @@ test('resume withholds bytes when current Access conceals the saved chapter and 
   const port: HostedReadingPort = {
     async validateSelection() {
       return { ok: false, reason: 'unavailable' };
+    },
+    async readMetadata(_actor, saved) {
+      return { availability: 'unavailable', occurrenceId: saved.occurrenceId, kind: 'chapter' };
     },
     async resolveExact(_actor, saved) {
       expect(saved).toEqual(address);

@@ -20,7 +20,8 @@ SET catalogue_id = input.catalogue_id,
     document_block_id = input.document_block_id,
     document_offset = input.document_offset,
     revision = stored.revision + 1,
-    changed_at = clock_timestamp()
+    changed_at = clock_timestamp(),
+    activity_sequence = nextval('library.hosted_reading_activity_sequence')
 FROM input
 WHERE stored.route = input.route
   AND stored.account_id = input.account_id
