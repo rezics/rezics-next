@@ -1028,7 +1028,7 @@ export function PostRevisionHeaderSchema() {
         sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
         recordedAt: t.String({ format: 'date-time' }),
         authorId: ContentIdSchema,
-        licence: t.String({ minLength: 1, maxLength: 256 }),
+        licence,
         kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
         documentKind: t.Union([t.Literal('opening'), t.Literal('reply')]),
         subjectIds: t.Array(ContentIdSchema, { maxItems: 128 }),

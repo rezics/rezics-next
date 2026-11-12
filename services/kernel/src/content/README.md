@@ -422,7 +422,7 @@ one retained final read per admitted revision and one retained final source read
 native observation/final read retains the existing depth bound (Post plus at most 32
 reply ancestors), independently anchored Board/Realm and prepared Access bounds and
 releases all checkouts. There is no cross-home atomic snapshot. Memory and output are
-O(p) header metadata; each header has at most 128 Subject IDs and a 256-character licence,
+O(p) header metadata; each header has at most 128 Subject IDs and a 128-character licence,
 with no document bytes or foreign display records. Retry repeats bounded read work and
 writes no receipts, revisions or head state. No history census or body scan occurs.
 
