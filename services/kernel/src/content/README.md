@@ -963,6 +963,9 @@ Immediate published creation and draft publication emit the closed publication e
 `revisionId`, `actorId`, `placeId`, `kind`, `subjectIds` and `activityAt`. Drafts, subsequent edits, rollback and receipt
 replay emit no publication event. Reply index fields retain the existing opening-post subject inheritance.
 
+Decision: resource initialization checks creator-role provenance through the exact `side='new'` source-key index;
+thread creation keeps its native creation event and separate opening-post publication event.
+
 ## Notifications
 
 Content owns minimal in-app notices for `reply`, `mention`, `thread_watch`, `board_activity` and `moderation_decision`, using the names

@@ -32,10 +32,6 @@ import { createNativeAccountBindings } from '../../src/access/native-account-bin
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { CommandUnavailableError } from '../../src/command/command.ts';
 import fenceStatement from '../../src/command/fence.sql';
-import readReceipt from '../../src/command/read-receipt.sql';
-import insertPost from '../../src/content/create-post.sql';
-import insertRevision from '../../src/content/create-revision.sql';
-import insertThread from '../../src/content/create-thread.sql';
 import { threadTarget } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/http/request.ts';
@@ -65,7 +61,6 @@ async function releaseSuiteDrivers(): Promise<void> {
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type Credential = { bearer: string; actor: AccountActor };
-type Stage = 'authorize' | 'receipt' | 'body' | 'write';
 type ProductItem = {
   id: string;
   threadId: string;
@@ -933,12 +928,16 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
           id: string;
           partition: number;
           command: string;
+          idempotencyKey: string;
+          eventSequence: number;
+          eventType: string;
           threadId: string;
           itemId: string;
           revisionId: string;
           actorId: string;
         }>(
           `SELECT o.id::text AS id, o.partition_no AS partition, r.command_kind AS command,
+                  r.idempotency_key AS "idempotencyKey", o.event_seq AS "eventSequence", o.type AS "eventType",
                   o.data->>'threadId' AS "threadId", o.data->>'itemId' AS "itemId",
                   o.data->>'revisionId' AS "revisionId", o.data->>'actorId' AS "actorId"
            FROM core.outbox o
@@ -973,6 +972,9 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
             id: row.id,
             partition: row.partition,
             command: row.command,
+            idempotencyKey: row.idempotencyKey,
+            eventSequence: row.eventSequence,
+            eventType: row.eventType,
             envelope: {
               threadId: row.threadId,
               itemId: row.itemId,
@@ -1114,52 +1116,43 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
     },
     async commandTrace() {
       const records = observer.records.slice(mark);
-      const receiptAt = records.findIndex((record) => record.statement === readReceipt.sql);
-      const bodyStatements = new Set<string>([insertThread.sql, insertPost.sql, insertRevision.sql]);
-      const bodyAt = records.findIndex((record) => bodyStatements.has(record.statement));
-      // Board projection and read hydration run after the content command commits.
-      // Their fences are separate transactions and are not this command's writes.
-      let commandFenceUntil = bodyAt < 0 ? 0 : records.length;
-      if (bodyAt >= 0) {
-        for (let index = bodyAt + 1; index < records.length; index++) {
-          const statement = records[index]!.statement;
-          if (statement === 'COMMIT' || statement === 'ROLLBACK') {
-            commandFenceUntil = index;
-            break;
-          }
-        }
-      }
-      const stages: Stage[] = [];
-      const checks: { action: string; resourceId: string; partition: number; statement: number; at: string }[] = [];
-      const writePartitions: number[] = [];
-      const add = (stage: Stage) => {
-        if (!stages.includes(stage)) stages.push(stage);
-      };
+      const checks: {
+        action: string;
+        resourceId: string;
+        partition: number;
+        statement: number;
+        connectionId: number;
+        at: string;
+      }[] = [];
+      const fences: { partition: number; statement: number; connectionId: number }[] = [];
       records.forEach((record, index) => {
-        if (record.statement === permissionRead.sql && (receiptAt < 0 || index < receiptAt)) {
-          add('authorize');
+        if (record.statement === permissionRead.sql) {
           const route = Number(parameter(record, permissionRead.params, 'route'));
           checks.push({
             action: String(parameter(record, permissionRead.params, 'action')),
             resourceId: permissionResourceId(record, permissionRead.params),
             partition: route >>> 4,
             statement: index + 1,
+            connectionId: record.connectionId,
             at: instant(parameter(record, permissionRead.params, 'at')),
           });
-        } else if (record.statement === readReceipt.sql && (bodyAt < 0 || index < commandFenceUntil)) {
-          add('receipt');
-        } else if (bodyStatements.has(record.statement)) {
-          add('body');
-        } else if (record.statement === fenceStatement.sql && index < commandFenceUntil) {
-          add('write');
-          writePartitions.push(Number(parameter(record, fenceStatement.params, 'partition_no')));
+        }
+        if (record.statement === fenceStatement.sql) {
+          fences.push({
+            partition: Number(parameter(record, fenceStatement.params, 'partition_no')),
+            statement: index + 1,
+            connectionId: record.connectionId,
+          });
         }
       });
       return {
+        queries: records.map((record, index) => ({
+          statement: record.statement,
+          connectionId: record.connectionId,
+          index: index + 1,
+        })),
         checks,
-        stages,
-        writePartitions,
-        throughRunCommand: records.some((record) => record.statement === 'BEGIN ISOLATION LEVEL SERIALIZABLE'),
+        fences,
       };
     },
   };

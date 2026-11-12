@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import {
   CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
   CHECK_RECORD_CUSTODY_VERSION,
-  CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
   controllerProofReservationPath,
   custodyJsonCharacters,
   initializeRemoteRunCustody,
@@ -16,6 +16,7 @@ import {
   validateControllerProofReservation,
   validControllerProofRegistration,
   writeAtomicJson,
+  remoteRunCustodyUpdateLimit,
   type ControllerProofBindingV1,
   type CheckRemoteRunCustody,
   ownershipFromEnvironment,
@@ -35,7 +36,7 @@ import {
   waitWorkerCheck,
   withOriginalContext,
 } from './worker-check.ts';
-import { remoteCheckCustodyCallbacks } from './remote-check.ts';
+import { remoteCheckCustodyCallbacks, type RemotePhysicalRunReceipt } from './remote-check.ts';
 import { typingInputCommand } from '../tools/goal/src/worker-check-typing-inputs.ts';
 
 const roots: string[] = [];
@@ -135,9 +136,12 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
   const file = remoteRunCustodyPath(root, physicalRunId);
   initializeRemoteRunCustody(root, physicalRunId, binding);
   expect(readJsonFile<CheckRemoteRunCustody>(file)?.binding?.remoteArgv).toEqual(remoteArgv);
-  expect(custodyJsonCharacters(readJsonFile<CheckRemoteRunCustody>(file))).toBeLessThanOrEqual(
-    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  const initialCustody = readJsonFile<CheckRemoteRunCustody>(file)!;
+  const initialCustodyCharacters = custodyJsonCharacters(initialCustody);
+  expect(custodyJsonCharacters(initialCustody)).toBeLessThanOrEqual(
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
   );
+  expect(remoteRunCustodyUpdateLimit()).toBe(CHECK_CUSTODY_RECORD_MAX_CHARACTERS);
   Object.assign(process.env, {
     REZICS_CHECK_REMOTE_CUSTODY_FILE: file,
     REZICS_CHECK_REMOTE_CUSTODY_ID: checkId,
@@ -148,7 +152,33 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
   await callbacks.notStarted!({ host: 'check-a', run: 'first-run' }, null, 'transport before start');
   await callbacks.allocated!({ host: 'check-b', run: 'second-run' });
   const run = { host: 'check-b', run: 'second-run' },
-    native = { schema: 1 as const, ...run, exitCode: 0, lifetimeFailure: null, resources: null };
+    native: RemotePhysicalRunReceipt = {
+      schema: 1,
+      ...run,
+      exitCode: 0,
+      lifetimeFailure: null,
+      resources: {
+        schema: 1,
+        ...run,
+        boot: 'boot-id',
+        supervisor: { pid: 7, start: '1', group: 7 },
+        cgroup: null,
+        cadenceMs: 5000,
+        startedMonoMs: 0,
+        commandStartedMonoMs: 1,
+        terminalMonoMs: 66,
+        samples: Array.from({ length: 65 }, (_, index) => ({
+          monoMs: index + 1,
+          phase: 'command' as const,
+          usageUsec: index * 5000,
+          memoryPeakBytes: 1024,
+          intervalMs: 5000,
+          cores: 1,
+          unavailable: null,
+        })),
+        sampledMaxCores: 1,
+      },
+    };
   await callbacks.completed!(native);
   await callbacks.settled!({
     schema: 1,
@@ -181,6 +211,10 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
   ]);
   expect(record?.attempts[1]).toMatchObject({ id: 'second-run', native, settlement: expect.any(Object) });
   expect(record?.binding).toEqual({ ...binding, hostsFile: join(root, 'hosts.json'), returns: [] });
+  expect(custodyJsonCharacters(record)).toBeGreaterThan(
+    initialCustodyCharacters + CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
+  );
+  expect(custodyJsonCharacters(record)).toBeLessThanOrEqual(CHECK_CUSTODY_RECORD_MAX_CHARACTERS);
 
   const max = CHECK_CUSTODY_RECORD_MAX_CHARACTERS;
   const boundary = { payload: 'x'.repeat(max - custodyJsonCharacters({ payload: '' })) };
@@ -203,7 +237,8 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
   const aggregateRunId = randomUUID();
   const aggregateRemoteArgv = ['a'.repeat(27_000), 'b'.repeat(27_000)];
   const aggregateBinding = { checkId, argv, remoteArgv: aggregateRemoteArgv };
-  const aggregateRecordLimit = CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS;
+  const aggregateRecordLimit =
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS;
   expect([...argv, ...aggregateRemoteArgv].every((argument) => Buffer.byteLength(argument) <= 48 * 1024)).toBe(true);
   expect(Buffer.byteLength(JSON.stringify([aggregateBinding.argv, aggregateBinding.remoteArgv]))).toBeLessThanOrEqual(
     56 * 1024,
