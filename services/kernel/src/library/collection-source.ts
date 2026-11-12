@@ -70,6 +70,7 @@ export type CollectionSourceContext = Readonly<{ deadline: number }> &
 export type PrepareCollectionSource = CollectionSourceContext & {
   readonly collectionId: string;
   readonly allowance: WorkAllowance;
+  readonly logical?: boolean;
 };
 
 export type CollectionSourceCall = CollectionSourceContext & {

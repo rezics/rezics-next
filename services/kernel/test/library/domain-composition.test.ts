@@ -6,6 +6,7 @@ import {
   unbindLibraryDomain,
 } from '../../src/composition/library.ts';
 import { createLibraryApplications } from '../../src/library/application/index.ts';
+import { createNativeSourceCaptureAdapter } from '../../src/library/adapters/native-source.ts';
 import type { LibraryCapabilities } from '../../src/library/contract/capabilities.ts';
 import { nativeSourceIdentity } from '../../src/library/canonical-source-store.ts';
 import type { NativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
@@ -16,6 +17,7 @@ import {
 import type { LibraryActor } from '../../src/library/contract/actors.ts';
 import {
   preparedSource,
+  type CollectionSource,
   type CollectionSourceObservation,
   type NativeSourceIdentity,
 } from '../../src/library/contract/source.ts';
@@ -36,6 +38,8 @@ import { preparePresentationSelection } from '../../src/library/collection-prese
 import { libraryActorOf } from '../../src/library/contract/index.ts';
 import { admitComposedEntryProgress, libraryCommandAuthorization } from '../../src/library/command-support.ts';
 import { createLibraryObservationApplication } from '../../src/semantic/library-observation.ts';
+import type { Pool } from 'pg';
+import type { Access } from '../../src/request/access.ts';
 
 const accountId = '00000000-0000-7000-8000-000000000001';
 const collectionId = '00000000-0000-7000-8000-000000000002';
@@ -319,6 +323,35 @@ test('native Source observations preserve the identity for each authority varian
       sourceGeneration: '1',
     },
   });
+});
+
+test('native Source capture forwards logical intent through the exact caller Source instance', async () => {
+  let received: Parameters<CollectionSource['prepare']>[0] | undefined;
+  let receiver: unknown;
+  const callerSource: Pick<CollectionSource, 'prepare'> = {
+    async prepare(this: unknown, input) {
+      received = input;
+      receiver = this;
+      return {
+        source: source({ kind: 'private_builtin', curatorAccountId: accountId }),
+        work: receipt(input.allowance.reservationId),
+      };
+    },
+  };
+  const capture = createNativeSourceCaptureAdapter({ pool: {} as Pool, access: {} as Access });
+
+  await capture.prepare({
+    actor,
+    collectionId,
+    deadline: Date.now() + 1_000,
+    at: { epoch: 1 },
+    allowance: workAllowance(8, 'logical-source'),
+    source: callerSource,
+    logical: true,
+  });
+
+  expect(receiver).toBe(callerSource);
+  expect(received?.logical).toBe(true);
 });
 
 test('Library applications run with fake capabilities through Source, members, publication and Entry/progress', async () => {
