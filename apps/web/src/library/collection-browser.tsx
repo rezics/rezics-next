@@ -189,6 +189,7 @@ function PreviewStrip({ members }: { members: readonly LibrarySubject[] }) {
         return (
           <li key={`${subject.id}:${index}`} className="min-w-0">
             <CoverCard
+              density="small"
               title={title}
               href={href.href}
               cover={{

@@ -14,12 +14,14 @@ import { Checkbox } from '../shadcn/checkbox.tsx';
 import { Field } from '../shadcn/field.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRadius, listPresentationForCover, type CoverProps, type CoverRatio } from './cover.tsx';
+import { coverWidths, defaultCoverRatio, ratioValue } from './cover-model.ts';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from './content-item.tsx';
 import { independentControlsClassName } from './content-interaction.ts';
 import { ListRowControl } from './list-row.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
 export type CoverDensity = 'small' | 'medium' | 'large';
+const densityCoverSizes = { small: 'sm', medium: 'md', large: 'lg' } as const;
 const DensityContext = createContext<CoverDensity | undefined>(undefined);
 
 const RatioContext = createContext<CoverRatio | undefined>(undefined);
@@ -46,7 +48,7 @@ export interface CoverCardProps {
   href?: string;
   /** The component that draws the title link, an anchor by default; a site passes its client-side router link. */
   link?: CoverCardLink;
-  cover: Omit<CoverProps, 'size'>;
+  cover: Omit<CoverProps, 'size' | 'maxBlockSize'>;
   title: string;
   titleLang?: string;
   /** The link's accessible name when it says more than the title does ("Continue <title>"); it must contain the title. */
@@ -60,6 +62,7 @@ export interface CoverCardProps {
   /** A caller-managed trigger placed at the end of the last row. */
   menuTrigger?: ReactNode;
   menuLabel?: string;
+  /** Image-frame scale, inherited from its grid or row; medium by default. Large is an explicit opt-in. */
   density?: CoverDensity;
   status?: { label: string; href?: string };
   badge?: ReactNode;
@@ -103,8 +106,9 @@ export function CoverCard({
 }: CoverCardProps) {
   const ratio = useContext(RatioContext);
   const contextDensity = useContext(DensityContext);
-  const density = densityProp ?? contextDensity;
+  const density = densityProp ?? contextDensity ?? 'medium';
   const small = density === 'small';
+  const maxBlockSize = coverWidths[densityCoverSizes[density]] / ratioValue(defaultCoverRatio);
   const listPresentation = listPresentationForCover(cover.subject, cover.listPresentation);
   const Link = link ?? 'a';
   const credit = essentialCredit != null;
@@ -116,11 +120,12 @@ export function CoverCard({
     <Cover
       {...cover}
       size="fill"
+      maxBlockSize={maxBlockSize}
       {...(listPresentation ? { listPresentation } : {})}
       {...(ratio ? { ratio } : {})}
       decorative
       frameClassName="bg-transparent ring-0"
-      className={`w-full ${independentControlsClassName}`}
+      className={`w-full self-center ${independentControlsClassName}`}
     />
   );
   const actions =
