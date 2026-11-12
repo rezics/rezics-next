@@ -102,6 +102,8 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   the maintainer. It reports the decision afterwards.
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
   one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
+- Decision: manager and worker prompts link here; managers keep the next independent writable slice ready, and workers
+  checkpoint then repair in-scope evidence, parking only blocked checks or dependencies.
 - Give each worker a writable outcome and an owned boundary. Name the failing behaviour, current evidence and the
   smallest required check. Let the worker choose the repair order and take the next evidenced fix within that
   boundary; coordinate a new boundary before touching another worker's scope. Checkpoint coherent source and keep

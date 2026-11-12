@@ -228,7 +228,7 @@ test('a worker render over its budgets launches with layer sizes, budgets and ov
   expect(rendered.manifest.overBudget).toEqual(['role', 'conditions', 'brief', 'total']);
 });
 
-test('manager role templates keep their budget and oversized manager renders launch with measurements', () => {
+test('manager and worker roles apply operating discipline within their prompt budgets', () => {
   const input = {
     spec: { id: 'manager', goal: 'fixture', brief: 'Manage the fixture.', cwd: '/missing', engine: 'codex' as const },
     backlogPath: '/backlog',
@@ -236,6 +236,13 @@ test('manager role templates keep their budget and oversized manager renders lau
   };
   const standard = renderManagerOpening(input);
   expect(standard.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
+  const workerPrompt = renderWorkerPrompt({ task: worker(contract()), mainCheckout: MAIN }).prompt;
+  expect(standard.prompt).toMatch(
+    /efficiency.md#operating-discipline[\s\S]*one concrete user outcome[\s\S]*worker-owned write boundary[\s\S]*smallest required check[\s\S]*choose repair order[\s\S]*next independent writable slice ready/,
+  );
+  expect(workerPrompt).toMatch(
+    /source-writing attempts[\s\S]*efficiency.md#operating-discipline[\s\S]*Checkpoint coherent source[\s\S]*next evidenced fix within your owned paths[\s\S]*park that part and hand off any remainder once/,
+  );
   const rendered = renderManagerOpening({
     ...input,
     policy: {
