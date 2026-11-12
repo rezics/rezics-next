@@ -2769,10 +2769,13 @@ host's socket. The host skips the minute while the previous child is still runni
 
 Decision: `goal backlog disposition <goal> no-work` lets only the authenticated, unique running owner record that no
 additional writable outcome exists for the current scoped Goal evidence. The durable record binds to that owner
-session, ready brief names, contents and modification times, Goal task inventory markers, and typed Goal/task inbox
-sequence markers. An unchanged disposition suppresses repeated low-backlog instructions across hours and host restarts.
-A changed scope or `goal backlog disposition <goal> clear` rearms the next sweep to send if the backlog remains low;
-unrelated Goal and global development activity does not. The command accepts no free-text handoff as authority.
+session, ready brief names, contents and modification times, Goal task inventory markers, and scoped Goal/task inbox
+sequence markers. It excludes typed `width` events and only the low-backlog emitter's source-marked reminder
+(`from=system:backlog-low-water`); every other inbox event remains scoped input. Rows with missing kind or sender
+metadata remain included for compatibility with older native inbox records. An unchanged disposition suppresses
+repeated low-backlog instructions across hours and host restarts. A changed scope or
+`goal backlog disposition <goal> clear` rearms the next sweep to send if the backlog remains low; unrelated Goal and
+global development activity does not. The command accepts no free-text handoff as authority.
 
 From the owning manager session, record the disposition with:
 

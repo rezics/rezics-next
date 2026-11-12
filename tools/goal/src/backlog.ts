@@ -68,6 +68,8 @@ export { backlogDirectory };
 export const BACKLOG_LOW_WATER = defaultPolicy.backlog.lowWater;
 /** Ordinary low-backlog repeats wait this long unless scoped evidence changes or the owner clears its disposition. */
 export const BACKLOG_WAKE_INTERVAL_MS = defaultPolicy.backlog.wakeIntervalMs;
+/** Stable inbox sender for administrative low-backlog reminders; excluded from scoped no-work evidence. */
+const BACKLOG_LOW_WATER_SOURCE = 'system:backlog-low-water';
 /** Ordinary product stops expire after this interval; compiler-only stops first reconcile their same attempt. */
 export const STOPPED_TASK_LIMIT_MS = defaultPolicy.backlog.stoppedTaskLimitMs;
 /** At most this many stopped tasks per Goal are cancelled in one run, oldest first, so owners get them in batches. */
@@ -1286,15 +1288,18 @@ function backlogNoWorkScope(
   let inbox = { count: 0, latestId: 0 };
   if (tableExists(db, 'manager_inbox')) {
     const predicate = hasTasks
-      ? `goal_id = ? OR task_id IN (
+      ? `(goal_id = ? OR task_id IN (
            SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?
-         )`
-      : 'goal_id = ?';
-    const values = hasTasks ? [goal, goal] : [goal];
+         ))`
+      : '(goal_id = ?)';
+    const values = hasTasks ? [goal, goal, BACKLOG_LOW_WATER_SOURCE] : [goal, BACKLOG_LOW_WATER_SOURCE];
     inbox = db
       .query(
         `SELECT COUNT(*) AS count, COALESCE(MAX(id), 0) AS latestId
-         FROM manager_inbox WHERE ${predicate}`,
+         FROM manager_inbox
+         WHERE ${predicate}
+           AND (kind IS NULL OR kind <> 'width')
+           AND (sender IS NULL OR sender <> ?)`,
       )
       .get(...values) as typeof inbox;
   }
@@ -1452,6 +1457,7 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
           ).run(goal, now);
           runtime.inbox.deliver({
             managerId: row.id,
+            from: BACKLOG_LOW_WATER_SOURCE,
             goalId: goal,
             kind: 'instruction',
             summary:
