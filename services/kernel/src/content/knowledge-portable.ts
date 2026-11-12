@@ -10,6 +10,7 @@ import {
 } from '@rezics/document';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
+import type { Static } from 'typebox';
 import { InvalidDocumentError } from './document.ts';
 
 export const KNOWLEDGE_REFERENCE_DEFINITION = 'rezics.knowledge.reference';
@@ -18,24 +19,17 @@ const id = t.String({ minLength: 1, maxLength: 256 });
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const representation = t.Union([t.Literal('authoring'), t.Literal('public')]);
-const role = t.Union((['about', 'cites', 'explains', 'uses', 'inspired-by'] as const).map((value) => t.Literal(value)));
-export type KnowledgeReferenceTarget =
-  | Readonly<{ kind: 'subject'; subjectId: string }>
-  | Readonly<{ kind: 'document'; documentId: string }>
-  | Readonly<{ kind: 'revision'; documentId: string; revisionId: string; sha256: string; blockId?: string }>;
-export type KnowledgeReference = Readonly<{
-  id: string;
-  role: 'about' | 'cites' | 'explains' | 'uses' | 'inspired-by';
-  sourceBlockId?: string;
-  target: KnowledgeReferenceTarget | null;
-}>;
-export type KnowledgeProvenance = Readonly<{
-  documentId: string;
-  revisionId: string;
-  representation: 'authoring' | 'public';
-  sha256: string;
-  publicationId?: string;
-}>;
+// Keep a schema tuple: a mapped array loses TypeBox's finite union in response inference.
+const role = t.Union([
+  t.Literal('about'),
+  t.Literal('cites'),
+  t.Literal('explains'),
+  t.Literal('uses'),
+  t.Literal('inspired-by'),
+]);
+export type KnowledgeReference = Readonly<Static<typeof KnowledgeReferenceSchema>>;
+export type KnowledgeReferenceTarget = NonNullable<KnowledgeReference['target']>;
+export type KnowledgeProvenance = Readonly<Static<typeof KnowledgeProvenanceSchema>>;
 
 export const KnowledgeReferenceSchema = t.Object(
   {
