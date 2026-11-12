@@ -403,7 +403,7 @@ checks; it preserves native order, authors, thread destinations and historical c
 nested continuation. Full reviews own reaction/watch/report controls and pagination. Empty and unavailable regions
 retain their own states; neither is turned into a fabricated count or review.
 
-Use the [placement heuristics](../../../../../docs/development/feature-design.md#place-common-journeys-first) when
+Use the [placement heuristics](../../../../../docs/development/feature-design.md#information-placement) when
 changing the composition. Reference direction: [Goodreads Glorious Exploits](https://goodreads.com/book/show/127278133)
 (its live page may refuse automated access), Impeccable's [Read guidance](https://impeccable.style/designing/) and
 [distill](https://impeccable.style/docs/distill/): prioritize the reading job, remove repetition and keep occasional
