@@ -293,6 +293,20 @@ export function poolAllowed(
   );
 }
 
+/** A mailbox wake can use the manager reserve and is independent of worker pacing and slots. */
+export function managerWakePoolAllowed(
+  pool: Pool,
+  readings: readonly PoolReading[],
+  policy?: ControlPolicy['provider'],
+): boolean {
+  const { maxConcurrent: _workerSlots, ...rest } = pool.policy;
+  return poolAllowed(
+    { ...pool, policy: { ...rest, reservePercent: 0, reservePerHour: 0, allowUnknown: true } },
+    readings,
+    { policy, ignoreBurnCeiling: true },
+  );
+}
+
 /** The routed profile's pool, or the first fallback that has one; `undefined` when every candidate is refused. */
 export function findAllowedPool(
   profile: Profile,

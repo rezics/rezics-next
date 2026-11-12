@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite';
 import { parseArgs } from 'node:util';
 import { realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { poolAllowed } from '../src/allowance.ts';
+import { managerWakePoolAllowed } from '../src/allowance.ts';
 import { readRetainedPoolReadings } from '../src/pacing.ts';
 import { defaultPolicy } from '../src/policy.ts';
 import { PoolPolicyReloader } from '../src/pools.ts';
@@ -73,9 +73,7 @@ if (values.emit) {
       }
     });
     const readings = readRetainedPoolReadings(dirname(values.db!));
-    return matches.length > 0 && matches.every((pool) =>
-      poolAllowed(pool, readings, { history: readings, spanMs: policy.pacing.burnSpanMs, policy: policy.provider }),
-    );
+    return matches.length > 0 && matches.every((pool) => managerWakePoolAllowed(pool, readings, policy.provider));
   };
   const bridge = new ResidentWakeBridge(
     db,

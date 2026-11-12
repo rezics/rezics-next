@@ -2353,9 +2353,10 @@ long tools and old-turn completions never establish idleness. Unsupported provid
 The two-second token-free loop sends a fixed short mailbox notification only when actionable personally unread mail
 is at least 60 seconds old and the session has been explicitly idle for ten seconds. All event bodies remain in the
 native inbox. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
-The transcript identifies the Codex account directory. The resident watcher uses the same retained allowance and
-pool policy as managed wakes before starting a turn. While admission is held, unread mail coalesces and stays durable;
-the hourly report sender and direct operator messages are independent of the wake gate.
+The transcript identifies the Codex account directory. Resident and managed mailbox wakes may use the manager
+reserve and do not apply worker hourly pacing or worker concurrency. A currently reported exhausted provider still
+cannot start a turn. Unread mail coalesces and stays durable; the hourly report sender and direct operator messages
+are independent of the wake gate.
 The atomic `--cursor <file>` and transport journal retain one outstanding notification until personal read progress across
 retries and restarts. Consuming its triggering event rearms notification for remaining unread pages once explicitly
 idle; new mail without owner consumption coalesces. Waking never consumes messages. Global read, acknowledgement
