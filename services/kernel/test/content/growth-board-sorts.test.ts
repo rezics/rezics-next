@@ -37,29 +37,78 @@ const accessRoutes = [
   boardRoute,
   ...Array.from({ length: 16 }, (_, index) => partitionOf(threadRoute) * 16 + index),
 ];
-const accessPopulation: Population = {
-  name: 'board-sorts-unrelated-access',
-  hotPartition: partitionOf(threadRoute),
-  hotShare: 1,
-  rows: () => {
-    const resources = accessRoutes.map((route) => ({
+type AccessResource = {
+  readonly route: number;
+  readonly resource_id: string;
+  readonly subject_id: string;
+  readonly valid: string;
+  readonly transaction_id: string;
+};
+
+const accessRowsByOrdinal = new Map<number, readonly AccessResource[]>();
+
+function accessResourcesFor(ordinal: number): readonly AccessResource[] {
+  let resources = accessRowsByOrdinal.get(ordinal);
+  if (!resources) {
+    resources = accessRoutes.map((route) => ({
       route,
       resource_id: newId(route),
       subject_id: newId(threadRoute),
       valid: '(,)',
       transaction_id: randomUUID(),
     }));
-    return {
-      'access.resource_grant': resources.map((resource) => ({ ...resource, action: 'thread:read' })),
-      'access.resource_role_grant': resources.map((resource) => ({ ...resource, grant_role: 'content.thread.owner' })),
-      'access.resource_denial': resources.map((resource) => ({
+    accessRowsByOrdinal.set(ordinal, resources);
+  }
+  return resources;
+}
+
+const accessPopulations: readonly Population[] = [
+  {
+    name: 'board-sorts-unrelated-access-grants',
+    hotPartition: partitionOf(threadRoute),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'access.resource_grant': accessResourcesFor(ordinal).map((resource) => ({ ...resource, action: 'thread:read' })),
+    }),
+  },
+  {
+    name: 'board-sorts-unrelated-access-roles',
+    hotPartition: partitionOf(threadRoute),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'access.resource_role_grant': accessResourcesFor(ordinal).map((resource) => ({
+        ...resource,
+        grant_role: 'content.thread.owner',
+      })),
+    }),
+  },
+  {
+    name: 'board-sorts-unrelated-access-denials',
+    hotPartition: partitionOf(threadRoute),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'access.resource_denial': accessResourcesFor(ordinal).map((resource) => ({
         ...resource,
         action: 'thread:read',
         reason: 'resource',
       })),
-    };
+    }),
   },
-};
+];
+
+async function seedBoardSortRange(
+  target: Parameters<typeof seed>[0],
+  population: Population,
+  range: { readonly from: number; readonly to: number },
+): Promise<void> {
+  try {
+    await seed(target, population, range, { maintenance: false });
+    for (const accessPopulation of accessPopulations)
+      await seed(target, accessPopulation, range, { maintenance: false });
+  } finally {
+    accessRowsByOrdinal.clear();
+  }
+}
 
 test('board pages under newest, oldest, active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow', async () => {
   // HTTP calls use the production "newest" spelling for the contract's "new" sort.
@@ -180,9 +229,9 @@ test('board pages under newest, oldest, active and hot, with their disclosure pa
     };
     // Give every content relation 4096 unrelated rows before the measured scales, and every Access
     // relation 4096 per measured route. core.partition already has all 4096 anchors from migration.
-    // These disjoint ordinals follow the inverse-membership fixture; seed also VACUUMs (ANALYZE).
-    await seed(db, population, baseline);
-    await seed(db, accessPopulation, baseline);
+    // Keep the Content and three Access relations in separate bounded producers so each 500-row
+    // batch contains one relation. checkGrowth analyzes all four after growth.
+    await seedBoardSortRange(db, population, baseline);
     const report = await checkGrowth(db, {
       name: `Board page ${sort}, including candidate and final disclosure`,
       scales,
@@ -190,8 +239,7 @@ test('board pages under newest, oldest, active and hot, with their disclosure pa
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       repetitions: 1,
       grow: async (growthDb, scale, previous) => {
-        await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale });
-        await seed(growthDb, accessPopulation, { from: previous, to: scale });
+        await seedBoardSortRange(growthDb, population, { from: previous, to: scale });
         // checkGrowth runs VACUUM (ANALYZE) after grow, covering all three Access tables too.
       },
       operation: async () => {
@@ -373,16 +421,14 @@ test('board pages under newest, oldest, active and hot, with their disclosure pa
       return rows;
     },
   };
-  await seed(db, largePage, baseline);
-  await seed(db, accessPopulation, baseline);
+  await seedBoardSortRange(db, largePage, baseline);
   const queryReport = await checkGrowth(db, {
     name: 'Board page s=100 with text query and 101 visible survivors',
     scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     grow: async (growthDb, scale, previous) => {
-      await seed(growthDb, largePage, { from: previous, to: scale });
-      await seed(growthDb, accessPopulation, { from: previous, to: scale });
+      await seedBoardSortRange(growthDb, largePage, { from: previous, to: scale });
     },
     operation: async () => {
       const response = await app.handle(
