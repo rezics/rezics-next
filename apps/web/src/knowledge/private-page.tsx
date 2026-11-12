@@ -1,3 +1,4 @@
+import { KnowledgeTransferCaller } from './transfer-caller';
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { RichTextEditor, type RichTextEditorLabels } from '@rezics/ui';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -1558,6 +1559,20 @@ function PrivateKnowledgeEditor({
           locale={locale}
           isCurrent={() => active.current}
           onRetire={retire}
+        />
+        <KnowledgeTransferCaller
+          source={{
+            representation: 'authoring',
+            accountId: access.viewer,
+            notebookId: head.notebookId,
+            documentId: head.documentId,
+            revisionId: head.revisionId,
+          }}
+          title={head.title}
+          locale={locale}
+          binding={binding}
+          lifetime={access.owner}
+          blocked={dirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy}
         />
         <KnowledgePublicationPanel
           head={reviewHead ?? head}

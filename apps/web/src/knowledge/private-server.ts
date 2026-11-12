@@ -1,3 +1,12 @@
+import {
+  copyKnowledgeTransfer,
+  exportKnowledgeTransfer,
+  parseKnowledgeTransferSource,
+  readKnowledgeCopy,
+  type KnowledgeCopyResult,
+  type KnowledgeCopyReadback,
+  type KnowledgeExportResult,
+} from './transfer';
 import { parseDocument, type DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -560,4 +569,93 @@ export const readKnowledgeHistoryComparisonVisit = createServerFn({ method: 'POS
       if (isPlatformClosedError(error)) return { state: 'unavailable', status: 503 };
       throw error;
     }
+  });
+
+/** Transfer reuses the editor's prepared-session envelope and original command credential. */
+export const exportKnowledgeOwnTransferRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge export');
+    const source = parseKnowledgeTransferSource(value.source);
+    if (!source || source.representation !== 'authoring') throw new Error('Invalid Knowledge authoring source');
+    return { source, expected: expectedSession(value.expected) };
+  })
+  .handler(async ({ data }): Promise<KnowledgeExportResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return { state: identity.state };
+    if (data.source.accountId !== identity.viewer) return { state: 'retired' };
+    return exportKnowledgeTransfer(
+      (decorate) => kernelClient(undefined, undefined, decorate),
+      data.source,
+      identity.authorization,
+    );
+  });
+
+export const prepareKnowledgeTransferRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge transfer preparation');
+    return expectedSession(value);
+  })
+  .handler(async ({ data }): Promise<KnowledgePrivatePreparation> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data, await currentIdentity());
+    if ('state' in identity) return { state: identity.state };
+    return {
+      state: 'ready',
+      viewer: identity.viewer,
+      csrfToken: identity.csrfToken,
+      credential: await captureCredential(getRequest(), identity),
+    };
+  });
+
+export const copyKnowledgeTransferRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge copy command');
+    const source = parseKnowledgeTransferSource(value.source);
+    if (!source) throw new Error('Invalid Knowledge copy source');
+    return {
+      source,
+      notebookId: boundedId(value.notebookId, 'destination notebook'),
+      expectedStructureRevisionId: boundedId(value.expectedStructureRevisionId, 'structure revision'),
+      parentPlacementId: parentPlacement(value.parentPlacementId),
+      binding: commandBinding(value),
+    };
+  })
+  .handler(async ({ data }): Promise<KnowledgeCopyResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = await commandIdentity(data.binding);
+    if ('state' in identity) return { state: identity.state };
+    try {
+      return await copyKnowledgeTransfer(
+        kernelClient(),
+        { ...data, idempotencyKey: data.binding.idempotencyKey },
+        identity.authorization,
+      );
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable' };
+      // The POST may have committed before its transport failed. Only exact explicit replay can resolve it.
+      return { state: 'uncertain' };
+    }
+  });
+
+export const readKnowledgeCopyRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value) || !record(value.receipt)) throw new Error('Invalid Knowledge copy readback');
+    const receipt = value.receipt;
+    return {
+      expected: expectedSession(value.expected),
+      receipt: {
+        notebookId: boundedId(receipt.notebookId, 'notebook'),
+        documentId: boundedId(receipt.documentId, 'document'),
+        revisionId: boundedId(receipt.revisionId, 'revision'),
+        placementId: boundedId(receipt.placementId, 'placement'),
+        structureRevisionId: boundedId(receipt.structureRevisionId, 'structure revision'),
+      },
+    };
+  })
+  .handler(async ({ data }): Promise<KnowledgeCopyReadback> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return { state: identity.state };
+    return readKnowledgeCopy(kernelClient(), data.receipt, identity.viewer, identity.authorization);
   });
