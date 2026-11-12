@@ -237,6 +237,45 @@ test('Media lifecycle: HTTP-produced objects retain uploader and claim authority
       source,
       'abandoned',
     );
+    const reservationEvent = await system.database.pool.query<{
+      subject: string;
+      data: { mediaId: string; containerId: string; actorId: string };
+    }>(
+      `SELECT subject::text,data FROM core.outbox
+        WHERE partition_no=$1 AND subject=$2 AND type='com.rezics.content.media.reserved.v1'`,
+      [thread.partition, abandoned.id],
+    );
+    expect(reservationEvent.rows).toEqual([
+      {
+        subject: abandoned.id,
+        data: {
+          mediaId: abandoned.id,
+          containerId: thread.id,
+          actorId: system.actors.author.actor.accountId,
+        },
+      },
+    ]);
+    const uploaderRoute = routeOf(system.actors.author.actor.accountId);
+    expect(uploaderRoute).not.toBeNull();
+    const uploadLocator = await system.database.pool.query<{
+      route: number;
+      accountId: string;
+      phase: string;
+      id: string;
+    }>(
+      `SELECT route,account_id::text AS "accountId",phase,id::text AS id
+         FROM content.account_upload
+        WHERE route=$1 AND account_id=$2 AND phase='media' AND id=$3`,
+      [uploaderRoute, system.actors.author.actor.accountId, abandoned.id],
+    );
+    expect(uploadLocator.rows).toEqual([
+      {
+        route: uploaderRoute,
+        accountId: system.actors.author.actor.accountId,
+        phase: 'media',
+        id: abandoned.id,
+      },
+    ]);
     const claimed = await upload(
       system,
       store,

@@ -2877,6 +2877,9 @@ input cursor frontier on retry. The actor-home table is the existing account-era
 `content_account_upload_index` event effect remains the repair path. Browser reservation and URL import also
 upsert that same locator in a separate actor-home command after the media reservation commits, so a lost HTTP
 response can be replayed with the same reservation intent without making a second object.
+Fixture decision: ordinary HTTP reservation already emits the original `mediaId` and uploader `actorId`; keep that
+event contract and pin the registered relay's exact account-home `content.account_upload` locator in
+`test/content/media-native-collection-http.test.ts`.
 
 Each visible entry contains the routed media ID, purpose, current native state, declared type/size, measured size
 where present, creation and claim times, current admissible container ID/kind, collection/takedown flags and action

@@ -11,6 +11,7 @@ import type {
 } from '../../../../specs/content-media-driver.ts';
 import permissionRead from '../../src/access/permission-check.sql';
 import { CommandUnavailableError } from '../../src/command/command.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import commandFence from '../../src/command/fence.sql';
 import claimMedia from '../../src/content/claim-media.sql';
 import fenceCollection from '../../src/content/fence-collection.sql';
@@ -100,6 +101,7 @@ function createSharedContentSystem(databaseUrl: string): Promise<SharedContentSy
     const system = await createContentSystem({ databaseUrl });
     const jobPool = new Pool({ ...system.database.pool.options, max: 4 });
     try {
+      configureTestReceiptKeys(jobPool);
       const collectionBinding = await checkStatement(jobPool, {
         sql: selectCandidates.sql,
         params: [...selectCandidates.params],
