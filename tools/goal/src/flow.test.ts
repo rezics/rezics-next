@@ -913,7 +913,7 @@ test('retry alarms stay active through drift and rearm only after a measured rec
     expect(run(6, 24, 10_001, 'next-task')).toEqual([]);
     expect(run(0, 0, 10_002, 'rotated-task')).toEqual([]);
     expect(active()).toEqual({ active: 1 });
-    expect(run(6, 6, 10_003)).toEqual([]);
+    expect(run(2, 3, 10_003)).toEqual([]);
     expect(active()).toEqual({ active: 0 });
     expect(run(4, 8, 10_004)).toEqual(['attempts-per-integrated']);
     expect(sent).toHaveLength(2);

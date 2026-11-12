@@ -1314,8 +1314,9 @@ alarms keep their configured periodic escalation, and hourly flow reports contin
 alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the configured
 supermanager; priority grants and scope decisions remain with the supermanager.
 The worker retry alarm uses integrations from the trailing seven days and names that window, integrated-task sample,
-and attempt-generation sample. It rearms when the sampled ratio changes or recovers and breaches again; older history,
-waiting-task rotation, and same-attempt resumes do not rearm it. Actual queue age keeps its own alert.
+and attempt-generation sample. An active retry breach stays active through sampled-ratio drift, older history,
+waiting-task rotation, and same-attempt resumes; only a measured trailing-seven-day sample at or below the configured
+threshold records recovery. A later breach sends once. Actual queue age keeps its own alert.
 
 Decision: Flow attempt ratios count distinct task/generation pairs and add each integrated generation from its
 authoritative integration event; process launches stay separate, while retry alarms use the named trailing-seven-day
