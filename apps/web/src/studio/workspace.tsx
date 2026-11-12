@@ -378,7 +378,12 @@ function StudioVisit({
             <summary>Documents and {input.profile.kind === 'book' ? 'table of contents' : 'articles'}</summary>
             <div className="studio-stack">
               {state.structure ? (
-                <BookOrganizer controller={controller} state={state} onOpen={open} history={bookHistory} />
+                <BookOrganizer
+                  controller={controller}
+                  state={state}
+                  onOpen={open}
+                  {...(bookHistory ? { history: bookHistory } : {})}
+                />
               ) : null}
               <section
                 aria-label={input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}

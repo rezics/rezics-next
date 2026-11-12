@@ -63,10 +63,13 @@ function nativeResponse(data: unknown, status = 200) {
   const calls: URL[] = [];
   const native = createHostedBookNative(
     createKernelClient('https://kernel.test', {
-      fetch: async (input) => {
-        calls.push(new URL(input instanceof Request ? input.url : String(input)));
-        return Response.json(data, { status });
-      },
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0]) => {
+          calls.push(new URL(input instanceof Request ? input.url : String(input)));
+          return Response.json(data, { status });
+        },
+        { preconnect: () => {} },
+      ),
     }),
   );
   return { native, calls };
