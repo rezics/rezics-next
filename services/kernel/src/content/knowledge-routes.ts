@@ -301,7 +301,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
           operationId: 'knowledge_document.public_export',
           'x-exposure': 'public',
           'x-action': 'subject:read',
-          'x-resource-types': ['semantic:subject'],
+          'x-resource-types': ['semantic.subject'],
           security: readSecurity,
         },
       },
