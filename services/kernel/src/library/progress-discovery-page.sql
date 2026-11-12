@@ -11,89 +11,121 @@ WITH args AS NOT MATERIALIZED (
          :has_cursor::boolean AS has_cursor,
          :limit::integer AS page_limit
 ), candidate_ids AS (
+  -- Each filter selector drives its lateral index seek. Nonmatching arms do no session scan.
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'owner' AND args.subject_id IS NULL
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'owner' AND subject_id IS NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired'
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
   UNION ALL
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'subject' AND session.subject_id = args.subject_id
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'subject' AND subject_id IS NOT NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired' AND session.subject_id = selected.subject_id
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
   UNION ALL
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'state' AND session.state = args.state_filter
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'state' AND subject_id IS NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired' AND session.state = selected.state_filter
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
   UNION ALL
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'mode' AND session.mode = args.mode_filter
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'mode' AND subject_id IS NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired' AND session.mode = selected.mode_filter
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
   UNION ALL
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'profile'
-      AND session.library_profile_pin ->> 'profileId' = args.profile_filter
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'profile' AND subject_id IS NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired'
+        AND session.library_profile_pin ->> 'profileId' = selected.profile_filter
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
   UNION ALL
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'subject_state'
-      AND session.subject_id = args.subject_id AND session.state = args.state_filter
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'subject_state' AND subject_id IS NOT NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired' AND session.subject_id = selected.subject_id
+        AND session.state = selected.state_filter
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
   UNION ALL
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'subject_mode'
-      AND session.subject_id = args.subject_id AND session.mode = args.mode_filter
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'subject_mode' AND subject_id IS NOT NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired' AND session.subject_id = selected.subject_id
+        AND session.mode = selected.mode_filter
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
   UNION ALL
   (
-    SELECT session.route, session.session_id, session.started_at
-    FROM library.progress_session AS session CROSS JOIN args
-    WHERE session.route = args.route AND session.account_id = args.account_id
-      AND session.state <> 'retired' AND args.filter_kind = 'subject_profile'
-      AND session.subject_id = args.subject_id
-      AND session.library_profile_pin ->> 'profileId' = args.profile_filter
-      AND (NOT args.has_cursor OR session.started_at < args.after_started_at
-        OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    SELECT page.route, page.session_id, page.started_at
+    FROM (SELECT * FROM args WHERE filter_kind = 'subject_profile' AND subject_id IS NOT NULL) AS selected
+    CROSS JOIN LATERAL (
+      SELECT session.route, session.session_id, session.started_at
+      FROM library.progress_session AS session
+      WHERE session.route = selected.route AND session.account_id = selected.account_id
+        AND session.state <> 'retired' AND session.subject_id = selected.subject_id
+        AND session.library_profile_pin ->> 'profileId' = selected.profile_filter
+        AND (NOT selected.has_cursor OR session.started_at < selected.after_started_at
+          OR (session.started_at = selected.after_started_at AND session.session_id > selected.after_session_id))
+      ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
+    ) AS page
   )
 )
 SELECT session.route,

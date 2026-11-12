@@ -48,6 +48,8 @@ Decision: Progress HTTP fixtures build Access through Kernel's post-catalogue fa
 
 Decision: Progress HTTP mode coverage compiles a separate `ex:ProgressHttpSubject` with `fixture.progress-http` admitting scalar `minute`, `chapter` and `volume` with optional totals, cursor `page`, and completed units `volume`, `chapter` and `episode`; mounted Subject creation verifies native initialization, stored session pins identify that release/profile/type, and `schema:Book` remains page-only.
 
+Decision: mounted private progress reads require an account; anonymous session reads follow the route's 401 contract, while signed-in foreign IDs remain concealed as 404. Each progress HTTP case resets its owned session/log records before asserting exact occurrence pages.
+
 Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
 `adapters/preparation-work.ts` specializes them to the original native transaction, locator and ledger. Default
 `composition/library.ts` binds Search's `adapters/library-preparation.ts`: it borrows the already registered worker
