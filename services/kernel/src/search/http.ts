@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { t } from 'elysia';
+import { status, t } from 'elysia';
 import type { createApp } from '../http/app.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -61,8 +61,8 @@ export function knowledgeDiscoveryRoutes<App>(app: App, options: {
         const page = await discover(params.subjectId, searchHttpPrincipal(actor), query, { deadline: job.deadline });
         if (page.state === 'unavailable')
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-        if (page.state === 'preparing') set.status = 202;
-        return page;
+        if (page.state === 'preparing') return status(202, page);
+        return status(200, { ...page, documents: [...page.documents] });
       });
     });
   });

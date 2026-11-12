@@ -103,7 +103,12 @@ export function searchRoutes<App>(
   const { fill, publicBases } = catalogueResponses;
 
   const trending = createTrendingSearchesService({ pool, clock });
-  const mounted = knowledgeDiscoveryRoutes(app, { pool, tokens, access: routeAccess, now: () => clock().getTime() });
+  const mounted = knowledgeDiscoveryRoutes(app, {
+    pool,
+    ...(tokens ? { tokens } : {}),
+    access: routeAccess,
+    now: () => clock().getTime(),
+  });
   const routed = (mounted as ReturnType<typeof createApp>)
     .model('PublicFigure', PublicFigureSchema)
     .get(
