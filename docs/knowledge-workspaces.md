@@ -80,10 +80,26 @@ scan of account homes. Direct public resolution is available as soon as the Cont
 not wait for Search acknowledgement. The native first-loop proof selects and reads one exact publication, then
 withdraws it while derived indexing is paused.
 
-The current Search Content source port exposes review discovery but has no Knowledge candidate-page contract. The
-first native loop therefore proves direct exact reads against current Content source authority; it does not claim
-subject useful-page discovery. Search must add its own bounded Knowledge candidate observation and preparation API
-before subject contribution pages are exposed.
+Decision: `GET /v1/subjects/:subjectId/knowledgeDocuments` (`knowledge_document.discover`) supplies the native
+Subject candidate page under `gate:search`. Search indexes only explicit current publication identities through
+Content's native publication effect, with existing selected publications seeded at installation. Publication time
+(descending), document ID and publication ID fix ordering. A committed per-Subject receiving cut fixes membership
+for the visit. Post-cut rows spend the same bounded scan budget and are omitted; there is no SQL filter that can
+scan an unbounded newer population. This is coverage of the indexed association cut, not all native publications.
+
+Each step examines at most 128 candidates, retaining only nomination identities and its frontier until 20 permitted
+rows or exhaustion. Sparse steps return `202` and a confidential Search continuation bound to viewer, Subject and
+limit. No short successful intermediate page or total is returned. Prepared candidates are checked again through
+Content's metadata-only exact-current-publication seam and anonymous Subject authority on every continuation and
+before disclosure. Withdrawal/replacement closes an old row while receiving is paused. Missing source/index
+installation is unavailable; changed, expired or concurrently consumed progress restarts explicitly. Retention is
+15 minutes from initial capture, at most 256 active preparations per Subject; expiry cleanup is bounded to 100 rows
+per new retained chain. The index/preparation retain no body, account locator, private ancestry or permission result.
+
+The fewest focused tests pin fixed-cut publication ordering, sparse progress and exhaustion, stale selection
+omission, final-disclosure withdrawal, unavailable evidence and confidential viewer/query/expiry continuation.
+Native receiving/replay, Subject-access closure, paused-index withdrawal, exact navigation, SQL growth and mounted
+client/browser proof are deferred to the dev verifier. The direct native first-loop assertions remain unchanged.
 
 At account-erasure time, private notebook structure, attachments, heads, unselected revisions and owner links are
 erased. An eligible current publication retains only its selected immutable revision and permitted public fields as
@@ -93,7 +109,7 @@ the erasure fence has no retained public selection. Moderation and later source 
 retained contribution.
 
 Decision: the native first loop uses account-home notebooks, a 32-placement ancestor bound and exact current Content
-publication pointers for direct anonymous reads; Subject useful-page discovery waits for Search's bounded
+publication pointers for direct anonymous reads; Subject discovery uses Search's bounded
 candidate-preparation API, and erasure retains only eligible selected revisions in deidentified form.
 
 Decision: Knowledge create, revise, select and withdrawal commands commit registered domain events with native

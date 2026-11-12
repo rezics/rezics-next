@@ -2520,3 +2520,53 @@ bound or engine-growth proof by themselves. The native producer, generation/rela
 engine window receiver and mounted Web delivery remain required before advertising supported coverage. Destinations
 are admitted Subject/document entries; no chapter, occurrence or fragment is inferred from offsets. Public DTOs
 contain no reader state or full indexed text.
+
+## Current public Knowledge by Subject
+
+Decision: `GET /v1/subjects/:subjectId/knowledgeDocuments` (`knowledge_document.discover`) lists only the original
+Subject's deliberate current public Knowledge selections. It uses `gate:search`, ordinary Subject admission and
+anonymous Content publication/Subject checks even when the caller owns the notebook. It does not open general
+Search exposure or add a mixed-index kind, text query, count or document-transfer operation.
+
+Search owns an append-only index of public selection identities, ordered by immutable publication time descending,
+then document and publication UUID ascending. The installation migration seeds already selected publications;
+`search_knowledge_publication` consumes the normal durable Content publication event and idempotently adds the
+exact current selection through `createKnowledgeDiscoverySource`. Withdrawal needs no index acknowledgement:
+Content's current pointer conceals the old candidate immediately. Receiving an older selection after withdrawal
+or replacement cannot make it current. These are index observations, never coverage of undiscovered documents or
+upstream event dispatch completion. New publications may remain absent until their effect is delivered.
+
+The first request captures a committed per-Subject receiving sequence. Each insertion serializes that Subject's
+counter through commit. Continuations preserve this cut for the whole visit. Two disjoint indexed seeks page
+publication-time keys; at most 129 physical rows are read for 128 candidate examinations and one lookahead.
+Post-cut inserts also spend candidate budget and are discarded in the application, preventing a SQL cut filter from
+examining an unbounded population. Only originally observed identities can be returned. Under finite quiescent input,
+retained steps advance to a full requested page (at most 20) or proved index exhaustion.
+
+A sparse step returns `202 {state: 'preparing', next}` without a short successful page. The encrypted existing Search
+cursor binds method/path, original Subject, limit and current viewer; it carries only a preparation locator and
+revision. PostgreSQL retains the fixed cut, last examined key and at most 19 nominations. Nominations are reread
+on every continuation and again at final disclosure; no summary, private ancestry, body or Access decision is stored.
+Concurrent use of an old preparation revision restarts with `409 search_restart_required`. A ready page has
+`state: 'ready'`, `documents` and `next`; it has no total. Missing producers or incomplete installation are readiness,
+never successful empty results. Responses use `private, no-store`.
+
+Each continuation examines at most 128 candidate identities including retained nominations. Content probes one
+full routed current-publication/revision key per candidate, checks at most 65 anonymous Subject identities through
+its existing first-loop seam, then refreshes the exact selection and Subject authority. Final disclosure adds at
+most 20 currentness probes. The SQL projection names only published title, language, licence, digest and public
+selection identities/time; it never reads canonical body bytes, private notebook title, heads, author or grants.
+The native direct reader remains the lifecycle authority; later lifecycle states must be admitted in that common
+Content authority before they can be supported here.
+
+Derived preparation expires 15 minutes after initial capture, with no sliding extension; at most 256 live chains
+per Subject are admitted under the counter lock. New retained chains reclaim at most 100 expired records through
+the expiry index. No timer or new worker is installed. Index rows retain only once-public selection identities/time;
+withdrawn/replaced rows can remain stale nominations, never public metadata or retained public bodies. Preparation
+contains only these public identities and no account locator, reader state or reusable permission result.
+
+Deferred proof: the focused cases pin useful sparse progress, empty exhaustion, fixed-cut ordering, late additions,
+replacement/withdrawal during preparation and final disclosure, unavailable producers, confidential viewer/query
+binding and expiry. Native receiving/replay, current Subject closure, paused-index withdrawal, exact navigation,
+SQL growth at 256/1024/4096, generated-client and browser acceptance run in the dev verifier; source/typechecking
+alone is not that proof. Copy/export and the owned-document directory remain their native owners' operations.

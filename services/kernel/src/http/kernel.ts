@@ -704,6 +704,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   let searched: ReturnType<typeof searchRoutes>;
   searched = searchRoutes(contextual, {
     ...dependencies,
+    tokens,
     clock,
     gateAccess: () => resolveAccess({ actions: actionCatalogue(searched), realmRoleReader }),
   });

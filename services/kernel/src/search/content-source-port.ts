@@ -1,5 +1,7 @@
 /** Search-owned Content and Community capabilities used by Realm scope, review discovery and Space indexing. */
 
+type ContentKnowledgeApi = Pick<typeof import('../content/index.ts'), 'createKnowledgeDiscoverySource'>;
+
 type ContentRealmApi = Pick<typeof import('../content/realm-subject-source.ts'), 'createRealmSubjectSource'>;
 type ContentReviewApi = Pick<
   typeof import('../content/review-discovery.ts'),
@@ -15,5 +17,5 @@ type CommunitySpaceApi = Pick<
 >;
 
 export type SearchContentSourcePort = Readonly<
-  ContentRealmApi & ContentReviewApi & ContentReviewChangeApi & CommunitySpaceApi
+  ContentKnowledgeApi & ContentRealmApi & ContentReviewApi & ContentReviewChangeApi & CommunitySpaceApi
 >;

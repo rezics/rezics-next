@@ -343,3 +343,6 @@ export type DiscoverySearch = (
   request: MixedDiscoveryRequest,
   context: DiscoveryReadContext,
 ) => Promise<DiscoveryPage>;
+
+/** Subject-scoped current public Knowledge, separate from the mixed catalogue representation. */
+export type { KnowledgeDiscoveryRequest, KnowledgeDiscoveryPage } from './knowledge-discovery.ts';
