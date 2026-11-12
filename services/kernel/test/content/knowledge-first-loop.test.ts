@@ -152,13 +152,67 @@ test('one notebook keeps sibling documents private while its exact selected revi
   const staleWithdrawal = await fixture.call('POST', withdrawPath, withdrawInput, { key: crypto.randomUUID() });
   expect(staleWithdrawal.status).toBe(412);
 
-  const events = await fixture.pool.query<{ action: string }>(
-    `SELECT data->>'action' AS action FROM core.outbox
-     WHERE type='com.rezics.content.knowledge.publication.changed.v1' AND subject=$1
+  const noOpWithdrawalKey = crypto.randomUUID();
+  const noOpWithdrawalInput = {
+    expectedHeadRevisionId: selectedV2.revisionId,
+    expectedPublicationId: null,
+    revisionId: null,
+  };
+  const noOpWithdrawal = await fixture.call('POST', withdrawPath, noOpWithdrawalInput, { key: noOpWithdrawalKey });
+  expect(noOpWithdrawal.status).toBe(200);
+  expect(noOpWithdrawal.value.publicationId).toBeNull();
+  const noOpWithdrawalReplay = await fixture.call('POST', withdrawPath, noOpWithdrawalInput, {
+    key: noOpWithdrawalKey,
+  });
+  expect(noOpWithdrawalReplay.status).toBe(200);
+  expect(noOpWithdrawalReplay.value).toEqual(noOpWithdrawal.value);
+
+  const events = await fixture.pool.query<{ type: string; subject: string; data: Record<string, unknown> }>(
+    `SELECT type,subject,data FROM core.outbox
+     WHERE type LIKE 'com.rezics.content.knowledge.%' AND subject=ANY($1::text[])
      ORDER BY position,event_seq`,
-    [selectedV1.documentId],
+    [[notebook.notebookId, selectedV1.documentId, sibling.documentId]],
   );
-  expect(events.rows.map((event) => event.action)).toEqual(['selected', 'withdrawn']);
+  expect(events.rows.map(({ type, subject }) => [type, subject])).toEqual([
+    ['com.rezics.content.knowledge.notebook.created.v1', notebook.notebookId],
+    ['com.rezics.content.knowledge.document.created.v1', selectedV1.documentId],
+    ['com.rezics.content.knowledge.document.created.v1', sibling.documentId],
+    ['com.rezics.content.knowledge.document.revised.v1', selectedV1.documentId],
+    ['com.rezics.content.knowledge.publication.changed.v1', selectedV1.documentId],
+    ['com.rezics.content.knowledge.publication.changed.v1', selectedV1.documentId],
+  ]);
+  expect(events.rows[0]!.data).toEqual({
+    notebookId: notebook.notebookId,
+    subjectId: subject.id,
+    structureRevisionId: notebook.structureRevisionId,
+  });
+  expect(events.rows[1]!.data).toEqual({
+    notebookId: notebook.notebookId,
+    documentId: selectedV1.documentId,
+    placementId: selectedV1.placementId,
+    revisionId: selectedV1.revisionId,
+    structureRevisionId: selectedV1.structureRevisionId,
+  });
+  expect(events.rows[3]!.data).toEqual({
+    documentId: selectedV1.documentId,
+    previousRevisionId: selectedV1.revisionId,
+    revisionId: selectedV2.revisionId,
+  });
+  expect(events.rows.slice(4).map((event) => event.data.action)).toEqual(['selected', 'withdrawn']);
+  expect(JSON.stringify(events.rows)).not.toContain('Private sibling');
+
+  const receipts = await fixture.pool.query<{ command_kind: string; count: number }>(
+    `SELECT command_kind,count(*)::int AS count FROM core.receipt
+     WHERE principal_kind='account' AND principal_id=$1 AND command_kind LIKE 'content.knowledge.%'
+     GROUP BY command_kind ORDER BY command_kind`,
+    [fixture.author.actor.accountId],
+  );
+  expect(receipts.rows).toEqual([
+    { command_kind: 'content.knowledge.document.create', count: 2 },
+    { command_kind: 'content.knowledge.document.publication', count: 3 },
+    { command_kind: 'content.knowledge.document.revise', count: 1 },
+    { command_kind: 'content.knowledge.notebook.create', count: 1 },
+  ]);
 });
 
 test('knowledge ancestry and current Subject checks stay within their declared bounds', () => {

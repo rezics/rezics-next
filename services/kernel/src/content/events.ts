@@ -77,6 +77,18 @@ export function CONTENT_EVENTS() {
           },
           { additionalProperties: false },
         ),
+        'com.rezics.content.knowledge.notebook.created.v1': Type.Object(
+          { notebookId: UUID, subjectId: UUID, structureRevisionId: UUID },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.knowledge.document.created.v1': Type.Object(
+          { notebookId: UUID, documentId: UUID, placementId: UUID, revisionId: UUID, structureRevisionId: UUID },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.knowledge.document.revised.v1': Type.Object(
+          { documentId: UUID, previousRevisionId: UUID, revisionId: UUID },
+          { additionalProperties: false },
+        ),
         'com.rezics.content.thread.created.v1': Type.Object(
           { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
           { additionalProperties: false },

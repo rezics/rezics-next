@@ -59,6 +59,23 @@ const fixtures = {
     revisionId,
     subjectId: threadId,
   },
+  'com.rezics.content.knowledge.notebook.created.v1': {
+    notebookId: containerId,
+    subjectId: itemId,
+    structureRevisionId: revisionId,
+  },
+  'com.rezics.content.knowledge.document.created.v1': {
+    notebookId: containerId,
+    documentId: itemId,
+    placementId: threadId,
+    revisionId,
+    structureRevisionId: mediaId,
+  },
+  'com.rezics.content.knowledge.document.revised.v1': {
+    documentId: itemId,
+    previousRevisionId: revisionId,
+    revisionId: mediaId,
+  },
   'com.rezics.content.thread.created.v1': { ...authored, ...threadIndex },
   'com.rezics.content.post.created.v1': { ...authored, ...threadIndex },
   'com.rezics.content.post.published.v1': { ...authored, ...threadIndex },

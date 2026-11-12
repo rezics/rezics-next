@@ -91,6 +91,10 @@ Decision: the native first loop uses account-home notebooks, a 32-placement ance
 publication pointers for direct anonymous reads; Subject useful-page discovery waits for Search's bounded
 candidate-preparation API, and erasure retains only eligible selected revisions in deidentified form.
 
+Decision: Knowledge create, revise, select and withdrawal commands commit registered domain events with native
+receipts; event data carries resource and revision identities only, and withdrawal without a current selection is a
+receipted no-effect command.
+
 Decision: Knowledge route metadata comes from the public Content adapter; imported schemas are memoized when routes mount.
 
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
