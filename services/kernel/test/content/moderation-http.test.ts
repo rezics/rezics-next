@@ -7,15 +7,19 @@ import { customMethod } from '../../src/http/custom-method.ts';
 import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import resourceRoles from '../../src/access/resource-roles.json';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
 import { seedReportGrowth, type ReportGrowthRow } from './support/report-growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(17);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) };
+const receiptKeys = testReceiptKeys();
 const snapshot = (text: string) =>
   normalizeDocument({
     version: 'rezics-document-v1',
@@ -34,6 +38,8 @@ describe('moderation HTTP with migrated storage and current Access', () => {
   let app: ReturnType<typeof createKernel>;
   const credentials = new Map<string, string>();
   const boardId = newId(0x4321);
+  let boardSchemeId: string;
+  let boardConceptId: string;
   const reason = { reason: 'Policy violation' };
 
   beforeAll(async () => {
@@ -45,18 +51,18 @@ describe('moderation HTTP with migrated storage and current Access', () => {
       'realm:publish',
       'realm:participate',
       'realm:join',
+      'space:create',
+      'realm:create',
+      'statement:propose',
       'board:create',
       'account:read',
     ]);
     const catalogue = resourceRoleCatalogue(fixture.access);
     if (!catalogue) throw new Error('Fixture Access has no resource role catalogue');
     const roles = catalogue.roles as Map<string, readonly string[]>;
-    for (const [role, actions] of Object.entries(resourceRoles.roles))
-      if (role.startsWith('community.realm.')) roles.set(role, actions);
-    (catalogue.types as Map<string, Readonly<{ owner?: string; standing: readonly string[] }>>).set(
-      'community.realm',
-      resourceRoles.types['community.realm'],
-    );
+    for (const [role, actions] of Object.entries(resourceRoles.roles)) roles.set(role, actions);
+    const types = catalogue.types as Map<string, Readonly<{ owner?: string; standing: readonly string[] }>>;
+    for (const [type, definition] of Object.entries(resourceRoles.types)) types.set(type, definition);
     await fixture.reset();
     const authenticate = fixture.access.authenticate;
     let issued = '';
@@ -72,13 +78,35 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     } finally {
       fixture.access.authenticate = authenticate;
     }
+    configureTestReceiptKeys(db.pool, receiptKeys);
+    await bootstrapRelease(db.pool, bundledRelease);
     app = createKernel({
       pool: db.pool,
       routeKey,
       tokens,
+      receiptKeys,
       access: fixture.access,
       writeRate: createWriteRateLimiter({ secret: 'moderation-http-fixture-secret-at-least-32-bytes' }),
     });
+    for (const action of ['space:create', 'realm:create'])
+      await fixture.grant(fixture.actor, action, PLATFORM_RESOURCE);
+    for (const action of ['subject:create', 'subject:read', 'statement:propose'])
+      await fixture.grant(fixture.actor, action, { route: 0, id: GLOBAL_CONTEXT });
+    const scheme = await call('POST', '/v1/subjects', {
+      type: 'skos:ConceptScheme',
+      labels: { en: 'Moderation board scheme' },
+    });
+    expect(scheme.response.status).toBe(201);
+    boardSchemeId = scheme.body.subject.id;
+    const concept = await call('POST', '/v1/subjects', {
+      type: 'skos:Concept',
+      labels: { en: 'Moderation board concept' },
+      statements: {
+        'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: boardSchemeId } }],
+      },
+    });
+    expect(concept.response.status).toBe(201);
+    boardConceptId = concept.body.subject.id;
     await db.admin.query(
       `INSERT INTO content.board
        (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
@@ -101,13 +129,15 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     body?: unknown,
     key: string = randomUUID(),
     account: string | null = fixture.actor,
+    head?: string,
   ) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
           ...(account === null ? {} : { authorization: `Bearer ${credentials.get(account)}` }),
-          ...(method === 'POST' ? { 'idempotency-key': JSON.stringify(key) } : {}),
+          ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(key) }),
+          ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -128,70 +158,35 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     return result.body.thread;
   }
   async function createRealmBoard(title: string) {
-    const route = 0x4321;
-    const spaceId = newId(route);
-    const spaceRevisionId = newId(route);
-    const realmId = newId(route);
-    const realmRevisionId = newId(route);
-    const realmBoardId = newId(route);
-    const transactionId = randomUUID();
-    const createdAt = new Date().toISOString();
-    const client = await db.admin.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query('SET CONSTRAINTS ALL DEFERRED');
-      await client.query(
-        `INSERT INTO community.space (route,space_id,state,head_revision_id,created_at,creator)
-         VALUES ($1,$2,'active',$3,$4,$5)`,
-        [route, spaceId, spaceRevisionId, createdAt, fixture.actor],
-      );
-      await client.query(
-        `INSERT INTO community.space_revision
-         (route,space_id,revision_id,predecessor,title,summary,created_at,author)
-         VALUES ($1,$2,$3,NULL,$4,$5,$6,$7)`,
-        [route, spaceId, spaceRevisionId, `${title} host`, `${title} host`, createdAt, fixture.actor],
-      );
-      await client.query(
-        `INSERT INTO community.realm
-         (route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
-         VALUES ($1,$2,$3,'active','public',$4,$5,$6,$7)`,
-        [route, realmId, spaceId, GLOBAL_CONTEXT, realmRevisionId, createdAt, fixture.actor],
-      );
-      await client.query(
-        `INSERT INTO community.realm_revision
-         (route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
-         VALUES ($1,$2,$3,NULL,$4,$5,'public',$6,$7,$8)`,
-        [route, realmId, realmRevisionId, title, `${title} summary`, GLOBAL_CONTEXT, createdAt, fixture.actor],
-      );
-      await client.query(
-        `INSERT INTO access.resource_initialization (route,resource_id,resource_type,creator_id,initialized_at)
-         VALUES ($1,$2,'community.realm',$3,$4)`,
-        [route, realmId, fixture.actor, createdAt],
-      );
-      await client.query(
-        `INSERT INTO access.resource_role_grant
-         (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
-         VALUES ($1,$2,'identity',$3,'','community.realm.owner','(,)',$4)`,
-        [route, realmId, fixture.actor, transactionId],
-      );
-      await client.query(
-        `INSERT INTO content.board
-         (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id,realm_id)
-         VALUES ($1,$2,$3,$4,'published',1,$5,$6)`,
-        [route, realmBoardId, newId(route), `${title} board`, transactionId, realmId],
-      );
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    const host = await call('POST', '/v1/spaces', { title: `${title} host`, summary: `${title} host` });
+    expect(host.response.status).toBe(201);
+    const created = await call('POST', '/v1/realms', {
+      spaceId: host.body.space.spaceId,
+      title,
+      summary: `${title} summary`,
+      visibility: 'public',
+      contextId: GLOBAL_CONTEXT,
+    });
+    expect(created.response.status).toBe(201);
+    const realmId = created.body.realm.realmId as string;
     const realmRoute = routeOf(realmId)!;
     await fixture.grant(fixture.actor, 'realm:participate', { route: realmRoute, id: realmId });
-    await grant(realmBoardId, 'board:read', fixture.actor);
-    await grant(realmBoardId, 'thread:create', fixture.actor);
-    return { realmId, route: realmRoute, boardId: realmBoardId };
+    const selectedScheme = await call(
+      'PUT',
+      `/v1/realms/${realmId}/boardScheme`,
+      { schemeId: boardSchemeId },
+      undefined,
+      fixture.actor,
+      created.body.realm.headRevisionId,
+    );
+    expect(selectedScheme.response.status).toBe(200);
+    const createdBoard = await call('POST', `/v1/realms/${realmId}/boards`, {
+      conceptId: boardConceptId,
+      title: `${title} board`,
+      visibility: 'published',
+    });
+    expect(createdBoard.response.status).toBe(201);
+    return { realmId, route: realmRoute, boardId: createdBoard.body.board.id as string };
   }
   async function grantRealmRole(
     realmId: string,
@@ -528,7 +523,6 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     const report = await checkGrowth(db, {
       name: 'Realm-authorized moderation HTTP point command including current Access and same-partition history',
       scales: [32, 256, 2048],
-      rule: 'series',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         // Start content, ACL and command history at 2,048 rows. Otherwise the tiny receipt
@@ -630,7 +624,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
         expect(result.body.securityRevision).toBe('2');
       },
     });
-    expect(report.rule).toBe('series');
+    expect(report.rule).toBe('step');
     expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
     for (const { cost } of report.samples) {
       expect(cost.statements).toBeGreaterThan(0);

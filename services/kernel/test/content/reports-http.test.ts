@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { createAuthService } from '@rezics/auth';
+import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
 import { createHmac, randomUUID } from 'node:crypto';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { Pool } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import resourceRoles from '../../src/access/resource-roles.json';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { applyReportEffect } from '../../src/content/report-effect.ts';
@@ -15,14 +18,18 @@ import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { seedReportGrowth, type ReportGrowthBoard, type ReportGrowthRow } from './support/report-growth.ts';
 
 const routeKey = new Uint8Array(32).fill(47);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(48)]]) };
+const receiptKeys = testReceiptKeys();
 const secret = 'report-http-test-budget-secret-at-least-32-bytes';
 const reportEvent = 'com.rezics.content.report.created.v1';
 const paths = ['/v1/reports/{id}', ...['boards', 'threads', 'posts'].map((kind) => `/v1/${kind}/{id}/reports`)];
@@ -61,10 +68,11 @@ function provider() {
 }
 
 const contractPool = new Pool({ connectionString: 'postgres://kernel.invalid/reports-contract' });
+configureTestReceiptKeys(contractPool, receiptKeys);
 afterAll(() => contractPool.end());
 
 test('report routes publish closed schemas, shared report cost, actions and problem responses', () => {
-  const app = createKernel({ pool: contractPool, routeKey, tokens });
+  const app = createKernel({ pool: contractPool, routeKey, tokens, receiptKeys });
   const document = openApiDocument(app);
   const post = document.paths['/v1/reports']?.post;
   expect(post).toBeDefined();
@@ -123,13 +131,31 @@ describe('real migrated report HTTP and shared admission', () => {
   let other = newId(0x3456);
   let board = newId(0x4567);
   let secondBoard = newId(0x789a);
+  let boardRealm = '';
+  let secondBoardRealm = '';
   let grantor = newId(0x3467);
   let peer = 0;
   const roleRanges = new Map<string, string>();
   const issuer = 'https://report-auth.test';
   const audience = 'https://kernel.test';
   const password = 'report fixture password for native issuance';
-  const actions = ['report:create', 'board:read', 'moderation:read_reports', 'access:grant'];
+  const actions = [
+    'report:create',
+    'board:read',
+    'thread:create',
+    'moderation:read_reports',
+    'moderation:takedown',
+    'access:grant',
+    'space:create',
+    'realm:create',
+    'realm:manage',
+    'realm:read',
+    'realm:participate',
+    'board:create',
+    'subject:create',
+    'subject:read',
+    'statement:propose',
+  ];
   const authDatabase = `reports_auth_${process.pid}`;
   const approvals = new Set<string>();
   const input = (targetId = board) => ({
@@ -140,6 +166,8 @@ describe('real migrated report HTTP and shared admission', () => {
 
   beforeAll(async () => {
     db = await openGrowthDatabase();
+    configureTestReceiptKeys(db.pool, receiptKeys);
+    await bootstrapRelease(db.pool, bundledRelease);
     const authUrl = await createAuthDatabase(db.url, authDatabase);
     authPool = new Pool({ connectionString: authUrl });
     const signingKey = {
@@ -176,7 +204,10 @@ describe('real migrated report HTTP and shared admission', () => {
     const access = (config: Parameters<typeof createAccess>[0]) =>
       createAccess({
         ...config,
-        resourceRoles: { roles: { 'report.moderator': ['moderation:read_reports'] }, types: {} },
+        resourceRoles: {
+          roles: { ...resourceRoles.roles, 'report.moderator': ['moderation:read_reports'] },
+          types: resourceRoles.types,
+        },
         auth: {
           issuer,
           audience,
@@ -188,6 +219,7 @@ describe('real migrated report HTTP and shared admission', () => {
       pool: db.pool,
       routeKey,
       tokens,
+      receiptKeys,
       access,
       writeRate: createWriteRateLimiter({ secret }),
       // Distinct trusted network fixtures keep unrelated scenarios and seed
@@ -217,14 +249,49 @@ describe('real migrated report HTTP and shared admission', () => {
         id,
       ]);
     }
+    await db.admin.query(
+      `INSERT INTO access.resource_grant
+         (route,resource_id,subject_kind,subject_id,subject_role,action,valid,transaction_id)
+       SELECT $1,$2,'identity',$3,'',action,'(,)'::tstzrange,$4
+       FROM unnest($5::text[]) AS action`,
+      [
+        PLATFORM_RESOURCE.route,
+        PLATFORM_RESOURCE.id,
+        grantor,
+        randomUUID(),
+        ['space:create', 'realm:create', 'subject:create', 'subject:read', 'statement:propose'],
+      ],
+    );
+    const grantorBearer = await issue(grantor);
+    const schemeResult = await call(
+      'POST',
+      '/v1/subjects',
+      { type: 'skos:ConceptScheme', labels: { en: 'Report board scheme' } },
+      { bearer: grantorBearer },
+    );
+    expect(schemeResult.response.status).toBe(201);
+    const schemeId = schemeResult.body.subject.id as string;
+    const conceptResult = await call(
+      'POST',
+      '/v1/subjects',
+      {
+        type: 'skos:Concept',
+        labels: { en: 'Report board concept' },
+        statements: {
+          'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
+        },
+      },
+      { bearer: grantorBearer },
+    );
+    expect(conceptResult.response.status).toBe(201);
+    const conceptId = conceptResult.body.subject.id as string;
+    const first = await createRealmBoard('Report board A', schemeId, conceptId, grantorBearer);
+    const second = await createRealmBoard('Report board B', schemeId, conceptId, grantorBearer);
+    board = first.boardId;
+    secondBoard = second.boardId;
+    boardRealm = first.realmId;
+    secondBoardRealm = second.realmId;
     for (const id of [board, secondBoard]) {
-      await db.admin.query(
-        `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-       VALUES ($1,$2,$3,'Report board','published',1,$4)`,
-        [routeOf(id), id, newId(0x5678), randomUUID()],
-      );
-      // Only privileged setup rows grant the fixture grantor standing. Later
-      // grants and revocations go through the mounted production routes.
       await db.admin.query(
         `INSERT INTO access.resource_grant
            (route,resource_id,subject_kind,subject_id,subject_role,action,valid,transaction_id)
@@ -269,24 +336,56 @@ describe('real migrated report HTTP and shared admission', () => {
     method: string,
     path: string,
     body?: unknown,
-    options: { key?: string | null; bearer?: string; kernel?: typeof app } = {},
+    options: { key?: string | null; bearer?: string; kernel?: typeof app; ifMatch?: string } = {},
   ) {
     const response = await (options.kernel ?? app).handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
           ...(options.bearer ? { authorization: `Bearer ${options.bearer}` } : {}),
-          ...(body === undefined
+          ...(method === 'GET' || options.key === null
             ? {}
-            : {
-                'content-type': 'application/json',
-                ...(options.key === null ? {} : { 'idempotency-key': JSON.stringify(options.key ?? randomUUID()) }),
-              }),
+            : { 'idempotency-key': JSON.stringify(options.key ?? randomUUID()) }),
+          ...(options.ifMatch === undefined ? {} : { 'if-match': options.ifMatch }),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     );
     return { response, body: await response.json() };
+  }
+  async function createRealmBoard(title: string, schemeId: string, conceptId: string, bearer: string) {
+    const host = await call('POST', '/v1/spaces', { title: `${title} host`, summary: `${title} host` }, { bearer });
+    expect(host.response.status).toBe(201);
+    const created = await call(
+      'POST',
+      '/v1/realms',
+      {
+        spaceId: host.body.space.spaceId,
+        title,
+        summary: `${title} summary`,
+        visibility: 'public',
+        contextId: GLOBAL_CONTEXT,
+      },
+      { bearer },
+    );
+    expect(created.response.status).toBe(201);
+    const realmId = created.body.realm.realmId as string;
+    const selected = await call(
+      'PUT',
+      `/v1/realms/${realmId}/boardScheme`,
+      { schemeId },
+      { bearer, ifMatch: JSON.stringify(created.body.realm.headRevisionId) },
+    );
+    expect(selected.response.status).toBe(200);
+    const createdBoard = await call(
+      'POST',
+      `/v1/realms/${realmId}/boards`,
+      { conceptId, title: `${title} board`, visibility: 'published' },
+      { bearer },
+    );
+    expect(createdBoard.response.status).toBe(201);
+    return { realmId, boardId: createdBoard.body.board.id as string };
   }
   async function effects() {
     // Administrative inspection is outside measured production operations.
@@ -329,16 +428,20 @@ describe('real migrated report HTTP and shared admission', () => {
       valid: '(,)',
     });
   }
-  async function moderation(enabled: boolean, target = board) {
-    if (!enabled && !roleRanges.has(target)) return;
+  async function assignRole(enabled: boolean, role: string, target: string) {
+    const rangeKey = `${target}:${role}`;
+    if (!enabled && !roleRanges.has(rangeKey)) return;
     const result = await permission(enabled ? '/v1/roleGrants' : '/v1/roleGrants:revoke', {
       resource: { route: routeOf(target), id: target },
       subject: { kind: 'account', id: moderator },
-      role: 'report.moderator',
-      valid: enabled ? '(,)' : roleRanges.get(target),
+      role,
+      valid: enabled ? '(,)' : roleRanges.get(rangeKey),
     });
-    if (enabled) roleRanges.set(target, result.grant.valid);
-    else roleRanges.delete(target);
+    if (enabled) roleRanges.set(rangeKey, result.grant.valid);
+    else roleRanges.delete(rangeKey);
+  }
+  async function moderation(enabled: boolean, target = board) {
+    await assignRole(enabled, 'report.moderator', target);
   }
   async function barrier(reportId: string) {
     const rows = await db.admin.query(
@@ -479,6 +582,7 @@ describe('real migrated report HTTP and shared admission', () => {
       pool: db.pool,
       routeKey,
       tokens,
+      receiptKeys,
       reports: { anonymousVerifier: remote.verifier },
       ratePeer: () => '198.51.100.147',
       writeRate: createWriteRateLimiter({
@@ -538,6 +642,46 @@ describe('real migrated report HTTP and shared admission', () => {
         expect(JSON.stringify(denied.body)).not.toContain(id);
       }
     }
+  });
+
+  test('a Realm moderator resolves only reports in the assigned Realm and loses replay access when authority is revoked', async () => {
+    expect(boardRealm).not.toBe(secondBoardRealm);
+    const selected = await create(board);
+    const outside = await create(secondBoard);
+    await barrier(selected);
+    await barrier(outside);
+    await assignRole(true, 'report.moderator', board);
+    await assignRole(true, 'community.realm.moderator', boardRealm);
+    const bearer = await issue(moderator);
+
+    const selectedPage = await call('GET', `/v1/boards/${board}/reports`, undefined, { bearer });
+    expect(selectedPage.response.status).toBe(200);
+    expect(selectedPage.body.reports.map((report: { id: string }) => report.id)).toContain(selected);
+    for (const request of [
+      call('GET', `/v1/boards/${secondBoard}/reports`, undefined, { bearer }),
+      call('GET', `/v1/reports/${outside}`, undefined, { bearer }),
+      call('POST', `/v1/reports/${outside}:dismiss`, undefined, { bearer, key: 'outside-report-dismiss' }),
+    ]) {
+      const denied = await request;
+      expect(denied.response.status).toBe(404);
+      expect(denied.body.code).toBe('not_found');
+      expect(JSON.stringify(denied.body)).not.toContain(outside);
+    }
+
+    const key = 'selected-realm-report-dismiss';
+    const resolved = await call('POST', `/v1/reports/${selected}:dismiss`, undefined, { bearer, key });
+    expect(resolved.response.status).toBe(200);
+    expect(resolved.body).toEqual({ reportId: selected, outcome: 'dismissed' });
+    const resolvedPage = await call('GET', `/v1/boards/${board}/reports?status=resolved`, undefined, { bearer });
+    expect(resolvedPage.response.status).toBe(200);
+    expect(resolvedPage.body.reports.map((report: { id: string }) => report.id)).toContain(selected);
+
+    await assignRole(false, 'community.realm.moderator', boardRealm);
+    await assignRole(false, 'report.moderator', board);
+    const replay = await call('POST', `/v1/reports/${selected}:dismiss`, undefined, { bearer, key });
+    expect(replay.response.status).toBe(404);
+    expect(replay.body).toMatchObject({ code: 'not_found', effect_status: 'not_applied' });
+    expect(replay.body).not.toHaveProperty('outcome');
   });
 
   test('The default authorized moderation Reports journey filters by current status and target type and pages in selected time order with selection-bound cursors, sparse-page honesty and private viewer isolation', async () => {
@@ -649,8 +793,11 @@ describe('real migrated report HTTP and shared admission', () => {
     const typedEmpty = await read('targetKind=post');
     expect(typedEmpty.body.reports).toEqual([]);
     expect(typeof typedEmpty.body.next).toBe('string');
-    for (const invalid of ['status=open', 'targetKind=document', 'order=random', 'status=pending&status=resolved'])
+    for (const invalid of ['status=open', 'targetKind=document', 'order=random'])
       expect((await read(invalid)).response.status).toBe(400);
+    const duplicateStatus = await read('status=pending&status=resolved');
+    expect(duplicateStatus.response.status).toBe(400);
+    expect(duplicateStatus.body.code).toBe('invalid_request');
     await moderation(false);
     const denied = await read(`status=pending&cursor=${cursor}`);
     const unknown = await read('status=pending', bearer, newId(0x4567));
@@ -662,39 +809,29 @@ describe('real migrated report HTTP and shared admission', () => {
   });
 
   test('native target-kind selection intersects exact thread and post scopes and never widens them', async () => {
-    const thread = newId(0x6543);
-    const post = newId(0x6543);
-    const revision = newId(0x6543);
-    const fixture = await db.admin.connect();
-    try {
-      await fixture.query('BEGIN');
-      await fixture.query(
-        `INSERT INTO content.thread (route,thread_id,author_account_id,board_id,title,first_post_id,visibility,security_revision,recorded_transaction_id)
-         VALUES ($1,$2,$3,$4,'Reported thread',$5,'published',1,$6)`,
-        [0x6543, thread, author, board, post, randomUUID()],
-      );
-      await fixture.query(
-        `INSERT INTO content.post (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
-         VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
-        [0x6543, thread, post, author, revision, randomUUID()],
-      );
-      await fixture.query(
-        `INSERT INTO content.revision (route,thread_id,post_id,revision_id,licence,subject_ids,board_id,availability,recorded_transaction_id)
-         VALUES ($1,$2,$3,$4,'CC0-1.0','{}',$5,'erased',$6)`,
-        [0x6543, thread, post, revision, board, randomUUID()],
-      );
-      await fixture.query('COMMIT');
-    } catch (error) {
-      await fixture.query('ROLLBACK');
-      throw error;
-    } finally {
-      fixture.release();
-    }
+    await grant(author, 'board:read');
+    await grant(author, 'thread:create');
+    const created = await call(
+      'POST',
+      '/v1/threads',
+      {
+        boardId: board,
+        title: 'Reported thread',
+        body: fromPlainText('Reported content'),
+        licence: 'CC0-1.0',
+        subjectIds: [],
+        visibility: 'published',
+      },
+      { bearer: await issue(author) },
+    );
+    expect(created.response.status).toBe(201);
+    const thread = created.body.thread.id as string;
+    const post = created.body.thread.firstPost.id as string;
     for (const target of [thread, post]) {
       await db.admin.query(
         `INSERT INTO access.resource_grant (route,resource_id,subject_kind,subject_id,subject_role,action,valid,transaction_id)
          VALUES ($1,$2,'identity',$3,'','access:grant','(,)'::tstzrange,$4)`,
-        [0x6543, target, grantor, randomUUID()],
+        [routeOf(target), target, grantor, randomUUID()],
       );
       await moderation(true, target);
     }
@@ -751,7 +888,6 @@ describe('real migrated report HTTP and shared admission', () => {
       // At fixed admitted input this is constant rows/statements and logarithmic indexed blocks.
       name: 'report HTTP admission and create',
       scales: [32, 256, 2048],
-      rule: 'series',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         // At 64 rows per scale unit, board/report/command indexes start with 2,048 rows.
@@ -792,7 +928,7 @@ describe('real migrated report HTTP and shared admission', () => {
         expect(JSON.stringify(await effects())).not.toContain(proof);
       },
     });
-    expect(report.rule).toBe('series');
+    expect(report.rule).toBe('step');
     expect(report.samples).toHaveLength(3);
     for (const sample of report.samples) {
       expect(sample.cost.rows).toBeGreaterThan(0);
