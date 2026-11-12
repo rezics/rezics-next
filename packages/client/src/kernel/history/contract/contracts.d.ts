@@ -269,6 +269,10 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.content.edition.published.v1': EventClassification;
     'com.rezics.content.edition.unpublished.v1': EventClassification;
     'com.rezics.content.edition.creator-indexed.v1': EventClassification;
+    'com.rezics.content.knowledge.notebook.created.v1': EventClassification;
+    'com.rezics.content.knowledge.document.created.v1': EventClassification;
+    'com.rezics.content.knowledge.document.revised.v1': EventClassification;
+    'com.rezics.content.knowledge.publication.changed.v1': EventClassification;
     'com.rezics.content.authored-field.created.v1': EventClassification;
     'com.rezics.content.authored-field.erased.v1': EventClassification;
     'com.rezics.content.board-thread.projected.v1': Readonly<{
