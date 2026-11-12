@@ -81,6 +81,39 @@ function withCode(post: ThreadPost, text: string): ThreadPost {
   return { ...post, body: { ...post.body, doc: { ...post.body.doc, content } } };
 }
 
+function withWideBlocks(post: ThreadPost, text: string): ThreadPost {
+  const updated = withCode(post, text);
+  const content: DocumentNode[] = [];
+  for (const node of updated.body.doc.content ?? []) {
+    content.push(node);
+    if (node.type === 'codeBlock') {
+      content.push(structuredClone(node));
+    } else if (node.type === 'table') {
+      content.push(
+        structuredClone(node),
+        tableNode([
+          {
+            type: 'tableCell',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'concealed table content', marks: [{ type: 'spoiler' }] }],
+              },
+            ],
+          },
+        ]),
+        tableNode([
+          {
+            type: 'tableCell',
+            content: [{ type: 'paragraph', content: [{ type: 'image', attrs: { src: 'media-id' } }] }],
+          },
+        ]),
+      );
+    }
+  }
+  return { ...updated, body: { ...updated.body, doc: { ...updated.body.doc, content } } };
+}
+
 function button(container: ParentNode, label: string): HTMLButtonElement | null {
   return (
     [...container.querySelectorAll('button')].find(
@@ -165,7 +198,7 @@ test('published reader preserves exact code, table semantics, clipboard recovery
 
   const { createRoot } = await import('react-dom/client');
   const supplied = preparedPostReading(2);
-  const post = withCode(supplied.post, exactCode);
+  const post = withWideBlocks(supplied.post, exactCode);
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
@@ -184,11 +217,26 @@ test('published reader preserves exact code, table semantics, clipboard recovery
     const codeRegion = host.querySelector<HTMLElement>('pre.wide-document-code-content');
     expect(codeRegion?.textContent).toBe(exactCode);
     expect(codeRegion?.querySelector('script, img')).toBeNull();
+    const codeBlocks = [...host.querySelectorAll<HTMLElement>('[data-wide-document-code]')];
+    expect(codeBlocks).toHaveLength(2);
+    expect([...host.querySelectorAll('pre.wide-document-code-content')].map((region) => region.textContent)).toEqual([
+      exactCode,
+      exactCode,
+    ]);
+    expect(host.querySelectorAll('[data-slot="wide-document-table"]')).toHaveLength(2);
+    expect(host.querySelectorAll('.document-table-scroll:not(.wide-document-table-scroll)')).toHaveLength(2);
+
     const wrap = button(host, m.wide_document_code_wrap())!;
     expect(wrap.getAttribute('aria-pressed')).toBe('true');
     await act(async () => wrap.click());
     expect(wrap.getAttribute('aria-pressed')).toBe('false');
     expect(host.querySelector('pre.wide-document-code-content')?.textContent).toBe(exactCode);
+
+    clipboardWrites = [];
+    await act(async () => button(codeBlocks[1]!, m.wide_document_code_copy())!.click());
+    expect(clipboardWrites).toEqual([exactCode]);
+    expect(codeBlocks[1]?.textContent).toContain(m.wide_document_code_copied());
+    expect(codeBlocks[0]?.textContent).not.toContain(m.wide_document_code_copied());
 
     clipboardWrites = [];
     await act(async () => button(host, m.wide_document_code_copy())!.click());
@@ -205,7 +253,8 @@ test('published reader preserves exact code, table semantics, clipboard recovery
     await act(async () => button(dialog!, m.wide_document_inspector_close())!.click());
     expect(window.document.activeElement).toBe(codeTrigger);
 
-    const tableTrigger = button(host, m.wide_document_table_inspect())!;
+    const tableBlocks = [...host.querySelectorAll<HTMLElement>('[data-slot="wide-document-table"]')];
+    const tableTrigger = button(tableBlocks[1]!, m.wide_document_table_inspect())!;
     await act(async () => tableTrigger.click());
     dialog = window.document.body.querySelector<HTMLElement>('[role="dialog"]');
     const tableRegion = dialog?.querySelector<HTMLElement>('[role="region"]');

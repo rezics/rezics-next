@@ -9,6 +9,8 @@ export type WideDocumentDescriptor = Readonly<{
   kind: WideDocumentKind;
   node: DocumentNode;
   order: number;
+  /** Zero-based authored occurrence among nodes of this kind, including undisclosed and unsupported ones. */
+  occurrence: number;
   codeBytes?: number;
 }>;
 
@@ -18,6 +20,15 @@ type Metrics = Readonly<{
   hasUnsupportedTableContent: boolean;
   textBytes: number;
 }>;
+
+type WalkEntry = {
+  node: DocumentNode;
+  exit: boolean;
+  hidden: boolean;
+  unsupportedVisibility: boolean;
+  order?: number;
+  occurrence?: number;
+};
 
 const noDisclosures: ReadonlySet<number> = new Set();
 
@@ -48,33 +59,41 @@ function boundedUtf8Length(value: string, maximum: number): number {
 
 /**
  * Register at most 64 disclosed code and plain-table nodes in authored order. The post-order walk
- * records only bounded metadata; it keeps no serialized or rendered copy of the document.
+ * records only bounded metadata and a per-kind occurrence bridge for the shared ProseMirror renderer.
  */
 export function registerWideDocumentBlocks(
   snapshot: DocumentSnapshot,
   disclosedSpoilers: ReadonlySet<number> = noDisclosures,
 ): readonly WideDocumentDescriptor[] {
   const metrics = new WeakMap<DocumentNode, Metrics>();
-  const order = new WeakMap<DocumentNode, number>();
   const found: WideDocumentDescriptor[] = [];
-  const stack: Array<{ node: DocumentNode; exit: boolean; hidden: boolean; unsupportedVisibility: boolean }> = [
-    { node: snapshot.doc, exit: false, hidden: false, unsupportedVisibility: false },
-  ];
+  const stack: WalkEntry[] = [{ node: snapshot.doc, exit: false, hidden: false, unsupportedVisibility: false }];
   let nextOrder = 0;
+  let nextCodeOccurrence = 0;
+  let nextTableOccurrence = 0;
   let spoilerPosition = 0;
 
   while (stack.length > 0) {
     const entry = stack.pop()!;
     const { node } = entry;
     if (!entry.exit) {
-      order.set(node, nextOrder++);
       let hidden = entry.hidden || node.attrs?.conceal === true;
       let unsupportedVisibility = entry.unsupportedVisibility;
       for (const mark of node.marks ?? []) {
         if (mark.type === 'spoiler') hidden ||= !disclosedSpoilers.has(spoilerPosition++);
         else if (!tableMarkTypes.has(mark.type)) unsupportedVisibility = true;
       }
-      stack.push({ node, exit: true, hidden, unsupportedVisibility });
+
+      const occurrence =
+        node.type === 'codeBlock' ? nextCodeOccurrence++ : node.type === 'table' ? nextTableOccurrence++ : undefined;
+      stack.push({
+        node,
+        exit: true,
+        hidden,
+        unsupportedVisibility,
+        order: nextOrder++,
+        ...(occurrence === undefined ? {} : { occurrence }),
+      });
       const children = node.content ?? [];
       for (let index = children.length - 1; index >= 0; index -= 1) {
         stack.push({
@@ -107,9 +126,15 @@ export function registerWideDocumentBlocks(
     if (hasUnsupportedVisibility || hasHiddenContent || found.length >= MAX_WIDE_DOCUMENT_BLOCKS) continue;
 
     if (node.type === 'codeBlock') {
-      found.push({ kind: 'code', node, order: order.get(node) ?? 0, codeBytes: textBytes });
+      found.push({
+        kind: 'code',
+        node,
+        order: entry.order!,
+        occurrence: entry.occurrence!,
+        codeBytes: textBytes,
+      });
     } else if (node.type === 'table' && !hasUnsupportedTableContent) {
-      found.push({ kind: 'table', node, order: order.get(node) ?? 0 });
+      found.push({ kind: 'table', node, order: entry.order!, occurrence: entry.occurrence! });
     }
   }
 
