@@ -237,7 +237,8 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
   const aggregateRunId = randomUUID();
   const aggregateRemoteArgv = ['a'.repeat(27_000), 'b'.repeat(27_000)];
   const aggregateBinding = { checkId, argv, remoteArgv: aggregateRemoteArgv };
-  const aggregateRecordLimit = CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS;
+  const aggregateRecordLimit =
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS;
   expect([...argv, ...aggregateRemoteArgv].every((argument) => Buffer.byteLength(argument) <= 48 * 1024)).toBe(true);
   expect(Buffer.byteLength(JSON.stringify([aggregateBinding.argv, aggregateBinding.remoteArgv]))).toBeLessThanOrEqual(
     56 * 1024,
