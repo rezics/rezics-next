@@ -615,7 +615,8 @@ function inheritedContinuationNames(
   const sources = attemptContinuationSources(store, task, ref);
   const trees = new Set(sources);
   // Merge-conflict preparation records the exact worker and admitted controller source commits.
-  for (const source of sources) for (const parent of directMergeParents(task.worktree, source, policy)) trees.add(parent);
+  for (const source of sources)
+    for (const parent of directMergeParents(task.worktree, source, policy)) trees.add(parent);
   for (const tree of trees) for (const name of continuationNamesInTree(task.worktree, tree, policy)) names.add(name);
   return names;
 }

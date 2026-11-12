@@ -40,9 +40,7 @@ test('a dev product worker verifies premises, decides and informs its manager, a
     'Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
   );
   expect(prompt).toContain('Code another Goal has not delivered is not a blocker');
-  expect(prompt).toContain(
-    'When two requirements conflict, follow the owner documents and the delivered code',
-  );
+  expect(prompt).toContain('When two requirements conflict, follow the owner documents and the delivered code');
   expect(prompt).toContain('A blocker is only a conflict where every choice breaks an owner-document rule');
   expect(prompt).not.toContain('receipt');
   expect(prompt).not.toContain('when the work needs a product decision the contract does not make');
@@ -104,13 +102,7 @@ test("the prompt names the landing's exact test commands for the files the branc
 
     const changedTask = promptTask('web', { worktree: root, base } as Partial<Task>);
     changedTask.brief.acceptance = { ...changedTask.brief.acceptance, requires: ['native'] };
-    const prompt = workerPrompt(
-      changedTask,
-      undefined,
-      undefined,
-      [],
-      '/repo/main',
-    );
+    const prompt = workerPrompt(changedTask, undefined, undefined, [], '/repo/main');
     expect(prompt).toContain(
       "For the files this branch already changes, the landing's test commands are: " +
         "`'bun' 'run' '--cwd' 'services/kernel' 'check' 'test/library/shelf.test.ts'`; " +
