@@ -84,12 +84,15 @@ export function createFollowFixtureFetch(
   authHandlerJwksUrl: string,
   transport: typeof fetch,
 ): typeof fetch {
-  return (input, init) => {
-    const href = typeof input === 'string' ? input : input instanceof Request ? input.url : input.href;
-    if (href !== configuredJwksUrl) return transport(input, init);
-    const request = new Request(input, init);
-    return transport(new Request(authHandlerJwksUrl, request));
-  };
+  return Object.assign(
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const href = typeof input === 'string' ? input : input instanceof Request ? input.url : input.href;
+      if (href !== configuredJwksUrl) return transport(input, init);
+      const request = new Request(input, init);
+      return transport(new Request(authHandlerJwksUrl, request));
+    },
+    { preconnect: transport.preconnect.bind(transport) },
+  );
 }
 
 function queryText(query: unknown): string | undefined {
@@ -1515,7 +1518,7 @@ if (import.meta.main) {
   globalThis.fetch = createFollowFixtureFetch(
     workerEnv.AUTH_JWKS_URL!,
     workerEnv.REZICS_FOLLOW_FIXTURE_JWKS_HANDLER_URL!,
-    globalThis.fetch.bind(globalThis),
+    globalThis.fetch,
   );
   let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
   process.on('message', (message) => repairLatch?.receive(message));
