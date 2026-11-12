@@ -384,6 +384,61 @@ Optional dependency failures use concealed/unavailable states and expose same-in
 they do not become positive cache entries or confirmed absence. Successful reads are private and
 no-store and do not change heads, replies, reactions or review votes.
 
+### Metadata-only revision headers
+
+Decision: Studio and column history use additive `GET /v1/posts/{id}/revision-headers`
+(`post.historyMetadata`); exact bodies remain a separate fetch. The closed response is
+`{ revisions: PostRevisionHeader[], next: string | null }`, default 20, limit 1–100.
+Each header contains `postId`, `threadId`, `revisionId`, `sha256`, `recordedAt`, immutable
+`authorId`, exact stored `licence` and `subjectIds`, conversation `kind` and
+`documentKind` (`opening` or `reply`). `recordedAt` is the selected revision's native
+recorded timestamp with PostgreSQL microseconds preserved. These are available revision
+headers, never body DTOs: no `body` member, null/placeholder document, account name,
+handle, current title, current-head substitution or owner enrichment. Kind and document
+kind describe the containing conversation and Post; they do not imply a historical title.
+
+`post-history-metadata.ts` binds the existing `pageRevisionCandidates` keyset to
+`readPostMetadata`, including original source observations, native Post ancestry,
+Board/Realm/Access authority and retained final checks. No canonical document is selected,
+parsed or loaded, including for the initial current-head check. Authorship grants no read
+permission. An erased/unreadable current source returns not found with no session header;
+an erased/hidden historical key emits no header. Every examined key consumes its raw
+slot, so an empty page can carry `next`. The frontier is the last examined key, never
+the last visible header or the lookahead key. There is one range request, no refill.
+
+Continuation uses the existing signed cursor with its own `content.revision-headers`
+operation and binds Post, thread, viewer, partition epoch and ascending
+`(recorded_at, revision_id)` boundary. Full-history and header cursors are not
+interchangeable. A changed viewer, Post, thread, epoch, invalid signature or expired
+cursor is invalid input. The same cursor can retry the same raw boundary. All exact
+admitted revisions and the original source are revalidated before returning headers,
+continuation or session anchors, including empty/sparse pages. A changed native source,
+container or authority withholds the entire result. Success is private and no-store.
+Neither the full history response nor the exact-body route changes.
+
+Cost: one containing-thread locator, one source metadata observation, one raw keyset
+snapshot examining at most `p+1` keys (`p<=100`), at most `p` exact metadata observations,
+one retained final read per admitted revision and one retained final source read. Each
+native observation/final read retains the existing depth bound (Post plus at most 32
+reply ancestors), independently anchored Board/Realm and prepared Access bounds and
+releases all checkouts. There is no cross-home atomic snapshot. Memory and output are
+O(p) header metadata; each header has at most 128 Subject IDs and a 256-character licence,
+with no document bytes or foreign display records. Retry repeats bounded read work and
+writes no receipts, revisions or head state. No history census or body scan occurs.
+
+Later acceptance is `test/content/post-history-metadata.test.ts`: the author pages
+21 revisions as 20/1 with exact IDs, digests and timestamps, bounded raw selection and
+zero body-bearing revision probes; an independent exact-body fetch returns the selected
+old manuscript after the head changes. Anonymous/other-account readers see only native
+admitted metadata; protected containers still deny the author without Access and no
+viewer receives private names. Erased historical keys produce empty-but-continuable
+pages and advance the raw frontier without refill; cursors reject another projection,
+viewer, Post and epoch. Head, container, authority or partition changes during selection
+withhold all headers and session state, including an empty page. Existing full-history
+and exact-body assertions remain unchanged. Native acceptance and growth execution are
+deferred to the dev verifier; source verification selects changed-file format/lint and
+Kernel workspace typing only.
+
 ### Cost: composed native history page
 
 - Touches: the existing route/post locator and raw revision keyset; root plus exact native

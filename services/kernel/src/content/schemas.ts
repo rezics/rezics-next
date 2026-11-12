@@ -1017,6 +1017,38 @@ export function RevisionPageResponseSchema() {
   );
 }
 
+/** A distinct closed projection: a header can never masquerade as an ItemView. */
+export function PostRevisionHeaderSchema() {
+  return memoizedValue(PostRevisionHeaderSchema, () =>
+    t.Object(
+      {
+        postId: ContentIdSchema,
+        threadId: ContentIdSchema,
+        revisionId: ContentIdSchema,
+        sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+        recordedAt: t.String({ format: 'date-time' }),
+        authorId: ContentIdSchema,
+        licence: t.String({ minLength: 1, maxLength: 256 }),
+        kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+        documentKind: t.Union([t.Literal('opening'), t.Literal('reply')]),
+        subjectIds: t.Array(ContentIdSchema, { maxItems: 128 }),
+      },
+      closed,
+    ),
+  );
+}
+export function PostRevisionHeadersResponseSchema() {
+  return memoizedValue(PostRevisionHeadersResponseSchema, () =>
+    t.Object(
+      {
+        revisions: t.Array(PostRevisionHeaderSchema(), { maxItems: 100 }),
+        next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+
 // Portable semantic validators include the shared bulk Rights checks. The exact
 // portable schema also supplies OpenAPI; Elysia must not strip unknown members.
 export function MediaImportInputSchema() {

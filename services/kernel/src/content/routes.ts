@@ -89,6 +89,7 @@ import {
   READING_PAGE_REQUEST_BYTES,
 } from './reading-page.ts';
 import { readContentHistoryPage } from './history-page-context.ts';
+import { listPostRevisionHeaders } from './post-history-metadata.ts';
 import type { ReadingPageViewerActionRuntime } from './reading-page.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
@@ -127,6 +128,7 @@ import {
   ContentPageQuerySchema,
   PostPageResponseSchema,
   RevisionPageResponseSchema,
+  PostRevisionHeadersResponseSchema,
   PostInputSchema,
   PostResponseSchema,
   ContributedPostResponseSchema,
@@ -430,6 +432,9 @@ function postPageResponse() {
 }
 function revisionPageResponse() {
   return memoizedValue(revisionPageResponse, () => strictContentSchema(RevisionPageResponseSchema()));
+}
+function revisionHeadersResponse() {
+  return memoizedValue(revisionHeadersResponse, () => strictContentSchema(PostRevisionHeadersResponseSchema()));
 }
 
 /** Bound byte consumption before JSON parsing or entering a command. */
@@ -1461,6 +1466,44 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             return { revisions: page.revisions, next: page.next, page: page.page } satisfies Static<
               ReturnType<typeof RevisionPageResponseSchema>
+            >;
+          }),
+        ),
+    )
+    .get(
+      '/v1/posts/:id/revision-headers',
+      {
+        params,
+        query: ContentPageQuerySchema,
+        response: {
+          200: withHeaders(revisionHeadersResponse(), { ...sessionHeader(), 'cache-control': t.Optional(t.String()) }),
+          ...readFailures(),
+        },
+        detail: {
+          operationId: 'post.historyMetadata',
+          'x-resource-types': ['content.post'],
+          'x-exposure': 'public',
+          'x-action': 'post:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { id }, query, actor, admission, job, session, set }) =>
+        contentOperation(() =>
+          admission.run('normal', job, async () => {
+            set.headers['cache-control'] = 'private, no-store';
+            const context = { actor, deadline: job.deadline };
+            const threadId = await containingThread(id, context);
+            const page = await listPostRevisionHeaders(
+              dependencies,
+              threadId,
+              id,
+              context,
+              query.cursor,
+              query.limit ?? 20,
+            );
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { revisions: page.revisions, next: page.next } satisfies Static<
+              ReturnType<typeof PostRevisionHeadersResponseSchema>
             >;
           }),
         ),

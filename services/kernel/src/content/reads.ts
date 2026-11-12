@@ -199,6 +199,9 @@ export type NativePostMetadata = Readonly<{
   licence: string;
   sha256: string;
   visibility: Visibility;
+  kind: 'discussion' | 'review';
+  documentKind: 'opening' | 'reply';
+  subjectIds: readonly string[];
 }>;
 export type { Actor };
 
@@ -1473,6 +1476,9 @@ async function disclose(
         licence: revision.licence,
         sha256: revision.sha256.toString('hex'),
         visibility: post.visibility,
+        kind: current.thread.thread_kind!,
+        documentKind: post.id === current.thread.first_post_id ? 'opening' : 'reply',
+        subjectIds: revision.subject_ids,
       };
     }
     // The receipt names one exact revision. That replay is the erased-metadata
