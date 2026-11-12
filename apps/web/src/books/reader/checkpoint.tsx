@@ -10,6 +10,7 @@ import {
 } from './native-checkpoint';
 import type { CheckpointCommand, CheckpointWrite } from './checkpoint-api';
 import type { BookPage } from './source';
+import { sameCheckpointPosition, type CheckpointPosition } from './checkpoint-position';
 
 type Pending = { command: CheckpointCommand; key: string };
 export type HostedBookCheckpointProps = {
@@ -19,6 +20,7 @@ export type HostedBookCheckpointProps = {
   locale: Locale;
   isCurrent: () => boolean;
   reload: () => void;
+  position: CheckpointPosition;
 };
 
 /** A chapter checkpoint, with native availability and CAS. Retiring the reading also retires its private controls. */
@@ -29,11 +31,13 @@ export function HostedBookCheckpoint({
   locale,
   isCurrent,
   reload,
+  position,
 }: HostedBookCheckpointProps) {
   const [observation, setObservation] = useState<CheckpointObservation | null>(null);
   const [retry, setRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<'saved' | 'cleared' | 'conflict' | 'uncertain' | 'changed' | null>(null);
+  const controls = useRef<HTMLElement>(null);
   const pending = useRef<Pending | null>(null);
   const writing = useRef(false);
   const live = useRef(false);
@@ -48,7 +52,10 @@ export function HostedBookCheckpoint({
       setObservation(null);
       void readNativeHostedCheckpoint({ data: { subjectId, viewer, locale }, signal: controller.signal }).then(
         (value) => {
-          if (current()) setObservation(value);
+          if (current()) {
+            setObservation(value);
+            if (value.state === 'ready') position.restore(value.value, controls.current);
+          }
         },
         () => {
           if (current()) setObservation({ state: 'unavailable' });
@@ -59,7 +66,7 @@ export function HostedBookCheckpoint({
       live.current = false;
       controller.abort();
     };
-  }, [subjectId, viewer, locale, page, isCurrent, retry]);
+  }, [subjectId, viewer, locale, page, isCurrent, position, retry]);
   const current = () => live.current && isCurrent();
   const value = observation?.state === 'ready' ? observation.value : null;
 
@@ -96,7 +103,7 @@ export function HostedBookCheckpoint({
             saved.address.occurrenceId === command.address.occurrenceId &&
             saved.address.targetRevisionId === command.address.targetRevisionId &&
             saved.address.targetSha256 === command.address.targetSha256 &&
-            saved.address.documentPosition === null;
+            sameCheckpointPosition(saved.address.documentPosition, command.address.documentPosition);
       setNotice(matches ? (command.kind === 'save' ? 'saved' : 'cleared') : 'changed');
     } else {
       if (result.state !== 'uncertain') pending.current = null;
@@ -104,7 +111,7 @@ export function HostedBookCheckpoint({
     }
   };
   const save = () => {
-    if (!value || page.kind !== 'chapter') return;
+    if (!current() || !value || page.kind !== 'chapter') return;
     const { publication, selection } = page.address;
     // Native publications always carry a release ID; the optional consumer form also serves illustrative hosts.
     const publicationRevisionId = publication.releaseRevisionId!;
@@ -120,7 +127,7 @@ export function HostedBookCheckpoint({
           occurrenceId: selection.occurrenceId,
           targetRevisionId: selection.body.revisionId,
           targetSha256: selection.body.sha256,
-          documentPosition: null,
+          documentPosition: position.capture(controls.current),
         },
       },
     });
@@ -159,7 +166,11 @@ export function HostedBookCheckpoint({
                     ? m.book_reader_checkpoint_none({}, options)
                     : null;
   return (
-    <section className="grid gap-3 rounded-xl border p-4" aria-label={m.book_reader_checkpoint_title({}, options)}>
+    <section
+      ref={controls}
+      className={`grid gap-3 rounded-xl border bg-background p-4 ${page.kind === 'chapter' ? 'sticky top-0 z-20' : ''}`}
+      aria-label={m.book_reader_checkpoint_title({}, options)}
+    >
       <h2 className="font-semibold">{m.book_reader_checkpoint_title({}, options)}</h2>
       {message ? <p role="status">{message}</p> : null}
       {notice && value?.state === 'saved' && value.resume.availability === 'unavailable' ? (

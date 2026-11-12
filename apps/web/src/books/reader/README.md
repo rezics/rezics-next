@@ -7,7 +7,7 @@ Semantic Work, Series and Edition bibliography stays with the [literary catalogu
 Decision: mount the retained reader at the localized `/books/$id/read` route; resolve URL release/occurrence selections
 through native public catalogue disclosure and the prepared session, retain bounded return coordinates in links,
 and reread on browser return. The current literary Subject view links to the same route's bounded Subject catalogue
-view. The reader uses Library's native hosted-reading checkpoint with explicit save/resume/clear and chapter-level
+view. The reader uses Library's native hosted-reading checkpoint with explicit save/resume/clear and block-level
 positions; no automatic write or ordinary Progress conversion occurs. Hosts use the declared `books/reader/route.tsx`
 composition entry.
 
@@ -106,13 +106,27 @@ Anonymous and catalogue-only visits perform no private read. Subject discovery l
 may also pass it to `HostedBookReaderLink`. The native save validates the Subject/catalogue association, publication,
 occurrence and exact target, so a URL Subject never creates authority.
 
-Save stores the current exact chapter with `documentPosition: null`. Resume opens the saved publication and
-occurrence at the chapter beginning and reads through the ordinary current Content admission again. It never
-substitutes the current head or another occurrence. Existing checkpoints with a document position retain that fact
-on read; this UI offers chapter-level resume. A withheld resume keeps the exact saved address and clear action,
-without an actionable resume link. The browser receives availability and title, never the checkpoint operation's
-extra disclosed document bytes. The external-response boundary rejects a mismatched occurrence, target revision
-or digest rather than linking to a different saved chapter.
+Decision: explicit Save records the visible stable `data-block-id` within the admitted chapter article with offset
+`0`; native nonzero offsets are preserved on read and resume at their containing block. The shared checkpoint
+controls stay available while scrolling, and all eight locales label the block save. No character precision is
+inferred from geometry. If no visible anchor exists, Save retains the exact chapter with a null position.
+
+`checkpoint-position.ts` binds capture and restoration to one current page and its article ref. Save scans that
+article once, below the sticky checkpoint controls, choosing the innermost block at the viewport's reading edge or
+the first visible block below it. It does not scan the global document or retain an anchor index. The initial private
+checkpoint observation may restore once, after the renderer mounts, only when the prepared viewer remains current,
+resume is available, catalogue/publication/occurrence/revision/digest match the admitted body, and its anchor exists
+and is rendered. Restoration scrolls instantly below the controls without focusing. User wheel, touch, pointer,
+scroll-key input or a changed viewport cancels the pending restoration; ordinary initial navigation focus settles
+before the restore frame. Missing/hidden anchors, old null positions and stale exact coordinates leave normal
+chapter navigation usable. No observer waits for a missing anchor and later readback never moves the reader.
+
+Resume opens the same saved publication and occurrence through ordinary current Content admission. Library and
+Resume links contain only their existing public coordinates; private block IDs and offsets never enter a URL,
+history or a separate reading store. A withheld resume keeps the exact saved address and clear action without an
+actionable resume link. The browser receives availability and title, never the checkpoint operation's extra disclosed
+document bytes. The external-response boundary rejects a mismatched occurrence, target revision or digest rather
+than linking to a different saved chapter.
 
 Save and clear use native CAS revisions, idempotency keys and the installed POST BFF's session/CSRF checks. Each
 successful command is followed by one current native get before showing the result. An uncertain delivery keeps
@@ -142,18 +156,20 @@ The incumbent refinement keeps the existing reading measure, wrapping controls, 
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native
 host observations, public-only selectors, canonical links in eight locales, the actual default file route and
 bounded return through browser Back/Forward. New assertions pin sparse Subject discovery, exact CAS save/get/clear,
-withheld resume, response target mismatch, uncertain same-key retry, and retirement of late checkpoint reads. Assertions use explicitly illustrative native-format responses;
+withheld resume, response target mismatch, uncertain same-key retry, and retirement of late checkpoint reads.
+Block-position assertions cover explicit visible-block save, exact retry/readback, nonzero native offsets, article
+scoping, every exact coordinate, null/missing anchors, withheld targets, viewer retirement, user scrolling, once-only
+restoration and the unchanged public resume URL. Assertions use explicitly illustrative native-format responses;
 source assertions do not establish native admission or growth acceptance.
 
 Worker acceptance is final-source Web typing and formatting/diff inspection. The dev verifier executes the Web
-owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`. Integration then uses the
-existing Root seeded page-data/capture lane for native nested reading, moved exact links, draft privacy,
+owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`. Mounted acceptance remains
+deferred for explicit block save, reload and Library/Resume reopening in the exact
+chapter, stale revision/digest/publication/occurrence, missing anchor and old null positions, a changed viewer during
+the private read or restore frame, a withheld target, and scrolling while that read is pending. Verify that the
+containing block is visible, focus stays unchanged during restoration, nonzero offsets survive readback, and no
+private position appears in links. No browser, native, Storybook or broad suite runs in this source pass.
+Integration then uses the existing Root seeded page-data/capture lane for native nested reading, moved exact links,
+draft privacy,
 progress/Continue and return. Served revision, native seed and actual phone/desktop light/dark evidence are
 unverified here; source, typing, native execution, visual review and promotion remain separate.
-
-Current source orientation: the six retained commits `80ea75c339`, `285f8bb0d2`, `f654556965`, `a5ac14b08e`,
-`6b2ce753d2`, `55fbc8304d`, and the installed `5fb0d0b754` contract and generated client. Before this binding design,
-the owner sources read were this README, [Content hosted chapters](../../../../../services/kernel/src/content/hosted-chapters.md),
-[Library](../../../../../services/kernel/src/library/README.md), its hosted-reading contract and routes,
-[Book catalogue](../catalogue/README.md), the literary reader above, and the reader's exported types, callers and
-acceptance tests. The retained implementation's legacy behavior comparison remains valid for its original revision.

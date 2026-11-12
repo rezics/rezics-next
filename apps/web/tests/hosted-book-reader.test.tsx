@@ -771,7 +771,7 @@ test('native checkpoints use exact CAS operands, withhold unavailable resume and
     occurrenceId: ids.first,
     targetRevisionId: chapter.selection.body.revisionId,
     targetSha256: chapter.selection.body.sha256,
-    documentPosition: null,
+    documentPosition: { blockId: 'saved-native-block', offset: 37 },
   };
   const saved = {
     state: 'saved' as const,
@@ -801,6 +801,7 @@ test('native checkpoints use exact CAS operands, withhold unavailable resume and
     'available',
   );
   expect(JSON.stringify(available)).not.toContain('canonicalBytes');
+  expect(available.state === 'ready' && available.value.state === 'saved' && available.value.address).toEqual(address);
   response = { ...saved, resume: { availability: 'unavailable', occurrenceId: ids.first, kind: 'chapter' } };
   const withheld = await readHostedCheckpoint(native, 'Bearer member', ids.post, signal);
   expect(withheld.state === 'ready' && withheld.value.state === 'saved' && withheld.value.address).toEqual(address);
@@ -861,9 +862,10 @@ test('checkpoint controls retry an uncertain command unchanged and retire late p
   try {
     const { HostedBookCheckpoint } = await import('../src/books/reader/checkpoint');
     await mount(source, await book.chapter(), {
-      renderCheckpoint: (page, isCurrent) => (
+      renderCheckpoint: (page, isCurrent, position) => (
         <HostedBookCheckpoint
           page={page}
+          position={position}
           isCurrent={isCurrent}
           subjectId={ids.post}
           viewer={ids.author}
@@ -872,7 +874,15 @@ test('checkpoint controls retry an uncertain command unchanged and retire late p
         />
       ),
     });
+    const visible = host.querySelector<HTMLElement>('article [data-block-id]')!;
+    visible.getBoundingClientRect = () => new window.DOMRect(0, 120, 300, 80) as DOMRect;
     await click(button(m.book_reader_checkpoint_save()));
+    const command = writes.mock.calls[0]![0].data.command;
+    expect(command.kind === 'save' && command.address.documentPosition).toEqual({
+      blockId: visible.getAttribute('data-block-id'),
+      offset: 0,
+    });
+    visible.getBoundingClientRect = () => new window.DOMRect(0, -200, 300, 80) as DOMRect;
     expect(host.textContent).toContain(m.book_reader_checkpoint_uncertain());
     await click(button(m.book_reader_retry()));
     expect(writes.mock.calls[1]![0].data).toEqual(writes.mock.calls[0]![0].data);
@@ -904,6 +914,173 @@ test('checkpoint controls retry an uncertain command unchanged and retire late p
     );
     expect(host.textContent).not.toContain(m.book_reader_checkpoint_title());
   } finally {
+    mock.module('../src/books/reader/native-checkpoint', () => actual);
+  }
+});
+
+test('block positions are article-scoped, exact, once-only and cancelled by scrolling or retirement', async () => {
+  const { createCheckpointPosition, captureCheckpointBlock } = await import('../src/books/reader/checkpoint-position');
+  const book = createIllustrativeHostedBook();
+  const chapter = await book.chapter();
+  const result = await book.source.read(
+    { address: chapter, locale: 'en', limit: 40, ancestorLimit: 24 },
+    new AbortController().signal,
+  );
+  if (result.state !== 'ready' || result.page.kind !== 'chapter') throw new Error('Expected admitted chapter');
+  const page = result.page;
+  const article = document.createElement('article');
+  const controls = document.createElement('section');
+  controls.getBoundingClientRect = () => new window.DOMRect(0, 0, 390, 80) as DOMRect;
+  document.body.append(controls, article);
+  const add = (id: string, top: number, parent = article) => {
+    const block = document.createElement('p');
+    block.setAttribute('data-block-id', id);
+    block.getBoundingClientRect = () => new window.DOMRect(0, top, 300, 100) as DOMRect;
+    parent.append(block);
+    return block;
+  };
+  add('outside', 100, document.body);
+  add('above', -200);
+  add('visible', 100);
+  const savedBlock = add('saved', 600);
+  expect(captureCheckpointBlock(article, controls)).toEqual({ blockId: 'visible', offset: 0 });
+  const address = {
+    catalogueId: chapter.publication.id,
+    publicationRevisionId: chapter.publication.releaseRevisionId!,
+    occurrenceId: chapter.selection.occurrenceId,
+    targetRevisionId: chapter.selection.body.revisionId,
+    targetSha256: chapter.selection.body.sha256,
+    documentPosition: { blockId: 'saved', offset: 37 },
+  };
+  const saved = {
+    state: 'saved' as const,
+    subjectId: ids.post,
+    revision: '1',
+    address,
+    resume: { availability: 'available' as const, title: 'Saved' },
+  };
+  const original = window.scrollBy;
+  const scroll = mock(() => {});
+  window.scrollBy = scroll;
+  try {
+    let live = true;
+    const position = createCheckpointPosition(page, { current: article }, () => live);
+    const disconnect = position.connect();
+    await settle();
+    const focused = document.activeElement;
+    position.restore(saved, controls);
+    await settle();
+    expect(scroll.mock.calls).toEqual([[{ top: 504, behavior: 'instant' }]]);
+    expect(document.activeElement).toBe(focused);
+    expect(saved.address.documentPosition.offset).toBe(37);
+    position.restore(saved, controls);
+    await settle();
+    expect(scroll.mock.calls).toHaveLength(1);
+    disconnect();
+    // Every exact coordinate matters, including two occurrences reusing identical bytes.
+    for (const field of [
+      'catalogueId',
+      'publicationRevisionId',
+      'occurrenceId',
+      'targetRevisionId',
+      'targetSha256',
+    ] as const) {
+      const other = createCheckpointPosition(page, { current: article }, () => true);
+      const stop = other.connect();
+      other.restore({ ...saved, address: { ...address, [field]: 'different' } }, controls);
+      await settle();
+      stop();
+    }
+    for (const reason of ['null', 'missing', 'withheld', 'viewer', 'scroll', 'pending-scroll', 'retired'] as const) {
+      live = true;
+      const other = createCheckpointPosition(page, { current: article }, () => live);
+      const stop = other.connect();
+      await settle();
+      if (reason === 'viewer') live = false;
+      if (reason === 'scroll') window.dispatchEvent(new window.WheelEvent('wheel'));
+      if (reason === 'retired') stop();
+      other.restore(
+        {
+          ...saved,
+          address: {
+            ...address,
+            documentPosition:
+              reason === 'null' ? null : { blockId: reason === 'missing' ? 'outside' : 'saved', offset: 37 },
+          },
+          resume: reason === 'withheld' ? { availability: 'unavailable' } : saved.resume,
+        },
+        controls,
+      );
+      if (reason === 'pending-scroll') window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'PageDown' }));
+      await settle();
+      stop();
+    }
+    expect(scroll.mock.calls).toHaveLength(1);
+    savedBlock.remove();
+  } finally {
+    window.scrollBy = original;
+  }
+});
+
+test('a fresh exact reading restores the private block after admission and leaves its public link unchanged', async () => {
+  const actual = { ...(await import('../src/books/reader/native-checkpoint')) };
+  const book = createIllustrativeHostedBook();
+  const chapter = await book.chapter();
+  const read = deferred<Awaited<ReturnType<typeof actual.readNativeHostedCheckpoint>>>();
+  mock.module('../src/books/reader/native-checkpoint', () => ({
+    ...actual,
+    readNativeHostedCheckpoint: () => read.promise,
+  }));
+  const original = window.scrollBy;
+  const scroll = mock(() => {});
+  window.scrollBy = scroll;
+  try {
+    const { HostedBookCheckpoint } = await import('../src/books/reader/checkpoint');
+    await mount(book.source, chapter, {
+      renderCheckpoint: (page, isCurrent, position) => (
+        <HostedBookCheckpoint
+          page={page}
+          isCurrent={isCurrent}
+          position={position}
+          subjectId={ids.post}
+          viewer={ids.author}
+          locale="en"
+          reload={() => {}}
+        />
+      ),
+    });
+    const block = host.querySelector<HTMLElement>('article [data-block-id]')!;
+    block.getBoundingClientRect = () => new window.DOMRect(0, 600, 300, 100) as DOMRect;
+    await act(async () =>
+      read.resolve({
+        state: 'ready',
+        csrfToken: 'csrf',
+        value: {
+          state: 'saved',
+          subjectId: ids.post,
+          revision: '1',
+          resume: { availability: 'available', title: 'Saved' },
+          address: {
+            catalogueId: chapter.publication.id,
+            publicationRevisionId: chapter.publication.releaseRevisionId!,
+            occurrenceId: chapter.selection.occurrenceId,
+            targetRevisionId: chapter.selection.body.revisionId,
+            targetSha256: chapter.selection.body.sha256,
+            documentPosition: { blockId: block.dataset.blockId!, offset: 73 },
+          },
+        },
+      }),
+    );
+    await settle();
+    expect(scroll.mock.calls).toHaveLength(1);
+    const link = [...host.querySelectorAll('a')].find((a) => a.textContent === m.book_reader_checkpoint_resume())!;
+    const url = new URL(link.href);
+    expect([...url.searchParams.keys()].sort()).toEqual(['occurrence', 'release', 'subject', 'view']);
+    expect(url.hash).toBe('');
+    await settle();
+    expect(scroll.mock.calls).toHaveLength(1);
+  } finally {
+    window.scrollBy = original;
     mock.module('../src/books/reader/native-checkpoint', () => actual);
   }
 });

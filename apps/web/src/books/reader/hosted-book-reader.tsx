@@ -17,6 +17,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readerSessionSource, useReaderVisit } from '../../reader/lifetime';
 import { PostReadingBody } from '../../threads/post-reading-body';
+import { createCheckpointPosition, type CheckpointPosition } from './checkpoint-position';
 import { createBookReader, type BookReader, type BookReaderNavigation, type BookReaderFocus } from './reader-state';
 import {
   sameSelection,
@@ -46,7 +47,7 @@ export type HostedBookReaderProps = {
   onReload?: () => void;
   focusOnRead?: { focus: BookReaderFocus; owner: Element | null };
   /** Native Library checkpoint controls share the admitted page lifetime. */
-  renderCheckpoint?: (page: BookPage, isCurrent: () => boolean) => ReactNode;
+  renderCheckpoint?: (page: BookPage, isCurrent: () => boolean, position: CheckpointPosition) => ReactNode;
   /** An admitted region rendered by the existing Commerce progress/resume owner. */
   renderProgress?: (page: BookChapterPage, isCurrent: () => boolean) => ReactNode;
 };
@@ -141,6 +142,7 @@ function BookReaderView({
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const root = useRef<HTMLElement>(null);
+  const article = useRef<HTMLElement>(null);
   const rows = useRef(new Map<string, HTMLElement>());
   const intent = useMemo<{ current: { owner: Element | null } | null }>(
     () => ({ current: focusOwner === undefined ? null : { owner: focusOwner } }),
@@ -151,6 +153,10 @@ function BookReaderView({
   const isPageCurrent = useCallback(
     () => reader.current() && reader.getSnapshot() === state && state.state === 'ready',
     [reader, state],
+  );
+  const checkpointPosition = useMemo(
+    () => createCheckpointPosition(page, article, isPageCurrent),
+    [page, isPageCurrent],
   );
   const act = (action: () => void) => {
     if (!reader.current() || reader.getSnapshot() !== state) return;
@@ -192,6 +198,7 @@ function BookReaderView({
     });
     return () => cancelAnimationFrame(frame);
   }, [reader, state]);
+  useLayoutEffect(() => checkpointPosition.connect(), [checkpointPosition]);
   useEffect(() => {
     setShowControls(true);
   }, [page]);
@@ -359,7 +366,7 @@ function BookReaderView({
           key={JSON.stringify(page.address)}
           unavailable={m.book_reader_progress_unavailable({}, options)}
         >
-          {renderCheckpoint(page, isPageCurrent)}
+          {renderCheckpoint(page, isPageCurrent, checkpointPosition)}
         </ProgressRegion>
       ) : null}
       {page?.kind === 'chapter' ? (
@@ -378,6 +385,7 @@ function BookReaderView({
             </Button>
           </div>
           <article
+            ref={article}
             aria-labelledby={headingId}
             lang={page.language ?? ''}
             dir={page.direction}

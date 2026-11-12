@@ -7,6 +7,7 @@ import { hostedBookAddressHref, hostedBookHref, hostedBookSubjectHref } from './
 import { HostedBookCheckpoint } from './checkpoint';
 import type { NativeHostedBookAdmissionSource } from './native-source';
 import type { BookPage } from './source';
+import type { CheckpointPosition } from './checkpoint-position';
 import type { BookReaderNavigation } from './reader-state';
 import type { HostedBookReaderProps } from './hosted-book-reader';
 import type { HostedBookVisit } from './visit';
@@ -131,11 +132,12 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
       {...(renderProgress !== undefined ? { renderProgress } : {})}
       {...(subjectId && viewer.kind === 'session'
         ? {
-            renderCheckpoint: (page: BookPage, isCurrent: () => boolean) => (
+            renderCheckpoint: (page: BookPage, isCurrent: () => boolean, position: CheckpointPosition) => (
               <HostedBookCheckpoint
                 subjectId={subjectId}
                 viewer={viewer.subject}
                 page={page}
+                position={position}
                 locale={locale}
                 isCurrent={isCurrent}
                 reload={reload}
