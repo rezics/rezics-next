@@ -46,6 +46,8 @@ Decision: Collection directory/list/order authorization consumes Library `Author
 
 Decision: Progress HTTP fixtures build Access through Kernel's post-catalogue factory, preserving mounted Subject resource declarations and native composition ports; Subject creation requires both bearer scope and an ordinary identity grant on Global Context.
 
+Decision: Progress HTTP mode coverage compiles a separate `ex:ProgressHttpSubject` with `fixture.progress-http` admitting scalar `minute`, `chapter` and `volume` with optional totals, cursor `page`, and completed units `volume`, `chapter` and `episode`; mounted Subject creation verifies native initialization, stored session pins identify that release/profile/type, and `schema:Book` remains page-only.
+
 Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
 `adapters/preparation-work.ts` specializes them to the original native transaction, locator and ledger. Default
 `composition/library.ts` binds Search's `adapters/library-preparation.ts`: it borrows the already registered worker

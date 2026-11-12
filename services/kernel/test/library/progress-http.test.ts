@@ -7,7 +7,15 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { releaseDigest } from '@rezics/definitions';
+import { compileCatalogue } from '@rezics/definitions/compile';
+import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
+import {
+  LIBRARY_LOCALES,
+  libraryLabels,
+  libraryProfile,
+  unitData,
+} from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { revisionResource } from '../../src/semantic/authorship.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -20,6 +28,8 @@ const accountRoute = 0x2600;
 const owner = newId(accountRoute);
 const other = newId(accountRoute);
 const suspended = newId(accountRoute);
+const PROGRESS_TEST_TYPE = 'ex:ProgressHttpSubject';
+const PROGRESS_TEST_PROFILE = 'fixture.progress-http';
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
 const scopes = [
   'subject:create',
@@ -35,6 +45,7 @@ const scopes = [
 const credentials = new Map<string, string>();
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
+let progressTestReleaseDigest: string;
 let serial = 0;
 
 const key = () => JSON.stringify(`progress-http-${++serial}`);
@@ -63,17 +74,91 @@ async function request(
   return { response, body: (await response.json()) as Record<string, any> };
 }
 
-async function createSubject(as: 'owner' | 'other' | 'suspended' = 'owner'): Promise<string> {
+function expectStatus(result: Awaited<ReturnType<typeof request>>, status: number) {
+  expect(result.response.status, JSON.stringify(result.body)).toBe(status);
+}
+
+async function progressHttpRelease() {
+  const profile = libraryProfile(PROGRESS_TEST_PROFILE);
+  profile.progress.allowed = [
+    {
+      mode: 'scalar_amount',
+      units: ['minute', 'chapter', 'volume'].map((unit) => unitData(unit, 'scalar_amount')),
+    },
+    { mode: 'cursor_position', units: [unitData('page', 'cursor_position')] },
+    {
+      mode: 'completed_units',
+      units: ['volume', 'chapter', 'episode'].map((unit) => unitData(unit, 'completed_units')),
+    },
+  ];
+
+  const sources = bundledSources();
+  const root = Bun.YAML.parse(sources.schemas[sources.root]!) as { imports: string[] };
+  root.imports = [...root.imports, 'progress-http'];
+  sources.schemas[sources.root] = Bun.YAML.stringify(root);
+  sources.schemas['progress-http.yaml'] = JSON.stringify({
+    id: 'https://example.org/progress-http',
+    name: 'progress-http',
+    version: '1',
+    prefixes: { linkml: 'https://w3id.org/linkml/', ex: 'https://example.org/progress-http/' },
+    imports: ['linkml:types'],
+    classes: {
+      ProgressHttpSubject: {
+        class_uri: PROGRESS_TEST_TYPE,
+        annotations: { library: profile },
+      },
+    },
+  });
+  for (const locale of LIBRARY_LOCALES) {
+    sources.presentation[`progress-http/${locale}`] = JSON.stringify({
+      types: { [PROGRESS_TEST_TYPE]: 'progress test subject' },
+      libraryProfiles: { [profile.id]: libraryLabels(profile, locale) },
+    });
+  }
+
+  const release = await compileCatalogue(sources);
+  expect(release.types['schema:Book']).toEqual(bundledRelease.types['schema:Book']);
+  expect(release.libraryProfiles?.['book.reading']).toEqual(bundledRelease.libraryProfiles?.['book.reading']);
+  expect(release.types[PROGRESS_TEST_TYPE]?.library).toEqual({ profileId: PROGRESS_TEST_PROFILE });
+  expect(release.libraryProfiles?.[PROGRESS_TEST_PROFILE]?.progress.allowed.map(({ mode, units }) => ({
+    mode,
+    units: units.map(({ id, totalPolicy }) => ({ id, totalPolicy })),
+  }))).toEqual([
+    {
+      mode: 'scalar_amount',
+      units: [
+        { id: 'minute', totalPolicy: 'optional' },
+        { id: 'chapter', totalPolicy: 'optional' },
+        { id: 'volume', totalPolicy: 'optional' },
+      ],
+    },
+    { mode: 'cursor_position', units: [{ id: 'page', totalPolicy: 'forbidden' }] },
+    {
+      mode: 'completed_units',
+      units: [
+        { id: 'volume', totalPolicy: 'forbidden' },
+        { id: 'chapter', totalPolicy: 'forbidden' },
+        { id: 'episode', totalPolicy: 'forbidden' },
+      ],
+    },
+  ]);
+  return release;
+}
+
+async function createSubject(
+  as: 'owner' | 'other' | 'suspended' = 'owner',
+  type = PROGRESS_TEST_TYPE,
+): Promise<string> {
   const label = `Progress subject ${serial}`;
   const created = await request(as, 'POST', '/v1/subjects', {
-    type: 'schema:Book',
+    type,
     labels: { en: label },
   });
-  expect(created.response.status).toBe(201);
+  expectStatus(created, 201);
   const subject = created.body.subject as Record<string, any>;
   expect(subject).toMatchObject({
     id: expect.any(String),
-    type: 'schema:Book',
+    type,
     revision: 1,
     context: GLOBAL_CONTEXT,
     labels: { en: label },
@@ -122,14 +207,27 @@ async function start(
   as: 'owner' | 'other' = 'owner',
 ) {
   const result = await request(as, 'POST', '/v1/progressSessions', { subjectId, mode, unit, ...extras });
-  expect(result.response.status).toBe(201);
+  expectStatus(result, 201);
   return result.body.progressSession as Record<string, any>;
 }
 
 async function session(id: string) {
   const result = await request('owner', 'GET', `/v1/progressSessions/${id}`);
-  expect(result.response.status).toBe(200);
+  expectStatus(result, 200);
   return result.body.progressSession as Record<string, any>;
+}
+
+async function nativeSessionBinding(id: string) {
+  const result = await db.admin.query<{
+    accountId: string;
+    pin: { provenance: string; releaseDigest: string; acceptingType: string; profileId: string };
+  }>(
+    `SELECT account_id::text AS "accountId", library_profile_pin AS pin
+     FROM library.progress_session WHERE route=$1 AND session_id=$2`,
+    [accountRoute, id],
+  );
+  expect(result.rows).toHaveLength(1);
+  return result.rows[0]!;
 }
 
 async function authoritativeProgressRows() {
@@ -166,7 +264,9 @@ function stableProblem(body: Record<string, unknown>) {
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
-  await bootstrapRelease(db.pool, bundledRelease);
+  const release = await progressHttpRelease();
+  progressTestReleaseDigest = releaseDigest(release);
+  await bootstrapRelease(db.pool, release);
 
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'progress-http', alg: 'ES256' };
@@ -276,6 +376,16 @@ test('owners start and record every mode, page units and changes, and publish an
   expect((await session(scalar.id)).mode).toBe('scalar_amount');
   expect((await session(cursor.id)).mode).toBe('cursor_position');
   expect((await session(units.id)).mode).toBe('completed_units');
+  for (const created of [scalar, cursor, units])
+    expect(await nativeSessionBinding(created.id)).toEqual({
+      accountId: owner,
+      pin: {
+        provenance: 'profile',
+        releaseDigest: progressTestReleaseDigest,
+        acceptingType: PROGRESS_TEST_TYPE,
+        profileId: PROGRESS_TEST_PROFILE,
+      },
+    });
 
   for (const invalid of [
     { subjectId, unit: 'page' },
