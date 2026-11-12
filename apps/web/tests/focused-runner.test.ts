@@ -10,10 +10,7 @@ import {
   runFocusedCommand,
 } from '../scripts/focused.ts';
 import { webTestPrivateNetworkEnvName } from '../scripts/with-dev-server.ts';
-import {
-  resolveWebTestSelection,
-  writeWebTestSelectionContext,
-} from '../scripts/selection.ts';
+import { resolveWebTestSelection, writeWebTestSelectionContext } from '../scripts/selection.ts';
 
 const workspace = resolve(import.meta.dir, '../..');
 const temporaryRoot = join(workspace, '.temp');
