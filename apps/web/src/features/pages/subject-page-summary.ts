@@ -1,9 +1,4 @@
-import {
-  documentRead,
-  planReads,
-  platformRegistry,
-  type CompositionDocument,
-} from '@rezics/composition';
+import { documentRead, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { PublicFigure } from './subject-ratings';
 import { originalLanguage } from '../../subject/language';
 import { subjectHref } from '../../subject/subject-href';

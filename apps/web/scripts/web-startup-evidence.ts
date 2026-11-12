@@ -94,8 +94,7 @@ export async function observeColdHomeStartup(baseUrl: string): Promise<WebStartu
     if (request.resourceType() === 'script') {
       scriptsStarted++;
       scripts.set(request, { path: url.pathname, failed: false });
-      if (firstScriptPaths.length < maximumPendingScriptPaths)
-        firstScriptPaths.push(displayPath(url.pathname));
+      if (firstScriptPaths.length < maximumPendingScriptPaths) firstScriptPaths.push(displayPath(url.pathname));
       if (url.pathname === '/src/features/catalogue/page-render-binding.tsx') semanticBindingRequested = true;
     }
     if (serverFunctionPath.test(url.pathname)) {
@@ -163,9 +162,7 @@ export async function observeColdHomeStartup(baseUrl: string): Promise<WebStartu
     pending: scripts.size,
     firstPaths: [...firstScriptPaths],
     failedPaths: [...firstFailedScriptPaths],
-    pendingPaths: [...scripts.values()]
-      .slice(0, maximumPendingScriptPaths)
-      .map((request) => displayPath(request.path)),
+    pendingPaths: [...scripts.values()].slice(0, maximumPendingScriptPaths).map((request) => displayPath(request.path)),
   });
   const serverFunctionSnapshot = (): ServerFunctionCounts => ({
     started: serverFunctionsStarted,

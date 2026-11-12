@@ -83,9 +83,7 @@ test('mounted route carries the learned epoch into body reads and a late readbac
     async write(input, token) {
       writes.push({ input: structuredClone(input), token });
       writeAttempt++;
-      return writeAttempt === 1
-        ? { ok: true, post: {} as never }
-        : { ok: false, reason: 'unavailable' };
+      return writeAttempt === 1 ? { ok: true, post: {} as never } : { ok: false, reason: 'unavailable' };
     },
     async erase() {
       return { ok: true };
@@ -96,16 +94,18 @@ test('mounted route carries the learned epoch into body reads and a late readbac
   };
   try {
     const { DraftsRoute } = await import('../src/threads/drafts-route');
-    await fixture.renderComponent(
-      createElement(DraftsRoute, { reader, localWritingReader, transport }),
-    );
+    await fixture.renderComponent(createElement(DraftsRoute, { reader, localWritingReader, transport }));
     expect(listed[0]).toEqual({ accountId });
     await fixture.click('Inspect draft privately');
     expect(resumed[0]).toMatchObject({ accountId, authnEpoch: 2, id: entry.id, threadId: entry.threadId });
     await fixture.click('Use server-saved body in editor');
     await fixture.click('Save changes');
     expect(writes[0]?.token).toBe('fixture-csrf');
-    expect(writes[0]?.input).toMatchObject({ postId: entry.id, threadId: entry.threadId, revisionId: entry.revisionId });
+    expect(writes[0]?.input).toMatchObject({
+      postId: entry.id,
+      threadId: entry.threadId,
+      revisionId: entry.revisionId,
+    });
 
     await fixture.click('Read current post');
     await fixture.click('Retry this page');
@@ -114,13 +114,15 @@ test('mounted route carries the learned epoch into body reads and a late readbac
     await fixture.click('Save changes');
     expect(fixture.host.textContent).toContain('Retry save');
     expect(writes[1]?.token).toBe('fixture-csrf');
-    await act(async () => pendingReadbacks[0]?.({
-      state: 'available',
-      revision: 'prior-intent-revision',
-      visibility: 'draft',
-      body: fromPlainText('Prior acknowledged readback only', 'blocks'),
-      mediaIds: [],
-    }));
+    await act(async () =>
+      pendingReadbacks[0]?.({
+        state: 'available',
+        revision: 'prior-intent-revision',
+        visibility: 'draft',
+        body: fromPlainText('Prior acknowledged readback only', 'blocks'),
+        mediaIds: [],
+      }),
+    );
     expect(fixture.host.textContent).not.toContain('Prior acknowledged readback only');
     expect(fixture.host.textContent).toContain('Retry save');
   } finally {
@@ -263,7 +265,11 @@ test('A/B/A cache replacement closes old readers and command callbacks before th
     const original = collected.visit!;
     const oldCommands = original.commands!;
     await act(async () => {
-      fixture.client.setQueryData(['session'], { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-000000000099', csrfToken: 'token-b' });
+      fixture.client.setQueryData(['session'], {
+        state: 'signed-in',
+        subject: '0192f3a0-6c1e-7b2a-9d4e-000000000099',
+        csrfToken: 'token-b',
+      });
       fixture.client.setQueryData(['session'], { state: 'signed-in', subject: accountId, csrfToken: 'token-a2' });
     });
     expect(original.current()).toBe(false);
@@ -339,7 +345,11 @@ test('late list and selected-body results are discarded after synchronous sessio
     await firstBodyStarted;
     const bodyVisit = collected.visit!;
     await act(async () => {
-      fixture.client.setQueryData(['session'], { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-000000000099', csrfToken: 'token-b' });
+      fixture.client.setQueryData(['session'], {
+        state: 'signed-in',
+        subject: '0192f3a0-6c1e-7b2a-9d4e-000000000099',
+        csrfToken: 'token-b',
+      });
       releaseBody(selected(entry, 'late private body'));
     });
     expect(bodyVisit.current()).toBe(false);

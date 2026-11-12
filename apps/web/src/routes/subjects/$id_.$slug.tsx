@@ -11,11 +11,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { isView } from '@rezics/composition';
 import { SubjectPage } from '../../features/pages/subject';
-import {
-  pageRelationProperties,
-  subjectPageTitle,
-  subjectPageType,
-} from '../../features/pages/subject-page-summary';
+import { pageRelationProperties, subjectPageTitle, subjectPageType } from '../../features/pages/subject-page-summary';
 import { catalogueFileSourceId } from '../../features/catalogue/catalogue-file-reader/navigation';
 import { subjectHead } from '../../features/pages/subject-head';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';

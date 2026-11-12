@@ -1,10 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import {
-  planReads,
-  platformRegistry,
-  type CompositionDocument,
-  type View,
-} from '@rezics/composition';
+import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
 import { originalLanguage, originalTitle } from '../../subject/language';
 import { timePresentation } from '../../subject/reader';
 import type { Subject } from '../../subject/types';
@@ -151,7 +146,11 @@ export async function loadViewPages(
   assertSubjectPageReadActive(options.signal);
   if (overview.kind !== 'page') return overview;
   assertSamePageContext(result.page, overview.page);
-  const currentPlan = planReads(platformRegistry, result.page.document as CompositionDocument, pageContext(result.page));
+  const currentPlan = planReads(
+    platformRegistry,
+    result.page.document as CompositionDocument,
+    pageContext(result.page),
+  );
   const key = primary ? currentPlan.nodes[primary[0]] : undefined;
   const body = key ? result.page.reads[key]?.body : undefined;
   const groupCount = Object.values(currentPlan.reads).filter(
@@ -173,4 +172,3 @@ export async function loadViewPages(
     ...(primary && currentPlan.reads[primary[1]]?.kind !== 'collections' ? { node: primary[0] } : {}),
   };
 }
-
