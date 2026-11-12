@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -13,7 +13,9 @@ import { firstFailure, gateRunner, git } from './merge.ts';
 import { parseBrief, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
 import { TrainResolver } from './train-resolver.ts';
-import { repository } from './test-support.ts';
+import { harvestContinuations } from './continuation.ts';
+import { readControlPolicy } from './policy.ts';
+import { integrationHarness, markdown, repository } from './test-support.ts';
 
 function setup() {
   const repo = repository();
@@ -61,6 +63,70 @@ function setup() {
     },
   };
 }
+
+test('tracked continuation custody leaves one clean product landing', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const base = h.head(),
+      task = h.dispatch('result.txt');
+    const continuation = markdown
+      .replace('goal: fixture\n', `goal: fixture\nmanager: ${JSON.stringify(task.brief.manager)}\n`)
+      .replace(
+        'paths: [result.txt]\nwaiting: []',
+        `paths: [follow-up.txt]\nwaiting: []\nafter: ${JSON.stringify([task.id])}`,
+      )
+      .replace('Write the requested result and commit it.', 'Finish the follow-up slice.');
+    const ordinary = continuation
+      .replace('paths: [follow-up.txt]', 'paths: [ordinary.txt]')
+      .replace('Finish the follow-up slice.', 'Finish the ordinary slice.');
+    const planned = join(task.worktree, '.temp/goal/expected-continuation.md');
+    mkdirSync(dirname(planned), { recursive: true });
+    writeFileSync(planned, continuation);
+    writeFileSync(join(dirname(planned), 'expected-ordinary.md'), ordinary);
+    writeFileSync(
+      h.settings.pools[0]!.command,
+      `#!/usr/bin/env bun
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+const p=JSON.parse(readFileSync('.temp/worker-plan.json','utf8')); mkdirSync('.temp/continuation',{recursive:true}); writeFileSync(p.file,p.content);
+for(const [name,expected] of [['follow-up','continuation'],['ordinary','ordinary']]) writeFileSync('.temp/continuation/'+name+'.md',readFileSync('.temp/goal/expected-'+expected+'.md'));
+for(const args of [['add','--',p.file],['add','-f','--','.temp/continuation/follow-up.md'],['commit','-qm','Complete fixture']]) execFileSync('git',args);
+for(const item of [{type:'thread.started',thread_id:'tracked-continuation'},{type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}},{type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}]) console.log(JSON.stringify(item));
+`,
+    );
+    h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+    h.settings.formatCommand = ['sh', '-c', 'for f do case "$f" in .temp/continuation/*) exit 1;; esac; done', 'guard'];
+
+    await h.start(task);
+    const source = git(task.worktree, 'rev-parse', task.branch),
+      backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    const backlogBriefs = readdirSync(backlog)
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => readFileSync(join(backlog, name), 'utf8'))
+      .sort();
+    expect(backlogBriefs).toEqual([continuation, ordinary].sort());
+    expect(
+      harvestContinuations(h.store, h.settings, h.store.task(task.id), { taskId: task.id, attempt: 1 }).queued,
+    ).toEqual([]);
+
+    await h.train(async () => ({ passed: true, output: '', timedOut: false }));
+    const candidate = h.head(),
+      introduced = git(h.root, 'rev-list', `${base}..${candidate}`).split('\n').filter(Boolean);
+    expect(
+      introduced.every((commit) => !git(h.root, 'ls-tree', '-r', '--name-only', commit, '--', '.temp/continuation')),
+    ).toBe(true);
+    expect(git(h.root, 'show', `${candidate}:result.txt`)).toBe('result.txt');
+    expect([
+      git(task.worktree, 'rev-parse', task.branch),
+      git(task.worktree, 'status', '--porcelain', '--untracked-files=all'),
+    ]).toEqual([source, '']);
+    expect(h.store.task(task.id)).toMatchObject({ state: 'integrated', currentAttempt: 1 });
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })).toBeUndefined();
+  } finally {
+    await h.disposeAsync();
+  }
+}, 30_000);
 
 test('dev origin pushes are shared across train instances, throttled for a minute, and nonfatal on failure', () => {
   const repo = repository();

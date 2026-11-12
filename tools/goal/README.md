@@ -2146,16 +2146,17 @@ Decision: A control-plane release gate failure remains an ordinary gate failure 
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
-harvests only regular Markdown created after that attempt started (creation time, not modification time), and only
-when its top-level path was not tracked in the live index, prepared source, recorded launch trees or direct parents of
-recorded merge commits. Those commit lookups read path names only under `.temp/continuation`.
-Decision: preserve paths tracked in the live index, prepared source, recorded launch trees and direct merge parents;
-query only names under `.temp/continuation`, and leave inherited local bytes in place. Older untracked files
-are dropped with a recorded reason, including files inherited from another attempt. Valid briefs keep the source
-Goal and manager; a foreign Goal is dropped with its reason. Before a brief becomes ready, its remaining paths and
-normalized title are compared with the same Goal's ready, running, held, landing and stopped tasks and its ready, held
-and claimed briefs. Proposed briefs are ignored, so a parked sibling cannot deadlock a batch. Continuations from the
-same source task and attempt never block each other: their backlog names share the prefix
+harvests regular Markdown created after that attempt started (creation time, not modification time) when its
+top-level path is untracked or was first tracked during the attempt. The captured base, recorded launch/source
+baselines and direct parents of recorded merge commits establish inherited paths; those commit lookups read path names
+only under `.temp/continuation`. Decision: copy accepted newly tracked continuation bytes into the authenticated
+backlog without changing the worker source, then force the existing clean-source squash seam to omit
+`.temp/continuation` and its source commits from published landing history. Older untracked files are dropped with a
+recorded reason, including files inherited from another attempt. Valid briefs keep the source Goal and manager; a
+foreign Goal is dropped with its reason. Before a brief becomes ready, its remaining paths and normalized title are compared with the same Goal's
+ready, running, held, landing and stopped tasks and its ready, held and claimed briefs. Proposed briefs are ignored, so
+a parked sibling cannot deadlock a batch. Continuations from the same source task and attempt never block each other:
+their backlog names share the prefix
 `continuation-<source8>-<attempt>-`, and a dispatched sibling is `${taskId}-` plus that prefix. Paths in
 `policy.brief.sharedPaths` do not count toward overlap (READMEs, `docs/**`, generated definition and recorded files,
 and the derived outputs landing already regenerates). Decision: empty remaining paths after that subtraction are not a
@@ -2166,9 +2167,10 @@ without an `after` edge; the merge train and its resolver handle concurrent edit
 undelivered dependencies. Dispatch checks overlap again under the same backlog lease used by harvest.
 Nonoverlapping briefs outside review mode move to
 `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md` and record `continuation-queued`. A name that normalizes or truncates onto a file
-already holding the same brief is left in place. A different brief is published under a stable distinct name, and the
-source is removed only then; when every distinct name is occupied the source stays and a `continuation-retained` event
-is recorded. A brief moves only when it parses with the ordinary
+already holding the same brief is left in place. A different brief is published under a stable distinct name; an
+untracked source is removed only after publication, while a newly tracked source remains unchanged after its copy is
+published. When every distinct name is occupied the source stays and a `continuation-retained` event is recorded. A
+brief moves only when it parses with the ordinary
 brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
 regular Markdown that cannot be admitted moves to `<state>/backlog/<goal>/failed/` under a task/attempt-prefixed name,
 with a `.reason` file and a manager `instruction` naming the continuation and reason; other entries are removed. The
