@@ -1,4 +1,8 @@
-import type { KnowledgeDiscoveryCandidate, KnowledgeDiscoverySource, KnowledgeDiscoverySummary } from '../content/index.ts';
+import type {
+  KnowledgeDiscoveryCandidate,
+  KnowledgeDiscoverySource,
+  KnowledgeDiscoverySummary,
+} from '../content/index.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from './cursor.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
@@ -30,11 +34,14 @@ export type KnowledgeDiscoveryStore = Readonly<{
   id(): string;
 }>;
 export type KnowledgeDiscoveryRequest = Readonly<{ limit?: number; cursor?: string }>;
-export type KnowledgeDiscoveryPage = Readonly<{
-  state: 'ready';
-  documents: readonly KnowledgeDiscoverySummary[];
-  next: string | null;
-}> | Readonly<{ state: 'preparing'; next: string }> | Readonly<{ state: 'unavailable' }>;
+export type KnowledgeDiscoveryPage =
+  | Readonly<{
+      state: 'ready';
+      documents: readonly KnowledgeDiscoverySummary[];
+      next: string | null;
+    }>
+  | Readonly<{ state: 'preparing'; next: string }>
+  | Readonly<{ state: 'unavailable' }>;
 
 function invalidCursor(): never {
   throw new SearchOperationError('invalid_request', { errors: [{ pointer: '/cursor', code: 'invalid_format' }] });
@@ -53,10 +60,16 @@ export function createKnowledgeDiscovery(options: {
 }) {
   const { store, source, tokens, now } = options;
   const frontier = (candidate: KnowledgeDiscoveryCandidate): KnowledgeFrontier => ({
-    publishedAt: candidate.publishedAt, documentId: candidate.documentId, publicationId: candidate.publicationId,
+    publishedAt: candidate.publishedAt,
+    documentId: candidate.documentId,
+    publicationId: candidate.publicationId,
   });
-  return async (subjectId: string, principal: 'anonymous' | `account:${string}`, request: KnowledgeDiscoveryRequest,
-    context: Readonly<{ deadline: number }>): Promise<KnowledgeDiscoveryPage> => {
+  return async (
+    subjectId: string,
+    principal: 'anonymous' | `account:${string}`,
+    request: KnowledgeDiscoveryRequest,
+    context: Readonly<{ deadline: number }>,
+  ): Promise<KnowledgeDiscoveryPage> => {
     if (!source) return { state: 'unavailable' };
     const subject = await source.subject(subjectId, context);
     if (subject === 'unavailable') return { state: 'unavailable' };
@@ -64,14 +77,22 @@ export function createKnowledgeDiscovery(options: {
     if (subject !== 'available') restart();
     const limit = request.limit ?? KNOWLEDGE_DISCOVERY_PAGE_LIMIT;
     const binding: SearchCursorBinding = {
-      operation: 'GET /v1/subjects/:id/knowledgeDocuments', request: { subjectId, limit }, principal,
+      operation: 'GET /v1/subjects/:id/knowledgeDocuments',
+      request: { subjectId, limit },
+      principal,
     };
     let record: KnowledgePreparation;
     let previousRevision: number | null = null;
     if (request.cursor) {
       const decoded = await decodeSearchCursor(tokens, binding, request.cursor, now());
-      if (!decoded.ok || decoded.generation !== 1 || decoded.after.length !== 2 ||
-        typeof decoded.after[0] !== 'string' || typeof decoded.after[1] !== 'number') invalidCursor();
+      if (
+        !decoded.ok ||
+        decoded.generation !== 1 ||
+        decoded.after.length !== 2 ||
+        typeof decoded.after[0] !== 'string' ||
+        typeof decoded.after[1] !== 'number'
+      )
+        invalidCursor();
       const retained = await store.load(decoded.after[0]);
       if (!retained || retained.expiresAt <= now() || retained.revision !== decoded.after[1]) restart();
       // The confidential token authenticates all request/viewer operands; storage holds only its native locator.
@@ -80,8 +101,17 @@ export function createKnowledgeDiscovery(options: {
     } else {
       const through = await store.cut(subjectId);
       if (through === null) return { state: 'unavailable' };
-      record = { id: store.id(), revision: 0, subjectId, limit, through, after: null,
-        candidates: [], exhausted: false, expiresAt: now() + KNOWLEDGE_DISCOVERY_LIFETIME_MS };
+      record = {
+        id: store.id(),
+        revision: 0,
+        subjectId,
+        limit,
+        through,
+        after: null,
+        candidates: [],
+        exhausted: false,
+        expiresAt: now() + KNOWLEDGE_DISCOVERY_LIFETIME_MS,
+      };
     }
 
     // Recheck earlier nominations instead of reusing a successful permission result.
@@ -119,7 +149,10 @@ export function createKnowledgeDiscovery(options: {
     for (const candidate of selected) {
       const current = await source.current(candidate, context);
       if (current.status === 'unavailable') return { state: 'unavailable' };
-      if (current.value) { documents.push(current.value); retained.push(candidate); }
+      if (current.value) {
+        documents.push(current.value);
+        retained.push(candidate);
+      }
     }
     const finalSubject = await source.subject(subjectId, context);
     if (finalSubject === 'unavailable') return { state: 'unavailable' };
@@ -128,12 +161,19 @@ export function createKnowledgeDiscovery(options: {
     if (ready && exhausted) return { state: 'ready', documents, next: null };
 
     const nextRecord: KnowledgePreparation = {
-      ...record, revision: record.revision + 1, after, exhausted,
+      ...record,
+      revision: record.revision + 1,
+      after,
+      exhausted,
       candidates: ready ? [] : retained,
     };
     if (!(await store.save(nextRecord, previousRevision))) restart();
-    const next = await encodeSearchCursor(tokens, binding, { generation: 1,
-      after: [nextRecord.id, nextRecord.revision] }, now());
+    const next = await encodeSearchCursor(
+      tokens,
+      binding,
+      { generation: 1, after: [nextRecord.id, nextRecord.revision] },
+      now(),
+    );
     return ready ? { state: 'ready', documents, next } : { state: 'preparing', next };
   };
 }

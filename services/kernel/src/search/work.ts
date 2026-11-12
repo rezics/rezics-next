@@ -128,10 +128,17 @@ export function createSearchWorkModule(
         config === undefined ? undefined : { config, routeKey: readMembershipRouteKey(context.env) };
       const nativePorts = await composeNativePorts();
       bindSearchNativeCapabilities(nativePorts);
-      context.addEffects([knowledgeDiscoveryEffect({ pool: context.pool,
-        source: () => nativePorts.createKnowledgeDiscoverySource({ pool: context.pool, access: context.getAuthorization().access }),
-        deadlineNow: () => Date.now(),
-      })]);
+      context.addEffects([
+        knowledgeDiscoveryEffect({
+          pool: context.pool,
+          source: () =>
+            nativePorts.createKnowledgeDiscoverySource({
+              pool: context.pool,
+              access: context.getAuthorization().access,
+            }),
+          deadlineNow: () => Date.now(),
+        }),
+      ]);
       const trends = trendingSearchStore(context.pool, context.clock);
       type Withdrawal = { kind: 'account' | 'source'; identity: string; sequence: number };
       const withdraw = DBOS.registerStep(
