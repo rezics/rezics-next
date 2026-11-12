@@ -73,8 +73,7 @@ function eventActorIsAllowed(
   const value = actor as { id?: unknown; sessionId?: unknown };
   return (
     typeof value.id === 'string' &&
-    (value.id === task.brief.manager ||
-      (operationsManager !== undefined && value.id === operationsManager)) &&
+    (value.id === task.brief.manager || (operationsManager !== undefined && value.id === operationsManager)) &&
     typeof value.sessionId === 'string' &&
     value.sessionId.length > 0
   );
