@@ -35,8 +35,9 @@ const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
 
 /**
  * Reconcile a same-generation ready retry only when a completed stop was explicitly followed by a retry and the
- * retained compiler failure plus all same-attempt check custody are authoritative. A successful result also clears
- * the obsolete pending-evidence classification; every uncertain or held state remains untouched.
+ * retained compiler failure plus all same-attempt check custody are authoritative. A successful result releases the
+ * retry intent to the normal retry transaction, which supersedes the fenced stopped attempt; uncertain states remain
+ * untouched.
  */
 export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
   const { store, settings } = tasks;
@@ -115,16 +116,6 @@ export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: Atte
         current.status = 'pending';
         delete current.nextAttempt;
       });
-    store.updateAttempt(ref, (current) => {
-      delete current.typingEvidencePending;
-      current.failureKind = 'tool';
-      current.result = proof.result;
-    });
-    store.event(ref, 'typing-evidence-reclassified-for-source-retry', {
-      retryQueuedAt: retry.queuedAt,
-      command: proof.command ?? null,
-      result: proof.result,
-    });
     return true;
   } finally {
     lease.release();

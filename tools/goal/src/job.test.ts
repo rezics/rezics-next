@@ -229,10 +229,9 @@ test('an explicit stopped-to-ready retry supersedes current terminal compiler fa
 
     expect(h.store.task(recoverable.task.id).currentAttempt).toBe(2);
     expect(h.store.retryIntent(recoverable.ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
-    expect(h.store.attempt(recoverable.ref).typingEvidencePending).toBeUndefined();
-    expect(h.store.attempt(recoverable.ref).failureKind).toBe('tool');
-    expect(h.store.attempt(recoverable.ref).result).toContain('error TS2322');
+    expect(h.store.attempt(recoverable.ref).state).toBe('superseded');
     expect(h.store.attempt({ taskId: recoverable.task.id, attempt: 2 }).state).toBe('exited');
+    expect(h.store.attempt({ taskId: recoverable.task.id, attempt: 2 }).typingEvidencePending).toBeUndefined();
     expect(landings).toHaveLength(1);
   } finally {
     await h.disposeAsync();
