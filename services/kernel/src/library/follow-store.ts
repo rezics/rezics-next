@@ -22,7 +22,7 @@ function iso(value: string): string {
 }
 
 function asTargetType(value: string): FollowTargetType {
-  if (value === 'subject' || value === 'collection' || value === 'space') return value;
+  if (value === 'subject' || value === 'collection' || value === 'space' || value === 'zone') return value;
   throw new Error(`Unknown follow target type: ${value}`);
 }
 

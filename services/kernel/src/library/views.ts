@@ -67,6 +67,7 @@ export async function fullView<T>(
     deadline?: number;
     follow?: true;
     withholdChangedSource?: true;
+    nativeFollowTargets?: readonly import('./contract/index.ts').NativeFollowTargetAdapter[];
     followingSpaces?: (
       actor: Actor,
       ids: readonly string[],

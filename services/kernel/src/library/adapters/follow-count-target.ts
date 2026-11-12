@@ -49,6 +49,12 @@ export async function applyFollowCount(
       }
       const target = [destination.route, replacement.targetType, destination.targetId];
       // The single total lock also orders concurrent support changes for this target.
+      if (replacement.targetType === 'zone') {
+        await tx.query(
+          'INSERT INTO library.follow_count_total(route,target_type,target_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',
+          target,
+        );
+      }
       const total = await tx.query(
         'SELECT total FROM library.follow_count_total WHERE route=$1 AND target_type=$2 AND target_id=$3 FOR UPDATE',
         target,

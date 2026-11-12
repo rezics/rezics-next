@@ -3069,6 +3069,35 @@ target application, deliver that same handle and observe count 1 before their li
 replay the original handle after acknowledgement, as the duplicate-projection outcome also requires. Every replay
 still reconciles current native source eligibility; capture never manufactures pending work.
 
+Decision: readable published Zones are independent native targets registered with the common Follow engine;
+Subject, Collection and Space keep their existing adapters. A Zone is never a Space alias. The registration
+uses the native Zone metadata read, including current `zone:read`, owner eligibility and lifecycle/withholding
+rules. Private Zones are not published targets, even for their owner. Agent, Book and public Concept remain
+Subject targets. Following supplies no membership or access authority.
+
+A FULL followed Zone row carries `target: {id, type: "zone", label}` and
+`destination: {kind: "zone", zoneId}`. The producer selects the Zone's current primary-language name using
+Composition's existing name selector; it never recovers withheld labels. An absent name or unavailable read
+conceals the projection. A final native read compares revision, visibility and disclosed name after related
+reads; a changed, unreadable, withheld or deleted target returns `target: null` and
+`destination: {kind: "unavailable"}` while retaining the private edge. No client alias inference, fallback
+read or separate subscription store is involved. BASIC does not hydrate targets. FULL remains private/no-store.
+Removal of a retained Zone edge resolves no Zone payload and preserves explicit negative intent and receipt
+semantics. Registered observations share the bounded page concurrency of four and the original deadline.
+
+The forward Follow migration widens the graph and both constrained private-count relations together.
+Zone replacements use the existing source hook, owner outgoing counter, negative revision, delivery and
+terminal-follower cleanup. Their internal target total is initialized at its first native delivery, so existing
+partition bootstrap coverage is unchanged. The private target-count HTTP vocabulary remains Subject,
+Collection and Space; Zones add no public counts, recommendation or ranking projection.
+
+Focused deferred acceptance: native publish/follow/replay, selected-kind and mixed FULL pages with bounded
+cursors, current label changes, revoked/private/withheld/deleted concealment, unfollow after read loss,
+refollow denial, follower isolation and outgoing-count/source-delivery continuity. Adapter and presentation
+cases in `test/library/zone-follow-target.test.ts` pin deterministic projection and final read loss;
+`test/library/zone-follows-http.test.ts` pins native command/receipt/removal behavior and count-source continuity. Native/browser/growth acceptance
+runs after landing in the dev verifier. Web sidebar receiving is a separate consumer change.
+
 Create/refollow requires real current target authority at native command T through prepared command support.
 Stored source originals never change when Semantic identity moves. Exact authorized receipt replay precedes deferred
 target failure; replay/no-op emits no new invalidation or replacement. Explicit removal remains negative across
@@ -3220,7 +3249,7 @@ identity/custody and cost proof is pending; source typing does not certify these
 
 ### Follow page
 
-- Decision: the optional `/v1/follows` selector is `targetType` with `subject`, `collection` and `space`; omission selects all native kinds.
+- Decision: the optional `/v1/follows` selector is `targetType` with `subject`, `collection`, `space` and `zone`; omission selects all native kinds.
 - Touches: All-kind keysets use `follow_account_page` `(route, account_id, state, updated_at DESC, target_id)`. A selected kind uses `follow_account_kind_page` `(route, account_id, target_type, state, updated_at DESC, target_id)`. Both updated-time branches apply the same kind predicate before ordering and limit, so a selected population is sought in the index instead of filtered from an all-kind page. The command page is one statement. The HTTP page also reads the partition epoch. Its first fetch is `min(100, s + 1)`; when `s` is 100 and that fetch does not show another row, a second limit-1 call checks the same kind. A sealed cursor binds `follow.list`, the exact account, selected kind or all mode, `state = following`, and the native partition epoch.
 - Bound: The page statement is `R` `O(s+1)`, `B` `O(L(N)+s)`, `S` 1. HTTP at `s` = 100 adds the probe, so `S` is 1 or 2, plus the partition read. No command envelope. Both modes read current rows; follow or unfollow changes between pages follow the existing keyset consistency rule and add no snapshot authority.
 - Growth evidence: Existing all-kind measurements remain in `test/library/follows.test.ts` and `test/library/follow-store.test.ts`. `test/library/following-kind-growth.test.ts` now captures the whole HTTP selected-kind path with a fixed 102-edge Subject neighborhood while unrelated owner follows grow at 64, 512 and 4096, then keeps that population fixed while receipt, outbox and write-basis history grow independently. It records the first and deep FULL pages, empty and denied results, native page SQL/derived binds/plans, rows, buffers, statements and bytes against `follow-operation-bounds.ts`; native measurement execution remains post-integration.

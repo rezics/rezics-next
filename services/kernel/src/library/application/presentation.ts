@@ -4,6 +4,9 @@ import type {
   LibraryAccountSummary,
   LibraryTargetSummary,
   FollowingSpaceProjection,
+  NativeFollowTargetAdapter,
+  NativeFollowProjection,
+  LibraryActor,
 } from '../contract/index.ts';
 import { mapPresentationBounded } from './presentation-bounds.ts';
 
@@ -16,6 +19,11 @@ export function createLibraryPresentationApplication<Summary, Attribution>(
     body: T,
     options: Readonly<{
       withholdChangedSource?: boolean;
+      nativeFollowTargets?: Readonly<{
+        adapters: readonly NativeFollowTargetAdapter[];
+        actor: LibraryActor;
+        deadline: number;
+      }>;
       followingSpaces?: (ids: readonly string[]) => Promise<ReadonlyMap<string, FollowingSpaceProjection>>;
     }> = {},
   ): Promise<LibraryEmbedding<T, Summary, Attribution>> {
@@ -27,12 +35,15 @@ export function createLibraryPresentationApplication<Summary, Attribution>(
       accountIds = new Set<string>();
     const targets = new Map<string, string>();
     const spaceTargetIds = new Set<string>();
+    const nativeTargets = new Map<string, NativeFollowTargetAdapter>();
     for (const row of rows) {
       if (typeof row.subjectId === 'string') subjectIds.add(row.subjectId);
       if (typeof row.versionSubjectId === 'string') subjectIds.add(row.versionSubjectId);
       for (const key of ['curatorAccountId', 'accountId']) if (typeof row[key] === 'string') accountIds.add(row[key]);
       if (typeof row.targetId === 'string' && typeof row.targetType === 'string') {
-        if (row.targetType === 'subject') subjectIds.add(row.targetId);
+        const native = options.nativeFollowTargets?.adapters.find((adapter) => adapter.targetType === row.targetType);
+        if (native) nativeTargets.set(row.targetId, native);
+        else if (row.targetType === 'subject') subjectIds.add(row.targetId);
         else if (row.targetType === 'space' && options.followingSpaces) spaceTargetIds.add(row.targetId);
         else targets.set(row.targetId, row.targetType);
       }
@@ -50,6 +61,10 @@ export function createLibraryPresentationApplication<Summary, Attribution>(
     const followingSpaces = options.followingSpaces
       ? await options.followingSpaces([...spaceTargetIds])
       : new Map<string, FollowingSpaceProjection>();
+    const nativeObservations = await mapPresentationBounded([...nativeTargets], async ([id, adapter]) => ({
+      id,
+      observation: await adapter.observe(options.nativeFollowTargets!.actor, id, options.nativeFollowTargets!.deadline),
+    }));
     // Final disclosure occurs after every released related read. No cached allow is authority.
     const subjectsCurrent = await subjects.current();
     if (!subjectsCurrent && !options.withholdChangedSource) throw capabilities.unavailable();
@@ -67,11 +82,17 @@ export function createLibraryPresentationApplication<Summary, Attribution>(
       if (!current && !options.withholdChangedSource) throw capabilities.unavailable();
       currentTargets.set(id, current ? observation.value : null);
     });
+    const currentNative = new Map<string, NativeFollowProjection | null>();
+    await mapPresentationBounded(nativeObservations, async ({ id, observation }) => {
+      currentNative.set(id, (await observation.current()) ? observation.value : null);
+    });
     const enrich = (row: Record<string, unknown>) => {
       const spaceProjection =
         typeof row.targetId === 'string' && row.targetType === 'space' && options.followingSpaces
           ? followingSpaces.get(row.targetId)
           : undefined;
+      const native = typeof row.targetId === 'string' && nativeTargets.has(row.targetId);
+      const nativeProjection = native ? currentNative.get(row.targetId as string) : undefined;
       return {
         ...row,
         ...(typeof row.subjectId === 'string'
@@ -91,8 +112,9 @@ export function createLibraryPresentationApplication<Summary, Attribution>(
           : {}),
         ...(typeof row.targetId === 'string'
           ? {
-              target:
-                row.targetType === 'subject'
+              target: native
+                ? (nativeProjection?.target ?? null)
+                : row.targetType === 'subject'
                   ? subjectsCurrent
                     ? (subjects.value.get(row.targetId) ?? null)
                     : null
@@ -101,6 +123,7 @@ export function createLibraryPresentationApplication<Summary, Attribution>(
                     : (currentTargets.get(row.targetId) ?? null),
             }
           : {}),
+        ...(native ? { destination: nativeProjection?.destination ?? { kind: 'unavailable' as const } } : {}),
         ...(options.followingSpaces && typeof row.targetId === 'string' && row.targetType === 'space'
           ? {
               destination: spaceProjection?.destination ?? { kind: 'unavailable' as const },

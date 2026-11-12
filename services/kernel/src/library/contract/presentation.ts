@@ -1,3 +1,4 @@
+import type { FollowDestination } from './follow-targets.ts';
 import type { GrantedAccount, LibraryActor, LibraryAccountActor } from './actors.ts';
 
 /** A caller owns one bounded neighbourhood, including duplicate stored occurrences. */
@@ -97,6 +98,6 @@ export type LibraryEmbedding<T, Summary, Attribution> = T extends readonly (infe
           : object) &
         (T extends { targetId: string } ? { target?: Summary | LibraryTargetSummary | null } : object) &
         (T extends { targetId: string; targetType: string }
-          ? { destination?: FollowingSpaceDestination; actions?: FollowingSpaceActions }
+          ? { destination?: FollowDestination; actions?: FollowingSpaceActions }
           : object)
     : T;

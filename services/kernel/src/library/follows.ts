@@ -73,7 +73,12 @@ export type LibraryFollow = {
 };
 
 type QueryClient = Pick<PoolClient, 'query'>;
-type FollowDeps = { pool: Pool; access: Access; clock?: KernelClock };
+type FollowDeps = {
+  pool: Pool;
+  access: Access;
+  clock?: KernelClock;
+  followTargets?: readonly import('./contract/index.ts').NativeFollowTargetAdapter[];
+};
 
 class UnchangedFollow extends Error {
   constructor() {
@@ -95,7 +100,10 @@ function asTarget(value: FollowTarget): FollowTarget {
   if (
     !value ||
     typeof value.targetId !== 'string' ||
-    (value.targetType !== 'subject' && value.targetType !== 'collection' && value.targetType !== 'space')
+    (value.targetType !== 'subject' &&
+      value.targetType !== 'collection' &&
+      value.targetType !== 'space' &&
+      value.targetType !== 'zone')
   ) {
     throw new LibraryNotFoundError();
   }
@@ -136,6 +144,12 @@ export function createFollowCommands(config: FollowDeps) {
     deadline: number,
     attempt?: CommandAttempt,
   ): Promise<FollowTarget | null> {
+    if (target.targetType === 'zone') {
+      const adapter = config.followTargets?.find((entry) => entry.targetType === target.targetType);
+      if (!adapter) return null;
+      const observation = await adapter.observe(actor, target.targetId, deadline);
+      return observation.value !== null && (await observation.current()) ? target : null;
+    }
     const work = currentCommandWorkAssociation()?.access;
     const base = { pool, deadline, ...(work ? { work } : {}) };
     const context = attempt ? commandAccessContext(base, attempt) : base;
@@ -185,7 +199,7 @@ export function createFollowCommands(config: FollowDeps) {
   ): Promise<FollowTarget> {
     const candidates: FollowTarget[] =
       typeof input === 'string'
-        ? (['collection', 'subject', 'space'] as const).map((targetType) => ({ targetId: input, targetType }))
+        ? (['collection', 'subject', 'space', 'zone'] as const).map((targetType) => ({ targetId: input, targetType }))
         : [asTarget(input)];
     for (const target of candidates) {
       const resolved = await readable(actor, target, deadline, attempt);
