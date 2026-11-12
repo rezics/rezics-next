@@ -13,7 +13,7 @@ import {
   settleWorkerCheckHostBudget,
   workerCheckBudgetDirectory,
 } from './worker-check-budget.ts';
-import type { Attempt } from './types.ts';
+import type { Attempt, RetryIntent } from './types.ts';
 
 function waitingResumeCli(checkId: string): string {
   const waiting = JSON.stringify({ status: 'waiting', summary: 'check is running', checks: [checkId] });
@@ -243,11 +243,35 @@ test('an explicit stopped-to-ready retry supersedes current terminal compiler fa
     expect(h.store.task(liveAuxiliary.task.id).currentAttempt).toBe(1);
     expect(h.store.retryIntent(liveAuxiliary.ref)?.status).toBe('pending');
     expect(h.store.attempt(liveAuxiliary.ref).state).toBe('stopped');
+    job.resumePendingRetries();
+    await job.drain();
+    expect(
+      h.store.events(parked.task.id, parked.ref.attempt).filter((event) => event.kind === 'typing-retry-unreconciled'),
+    ).toHaveLength(1);
     expect(landings).toHaveLength(1);
   } finally {
     await h.disposeAsync();
   }
 }, 30_000);
+
+test('retry supply observation uses the current routed allowance admission', async () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const intent = { taskId: task.id, attempt: 1, status: 'pending', options: {} } satisfies RetryIntent;
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const observe = (used: number) =>
+      Object.defineProperty(h.tasks, 'reader', {
+        value: (pool: (typeof h.settings.pools)[number]) => reading(pool, used),
+      });
+    observe(0);
+    expect(job.hasRunnableRetrySupply(h.store.task(task.id), intent)).toBe(true);
+    observe(100);
+    expect(job.hasRunnableRetrySupply(h.store.task(task.id), intent)).toBe(false);
+  } finally {
+    await h.disposeAsync();
+  }
+});
 
 const fileActiveEmptyLogCli = `#!/usr/bin/env bun
 import { writeFileSync } from 'node:fs';
