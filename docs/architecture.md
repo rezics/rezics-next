@@ -27,6 +27,10 @@ Large jobs make bounded, resumable progress. Bound each step's examined work, ex
 bytes independently of the total logical set. A page limit must not become a lifetime ceiling or require rewriting
 the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact contract.
 
+Decision: use the [pinned universal scalability audit](research/universal-scalability-audit.md) as an owner-review
+queue and evidence index; promote stable requirements into their architecture, product or verification owner, with
+the report linked as evidence.
+
 A capability must hold wherever its abstraction appears. Inclusion in public scope means the complete architectural
 capability across its surfaces, rather than one working example.
 
