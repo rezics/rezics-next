@@ -4794,6 +4794,33 @@ CREATE TABLE library.follow_count_total (
 
 
 --
+-- Name: hosted_reading; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.hosted_reading (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    catalogue_id uuid NOT NULL,
+    publication_revision_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    target_revision_id uuid NOT NULL,
+    target_sha256 bytea NOT NULL,
+    document_block_id text,
+    document_offset integer,
+    revision bigint NOT NULL,
+    changed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT hosted_reading_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT hosted_reading_block_check CHECK (((document_block_id IS NULL) OR ((char_length(document_block_id) >= 1) AND (char_length(document_block_id) <= 128)))),
+    CONSTRAINT hosted_reading_offset_check CHECK (((document_offset IS NULL) OR ((document_offset >= 0) AND (document_offset <= 2097152)))),
+    CONSTRAINT hosted_reading_position_check CHECK (((document_block_id IS NULL) = (document_offset IS NULL))),
+    CONSTRAINT hosted_reading_revision_check CHECK ((revision > 0)),
+    CONSTRAINT hosted_reading_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT hosted_reading_target_sha256_check CHECK ((octet_length(target_sha256) = 32))
+);
+
+
+--
 -- Name: identity_epoch_participant_handoff; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -6990,33 +7017,6 @@ CREATE TABLE library.yearly_completion_goal (
 
 
 --
--- Name: hosted_reading; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.hosted_reading (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    subject_id uuid NOT NULL,
-    catalogue_id uuid NOT NULL,
-    publication_revision_id uuid NOT NULL,
-    occurrence_id uuid NOT NULL,
-    target_revision_id uuid NOT NULL,
-    target_sha256 bytea NOT NULL,
-    document_block_id text,
-    document_offset integer,
-    revision bigint NOT NULL,
-    changed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    CONSTRAINT hosted_reading_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT hosted_reading_block_check CHECK (((document_block_id IS NULL) OR ((char_length(document_block_id) >= 1) AND (char_length(document_block_id) <= 128)))),
-    CONSTRAINT hosted_reading_offset_check CHECK (((document_offset IS NULL) OR ((document_offset >= 0) AND (document_offset <= 2097152)))),
-    CONSTRAINT hosted_reading_position_check CHECK (((document_block_id IS NULL) = (document_offset IS NULL))),
-    CONSTRAINT hosted_reading_revision_check CHECK ((revision > 0)),
-    CONSTRAINT hosted_reading_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT hosted_reading_target_sha256_check CHECK ((octet_length(target_sha256) = 32))
-);
-
-
---
 -- Name: bangumi_upload bangumi_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -7806,6 +7806,14 @@ ALTER TABLE ONLY library.follow_count_total
 
 ALTER TABLE ONLY library.follow
     ADD CONSTRAINT follow_pkey PRIMARY KEY (route, account_id, target_id);
+
+
+--
+-- Name: hosted_reading hosted_reading_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.hosted_reading
+    ADD CONSTRAINT hosted_reading_pkey PRIMARY KEY (route, account_id, subject_id);
 
 
 --
@@ -8686,14 +8694,6 @@ ALTER TABLE ONLY library.vndb_label_adoption
 
 ALTER TABLE ONLY library.yearly_completion_goal
     ADD CONSTRAINT yearly_completion_goal_pkey PRIMARY KEY (route, account_id, year);
-
-
---
--- Name: hosted_reading hosted_reading_pkey; Type: CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.hosted_reading
-    ADD CONSTRAINT hosted_reading_pkey PRIMARY KEY (route, account_id, subject_id);
 
 
 --
