@@ -871,7 +871,8 @@ export class ManagerSessions {
           return;
         current.continuationAsked = true;
         const previousContinuation = this.readContinuation(current);
-        current.continuationThreadId = current.threadId ?? undefined;
+        if (current.threadId) current.continuationThreadId = current.threadId;
+        else delete current.continuationThreadId;
         current.continuationBaselineHash =
           previousContinuation === null ? null : continuationHash(previousContinuation);
         current.continuationBaselineProgressHashes =
