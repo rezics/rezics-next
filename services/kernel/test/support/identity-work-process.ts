@@ -34,8 +34,6 @@ export async function startIdentityWorkProcess(config: IdentityWorkProcessConfig
       }),
     },
   });
-  child.stdin.write(JSON.stringify(config));
-  await child.stdin.end();
   const reader = child.stdout.getReader();
   const decoder = new TextDecoder();
   let seen = '';
@@ -50,14 +48,20 @@ export async function startIdentityWorkProcess(config: IdentityWorkProcessConfig
     throw new Error('identity work process exited before it was ready');
   });
   try {
+    child.stdin.write(JSON.stringify(config));
+    await child.stdin.end();
     while (!seen.includes(READY)) {
       const next = await Promise.race([reader.read(), timeout, exited]);
       if (next.done) throw new Error('identity work process closed stdout before it was ready');
       seen += decoder.decode(next.value, { stream: true });
     }
   } catch (error) {
-    child.kill();
-    await child.exited;
+    try {
+      child.kill();
+      await child.exited;
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Identity work readiness and child cleanup failed');
+    }
     throw error;
   } finally {
     clearTimeout(timer);
@@ -66,10 +70,14 @@ export async function startIdentityWorkProcess(config: IdentityWorkProcessConfig
   void (async () => {
     while (!(await reader.read()).done);
   })();
+  let stopping: Promise<void> | undefined;
   return {
-    async stop() {
-      child.kill('SIGTERM');
-      await child.exited;
+    stop() {
+      return (stopping ??= (async () => {
+        child.kill('SIGTERM');
+        const exitCode = await child.exited;
+        if (exitCode !== 0) throw new Error(`identity work process exited with status ${exitCode}`);
+      })());
     },
   };
 }
@@ -90,19 +98,34 @@ export async function startAccountIdentityPublication(config: {
   openSearchUrl?: string | undefined;
 }): Promise<AccountIdentityPublicationRuntime> {
   const workClient = await createWorkClient(config.databaseUrl);
-  for (const [name, parameters] of Object.entries(WORK_QUEUES)) await workClient.registerQueue(name, parameters);
-  const identityWork = await startIdentityWorkProcess({
-    databaseUrl: config.databaseUrl,
-    routeKey: config.routeKey,
-    searchPrefix: config.searchPrefix,
-    executorId: `identity-publication-${randomUUID()}`,
-    ...(config.openSearchUrl === undefined ? {} : { openSearchUrl: config.openSearchUrl }),
-  });
-  return {
-    workClient,
-    async stop() {
-      await identityWork.stop();
+  try {
+    for (const [name, parameters] of Object.entries(WORK_QUEUES)) await workClient.registerQueue(name, parameters);
+    const identityWork = await startIdentityWorkProcess({
+      databaseUrl: config.databaseUrl,
+      routeKey: config.routeKey,
+      searchPrefix: config.searchPrefix,
+      executorId: `identity-publication-${randomUUID()}`,
+      ...(config.openSearchUrl === undefined ? {} : { openSearchUrl: config.openSearchUrl }),
+    });
+    let stopping: Promise<void> | undefined;
+    return {
+      workClient,
+      stop() {
+        return (stopping ??= (async () => {
+          try {
+            await identityWork.stop();
+          } finally {
+            await workClient.close();
+          }
+        })());
+      },
+    };
+  } catch (error) {
+    try {
       await workClient.close();
-    },
-  };
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Identity publication startup and cleanup failed');
+    }
+    throw error;
+  }
 }

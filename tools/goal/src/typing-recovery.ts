@@ -1,10 +1,13 @@
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { isKnownTypingCompiler, resolveTypingCompilerCommand } from './worker-check-typing-inputs.ts';
 import type { AttemptRef, LandingQueue } from './contracts.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { sameProcess } from './process.ts';
 import { backlogManagerActor, type AuthenticatedManager } from './priority-authority.ts';
+import { readMeasurement } from './records.ts';
 import { settle } from './settle.ts';
+import type { WithdrawnTypingRecoveryOrigin } from './store.ts';
 import type { WorkerTasks } from './tasks.ts';
 import {
   expandCheckCommands,
@@ -20,8 +23,177 @@ import {
   workerCheckHostHasTypecheckRun,
   workerCheckHostTypingSettlement,
   workerCheckHostTypingReceiptMatches,
+  workerCheckHostStaleTypingFailureSelection,
+  workerCheckHostBudgetRefusalReport,
+  workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt,
   workerCheckHostWithdrawnRetryIsRecoverable,
 } from './worker-check-budget.ts';
+
+const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function refusalNamesSourceCommit(report: string, sourceCommit: unknown): sourceCommit is string {
+  if (typeof sourceCommit !== 'string' || !/^[0-9a-f]{40}$/.test(sourceCommit)) return false;
+  return (report.match(/[0-9a-f]{10,40}/gi) ?? []).some((reference) =>
+    sourceCommit.startsWith(reference.toLowerCase()),
+  );
+}
+
+function parsedObject(value: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function originalBudgetRefusal(
+  tasks: WorkerTasks,
+  attempt: ReturnType<WorkerTasks['store']['attempt']>,
+  sourceCommit: unknown,
+): string | undefined {
+  const report = readMeasurement(attempt, { policy: tasks.store.policy }).result;
+  if (!workerCheckHostBudgetRefusalReport(report) || !refusalNamesSourceCommit(report, sourceCommit)) return;
+  return report;
+}
+
+function eventActorIsAllowed(
+  body: Record<string, unknown>,
+  task: ReturnType<WorkerTasks['store']['task']>,
+  operationsManager?: string,
+): boolean {
+  const actor = body.actor;
+  if (!actor || typeof actor !== 'object' || Array.isArray(actor)) return false;
+  const value = actor as { id?: unknown; sessionId?: unknown };
+  return (
+    typeof value.id === 'string' &&
+    (value.id === task.brief.manager || (operationsManager !== undefined && value.id === operationsManager)) &&
+    typeof value.sessionId === 'string' &&
+    value.sessionId.length > 0
+  );
+}
+
+function hasRetainedOverwrittenOrigin(events: readonly { kind: string; body: string }[]): boolean {
+  return events.some(
+    (event) => event.kind === 'typing-recovery-authorized' && event.body.includes('"withdrawnBudgetOrigin"'),
+  );
+}
+
+function validateStoredOverwrittenOrigin(input: {
+  tasks: WorkerTasks;
+  events: readonly { kind: string; body: string }[];
+  task: ReturnType<WorkerTasks['store']['task']>;
+  attempt: ReturnType<WorkerTasks['store']['attempt']>;
+  result: string;
+  sourceCommit: unknown;
+  directory: string;
+}): { report: string; origin: WithdrawnTypingRecoveryOrigin } | undefined {
+  const event = input.events.findLast(
+    (entry) => entry.kind === 'typing-recovery-authorized' && entry.body.includes('"withdrawnBudgetOrigin"'),
+  );
+  if (!event) return;
+  const body = parsedObject(event.body);
+  const origin = body?.withdrawnBudgetOrigin as WithdrawnTypingRecoveryOrigin | undefined;
+  if (
+    !body ||
+    body.recoveryKind !== 'withdrawn-budget-stop' ||
+    JSON.stringify(body.command) !== JSON.stringify(WITHDRAWN_WEB_COMPILER) ||
+    !eventActorIsAllowed(body, input.task, input.tasks.settings.integration.operationsManager) ||
+    !origin ||
+    origin.version !== 1 ||
+    !/^[0-9a-f]{40}$/.test(origin.sourceCommit) ||
+    !/^[0-9a-f]{64}$/.test(origin.reportSha256) ||
+    !/^[0-9a-f]{64}$/.test(origin.failureSha256) ||
+    !/^[1-9]\d*$/.test(origin.failureStamp) ||
+    origin.sourceCommit !== input.sourceCommit ||
+    origin.failureSha256 !== sha256(input.result)
+  )
+    return;
+  const selection = workerCheckHostStaleTypingFailureSelection({
+    directory: input.directory,
+    worktree: input.task.worktree,
+    result: input.result,
+    stamp: origin.failureStamp,
+  });
+  if (
+    !selection ||
+    JSON.stringify(selection.command) !== JSON.stringify(WITHDRAWN_WEB_COMPILER) ||
+    !workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
+      input.task.worktree,
+      input.task.id,
+      input.attempt.attempt,
+      selection.physicalRunId,
+      selection.command,
+      selection.exitCode,
+    )
+  )
+    return;
+  const report = originalBudgetRefusal(input.tasks, input.attempt, origin.sourceCommit);
+  if (!report || sha256(report) !== origin.reportSha256) return;
+  return { report, origin };
+}
+
+function reconstructOverwrittenOrigin(input: {
+  tasks: WorkerTasks;
+  events: readonly { kind: string; body: string }[];
+  task: ReturnType<WorkerTasks['store']['task']>;
+  attempt: ReturnType<WorkerTasks['store']['attempt']>;
+  result: string;
+  sourceCommit: unknown;
+  directory: string;
+}): { report: string; origin: WithdrawnTypingRecoveryOrigin } | undefined {
+  if (
+    input.events.some(
+      (event) => event.kind === 'typing-recovery-authorized' || event.kind === 'typing-evidence-recovery',
+    )
+  )
+    return;
+  const failure = input.events.findLast((event) => event.kind === 'typing-evidence-failed');
+  const body = failure ? parsedObject(failure.body) : undefined;
+  if (
+    !body ||
+    Object.keys(body).sort().join(',') !== 'actor,recoveryKind' ||
+    body.recoveryKind !== 'withdrawn-budget-stop' ||
+    !eventActorIsAllowed(body, input.task, input.tasks.settings.integration.operationsManager)
+  )
+    return;
+  const selection = workerCheckHostStaleTypingFailureSelection({
+    directory: input.directory,
+    worktree: input.task.worktree,
+    result: input.result,
+  });
+  if (
+    !selection ||
+    JSON.stringify(selection.command) !== JSON.stringify(WITHDRAWN_WEB_COMPILER) ||
+    !workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
+      input.task.worktree,
+      input.task.id,
+      input.attempt.attempt,
+      selection.physicalRunId,
+      selection.command,
+      selection.exitCode,
+    )
+  )
+    return;
+  const report = originalBudgetRefusal(input.tasks, input.attempt, input.sourceCommit);
+  if (!report || typeof input.sourceCommit !== 'string') return;
+  return {
+    report,
+    origin: {
+      version: 1,
+      sourceCommit: input.sourceCommit,
+      reportSha256: sha256(report),
+      failureSha256: sha256(input.result),
+      failureStamp: selection.stamp,
+    },
+  };
+}
 
 /** Reconcile completed source under its original attempt; this boundary never invokes a model. */
 export async function recoverWorkerTyping(
@@ -42,16 +214,51 @@ export async function recoverWorkerTyping(
     }
     const attempt = store.attempt(ref);
     const retry = store.retryIntent(ref);
-    const progressEvent = store.events(ref.taskId, ref.attempt).findLast((event) => event.kind === 'attempt-progress');
+    const events = store.events(ref.taskId, ref.attempt);
+    const progressEvent = events.findLast((event) => event.kind === 'attempt-progress');
     let progress: { endHead?: unknown; uncommitted?: unknown } | undefined;
     try {
       progress = progressEvent ? (JSON.parse(progressEvent.body) as typeof progress) : undefined;
     } catch {
       progress = undefined;
     }
+    const directory = workerCheckBudgetDirectory(settings.stateDirectory, task.id, ref.attempt);
+    let eligibilityAttempt = attempt;
+    let withdrawnOrigin: WithdrawnTypingRecoveryOrigin | undefined;
+    let withdrawnOriginReport: string | undefined;
+    if (
+      !workerCheckHostBudgetRefusalReport(attempt.result) &&
+      typeof attempt.result === 'string' &&
+      attempt.result.startsWith('Last check-host run failed its typecheck.')
+    ) {
+      const recoveredOrigin = hasRetainedOverwrittenOrigin(events)
+        ? validateStoredOverwrittenOrigin({
+            tasks,
+            events,
+            task,
+            attempt,
+            result: attempt.result,
+            sourceCommit: progress?.endHead,
+            directory,
+          })
+        : reconstructOverwrittenOrigin({
+            tasks,
+            events,
+            task,
+            attempt,
+            result: attempt.result,
+            sourceCommit: progress?.endHead,
+            directory,
+          });
+      if (recoveredOrigin) {
+        eligibilityAttempt = { ...attempt, result: recoveredOrigin.report };
+        withdrawnOrigin = recoveredOrigin.origin;
+        withdrawnOriginReport = recoveredOrigin.report;
+      }
+    }
     const withdrawnRetry = workerCheckHostWithdrawnRetryIsRecoverable({
       task,
-      attempt,
+      attempt: eligibilityAttempt,
       ...(retry ? { retry } : {}),
       ...(progress ? { progress } : {}),
     });
@@ -86,7 +293,6 @@ export async function recoverWorkerTyping(
     }
     if (withdrawnRetry && !authority)
       throw new Error('withdrawn retry compiler recovery requires authenticated owner or operations authority');
-    const directory = workerCheckBudgetDirectory(settings.stateDirectory, task.id, ref.attempt);
     const typing = workerCheckHostTypingSettlement({
       directory,
       worktree: task.worktree,
@@ -135,24 +341,30 @@ export async function recoverWorkerTyping(
       store.event(ref, 'typing-evidence-failed', { result: typing.result });
       return { ...ref, status: 'typing-failure' as const, result: typing.result };
     }
-    const webCompiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    const webCompiler = WITHDRAWN_WEB_COMPILER;
     const hasWebReceipt =
       typing.ok &&
       workerCheckHostHasTypecheckRun(directory) &&
       workerCheckHostTypingReceiptMatches(directory, webCompiler);
     if (withdrawnRetry && hasWebReceipt) {
-      store.beginWithdrawnTypingRecoverySettlement(ref, attempt.result, webCompiler, {
-        actor: authority,
-        previousResult: attempt.result,
-        recoveryKind: 'withdrawn-budget-stop',
-        compilerCommand: webCompiler,
-      });
+      store.beginWithdrawnTypingRecoverySettlement(
+        ref,
+        attempt.result,
+        webCompiler,
+        {
+          actor: authority,
+          previousResult: attempt.result,
+          recoveryKind: 'withdrawn-budget-stop',
+          compilerCommand: webCompiler,
+        },
+        withdrawnOriginReport,
+      );
       await settle(
         tasks,
         { attempt, exited: Promise.resolve({ code: attempt.exitCode ?? 0, signal: null }) },
         landing,
         afterSettle,
-        { withdrawnBudgetRecovery: { previousResult: attempt.result, command: webCompiler } },
+        { withdrawnBudgetRecovery: { previousResult: withdrawnOriginReport ?? attempt.result, command: webCompiler } },
       );
       return {
         ...ref,
@@ -211,6 +423,7 @@ export async function recoverWorkerTyping(
             checkId: grant.checkId,
             recoveryKind: 'withdrawn-budget-stop',
           },
+          withdrawnOrigin,
         );
       } else {
         for (const grant of grants)

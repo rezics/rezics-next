@@ -40,7 +40,7 @@ export function ConfiguredAspect({ choice }: { choice: Pick<TypeChoice, 'present
 
 export function TypeChoiceMeaning({ choice }: { choice: TypeChoice }) {
   return (
-    <div className="space-y-2" data-draft-type-state={choice.state}>
+    <div className="grid min-w-0 gap-y-2 sm:row-span-5 sm:grid-rows-subgrid" data-draft-type-state={choice.state}>
       <p className="font-medium [overflow-wrap:anywhere]">{typeChoiceLabel(choice)}</p>
       <p className="text-sm text-muted-foreground">{choiceStateLabel(choice.state)}</p>
       <p className="text-sm leading-relaxed">
@@ -51,7 +51,7 @@ export function TypeChoiceMeaning({ choice }: { choice: TypeChoice }) {
             : m.collection_choice_retained_type_help()}
       </p>
       {choice.availability !== 'automatic' ? <ConfiguredAspect choice={choice} /> : null}
-      <p className="text-sm text-muted-foreground">{m.collection_choice_member_types_preserved()}</p>
+      <p className="text-sm text-muted-foreground sm:row-start-5">{m.collection_choice_member_types_preserved()}</p>
     </div>
   );
 }

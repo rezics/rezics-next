@@ -1,6 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  watch as watchFs,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import type { Database } from 'bun:sqlite';
@@ -106,7 +115,13 @@ export type PageDataRun = {
   seed?: PageDataSeedStatus;
   coverage?: { status: 'incomplete' };
 };
-export type PageDataSeedStatus = { status: 'publication-incomplete'; omissions: number };
+export type PageDataSeedPublicationStatus = { status: 'publication-incomplete'; omissions: number };
+export type PageDataSeedStatus = PageDataSeedPublicationStatus | { status: 'admission-deferred' };
+export type PageDataSeedExecution<T> = { status: 'completed'; value: T } | { status: 'admission-deferred' };
+export type PageDataSeedAdmission = {
+  isPaused: () => boolean;
+  watch: (onChange: () => void) => () => void;
+};
 export type PageDataRepair = {
   repairKey: string;
   section: PageDataSection;
@@ -263,6 +278,46 @@ export async function runPageDataSeedBoundary<T>(
   return seedOrResume();
 }
 
+/** Run only the cross-media seed command under the existing host-admission brake. */
+export async function runPageDataSeedWithAdmission<T>(
+  admission: PageDataSeedAdmission,
+  run: (signal: AbortSignal) => Promise<PageDataSeedExecution<T>>,
+): Promise<PageDataSeedExecution<T>> {
+  const controller = new AbortController();
+  const check = () => {
+    if (!controller.signal.aborted && admission.isPaused()) controller.abort();
+  };
+  const unwatch = admission.watch(check);
+  try {
+    check();
+    if (controller.signal.aborted) return { status: 'admission-deferred' };
+    return await run(controller.signal);
+  } finally {
+    unwatch();
+  }
+}
+
+/** Follow the pressure state already maintained by launch admission; no timer or new admission loop is added. */
+export function pageDataSeedAdmission(stateDirectory: string): PageDataSeedAdmission {
+  const pressureFile = join(stateDirectory, 'capacity-pressure.json');
+  return {
+    isPaused: () => {
+      try {
+        const value = JSON.parse(readFileSync(pressureFile, 'utf8')) as { paused?: unknown };
+        return value.paused === true;
+      } catch {
+        return false;
+      }
+    },
+    watch: (onChange) => {
+      const watcher = watchFs(stateDirectory, { persistent: false }, (_event, filename) => {
+        if (!filename || filename.toString() === 'capacity-pressure.json') onChange();
+      });
+      return () => watcher.close();
+    },
+  };
+}
+
 const seedArtifactHandoffPrefix = 'Cross-media seed artifact handoff ';
 const pageDataArtifactLimit = 64 * 1024 * 1024;
 
@@ -271,7 +326,7 @@ export function pageDataSeedStatus(
   exitCode: number,
   output: string,
   expectedArtifact: string,
-): PageDataSeedStatus | undefined {
+): PageDataSeedPublicationStatus | undefined {
   const markers = output.split(/\r?\n/u).filter((line) => line.startsWith(seedArtifactHandoffPrefix));
   if (markers.length > 1)
     throw new PageDataStackError('boot', 'page-data seed emitted multiple artifact handoffs', undefined, output);
@@ -1115,6 +1170,7 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     const tasks = options.tasks.tasks();
     const pendingRepairs: PageDataRepair[] = [];
     for (const section of sections.filter((candidate) => PAGE_DATA_DEFECTS.has(candidate.class))) {
+      if (seed?.status === 'admission-deferred' && section.class === 'SEED') continue;
       const target = pageDataRepairTarget(section);
       const candidates = target.producer ? tasks.filter((task) => task.brief.goal === target.goal) : tasks;
       const owner = latestSectionOwner(candidates, changes, target.files);
@@ -1389,6 +1445,7 @@ type ProcessResult = {
   stdout: string;
   stderr: string;
   output: string;
+  admissionDeferred?: true;
 };
 type ScopedPageDataResult = ProcessResult & { scopeLimitExceeded: boolean; scopeKilled: boolean };
 export type PageDataCapture = {
@@ -1556,22 +1613,35 @@ async function runCommand(
   phase: StackFailurePhase = 'boot',
   allowedExitCodes: readonly number[] = [0],
   killAfterMs = defaultPolicy.pageData.stopTimeoutMs,
+  admissionSignal?: AbortSignal,
 ): Promise<ProcessResult> {
+  if (admissionSignal?.aborted)
+    return { exitCode: -1, signal: 'SIGTERM', stdout: '', stderr: '', output: '', admissionDeferred: true };
   const child = spawn(command, args, { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
-  let timedOut = false;
+  let stopReason: 'timeout' | 'admission-pressure' | undefined;
+  let processClosed = false;
   child.stdout?.on('data', (chunk: Buffer) => (stdout = boundedAppend(stdout, chunk.toString(), outputLimit)));
   child.stderr?.on('data', (chunk: Buffer) => (stderr = boundedAppend(stderr, chunk.toString(), outputLimit)));
   const closed = new Promise<number | null>((resolve, reject) => {
     child.once('error', reject);
-    child.once('close', (code) => resolve(code));
+    child.once('close', (code) => {
+      processClosed = true;
+      resolve(code);
+    });
   });
   let killTimer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = setTimeout(() => {
-    timedOut = true;
+  const stop = (reason: 'timeout' | 'admission-pressure') => {
+    if (stopReason || processClosed || child.exitCode !== null || child.signalCode !== null) return;
+    stopReason = reason;
     signalGroup(child, 'SIGTERM');
     killTimer = setTimeout(() => signalGroup(child, 'SIGKILL'), killAfterMs);
+  };
+  const onAdmissionPressure = () => stop('admission-pressure');
+  if (admissionSignal) admissionSignal.addEventListener('abort', onAdmissionPressure, { once: true });
+  const timeout = setTimeout(() => {
+    stop('timeout');
   }, timeoutMs);
   let code: number | null;
   try {
@@ -1587,16 +1657,26 @@ async function runCommand(
   } finally {
     clearTimeout(timeout);
     if (killTimer) clearTimeout(killTimer);
+    admissionSignal?.removeEventListener('abort', onAdmissionPressure);
   }
   const output = commandOutput(stdout, stderr);
   const diagnostic = externalErrorLine(stderr || stdout);
-  if (timedOut)
+  if (stopReason === 'timeout')
     throw new PageDataStackError(
       phase,
       `${command} ${args.join(' ')} timed out after ${timeoutMs} ms: ${diagnostic}`,
       diagnostic,
       output,
     );
+  if (stopReason === 'admission-pressure' && code !== 0)
+    return {
+      exitCode: code ?? -1,
+      signal: child.signalCode,
+      stdout,
+      stderr,
+      output: stdout,
+      admissionDeferred: true,
+    };
   if (!allowedExitCodes.includes(code ?? -1))
     throw new PageDataStackError(
       phase,
@@ -2031,22 +2111,35 @@ async function runDedicatedPageDataStack(
           policy.stopTimeoutMs,
         );
         env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
-        const seedResult = await runCommand(
-          bun,
-          ['scripts/datasets/cross-media-seed.ts', '--dev'],
-          worktree,
-          env,
-          policy.seedTimeoutMs,
-          policy.outputBytes,
-          'boot',
-          [0, 1],
-          policy.stopTimeoutMs,
+        const execution = await runPageDataSeedWithAdmission(
+          pageDataSeedAdmission(settings.stateDirectory),
+          async (signal) => {
+            const seedResult = await runCommand(
+              bun,
+              ['scripts/datasets/cross-media-seed.ts', '--dev'],
+              worktree,
+              env,
+              policy.seedTimeoutMs,
+              policy.outputBytes,
+              'boot',
+              [0, 1],
+              policy.stopTimeoutMs,
+              signal,
+            );
+            if (seedResult.admissionDeferred) return { status: 'admission-deferred' };
+            const status = pageDataSeedStatus(
+              seedResult.exitCode,
+              commandOutput(seedResult.stdout, seedResult.stderr),
+              resolve(worktree, '.temp/cross-media-seed/result.json'),
+            );
+            return { status: 'completed', value: status };
+          },
         );
-        const status = pageDataSeedStatus(
-          seedResult.exitCode,
-          commandOutput(seedResult.stdout, seedResult.stderr),
-          resolve(worktree, '.temp/cross-media-seed/result.json'),
-        );
+        if (execution.status === 'admission-deferred') {
+          captureEvent(stackCapture, { kind: 'seed', status: execution.status });
+          return { status: execution.status };
+        }
+        const status = execution.value;
         if (status)
           captureEvent(stackCapture, {
             kind: 'seed',

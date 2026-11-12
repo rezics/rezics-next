@@ -18,6 +18,7 @@ import {
   type DocumentSnapshot,
   type JsonValue,
 } from '../src/index.ts';
+import { DOCUMENT_TABLE_MAP_CELL_BUDGET, tableMapFitsBudget } from '../src/table-map-budget.ts';
 
 const paragraph = (id: string, text: string): DocumentNode => ({
   type: 'paragraph',
@@ -209,6 +210,36 @@ test('invalid table spans are rejected and extension payload IDs are not documen
       ]),
     ),
   ).toBe(true);
+});
+
+test('table map preflight bounds expanded grids and retains ordinary merged cells', () => {
+  const cell = (id: string, colspan = 1, rowspan = 1): DocumentNode => ({
+    type: 'tableCell',
+    attrs: { id, colspan, rowspan },
+    content: [paragraph(`${id}-p`, id)],
+  });
+  const row = (id: string, cells: DocumentNode[]): DocumentNode => ({
+    type: 'tableRow',
+    attrs: { id },
+    content: cells,
+  });
+  const table = (rows: DocumentNode[]): DocumentNode => ({ type: 'table', attrs: { id: 'table' }, content: rows });
+
+  const merged = table([row('r1', [cell('a', 1, 2), cell('b')]), row('r2', [cell('c')])]);
+  expect(checkDocument(snapshot([merged]))).toBe(true);
+
+  const small = table([row('r1', [cell('a', 2)]), row('r2', [cell('b')])]);
+  expect(tableMapFitsBudget(small, 6)).toBe(true);
+  expect(tableMapFitsBudget(small, 5)).toBe(false);
+
+  const overflowingSum = table([row('r1', [cell('a', Number.MAX_SAFE_INTEGER), cell('b')])]);
+  expect(tableMapFitsBudget(overflowingSum, Number.MAX_SAFE_INTEGER)).toBe(false);
+  const halfSafeInteger = Math.floor(Number.MAX_SAFE_INTEGER / 2);
+  const overflowingProduct = table([row('r1', [cell('a', halfSafeInteger)]), row('r2', [cell('b', halfSafeInteger)])]);
+  expect(tableMapFitsBudget(overflowingProduct, Number.MAX_SAFE_INTEGER)).toBe(false);
+
+  const beyondProfileBudget = table([row('r1', [cell('wide', DOCUMENT_TABLE_MAP_CELL_BUDGET + 1)])]);
+  expect(checkDocument(snapshot([beyondProfileBudget]))).toBe(false);
 });
 
 test('normalization merges adjacent matching text and serialization is key-order independent', () => {

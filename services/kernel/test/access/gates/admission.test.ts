@@ -24,7 +24,7 @@ async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void
 }
 
 await import('reylo/register');
-const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
+const { configureTestReceiptKeys, testReceiptKeys, testReceiptKeysEnv } = await import('../../support/receipt-keys.ts');
 const { createAuthBindings } = await import('../../../src/access/auth-bindings.ts');
 const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-governance.ts');
 const { createRegistrationPorts } = await import('../../support/registration-ports.ts');
@@ -255,7 +255,7 @@ beforeAll(async () => {
 
   const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', staff.accountId], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env: { ...process.env, DATABASE_URL: databaseUrl, ...testReceiptKeysEnv(receiptKeys) },
     stdout: 'pipe',
     stderr: 'pipe',
   });

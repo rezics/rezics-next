@@ -157,6 +157,15 @@ Semantic owns the native producer and current original/terminal/source/related-i
 fences. Neither index nor fact cache supplies authority. Commerce owns FULL integration and final currentness.
 Existing raw-key/source budgets remain intact; enrichment is explicitly charged, never free hydration.
 
+## Presentation draft review
+
+Decision: saved and draft presentation readings use flat sections with shared comparison rows, a column rule at
+wide widths and a horizontal separator when stacked; each correction control sits beside its comparison heading.
+Long localized labels wrap without truncation, real covers retain their proportions, and saved precedes draft in
+DOM and reading order. Opening the review focuses its heading; correction returns to the matching editor control,
+and Close or Escape restores the opener. Returning to Save moves focus to the existing native Save control without
+submitting or capturing a command.
+
 ## Existing-media Collection cover reference
 
 Create/PATCH select optional `coverMediaId: string | null`; null clears the configured cover, absence preserves

@@ -45,6 +45,9 @@
 .studio-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'document'
+    'sidebar';
   gap: var(--studio-gap);
 }
 .studio-sidebar,
@@ -54,16 +57,21 @@
   min-inline-size: 0;
 }
 .studio-sidebar {
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  padding: 1rem;
+  grid-area: sidebar;
+  border-block-start: 1px solid var(--border);
+  padding-block-start: 0.75rem;
   align-self: start;
+}
+.studio-document {
+  grid-area: document;
 }
 .studio-mobile-navigation > summary {
   font-weight: 600;
+  font-size: 0.9rem;
+  padding-block: 0.5rem;
 }
 .studio-mobile-navigation > .studio-stack {
-  margin-block-start: 1rem;
+  margin-block-start: 0.75rem;
 }
 .studio-stack {
   display: flex;
@@ -313,6 +321,10 @@
   display: grid;
   gap: 0.15rem;
 }
+.studio-draft-list li + li {
+  border-block-start: 1px solid var(--border);
+  padding-block-start: 0.5rem;
+}
 .studio-draft-list button {
   justify-content: start;
   text-align: start;
@@ -385,7 +397,14 @@
 }
 @media (min-width: 64rem) {
   .studio-layout {
-    grid-template-columns: minmax(16rem, 21rem) minmax(0, 1fr);
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+    grid-template-areas: 'sidebar document';
+  }
+  .studio-sidebar {
+    border-block-start: 0;
+    border-inline-end: 1px solid var(--border);
+    padding-block-start: 0;
+    padding-inline-end: 1.25rem;
   }
   .studio-mobile-navigation > summary {
     display: none;
@@ -405,9 +424,6 @@
 @media (max-width: 30rem) {
   .studio-document-toolbar {
     position: static;
-  }
-  .studio-sidebar {
-    padding: 0.75rem;
   }
   .studio-action-row {
     gap: 0.35rem;

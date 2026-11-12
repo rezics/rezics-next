@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../src/content-editions/edition-model';
 import { StudioController } from '../src/studio/controller';
+import { StudioWorkspace } from '../src/studio/workspace';
 import type {
   ArticleReviewSnapshot,
   NativeDraftCreate,
@@ -241,4 +244,15 @@ test('uncertain article publication retries its frozen exact revision and reads 
   } finally {
     disconnect();
   }
+});
+
+test('Studio leads with the document and starts its draft navigation as a compact disclosure', () => {
+  const fixture = port();
+  const markup = renderToStaticMarkup(createElement(StudioWorkspace, { input: input(), port: fixture.value }));
+  const documentPosition = markup.indexOf('class="studio-document"');
+  const navigationPosition = markup.indexOf('class="studio-sidebar"');
+
+  expect(documentPosition).toBeGreaterThanOrEqual(0);
+  expect(navigationPosition).toBeGreaterThan(documentPosition);
+  expect(markup).toContain('<details class="studio-mobile-navigation">');
 });

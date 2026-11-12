@@ -150,11 +150,70 @@ test('entry resolves exactly three released Types, preserves partial metadata an
   expect(host.querySelector('a[href="/ja/books"]')?.textContent).toBe(m.books_catalogue_retry({}, { locale: 'ja' }));
   expect(host.querySelector('form')?.getAttribute('action')).toBe('/ja/search');
   expect(host.querySelector('input[name="type"]')?.getAttribute('value')).toBe('schema:Book');
+  expect(host.querySelector('[data-book-type="schema:Book"] a')?.getAttribute('href')).toBe(
+    bookDiscoveryHref('ja', 'schema:Book'),
+  );
+  expect(host.querySelector('[data-slot="book-catalogue-personal"] a[href*="type=schema"]')).not.toBeNull();
   await render(
     <BookCataloguePage locale="ja" choices={readyChoices.map((choice) => ({ ...choice, state: 'missing' }))} />,
   );
   expect(host.querySelector('form')).toBeNull();
   expect(host.querySelector('a[href="/ja/library/continue"]')).not.toBeNull();
+  expect(host.querySelector('[data-slot="book-catalogue-personal"] a[href*="type="]')).toBeNull();
+});
+
+test('search precedes the type list, rows keep one browse action, and personal destinations follow', async () => {
+  const long = `${'港'.repeat(24)} 超長標題`;
+  await render(
+    <BookCataloguePage
+      locale="ja"
+      choices={[
+        {
+          type: 'schema:Book',
+          state: 'ready',
+          label: long,
+          language: 'ja',
+          description: `${long} 解説`,
+          descriptionLanguage: 'ja',
+        },
+        { type: 'schema:BookSeries', state: 'missing' },
+        { type: 'bf:Instance', state: 'unavailable' },
+      ]}
+    />,
+  );
+  const root = host.querySelector('[data-slot="book-catalogue"]')!;
+  const search = root.querySelector('[data-slot="book-catalogue-search"]')!;
+  const types = root.querySelector('[data-slot="book-catalogue-types"]')!;
+  const personal = root.querySelector('[data-slot="book-catalogue-personal"]')!;
+  expect(search.compareDocumentPosition(types) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+  expect(types.compareDocumentPosition(personal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+  expect(search.className).toContain('flex-wrap');
+  expect(types.className).toContain('divide-y');
+  expect(search.querySelector('input[name="type"]')?.getAttribute('value')).toBe('schema:Book');
+  const book = types.querySelector('[data-book-type="schema:Book"]')!;
+  expect(book.querySelector('h2')?.textContent).toBe(long);
+  expect(book.querySelector('p')?.textContent).toBe(`${long} 解説`);
+  expect([...book.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual([
+    bookDiscoveryHref('ja', 'schema:Book'),
+  ]);
+  expect(types.querySelector('[data-book-type="schema:BookSeries"]')?.textContent).toContain(
+    m.books_catalogue_missing({}, { locale: 'ja' }),
+  );
+  expect(types.querySelector('[data-book-type="bf:Instance"]')?.textContent).toContain(
+    m.books_catalogue_unavailable({}, { locale: 'ja' }),
+  );
+  expect(types.querySelector('[data-book-type="schema:BookSeries"] a')).toBeNull();
+  expect(types.querySelector('[data-book-type="bf:Instance"] a')).toBeNull();
+  expect([...personal.querySelectorAll<HTMLAnchorElement>('a')].map((link) => link.getAttribute('href'))).toEqual([
+    shelfHref('ja', { type: 'schema:Book' }),
+    '/ja/library/continue',
+  ]);
+  const focusable = [...root.querySelectorAll<HTMLElement>('a, button, input')].filter(
+    (node) => node.getAttribute('aria-hidden') !== 'true',
+  );
+  expect(focusable[0]).toBe(search.querySelector('input[name="q"]'));
+  expect(focusable.at(-2)?.getAttribute('href')).toBe(shelfHref('ja', { type: 'schema:Book' }));
+  expect(focusable.at(-1)?.getAttribute('href')).toBe('/ja/library/continue');
 });
 
 test.each(locales)(
@@ -168,15 +227,19 @@ test.each(locales)(
       label: m.books_catalogue_title({}, { locale }),
     });
     await render(<BookCataloguePage locale={locale} choices={readyChoices} />);
+    const personal = [...host.querySelectorAll<HTMLAnchorElement>('[data-slot="book-catalogue-personal"] a')];
+    expect(personal.map((link) => link.getAttribute('href'))).toEqual([
+      ...bookCatalogueTypes.map((type) => shelfHref(locale, { type })),
+      `/${locale}/library/continue`,
+    ]);
     for (const type of bookCatalogueTypes) {
-      const card = host.querySelector(`[data-book-type="${type}"]`)!;
-      const links = [...card.querySelectorAll<HTMLAnchorElement>('a')];
-      expect(links.map((link) => link.getAttribute('href'))).toEqual([
-        bookDiscoveryHref(locale, type),
-        shelfHref(locale, { type }),
-      ]);
-      expect(links.every((link) => link.target === '_blank' && link.rel.includes('noopener'))).toBe(true);
-      const destination = new URL(links[1]!.href);
+      const row = host.querySelector(`[data-book-type="${type}"]`)!;
+      const browse = [...row.querySelectorAll<HTMLAnchorElement>('a')];
+      expect(browse.map((link) => link.getAttribute('href'))).toEqual([bookDiscoveryHref(locale, type)]);
+      expect(browse[0]!.target === '_blank' && browse[0]!.rel.includes('noopener')).toBe(true);
+      const shelf = personal.find((link) => link.getAttribute('href') === shelfHref(locale, { type }))!;
+      expect(shelf.target === '_blank' && shelf.rel.includes('noopener')).toBe(true);
+      const destination = new URL(shelf.href);
       expect([...destination.searchParams]).toEqual([['type', type]]);
       const search = validateShelfSearch(Object.fromEntries(destination.searchParams));
       expect(

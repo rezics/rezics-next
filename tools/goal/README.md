@@ -1617,6 +1617,7 @@ condition and the brief, plus the policy hash and layer measurements; manager se
 measurements. `attempts --json` exports worker manifests.
 Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 Decision: Worker prompts render architecture-map rows for the modules that own the brief's paths and those modules' allowed dependencies, with a one-line pointer to `docs/architecture/modules.json`; a Kernel-only brief carries no web rows. The map is computed from `scripts/architecture-map.ts` without loading oxc-parser.
+Decision: Refresh only the `interface-stories.txt` prompt golden when its generated `wapp` row omits the current `w/knowledge/route.tsx` entry; prompt behavior, budgets and other goldens stay unchanged.
 
 ### Research
 
@@ -1812,12 +1813,12 @@ and teardown reason. Observed config output proves only that stage was reached; 
 A later teardown error stays in the transcript without replacing the pre-teardown cause. Content owns Web stage
 instrumentation and startup repair; page-data owns child/readiness capture. Logs and notices redact recognized credentials.
 
-Decision: a page-data seed with the seed owner's versioned publication-incomplete handoff runs route checks on the
-same stack and records its incomplete status and omission count in the page-data run. Only the exact current result
-path, matching artifact SHA-256 and exit code 1 are admitted; the seed command remains strict. A partial run does not
-create the seeded marker, so the next cycle retries. Partial reuse stays unavailable until existing stack owners
-expose the actual dedicated PostgreSQL generation and a cheap exact identity for every locally selected seed input;
-URL-derived database identity, mtimes and artifact path or digest alone cannot authorize reuse.
+Decision: admit the seed owner's versioned publication-incomplete handoff only for its exact current result path,
+matching SHA-256 and exit 1; keep the command strict, continue route checks on the same stack and record omissions.
+When the existing capacity brake pauses, terminate only the owned cross-media seed group with SIGTERM and its
+existing grace period, record `admission-deferred`, preserve the stack and journal, continue page checks, and retry at
+next two-hour due cycle. Defer SEED repair routing for that run. Partial reuse still requires exact dedicated
+database generation and selected-input identity; URL, mtime and artifact digest alone are insufficient.
 
 Decision: isolate each page-data prerequisite at its owning boundary. A member browser setup failure leaves anonymous
 readers, SQL counts and independently token-authorized member native reads running on the same owned browser/stack.
@@ -2846,6 +2847,10 @@ Decision: at the existing stopped-task expiry, the sweep reconciles compiler-onl
 
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 
+Decision: when local `integration.operationsManager` is absent, typing-recovery event checks admit the owning task manager only; the nonempty actor session and retained source checks remain required.
+
+Decision: terminal receipt matching narrows the external exit code to a number before checking it is an integer, and retained-origin reconstruction passes only defined end-head progress to its source validator.
+
 ```sh
 bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>
 ```
@@ -2879,8 +2884,8 @@ qualifies only when every current source input and prepared dependency identity 
 unconsumed documents and operational files the configured owner already excludes. Reuse an earlier Kernel pass across
 later stamps only after every same-attempt check has terminal physical custody. A cancellation tombstone must bind the
 exact result bytes and referenced Root authorization bytes/row, and its physical history must prove terminality;
-unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer real compiler failure
-remains authoritative. Web recovery is unchanged.
+unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer compiler failure
+for matching current inputs remains authoritative. Withdrawn Web recovery uses the same exact-input failure rule.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
@@ -2889,11 +2894,20 @@ replacement grant only when the original recovery check has proven terminal befo
 grant tombstones and physical custody. Keep the withdrawn retry and stop tombstones intact; only a terminal Web
 receipt for the current inputs may land that same attempt.
 
+Decision: withdrawn Web recovery settles compiler failures only for matched retained inputs; the specific overwritten
+refusal may regain eligibility only from its original trusted report, exact stale failure selection and event, clean
+final commit, and intact stop, abandoned retry and terminal custody. When the omitted selected check is legacy-owned,
+bind it by physical run ID with the existing legacy terminal predicate; listed checks must also agree with their
+terminal result. Keep ordinary and Kernel matching unchanged. The first native compiler grant retains that validated
+origin, and admission rechecks it against the trusted exit report, selected physical check and final source. After a
+current Web compiler pass, native settlement restores the trusted refusal while retaining the prior failure event.
+
 For this stopped Web-source case, use the same `typing-recover <task> --expected-attempt <n>` command. It returns only
 `bun run --cwd apps/web typecheck` through the authorized wrapper when a matching successful receipt is absent. Run the
 returned wrapper once and repeat `typing-recover` after its physical result is terminal. An exact current-source Web
 receipt lands without another run. Unknown process or check custody, source drift, explicit cancellation, a live check,
-or a compiler diagnostic keeps the attempt fenced; recovery never restores the withdrawn source retry.
+or a compiler diagnostic for matching current inputs keeps the attempt fenced; recovery never restores the withdrawn
+source retry.
 
 After this recovery path is live, settle a retained numeric task with
 `bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <attempt>`, run only the returned exact wrapper

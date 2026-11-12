@@ -8,10 +8,11 @@ unconditional discovery below supersede the older dynamic document's two-kind en
 [Collection source](collection-source.md) and [filtered lists](filtered-lists.md) retain their authorities.
 This is specification and native acceptance delivery, not an implemented or exposed Liked reader.
 
-Implementation decision: registered native capture receives the exact caller Collection Source instance and its
-`logical` request. A logical read succeeds only from a current private-working observation through that instance;
-missing binding evidence remains unavailable. Never synthesize Collection metadata or a private-working observation,
-and keep GET materialization-free.
+Decision: registered native capture carries the exact caller Collection Source and its `logical` request. Preparation
+resolves that key against current owner Access, owner-index/state support or Content's indexed Liked version. This is
+binding evidence, not Collection metadata or reader authority. The same Source must also provide current canonical
+identity and prefix evidence; until its canonical scope exists, headerless reads stay unavailable. Never synthesize
+metadata or a private-working observation from a descriptor, and keep GET materialization-free.
 
 ## Identity and common wire
 

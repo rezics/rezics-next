@@ -22,6 +22,8 @@ Decision: ordinary Kernel defaults and native preloads enter Community through `
 route construction. `createKernel` remains the low-level mount: catalogue and HTTP callers first install owner
 composition, which binds Content's existing Realm image schema before Community response factories run. Repeated
 default composition reuses the bound ambient; each Kernel mount still supplies its own deadline clock.
+Decision: isolated identity work children use `installNativeHistoryPreload()` before `composeWorkApplication()` so
+cold worker authorization keeps the same Content-owned schema binding.
 
 Decision: Realm board fixtures pass one dedicated `testReceiptKeys()` ring to both `createKernel` and the native
 worker's `WorkerConfig.receiptKeys`, keeping genuine receipt verification in force through membership publication
@@ -1164,6 +1166,10 @@ Cost: one active Realm lock, current membership/ban/authorization probes, one ge
 binding per publication/cancellation; constant rows/statements/output with logarithmic index blocks. The native
 64/512/4096 growth series in `test/access/growth-realm-membership-transition.test.ts` includes the shared workflow,
 Access consumers, source proofs, transaction controls and DBOS work.
+
+Decision: the measured Community growth fixture runs Accounts' existing reserve, recovery, publication and exact
+finalization ports with the returned current transition. Publication proofs bind the command executor's selected
+receipt storage key, so source acknowledgement reads the receipt under the same dedicated ring.
 
 ## Participation on the Space home
 

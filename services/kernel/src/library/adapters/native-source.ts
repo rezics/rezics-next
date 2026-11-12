@@ -6,6 +6,7 @@ import type { Access, Actor } from '../../request/access.ts';
 import type { SourceCaptureCapability } from '../contract/index.ts';
 import { createCollectionSource, createOrdinaryCollectionPageSource } from '../collection-source.ts';
 import type { LibraryActor } from '../contract/index.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 
 export function createNativeSourceCaptureAdapter(dependencies: {
   pool: Pool;
@@ -18,6 +19,10 @@ export function createNativeSourceCaptureAdapter(dependencies: {
     prepare(input) {
       const at = input.at;
       if (at === undefined) throw new TypeError('Collection Source prepare requires authoritative time');
+      if (input.logical && !input.source)
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'Logical built-ins require the caller’s registered Collection Source.',
+        });
       const source = input.source ?? ((input.ordinaryPage ?? dependencies.ordinaryPage) ? ordinary : full);
       return source.prepare({
         actor: input.actor as Actor,

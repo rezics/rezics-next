@@ -1061,6 +1061,7 @@ The board-read current-role projection stays with Accounts.
 Decision: paid genuine-order settlement uses the parent kernel's Content Access and Auth-database
 consent; the worker child's second Access cannot restore mechanical sale authority until that
 projection is repaired, and its webhook replays the committed payment.
+Decision: native Commerce outcome fixtures bind one Auth-owned current-consent reader to mounted Content and direct Commerce commands, preserving publisher actor/client, current scopes and exact edition/revision/hash through preparation and final revalidation.
 Decision: fresh native `POST /v1/offers` sends only `contentEditionId` and ordinary commercial terms;
 `targetSubjectId` is the historical-replay body and is rejected on the same object. Native genuine-order
 acceptance reads `expectedOfferRevision` from public `GET /v1/offers/:offerId`; seller create responses stay

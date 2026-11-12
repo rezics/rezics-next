@@ -953,7 +953,7 @@ async function verifyDueRound(options: DevVerifierOptions): Promise<void> {
   }
 }
 
-/** Run independent owned cycles together; intermediate dev heads never queue. */
+/** Run native checks independently; an admission-yielded page-data seed does not hold the native round. */
 export async function verifyDev(options: DevVerifierOptions): Promise<void> {
   const pageData = (async () => {
     await options.runPageData?.();

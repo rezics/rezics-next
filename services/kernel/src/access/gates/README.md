@@ -7,7 +7,9 @@ Decision: mounted route declarations keep the underscore-only group grammar, whi
 inputs keep the existing underscore-or-hyphen grammar; neither profile changes its admitted set.
 
 Decision: gate acceptance fixtures configure the dedicated receipt ring on every command pool and pass it to each
-composed Kernel before fixture commands; admission growth asserts the measured account-first erasure indexes, and
+composed Kernel before fixture commands. Discovery and admission bootstrap children use `testReceiptKeysEnv(receiptKeys)`
+after inherited environment values so the same fixture ring overrides ambient keys; existing journey assertions remain
+unchanged. Admission growth asserts the measured account-first erasure indexes, and
 discovery growth relies on `checkGrowth`'s per-scale settle and `ANALYZE` instead of repeating fixture scans.
 
 `@rezics/access` is the pure public policy surface for normalized declarations, the installed exposure catalogue and

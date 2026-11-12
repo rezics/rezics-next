@@ -110,9 +110,9 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   the next independent repair ready before the current one parks. While its check runs, admit that repair within
   existing limits. Return exact failures to their source owner. At review, track writing, ready repairs, admission
   waits and verification separately; distinguish missing implementation from unintegrated or unverified source.
-- At the hourly review, the supermanager acts on the largest evidenced loss and reports the effect or the next
-  measurement. If evidence is missing, collect the smallest useful observation. Use existing watchers; clear obsolete
-  work and assign independent repairs before adjusting worker width within allowance and host limits.
+- Use the hourly report to detect lost writing time and empty writable queues. The supermanager acts on the
+  largest evidenced loss and checks the next sample without a maintainer prompt. Managers turn defects and
+  [worker proposals](delivery.md#checkout-and-landing-discipline) into ready repairs before raising width.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.

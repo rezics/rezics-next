@@ -104,7 +104,7 @@ type Header = Ref & {
   revision: number;
   createdAt: string;
   sourceGeneration: string;
-  builtinKind: 'everything' | 'state' | null;
+  builtinKind: 'everything' | 'state' | 'liked' | null;
   releaseDigest: string | null;
   profileId: string | null;
   stateSetId: string | null;
@@ -126,6 +126,21 @@ export type NativeCollectionMetadata = Readonly<
     outputPublication: CollectionOutputPublication | null;
   }
 >;
+/** Current owner/source evidence selected by a logical ID. It is not Collection metadata or reader authority. */
+export type NativeLogicalBuiltinBinding = Readonly<{
+  route: number;
+  collectionId: string;
+  accountId: string;
+  key: BuiltinCollectionKey;
+  sourceVersion: string;
+  sourceFence: string | null;
+  ownerIndexReady: boolean;
+  stateSupported: boolean;
+  ready: boolean;
+  partition: number;
+  epoch: number;
+  position: bigint;
+}>;
 // Server-local provenance of structural working metadata, never a serialized permission bit.
 const workingMetadata = new WeakSet<NativeCollectionMetadata>();
 export type NativeCollectionWitness = Readonly<{
@@ -152,6 +167,9 @@ import headerQuery from './collection-source-native-header.sql';
 function headerSQL() {
   return memoizedValue(headerSQL, () => headerQuery.sql);
 }
+function logicalBindingSQL() {
+  return memoizedValue(logicalBindingSQL, () => logicalBindingQuery.sql);
+}
 import membersQuery from './collection-source-native-members.sql';
 import factsQuery from './collection-source-native-facts.sql';
 import stateSize from './owner-filter-entry-size.sql';
@@ -163,6 +181,8 @@ import type { CollectionOutputPublication } from './collection-source-output.ts'
 import outputHead from './collection-source-output-head.sql';
 import outputPage from './collection-source-output-page.sql';
 import outputProbe from './collection-source-output-probe.sql';
+import logicalBindingQuery from './collection-source-native-logical-binding.sql';
+import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identity.ts';
 
 export type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
 import type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
@@ -257,6 +277,7 @@ function costs() {
       // These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
       // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
       for (const sql of [headerSQL(), fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
+      register(logicalBindingSQL(), fixed(64, 8, 4096));
       // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
       register(scopeIdentitySQL, fixed(4, 1, 4608));
       register(nativeCollectionPartitionMetadataSQL, fixed(4, 1, 128));
@@ -634,6 +655,125 @@ export function readNativeCollectionMetadataWithWork(
   work: NativeCollectionWork,
 ) {
   return withLibraryIdentityWork(pool, work, () => metadataCall(pool, ref, options, work));
+}
+
+/** Resolve a logical key against current owner/access/source rows without manufacturing Collection metadata. */
+export function readNativeLogicalBuiltinBinding(
+  pool: Pool,
+  input: Options & { access: Access; actor: Actor; at: AuthoritativeTime; collectionId: string },
+) {
+  if (input.tx || input.commandTx) throw new ProblemError('semantic_not_ready');
+  authoritativeTimeValue(input.at);
+  return call(pool, input, async (work) => {
+    const actor = input.actor;
+    if (
+      actor.kind !== 'account' ||
+      !actor.scopes.includes('collection:read') ||
+      routeOf(actor.accountId) === null ||
+      routeOf(input.collectionId) !== routeOf(actor.accountId)
+    )
+      return { binding: null };
+
+    const access = accessRoot(input.access);
+    try {
+      await admitGroup({
+        pool,
+        access: () => access,
+        actor,
+        group: 'collections',
+        clientAction: 'collection:read',
+        deadline: input.deadline,
+        clock: () => new Date(authoritativeTimeValue(input.at)),
+      });
+    } catch (error) {
+      if (error instanceof PlatformClosedError) return { binding: null };
+      throw error;
+    }
+
+    const route = routeOf(actor.accountId)!;
+    const row = (
+      await readOnly(pool, input, work, (client) =>
+        client.query<{
+          accountRoute: number | null;
+          accountId: string | null;
+          accountKind: 'actor' | 'organization' | null;
+          accountState: string | null;
+          fenced: boolean | null;
+          minimumAuthnEpoch: string | null;
+          partitionState: string | null;
+          partitionEpoch: number | null;
+          partitionPosition: string | null;
+          sourceVersion: string | null;
+          ownerIndexPhase: string | null;
+          pendingOwnerPin: boolean;
+          referenceAccountId: string | null;
+          profileId: string | null;
+          stateSetId: string | null;
+          stateId: string | null;
+          stateSupported: boolean;
+          likedVersion: string;
+        }>(logicalBindingSQL(), [route, actor.accountId, input.collectionId, partitionOf(route)]),
+      )
+    ).rows[0];
+    if (
+      !row ||
+      row.accountRoute !== route ||
+      row.accountId !== actor.accountId ||
+      !row.accountKind ||
+      !row.accountState ||
+      row.fenced === null ||
+      row.minimumAuthnEpoch === null ||
+      !grantCapable(
+        {
+          route,
+          accountId: actor.accountId,
+          kind: row.accountKind,
+          state: row.accountState,
+          fenced: row.fenced,
+          minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch),
+        },
+        actor,
+      ) ||
+      row.partitionState === 'moved' ||
+      row.partitionEpoch === null ||
+      row.partitionPosition === null
+    )
+      return { binding: null };
+
+    let key: BuiltinCollectionKey | null = null;
+    if (input.collectionId === builtinCollectionId(actor.accountId, { kind: 'everything' }))
+      key = { kind: 'everything' };
+    else if (input.collectionId === builtinCollectionId(actor.accountId, { kind: 'liked' })) key = { kind: 'liked' };
+    else if (
+      row.referenceAccountId === actor.accountId &&
+      row.profileId !== null &&
+      row.stateSetId !== null &&
+      row.stateId !== null
+    )
+      key = { kind: 'state', profileId: row.profileId, stateSetId: row.stateSetId, stateId: row.stateId };
+    if (!key) return { binding: null };
+
+    const ownerIndexReady = row.ownerIndexPhase === 'ready' && !row.pendingOwnerPin;
+    const stateSupported = key.kind !== 'state' || row.stateSupported;
+    const sourceFence = row.sourceVersion;
+    const sourceVersion = key.kind === 'liked' ? row.likedVersion : (sourceFence ?? 'absent');
+    return {
+      binding: Object.freeze({
+        route,
+        collectionId: input.collectionId,
+        accountId: actor.accountId,
+        key,
+        sourceVersion,
+        sourceFence,
+        ownerIndexReady,
+        stateSupported,
+        ready: key.kind === 'liked' || (ownerIndexReady && stateSupported && sourceFence !== null),
+        partition: partitionOf(route),
+        epoch: row.partitionEpoch,
+        position: BigInt(row.partitionPosition),
+      } satisfies NativeLogicalBuiltinBinding),
+    };
+  });
 }
 
 /** Selected Source adapter: exact metadata statements and multiplicity, with no allowance or work ledger. */
