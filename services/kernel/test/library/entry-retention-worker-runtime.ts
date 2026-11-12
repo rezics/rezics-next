@@ -113,7 +113,7 @@ if (import.meta.main) {
   let runtimeError: unknown;
   let runtimeFailed = false;
   try {
-    client = await createWorkClient(databaseUrl);
+    client = await createWorkClient(databaseUrl, pool);
     const clock = () => new Date(Number(readFileSync(timePath, 'utf8')));
     // Test-only transport interception observes the actual native source/COMMIT, never replaces a command or SDK.
     // Holding after COMMIT leaves the DBOS page output uncheckpointed when this child is killed.
@@ -173,16 +173,69 @@ export async function growRetentionPopulation(
   subjectId: string,
   previous: number,
   scale: number,
+  report?: (progress: RetentionGrowthProgress) => void,
 ) {
-  for (let n = previous; n < scale; n++) {
-    const owner = await f.identity(
-      ['subject:read', 'library_entry:update', 'library_entry:delete'],
-      n % 2 === 0 ? partition : (partition + 1) % 4096,
+  const target = scale - previous;
+  const started = performance.now();
+  let completed = 0;
+  const connectionCounts = () => ({
+    max: f.pool.options.max,
+    total: f.pool.totalCount,
+    idle: f.pool.idleCount,
+    waiting: f.pool.waitingCount,
+  });
+  const progress = (phase: RetentionGrowthPhase, from: number, count: number) =>
+    report?.({
+      phase,
+      from,
+      count,
+      completed,
+      target,
+      elapsedMs: Math.round(performance.now() - started),
+      connections: connectionCounts(),
+    });
+
+  for (let n = previous; n < scale; n += 2) {
+    const indexes = n + 1 < scale ? [n, n + 1] : [n];
+    progress('identity', n, indexes.length);
+    const owners = await Promise.all(
+      indexes.map((index) =>
+        f.identity(
+          ['subject:read', 'library_entry:update', 'library_entry:delete'],
+          index % 2 === 0 ? partition : (partition + 1) % 4096,
+        ),
+      ),
     );
-    await archive(f, subjectId, owner.actor);
-    await f.commands.putEntry(owner.actor, subjectId, { state: 'planned' }, entryKey());
+
+    // Pairing adjacent partition owners keeps each authenticated actor fresh
+    // while allowing independent setup to use the fixture's bounded pool.
+    progress('archive', n, owners.length);
+    await Promise.all(owners.map((owner) => archive(f, subjectId, owner.actor)));
+
+    progress('replacement', n, owners.length);
+    await Promise.all(
+      owners.map((owner) => f.commands.putEntry(owner.actor, subjectId, { state: 'planned' }, entryKey())),
+    );
+    completed += owners.length;
   }
+  progress('complete', scale, 0);
 }
+
+export type RetentionGrowthPhase = 'identity' | 'archive' | 'replacement' | 'complete';
+export type RetentionGrowthProgress = {
+  readonly phase: RetentionGrowthPhase;
+  readonly from: number;
+  readonly count: number;
+  readonly completed: number;
+  readonly target: number;
+  readonly elapsedMs: number;
+  readonly connections: {
+    readonly max: number;
+    readonly total: number;
+    readonly idle: number;
+    readonly waiting: number;
+  };
+};
 
 export async function renewRetentionIdentities(f: NativeProfileFixture) {
   for (const identity of [f.owner, f.other, f.steward]) {

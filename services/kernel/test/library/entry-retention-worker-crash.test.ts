@@ -22,7 +22,7 @@ const children: Runtime[] = [];
 beforeAll(async () => {
   mkdirSync(directory, { recursive: true });
   f = await createProfileEntryFixture({ clock: () => new Date(time) });
-  client = await createWorkClient(process.env.DATABASE_URL!);
+  client = await createWorkClient(process.env.DATABASE_URL!, f.pool);
 }, 120000);
 afterAll(async () => {
   const failures: unknown[] = [];

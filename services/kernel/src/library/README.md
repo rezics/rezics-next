@@ -42,6 +42,10 @@ composition, forwarding and constructor-identity tests preserve existing behavio
 Decision: the profile entry fixture composes its native Library domain once when lazy Access is ready, preserving its
 Pool, route key and selected clock for entry, session and growth commands through startup.
 
+Decision: retention fixtures pass the same caller-owned Pool object to `createWorkClient` and `composeWork` in each
+process; growth keeps one fresh Auth actor per owner, pairs only adjacent-partition actors, and commits archive and
+replacement work before capture while reporting the current phase and bounded pool counts.
+
 Decision: Collection directory/list/order authorization consumes Library `AuthorizationCapability.specializeCollectionList` and Access's funded collection-update preparation bound. Access adapters own the catalogue residual, permission SQL and inverse membership limit (1000); Library directory SQL binds only the admitted curator/public parameter map. Collection mutation and Progress descriptors stay independent. Fewest tests: owner/public/unavailable list outcomes, preparation memberships, directory public-floor bytes, unchanged order/read assertions.
 
 Decision: Progress HTTP fixtures build Access through Kernel's post-catalogue factory, preserving mounted Subject resource declarations and native composition ports; Subject creation requires both bearer scope and an ordinary identity grant on Global Context.
