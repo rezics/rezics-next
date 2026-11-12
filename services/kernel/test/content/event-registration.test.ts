@@ -76,6 +76,13 @@ const fixtures = {
     previousRevisionId: revisionId,
     revisionId: mediaId,
   },
+  'com.rezics.content.knowledge.structure.changed.v1': {
+    notebookId: containerId,
+    structureRevisionId: revisionId,
+    revisionNumber: '1',
+    action: 'placement_added',
+    placementId: threadId,
+  },
   'com.rezics.content.thread.created.v1': { ...authored, ...threadIndex },
   'com.rezics.content.post.created.v1': { ...authored, ...threadIndex },
   'com.rezics.content.post.published.v1': { ...authored, ...threadIndex },

@@ -44,6 +44,10 @@ WHERE revision.route = notebook.route
   AND revision.revision_id = notebook.structure_revision_id;
 
 ALTER TABLE content.knowledge_structure_revision
+  ADD CONSTRAINT knowledge_structure_revision_change_kind_check
+    CHECK (change_kind IN ('legacy', 'baseline', 'notebook_created', 'placement_added', 'placement_moved', 'placement_reordered'));
+
+ALTER TABLE content.knowledge_structure_revision
   ADD CONSTRAINT knowledge_structure_revision_number_key UNIQUE (route, notebook_id, revision_number);
 
 ALTER TABLE content.knowledge_placement
@@ -318,6 +322,7 @@ ALTER TABLE content.knowledge_placement
     UNIQUE NULLS NOT DISTINCT (route, notebook_id, parent_id, position);
 ALTER TABLE content.knowledge_structure_revision
   DROP CONSTRAINT knowledge_structure_revision_number_key,
+  DROP CONSTRAINT knowledge_structure_revision_change_kind_check,
   DROP COLUMN revision_number,
   DROP COLUMN history_complete,
   DROP COLUMN change_kind;

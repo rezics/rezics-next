@@ -8,18 +8,21 @@ import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import { ContentNotFoundError } from './reads.ts';
 import { snapshot } from './reads.ts';
-import type { AnchoredPosition, ReadContext } from './model.ts';
+import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import {
   KNOWLEDGE_ANCESTOR_LIMIT,
   KNOWLEDGE_OUTLINE_SCAN_LIMIT,
   KNOWLEDGE_PAGE_LIMIT,
   KnowledgeInvalidCursorError,
+  KnowledgeInvalidInputError,
   KnowledgeNotFoundError,
   KnowledgeStaleCursorError,
   knowledgeSubjectTargets,
   type KnowledgeOutlinePageInput,
   type KnowledgePageInput,
   type KnowledgeStructureHistoryInput,
+  type KnowledgeStructureChangeAction,
+  type KnowledgeStructureChangeKind,
   type KnowledgeDependencies,
 } from './knowledge-model.ts';
 import {
@@ -585,7 +588,7 @@ export async function readKnowledgeStructureHistory(
       revision_id: string;
       revision_number: string;
       history_complete: boolean;
-      change_kind: string;
+      change_kind: KnowledgeStructureChangeKind;
       created_at: Date;
     }>(
       `SELECT revision_id,revision_number::text AS revision_number,history_complete,change_kind,created_at
@@ -602,7 +605,7 @@ export async function readKnowledgeStructureHistory(
             rows: [] as {
               revision_number: string;
               placement_id: string;
-              action: string;
+              action: KnowledgeStructureChangeAction;
               previous_parent_id: string | null;
               previous_position: string | null;
               parent_id: string | null;
@@ -612,7 +615,7 @@ export async function readKnowledgeStructureHistory(
         : await client.query<{
             revision_number: string;
             placement_id: string;
-            action: string;
+            action: KnowledgeStructureChangeAction;
             previous_parent_id: string | null;
             previous_position: string | null;
             parent_id: string | null;
@@ -671,6 +674,48 @@ export async function readKnowledgeStructureHistory(
   };
 }
 
+type PrivateRevisionHistoryRow = Readonly<{
+  document_id: string;
+  revision_id: string;
+  title: string;
+  language: string | null;
+  body_sha256: Buffer;
+  licence: string;
+  created_at: Date;
+  created_at_key: string;
+}>;
+type PrivateRevisionBodyRow = Readonly<{
+  document_id: string;
+  revision_id: string;
+  title: string;
+  language: string | null;
+  canonical_bytes: Buffer;
+  body_sha256: Buffer;
+  licence: string;
+  subject_ids: string[];
+}>;
+type PrivateRevisionSelection<Row> = Readonly<{ subjectId: string; revisions: Row[] }> | null;
+
+function exactPrivateRevisions(
+  deps: KnowledgeDependencies,
+  accountId: string,
+  notebookId: string,
+  documentId: string,
+  revisionIds: null,
+  after: Readonly<{ createdAt: string; revisionId: string }> | null,
+  limit: number,
+  context: ReadContext,
+): Promise<Anchored<PrivateRevisionSelection<PrivateRevisionHistoryRow>>>;
+function exactPrivateRevisions(
+  deps: KnowledgeDependencies,
+  accountId: string,
+  notebookId: string,
+  documentId: string,
+  revisionIds: readonly string[],
+  after: null,
+  limit: number,
+  context: ReadContext,
+): Promise<Anchored<PrivateRevisionSelection<PrivateRevisionBodyRow>>>;
 async function exactPrivateRevisions(
   deps: KnowledgeDependencies,
   accountId: string,
@@ -680,7 +725,7 @@ async function exactPrivateRevisions(
   after: Readonly<{ createdAt: string; revisionId: string }> | null,
   limit: number,
   context: ReadContext,
-) {
+): Promise<Anchored<PrivateRevisionSelection<PrivateRevisionHistoryRow | PrivateRevisionBodyRow>>> {
   const sourceRoute = route(documentId);
   if (
     context.actor.kind !== 'account' ||
@@ -723,31 +768,13 @@ async function exactPrivateRevisions(
       return null;
 
     const revisions = revisionIds
-      ? await client.query<{
-          document_id: string;
-          revision_id: string;
-          title: string;
-          language: string | null;
-          canonical_bytes: Buffer;
-          body_sha256: Buffer;
-          licence: string;
-          subject_ids: string[];
-        }>(
+      ? await client.query<PrivateRevisionBodyRow>(
           `SELECT document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids
            FROM content.knowledge_revision
            WHERE route=$1 AND document_id=$2 AND revision_id=ANY($3::uuid[])`,
           [sourceRoute, documentId, revisionIds],
         )
-      : await client.query<{
-          document_id: string;
-          revision_id: string;
-          title: string;
-          language: string | null;
-          body_sha256: Buffer;
-          licence: string;
-          created_at: Date;
-          created_at_key: string;
-        }>(
+      : await client.query<PrivateRevisionHistoryRow>(
           `SELECT document_id,revision_id,title,language,body_sha256,licence,created_at,
                   to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_key
            FROM content.knowledge_revision

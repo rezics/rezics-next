@@ -10,6 +10,19 @@ export const KNOWLEDGE_ORDER_GAP = 1_000_000n;
 export const KNOWLEDGE_REBALANCE_SIDE_LIMIT = 64;
 export const KNOWLEDGE_REBALANCE_CHANGE_LIMIT = KNOWLEDGE_REBALANCE_SIDE_LIMIT * 2 + 1;
 
+export type KnowledgeStructureChangeKind =
+  | 'legacy'
+  | 'baseline'
+  | 'notebook_created'
+  | 'placement_added'
+  | 'placement_moved'
+  | 'placement_reordered';
+export type KnowledgeStructureChangeAction =
+  | 'placement_added'
+  | 'placement_moved'
+  | 'placement_reordered'
+  | 'order_rebalanced';
+
 export type KnowledgeDependencies = ContentCommandDependencies & ContentReadDependencies;
 export type KnowledgeCommandContext = Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>;
 export type KnowledgeReadContext = Readonly<{ actor: import('../request/access.ts').Actor; deadline: number }>;

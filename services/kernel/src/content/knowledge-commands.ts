@@ -33,6 +33,8 @@ import {
   type KnowledgeMovePlacementInput,
   type KnowledgePublicationInput,
   type KnowledgeReviseDocumentInput,
+  type KnowledgeStructureChangeAction,
+  type KnowledgeStructureChangeKind,
 } from './knowledge-model.ts';
 import { isCompleteStableAncestorPath, type StableAncestor } from './hosted-chapters-tree.ts';
 import {
@@ -65,7 +67,7 @@ type KnowledgePositionChange = Readonly<{
   oldPosition: bigint | null;
   parentId: string | null;
   position: bigint;
-  action: 'placement_added' | 'placement_moved' | 'placement_reordered' | 'order_rebalanced';
+  action: KnowledgeStructureChangeAction;
 }>;
 
 function accountId(actor: Actor): string {
@@ -218,7 +220,7 @@ async function saveKnowledgeStructureRevision(
   revisionNumber: bigint,
   transactionId: string,
   time: AuthoritativeTime,
-  changeKind: string,
+  changeKind: KnowledgeStructureChangeKind,
 ): Promise<void> {
   await tx.query(
     `INSERT INTO content.knowledge_structure_revision
@@ -342,7 +344,12 @@ async function rebalanceKnowledgeSiblings(
   const insertAt =
     beforePlacementId === null ? ordered.length : ordered.findIndex((row) => row.placement_id === beforePlacementId);
   if (insertAt < 0) throw new KnowledgeNotFoundError();
-  const desired = [...ordered.slice(0, insertAt), { ...moving, moving: true as const }, ...ordered.slice(insertAt)];
+  type RebalanceSibling = (typeof ordered)[number] | (typeof moving & Readonly<{ moving: true }>);
+  const desired: RebalanceSibling[] = [
+    ...ordered.slice(0, insertAt),
+    { ...moving, moving: true },
+    ...ordered.slice(insertAt),
+  ];
   const step = (upper - lower) / BigInt(desired.length + 1);
   if (step < 1n) throw new KnowledgeInvalidInputError();
   return desired.flatMap((row, index) => {
@@ -799,7 +806,7 @@ export async function moveKnowledgePlacement(
         nextRevisionNumber,
         transactionId,
         time,
-        moved.action,
+        sameParent ? 'placement_reordered' : 'placement_moved',
       );
 
       const roots = new Map<string, { parentId: string | null; rootPageId: string | null }>();

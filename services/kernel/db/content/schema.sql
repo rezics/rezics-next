@@ -1667,6 +1667,7 @@ CREATE TABLE content.knowledge_structure_revision (
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT knowledge_structure_revision_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
     CONSTRAINT knowledge_structure_revision_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT knowledge_structure_revision_change_kind_check CHECK ((change_kind = ANY (ARRAY['legacy'::text, 'baseline'::text, 'notebook_created'::text, 'placement_added'::text, 'placement_moved'::text, 'placement_reordered'::text]))),
     CONSTRAINT knowledge_structure_revision_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT knowledge_structure_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT knowledge_structure_revision_revision_number_check CHECK ((revision_number > 0))

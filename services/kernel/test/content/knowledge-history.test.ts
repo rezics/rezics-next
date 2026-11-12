@@ -61,7 +61,7 @@ test('owners move and reorder stable placements, reload exact structure and body
 
   const movePath = `/v1/knowledge/notebooks/${notebook.notebookId}/placements/${second.placementId}:move`;
   const moveBody = {
-    expectedStructureRevisionId,
+    expectedStructureRevisionId: structureRevisionId,
     destinationParentPlacementId: section.placementId,
     beforePlacementId: note.placementId,
   };
