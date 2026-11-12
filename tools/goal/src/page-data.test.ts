@@ -639,6 +639,8 @@ test('an owned page-data scope preserves emitted sections when MemoryMax is exha
     ]);
     expect(scopeArgs.slice(8, 10)).toEqual(['/bin/sh', '-c']);
     expect(scopeArgs[10]).toContain('/sys/fs/cgroup$cgroup/memory.events');
+    expect(scopeArgs[10]).toContain('REZICS_PAGE_DATA_SCOPE_CGROUP=$cgroup');
+    expect(scopeArgs[10]!.indexOf('export REZICS_PAGE_DATA_SCOPE_CGROUP')).toBeLessThan(scopeArgs[10]!.indexOf('"$@"'));
     expect(scopeArgs[10]).toContain('REZICS_PAGE_DATA_SCOPE_OOM_KILLS=');
     expect(scopeArgs.slice(11)).toEqual(['page-data-check-scope', 'bun', 'scripts/page-data-check.ts']);
 

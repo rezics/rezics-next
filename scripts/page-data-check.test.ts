@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.js';
 import {
+  browserScopeAdmissionFailure,
   classifySection,
   formatLine,
   hasItems,
@@ -11,8 +12,10 @@ import {
   nativeProblemEvidence,
   pageKind,
   parseArgs,
+  parseChromiumProcessInfo,
   parseManifest,
   pointer,
+  pageDataBrowserLaunchOptions,
   publicOrigin,
   redact,
   resolveSeedIdentity,
@@ -23,6 +26,7 @@ import {
   type NativeObservation,
   type PageObservation,
   type SectionResult,
+  unifiedCgroupPath,
 } from './page-data-check.ts';
 
 const native = (status: number, body: unknown, authorized = false): NativeObservation => ({
@@ -79,6 +83,82 @@ const browserPage = (options: {
     close: async () => options.close?.(),
   };
 };
+
+test('the page-data browser uses its owned scope and process-local portal isolation', () => {
+  const options = pageDataBrowserLaunchOptions({ DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus' });
+  expect(options).toMatchObject({
+    headless: true,
+    args: ['--disable-dev-shm-usage'],
+    env: { DBUS_SESSION_BUS_ADDRESS: 'unix:path=/dev/null' },
+  });
+  const expected = '/user.slice/user-1000.slice/rezics-page-data-check.scope';
+  expect(unifiedCgroupPath(`0::${expected}\n`)).toBe(expected);
+  const processes = parseChromiumProcessInfo({
+    processInfo: [
+      { type: 'renderer', id: 42 },
+      { type: 'browser', id: 43 },
+    ],
+  });
+  expect(
+    browserScopeAdmissionFailure(expected, processes, (pid) =>
+      pid === 43 ? '/user.slice/app.slice/chromium.scope' : expected,
+    ),
+  ).toContain('Chromium browser PID 43');
+  expect(browserScopeAdmissionFailure(expected, processes, () => expected)).toBeUndefined();
+  expect(parseChromiumProcessInfo({ processInfo: [{ type: 'browser', id: '43' }] })).toBeUndefined();
+});
+
+test('a browser outside its page-data scope leaves native and SQL evidence incomplete without navigation', async () => {
+  let navigations = 0;
+  let pageCloses = 0;
+  let contextCloses = 0;
+  let browserCloses = 0;
+  const output: string[] = [];
+  const browser = {
+    newContext: async () => ({
+      newPage: async () =>
+        browserPage({ navigate: () => void (navigations += 1), close: () => void (pageCloses += 1) }),
+      close: async () => void (contextCloses += 1),
+    }),
+    close: async () => void (browserCloses += 1),
+  } as unknown as Browser;
+  const result = await runPageDataCheck({
+    baseUrl: 'http://web.test',
+    kernel: 'http://kernel.test',
+    browser,
+    browserScopeAdmission: async () => 'Chromium browser PID 43 cgroup=/user.slice/app.slice/chromium.scope',
+    manifest: {
+      version: 1,
+      context: '',
+      question: '',
+      pages: [
+        {
+          id: 'scope-check',
+          path: '/',
+          personas: ['anonymous'],
+          sections: [
+            {
+              id: 'reader',
+              name: 'Reader',
+              selector: 'main',
+              native: { method: 'GET', path: '/items', items: '/items' },
+              sql: { text: 'SELECT 1 AS n', params: [] },
+            },
+          ],
+        },
+      ],
+    },
+    fetch: (async () => Response.json({ items: ['native'] })) as typeof fetch,
+    queryCount: async () => 1,
+    stdout: { write: (line) => output.push(line) },
+    stderr: { write() {} },
+  });
+  expect(result.incomplete).toBe(true);
+  expect(result.results[0]?.evidence).toMatchObject({ nativeProbe: 'run', browserProbe: 'unrun', sqlProbe: 'run' });
+  expect([navigations, pageCloses, contextCloses, browserCloses]).toEqual([0, 1, 1, 1]);
+  expect(result.diagnostics.join('\n')).toContain('Browser scope admission failed');
+  expect(output.at(-1)).toContain('"incomplete":true');
+});
 
 test('a section that hides a successful native response is WEB', () => {
   expect(
