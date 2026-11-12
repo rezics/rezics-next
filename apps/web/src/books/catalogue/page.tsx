@@ -137,7 +137,7 @@ export function BookCataloguePage({ locale, choices }: { locale: string; choices
                 locale={locale}
                 type={choice.type}
                 label={choiceLabel(choice)}
-                language={choice.language}
+                language={choice.language ?? null}
               />
             </li>
           ))}
