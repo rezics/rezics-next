@@ -1130,6 +1130,8 @@ a deleted request or locator. The account-erasure participant remains the sole A
 
 ## Realm transition publication proof
 
+Decision: native Realm membership fixtures sign in with the registered email and password, then use the registered Auth callback with S256 PKCE, state, nonce, resource and materialized consent; they verify the session cookie before authorization.
+
 Every positive native membership publication requires the fresh Access transition returned by inverse reservation.
 Stable reservation and transition generation are separate. Under the Realm row lock the transaction writes
 membership (or confirms the same live reservation), its native receipt response and an immutable

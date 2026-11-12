@@ -414,24 +414,26 @@ async function createNativeContentSystemWithOptions(
         throw new Error(`Website Auth token request denied (${response.status}): ${await response.text()}`);
       return (await response.json()) as { access_token: string; refresh_token: string };
     };
-    const issueWebsite = async (input: { accountId: string; password: string; scopes: readonly string[] }) => {
+    const issueWebsite = async (input: { email: string; password: string; scopes: readonly string[] }) => {
       const requested = [...new Set(input.scopes)].sort();
       if (requested.some((scope) => !websiteScopes.includes(scope)))
         throw new TypeError('Website OAuth scopes must be registered protocol scopes or mounted kernel actions');
       const signed = await requestAuth(
         '/signin',
         {
-          account_id: input.accountId,
+          email: input.email,
           password: input.password,
           client_id: ordinaryClient.id,
-          scope: registeredOrdinaryScopes,
+          scope: registeredOrdinaryScopes.includes('media:read') ? ['media:read'] : registeredOrdinaryScopes,
         },
         '',
       );
+      if (!signed.ok) throw new Error(`Website Auth sign-in denied (${signed.status}): ${await signed.text()}`);
       const cookie = signed.headers
         .getSetCookie()
         .map((value) => value.split(';')[0])
         .join('; ');
+      if (!cookie.includes('session_token=')) throw new Error('Website Auth sign-in did not issue a session cookie');
       const verifier = randomBytes(48).toString('base64url');
       const state = randomBytes(24).toString('base64url');
       const authorize = new URL(`${issuer}/authorize`);
@@ -575,11 +577,12 @@ async function createNativeContentSystemWithOptions(
         const clientId = `${name}_client`;
         const deletionScopes = [...new Set([...registeredOrdinaryScopes, 'account:delete'])];
         const personPassword = 'ordinary native registration password';
+        const email = `${name}@content.test`;
         await nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes: deletionScopes });
         const { accountId } = await host!.workflows.register({
           key: name,
           handle: name,
-          email: `${name}@content.test`,
+          email,
           password: personPassword,
         });
         const signed = await requestAuth('/signin', {
@@ -594,7 +597,7 @@ async function createNativeContentSystemWithOptions(
           .join('; ');
         const token = await credential(await requestAuth('/token', {}, cookie));
         const website = await issueWebsite({
-          accountId,
+          email,
           password: personPassword,
           scopes: ['media:create', 'media:complete', 'media:read_reservation', 'media:erase', 'realm:participate'],
         });
