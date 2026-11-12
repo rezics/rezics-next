@@ -66,6 +66,8 @@ test('close drains admitted checks in order before releasing pools', async () =>
     events.push('first:start');
     startFirst();
     await firstBlock;
+    lifecycle.assertOpen();
+    events.push('first:capture');
     events.push('first:end');
   });
   await firstStarted;
@@ -78,21 +80,24 @@ test('close drains admitted checks in order before releasing pools', async () =>
     events.push('second:start');
     startSecond();
     await secondBlock;
+    lifecycle.assertOpen();
+    events.push('second:capture');
     events.push('second:end');
   });
   const closing = lifecycle.close();
 
   expect(events).toEqual(['first:start']);
   expect(() => lifecycle.runExclusiveCheck(async () => {})).toThrow('Growth database is closed');
+  expect(() => lifecycle.assertOpen()).toThrow('Growth database is closed');
   expect(poolClosed).toBe(false);
 
   releaseFirst();
   await secondStarted;
-  expect(events).toEqual(['first:start', 'first:end', 'second:start']);
+  expect(events).toEqual(['first:start', 'first:capture', 'first:end', 'second:start']);
   expect(poolClosed).toBe(false);
 
   releaseSecond();
   await Promise.all([first, second, closing]);
-  expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end']);
+  expect(events).toEqual(['first:start', 'first:capture', 'first:end', 'second:start', 'second:capture', 'second:end']);
   expect(poolClosed).toBe(true);
 });

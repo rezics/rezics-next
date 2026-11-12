@@ -52,8 +52,9 @@ export function createGrowthDatabaseLifecycle() {
   const resources = new Map<CloseablePool, string>();
   let closing: Promise<void> | undefined;
   let admittedChecks = Promise.resolve();
+  const admittedCheck = new AsyncLocalStorage<{ active: boolean }>();
   const assertOpen = () => {
-    if (closing) throw new Error('Growth database is closed');
+    if (closing && !admittedCheck.getStore()?.active) throw new Error('Growth database is closed');
   };
   const acquire = <T extends CloseablePool>(name: string, create: () => T): T => {
     assertOpen();
@@ -62,18 +63,21 @@ export function createGrowthDatabaseLifecycle() {
     return resource;
   };
   const runExclusiveCheck = <T>(operation: () => Promise<T>): Promise<T> => {
-    assertOpen();
+    if (closing) throw new Error('Growth database is closed');
     const previous = admittedChecks;
     let release!: () => void;
     admittedChecks = new Promise<void>((resolve) => (release = resolve));
-    return (async () => {
+    const admission = { active: false };
+    return admittedCheck.run(admission, async () => {
       await previous;
+      admission.active = true;
       try {
         return await operation();
       } finally {
+        admission.active = false;
         release();
       }
-    })();
+    });
   };
   const closeResources = async (): Promise<void> => {
     const results = await Promise.allSettled(
