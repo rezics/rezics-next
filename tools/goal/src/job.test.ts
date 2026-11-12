@@ -157,6 +157,9 @@ function stoppedTypingRetryFixture(
       }),
     );
   }
+  h.store.updateTask(ref, (current) => {
+    current.state = 'stopped';
+  });
   h.store.updateAttempt(ref, (current) => {
     current.state = 'stopped';
     current.endedAt = endedAt;
@@ -173,9 +176,6 @@ function stoppedTypingRetryFixture(
       auxiliaryProcesses: [],
       settledAt: stopSettledAt,
     };
-  });
-  h.store.updateTask(ref, (current) => {
-    current.state = 'stopped';
   });
   h.store.recordExplicitRetry(ref, (current) => {
     current.state = 'ready';
