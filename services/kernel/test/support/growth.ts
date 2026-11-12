@@ -23,6 +23,7 @@ import {
   trackGrow,
   withGrowthCheck,
   type GrowthDatabase,
+  type MaintenanceTarget,
 } from './growth-capture.ts';
 import {
   addGrowthFailureCause,
