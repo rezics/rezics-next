@@ -624,5 +624,5 @@ export function searchRoutes<App>(
       },
     );
   actionCatalogueApp = routed as Parameters<typeof actionCatalogue>[0];
-  return routed as typeof routed & App;
+  return routed as typeof routed & typeof mounted & App;
 }

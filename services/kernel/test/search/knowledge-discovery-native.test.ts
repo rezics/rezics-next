@@ -64,6 +64,8 @@ test('mounted Subject discovery keeps the Search gate, resolves only current exa
   await operator('/v1/platform/exposure/search:open');
   const listed = await f.call('GET', path, undefined, { anonymous: true });
   expect(listed.status, JSON.stringify(listed.value)).toBe(200);
+  const response = await f.system.kernel.handle(new Request(`https://content.test${path}`));
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
   expect(listed.value.documents).toHaveLength(1);
   expect(listed.value.documents[0]).toMatchObject({ subjectId: subject.id, documentId: selected.documentId,
     revisionId: selected.revisionId, publicationId: publication.publicationId, title: 'Published title' });
@@ -86,6 +88,11 @@ test('mounted Subject discovery keeps the Search gate, resolves only current exa
   await effect.run(oldEvent); // a delayed old add cannot resurrect that row
   await effect.run(await selectionEvent(selected.documentId));
   expect(await store.cut(subject.id)).toBe('2');
+  const firstKey = (await store.page(subject.id, null, 1))[0]!;
+  const secondKey = (await store.page(subject.id, firstKey, 1))[0]!;
+  expect(new Set([firstKey.publicationId, secondKey.publicationId])).toEqual(
+    new Set([publication.publicationId, replacement.publicationId]));
+  expect(await store.page(subject.id, secondKey, 1)).toEqual([]);
   const replaced = await f.call('GET', path, undefined, { anonymous: true });
   expect(replaced.status).toBe(200);
   expect(replaced.value.documents).toHaveLength(1);
