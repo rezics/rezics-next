@@ -32,7 +32,7 @@ function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRisk
   const [controller] = useState(() => new StudioController(input, port, bookPort));
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [tab, setTab] = useState<'write' | 'preview' | 'versions'>('write');
-  const [navigation, setNavigation] = useState(true);
+  const [navigation, setNavigation] = useState(false);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
   const editorHeading = useRef<HTMLHeadingElement>(null);
@@ -49,6 +49,13 @@ function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRisk
   const blocked = Boolean(state.busy) || unresolved;
 
   useEffect(() => controller.connect(), [controller]);
+  useEffect(() => {
+    const wideLayout = window.matchMedia('(min-width: 64rem)');
+    const syncNavigation = () => setNavigation(wideLayout.matches);
+    syncNavigation();
+    wideLayout.addEventListener('change', syncNavigation);
+    return () => wideLayout.removeEventListener('change', syncNavigation);
+  }, []);
   useEffect(() => {
     onDepartureRiskChange?.(atRisk);
     return () => onDepartureRiskChange?.(false);
@@ -95,13 +102,17 @@ function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRisk
     previousPost.current = postId;
   }, [postId]);
 
+  function keepWideNavigationOpen() {
+    if (window.matchMedia('(min-width: 64rem)').matches) setNavigation(true);
+    else setNavigation(false);
+  }
   function open(post: string) {
     if (post === postId) return;
     if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
       setPendingOpen(post);
       return;
     }
-    setNavigation(false);
+    keepWideNavigationOpen();
     setTab('write');
     void controller.open(post);
   }
@@ -113,7 +124,7 @@ function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRisk
     } else controller.discard();
     if (await controller.open(target)) {
       setPendingOpen(null);
-      setNavigation(false);
+      keepWideNavigationOpen();
       setTab('write');
     }
   }
@@ -184,79 +195,6 @@ function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRisk
         </section>
       ) : null}
       <div className="studio-layout">
-        <aside className="studio-sidebar" aria-label="Workspace navigation">
-          <details
-            open={navigation}
-            onToggle={(event) => setNavigation(event.currentTarget.open)}
-            className="studio-mobile-navigation"
-          >
-            <summary>Documents and {input.profile.kind === 'book' ? 'table of contents' : 'articles'}</summary>
-            <div className="studio-stack">
-              {state.structure ? <BookOrganizer controller={controller} state={state} onOpen={open} /> : null}
-              <section
-                aria-label={input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}
-                className="studio-stack"
-              >
-                <h2>{input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}</h2>
-                <p className="studio-help">
-                  {input.profile.kind === 'book'
-                    ? 'Documents can be placed as chapters after saving.'
-                    : 'Each article has its own saved revisions and publication.'}
-                </p>
-                <ol className="studio-draft-list">
-                  {state.documents.items.map((document) => (
-                    <li key={document.postId}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        aria-current={postId === document.postId ? 'page' : undefined}
-                        disabled={blocked || document.openable === false}
-                        onClick={() => open(document.postId)}
-                      >
-                        {document.title || 'Untitled draft'}
-                      </Button>
-                      <span className="studio-help">
-                        {document.openable === false
-                          ? m.studio_account_continue_drafts({}, { locale: getLocale() })
-                          : document.state === 'published'
-                            ? 'Published document'
-                            : document.state === 'protected'
-                              ? 'Protected document'
-                              : document.state === 'taken_down'
-                                ? 'Taken down'
-                                : 'Private draft'}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-                {!state.documents.items.length ? <p>No drafts on this page.</p> : null}
-                {state.documents.nextCursor ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={blocked}
-                    onClick={() => void controller.loadDocuments()}
-                  >
-                    {controller.failedPageCursor() === state.documents.nextCursor
-                      ? m.own_drafts_retry({}, { locale: getLocale() })
-                      : 'Next drafts'}
-                  </Button>
-                ) : null}
-                {input.nativeDrafts ? (
-                  <NativeDraftComposer
-                    controller={controller}
-                    disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
-                  />
-                ) : input.canCreateDraft ? (
-                  <NewDraft
-                    controller={controller}
-                    disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
-                  />
-                ) : null}
-              </section>
-            </div>
-          </details>
-        </aside>
         <div id={`${id}-document`} className="studio-document" tabIndex={-1}>
           {selected ? (
             <>
@@ -421,6 +359,79 @@ function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRisk
           )}
           <StudioPublication controller={controller} state={state} />
         </div>
+        <aside className="studio-sidebar" aria-label="Workspace navigation">
+          <details
+            open={navigation}
+            onToggle={(event) => setNavigation(event.currentTarget.open)}
+            className="studio-mobile-navigation"
+          >
+            <summary>Documents and {input.profile.kind === 'book' ? 'table of contents' : 'articles'}</summary>
+            <div className="studio-stack">
+              {state.structure ? <BookOrganizer controller={controller} state={state} onOpen={open} /> : null}
+              <section
+                aria-label={input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}
+                className="studio-stack"
+              >
+                <h2>{input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}</h2>
+                <p className="studio-help">
+                  {input.profile.kind === 'book'
+                    ? 'Documents can be placed as chapters after saving.'
+                    : 'Each article has its own saved revisions and publication.'}
+                </p>
+                <ol className="studio-draft-list">
+                  {state.documents.items.map((document) => (
+                    <li key={document.postId}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-current={postId === document.postId ? 'page' : undefined}
+                        disabled={blocked || document.openable === false}
+                        onClick={() => open(document.postId)}
+                      >
+                        {document.title || 'Untitled draft'}
+                      </Button>
+                      <span className="studio-help">
+                        {document.openable === false
+                          ? m.studio_account_continue_drafts({}, { locale: getLocale() })
+                          : document.state === 'published'
+                            ? 'Published document'
+                            : document.state === 'protected'
+                              ? 'Protected document'
+                              : document.state === 'taken_down'
+                                ? 'Taken down'
+                                : 'Private draft'}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                {!state.documents.items.length ? <p>No drafts on this page.</p> : null}
+                {state.documents.nextCursor ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={blocked}
+                    onClick={() => void controller.loadDocuments()}
+                  >
+                    {controller.failedPageCursor() === state.documents.nextCursor
+                      ? m.own_drafts_retry({}, { locale: getLocale() })
+                      : 'Next drafts'}
+                  </Button>
+                ) : null}
+                {input.nativeDrafts ? (
+                  <NativeDraftComposer
+                    controller={controller}
+                    disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
+                  />
+                ) : input.canCreateDraft ? (
+                  <NewDraft
+                    controller={controller}
+                    disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
+                  />
+                ) : null}
+              </section>
+            </div>
+          </details>
+        </aside>
       </div>
     </section>
   );

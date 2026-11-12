@@ -364,15 +364,18 @@ export const PhoneKeyboardRecovery: Story = {
   globals: { locale: 'ja', viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    canvas.getByRole('link', { name: 'Skip to document' }).focus();
-    await userEvent.tab();
     const navigation = canvas.getByText('Documents and articles');
+    await expect(navigation.closest('details')?.open).toBe(false);
+    navigation.focus();
     await expect(navigation).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await expect(canvas.getByRole('button', { name: 'A private opening' })).not.toBeVisible();
-    await userEvent.keyboard('{Enter}');
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'A private opening' })).toHaveFocus();
+    const draft = canvas.getByRole('button', { name: 'A private opening' });
+    await expect(draft).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await canvas.findByRole('textbox', { name: 'Article document' });
+    await expect(canvas.getByRole('heading', { name: 'A private opening' })).toHaveFocus();
+    await expect(draft).not.toBeVisible();
   },
 };
 
@@ -381,8 +384,19 @@ export const DesktopKeyboardRecovery: Story = {
   globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'A private opening' }));
+    await canvas.findByRole('textbox', { name: 'Article document' });
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Document title' }), '!');
     canvas.getByRole('link', { name: 'Skip to document' }).focus();
+    await userEvent.keyboard('{Enter}');
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'A private opening' })).toHaveFocus();
+    await expect(canvas.getByText('Exact document version')).toHaveFocus();
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Versions' })).toHaveFocus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Save draft' })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: /Review publication/ })).toBeVisible();
   },
 };

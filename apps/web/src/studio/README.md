@@ -28,3 +28,6 @@ Decision: Studio owns one account-draft inventory and private creation flow, com
 revision lifecycle, and keeps local acknowledged-revision publication separate from hosted Book publication. Studio
 exact document operations use a focused Content public entry that exposes only those operations and required types;
 implementation stays in Content and Studio remains the receiving owner.
+
+Decision: The shared book/article Studio puts the active document first, collapses outline and drafts into a compact
+phone disclosure, and separates its wide navigation without an outer frame.
