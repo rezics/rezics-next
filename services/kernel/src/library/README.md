@@ -276,6 +276,13 @@ the key equalities keep the complete primary key visible to the planner. Active-
 after its fence and still names `progress_session_active`. Set, unassign, restore and rename select each named operand once in the one-row request
 and read those columns in the mutation WHERE.
 
+Decision: active-session point probes repeat route, account and subject scalar equalities beside their row bounds,
+keeping the complete partial-index key visible to generic plans. Entry-tile growth associates each captured sort with
+its declared statement and applies the request-key-only relation assertion only to a sort directly fed by the request
+key `generate_series`; every sort retains its bounded row/loop check and every statement remains costed. Active-shelf
+growth analyzes only `library.progress_session`; the 1/48 page requests, owner separation, three history populations
+and 64/512/4096 scales remain unchanged.
+
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation, Entry/progress and funded Progress-operation planning/admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
 implementations. Progress planning consumes Access account and Semantic definition/identity descriptors and shelf-maintenance's public statement plans; `session-operation-bounds.ts` is the compatibility facade for SQL runners and work consumption. No guessed allowances, refund, hidden work or reauthorization fallback. Search filter-leaf classification is a composition port. Publication-staging takes population from the stored Source: a catalogue Source requires catalogue leaves and stages Search's public population; an owner Source evaluates every leaf through Search's owner scope and pins the public catalogue observation when catalogue leaves are present. Content `media.ts` is a public cover-download entry. Native SQL declarations stay unchanged, so the new seam adds no query or statement. Missing identity disclosure defers to the native subject resolver. A composed collection-read

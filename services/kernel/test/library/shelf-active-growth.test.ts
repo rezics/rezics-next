@@ -187,6 +187,7 @@ test('active probes stay bounded behind private session history', async () => {
     scales: [64, 512, 4096],
     warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    seededRelations: [{ kind: 'relation', schema: 'library', name: 'progress_session' }],
     grow: async (_db, scale, previous) => {
       // Each subject has both terminal histories plus another owner's active history. All are newer than the winner.
       await db.admin.query(

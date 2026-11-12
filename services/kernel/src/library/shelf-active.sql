@@ -5,7 +5,8 @@
 -- step from the MATERIALIZED request row that carries the subject-id array,
 -- then a MATERIALIZED one-row point CTE inside LATERAL, so each seek is the
 -- unique-key point: Access ROW-bounded (route, account_id, subject_id) range
--- and OFFSET 0. ORDER BY names that index. Page LIMIT stays after OFFSET 0.
+-- with matching scalar equalities for generic plans, then OFFSET 0. ORDER BY
+-- names that index. Page LIMIT stays after OFFSET 0.
 WITH input AS MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id,
          :subject_ids::uuid[] AS subject_ids
@@ -37,6 +38,9 @@ CROSS JOIN LATERAL (
             >= ROW(point.route, point.account_id, point.subject_id)
       AND ROW(sought.route, sought.account_id, sought.subject_id)
             <= ROW(point.route, point.account_id, point.subject_id)
+      AND sought.route = point.route
+      AND sought.account_id = point.account_id
+      AND sought.subject_id = point.subject_id
       AND sought.state = 'active'
     ORDER BY sought.route, sought.account_id, sought.subject_id, sought.last_changed_at DESC,
              sought.session_id
