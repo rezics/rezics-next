@@ -1688,7 +1688,7 @@ export function readCitationDisclosure(value: PostEntry | ThreadView): 'absent' 
  * its snapshots. An unreadable question suppresses the citation, preserving the
  * ordinary post and its own disclosure checks; unavailable authority propagates. */
 async function readableCitation<T extends PostEntry | ThreadView>(
-  dependencies: ContentReadDependencies,
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'deadlineNow'>,
   context: ReadContext,
   value: T,
 ): Promise<T> {

@@ -45,6 +45,12 @@ const fixtures = {
   'com.rezics.content.watch.removed.v1': { accountId: actorId, kind: 'board', watchId: itemId },
   'com.rezics.content.own-drafts.repaired.v1': {},
   'com.rezics.content.hosted-catalogue.locator-repaired.v1': {},
+  'com.rezics.content.hosted-catalogue.preparation.work.v1': {
+    catalogueId: threadId,
+    stageId: revisionId,
+    stepId: mediaId,
+    commandKey: reportId,
+  },
   'com.rezics.content.board.slow-mode.changed.v1': { boardId: containerId, intervalSeconds: 60 },
   'com.rezics.content.feed.indexed.v1': {},
   'com.rezics.content.feed.delivered.v1': {},
