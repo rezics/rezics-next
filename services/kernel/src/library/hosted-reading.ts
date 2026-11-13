@@ -223,8 +223,7 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
                 typeof sequence !== 'string' ||
                 !/^[1-9][0-9]{0,18}$/.test(sequence) ||
                 BigInt(sequence) > 9_223_372_036_854_775_807n ||
-                typeof subjectId !== 'string' ||
-                routeOf(subjectId) !== route
+                !hostedReadingUuid(subjectId)
               )
                 throw new ProblemError('invalid_cursor');
               afterSequence = sequence;
