@@ -156,7 +156,7 @@ export function hostedPublicationPreparationRoutes(
         200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release.append_batch' },
+      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_append_batch' },
     },
     async ({ actor, params: { id, stageId }, body, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -181,7 +181,7 @@ export function hostedPublicationPreparationRoutes(
         200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release.freeze' },
+      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_freeze_selection' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -206,7 +206,7 @@ export function hostedPublicationPreparationRoutes(
         200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release.advance' },
+      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_advance' },
     },
     async ({ actor, params: { id, stageId }, body, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -231,7 +231,7 @@ export function hostedPublicationPreparationRoutes(
         200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release.progress' },
+      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_progress' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -256,7 +256,7 @@ export function hostedPublicationPreparationRoutes(
         200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release.cancel' },
+      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_cancel' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -281,7 +281,7 @@ export function hostedPublicationPreparationRoutes(
         200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release.seal' },
+      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_seal' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
