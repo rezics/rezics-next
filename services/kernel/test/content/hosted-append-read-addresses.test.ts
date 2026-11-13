@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import type { AccessClient } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
-import type { HostedAppendDescriptor, HostedDependencies } from '../../src/content/hosted-chapters-model.ts';
+import type { HostedAppendDescriptor } from '../../src/content/hosted-chapters-model.ts';
 import { hostedReadPlacementPage } from '../../src/content/hosted-chapters-store.ts';
 import { hostedCursorBinding, readHostedCursor, writeHostedCursor } from '../../src/content/hosted-chapters-cursor.ts';
 import appendPrevious from '../../src/content/hosted-append-read-previous.sql';
@@ -50,7 +50,7 @@ test('bigint offsets preserve exact addresses and reverse frontiers through the 
   const deps = {
     tokens: { current: 1, keys: new Map([[1, randomBytes(32)]]) },
     clock: () => new Date(1_000_000),
-  } as HostedDependencies;
+  };
   const binding = hostedCursorBinding(
     id,
     { revisionId },

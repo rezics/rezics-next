@@ -48,7 +48,7 @@ test('pinned mixed drafts retain raw slots, exact links, authority and bounded s
     const release = (
       await f.native.command(
         `/v1/hostedCatalogues/${f.catalogueId}:publish`,
-        { expectedRevisionId: base, expectedPublicationId: null, occurrenceIds: [ids[511]] },
+        { expectedRevisionId: base, expectedPublicationId: null, occurrenceIds: [ids[511]!] },
         200,
       )
     ).revisionId as string;
@@ -86,7 +86,7 @@ test('pinned mixed drafts retain raw slots, exact links, authority and bounded s
         { revisionId: pinned, after, origin: -1, issuedAt: now, epoch: initial.anchors[0]!.epoch },
       );
     const cursor = token('children', 509);
-    const outline = (cursor?: string) =>
+    const outline = (cursor: string) =>
       listHostedAuthorOutline(deps, f.catalogueId, { revisionId: pinned, limit: 2, cursor }, context);
     const metadata = (revisionId: string, occurrenceId: string) =>
       resolveHostedOccurrenceMetadata(deps, f.catalogueId, occurrenceId, { revisionId }, context);
@@ -97,12 +97,12 @@ test('pinned mixed drafts retain raw slots, exact links, authority and bounded s
     const mixed = await children({ kind: 'structure', limit: 2, cursor });
     expect(mixed.value.revisionId).toBe(pinned);
     expect(mixed.value.items).toEqual([
-      expect.objectContaining({ occurrenceId: ids[511], position: 510, availability: 'available' }),
-      { occurrenceId: appended[0], parentId: null, position: 511, kind: 'chapter', availability: 'unavailable' },
+      expect.objectContaining({ occurrenceId: ids[511]!, position: 510, availability: 'available' }),
+      { occurrenceId: appended[0]!, parentId: null, position: 511, kind: 'chapter', availability: 'unavailable' },
     ]);
     expect(mixed.value.nextCursor).toEqual(expect.any(String));
     const continued = await children({ kind: 'structure', limit: 2, cursor: mixed.value.nextCursor! });
-    expect(continued.value.items).toEqual([expect.objectContaining({ occurrenceId: appended[1], position: 512 })]);
+    expect(continued.value.items).toEqual([expect.objectContaining({ occurrenceId: appended[1]!, position: 512 })]);
     expect(continued.value.nextCursor).toBeNull();
     expect(Value.Check(HostedPageSchema, continued.value)).toBe(true);
     expect(
@@ -115,16 +115,16 @@ test('pinned mixed drafts retain raw slots, exact links, authority and bounded s
       appended.slice(0, 2),
     );
     expect((await navigate(appended[1]!, 'previous')).value.items.map((item) => item.occurrenceId)).toEqual([
-      appended[0],
-      ids[511],
+      appended[0]!,
+      ids[511]!,
     ]);
     const authorPage = await outline(token('outline', 510));
-    expect(authorPage.value.items.map((item) => item.occurrenceId)).toEqual([ids[511], appended[0]]);
+    expect(authorPage.value.items.map((item) => item.occurrenceId)).toEqual([ids[511]!, appended[0]!]);
     expect((await outline(authorPage.value.nextCursor!)).value.items[0]!.occurrenceId).toBe(appended[1]!);
     await expect(metadata(first, appended[1]!)).rejects.toThrow();
     await expect(metadata(base, appended[0]!)).rejects.toThrow();
     expect((await metadata(pinned, appended[1]!)).value.occurrence).toMatchObject({
-      occurrenceId: appended[1],
+      occurrenceId: appended[1]!,
       position: 512,
       target: f.target(source),
     });
@@ -145,8 +145,8 @@ test('pinned mixed drafts retain raw slots, exact links, authority and bounded s
     }
     const beforeNested = observer.records.length;
     expect(
-      (await children({ revisionId: pinned, parentId: ids[0] })).value.items.map((item) => item.occurrenceId),
-    ).toEqual([ids[1]]);
+      (await children({ revisionId: pinned, parentId: ids[0]! })).value.items.map((item) => item.occurrenceId),
+    ).toEqual([ids[1]!]);
     expect(
       observer.records.slice(beforeNested).some((row) => row.statement.includes('FROM content.hosted_append a')),
     ).toBe(false);

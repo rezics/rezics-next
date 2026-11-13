@@ -190,7 +190,7 @@ export async function hostedReadPlacement(
     occurrence_id: occurrenceId,
     high_water: descriptor.highWater.toString(),
   });
-  return appended[0] ? appendedPlacement(appended[0], descriptor) : null;
+  return appended ? appendedPlacement(appended, descriptor) : null;
 }
 
 export type HostedPlacementPageQuery = Readonly<{

@@ -8,6 +8,8 @@ import {
   type HostedReadSelection,
 } from './hosted-chapters-model.ts';
 
+type HostedCursorDependencies = Pick<HostedDependencies, 'tokens' | 'clock'>;
+
 export type HostedCursorState = Readonly<{
   revisionId: string;
   after: number;
@@ -53,7 +55,7 @@ export function hostedCursorBinding(
   };
 }
 export function readHostedCursor(
-  deps: HostedDependencies,
+  deps: HostedCursorDependencies,
   binding: CursorBinding,
   catalogueId: string,
   token: string | undefined,
@@ -79,7 +81,11 @@ export function readHostedCursor(
     throw new InvalidHostedCursorError();
   return { revisionId, after, origin, issuedAt, epoch: decoded.epoch };
 }
-export function writeHostedCursor(deps: HostedDependencies, binding: CursorBinding, state: HostedCursorState): string {
+export function writeHostedCursor(
+  deps: HostedCursorDependencies,
+  binding: CursorBinding,
+  state: HostedCursorState,
+): string {
   // Preserve the first page's lifetime; continuation cannot renew the original frontier.
   return encodeCursor(
     deps.tokens,
