@@ -6,23 +6,35 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 
 ## Authoring and release
 
-| Operation ID                           | Method and path                                    | Input                                                                                                |
-| -------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `hosted_catalogue.create`              | `POST /v1/hostedCatalogues`                        | `postId`, `threadId`, `placements`                                                                   |
-| `hosted_catalogue.revise`              | `POST /v1/hostedCatalogues/{id}:revise`            | `expectedRevisionId`, `placements`                                                                   |
-| `hosted_catalogue.append_root_chapter` | `POST /v1/hostedCatalogues/{id}:appendRootChapter` | `expectedRevisionId`, `occurrenceId`, `title`, `target`                                              |
-| `hosted_catalogue.insert_draft_point`  | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`  | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
-| `hosted_catalogue.remove_draft_point`  | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`  | `expectedRevisionId`, `occurrenceId`                                                                 |
-| `hosted_catalogue.update_draft_point`  | `POST /v1/hostedCatalogues/{id}:updateDraftPoint`  | `expectedRevisionId`, `occurrenceId`, `title`, explicit nullable `target`                            |
-| `hosted_catalogue.move_draft_point`    | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`    | `expectedRevisionId`, `occurrenceId`, `parentId`, nullable `beforeOccurrenceId`                      |
-| `hosted_catalogue.convert_draft`       | `POST /v1/hostedCatalogues/{id}:convertDraft`      | `expectedRevisionId`, bounded `step`, retained `inputId` and native page cursor when paging          |
-| `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
+| Operation ID                                    | Method and path                                                                         | Input                                                                                                |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `hosted_catalogue.create`                       | `POST /v1/hostedCatalogues`                                                             | `postId`, `threadId`, `placements`                                                                   |
+| `hosted_catalogue.revise`                       | `POST /v1/hostedCatalogues/{id}:revise`                                                 | `expectedRevisionId`, `placements`                                                                   |
+| `hosted_catalogue.append_root_chapter`          | `POST /v1/hostedCatalogues/{id}:appendRootChapter`                                      | `expectedRevisionId`, `occurrenceId`, `title`, `target`                                              |
+| `hosted_catalogue.insert_draft_point`           | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
+| `hosted_catalogue.remove_draft_point`           | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`                                                                 |
+| `hosted_catalogue.update_draft_point`           | `POST /v1/hostedCatalogues/{id}:updateDraftPoint`                                      | `expectedRevisionId`, `occurrenceId`, `title`, explicit nullable `target`                            |
+| `hosted_catalogue.move_draft_point`             | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`                                         | `expectedRevisionId`, `occurrenceId`, `parentId`, nullable `beforeOccurrenceId`                      |
+| `hosted_catalogue.convert_draft`                | `POST /v1/hostedCatalogues/{id}:convertDraft`                                          | `expectedRevisionId`, bounded `step`, retained `inputId` and native page cursor when paging          |
+| `hosted_catalogue.publish`                      | `POST /v1/hostedCatalogues/{id}:publish`                                                | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
+| `hosted_catalogue.prepare_release`              | `POST /v1/hostedCatalogues/{id}:prepareRelease`                                         | caller-generated `stageId`, `expectedRevisionId`, nullable `expectedPublicationId`, `mode`           |
+| `hosted_catalogue.prepare_release.append_batch` | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:appendSelectionBatch` | `batchId`, `occurrenceIds` (1–512)                                                                   |
+| `hosted_catalogue.prepare_release.freeze`       | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:freezeSelection`      | empty object                                                                                         |
+| `hosted_catalogue.prepare_release.advance`      | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:advance`              | `stepId`                                                                                             |
+| `hosted_catalogue.prepare_release.progress`     | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:progress`             | empty object                                                                                         |
+| `hosted_catalogue.prepare_release.cancel`       | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:cancel`               | empty object                                                                                         |
+| `hosted_catalogue.prepare_release.seal`         | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:seal`                 | empty object                                                                                         |
 
 Every command requires an Idempotency-Key and returns `catalogueId`. Create returns 201; revise, root append, draft
 point writes, conversion steps and publish return 200. Conversion returns private phase/count progress and adds the
 new `revisionId` only after activation. A fresh command with a stale head or release returns 412.
 Native authorization precedes receipt lookup, while concurrency comparisons follow it: an authorized exact retry
 can return its original immutable revision after later changes. An altered request under the same key conflicts.
+
+Preparation start returns 202 and the remaining preparation commands return 200. Start supplies a route-native
+`stageId`; expected draft/publication IDs are only stale-intent preconditions. Selection batches are independently
+limited to 512 IDs with no aggregate cap. Preparation responses are private and no-store, expose only retained
+progress and candidate counts, and never select the publication pointer.
 
 Each placement supplies `occurrenceId`, nullable `parentId`, zero-based sibling `position`, `title` and `kind`.
 Parts have no target. Chapters supply a target containing `threadId`, `postId`, `revisionId` and lowercase SHA-256
