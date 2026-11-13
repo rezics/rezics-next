@@ -130,12 +130,6 @@ draft generations and publication writes require candidate generations. After bo
 generation-kind foreign keys in `20261113121340_hosted_version_revision_snapshot_fk.sql` because the descriptor table
 did not exist at the store producer timestamp.
 
-Decision: Content binds each ordered Book revision to one immutable `(catalogue, generation, sequence)` snapshot.
-Exact reads distinguish ordered, compatibility and missing revisions; structure revisions bind draft generations,
-publication revisions bind candidate generations and retain the expected draft as source. The shared transaction
-seam inserts the native revision and descriptor before CAS-advancing only the caller's draft or publication pointer.
-The temporal store owner adds the snapshot and generation-kind foreign keys with its producer migration.
-
 ### Evidence and migration
 
 Sources checked before this decision: this document; Knowledge's
@@ -225,11 +219,16 @@ membership is already selected and their disclosure is always current. Authorize
 publication CAS. A stale fresh command fails without index or pointer changes.
 
 Decision: point publication prepares retained anonymous metadata checks for the catalogue opening and only newly
-selected exact targets; the seam stays unmounted until Content can join those final checks to the pointer transaction.
+selected exact targets. Its Content writer now binds the exact native candidate snapshot, point delta, immutable
+descriptor and publication CAS in one transaction; keep the command unmounted until its caller joins those final
+checks to this transaction.
 
-Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; point admission uses Content's existing exact revision-disclosure observation for private openings beside retained public eligibility, then rechecks source currentness and consent in finalization. Keep insert and replacement unmounted until the native Book-version transaction exists, and coordinate Book-link reader dispatch before changing reads.
+Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; point admission uses Content's existing exact revision-disclosure observation for private openings beside retained public eligibility, then rechecks source currentness and consent in finalization. Keep insert and replacement unmounted until route and reader owners wire this native transaction seam and coordinate Book-link reader dispatch.
 
-Decision: point-publication index mutation uses one operation-local overlay for each sibling, preorder and chapter index, all pinned to the exact candidate publication; insertion changes only touched index paths and selected occurrence/ancestor summaries, replacement changes only its selected occurrence, and both remain unmounted until the native `createHostedVersionWrite` transaction binding is available.
+Decision: ordered point publications resolve their exact candidate descriptor and snapshot; legacy publications use
+only a prepared candidate baseline whose captured source publication ID equals the expected public selection. The
+Content writer stages the point delta and commits native index rows, the immutable revision descriptor and
+publication pointer CAS in the same transaction.
 
 Copy only the affected sibling, preorder and chapter index paths and at most H explicitly selected ancestors; create
 one small version root/count summary and atomically CAS the publication pointer with receipt/identity-only event.
