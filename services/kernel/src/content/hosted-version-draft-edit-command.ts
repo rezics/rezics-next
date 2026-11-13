@@ -23,6 +23,7 @@ import type {
   HostedVersionDraftMovePlan,
 } from './hosted-version-draft-edit-model.ts';
 import { HostedVersionDraftMoveError } from './hosted-version-draft-edit-model.ts';
+import { resolveHostedVersionRevision } from './hosted-version-revision.ts';
 import {
   InvalidHostedStructureError,
   type HostedCommandContext,
@@ -46,9 +47,18 @@ export async function commitHostedVersionDraftMoveInTransaction(
   tx: CommandTransaction,
   write: Omit<HostedVersionDraftMoveNativeWrite, 'snapshot' | 'plan'>,
 ): Promise<CommandResult<HostedCommandValue>> {
-  const selected = await adapter.selectExpectedSnapshot(tx, write.catalogueId, write.input);
+  let selected: Awaited<ReturnType<typeof adapter.selectExpectedSnapshot>>;
   let plan: HostedVersionDraftMovePlan;
   try {
+    const revision = await resolveHostedVersionRevision(tx, write.catalogueId, write.input.expectedRevisionId);
+    if (
+      revision.kind !== 'ordered' ||
+      revision.revisionKind !== 'structure' ||
+      revision.snapshot.generationKind !== 'draft'
+    ) {
+      throw new HostedVersionDraftMoveError('stale-head');
+    }
+    selected = await adapter.selectExpectedSnapshot(tx, write.catalogueId, write.input, revision);
     plan = await prepareHostedVersionDraftMovePlan(write.input, selected.selection, selected.indexes);
   } catch (error) {
     if (error instanceof HostedVersionDraftMoveError) {
@@ -85,8 +95,7 @@ export async function commitHostedVersionDraftMoveInTransaction(
 }
 
 /** Admit the catalogue author, then bind the pure planner to one native
- * expected-snapshot workspace and atomic owner write. It is deliberately not
- * registered by the existing hosted command module while that adapter is absent. */
+ * expected-snapshot workspace and atomic owner write. */
 export async function moveHostedVersionDraftOccurrence(
   deps: HostedVersionDraftMoveCommandDependencies,
   actor: Actor,

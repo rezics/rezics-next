@@ -2,6 +2,7 @@ import type {
   VersionedOutlineSequenceReadWriteSet,
   VersionedOutlineSequenceWork,
 } from './versioned-outline-sequence.ts';
+import type { HostedVersionRevisionResolution } from './hosted-version-revision.ts';
 
 /** A request to move one existing occurrence and its unchanged subtree. */
 export type HostedVersionDraftMoveInput = Readonly<{
@@ -81,6 +82,7 @@ export type HostedVersionDraftMoveNativeAdapter<Transaction> = Readonly<{
     tx: Transaction,
     catalogueId: string,
     input: HostedVersionDraftMoveInput,
+    revision: Extract<HostedVersionRevisionResolution, { kind: 'ordered' }>,
   ): Promise<HostedVersionDraftMoveNativeSnapshot>;
   commitMove(tx: Transaction, write: HostedVersionDraftMoveNativeWrite): Promise<boolean>;
 }>;
