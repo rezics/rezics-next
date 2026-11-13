@@ -54,6 +54,7 @@ import {
   physicalHistoryPath,
   processIdentity,
   publishRemoteRunEvidence,
+  readRemoteRunEvidence,
   remoteRunCustodyPath,
   validControllerProofRegistration,
   withCheckFence,
@@ -759,6 +760,7 @@ async function writeLostRemoteCheck(
   root: string,
   state:
     | 'pending'
+    | 'legacy-uncertain'
     | 'terminal'
     | 'empty'
     | 'missing'
@@ -818,7 +820,7 @@ async function writeLostRemoteCheck(
       argv,
       remoteArgv,
     };
-    const attempts =
+    const attempts: unknown[] =
       state === 'pending'
         ? [{ host: 'check-a', id: 'reservation-pending', status: 'running', startedAt: new Date().toISOString() }]
         : state === 'terminal'
@@ -881,13 +883,17 @@ async function writeLostRemoteCheck(
                 return [attempt];
               })()
             : [];
+    if (state === 'legacy-uncertain')
+      attempts.push(retainedUncertainPreparationAbortAttempt('check-a', 'reservation-legacy-abort'));
     writeAtomicJson(remoteRunCustodyPath(root, physicalRunId), {
       version: 1,
       physicalRunId: state === 'mismatched' ? randomUUID() : physicalRunId,
       binding,
       status: ['terminal', 'referenced-terminal', 'missing-evidence', 'mismatched-evidence'].includes(state)
         ? 'terminal'
-        : 'running',
+        : state === 'legacy-uncertain'
+          ? 'uncertain'
+          : 'running',
       attempts,
       updatedAt: new Date().toISOString(),
     });
@@ -975,6 +981,38 @@ function retainedPreparationAbortSettlement(
     returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
     cleanup,
     transportChildReaped: true,
+  };
+}
+
+function retainedUncertainPreparationAbortAttempt(host: string, run: string) {
+  const cleanup = {
+    schema: 1,
+    host,
+    run,
+    status: 'verified',
+    supervisorStopped: true,
+    commandGroupTerminal: true,
+    containersRemoved: true,
+    runDirectoryRemoved: true,
+    failures: [],
+  } as const;
+  return {
+    host,
+    id: run,
+    status: 'uncertain',
+    startedAt: new Date().toISOString(),
+    endedAt: new Date().toISOString(),
+    settlement: {
+      schema: 1,
+      host,
+      run,
+      native: null,
+      preparedInputs: null,
+      returns: { schema: 1, status: 'unknown', entries: [], missing: [], failures: [] },
+      cleanup,
+      transportChildReaped: true,
+    },
+    cleanup,
   };
 }
 
@@ -1195,6 +1233,162 @@ test('a matching terminal preparation abort settles once without a native receip
   expect(await waitWorkerCheck(lost.id, fixture.root, 0, { write: () => {}, remoteReconcile })).toBe(1);
   expect(reconciliations).toBe(1);
   expect(existsSync(join(fixture.root, 'rerun-marker'))).toBe(false);
+});
+
+test('a cancelled legacy uncertain run receives its original preparation abort without changing cancellation or source', async () => {
+  const fixture = workerFixture();
+  const lost = await writeLostRemoteCheck(fixture.root, 'legacy-uncertain');
+  const hostsFile = writeHosts(fixture);
+  const custodyFile = remoteRunCustodyPath(fixture.root, lost.physicalRunId);
+  const originalCustody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    binding: Record<string, unknown>;
+  };
+  const returns = [
+    `.temp/goal/checks/artifact-returns/${lost.physicalRunId}`,
+    `.temp/goal/checks/typing-inputs/${lost.physicalRunId}.json`,
+  ];
+  writeAtomicJson(custodyFile, {
+    ...originalCustody,
+    binding: { ...originalCustody.binding, hostsFile, returns },
+  });
+
+  const original = readWorkerCheckRecord(lost.id, fixture.root);
+  const cancellationFile = workerCheckCancellation(lost.id, fixture.root).file;
+  requestWorkerCheckCancellation(lost.id, fixture.root, 15);
+  const cancellationBytes = readFileSync(cancellationFile);
+  expect(sameProcess(lost.runnerIdentity)).toBe(false);
+  expect(processGroupMembers(lost.runnerIdentity.group)).toEqual([]);
+
+  const reconciliations: Array<{ cleanupOnly: boolean; returns: string[] }> = [];
+  const remoteReconcile = async ({
+    physical,
+    cleanupOnly,
+    returns: requestedReturns,
+  }: {
+    physical: { host: string; run: string };
+    cleanupOnly?: boolean;
+    returns?: string[];
+  }) => {
+    reconciliations.push({ cleanupOnly: cleanupOnly === true, returns: requestedReturns ?? [] });
+    const evidence = retainedPreparationAbortSettlement(physical.host, physical.run);
+    if (!cleanupOnly) return evidence;
+    return {
+      schema: 1 as const,
+      host: physical.host,
+      run: physical.run,
+      native: null,
+      preparedInputs: null,
+      returns: { schema: 1 as const, status: 'empty' as const, entries: [], missing: [], failures: [] },
+      cleanup: evidence.cleanup,
+      transportChildReaped: true,
+    } satisfies RemoteCheckSettlement;
+  };
+
+  const output: string[] = [];
+  expect(
+    await waitWorkerCheck(lost.id, fixture.root, 100, {
+      write: (line) => output.push(line),
+      remoteReconcile,
+    }),
+  ).toBe(143);
+
+  const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    status: string;
+    physicalRunId: string;
+    binding: { checkId: string; ownership: unknown; returns: string[] };
+    attempts: Array<{
+      host: string;
+      id: string;
+      status: string;
+      nativeReference?: unknown;
+      physicalCleanup?: unknown;
+      settlementReference?: {
+        version: number;
+        kind: string;
+        checkId: string;
+        physicalRunId: string;
+        host: string;
+        run: string;
+        sha256: string;
+        bytes: number;
+      };
+    }>;
+  };
+  const attempt = custody.attempts[0]!;
+  expect(custody).toMatchObject({
+    status: 'terminal',
+    physicalRunId: lost.physicalRunId,
+    binding: { checkId: lost.id, ownership: original.ownership, returns },
+  });
+  expect(attempt).toMatchObject({
+    host: 'check-a',
+    id: 'reservation-legacy-abort',
+    status: 'terminal',
+    physicalCleanup: { status: 'verified', commandGroupTerminal: true, runDirectoryRemoved: true },
+    settlementReference: {
+      version: 1,
+      kind: 'settlement',
+      checkId: lost.id,
+      physicalRunId: lost.physicalRunId,
+      host: 'check-a',
+      run: 'reservation-legacy-abort',
+    },
+  });
+  expect(attempt.settlementReference?.sha256).toMatch(/^[a-f0-9]{64}$/);
+  expect(attempt.settlementReference?.bytes).toBeGreaterThan(0);
+  expect(attempt.nativeReference).toBeUndefined();
+  const received = readRemoteRunEvidence<{
+    host: string;
+    run: string;
+    preparationAbort: { preparationReceiptSha256: string; resourcesReceiptSha256: string };
+    preparedInputs: null;
+    returns: { status: string; entries: unknown[] };
+  }>(
+    custodyFile,
+    attempt.settlementReference,
+    {
+      checkId: lost.id,
+      physicalRunId: lost.physicalRunId,
+      host: 'check-a',
+      run: 'reservation-legacy-abort',
+    },
+    'settlement',
+  );
+  expect(received).toMatchObject({
+    host: 'check-a',
+    run: 'reservation-legacy-abort',
+    preparationAbort: {
+      preparationReceiptSha256: 'a'.repeat(64),
+      resourcesReceiptSha256: 'b'.repeat(64),
+    },
+    preparedInputs: null,
+    returns: { status: 'empty', entries: [] },
+  });
+  expect(reconciliations).toEqual([
+    { cleanupOnly: false, returns: [] },
+    { cleanupOnly: true, returns: [] },
+  ]);
+  expect(readFileSync(cancellationFile)).toEqual(cancellationBytes);
+  expect(readWorkerCheckRecord(lost.id, fixture.root)).toMatchObject({
+    status: 'running',
+    ownership: original.ownership,
+    argv: original.argv,
+    physicalRunId: lost.physicalRunId,
+  });
+  expect(readWorkerCheckRecord(lost.id, fixture.root).exitCode).toBeUndefined();
+  expect(readWorkerCheckRecord(lost.id, fixture.root).physicalRunReference).toBeUndefined();
+  expect(readWorkerCheckHistory(lost.id, lost.physicalRunId, fixture.root)?.terminalProof).toMatchObject({
+    local: true,
+    remote: true,
+    resultKnown: false,
+  });
+  expect(output.join('')).toContain('compiler result remains unavailable');
+  expect(output.join('')).toContain('cancellation requested; automatic restart is disabled');
+  expect(existsSync(join(fixture.root, 'rerun-marker'))).toBe(false);
+
+  expect(await waitWorkerCheck(lost.id, fixture.root, 100, { remoteReconcile, write: () => {} })).toBe(143);
+  expect(reconciliations).toHaveLength(2);
+  expect(readFileSync(cancellationFile)).toEqual(cancellationBytes);
 });
 
 test.each([

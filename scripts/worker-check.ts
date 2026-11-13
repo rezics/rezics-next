@@ -3156,16 +3156,18 @@ async function reconcileRetainedRemoteResult(
   const unresolved = custody.attempts.filter(
     (attempt) =>
       attempt.status === 'running' ||
+      attempt.status === 'uncertain' ||
       (attempt.status === 'terminal' && attempt.settlement === undefined && attempt.settlementReference === undefined),
   );
   if (unresolved.length !== 1) return;
   const attempt = unresolved[0]!;
+  if (exactWorkerCheckCancellation(record, root, id) && attempt.status !== 'uncertain') return;
   try {
     const settlement = await remoteReconcile({
       hosts: readHosts(hostsFile),
       physical: { host: attempt.host, run: attempt.id },
       workspace: root,
-      returns: binding.returns ?? [],
+      returns: exactWorkerCheckCancellation(record, root, id) ? [] : (binding.returns ?? []),
       allowedHosts: [attempt.host],
     });
     const native = parseRemotePhysicalRunReceipt(settlement.native);
@@ -3206,11 +3208,10 @@ async function reconcileRetainedRemoteResult(
       if (index < 0) return;
       const attempts = [...latestCustody.attempts];
       const prior = attempts[index]!;
-      if (prior.status !== 'running' && prior.status !== 'terminal') return;
+      if (prior.status !== 'running' && prior.status !== 'uncertain' && prior.status !== 'terminal') return;
       if (
         preparationAbort &&
-        (exactWorkerCheckCancellation(latest, root, id) ||
-          latest.exitCode !== undefined ||
+        (latest.exitCode !== undefined ||
           latestPhysical.exitCode !== undefined ||
           latest.physicalRunReference !== undefined ||
           latestPhysical.terminalProof?.resultKnown === true)
@@ -3478,12 +3479,18 @@ async function retainedRemoteCancellationResult(
 ): Promise<number | undefined> {
   const cancellation = executionCancellation(workerCheckCancellation(id, root));
   if (cancellation) {
+    const target = cancelledRemoteCleanupTarget(record, root, id);
+    if (target?.custody.status === 'uncertain' && target.attempt.status === 'uncertain')
+      await reconcileRetainedRemoteResult(record, root, id, monitor.remoteReconcile);
     const cleanup = await reconcileCancelledRemoteCleanup(record, root, id, monitor.remoteReconcile);
     if (cleanup) write('worker-check: remote physical cleanup is verified; compiler result remains unavailable\n');
     write('check: cancellation requested; automatic restart is disabled\n');
     return 128 + cancellation.signal;
   }
   if (checkCancelled(root, id)) {
+    const target = cancelledRemoteCleanupTarget(record, root, id);
+    if (target?.custody.status === 'uncertain' && target.attempt.status === 'uncertain')
+      await reconcileRetainedRemoteResult(record, root, id, monitor.remoteReconcile);
     const cleanup = await reconcileCancelledRemoteCleanup(record, root, id, monitor.remoteReconcile);
     if (cleanup) write('worker-check: remote physical cleanup is verified; compiler result remains unavailable\n');
     else write('worker-check: logically cancelled; physical cleanup remains unknown\n');
