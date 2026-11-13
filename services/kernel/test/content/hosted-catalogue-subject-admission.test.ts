@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun
 import { fromPlainText } from '@rezics/document';
 import * as reads from '../../src/content/reads.ts';
 import readChain from '../../src/content/read-chain.sql';
+import type { HostedSubjectCatalogueItem } from '../../src/content/hosted-catalogue-subject-model.ts';
 import { anchorRoute } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -161,17 +162,25 @@ test('Subject discovery admits published Books, conceals a protected candidate, 
   });
   try {
     const sparseStart = observer.records.length;
-    const sparse = await getSubjectBooks('?limit=1');
+    const sparse = await getSubjectBooks('?limit=1&includeTitle=1');
     expect(sparse.status).toBe(200);
     expect(withdrawn).toBe(true);
     expect(sparse.value.items).toEqual([]);
     expect(sparse.value.nextCursor).toEqual(expect.any(String));
     expect(bodyProbes(sparseStart)).toHaveLength(0);
 
+    const unprojected = await getSubjectBooks(`?limit=1&cursor=${encodeURIComponent(sparse.value.nextCursor)}`);
+    expect(unprojected.status).toBe(400);
+
     const continuationStart = observer.records.length;
-    const continued = await getSubjectBooks(`?limit=1&cursor=${encodeURIComponent(sparse.value.nextCursor)}`);
+    const continued = await getSubjectBooks(
+      `?limit=1&includeTitle=1&cursor=${encodeURIComponent(sparse.value.nextCursor)}`,
+    );
     expect(continued.status).toBe(200);
-    expect(continued.value.items).toEqual([expectedItems.find((item) => item.catalogueId === second.catalogueId)]);
+    expect(continued.value.items.map(({ title: _title, ...item }: HostedSubjectCatalogueItem) => item)).toEqual([
+      expectedItems.find((item) => item.catalogueId === second.catalogueId),
+    ]);
+    expect(continued.value.items[0]?.title).toBe('published Subject Book');
     expect(continued.value.nextCursor).toBeNull();
     expect(bodyProbes(continuationStart)).toHaveLength(0);
   } finally {

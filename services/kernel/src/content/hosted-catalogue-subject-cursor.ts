@@ -12,13 +12,19 @@ function viewerKey(context: ReadContext): string {
     .digest('hex');
 }
 
-export function hostedSubjectCursorBinding(subjectId: string, context: ReadContext, limit: number): CursorBinding {
+export function hostedSubjectCursorBinding(
+  subjectId: string,
+  context: ReadContext,
+  limit: number,
+  includeTitle = false,
+): CursorBinding {
   return {
     operation: 'content.hosted-catalogue.for-subject',
     parameters: {
       subjectId,
       limit,
       viewer: viewerKey(context),
+      ...(includeTitle ? { includeTitle: true } : {}),
     },
   };
 }

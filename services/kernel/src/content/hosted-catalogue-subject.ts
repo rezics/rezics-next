@@ -75,6 +75,7 @@ async function discloseCatalogue(
   row: HostedSubjectCatalogueRow,
   context: ReadContext,
   epoch: number,
+  includeTitle: boolean,
 ): Promise<{ item: HostedSubjectCatalogueItem; anchor: AnchoredPosition } | null> {
   if (!isCurrentPublicCatalogueCandidate(row) || routeOf(row.catalogue_id) !== row.route) return null;
   const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
@@ -113,6 +114,7 @@ async function discloseCatalogue(
         kind: 'publication',
         sourceRevisionId: selected.value.source_revision_id,
         threadId: row.thread_id,
+        ...(includeTitle && final.value.title !== null ? { title: final.value.title } : {}),
       },
       anchor: final.anchor,
     };
@@ -136,7 +138,8 @@ export async function listHostedCataloguesForSubject(
   if (route === null) throw new InvalidHostedStructureError('Invalid subject selector');
   const limit = hostedSubjectPageLimit(query.limit);
   if (limit < 0) throw new InvalidHostedStructureError();
-  const binding = hostedSubjectCursorBinding(subjectId, context, limit);
+  const includeTitle = query.includeTitle === '1';
+  const binding = hostedSubjectCursorBinding(subjectId, context, limit, includeTitle);
   const cursor = readSubjectCursor(deps, binding, subjectId, query.cursor);
   const issuedAt = cursor?.issuedAt ?? deps.clock().getTime();
   const selected = await snapshot(deps, subjectId, context, async (client) => {
@@ -156,7 +159,7 @@ export async function listHostedCataloguesForSubject(
   const raw = selected.value.rows.slice(0, limit);
   const items: HostedSubjectCatalogueItem[] = [];
   for (const row of raw) {
-    const disclosed = await discloseCatalogue(deps, row, context, selected.value.epoch);
+    const disclosed = await discloseCatalogue(deps, row, context, selected.value.epoch, includeTitle);
     if (!disclosed) continue;
     items.push(disclosed.item);
     anchors.push(disclosed.anchor);

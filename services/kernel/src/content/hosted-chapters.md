@@ -286,7 +286,7 @@ acceptance are deferred for this source sprint; the controller publishes the gen
 | `hosted_catalogue.resolve`          | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
 | `hosted_catalogue.resolve_metadata` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/metadata`   | selection                                         |
 | `hosted_catalogue.navigate`         | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor`         |
-| `hosted_catalogue.for_subject`      | `GET /v1/subjects/{id}/hostedCatalogues`                              | optional `limit`, `cursor`                        |
+| `hosted_catalogue.for_subject`      | `GET /v1/subjects/{id}/hostedCatalogues`                              | optional `limit`, `cursor`, `includeTitle=1`      |
 
 Selection accepts optional `revisionId` and `kind` (`structure` or `publication`). Without either, it chooses the
 current release. `kind=structure` chooses the current draft head, including a catalogue that has never released.
@@ -300,6 +300,16 @@ published catalogue-post subject references. Each page inspects at most 21 raw
 catalogues, discloses at most 20, and never refills concealed slots. Empty
 publications are absent. Historical exact occurrence reads use `hosted_catalogue.resolve` or
 `hosted_catalogue.resolve_metadata` and still obey current catalogue and target Access.
+
+Decision: the optional `includeTitle=1` request adds `title?: string` (maximum 512 characters) to admitted items
+only when the final retained current public Post metadata observation has a non-null opening title. Default requests
+omit the property byte-for-byte, and a missing title stays absent. Protected, erased, changed or retired observations
+cannot supply a title. This uses the existing metadata read and final retained check, with no extra SQL, HTTP or body
+selection. The generated Web request is `includeTitle?: "1"` and its item response adds `title?: string`; no generated
+file is edited in this Content change.
+
+Opt-in continuations bind the title projection and require `includeTitle=1` on every continuation. Default cursors
+retain the existing subject, limit and viewer binding exactly, so current-format default tokens remain valid.
 
 Every read retains native catalogue disclosure and repeats it before returning. Chapter disclosure independently
 retains the exact native target Post, Board, Realm and ancestor checks. Erased, concealed, missing or changed
