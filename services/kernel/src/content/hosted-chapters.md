@@ -92,9 +92,11 @@ splices them at the destination's aggregate rank; it updates sibling roots, move
 ancestor summaries, without visiting descendants.
 
 Decision: keep the hosted move planner unmounted until the native version adapter provides expected-snapshot
-selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and expected-head CAS. The
-planner has no command or persistence authority; mounting the move requires one transaction to commit its sequence
-roots, occurrence parent, ancestor summaries, receipt/event and head change together.
+selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and expected-head CAS. Once
+available, bind it through the admitted-author `runCommand`: resolve all anchors and ancestor paths from one pinned
+draft, stage all three sequence workspaces in that transaction, then commit sequence roots, occurrence parent,
+changed ancestor summaries, receipt/event and expected-head CAS atomically. The planner remains pure and owns no
+command or persistence authority.
 
 ### Evidence and migration
 
