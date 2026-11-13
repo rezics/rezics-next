@@ -85,11 +85,11 @@ async function typingRetryFixture(
   const exited = options.exited ?? false;
   const kernelOutput = options.kernelOutput ?? false;
   if (kernelOutput && !exited) throw new Error('Kernel output fixture models an exited compiler attempt');
+  const brief = readFileSync(h.briefFile, 'utf8')
+    .replace(/^goal: fixture$/m, 'goal: web')
+    .replace(/^kind: implementation$/m, 'kind: interface');
+  writeFileSync(h.briefFile, brief);
   const task = h.tasks.dispatch(h.briefFile);
-  h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
-    current.brief.goal = 'web';
-    current.brief.kind = 'interface';
-  });
   const ref = { taskId: task.id, attempt: 1 };
   const now = Date.now();
   const workerProcess: ProcessIdentity = { pid: 2_000_000_000, start: '1', boot: 'fixture', group: 2_000_000_000 };
