@@ -36,15 +36,15 @@ function assertSourceTarget(target: HostedChapterTarget): void {
 }
 
 function validatePointRoutes(route: number, operation: HostedPublicationPointInput): void {
-  const { input } = operation;
+  const input = operation.input;
   assertHostedPointRoute(route, input.expectedRevisionId);
   assertHostedPointRoute(route, input.expectedPublicationId);
   assertHostedPointRoute(route, input.occurrenceId);
   assertSourceTarget(input.target);
   if (operation.kind === 'publishChapter') {
-    if (input.parentId !== null) assertHostedPointRoute(route, input.parentId);
-    if (input.beforeOccurrenceId !== null) assertHostedPointRoute(route, input.beforeOccurrenceId);
-    for (const ancestor of input.selectedAncestors) {
+    if (operation.input.parentId !== null) assertHostedPointRoute(route, operation.input.parentId);
+    if (operation.input.beforeOccurrenceId !== null) assertHostedPointRoute(route, operation.input.beforeOccurrenceId);
+    for (const ancestor of operation.input.selectedAncestors) {
       assertHostedPointRoute(route, ancestor.occurrenceId);
       if (ancestor.beforeOccurrenceId !== null) assertHostedPointRoute(route, ancestor.beforeOccurrenceId);
     }

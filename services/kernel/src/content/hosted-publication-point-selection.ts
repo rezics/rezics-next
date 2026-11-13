@@ -162,7 +162,7 @@ async function resolveInsertion(
   const ancestors = leafFirst.reverse();
   const publicAncestors = await Promise.all(ancestors.map((ancestor) => publicationPoint(ancestor.occurrenceId)));
   for (let index = 0; index < ancestors.length; index += 1) {
-    const publicAncestor = publicAncestors[index];
+    const publicAncestor = publicAncestors[index]!;
     if (publicAncestor !== null && !part(publicAncestor))
       throw new Error('Hosted occurrence kind changed between retained versions');
   }
