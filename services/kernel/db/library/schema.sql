@@ -4841,6 +4841,21 @@ ALTER SEQUENCE library.hosted_reading_activity_sequence OWNED BY library.hosted_
 
 
 --
+-- Name: hosted_reading_fence; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.hosted_reading_fence (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    CONSTRAINT hosted_reading_fence_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT hosted_reading_fence_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT hosted_reading_fence_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: identity_epoch_participant_handoff; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -7833,6 +7848,14 @@ ALTER TABLE ONLY library.follow_count_total
 
 ALTER TABLE ONLY library.follow
     ADD CONSTRAINT follow_pkey PRIMARY KEY (route, account_id, target_id);
+
+
+--
+-- Name: hosted_reading_fence hosted_reading_fence_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.hosted_reading_fence
+    ADD CONSTRAINT hosted_reading_fence_pkey PRIMARY KEY (route, account_id, subject_id);
 
 
 --
