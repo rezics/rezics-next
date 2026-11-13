@@ -3,6 +3,31 @@
 This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
 [Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
 
+## Selected Collection publication
+
+Decision: Measure `POST /v1/collections/{collectionId}:publishSelected` as its own request under ordinary Library
+composition. Prepare each private dynamic Source before capture, keep one selected owner neighbourhood fixed, and
+grow unrelated Collection catalogue and retained member history in separate 1/4/16 series. Derive the bound from
+the raw request selection length and producer terms before capture; neither canonical terminal deduplication nor a
+shorter response refunds examined branch work.
+
+The operation composes initial binder authorization and final revalidation, two Source preparations and their
+metadata observations, Access preparation, raw selected branches, original and terminal disclosure across the
+complete closure, owner-fact matching, receipt and header checks, output activation and rows, metadata History,
+event commit, serialization, rollback, and the bounded Core attempt count. The plan suite pins those relationships from the nested canonical,
+Access and owner-filter declarations rather than duplicating computed totals. The native growth suite executes only
+the selected-publication HTTP command inside capture; Collection creation, Source preparation, and unrelated
+population seeding stay outside it. Its attempt ledger records committed and aborted transaction work, while
+`backgroundCosts` remains separate from foreground command cost. Standard `GROWTH_PROFILE` records the source
+revision and complete per-scale statement evidence for verifier acceptance.
+
+Growth check: `test/library/collection-publication-growth.test.ts`:
+`selected publication remains bounded as unrelated Collections and member history grow independently`. It runs the
+ordinary selected command at scales 1, 4 and 16 with a fixed one-subject owner neighbourhood, separately growing
+unrelated Collections and repeated add/delete member history. `test/library/collection-publication.test.ts` retains
+the explicit empty success, selected-member success and exact receipt replay, withheld nonmember denial, source-fence
+conflict rollback, and bounded output-retention refusal cases.
+
 ## Captured owner-query and bulk-selection work
 
 An owner query passes its captured `PreparedCollectionSource` to Search preparation. Native composition resolves that

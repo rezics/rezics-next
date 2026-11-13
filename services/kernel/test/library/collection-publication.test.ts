@@ -4,11 +4,14 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { releaseDigest } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
 import {
+  COLLECTION_SELECTED_PUBLICATION_ATTEMPTS,
   collectionSelectedPublicationPlan,
   nativeReceiptBound,
   nativeWorkDimensions,
 } from '../../src/library/collection-selected-publication-bounds.ts';
-import { withinCeiling } from '@rezics/bounds';
+import { declareBound, repeatBound, sumBounds, withinCeiling } from '@rezics/bounds';
+import { collectionAuthorizationPreparationWork } from '../../src/library/access-port.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST } from '../../src/library/canonical-source-bounds.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
@@ -30,14 +33,39 @@ afterAll(async () => {
 });
 const path = (id: string) => `/v1/collections/${id}:publishSelected`;
 
-test('selected publication declares an immutable nine-axis plan, including the full alias closure for each selection', () => {
+test('selected publication derives its complete retry budget from raw branches, Source, Access and final binding', () => {
   const empty = collectionSelectedPublicationPlan(0);
   const full = collectionSelectedPublicationPlan(100);
+  const canonical = CANONICAL_SOURCE_RECEIVING_COST();
+  const sourcePreparation = sumBounds(
+    canonical.state,
+    repeatBound(canonical.metadata, 2),
+    declareBound(collectionAuthorizationPreparationWork()),
+  );
+  const preparation = (plan: typeof full) =>
+    sumBounds(
+      repeatBound(plan.terms.sourcePreparation, 2),
+      repeatBound(plan.terms.scopeCurrentness, 2),
+      plan.terms.ownerFilterReauthorization,
+      plan.terms.canonicalDeduplication,
+      plan.terms.selectedBranches,
+    );
+  const maximum = collectionSelectedPublicationPlan(100);
+
   expect(Object.isFrozen(empty)).toBe(true);
   expect(Object.isFrozen(full.terms.selectedBranches)).toBe(true);
-  expect(empty.terms.selectedBranches.candidateKeys).toBe(0);
-  expect(empty.perAttempt.nativeRows).toBeGreaterThan(0);
-  expect(full.terms.selectedBranches.candidateKeys).toBeGreaterThan(100);
+  expect(empty.terms.selectedBranches).toEqual(repeatBound(empty.terms.selectedBranch, 0));
+  expect(full.terms.selectedBranches).toEqual(repeatBound(full.terms.selectedBranch, full.selectionCount));
+  expect(full.terms.selectedBranches.candidateKeys).toBeGreaterThan(full.selectionCount);
+  expect(empty.terms.sourcePreparation).toEqual(sourcePreparation);
+  expect(full.terms.sourcePreparation).toEqual(sourcePreparation);
+  expect(full.terms.preparation).toEqual(preparation(full));
+  expect(full.terms.binding).toEqual(repeatBound(full.terms.ownerFilterReauthorization, 2));
+  expect(full.perAttempt).toEqual(
+    sumBounds(full.terms.binding, full.terms.preparation, full.terms.preReceipt, full.terms.nativeTransaction),
+  );
+  expect(full.terms.retries).toEqual(repeatBound(maximum.perAttempt, COLLECTION_SELECTED_PUBLICATION_ATTEMPTS()));
+  expect(full.ceiling).toEqual(full.terms.retries);
   expect(full.perAttempt.engineRequests).toBe(0);
   expect(withinCeiling(full.perAttempt, full.ceiling)).toBe(true);
   expect(nativeWorkDimensions(nativeReceiptBound({ reservationId: 'native', used: full.bindingWork }))).toEqual(

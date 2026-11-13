@@ -21,6 +21,8 @@ import { workerTestEnv } from '../support/worker-env.ts';
 import { capture, checkGrowth, costOf, openGrowthDatabase } from '../support/growth.ts';
 import { decodeSession, type SessionComponent } from '../../src/tokens/session.ts';
 import { testTokens, testRouteKey } from '../support/test-kernel.ts';
+import { collectionSelectedPublicationPlan } from '../../src/library/collection-selected-publication-bounds.ts';
+import { createCollectionRulesFixture } from './support/collection-rules-fixture.ts';
 
 const db = await openGrowthDatabase();
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
@@ -530,3 +532,173 @@ test('native visibility publication grows linearly only with the changed Collect
   );
   for (const target of targets.slice(0, index)) for (const s of target.subjects) await count(s, 0);
 }, 180_000);
+
+test('selected publication remains bounded as unrelated Collections and member history grow independently', async () => {
+  const fixture = await createCollectionRulesFixture();
+  try {
+    const selectedSubject = await fixture.subject('Fixed selected publication neighbourhood');
+    await fixture.entry(selectedSubject);
+    const subjectIds = Object.freeze([selectedSubject]);
+    const selectedPlan = collectionSelectedPublicationPlan(subjectIds.length);
+    expect(selectedPlan.selectionCount).toBe(subjectIds.length);
+    expect(selectedPlan.terms.selectedBranches.candidateKeys).toBeGreaterThan(subjectIds.length);
+
+    let bearer = await fixture.credential();
+    let serial = 0;
+    let target: { id: string; revision: number } | undefined;
+    let warmupTarget: { id: string; revision: number } | undefined;
+    let historyCollectionId: string | undefined;
+    const historySubject = await fixture.subject('Unrelated member-history subject');
+    const refresh = async () => {
+      bearer = await fixture.credential();
+    };
+    const prepareTarget = async () => {
+      await refresh();
+      const created = await fixture.send(
+        'POST',
+        '/v1/collections',
+        {
+          membershipKind: 'dynamic',
+          title: `Selected publication growth ${++serial}`,
+          visibility: 'private',
+          rule: { filter: { owner: { presence: true } }, sort: 'id' },
+        },
+        bearer,
+      );
+      expect(created.status, await created.clone().text()).toBe(201);
+      const collection = (await created.json()).collection as { id: string; revision: number };
+      await fixture.prepareSource(collection.id);
+      await refresh();
+      return collection;
+    };
+    const publish = async (collection: { id: string; revision: number }) => {
+      const response = await fixture.send(
+        'POST',
+        `/v1/collections/${collection.id}:publishSelected`,
+        { revision: collection.revision, subjectIds },
+        bearer,
+      );
+      expect(response.status, await response.clone().text()).toBe(200);
+      const result = (await response.json()) as {
+        collection: { id: string; revision: number; visibility: string };
+        publication: { generation: string; state: 'complete'; itemCount: number };
+      };
+      expect(result.collection).toMatchObject({ id: collection.id, visibility: 'public' });
+      expect(result.publication).toMatchObject({ state: 'complete', itemCount: subjectIds.length });
+      return result;
+    };
+
+    for (const axis of ['Collections', 'member history'] as const) {
+      const report = await checkGrowth(fixture.database, {
+        name: `selected Collection publication / unrelated ${axis}`,
+        scales: [1, 4, 16],
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        attempts: { commands: 1 },
+        repetitions: 3,
+        async grow(_database, scale, previous) {
+          await refresh();
+          if (axis === 'Collections') {
+            for (let index = previous; index < scale; index++) {
+              if (index > previous && index % 32 === 0) await refresh();
+              const unrelated = await fixture.send(
+                'POST',
+                '/v1/collections',
+                { title: `Unrelated selected-publication catalogue ${index}`, visibility: 'private' },
+                bearer,
+              );
+              expect(unrelated.status, await unrelated.clone().text()).toBe(201);
+            }
+          } else {
+            if (!historyCollectionId) {
+              const unrelated = await fixture.send(
+                'POST',
+                '/v1/collections',
+                { title: 'Unrelated selected-publication member history', visibility: 'private' },
+                bearer,
+              );
+              expect(unrelated.status, await unrelated.clone().text()).toBe(201);
+              historyCollectionId = ((await unrelated.json()).collection as { id: string }).id;
+            }
+            for (let index = previous; index < scale; index++) {
+              if (index > previous && index % 32 === 0) await refresh();
+              const added = await fixture.send(
+                'POST',
+                `/v1/collections/${historyCollectionId}/members`,
+                { subjectId: historySubject },
+                bearer,
+              );
+              expect(added.status, await added.clone().text()).toBeGreaterThanOrEqual(200);
+              expect(added.status).toBeLessThan(300);
+              const memberId = ((await added.json()).member as { id: string }).id;
+              const removed = await fixture.send(
+                'DELETE',
+                `/v1/collections/${historyCollectionId}/members/${memberId}`,
+                undefined,
+                bearer,
+              );
+              expect(removed.status, await removed.clone().text()).toBeGreaterThanOrEqual(200);
+              expect(removed.status).toBeLessThan(300);
+            }
+          }
+          // Source setup is part of seeding; warmup and measurement capture only the selected command.
+          warmupTarget = await prepareTarget();
+        },
+        async warmup() {
+          if (!warmupTarget) throw new Error('Selected-publication warmup target was not prepared');
+          const prepared = warmupTarget;
+          warmupTarget = undefined;
+          await publish(prepared);
+        },
+        async prepare() {
+          target = await prepareTarget();
+        },
+        async operation() {
+          if (!target) throw new Error('Selected-publication target was not prepared');
+          return publish(target);
+        },
+        async verify(database, _scale, _repetition, value) {
+          const result = value as {
+            collection: { id: string };
+            publication: { generation: string };
+          };
+          const members = await database.admin.query<{ subjectId: string }>(
+            `SELECT subject_id::text AS "subjectId" FROM library.collection_source_output_member
+             WHERE route=$1 AND collection_id=$2 AND generation=$3 ORDER BY subject_id`,
+            [routeOf(result.collection.id), result.collection.id, result.publication.generation],
+          );
+          expect(members.rows.map(({ subjectId: id }) => id)).toEqual([...subjectIds].sort());
+        },
+      });
+      expect(report.samples.map(({ scale }) => scale)).toEqual([1, 4, 16]);
+      expect(report.verdicts.rows.outcome).toBe('compatible');
+      expect(report.verdicts.blocks.outcome).toBe('compatible');
+      expect(report.verdicts.statements.outcome).toBe('compatible');
+      for (const sample of report.samples) {
+        expect(sample.cost.rows).toBeGreaterThan(0);
+        expect(sample.cost.statements).toBeGreaterThan(0);
+        expect(sample.attempts?.commands).toBe(1);
+        expect(sample.attempts?.repetitions).toHaveLength(3);
+      }
+      console.log(
+        JSON.stringify({
+          check: report.name,
+          rawSelectionCount: selectedPlan.selectionCount,
+          samples: report.samples.map(({ scale, cost, attempts, statementRepetitions }) => ({
+            scale,
+            foreground: {
+              rows: cost.rows,
+              blocks: cost.blocks,
+              statements: cost.statements,
+              relations: cost.relations,
+            },
+            background: cost.backgroundCosts ?? {},
+            callerAttempts: attempts?.repetitions,
+            nativeStatements: statementRepetitions,
+          })),
+        }),
+      );
+    }
+  } finally {
+    await fixture.close();
+  }
+}, 600_000);
