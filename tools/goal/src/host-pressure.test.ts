@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   pressureBrake,
@@ -9,6 +9,7 @@ import {
   workerHeadroomMiB,
   workerMemoryCurrentMiB,
   workerReservationMiB,
+  workerScopeIncarnation,
 } from './host-pressure.ts';
 import { temporaryDirectory } from './test-support.ts';
 
@@ -62,18 +63,28 @@ test('five worker scopes retain actual usage and active reserves while proven pa
     scope('rezics-worker-active.scope', 2.25, 7.71);
     scope('rezics-worker-unknown.scope', 2.25, 4);
 
-    const baseline = workerHeadroomMiB(1, directory.path, new Set(), new Set(['rezics-worker-active.scope']));
+    const identity = (name: string) => workerScopeIncarnation(directory.path, name)!;
+    const active = new Map([['rezics-worker-active.scope', identity('rezics-worker-active.scope')]]);
+    const parkedScopes = [
+      'rezics-worker-check-a.scope',
+      'rezics-worker-check-b.scope',
+      'rezics-worker-check-c.scope',
+    ];
+    const parkedEvidence = new Map(parkedScopes.map((name) => [name, identity(name)]));
+    const baseline = workerHeadroomMiB(1, directory.path, new Map(), active);
     const parked = workerHeadroomMiB(
       1,
       directory.path,
-      new Set(['rezics-worker-check-a.scope', 'rezics-worker-check-b.scope', 'rezics-worker-check-c.scope']),
-      new Set(['rezics-worker-active.scope']),
+      parkedEvidence,
+      active,
     );
+    const contradictoryActive = new Map(active);
+    contradictoryActive.set(parkedScopes[0]!, identity(parkedScopes[0]!));
     const contradictory = workerHeadroomMiB(
       1,
       directory.path,
-      new Set(['rezics-worker-check-a.scope', 'rezics-worker-check-b.scope', 'rezics-worker-check-c.scope']),
-      new Set(['rezics-worker-active.scope', 'rezics-worker-check-a.scope']),
+      parkedEvidence,
+      contradictoryActive,
     );
 
     expect(baseline).toBeCloseTo(0.06 * 1024, 1);
@@ -81,6 +92,37 @@ test('five worker scopes retain actual usage and active reserves while proven pa
     expect(parked).toBeCloseTo(11.63 * 1024, 1);
     expect(parked).toBeGreaterThan(workerReservationMiB('imports'));
     expect(contradictory).toBeCloseTo(parked - 3.96 * 1024, 1);
+  } finally {
+    directory.close();
+  }
+});
+
+test('retirement exemptions bind to one cgroup incarnation and an active same-scope writer keeps its reserve', () => {
+  const directory = temporaryDirectory();
+  const gib = 1024 ** 3;
+  const name = 'rezics-worker-owner-1-retired.scope';
+  const scope = join(directory.path, name);
+  const put = (path: string, value: number) => writeFileSync(path, String(Math.round(value * gib)));
+  try {
+    put(join(directory.path, 'memory.max'), 26);
+    put(join(directory.path, 'memory.current'), 1);
+    mkdirSync(scope);
+    put(join(scope, 'memory.current'), 0.25);
+    put(join(scope, 'memory.peak'), 5);
+    const retiredIncarnation = workerScopeIncarnation(directory.path, name)!;
+    const retired = new Map([[name, retiredIncarnation]]);
+    const noRetirement = workerHeadroomMiB(0, directory.path, new Map(), new Map());
+    const exempted = workerHeadroomMiB(0, directory.path, retired, new Map());
+    const replacementWriter = workerHeadroomMiB(0, directory.path, retired, retired);
+    expect(exempted - noRetirement).toBeCloseTo(5_120 - 256, 1);
+    expect(replacementWriter).toBeCloseTo(noRetirement, 1);
+
+    rmSync(scope, { recursive: true });
+    mkdirSync(scope);
+    put(join(scope, 'memory.current'), 0.25);
+    put(join(scope, 'memory.peak'), 5);
+    expect(workerScopeIncarnation(directory.path, name)).not.toEqual(retiredIncarnation);
+    expect(workerHeadroomMiB(0, directory.path, retired, new Map())).toBeCloseTo(noRetirement, 1);
   } finally {
     directory.close();
   }

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export type PressureSample = { memoryFull: number; ioFull: number };
@@ -37,6 +37,33 @@ const unavailableReclaimCodes = new Set([
   'ENOENT',
 ]);
 export const WORKER_SLICE_ROOT = `/sys/fs/cgroup/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/rezics.slice/rezics-workers.slice`;
+/** cgroup directory identity prevents a stale name-based exemption from applying to a later scope incarnation. */
+export type WorkerScopeIncarnation = { device: string; inode: string; ctimeNs: string };
+export type WorkerScopeMembership = ReadonlyMap<string, WorkerScopeIncarnation>;
+export function workerScopeIncarnation(root: string, name: string): WorkerScopeIncarnation | undefined {
+  try {
+    const stats = statSync(join(root, name), { bigint: true });
+    return { device: stats.dev.toString(), inode: stats.ino.toString(), ctimeNs: stats.ctimeNs.toString() };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+function matchingScope(
+  evidence: WorkerScopeMembership | undefined,
+  name: string,
+  incarnation?: WorkerScopeIncarnation,
+): boolean {
+  if (!evidence) return false;
+  const expected = evidence.get(name);
+  return Boolean(
+    expected &&
+      incarnation &&
+      expected.device === incarnation.device &&
+      expected.inode === incarnation.inode &&
+      expected.ctimeNs === incarnation.ctimeNs,
+  );
+}
 /** Initial working-set reservation; hard safety limits are deliberately not expected working sets. */
 export function workerReservationMiB(goal?: string): number {
   return goal && goal !== 'control-plane' ? CODE_WORKER_MIB : HEAVY_WORKER_MIB;
@@ -45,8 +72,8 @@ export function workerReservationMiB(goal?: string): number {
 export function workerHeadroomMiB(
   running: number,
   root = WORKER_SLICE_ROOT,
-  parkedScopes: ReadonlySet<string> = new Set(),
-  activeScopes?: ReadonlySet<string>,
+  parkedScopes: WorkerScopeMembership = new Map(),
+  activeScopes?: WorkerScopeMembership,
 ): number {
   const read = (path: string) => Number(readFileSync(path, 'utf8').trim());
   let maximum: number;
@@ -66,11 +93,15 @@ export function workerHeadroomMiB(
         const current = read(join(scope, 'memory.current'));
         // Aggregate memory.current already charges parked checks in full. Only a reconciled owned scope may
         // relinquish its writing reserve, and it cannot stand in for a missing running worker below.
-        if (parkedScopes.has(entry.name) && !activeScopes?.has(entry.name)) continue;
+        const hasIncarnationEvidence = parkedScopes.has(entry.name) || Boolean(activeScopes?.has(entry.name));
+        const incarnation = hasIncarnationEvidence ? workerScopeIncarnation(root, entry.name) : undefined;
+        const parked = matchingScope(parkedScopes, entry.name, incarnation);
+        const active = matchingScope(activeScopes, entry.name, incarnation);
+        if (parked && !active) continue;
         const peak = read(join(scope, 'memory.peak'));
         reserved += Math.max(0, Math.max(HEAVY_WORKER_MIB * MIB, peak) - current);
         // An old or unidentified scope keeps its own reserve, but cannot replace an unreconciled current writer.
-        if (!activeScopes || activeScopes.has(entry.name)) scopes++;
+        if (!activeScopes || active) scopes++;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         // A scope removed during this read is covered conservatively by the running counter below.

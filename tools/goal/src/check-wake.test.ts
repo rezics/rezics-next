@@ -236,7 +236,7 @@ function wakingJob(h: ReturnType<typeof harness>, sliceRoot: string, parkedSnaps
       workerSliceRoot: sliceRoot,
       memoryCurrentMiB: () => workerMemoryCurrentMiB(sliceRoot),
       workerHeadroomMiB: (running, root, parked, active) => {
-        parkedSnapshots.push(new Set(parked));
+        parkedSnapshots.push(new Set(parked.keys()));
         return workerHeadroomMiB(running, root, parked, active);
       },
       reclaim: () => 0,

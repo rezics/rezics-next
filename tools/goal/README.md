@@ -96,6 +96,9 @@ current attempt with no runner process can also release the future-writing reser
 when every listed check has an exactly owned finished result and physical history, a local terminal proof, and a
 locally terminal runner identity. This local proof does not settle remote execution or cleanup. Active, current,
 replacement and unknown scopes retain conservative accounting and cannot stand in for an unidentified current writer.
+Decision: persist exact local retirements in `<state>/capacity-retired-scopes.json`, bound to cgroup device/inode/ctime
+and finished check/runner identity; reapply only to that unchanged scope when it predates the check, and let current or
+unidentified writers keep their reserve.
 Check wakes use the existing capacity ticket and task lease to reserve the active minimum before launch. That ticket's
 memory charge transfers to the reconciled current writer's scope; pending or unreconciled launches keep their ticket
 charge until start or explicit release. Memory floors, PSI, worker caps and check slots remain independent limits.
