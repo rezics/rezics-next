@@ -127,6 +127,57 @@ Source verification is changed-file formatting, message key/argument parity, one
 and one affected Web typecheck. Native, keyboard/phone/desktop, legacy parity, browser/Storybook, broad suites and
 promoted-commit acceptance remain separate verifier obligations.
 
+## Stable draft outline anchors
+
+Decision: reuse the root-append command lifecycle for stable-anchor insert/remove; retain stale choices but require
+anchors observed at the refreshed revision and reread the original exact chapter version before a fresh intent.
+Root append, complete-tree editing and publication remain available.
+
+The owned Book inventory offers `/studio?catalogueId=…&points=1` with its native viewer comparison before any
+complete-tree read. The separate point visit uses the existing picker and one replacing outline page of at most
+20 body-free occurrences per explicit request. Opaque continuations, sparse pages, large sibling addresses and
+same-cursor retry retain the bounded window contract. Only an available, displayed part can become a parent;
+root is always available. An observed sibling under that parent can become the before anchor, or the author chooses
+parent end. Selected anchors retain their supplied human titles, stable IDs and exact draft revision across page
+replacement. Removal reviews the chosen occurrence and explicitly removes its whole subtree from the draft without
+scanning descendants, inventing a count or erasing saved Posts and historical versions.
+
+The chapter picker reads only the deliberate selection through `post-document-port.ts`. The page displays its
+saved body, timestamp, revision and SHA-256. Insert review freezes command kind, catalogue, expected head, fresh
+route-bound occurrence, parent/before IDs, title and exact chapter target; removal freezes the selected occurrence.
+Both retain the original idempotency key, CSRF and session/locale intent. Unknown results replay those exact bytes.
+A stale result preserves all choices but requires an explicit owner-head refresh, new observation/review of retained
+anchors and an explicit exact-version reread through the Post port; the latest chapter head is never substituted.
+Only then can review create a fresh intent/key. The private authenticated CSRF/no-store BFF validates incoming
+operands and calls the installed `$insertDraftPoint.post` or `$removeDraftPoint.post`; external receipts and pages
+are validated at the HTTP boundary. No Client declaration or generator changes are needed.
+
+`hosted-draft-point-lifecycle.ts` owns the shared root-append/point replay, stale refresh, receipt and retirement
+lifecycle. An HTTP200 receipt acknowledges the write independently of observation. Its exact revision, including
+historical replay, selects a new bounded window; failed readback retries only that exact page. Account, session
+incarnation, source, credential, locale and departure retire private selection, abort pending requests and fence late
+results and focus. Shared wrapping 44px controls and eight-locale `studio_draft_point_*` messages retain the existing
+Studio appearance. Unmapped legacy drafts retain native recovery and the complete editor link; no browser migration
+or implicit whole-tree replacement is attempted. Move, point publication and batch activation remain separate work.
+
+Sources read before design: this owner's bounded-root section, native
+[authoring and release](../../../../services/kernel/src/content/hosted-chapters.md#authoring-and-release),
+[Web acceptance](../../../../docs/goals/web.md#acceptance), installed `hosted-chapters-routes.d.ts`, declared module
+entries, the route/workspace, hosted contracts/native/BFF, picker/window/root-append callers and regressions,
+`post-document-port.ts`, Impeccable's craft floor and the read-only main checkout `.reference/INDEX.md`.
+The base provides mounted insert/remove and ordered readback; the missing outcome was the author interface.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-draft-points.test.tsx
+ tests/studio-hosted-draft-picker.test.tsx tests/studio-hosted-root-append.test.tsx tests/studio-hosted-outline-window.test.ts`.
+The focused mounted cases cover nested anchor/exact-version review, part/end insertion, subtree removal, original
+intent replay, stale refresh and exact-version reread, opaque paging/retry, acknowledged-write/readback failure,
+private retirement and late results. Six illustrative `/studio` owned-author stories show anchor/version review,
+stale recovery and acknowledged-write/readback failure at phone390 and desktop1280. Existing picker/root/window
+assertions remain unchanged. Continue the existing native author-to-reader witness lane with its journal intact and
+separate private-publication/prepublished-reader verdicts. Native, browser/visual, legacy parity, broader suites and
+promoted-commit acceptance remain independent verifier work. Source checks are changed-file formatting, locale
+key/argument parity, one changed-UI detector pass and one affected Web typecheck.
+
 ## Book outline index
 
 Decision: Book organization memoizes one index for the loaded structure revision, derived from the existing admitted

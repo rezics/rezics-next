@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import type { StudioFailure, StudioResult } from './contract';
 import {
   hostedCommand,
+  type HostedDraftPointNative,
   type HostedRootAppendNative,
   hostedCreate,
   hostedId,
@@ -64,7 +65,7 @@ function failure(status: number, mutation: boolean): StudioResult<never> {
 /** Uses the existing credential-bearing client and its read-your-writes session-token handling. */
 export function createHostedBookNative(
   client: KernelClient,
-): HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative {
+): HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative & HostedDraftPointNative {
   const fetchOptions = (signal: AbortSignal) => ({ signal, cache: 'no-store' as const, redirect: 'manual' as const });
   const queryOptions = (signal: AbortSignal, query: Record<string, string>) => ({ query, fetch: fetchOptions(signal) });
   const commandOptions = (signal: AbortSignal, key: string) => ({
@@ -299,6 +300,23 @@ export function createHostedBookNative(
     }
   }
   return {
+    async writeDraftPoint(input, signal) {
+      if (signal.aborted) return unavailable();
+      const { catalogueId, idempotencyKey } = input;
+      try {
+        const resource = client.hostedCatalogues({ id: catalogueId });
+        const response =
+          input.kind === 'insert'
+            ? await resource.$insertDraftPoint.post(input.body, commandOptions(signal, idempotencyKey))
+            : await resource.$removeDraftPoint.post(input.body, commandOptions(signal, idempotencyKey));
+        if (response.error || response.status !== 200) return failure(response.status, true);
+        const receipt = v.safeParse(hostedCommand, response.data);
+        if (!receipt.success || receipt.output.catalogueId !== catalogueId) return uncertain();
+        return { ok: true, value: receipt.output };
+      } catch {
+        return uncertain();
+      }
+    },
     async appendRootChapter({ catalogueId, body, idempotencyKey }, signal) {
       if (signal.aborted) return unavailable();
       try {

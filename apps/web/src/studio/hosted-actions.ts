@@ -8,6 +8,8 @@ import type { SessionEnv } from '../session/client';
 import type { StudioResult } from './contract';
 import {
   hostedCreate,
+  hostedDraftPointRequest,
+  type HostedDraftPointNative,
   hostedId,
   hostedHistoryRequest,
   hostedOwnerBinding,
@@ -86,7 +88,7 @@ export const publishHostedBook = createServerFn({ method: 'POST' })
 
 async function admittedOwner<T>(
   run: (
-    native: HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative,
+    native: HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative & HostedDraftPointNative,
     accountId: string,
     signal: AbortSignal,
   ) => Promise<StudioResult<T>>,
@@ -143,6 +145,18 @@ export const hostedOutlineWindowNative: HostedOutlineWindowNative = {
   },
 };
 
+export const writeHostedDraftPoint = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => v.parse(hostedDraftPointRequest, input))
+  .handler(({ data }) =>
+    admittedOwner(async (native, accountId, signal) => {
+      if (data.expectedViewer.accountId !== accountId)
+        return hostedFailure('denied', 'This book belongs to a different account.');
+      const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
+      if (!owner.ok) return owner;
+      return native.writeDraftPoint(data, signal);
+    }, true),
+  );
+
 export const appendHostedRootChapter = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(hostedRootAppendRequest, input))
   .handler(({ data }) =>
@@ -169,6 +183,20 @@ export const hostedRootAppendNative: HostedRootAppendNative &
   async appendRootChapter(data, signal, csrfToken) {
     try {
       return await appendHostedRootChapter({ data, signal, headers: { 'X-CSRF-Token': csrfToken! } });
+    } catch {
+      return hostedFailure('uncertain', 'The command result is unknown. Retry the same operation.');
+    }
+  },
+};
+
+export const hostedDraftPointNative: HostedDraftPointNative &
+  HostedOutlineWindowNative &
+  Pick<HostedBookNative, 'readOwn'> = {
+  ...hostedOutlineWindowNative,
+  readOwn: (...args) => hostedRootAppendNative.readOwn(...args),
+  async writeDraftPoint(data, signal, csrfToken) {
+    try {
+      return await writeHostedDraftPoint({ data, signal, headers: { 'X-CSRF-Token': csrfToken! } });
     } catch {
       return hostedFailure('uncertain', 'The command result is unknown. Retry the same operation.');
     }

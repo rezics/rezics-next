@@ -9,6 +9,7 @@ import {
   hostedId,
   HostedBookInventory,
   HostedRootAppendEntry,
+  HostedDraftPointEntry,
   HostedInventoryVisit,
   HostedDraftPicker,
   hostedBookNative,
@@ -46,6 +47,7 @@ const searchSchema = v.pipe(
     postId: v.optional(hostedId),
     books: v.optional(v.literal('1')),
     append: v.optional(v.literal('1')),
+    points: v.optional(v.literal('1')),
     ownerAccount: v.optional(hostedId),
     ownerEpoch: v.optional(
       v.pipe(
@@ -61,7 +63,7 @@ const searchSchema = v.pipe(
     draftCursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(32768))),
   }),
   v.check((value) => !(value.catalogueId && value.postId) && !(value.books && (value.catalogueId || value.postId))),
-  v.check((value) => !value.append || value.catalogueId !== undefined),
+  v.check((value) => !(value.append || value.points) || value.catalogueId !== undefined),
   v.check(
     (value) =>
       (value.ownerAccount === undefined && value.ownerEpoch === undefined) ||
@@ -116,6 +118,7 @@ function StudioRoute() {
     return (
       <BookStudioEntry
         append={search.append === '1'}
+        points={search.points === '1'}
         owner={loaded.value}
         source={source}
         accountId={session.subject ?? null}
@@ -401,7 +404,12 @@ function documentRow(selection: StudioSelection, fallbackState: StudioDocument['
   };
 }
 
-function BookStudioEntry({ append, ...props }: Parameters<typeof BookStudioVisit>[0] & { append: boolean }) {
+function BookStudioEntry({
+  append,
+  points,
+  ...props
+}: Parameters<typeof BookStudioVisit>[0] & { append: boolean; points: boolean }) {
+  if (points) return <HostedDraftPointEntry {...props} />;
   return append ? <HostedRootAppendEntry {...props} /> : <BookStudioVisit {...props} />;
 }
 

@@ -228,6 +228,32 @@ export interface HostedRootAppendNative {
   ): Promise<StudioResult<HostedCommandReceipt>>;
 }
 
+export const hostedDraftPointInsert = v.strictObject({
+  expectedRevisionId: hostedId,
+  occurrenceId: hostedId,
+  parentId: nullableId,
+  beforeOccurrenceId: nullableId,
+  title,
+  placement: v.variant('kind', [
+    v.strictObject({ kind: v.literal('part') }),
+    v.strictObject({ kind: v.literal('chapter'), target }),
+  ]),
+});
+export const hostedDraftPointRemove = v.strictObject({ expectedRevisionId: hostedId, occurrenceId: hostedId });
+const pointEnvelope = { catalogueId: hostedId, idempotencyKey: hostedKey, expectedViewer: hostedOwnerViewer };
+export const hostedDraftPointRequest = v.variant('kind', [
+  v.strictObject({ ...pointEnvelope, kind: v.literal('insert'), body: hostedDraftPointInsert }),
+  v.strictObject({ ...pointEnvelope, kind: v.literal('remove'), body: hostedDraftPointRemove }),
+]);
+export type HostedDraftPointRequest = v.InferOutput<typeof hostedDraftPointRequest>;
+export interface HostedDraftPointNative {
+  writeDraftPoint(
+    input: HostedDraftPointRequest,
+    signal: AbortSignal,
+    csrfToken?: string,
+  ): Promise<StudioResult<HostedCommandReceipt>>;
+}
+
 /** Expected viewer metadata is a comparison operand, never an authorization credential. */
 export function sameHostedViewer(left: HostedOwnerViewer, right: HostedOwnerViewer): boolean {
   return left.accountId === right.accountId && left.authnEpoch === right.authnEpoch;
