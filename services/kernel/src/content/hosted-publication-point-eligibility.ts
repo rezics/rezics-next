@@ -1,14 +1,26 @@
 import type { ReadContext } from './model.ts';
+import type { AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError, readPostMetadata, type NativePostMetadata, type RetainContentRead } from './reads.ts';
 import { hostedTargetKey } from './hosted-chapters-disclosure.ts';
 import type { HostedChapterTarget, HostedDependencies } from './hosted-chapters-model.ts';
+import {
+  observeIssuedRevisionDisclosure,
+  revisionDisclosureSourceCurrent,
+  revisionDisclosureStillIssued,
+  type RevisionDisclosureSource,
+} from './revision-disclosure.ts';
 
 const anonymous = Object.freeze({ kind: 'anonymous' as const });
 
 export type HostedPointPublicEligibility = Readonly<{
   /** Recheck the original native observations. A false result is a private refusal. */
   final(): Promise<boolean>;
+}>;
+
+export type HostedPointDisclosureEligibility = Readonly<{
+  /** Recheck public sources and exact private-source consent in the Book transaction. */
+  final(client: AccessClient): Promise<boolean>;
 }>;
 
 function matches(value: NativePostMetadata | null, target: HostedChapterTarget): value is NativePostMetadata {
@@ -119,6 +131,65 @@ export async function prepareHostedPointPublicEligibility(
   return {
     async final() {
       for (const observation of observations) if (!(await observation.final())) return false;
+      return true;
+    },
+  };
+}
+
+function disclosureSource(
+  source: NonNullable<Awaited<ReturnType<typeof observeIssuedRevisionDisclosure>>>,
+): RevisionDisclosureSource {
+  return {
+    ...source.target,
+    licence: source.licence,
+    creatorAccountId: source.issuerAccountId,
+    incarnation: source.incarnation,
+  };
+}
+
+/**
+ * Prepare the public catalogue opening and each changed exact target. Public
+ * targets retain their anonymous Access observation; a private opening can use
+ * only existing exact catalogue-scoped consent. Commit rechecks both the
+ * source incarnation and issued consent row through Content's native exports.
+ */
+export async function prepareHostedPointDisclosureEligibility(
+  deps: HostedDependencies,
+  catalogueOpening: HostedChapterTarget,
+  catalogueId: string,
+  newlySelectedTargets: readonly HostedChapterTarget[],
+  context: ReadContext,
+): Promise<HostedPointDisclosureEligibility | null> {
+  const opening = await preparePublicSource(deps, catalogueOpening, context, true);
+  if (!opening) return null;
+
+  const publicObservations: HostedPointPublicEligibility[] = [opening];
+  const privateObservations: Array<Readonly<{ disclosureId: string; source: RevisionDisclosureSource }>> = [];
+  const seen = new Set([hostedTargetKey(catalogueOpening)]);
+
+  for (const target of newlySelectedTargets) {
+    const key = hostedTargetKey(target);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const publicObservation = await preparePublicSource(deps, target, context, false);
+    if (publicObservation) {
+      publicObservations.push(publicObservation);
+      continue;
+    }
+
+    const consent = await observeIssuedRevisionDisclosure(deps, { catalogueId, target }, context);
+    if (!consent) return null;
+    privateObservations.push({ disclosureId: consent.disclosureId, source: disclosureSource(consent) });
+  }
+
+  return {
+    async final(client) {
+      for (const observation of publicObservations) if (!(await observation.final())) return false;
+      for (const observation of privateObservations) {
+        if (!(await revisionDisclosureSourceCurrent(client, observation.source))) return false;
+        if (!(await revisionDisclosureStillIssued(client, observation.disclosureId))) return false;
+      }
       return true;
     },
   };

@@ -1,9 +1,9 @@
-import type { Actor } from '../request/access.ts';
+import type { AccessClient, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { ContentNotFoundError, RevisionPreconditionError } from './commands.ts';
 import {
-  prepareHostedPointPublicEligibility,
-  type HostedPointPublicEligibility,
+  prepareHostedPointDisclosureEligibility,
+  type HostedPointDisclosureEligibility,
 } from './hosted-publication-point-eligibility.ts';
 import {
   selectHostedPublicationPoint,
@@ -20,9 +20,9 @@ export type HostedPointPreparationContext = Readonly<{ actor: Actor; deadline: n
 
 export type HostedPublicationPointPreparation = Readonly<{
   selection: HostedPointSelection;
-  publicEligibility: HostedPointPublicEligibility;
+  disclosureEligibility: HostedPointDisclosureEligibility;
   /** Run in the command finalizer before receipt and outbox writes. */
-  final(): Promise<void>;
+  final(client: AccessClient): Promise<void>;
 }>;
 
 function assertHostedPointRoute(route: number, id: string): void {
@@ -88,14 +88,20 @@ export async function prepareHostedPublicationPoint(
   const changedTargets = selection.changedPlacements.flatMap((placement) =>
     placement.kind === 'chapter' ? [placement.target] : [],
   );
-  const publicEligibility = await prepareHostedPointPublicEligibility(deps, catalogueOpening, changedTargets, context);
-  if (!publicEligibility) throw new ContentNotFoundError();
+  const disclosureEligibility = await prepareHostedPointDisclosureEligibility(
+    deps,
+    catalogueOpening,
+    catalogueId,
+    changedTargets,
+    context,
+  );
+  if (!disclosureEligibility) throw new ContentNotFoundError();
 
   return {
     selection,
-    publicEligibility,
-    async final() {
-      if (!(await publicEligibility.final())) throw new ContentNotFoundError();
+    disclosureEligibility,
+    async final(client) {
+      if (!(await disclosureEligibility.final(client))) throw new ContentNotFoundError();
     },
   };
 }

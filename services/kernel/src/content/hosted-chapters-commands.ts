@@ -128,7 +128,7 @@ export async function prepareHostedPublicationPointCommand(
       await base.finalize?.(tx, attempt, evidence);
       const prepared = preparedByTime.get(attempt.time);
       if (!prepared) throw new Error('Hosted point command reached finalization without preparation');
-      await prepared.final();
+      await prepared.final(tx);
     },
   };
 

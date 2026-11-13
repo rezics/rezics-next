@@ -1,10 +1,19 @@
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
+import { issueRevisionDisclosure, revokeRevisionDisclosure } from '../../src/content/revision-disclosure.ts';
+import { prepareHostedPointDisclosureEligibility } from '../../src/content/hosted-publication-point-eligibility.ts';
 import { InvalidHostedStructureError } from '../../src/content/hosted-chapters-model.ts';
 import {
   selectHostedPublicationPoint,
   type HostedPointSelectionReads,
 } from '../../src/content/hosted-publication-point-selection.ts';
 import type { HostedChapterTarget, OrderedHostedPlacement } from '../../src/content/hosted-chapters-model.ts';
+import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
+
+setDefaultTimeout(180_000);
+
+function commandContext() {
+  return { idempotencyKey: crypto.randomUUID(), deadline: Date.now() + 120_000, requestId: crypto.randomUUID() };
+}
 
 const sourceTarget: HostedChapterTarget = {
   threadId: 'thread',
@@ -131,4 +140,66 @@ test('replacement keeps the exact public placement and selects only the requeste
   });
   expect(selection.draftChapter.target).toEqual(sourceTarget);
   expect(selection.changedPlacements).toEqual([selection.draftChapter]);
+});
+
+test('point eligibility accepts exact private Book consent and rechecks revocation at commit', async () => {
+  const f = await hostedChaptersFixture();
+  try {
+    const catalogue = await f.native.thread('published');
+    const otherCatalogue = await f.native.thread('published');
+    const privateOpening = await f.native.thread('draft');
+    const target = f.target(privateOpening);
+    const opening = f.target(catalogue);
+    const deps = {
+      pool: f.native.pool,
+      access: f.native.system.access,
+      tokens: f.native.system.tokenKeys,
+      routeKey: f.native.system.routeKey,
+      clock: () => new Date(),
+    };
+    const context = { actor: f.native.author.actor, deadline: Date.now() + 120_000 };
+
+    expect(
+      await prepareHostedPointDisclosureEligibility(deps, opening, catalogue.firstPost.id, [target], context),
+    ).toBeNull();
+    const consent = await issueRevisionDisclosure(
+      deps,
+      f.native.author.actor,
+      { catalogueId: catalogue.firstPost.id, target },
+      commandContext(),
+    );
+    expect(
+      await prepareHostedPointDisclosureEligibility(deps, opening, otherCatalogue.firstPost.id, [target], context),
+    ).toBeNull();
+
+    const prepared = await prepareHostedPointDisclosureEligibility(
+      deps,
+      opening,
+      catalogue.firstPost.id,
+      [target],
+      context,
+    );
+    expect(prepared).not.toBeNull();
+    const client = await f.native.pool.connect();
+    try {
+      expect(await prepared!.final(client)).toBe(true);
+    } finally {
+      client.release();
+    }
+
+    await revokeRevisionDisclosure(
+      deps,
+      f.native.author.actor,
+      { disclosureId: consent.value.disclosureId },
+      commandContext(),
+    );
+    const afterRevoke = await f.native.pool.connect();
+    try {
+      expect(await prepared!.final(afterRevoke)).toBe(false);
+    } finally {
+      afterRevoke.release();
+    }
+  } finally {
+    await f.close();
+  }
 });
