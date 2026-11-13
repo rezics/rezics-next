@@ -40,6 +40,8 @@ import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
 import { historicalReaderSource, type HistoricalReaderSource } from '../threads/historical-reader-provenance';
+import { HostedLegacyBaselineEntry } from '../studio/hosted-legacy-baseline-entry';
+import { baselineCopy } from '../studio/hosted-legacy-baseline-copy';
 
 const searchSchema = v.pipe(
   v.strictObject({
@@ -48,6 +50,7 @@ const searchSchema = v.pipe(
     books: v.optional(v.literal('1')),
     append: v.optional(v.literal('1')),
     points: v.optional(v.literal('1')),
+    baseline: v.optional(v.literal('1')),
     ownerAccount: v.optional(hostedId),
     ownerEpoch: v.optional(
       v.pipe(
@@ -63,7 +66,8 @@ const searchSchema = v.pipe(
     draftCursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(32768))),
   }),
   v.check((value) => !(value.catalogueId && value.postId) && !(value.books && (value.catalogueId || value.postId))),
-  v.check((value) => !(value.append || value.points) || value.catalogueId !== undefined),
+  v.check((value) => !(value.append || value.points || value.baseline) || value.catalogueId !== undefined),
+  v.check((value) => !value.baseline || !(value.append || value.points)),
   v.check(
     (value) =>
       (value.ownerAccount === undefined && value.ownerEpoch === undefined) ||
@@ -119,6 +123,7 @@ function StudioRoute() {
       <BookStudioEntry
         append={search.append === '1'}
         points={search.points === '1'}
+        baseline={search.baseline === '1'}
         owner={loaded.value}
         source={source}
         accountId={session.subject ?? null}
@@ -407,10 +412,28 @@ function documentRow(selection: StudioSelection, fallbackState: StudioDocument['
 function BookStudioEntry({
   append,
   points,
+  baseline,
   ...props
-}: Parameters<typeof BookStudioVisit>[0] & { append: boolean; points: boolean }) {
+}: Parameters<typeof BookStudioVisit>[0] & { append: boolean; points: boolean; baseline: boolean }) {
+  if (baseline) return <HostedLegacyBaselineEntry {...props} />;
   if (points) return <HostedDraftPointEntry {...props} />;
-  return append ? <HostedRootAppendEntry {...props} /> : <BookStudioVisit {...props} />;
+  if (append) return <HostedRootAppendEntry {...props} />;
+  return (
+    <>
+      <nav className="mx-auto w-full max-w-4xl px-4 pt-6">
+        <a
+          className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          href={localizeHref(
+            `/studio?catalogueId=${props.owner.item.catalogueId}&baseline=1&ownerAccount=${props.owner.viewer.accountId}&ownerEpoch=${props.owner.viewer.authnEpoch}`,
+            { locale: props.locale },
+          )}
+        >
+          {baselineCopy[props.locale].entry}
+        </a>
+      </nav>
+      <BookStudioVisit {...props} />
+    </>
+  );
 }
 
 function BookStudioVisit({
