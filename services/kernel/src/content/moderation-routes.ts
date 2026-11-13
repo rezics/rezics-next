@@ -298,7 +298,7 @@ export function moderationRoutes(
       customMethod('/v1/posts/:id', 'restrictRevision'),
       {
         ...revisionRestrictionOptions,
-        detail: detail('post.revision.restrict', 'moderation:takedown', 'post'),
+        detail: detail('post.restrict_revision', 'moderation:takedown', 'post'),
       },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
