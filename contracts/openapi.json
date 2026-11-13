@@ -235187,7 +235187,7 @@
                                   ]
                                 },
                                 "position": {
-                                  "maximum": 511,
+                                  "maximum": 9007199254740991,
                                   "minimum": 0,
                                   "type": "integer"
                                 },
@@ -236779,7 +236779,7 @@
                                     ]
                                   },
                                   "position": {
-                                    "maximum": 511,
+                                    "maximum": 9007199254740991,
                                     "minimum": 0,
                                     "type": "integer"
                                   },
@@ -237542,7 +237542,7 @@
                                   ]
                                 },
                                 "position": {
-                                  "maximum": 511,
+                                  "maximum": 9007199254740991,
                                   "minimum": 0,
                                   "type": "integer"
                                 },
