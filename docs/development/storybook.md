@@ -56,6 +56,16 @@ bun test apps/web/tests/library-page-smoke.test.ts
 The Web landing integration check selects this command for changes under `apps/web`, `packages/ui`, and
 `packages/document`.
 
+## Publication transport
+
+The Web publisher validates one committed snapshot with its build and six smoke scenarios, then returns one
+publication archive through the ordinary check-artifact boundary. The embedded manifest records the exact revision,
+relative member paths, byte lengths and SHA-256 digests. Publication accepts at most 16,384 ordinary files and
+240 MiB including a manifest of at most 4 MiB. The receiver verifies all members and the built revision before
+atomically replacing the local deployment directory. Generic check-artifact file and byte limits remain unchanged.
+The focused boundary regression is `apps/web/tests/storybook-archive.test.ts`; successful transport does not establish
+native product acceptance or visual review.
+
 ## Agent access
 
 Start an isolated local catalogue from the worktree root with an unused exact loopback port:
