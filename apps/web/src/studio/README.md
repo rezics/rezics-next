@@ -51,6 +51,32 @@ exact chapter versions; existing placement, focus and release assertions remain 
 changed-file formatting and one Web typecheck; ordinary acceptance, native, browser, Storybook and broader suites
 are deferred.
 
+## Native author outline
+
+Decision: Book Studio reads the installed private author outline stream, with one bounded request per page,
+including nested and empty parts. It first admits the requested current or exact draft/release revision, then sends
+the same catalogue, kind, pinned revision and limit with every opaque continuation. The existing credential-bearing
+client retains native session anchors and admission; public release disclosure does not grant author access.
+
+The shared body-free occurrence decoder retains exact chapter targets, parent identities and sibling positions.
+Only a completed stream enters `hostedBookStructure`, the common tree model for editing, preview, withdrawal and
+publication. Its depth, parent and dense sibling checks also apply to outlines; the stream must match its preorder.
+Duplicate identities, malformed or repeated cursors, empty continuing pages, withheld rows and failed later pages
+reject the entire read. No prefix becomes an empty or editable tree. An empty terminal outline remains valid.
+Command recovery reads the acknowledged exact revision through the same operation. Release verification stays
+separate from the draft and still checks the source structure revision.
+
+Sources read before design: this owner document, `hosted-native.ts`, `hosted-contract.ts`, `hosted-structure.ts`,
+`book-toc.ts`, the adapter/workspace callers and hosted inventory/publication fixtures, the installed generated
+outline declaration, and Content's [author outline](../../../../services/kernel/src/content/hosted-chapters.md#author-outline)
+contract. The base includes the named native fix and generated operation; no merge or cherry-pick is required.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-outline.test.ts`.
+One transport fixture covers ordered pages, nested/empty parts, exact targets and write/readback, cursor and tree
+corruption, partial denial and aborted reads. Existing publication assertions remain unchanged. Source checks are
+changed-file formatting and one affected Web typecheck; acceptance, native, browser, Storybook and broad suites
+remain deferred.
+
 ## Book placement fields
 
 Decision: Book placement composes shared `Field`, `FieldLabel` and shadcn `Select` primitives, following Book catalogue

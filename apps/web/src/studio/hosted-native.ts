@@ -1,7 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import type { StudioFailure, StudioResult } from './contract';
-import { bookTocRows } from './book-toc';
 import {
   hostedCommand,
   hostedCreate,
@@ -81,70 +80,63 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative {
       )
         return unavailable();
       const placements: HostedPlacement[] = [];
-      const parents: { id: string | null; depth: number }[] = [{ id: null, depth: 1 }];
       const ids = new Set<string>();
-      for (let index = 0; index < parents.length; index++) {
-        const parent = parents[index]!;
-        let cursor: string | null = null;
-        const cursors = new Set<string>();
-        let position = 0;
-        do {
-          if (signal.aborted) return unavailable();
-          const pageResponse: Response = await resource.children.get(
-            queryOptions(signal, {
-              kind: revision.kind,
-              revisionId: revision.revisionId,
-              limit: '20',
-              ...(parent.id ? { parentId: parent.id } : {}),
-              ...(cursor ? { cursor } : {}),
-            }),
+      const cursors = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        if (signal.aborted) return unavailable();
+        // Select once, then bind every opaque continuation to that exact immutable revision.
+        const pageResponse: Response = await resource.outline.get(
+          queryOptions(signal, {
+            kind: revision.kind,
+            revisionId: revision.revisionId,
+            limit: '20',
+            ...(cursor === null ? {} : { cursor }),
+          }),
+        );
+        if (signal.aborted) return unavailable();
+        if (pageResponse.error || pageResponse.status !== 200) return failure(pageResponse.status, false);
+        const page = v.parse(hostedPage, pageResponse.data);
+        if (
+          page.catalogueId !== revision.catalogueId ||
+          page.revisionId !== revision.revisionId ||
+          page.kind !== revision.kind ||
+          page.sourceRevisionId !== revision.sourceRevisionId
+        )
+          return unavailable();
+        for (const item of page.items) {
+          if (item.availability !== 'available')
+            return hostedFailure(
+              'unavailable',
+              'A chapter is unavailable. The incomplete table of contents cannot be rewritten.',
+            );
+          if (ids.has(item.occurrenceId) || placements.length >= 512) return unavailable();
+          ids.add(item.occurrenceId);
+          const address = {
+            occurrenceId: item.occurrenceId,
+            parentId: item.parentId,
+            position: item.position,
+            title: item.title,
+          };
+          placements.push(
+            item.kind === 'chapter'
+              ? { ...address, kind: 'chapter', target: item.target }
+              : { ...address, kind: 'part' },
           );
-          if (pageResponse.error || pageResponse.status !== 200) return failure(pageResponse.status, false);
-          const page: v.InferOutput<typeof hostedPage> = v.parse(hostedPage, pageResponse.data);
-          if (
-            page.catalogueId !== revision.catalogueId ||
-            page.revisionId !== revision.revisionId ||
-            page.kind !== revision.kind ||
-            page.sourceRevisionId !== revision.sourceRevisionId
-          )
-            return unavailable();
-          for (const item of page.items) {
-            if (item.availability !== 'available')
-              return hostedFailure(
-                'unavailable',
-                'A chapter is unavailable. The incomplete table of contents cannot be rewritten.',
-              );
-            if (
-              parent.depth > 16 ||
-              item.parentId !== parent.id ||
-              item.position !== position++ ||
-              ids.has(item.occurrenceId) ||
-              placements.length >= 512
-            )
-              return unavailable();
-            ids.add(item.occurrenceId);
-            const address = {
-              occurrenceId: item.occurrenceId,
-              parentId: item.parentId,
-              position: item.position,
-              title: item.title,
-            };
-            if (item.kind === 'chapter') placements.push({ ...address, kind: 'chapter', target: item.target });
-            else {
-              placements.push({ ...address, kind: 'part' });
-              parents.push({ id: item.occurrenceId, depth: parent.depth + 1 });
-            }
-          }
-          cursor = page.nextCursor;
-          if (cursor) {
-            if (!page.items.length || cursors.has(cursor)) return unavailable();
-            cursors.add(cursor);
-          }
-        } while (cursor);
-      }
+        }
+        cursor = page.nextCursor;
+        if (cursor !== null) {
+          if (!page.items.length || cursors.has(cursor)) return unavailable();
+          cursors.add(cursor);
+        }
+      } while (cursor !== null);
       if (signal.aborted) return unavailable();
       const book = { revision, placements };
-      bookTocRows(hostedBookStructure(book));
+      // The common tree model checks parents, dense sibling positions and depth. Comparing
+      // its preorder also rejects a stream that reopens an already completed subtree.
+      const structure = hostedBookStructure(book);
+      if (structure.placements.some((item, index) => item.occurrenceId !== placements[index]!.occurrenceId))
+        return unavailable();
       return { ok: true, value: book };
     } catch {
       return unavailable();

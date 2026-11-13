@@ -48,6 +48,7 @@ const revision = {
   sourceRevisionId: nullableId,
 };
 export const hostedRevision = v.strictObject(revision);
+/** Shared body-free occurrence wire for children and the private author preorder stream. */
 export const hostedPage = v.strictObject({
   ...revision,
   items: v.pipe(
