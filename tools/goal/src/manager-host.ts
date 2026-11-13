@@ -20,6 +20,10 @@ import { defaultPolicy } from './policy.ts';
 import { sameProcess, terminateProcessGroup, type ProcessIdentity } from './process.ts';
 import { currentCodeVersion } from './runtime-version.ts';
 import { runHostOperation, startHostHeartbeat } from './service.ts';
+import {
+  workerCheckHostActiveTypingRecovery,
+  type WorkerCheckHostActiveTypingRecovery,
+} from './worker-check-budget.ts';
 
 /** Socket server, registry, shutdown and periodic host scheduling; CLI dispatch stays in `integration-cli.ts`. */
 
@@ -373,24 +377,63 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
       reaping = Promise.resolve()
         .then(() =>
           runHostOperation('container reaper', async () => {
+            const activeRecoveries = new Map<string, WorkerCheckHostActiveTypingRecovery | null>();
             await sweepAbandonedResources({
               tasks: readTerminalTaskOwners(runtime.db),
               stateDirectory: runtime.stateDirectory,
               containers: policy.containers,
               graceMs: 1000,
               ...(options.terminalProcessSweep ? { terminalProcessSweep: options.terminalProcessSweep } : {}),
-              currentTerminalOwner(owner, worktree) {
+              currentTerminalOwner(owner, worktree, processIdentity) {
                 const task = runtime.db
                   .query(
                     `SELECT json_extract(body, '$.state') AS state, json_extract(body, '$.worktree') AS worktree, json_extract(body, '$.workspace') AS workspace FROM worker_tasks WHERE id=?`,
                   )
                   .get(owner) as { state: string; worktree: string; workspace: unknown } | null;
-                return Boolean(
+                const current = Boolean(
                   task &&
                   (TERMINAL_TASK_STATES as readonly string[]).includes(task.state) &&
                   task.worktree === worktree &&
                   !task.workspace,
                 );
+                if (!current || !processIdentity || task?.state !== 'stopped') return current;
+
+                let recovery = activeRecoveries.get(owner);
+                if (!activeRecoveries.has(owner)) {
+                  recovery =
+                    workerCheckHostActiveTypingRecovery({
+                      db: runtime.db,
+                      stateDirectory: runtime.stateDirectory,
+                      taskId: owner,
+                      worktree,
+                    }) ?? null;
+                  activeRecoveries.set(owner, recovery);
+                }
+                if (
+                  recovery &&
+                  recovery.runnerIdentity.group === processIdentity.group &&
+                  recovery.runnerIdentity.boot === processIdentity.boot &&
+                  BigInt(processIdentity.start) >= BigInt(recovery.runnerIdentity.start)
+                ) {
+                  const currentRecovery = workerCheckHostActiveTypingRecovery({
+                    db: runtime.db,
+                    stateDirectory: runtime.stateDirectory,
+                    taskId: owner,
+                    worktree,
+                  });
+                  if (
+                    currentRecovery?.token === recovery.token &&
+                    currentRecovery.checkId === recovery.checkId &&
+                    currentRecovery.physicalRunId === recovery.physicalRunId &&
+                    currentRecovery.runnerHost === recovery.runnerHost &&
+                    currentRecovery.runnerIdentity.pid === recovery.runnerIdentity.pid &&
+                    currentRecovery.runnerIdentity.start === recovery.runnerIdentity.start &&
+                    currentRecovery.runnerIdentity.boot === recovery.runnerIdentity.boot &&
+                    currentRecovery.runnerIdentity.group === recovery.runnerIdentity.group
+                  )
+                    return false;
+                }
+                return true;
               },
             });
             await reapContainersAsync(
