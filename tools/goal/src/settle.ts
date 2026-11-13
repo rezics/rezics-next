@@ -402,8 +402,7 @@ export async function settle(
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
           attempt.checks =
-            ordinaryWaitingChecks ??
-            (pendingChecks?.length ? pendingChecks : proofWaitingId ? [proofWaitingId] : []);
+            ordinaryWaitingChecks ?? (pendingChecks?.length ? pendingChecks : proofWaitingId ? [proofWaitingId] : []);
           attempt.process = null;
           attempt.driver = null;
           attempt.exitCode = code;
