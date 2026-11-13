@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import { MAX_DOCUMENT_BYTES } from './document-limits.ts';
-import { HOSTED_PLACEMENT_LIMIT, HOSTED_PAGE_LIMIT } from './hosted-chapters-limits.ts';
+import { HOSTED_DEPTH_LIMIT, HOSTED_PLACEMENT_LIMIT, HOSTED_PAGE_LIMIT } from './hosted-chapters-limits.ts';
 
 const closed = { additionalProperties: false } as const;
 export const HostedIdSchema = t.String({
@@ -9,7 +9,7 @@ export const HostedIdSchema = t.String({
 const nullableId = t.Union([HostedIdSchema, t.Null()]);
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const title = t.String({ minLength: 1, maxLength: 256 });
-const target = t.Object(
+export const HostedChapterTargetSchema = t.Object(
   {
     threadId: HostedIdSchema,
     postId: HostedIdSchema,
@@ -18,6 +18,7 @@ const target = t.Object(
   },
   closed,
 );
+const target = HostedChapterTargetSchema;
 const address = {
   occurrenceId: HostedIdSchema,
   parentId: nullableId,
@@ -45,6 +46,31 @@ export const HostedPublishSchema = t.Object(
     expectedRevisionId: HostedIdSchema,
     expectedPublicationId: nullableId,
     occurrenceIds: t.Array(HostedIdSchema, { maxItems: HOSTED_PLACEMENT_LIMIT, uniqueItems: true }),
+  },
+  closed,
+);
+/** Point commands carry one exact source selection and name only public-version anchors. */
+export const HostedPublishChapterSchema = t.Object(
+  {
+    expectedRevisionId: HostedIdSchema,
+    expectedPublicationId: HostedIdSchema,
+    occurrenceId: HostedIdSchema,
+    target,
+    parentId: nullableId,
+    beforeOccurrenceId: nullableId,
+    selectedAncestors: t.Array(t.Object({ occurrenceId: HostedIdSchema, beforeOccurrenceId: nullableId }, closed), {
+      maxItems: HOSTED_DEPTH_LIMIT - 1,
+      uniqueItems: true,
+    }),
+  },
+  closed,
+);
+export const HostedReplacePublishedChapterSchema = t.Object(
+  {
+    expectedRevisionId: HostedIdSchema,
+    expectedPublicationId: HostedIdSchema,
+    occurrenceId: HostedIdSchema,
+    target,
   },
   closed,
 );

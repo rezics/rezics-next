@@ -14,6 +14,8 @@ import {
   hostedPostAuthorization,
   type ContentCommandDependencies,
 } from './commands.ts';
+import { prepareHostedPublicationPoint, type HostedPublicationPointPreparation } from './hosted-publication-point.ts';
+import type { HostedPointSelectionReads, HostedPublicationPointInput } from './hosted-publication-point-selection.ts';
 import { snapshot } from './reads.ts';
 import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
 import { insertHostedRootAppend } from './hosted-chapters-append.ts';
@@ -80,6 +82,71 @@ export function appendHostedRootChapter(
   context: HostedCommandContext,
 ) {
   return mutate(deps, actor, catalogueId, { kind: 'append', input }, context);
+}
+
+/** Build the native admission and receipt binding for a point operation. The
+ * storage owner supplies reads pinned to the request's expected Book versions;
+ * the returned preparation is consumed by its transaction writer. */
+export async function prepareHostedPublicationPointCommand(
+  deps: HostedCommandDependencies,
+  actor: Actor,
+  catalogueId: string,
+  operation: HostedPublicationPointInput,
+  reads: HostedPointSelectionReads,
+  context: HostedCommandContext,
+) {
+  const route = routeOf(catalogueId);
+  if (route === null || actor.kind !== 'account') throw new ContentNotFoundError();
+  const initial = (
+    await snapshot(deps, catalogueId, { actor, deadline: context.deadline }, (client) =>
+      hostedCatalogue(client, catalogueId),
+    )
+  ).value;
+  if (!initial) throw new ContentNotFoundError();
+
+  const kind = `content.hosted-catalogue.${operation.kind}`;
+  const receipt = {
+    kind,
+    key: context.idempotencyKey,
+    digest: requestDigest(kind, actor, { catalogueId, input: operation.input }),
+  };
+  const base = hostedPostAuthorization(deps, actor, initial.thread_id, catalogueId, context, receipt);
+  const preparedByTime = new WeakMap<AuthoritativeTime, HostedPublicationPointPreparation>();
+  const authorization: CommandAuthorization = {
+    ...base,
+    async prepare(attempt) {
+      const evidence = await base.prepare!(attempt);
+      preparedByTime.set(
+        attempt.time,
+        await prepareHostedPublicationPoint(deps, catalogueId, operation, reads, {
+          actor,
+          deadline: context.deadline,
+        }),
+      );
+      return evidence;
+    },
+    async authorize(tx, attempt, evidence) {
+      return base.authorize(tx, attempt, evidence);
+    },
+    async finalize(tx, attempt, evidence) {
+      await base.finalize?.(tx, attempt, evidence);
+      const prepared = preparedByTime.get(attempt.time);
+      if (!prepared) throw new Error('Hosted point command reached finalization without preparation');
+      await prepared.final();
+    },
+  };
+
+  return {
+    catalogueId,
+    partition: partitionOf(route),
+    receipt,
+    authorization,
+    prepared(time: AuthoritativeTime) {
+      const result = preparedByTime.get(time);
+      if (!result) throw new Error('Hosted point command has no preparation for this attempt');
+      return result;
+    },
+  };
 }
 
 async function mutate(
