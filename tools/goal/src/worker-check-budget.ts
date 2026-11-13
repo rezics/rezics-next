@@ -1394,29 +1394,29 @@ function authorizedTypingRecoveryEvent(db: Database, grant: TypingRecoveryGrant)
 }
 
 /**
- * Return only the runner of a current stopped-task typing recovery whose authenticated grant was consumed into an
- * exact check-host stamp and whose registered logical and physical run are still live on this host.
+ * Return every runner of the current stopped-task typing recoveries whose authenticated grants were consumed into
+ * exact check-host stamps and whose registered logical and physical runs are still live on this host.
  */
-export function workerCheckHostActiveTypingRecovery(input: {
+export function workerCheckHostActiveTypingRecoveries(input: {
   db: Database;
   stateDirectory: string;
   taskId: string;
   worktree: string;
   /** When supplied, inspect only the current authenticated grant's stamp. */
   token?: string;
-}): WorkerCheckHostActiveTypingRecovery | undefined {
+}): WorkerCheckHostActiveTypingRecovery[] {
   const taskRow = input.db.query('SELECT current_attempt, body FROM worker_tasks WHERE id=?').get(input.taskId) as {
     current_attempt: number;
     body: string;
   } | null;
-  if (!taskRow || !Number.isSafeInteger(taskRow.current_attempt) || taskRow.current_attempt < 1) return;
+  if (!taskRow || !Number.isSafeInteger(taskRow.current_attempt) || taskRow.current_attempt < 1) return [];
   let task: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse(taskRow.body);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
     task = parsed as Record<string, unknown>;
   } catch {
-    return;
+    return [];
   }
   if (
     task.id !== input.taskId ||
@@ -1425,45 +1425,48 @@ export function workerCheckHostActiveTypingRecovery(input: {
     task.worktree !== input.worktree ||
     task.workspace
   )
-    return;
+    return [];
 
   const attemptRow = input.db
     .query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
     .get(input.taskId, taskRow.current_attempt) as { body: string } | null;
-  if (!attemptRow) return;
+  if (!attemptRow) return [];
   let attempt: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse(attemptRow.body);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
     attempt = parsed as Record<string, unknown>;
   } catch {
-    return;
+    return [];
   }
   if (
     attempt.taskId !== input.taskId ||
     attempt.attempt !== taskRow.current_attempt ||
-    (attempt.state !== 'exited' && attempt.state !== 'stopped')
+    (attempt.state !== 'exited' && attempt.state !== 'stopped') ||
+    (attempt.terminationIntent as { operation?: unknown } | undefined)?.operation === 'stop' ||
+    (attempt.terminationIntent as { operation?: unknown } | undefined)?.operation === 'cancel'
   )
-    return;
+    return [];
 
   const directory = workerCheckBudgetDirectory(input.stateDirectory, input.taskId, taskRow.current_attempt);
   let names: string[];
   if (input.token !== undefined) {
-    if (!/^[0-9a-f-]{36}$/.test(input.token)) return;
+    if (!/^[0-9a-f-]{36}$/.test(input.token)) return [];
     const grant = readCheckEvidence(recoveryPath(directory, input.token)) as
       | (CheckEvidence & TypingRecoveryGrant)
       | undefined;
-    if (!grant?.stamp || !STAMP_NAME.test(grant.stamp)) return;
+    if (!grant?.stamp || !STAMP_NAME.test(grant.stamp)) return [];
     names = [grant.stamp];
   } else {
     try {
       names = stampNames(directory);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
       throw error;
     }
   }
   const root = join(input.worktree, '.temp', 'goal', 'checks');
+  const active: WorkerCheckHostActiveTypingRecovery[] = [];
   for (const name of names.reverse()) {
     const stampSource = readOptionalCheckEvidence(join(directory, name));
     if (stampSource.state !== 'present') continue;
@@ -1555,14 +1558,26 @@ export function workerCheckHostActiveTypingRecovery(input: {
     )
       continue;
 
-    return {
+    active.push({
       token: grant.token,
       checkId: grant.checkId,
       physicalRunId: grant.physicalRunId,
       runnerHost: result.runnerHost,
       runnerIdentity: resultRunner,
-    };
+    });
   }
+  return active;
+}
+
+/** Compatibility helper for callers that need one current recovery rather than the full live set. */
+export function workerCheckHostActiveTypingRecovery(input: {
+  db: Database;
+  stateDirectory: string;
+  taskId: string;
+  worktree: string;
+  token?: string;
+}): WorkerCheckHostActiveTypingRecovery | undefined {
+  return workerCheckHostActiveTypingRecoveries(input)[0];
 }
 
 /** Read only the current-input recovery whose grant is bound to a consumed budget stamp. */

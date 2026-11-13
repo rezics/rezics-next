@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import type { Attempt } from './types.ts';
 import { createInterface } from 'node:readline';
 import type { AppServer, Notification } from './app-server.ts';
@@ -12,11 +12,18 @@ import { dispatchDailyStepAudit, ensureFlow } from './flow.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
-import { brief, harness, temporaryDirectory } from './test-support.ts';
-import { stoppedTaskSweepRetainsOrdinaryProof } from './manager-host.ts';
+import { brief, harness, prepareKernelCompilerFixture, temporaryDirectory } from './test-support.ts';
+import { createManagerTerminalOwnerLookup, stoppedTaskSweepRetainsOrdinaryProof } from './manager-host.ts';
 import { authorizeProof } from './verification.ts';
 import { git } from './tasks.ts';
 import { hostRequest } from './integration-cli.ts';
+import { createTerminalProcessSweep } from './attempt-resources.ts';
+import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
+import {
+  grantWorkerTypingRecovery,
+  workerCheckBudgetDirectory,
+  workerCheckHostContentTree,
+} from './worker-check-budget.ts';
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const short = (path: string) => relative(process.cwd(), path);
@@ -1020,5 +1027,195 @@ test('the stopped-task sweep retains only the live owned ordinary-proof runner',
     expect(stoppedTaskSweepRetainsOrdinaryProof(h.store.db, proof.id, h.root, identity)).toBe(false);
   } finally {
     h.dispose();
+  }
+});
+
+test('the native terminal sweep retains both exact groups and reaps unmatched and superseded groups', async () => {
+  const h = harness();
+  const runners: { child: ChildProcess; identity: ProcessIdentity; exited: Promise<void> }[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    prepareKernelCompilerFixture(task.worktree, true);
+    mkdirSync(join(task.worktree, 'apps/web/scripts'), { recursive: true });
+    mkdirSync(join(task.worktree, 'apps/web/src'), { recursive: true });
+    writeFileSync(
+      join(task.worktree, 'apps/web/package.json'),
+      JSON.stringify({ name: '@rezics/web', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+    );
+    writeFileSync(join(task.worktree, 'apps/web/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+    writeFileSync(join(task.worktree, 'apps/web/scripts/typecheck.ts'), 'export {}\n');
+    writeFileSync(join(task.worktree, 'apps/web/src/reader.ts'), 'export const reader = true\n');
+    git(task.worktree, ['add', 'apps/web']);
+    git(task.worktree, ['commit', '-m', 'Prepare Web recovery compiler fixture']);
+
+    const ref = { taskId: task.id, attempt: 1 };
+    h.store.db
+      .query("UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1, '$.state', 'stopped') WHERE id=?")
+      .run(task.id);
+    h.store.db
+      .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
+      .run(task.id, JSON.stringify({ taskId: task.id, attempt: 1, state: 'exited' }));
+    const actor = { id: task.brief.manager, sessionId: 'native-recovery-session' };
+    const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, ref.attempt);
+    mkdirSync(join(budget, 'typing-recovery'), { recursive: true });
+    const content = workerCheckHostContentTree(task.worktree);
+
+    const startRunner = async () => {
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        cwd: task.worktree,
+        detached: true,
+        stdio: 'ignore',
+      });
+      const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', resolve);
+        child.once('error', reject);
+      });
+      const identity = processIdentity(child.pid!);
+      if (!identity) throw new Error('native recovery runner has no process identity');
+      const runner = { child, identity, exited };
+      runners.push(runner);
+      return runner;
+    };
+
+    const writeRecovery = (
+      grant: ReturnType<typeof grantWorkerTypingRecovery>,
+      stamp: string,
+      runner: ProcessIdentity,
+      runnerHost = hostname(),
+    ): void => {
+      const command = grant.command as string[];
+      writeFileSync(
+        join(budget, stamp),
+        JSON.stringify({
+          content,
+          includedTypecheck: true,
+          exitCode: 0,
+          typingRequest: { physicalRunId: grant.physicalRunId, command, localPrepared: [], capture: 'physical-command' },
+          typingRecovery: {
+            token: grant.token,
+            checkId: grant.checkId,
+            physicalRunId: grant.physicalRunId,
+          },
+        }),
+      );
+      writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp }));
+      h.store.db
+        .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(
+          task.id,
+          ref.attempt,
+          'typing-recovery-authorized',
+          new Date().toISOString(),
+          JSON.stringify({
+            actor: grant.actor,
+            token: grant.token,
+            identity: grant.identity,
+            command,
+            checkId: grant.checkId,
+          }),
+        );
+      const record = {
+        version: 1,
+        id: grant.checkId,
+        cwd: task.worktree,
+        argv: command,
+        ownership: { taskId: task.id, attempt: ref.attempt },
+        physicalRunId: grant.physicalRunId,
+        runnerHost,
+        runnerPid: runner.pid,
+        runnerIdentity: runner,
+        status: 'running',
+      };
+      const resultPath = join(task.worktree, '.temp/goal/checks/results', `${grant.checkId}.json`);
+      const physicalPath = physicalHistoryPath(task.worktree, grant.checkId, grant.physicalRunId);
+      mkdirSync(dirname(resultPath), { recursive: true });
+      mkdirSync(dirname(physicalPath), { recursive: true });
+      writeFileSync(resultPath, JSON.stringify(record));
+      writeFileSync(physicalPath, JSON.stringify({ ...record, remoteExpected: false }));
+    };
+
+    const kernelGrant = grantWorkerTypingRecovery({
+      stateDirectory: h.settings.stateDirectory,
+      database: h.store.db.filename,
+      taskId: task.id,
+      attempt: ref.attempt,
+      worktree: task.worktree,
+      command: ['bun', 'services/kernel/scripts/typecheck.ts'],
+      actor,
+    });
+    const webGrant = grantWorkerTypingRecovery({
+      stateDirectory: h.settings.stateDirectory,
+      database: h.store.db.filename,
+      taskId: task.id,
+      attempt: ref.attempt,
+      worktree: task.worktree,
+      command: ['bun', 'run', '--cwd', 'apps/web', 'typecheck'],
+      actor,
+    });
+    const kernelRunner = await startRunner();
+    const webRunner = await startRunner();
+    const foreignRunner = await startRunner();
+    const unrelatedRunner = await startRunner();
+    writeRecovery(kernelGrant, '1', kernelRunner.identity);
+    writeRecovery(webGrant, '2', webRunner.identity);
+
+    const foreignGrant = {
+      ...kernelGrant,
+      token: randomUUID(),
+      checkId: randomUUID(),
+      physicalRunId: randomUUID(),
+    };
+    writeRecovery(foreignGrant, '3', foreignRunner.identity, 'foreign-runner');
+
+    const sweep = createTerminalProcessSweep();
+    const lookup = createManagerTerminalOwnerLookup(h.store.db, h.settings.stateDirectory);
+    const owners = [{ id: task.id, worktree: task.worktree }];
+    const first = await sweep.stop(await sweep.inventory(owners), lookup);
+    expect(first.map(({ identity }) => identity.pid).sort((a, b) => a - b)).toEqual(
+      [foreignRunner, unrelatedRunner]
+        .map(({ identity }) => identity.pid)
+        .sort((a, b) => a - b),
+    );
+    expect(sameProcess(kernelRunner.identity)).toBe(true);
+    expect(sameProcess(webRunner.identity)).toBe(true);
+
+    const terminalAt = new Date().toISOString();
+    for (const path of [
+      join(task.worktree, '.temp/goal/checks/results', `${webGrant.checkId}.json`),
+      physicalHistoryPath(task.worktree, webGrant.checkId, webGrant.physicalRunId),
+    ]) {
+      const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+      writeFileSync(path, JSON.stringify({ ...record, status: 'finished', exitCode: 0, endedAt: terminalAt }));
+    }
+    const terminal = await sweep.stop(await sweep.inventory(owners), lookup);
+    expect(terminal.map(({ identity }) => identity.pid)).toEqual([webRunner.identity.pid]);
+    expect(sameProcess(kernelRunner.identity)).toBe(true);
+    expect(sameProcess(webRunner.identity)).toBe(false);
+
+    h.store.db
+      .query("UPDATE worker_attempts SET body=json_set(body, '$.terminationIntent', json(?)) WHERE task_id=? AND attempt=1")
+      .run(JSON.stringify({ operation: 'cancel' }), task.id);
+    expect(lookup(task.id, task.worktree, kernelRunner.identity)).toBe(true);
+    h.store.db
+      .query("UPDATE worker_attempts SET body=json_remove(body, '$.terminationIntent') WHERE task_id=? AND attempt=1")
+      .run(task.id);
+
+    h.store.db
+      .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 2, ?)')
+      .run(task.id, JSON.stringify({ taskId: task.id, attempt: 2, state: 'exited' }));
+    h.store.db
+      .query("UPDATE worker_tasks SET current_attempt=2, body=json_set(body, '$.currentAttempt', 2, '$.state', 'stopped') WHERE id=?")
+      .run(task.id);
+    const third = await sweep.stop(await sweep.inventory(owners), lookup);
+    expect(third.map(({ identity }) => identity.pid)).toEqual([kernelRunner.identity.pid]);
+    expect(sameProcess(kernelRunner.identity)).toBe(false);
+    expect(sameProcess(webRunner.identity)).toBe(false);
+  } finally {
+    for (const runner of runners) {
+      if (sameProcess(runner.identity)) runner.child.kill('SIGKILL');
+    }
+    await Promise.all(runners.map(({ exited }) => exited));
+    await h.disposeAsync();
   }
 });

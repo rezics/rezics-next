@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { cleanupReceiptPath, physicalHistoryPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
@@ -196,6 +196,17 @@ test('active typing recovery requires its consumed grant and exact running physi
       physicalRunId: original.physicalRunId,
       runnerIdentity: runner,
     });
+
+    rmSync(physicalPath);
+    expect(
+      workerCheckHostActiveTypingRecovery({
+        db: h.store.db,
+        stateDirectory: h.settings.stateDirectory,
+        taskId: task.id,
+        worktree: task.worktree,
+      }),
+    ).toBeUndefined();
+    writeFileSync(physicalPath, JSON.stringify(physical));
 
     writeFileSync(resultPath, JSON.stringify({ ...record, status: 'finished', exitCode: 0 }));
     expect(
