@@ -79,6 +79,7 @@ function executePage<T>(
   const selected = structuredClone({ anchor, request });
   const route = routeOf(selected.anchor.catalogueId)!;
   let threadId: string;
+  const denied = () => new Error('Hosted title disposition requires terminal native authority');
   return runCommand<T>(
     pool,
     {
@@ -91,6 +92,9 @@ function executePage<T>(
         digest: createHash('sha256').update(JSON.stringify(selected)).digest(),
       },
       authorization: {
+        action: 'content.hosted-catalogue.private-title-disposition',
+        resource: { route, id: selected.anchor.catalogueId },
+        denied,
         async authorize(tx) {
           const parameters = {
             route,
@@ -103,7 +107,7 @@ function executePage<T>(
               authority.params.map((name) => parameters[name as keyof typeof parameters]),
             )
           ).rows[0];
-          if (!row) throw new Error('Hosted title disposition requires terminal native authority');
+          if (!row) throw denied();
           threadId = row.thread_id;
           return 'execute';
         },
