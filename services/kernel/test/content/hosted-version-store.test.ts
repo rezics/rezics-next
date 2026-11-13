@@ -292,7 +292,7 @@ test('keeps exact temporal state and private generations separate from the legac
   expect(observer.records.filter((record) => record.statement === createGeneration.sql)).toHaveLength(2);
   expect(observer.records.filter((record) => record.statement === commitVersion.sql)).toHaveLength(5);
 
-  const storeSql = new Set([
+  const storeSql = new Set<string>([
     createGeneration.sql,
     commitVersion.sql,
     readHead.sql,

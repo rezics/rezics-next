@@ -276,7 +276,7 @@ export function createHostedVersionWrite<Value extends object>(
   for (const indexKind of HOSTED_VERSION_INDEX_KINDS)
     sequences.set(
       indexKind,
-      createVersionedOutlineSequenceReadWriteSet((id) =>
+      createVersionedOutlineSequenceReadWriteSet<Value>((id) =>
         readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
       ),
     );
