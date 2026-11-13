@@ -5,6 +5,7 @@ import { noticeRoutes } from './notice-routes.ts';
 import type { Dependencies as MediaDependencies } from './media-routes.ts';
 import { mediaRoutes } from './media-routes.ts';
 import { hostedChapterRoutes } from './hosted-chapters-routes.ts';
+import { hostedDraftConversionRoutes } from './hosted-draft-conversion-routes.ts';
 import { knowledgeRoutes } from './knowledge-routes.ts';
 /** Explicit operands for Content's HTTP surface. The trusted kernel composition constructs each object; no
  * route reads the environment, the network, a UUID source or a clock by itself. */
@@ -24699,6 +24700,165 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 };
             };
         };
+    } & {
+        v1: {
+            knowledge: {
+                documents: {
+                    ":id": {
+                        publication: {
+                            $select: {
+                                post: {
+                                    body: {
+                                        expectedHeadRevisionId: string;
+                                        expectedPublicationId: string | null;
+                                        revisionId: string | null;
+                                    };
+                                    params: {
+                                        id: string;
+                                    };
+                                    query: unknown;
+                                    headers: {
+                                        "idempotency-key": string;
+                                    };
+                                    response: {
+                                        200: {
+                                            notebookId?: string;
+                                            documentId?: string;
+                                            placementId?: string;
+                                            structureRevisionId?: string;
+                                            revisionId?: string;
+                                            publicationId?: string | null;
+                                        };
+                                        400: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        401: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        403: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        404: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        409: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        412: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        413: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        422: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        429: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        500: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        503: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                    };
+                                    error: never;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
     }, import("elysia").DefaultEphemeral, {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
@@ -24720,7 +24880,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         schemas: {};
         response: {};
         error: [];
-    }, "post", "/v1/knowledge/documents/:id/publication/$select", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+    }, "post", "/v1/hostedCatalogues/:id/$convertDraft", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             id: import("typebox").TString;
         }>;
@@ -24733,21 +24893,117 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 vendor: string;
                 types: {
                     input: {
-                        expectedHeadRevisionId: string;
-                        expectedPublicationId: string | null;
-                        revisionId: string | null;
+                        expectedRevisionId: string;
+                        step: "capture";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "begin";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "page";
+                        cursor: {
+                            segment: "base";
+                            afterOrdinal: number;
+                        } | {
+                            segment: "prefix";
+                            afterOffset: string;
+                        } | {
+                            segment: "complete";
+                        };
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "seal";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materialize";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materializePage";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "commit";
                     };
                     output: {
-                        expectedHeadRevisionId: string;
-                        expectedPublicationId: string | null;
-                        revisionId: string | null;
+                        expectedRevisionId: string;
+                        step: "capture";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "begin";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "page";
+                        cursor: {
+                            segment: "base";
+                            afterOrdinal: number;
+                        } | {
+                            segment: "prefix";
+                            afterOffset: string;
+                        } | {
+                            segment: "complete";
+                        };
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "seal";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materialize";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materializePage";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "commit";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        expectedHeadRevisionId: string;
-                        expectedPublicationId: string | null;
-                        revisionId: string | null;
+                        expectedRevisionId: string;
+                        step: "capture";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "begin";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "page";
+                        cursor: {
+                            segment: "base";
+                            afterOrdinal: number;
+                        } | {
+                            segment: "prefix";
+                            afterOffset: string;
+                        } | {
+                            segment: "complete";
+                        };
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "seal";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materialize";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materializePage";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "commit";
                     };
                     issues?: never;
                 } | {
@@ -24757,16 +25013,80 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     }[];
                 };
                 jsonSchema: {
-                    input: () => import("typebox").TObject<{
-                        expectedHeadRevisionId: import("typebox").TString;
-                        expectedPublicationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        revisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    }>;
-                    output: () => import("typebox").TObject<{
-                        expectedHeadRevisionId: import("typebox").TString;
-                        expectedPublicationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        revisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    }>;
+                    input: () => import("typebox").TUnion<[import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"capture">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"begin">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"page">;
+                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"base">;
+                            afterOrdinal: import("typebox").TInteger;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"prefix">;
+                            afterOffset: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"complete">;
+                        }>]>;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"seal">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materialize">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materializePage">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"commit">;
+                    }>]>;
+                    output: () => import("typebox").TUnion<[import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"capture">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"begin">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"page">;
+                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"base">;
+                            afterOrdinal: import("typebox").TInteger;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"prefix">;
+                            afterOffset: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"complete">;
+                        }>]>;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"seal">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materialize">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materializePage">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"commit">;
+                    }>]>;
                 };
             };
         };
@@ -24828,20 +25148,6 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 }>>>;
             }>;
             412: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
-                }>>>;
-            }>;
-            409: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -24931,30 +25237,69 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     vendor: string;
                     types: {
                         input: {
-                            notebookId?: string;
-                            documentId?: string;
-                            placementId?: string;
-                            structureRevisionId?: string;
+                            catalogueId: string;
+                            inputId: string;
+                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                            frontier?: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                            coverage?: {
+                                visited: string;
+                                expected: string;
+                                complete: boolean;
+                            };
                             revisionId?: string;
-                            publicationId?: string | null;
                         };
                         output: {
-                            notebookId?: string;
-                            documentId?: string;
-                            placementId?: string;
-                            structureRevisionId?: string;
+                            catalogueId: string;
+                            inputId: string;
+                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                            frontier?: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                            coverage?: {
+                                visited: string;
+                                expected: string;
+                                complete: boolean;
+                            };
                             revisionId?: string;
-                            publicationId?: string | null;
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            notebookId?: string;
-                            documentId?: string;
-                            placementId?: string;
-                            structureRevisionId?: string;
+                            catalogueId: string;
+                            inputId: string;
+                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                            frontier?: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                            coverage?: {
+                                visited: string;
+                                expected: string;
+                                complete: boolean;
+                            };
                             revisionId?: string;
-                            publicationId?: string | null;
                         };
                         issues?: never;
                     } | {
@@ -24965,20 +25310,46 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
-                            notebookId: import("typebox").TOptional<import("typebox").TString>;
-                            documentId: import("typebox").TOptional<import("typebox").TString>;
-                            placementId: import("typebox").TOptional<import("typebox").TString>;
-                            structureRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                            catalogueId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
+                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
+                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"base">;
+                                afterOrdinal: import("typebox").TInteger;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"prefix">;
+                                afterOffset: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"complete">;
+                            }>]>>;
+                            coverage: import("typebox").TOptional<import("typebox").TObject<{
+                                visited: import("typebox").TString;
+                                expected: import("typebox").TString;
+                                complete: import("typebox").TBoolean;
+                            }>>;
                             revisionId: import("typebox").TOptional<import("typebox").TString>;
-                            publicationId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
                         }>;
                         output: () => import("typebox").TObject<{
-                            notebookId: import("typebox").TOptional<import("typebox").TString>;
-                            documentId: import("typebox").TOptional<import("typebox").TString>;
-                            placementId: import("typebox").TOptional<import("typebox").TString>;
-                            structureRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                            catalogueId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
+                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
+                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"base">;
+                                afterOrdinal: import("typebox").TInteger;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"prefix">;
+                                afterOffset: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"complete">;
+                            }>]>>;
+                            coverage: import("typebox").TOptional<import("typebox").TObject<{
+                                visited: import("typebox").TString;
+                                expected: import("typebox").TString;
+                                complete: import("typebox").TBoolean;
+                            }>>;
                             revisionId: import("typebox").TOptional<import("typebox").TString>;
-                            publicationId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
                         }>;
                     };
                 };
@@ -24990,15 +25361,16 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
             };
         };
         detail: {
-            operationId: string;
             'x-exposure': string;
+            'x-resource-types': string[];
             'x-action': string;
             'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            operationId: string;
             security: {
                 bearerAuth: never[];
             }[];
         };
-    }, {}, "/v1/knowledge/documents/:id/publication/$select">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id }, body, request, admission, job, session, set }: {
+    }, {}, "/v1/hostedCatalogues/:id/$convertDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id }, body, request, admission, job, session, set }: {
         server: import("elysia").Server | null;
         redirect: import("elysia").redirect;
         set: {
@@ -25063,17 +25435,6 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 detail: unknown;
                 errors: unknown;
             };
-            409: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
             413: {
                 type: unknown;
                 title: unknown;
@@ -25130,12 +25491,25 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 errors: unknown;
             };
             200: {
-                notebookId?: string;
-                documentId?: string;
-                placementId?: string;
-                structureRevisionId?: string;
+                catalogueId: string;
+                inputId: string;
+                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                frontier?: {
+                    segment: "base";
+                    afterOrdinal: number;
+                } | {
+                    segment: "prefix";
+                    afterOffset: string;
+                } | {
+                    segment: "complete";
+                };
+                coverage?: {
+                    visited: string;
+                    expected: string;
+                    complete: boolean;
+                };
                 revisionId?: string;
-                publicationId?: string | null;
             };
         }>;
         problem: import("elysia").SelectiveProblem<{
@@ -25194,17 +25568,6 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 detail: unknown;
                 errors: unknown;
             };
-            409: {
-                type: unknown;
-                title: unknown;
-                status: number;
-                code: unknown;
-                retryable: unknown;
-                effect_status: "not_applicable" | "not_applied";
-                request_id: string;
-                detail: unknown;
-                errors: unknown;
-            };
             413: {
                 type: unknown;
                 title: unknown;
@@ -25261,12 +25624,25 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 errors: unknown;
             };
             200: {
-                notebookId?: string;
-                documentId?: string;
-                placementId?: string;
-                structureRevisionId?: string;
+                catalogueId: string;
+                inputId: string;
+                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                frontier?: {
+                    segment: "base";
+                    afterOrdinal: number;
+                } | {
+                    segment: "prefix";
+                    afterOffset: string;
+                } | {
+                    segment: "complete";
+                };
+                coverage?: {
+                    visited: string;
+                    expected: string;
+                    complete: boolean;
+                };
                 revisionId?: string;
-                publicationId?: string | null;
             };
         }>;
         defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -25282,21 +25658,117 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     vendor: string;
                     types: {
                         input: {
-                            expectedHeadRevisionId: string;
-                            expectedPublicationId: string | null;
-                            revisionId: string | null;
+                            expectedRevisionId: string;
+                            step: "capture";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "begin";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "page";
+                            cursor: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "seal";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "materialize";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "materializePage";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "commit";
                         };
                         output: {
-                            expectedHeadRevisionId: string;
-                            expectedPublicationId: string | null;
-                            revisionId: string | null;
+                            expectedRevisionId: string;
+                            step: "capture";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "begin";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "page";
+                            cursor: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "seal";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "materialize";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "materializePage";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "commit";
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            expectedHeadRevisionId: string;
-                            expectedPublicationId: string | null;
-                            revisionId: string | null;
+                            expectedRevisionId: string;
+                            step: "capture";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "begin";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "page";
+                            cursor: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "seal";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "materialize";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "materializePage";
+                        } | {
+                            expectedRevisionId: string;
+                            inputId: string;
+                            step: "commit";
                         };
                         issues?: never;
                     } | {
@@ -25306,16 +25778,80 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         }[];
                     };
                     jsonSchema: {
-                        input: () => import("typebox").TObject<{
-                            expectedHeadRevisionId: import("typebox").TString;
-                            expectedPublicationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            revisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
-                        output: () => import("typebox").TObject<{
-                            expectedHeadRevisionId: import("typebox").TString;
-                            expectedPublicationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            revisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        input: () => import("typebox").TUnion<[import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"capture">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"begin">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"page">;
+                            cursor: import("typebox").TUnion<[import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"base">;
+                                afterOrdinal: import("typebox").TInteger;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"prefix">;
+                                afterOffset: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"complete">;
+                            }>]>;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"seal">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"materialize">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"materializePage">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"commit">;
+                        }>]>;
+                        output: () => import("typebox").TUnion<[import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"capture">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"begin">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"page">;
+                            cursor: import("typebox").TUnion<[import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"base">;
+                                afterOrdinal: import("typebox").TInteger;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"prefix">;
+                                afterOffset: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"complete">;
+                            }>]>;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"seal">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"materialize">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"materializePage">;
+                        }>, import("typebox").TObject<{
+                            expectedRevisionId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            step: import("typebox").TLiteral<"commit">;
+                        }>]>;
                     };
                 };
             };
@@ -25377,20 +25913,6 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     }>>>;
                 }>;
                 412: import("typebox").TObject<{
-                    type: import("typebox").TSchema;
-                    title: import("typebox").TSchema;
-                    status: import("typebox").TLiteral<number>;
-                    code: import("typebox").TSchema;
-                    retryable: import("typebox").TSchema;
-                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                    request_id: import("typebox").TString;
-                    detail?: import("typebox").TOptional<import("typebox").TString>;
-                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        pointer: import("typebox").TString;
-                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
-                    }>>>;
-                }>;
-                409: import("typebox").TObject<{
                     type: import("typebox").TSchema;
                     title: import("typebox").TSchema;
                     status: import("typebox").TLiteral<number>;
@@ -25480,30 +26002,69 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         vendor: string;
                         types: {
                             input: {
-                                notebookId?: string;
-                                documentId?: string;
-                                placementId?: string;
-                                structureRevisionId?: string;
+                                catalogueId: string;
+                                inputId: string;
+                                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                                frontier?: {
+                                    segment: "base";
+                                    afterOrdinal: number;
+                                } | {
+                                    segment: "prefix";
+                                    afterOffset: string;
+                                } | {
+                                    segment: "complete";
+                                };
+                                coverage?: {
+                                    visited: string;
+                                    expected: string;
+                                    complete: boolean;
+                                };
                                 revisionId?: string;
-                                publicationId?: string | null;
                             };
                             output: {
-                                notebookId?: string;
-                                documentId?: string;
-                                placementId?: string;
-                                structureRevisionId?: string;
+                                catalogueId: string;
+                                inputId: string;
+                                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                                frontier?: {
+                                    segment: "base";
+                                    afterOrdinal: number;
+                                } | {
+                                    segment: "prefix";
+                                    afterOffset: string;
+                                } | {
+                                    segment: "complete";
+                                };
+                                coverage?: {
+                                    visited: string;
+                                    expected: string;
+                                    complete: boolean;
+                                };
                                 revisionId?: string;
-                                publicationId?: string | null;
                             };
                         } | undefined;
                         validate(value: unknown): {
                             value: {
-                                notebookId?: string;
-                                documentId?: string;
-                                placementId?: string;
-                                structureRevisionId?: string;
+                                catalogueId: string;
+                                inputId: string;
+                                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                                frontier?: {
+                                    segment: "base";
+                                    afterOrdinal: number;
+                                } | {
+                                    segment: "prefix";
+                                    afterOffset: string;
+                                } | {
+                                    segment: "complete";
+                                };
+                                coverage?: {
+                                    visited: string;
+                                    expected: string;
+                                    complete: boolean;
+                                };
                                 revisionId?: string;
-                                publicationId?: string | null;
                             };
                             issues?: never;
                         } | {
@@ -25514,20 +26075,46 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         };
                         jsonSchema: {
                             input: () => import("typebox").TObject<{
-                                notebookId: import("typebox").TOptional<import("typebox").TString>;
-                                documentId: import("typebox").TOptional<import("typebox").TString>;
-                                placementId: import("typebox").TOptional<import("typebox").TString>;
-                                structureRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                                catalogueId: import("typebox").TString;
+                                inputId: import("typebox").TString;
+                                phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
+                                nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
+                                frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                    segment: import("typebox").TLiteral<"base">;
+                                    afterOrdinal: import("typebox").TInteger;
+                                }>, import("typebox").TObject<{
+                                    segment: import("typebox").TLiteral<"prefix">;
+                                    afterOffset: import("typebox").TString;
+                                }>, import("typebox").TObject<{
+                                    segment: import("typebox").TLiteral<"complete">;
+                                }>]>>;
+                                coverage: import("typebox").TOptional<import("typebox").TObject<{
+                                    visited: import("typebox").TString;
+                                    expected: import("typebox").TString;
+                                    complete: import("typebox").TBoolean;
+                                }>>;
                                 revisionId: import("typebox").TOptional<import("typebox").TString>;
-                                publicationId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
                             }>;
                             output: () => import("typebox").TObject<{
-                                notebookId: import("typebox").TOptional<import("typebox").TString>;
-                                documentId: import("typebox").TOptional<import("typebox").TString>;
-                                placementId: import("typebox").TOptional<import("typebox").TString>;
-                                structureRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                                catalogueId: import("typebox").TString;
+                                inputId: import("typebox").TString;
+                                phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
+                                nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
+                                frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                    segment: import("typebox").TLiteral<"base">;
+                                    afterOrdinal: import("typebox").TInteger;
+                                }>, import("typebox").TObject<{
+                                    segment: import("typebox").TLiteral<"prefix">;
+                                    afterOffset: import("typebox").TString;
+                                }>, import("typebox").TObject<{
+                                    segment: import("typebox").TLiteral<"complete">;
+                                }>]>>;
+                                coverage: import("typebox").TOptional<import("typebox").TObject<{
+                                    visited: import("typebox").TString;
+                                    expected: import("typebox").TString;
+                                    complete: import("typebox").TBoolean;
+                                }>>;
                                 revisionId: import("typebox").TOptional<import("typebox").TString>;
-                                publicationId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
                             }>;
                         };
                     };
@@ -25539,15 +26126,16 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 };
             };
             detail: {
-                operationId: string;
                 'x-exposure': string;
+                'x-resource-types': string[];
                 'x-action': string;
                 'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+                operationId: string;
                 security: {
                     bearerAuth: never[];
                 }[];
             };
-        }, {}, "/v1/knowledge/documents/:id/publication/$select">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+        }, {}, "/v1/hostedCatalogues/:id/$convertDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
             derive: {
                 readonly admission: import("../http/admission.ts").Admission;
                 readonly job: {
@@ -25571,9 +26159,41 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         request: Request;
         store: {};
         body: {
-            expectedHeadRevisionId: string;
-            expectedPublicationId: string | null;
-            revisionId: string | null;
+            expectedRevisionId: string;
+            step: "capture";
+        } | {
+            expectedRevisionId: string;
+            inputId: string;
+            step: "begin";
+        } | {
+            expectedRevisionId: string;
+            inputId: string;
+            step: "page";
+            cursor: {
+                segment: "base";
+                afterOrdinal: number;
+            } | {
+                segment: "prefix";
+                afterOffset: string;
+            } | {
+                segment: "complete";
+            };
+        } | {
+            expectedRevisionId: string;
+            inputId: string;
+            step: "seal";
+        } | {
+            expectedRevisionId: string;
+            inputId: string;
+            step: "materialize";
+        } | {
+            expectedRevisionId: string;
+            inputId: string;
+            step: "materializePage";
+        } | {
+            expectedRevisionId: string;
+            inputId: string;
+            step: "commit";
         };
         query: Record<string, string | undefined>;
         params: {
@@ -25597,11 +26217,19 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-    }) => Promise<{
-        documentId: string;
-        publicationId: string | null;
+    }) => Promise<Readonly<{
+        catalogueId: string;
+        inputId: string;
+        phase: 'captured' | 'building' | 'sealed' | 'materializing' | 'ready-to-activate' | 'complete';
+        nextStep: 'begin' | 'page' | 'seal' | 'materialize' | 'materializePage' | 'commit' | 'complete';
+        frontier?: import("./hosted-migration-input-model.ts").HostedMigrationFrontier;
+        coverage?: Readonly<{
+            visited: string;
+            expected: string;
+            complete: boolean;
+        }>;
         revisionId?: string;
-    }>, {
+    }>>, {
         params: import("typebox").TObject<{
             id: import("typebox").TString;
         }>;
@@ -25614,21 +26242,117 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 vendor: string;
                 types: {
                     input: {
-                        expectedHeadRevisionId: string;
-                        expectedPublicationId: string | null;
-                        revisionId: string | null;
+                        expectedRevisionId: string;
+                        step: "capture";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "begin";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "page";
+                        cursor: {
+                            segment: "base";
+                            afterOrdinal: number;
+                        } | {
+                            segment: "prefix";
+                            afterOffset: string;
+                        } | {
+                            segment: "complete";
+                        };
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "seal";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materialize";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materializePage";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "commit";
                     };
                     output: {
-                        expectedHeadRevisionId: string;
-                        expectedPublicationId: string | null;
-                        revisionId: string | null;
+                        expectedRevisionId: string;
+                        step: "capture";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "begin";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "page";
+                        cursor: {
+                            segment: "base";
+                            afterOrdinal: number;
+                        } | {
+                            segment: "prefix";
+                            afterOffset: string;
+                        } | {
+                            segment: "complete";
+                        };
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "seal";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materialize";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materializePage";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "commit";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        expectedHeadRevisionId: string;
-                        expectedPublicationId: string | null;
-                        revisionId: string | null;
+                        expectedRevisionId: string;
+                        step: "capture";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "begin";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "page";
+                        cursor: {
+                            segment: "base";
+                            afterOrdinal: number;
+                        } | {
+                            segment: "prefix";
+                            afterOffset: string;
+                        } | {
+                            segment: "complete";
+                        };
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "seal";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materialize";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "materializePage";
+                    } | {
+                        expectedRevisionId: string;
+                        inputId: string;
+                        step: "commit";
                     };
                     issues?: never;
                 } | {
@@ -25638,16 +26362,80 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     }[];
                 };
                 jsonSchema: {
-                    input: () => import("typebox").TObject<{
-                        expectedHeadRevisionId: import("typebox").TString;
-                        expectedPublicationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        revisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    }>;
-                    output: () => import("typebox").TObject<{
-                        expectedHeadRevisionId: import("typebox").TString;
-                        expectedPublicationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        revisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    }>;
+                    input: () => import("typebox").TUnion<[import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"capture">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"begin">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"page">;
+                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"base">;
+                            afterOrdinal: import("typebox").TInteger;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"prefix">;
+                            afterOffset: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"complete">;
+                        }>]>;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"seal">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materialize">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materializePage">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"commit">;
+                    }>]>;
+                    output: () => import("typebox").TUnion<[import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"capture">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"begin">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"page">;
+                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"base">;
+                            afterOrdinal: import("typebox").TInteger;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"prefix">;
+                            afterOffset: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            segment: import("typebox").TLiteral<"complete">;
+                        }>]>;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"seal">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materialize">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"materializePage">;
+                    }>, import("typebox").TObject<{
+                        expectedRevisionId: import("typebox").TString;
+                        inputId: import("typebox").TString;
+                        step: import("typebox").TLiteral<"commit">;
+                    }>]>;
                 };
             };
         };
@@ -25709,20 +26497,6 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 }>>>;
             }>;
             412: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
-                }>>>;
-            }>;
-            409: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -25812,30 +26586,69 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     vendor: string;
                     types: {
                         input: {
-                            notebookId?: string;
-                            documentId?: string;
-                            placementId?: string;
-                            structureRevisionId?: string;
+                            catalogueId: string;
+                            inputId: string;
+                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                            frontier?: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                            coverage?: {
+                                visited: string;
+                                expected: string;
+                                complete: boolean;
+                            };
                             revisionId?: string;
-                            publicationId?: string | null;
                         };
                         output: {
-                            notebookId?: string;
-                            documentId?: string;
-                            placementId?: string;
-                            structureRevisionId?: string;
+                            catalogueId: string;
+                            inputId: string;
+                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                            frontier?: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                            coverage?: {
+                                visited: string;
+                                expected: string;
+                                complete: boolean;
+                            };
                             revisionId?: string;
-                            publicationId?: string | null;
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            notebookId?: string;
-                            documentId?: string;
-                            placementId?: string;
-                            structureRevisionId?: string;
+                            catalogueId: string;
+                            inputId: string;
+                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                            frontier?: {
+                                segment: "base";
+                                afterOrdinal: number;
+                            } | {
+                                segment: "prefix";
+                                afterOffset: string;
+                            } | {
+                                segment: "complete";
+                            };
+                            coverage?: {
+                                visited: string;
+                                expected: string;
+                                complete: boolean;
+                            };
                             revisionId?: string;
-                            publicationId?: string | null;
                         };
                         issues?: never;
                     } | {
@@ -25846,20 +26659,46 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
-                            notebookId: import("typebox").TOptional<import("typebox").TString>;
-                            documentId: import("typebox").TOptional<import("typebox").TString>;
-                            placementId: import("typebox").TOptional<import("typebox").TString>;
-                            structureRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                            catalogueId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
+                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
+                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"base">;
+                                afterOrdinal: import("typebox").TInteger;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"prefix">;
+                                afterOffset: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"complete">;
+                            }>]>>;
+                            coverage: import("typebox").TOptional<import("typebox").TObject<{
+                                visited: import("typebox").TString;
+                                expected: import("typebox").TString;
+                                complete: import("typebox").TBoolean;
+                            }>>;
                             revisionId: import("typebox").TOptional<import("typebox").TString>;
-                            publicationId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
                         }>;
                         output: () => import("typebox").TObject<{
-                            notebookId: import("typebox").TOptional<import("typebox").TString>;
-                            documentId: import("typebox").TOptional<import("typebox").TString>;
-                            placementId: import("typebox").TOptional<import("typebox").TString>;
-                            structureRevisionId: import("typebox").TOptional<import("typebox").TString>;
+                            catalogueId: import("typebox").TString;
+                            inputId: import("typebox").TString;
+                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
+                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
+                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"base">;
+                                afterOrdinal: import("typebox").TInteger;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"prefix">;
+                                afterOffset: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                segment: import("typebox").TLiteral<"complete">;
+                            }>]>>;
+                            coverage: import("typebox").TOptional<import("typebox").TObject<{
+                                visited: import("typebox").TString;
+                                expected: import("typebox").TString;
+                                complete: import("typebox").TBoolean;
+                            }>>;
                             revisionId: import("typebox").TOptional<import("typebox").TString>;
-                            publicationId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
                         }>;
                     };
                 };
@@ -25871,10 +26710,11 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
             };
         };
         detail: {
-            operationId: string;
             'x-exposure': string;
+            'x-resource-types': string[];
             'x-action': string;
             'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            operationId: string;
             security: {
                 bearerAuth: never[];
             }[];
@@ -34643,7 +35483,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
     }>;
 };
 /** The route surface Content contributes to the kernel's composed type. */
-export type ContentHttpRoutes = ReturnType<typeof contentRoutes> & ReturnType<typeof hostedChapterRoutes> & ReturnType<typeof knowledgeRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof mediaRoutes>;
+export type ContentHttpRoutes = ReturnType<typeof contentRoutes> & ReturnType<typeof hostedChapterRoutes> & ReturnType<typeof hostedDraftConversionRoutes> & ReturnType<typeof knowledgeRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof mediaRoutes>;
 /** HTTP composition reads the same declaration as the worker: events, operations, permissions, work,
  * effects, plus the mount function this module owns. */
 export declare function contentHttpDeclaration(): Readonly<{
