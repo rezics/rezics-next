@@ -353,9 +353,8 @@ test('persists a 12,001-occurrence cross-parent move on one snapshot overlay wit
 
   const indexHeightBound = Math.ceil(Math.log2(facts.size + 1));
   const pathWorkBound = 96 * (indexHeightBound + 8);
-  const physicalProbes = firstMoveSql.filter((entry) =>
-    [readNode.sql, readOccurrence.sql, readSiblingRoot.sql].includes(entry.statement),
-  ).length;
+  const probeStatements: readonly string[] = [readNode.sql, readOccurrence.sql, readSiblingRoot.sql];
+  const physicalProbes = firstMoveSql.filter((entry) => probeStatements.includes(entry.statement)).length;
   expect(physicalProbes).toBeLessThan(pathWorkBound);
   expect(physicalProbes).toBeLessThan(descendants.length);
   const storeCommit = firstMoveSql.find((entry) => entry.statement === commitVersion.sql);

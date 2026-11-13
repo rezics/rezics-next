@@ -1,10 +1,7 @@
 import type { HostedVersionDraftMoveSelection } from './hosted-version-draft-edit-model.ts';
 import type { HostedChapterTarget } from './hosted-chapters-model.ts';
-import type {
-  HostedVersionOccurrenceValue,
-  HostedVersionSnapshot,
-  HostedVersionWrite,
-} from './hosted-version-model.ts';
+import type { HostedVersionOccurrenceValue, HostedVersionSnapshot } from './hosted-version-model.ts';
+import type { HostedVersionWrite } from './hosted-version-store.ts';
 import type { HostedVersionRevisionResolution } from './hosted-version-revision.ts';
 
 export type HostedVersionDraftMoveDescriptor = Extract<HostedVersionRevisionResolution, { kind: 'ordered' }>;

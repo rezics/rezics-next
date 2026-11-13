@@ -8,6 +8,11 @@ import {
 } from './versioned-outline-sequence.ts';
 import { HOSTED_DEPTH_LIMIT } from './hosted-chapters-model.ts';
 import {
+  HostedVersionHeadChangedError,
+  InvalidHostedVersionIdentityError,
+  type HostedVersionSnapshot,
+} from './hosted-version-model.ts';
+import {
   HostedVersionDraftMoveError,
   type HostedVersionDraftMoveAncestor,
   type HostedVersionDraftMoveIndexes,
@@ -18,9 +23,6 @@ import {
   type HostedVersionDraftMoveSelection,
 } from './hosted-version-draft-edit-model.ts';
 import {
-  HostedVersionHeadChangedError,
-  InvalidHostedVersionIdentityError,
-  type HostedVersionSnapshot,
   commitHostedVersionWrite,
   createHostedVersionWrite,
   hostedVersionSequence,
@@ -174,10 +176,12 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
       assertSnapshotIdentity(versionHead, descriptor);
 
       const storeWrite = createHostedVersionWrite<HostedVersionDraftMoveStoredValue>(tx, snapshot);
+      // The store producer shares its occurrence payload generic with sequence values;
+      // Book order indexes carry stable occurrence ID strings for the retained planner.
       const indexes: HostedVersionDraftMoveIndexes = {
-        siblings: hostedVersionSequence(storeWrite, 'sibling'),
-        preorder: hostedVersionSequence(storeWrite, 'preorder'),
-        chapters: hostedVersionSequence(storeWrite, 'chapter'),
+        siblings: hostedVersionSequence(storeWrite, 'sibling') as unknown as HostedVersionDraftMoveIndexes['siblings'],
+        preorder: hostedVersionSequence(storeWrite, 'preorder') as unknown as HostedVersionDraftMoveIndexes['preorder'],
+        chapters: hostedVersionSequence(storeWrite, 'chapter') as unknown as HostedVersionDraftMoveIndexes['chapters'],
       };
       await assertRootSummary(snapshot, indexes.preorder, indexes.chapters);
 
