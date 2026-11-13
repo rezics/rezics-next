@@ -717,8 +717,8 @@ workspace typecheck after commit. Native, browser, ordinary acceptance, root and
 
 ## Prepared Book release activation
 
-Decision: extend preparation with an injectable native start/advance/activate consumer; ordinary Studio remains at
-private sealed readiness until Content supplies mounted generated activation transport. Point publication stays
+Decision: retain the complete injectable consumer and preparation-only Studio until Content mounts and generates
+activation operations after native currentness acceptance; bind that producer directly. Point publication stays
 independent. One visit retains the exact catalogue, stage, source, sealed candidate generation and previous release.
 Each explicit check advances one native page of at most 20 targets; pause retains the candidate, and a native restart
 uses explicit advance to reset authority without preparing or sealing again. Readiness never activates a release.
@@ -739,14 +739,14 @@ Sources read before design: [Web Book acceptance](../../../../docs/goals/web.md#
 `services/kernel/src/content/hosted-publication-activation.ts` and its focused
 `hosted-publication-activation-currentness.test.ts`, preparation contract/controller/entry/actions/native/view,
 `hosted-release-reader-link.ts`, its anonymous admission/action, and the existing preparation tests and stories.
-The named preparation preflight is already in the base; no merge or cherry-pick was needed.
 
-Missing producer, explicitly unaccepted: Content exports `startHostedPublicationActivation`,
-`advanceHostedPublicationActivationAuthority` and `activateHostedPublicationCandidate`, but preparation routes and
-KernelClient have no mounted activation operations. `createHostedReleaseActivationTransport` accepts those typed
-operation bindings and validates their external progress; `HostedReleasePreparationEntry.activation` composes them
-only when supplied. It guesses no URL or handwritten Client method, adds no ordinary refusal flow, and installs no
-fixture transport in Studio. Content owns authority proof and the atomic publication root swap.
+Content's [handoff](../../../../services/kernel/src/content/hosted-chapters.md#release-candidate-disposition-and-implementation-handoff)
+requires native two-pool currentness acceptance before mounting `startHostedPublicationActivation`,
+`advanceHostedPublicationActivationAuthority` and `activateHostedPublicationCandidate`. Preparation routes and
+generated KernelClient lack these operations. Bind them to
+`createHostedReleaseActivationTransport` through `HostedReleasePreparationEntry.activation` with current private
+admission/no-store, existing owner/publication reads and anonymous exact-reader admission. No guessed endpoint,
+handwritten Client method or Studio fixture supplies this producer.
 
 Deferred acceptance: after integration, run `bun run --cwd apps/web test tests/studio-hosted-release-activation.test.tsx`.
 Focused cases cover explicit checks/activation, pause/restart, same-intent replay, observations versus receipts,
