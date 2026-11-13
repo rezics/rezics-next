@@ -22,9 +22,18 @@ retain More when supplied, and Retry rereads the same URL. Each row opens its di
 `subject` in subsequent exact chapter and contents links. Discovery supplies no catalogue titles, so rows use a
 localized numbered publication label without per-row hydration. `readHostedBookVisit` prepares the native Web
 session, reads the current publication with the installed generated catalogue operation, resolves any frozen
-release and selected occurrence, and produces `NativeHostedBookAdmission` for this visit. A missing catalogue title
-uses the localized Book title; it does not refuse an otherwise readable chapter. Credentials never enter URLs or
+release and selected occurrence, and produces `NativeHostedBookAdmission` for this visit. An omitted or empty
+catalogue title uses the localized Book title; it does not refuse an otherwise readable chapter. Credentials never enter URLs or
 loader data. Missing native origin never falls back to Web's development fixtures.
+
+Decision: only the existing current-publication admission GET opts into `includeTitle: '1'`. Its strict point
+response decoder accepts an optional string of at most 512 characters, matching Content; the private reader input
+retains that bound. The admitted label describes the currently public opening even for a frozen historical
+selection. Only that admission supplies the display label; omitted or empty labels use the current localized
+fallback, with no inference from the URL, draft, chapter body or previous visit. Frozen coordinates, current-access
+rechecks, header composition and request counts stay unchanged. Subject discovery keeps numbered labels without
+list title opt-in or per-row hydration. Occurrence/page response shapes and 256-character occurrence titles stay
+unchanged.
 
 URL values are HTTP selections, validated at the boundary in `address.ts`, not admission or expected credentials.
 The host always asks for `kind: publication`; a private structure revision cannot turn into a public draft read.
@@ -80,7 +89,7 @@ read prepares the real session and checks that it still matches the admitted ano
 
 Decision: occurrence, contents/navigation and checkpoint metadata receivers accept exact nonnegative safe-integer
 positions through `Number.MAX_SAFE_INTEGER`, including 512. Each owner uses Valibot's `safeInteger` without a new
-cross-owner codec. Studio's 0–511 full-replacement input bound and the reader's page, title, body, exact-selector,
+cross-owner codec. Studio's 0–511 full-replacement input bound and the reader's page, occurrence-title, body, exact-selector,
 viewer/target, retirement and document-offset bounds stay unchanged. Focused decoder fixtures establish Web
 compatibility only; native acceptance runs in the dev verifier. Library's server metadata schema still caps positions
 at 511 and requires a separate Library-owned change.

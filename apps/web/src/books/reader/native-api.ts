@@ -26,7 +26,10 @@ const revision = {
   kind: v.picklist(['structure', 'publication']),
   sourceRevisionId: v.nullable(hostedId),
 };
-const revisionSchema = v.strictObject(revision);
+const revisionSchema = v.strictObject({
+  ...revision,
+  title: v.optional(v.pipe(v.string(), v.maxLength(512))),
+});
 const pageSchema = v.strictObject({
   ...revision,
   items: v.pipe(v.array(occurrence), v.maxLength(20)),
@@ -63,7 +66,7 @@ export type HostedQuery = Readonly<{
   direction?: 'previous' | 'next';
 }>;
 export type HostedCatalogueApi = Readonly<{
-  catalogue(id: string, query: HostedQuery): Promise<HostedRead<HostedRevision>>;
+  catalogue(id: string, query: HostedQuery & { includeTitle?: '1' }): Promise<HostedRead<HostedRevision>>;
   children(id: string, query: HostedQuery): Promise<HostedRead<HostedPage>>;
   metadata(id: string, occurrenceId: string, query: HostedQuery): Promise<HostedRead<HostedMetadata>>;
   resolve(id: string, occurrenceId: string, query: HostedQuery): Promise<HostedRead<HostedResolution>>;

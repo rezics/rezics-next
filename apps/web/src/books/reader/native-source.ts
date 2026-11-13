@@ -14,7 +14,7 @@ export type NativeHostedBookAdmission =
       publication: BookPublication;
       currentReleaseRevisionId: string;
       currentStructureRevisionId: string;
-      /** Label from the admitted host; the hosted Content schema carries no catalogue title. */
+      /** Current public opening label from this admission, or its localized fallback. */
       publicationTitle: string;
       viewer: HostedBookViewer;
     }>

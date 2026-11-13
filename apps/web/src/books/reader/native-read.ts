@@ -52,7 +52,7 @@ export type HostedBookViewer = v.InferOutput<typeof viewer>;
 const input = v.strictObject({
   request,
   viewer,
-  publicationTitle: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+  publicationTitle: v.pipe(v.string(), v.minLength(1), v.maxLength(512)),
   currentReleaseRevisionId: hostedId,
   currentStructureRevisionId: hostedId,
 });

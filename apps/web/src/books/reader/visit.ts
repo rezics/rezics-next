@@ -25,10 +25,10 @@ export async function observeHostedBookVisit(
   api: HostedCatalogueApi,
   input: HostedBookVisitInput,
   viewer: HostedBookViewer,
-  publicationTitle: string,
+  fallbackTitle: string,
 ): Promise<HostedBookVisit> {
   const { catalogueId, search } = input;
-  const current = await api.catalogue(catalogueId, { kind: 'publication' });
+  const current = await api.catalogue(catalogueId, { kind: 'publication', includeTitle: '1' });
   if (current.state !== 'ready') return current;
   const currentPublication = bookPublicationFromNative(current.value);
   if (!currentPublication || currentPublication.id !== catalogueId) return { state: 'unavailable' };
@@ -98,7 +98,7 @@ export async function observeHostedBookVisit(
     admission: {
       state: 'current',
       publication,
-      publicationTitle,
+      publicationTitle: current.value.title || fallbackTitle,
       viewer,
       currentReleaseRevisionId: current.value.revisionId,
       currentStructureRevisionId: currentPublication.structureRevisionId,
