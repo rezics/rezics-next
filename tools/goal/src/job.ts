@@ -1590,7 +1590,12 @@ export class WorkerJob implements GateOutcomeSink {
       for (const task of store.activeTasks()) {
         if (task.state !== 'stopped' || task.brief.kind !== 'verification' || !task.currentAttempt) continue;
         try {
-          await reconcileStoppedOrdinaryProof(this.tasks, { taskId: task.id, attempt: task.currentAttempt });
+          const settled = await reconcileStoppedOrdinaryProof(this.tasks, {
+            taskId: task.id,
+            attempt: task.currentAttempt,
+          });
+          if (settled && store.task(task.id).state !== 'verified')
+            this.onAttemptExit({ taskId: task.id, attempt: task.currentAttempt });
         } catch (error) {
           this.recoveryFailed(task.id, 'ordinary proof reconciliation', error);
         }

@@ -389,8 +389,8 @@ export async function settle(
       const waitRegisteredOrdinary =
         ordinaryRegistered &&
         (proofObservation?.status === 'running' ||
-          proofObservation?.status === 'unknown' ||
-          (proofObservation?.status === 'terminal' && Boolean(pendingChecks?.length || waitingId)));
+          (Boolean(pendingChecks?.length || waitingId) &&
+            (proofObservation?.status === 'unknown' || proofObservation?.status === 'terminal')));
       if (
         waitRegisteredOrdinary ||
         ((pendingChecks?.length || lostReportWaitingId) &&
@@ -401,7 +401,9 @@ export async function settle(
       ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
-          attempt.checks = ordinaryWaitingChecks ?? (pendingChecks?.length ? pendingChecks : [proofWaitingId!]);
+          attempt.checks =
+            ordinaryWaitingChecks ??
+            (pendingChecks?.length ? pendingChecks : proofWaitingId ? [proofWaitingId] : []);
           attempt.process = null;
           attempt.driver = null;
           attempt.exitCode = code;
@@ -847,6 +849,10 @@ export async function reconcileStoppedOrdinaryProof(tasks: WorkerTasks, ref: Att
             value.state = verified ? 'verified' : 'stopped';
           });
           store.updateAttempt(ref, (value) => {
+            value.state = 'exited';
+            value.endedAt = value.endedAt ?? new Date().toISOString();
+            value.process = null;
+            value.driver = null;
             value.failureKind = verified || captureOnly ? null : 'tool';
             value.result = `${currentAttempt.result}\n${observation.cause}${
               sourceStatus === 'capture-changed'

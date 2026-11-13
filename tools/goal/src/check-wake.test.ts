@@ -9,7 +9,7 @@ import { readFlow } from './flow.ts';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
 import { processIdentity } from './process.ts';
-import { settle } from './settle.ts';
+import { reconcileStoppedOrdinaryProof, settle } from './settle.ts';
 import type { Attempt, Task } from './types.ts';
 import { brief, harness, markdown, temporaryDirectory } from './test-support.ts';
 import { authorizeProof } from './verification.ts';
@@ -996,6 +996,40 @@ test('an ambiguous or foreign ordinary-proof invocation stays unavailable and do
     expect(existsSync(join(h.root, '.temp/goal/resume-started'))).toBe(false);
     expect(h.store.attempt(attempt).state).toBe('waiting');
     expect(h.store.task(taskId).state).toBe('running');
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
+test('a stopped ordinary proof reconciles the same attempt after its unique owned record is terminal', async () => {
+  const h = harness(waitingCli);
+  try {
+    const actual = randomUUID();
+    const hint = randomUUID();
+    const { taskId, attempt } = registeredOrdinaryProofAttempt(h, [hint]);
+    const record = writeOrdinaryProofResult(h.root, taskId, actual, 'running');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue() {} });
+    h.store.updateTask(attempt, (task) => {
+      task.state = 'stopped';
+    });
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
+    expect(h.store.task(taskId)).toMatchObject({ state: 'stopped', currentAttempt: 1 });
+    expect(h.store.attempt(attempt).state).toBe('waiting');
+
+    writeFileSync(
+      join(h.root, '.temp/goal/checks/results', `${actual}.json`),
+      JSON.stringify({ ...record, status: 'finished', exitCode: 0 }),
+    );
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.recoverOrphans();
+    expect(h.store.task(taskId)).toMatchObject({ state: 'verified', currentAttempt: 1 });
+    expect(h.store.attempt(attempt)).toMatchObject({
+      state: 'exited',
+      checks: [actual],
+      failureKind: null,
+    });
+    expect(h.store.events(taskId, 1).some((event) => event.kind === 'proof-verified')).toBe(true);
+    expect(existsSync(join(h.root, '.temp/goal/resume-started'))).toBe(false);
   } finally {
     h.dispose();
   }
