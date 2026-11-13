@@ -75,3 +75,19 @@ second saved draft at Book root, moves it under the part, selects one exact vers
 publishes it. Its stage journal preserves observations and labels dependent stages unreached. The independent control
 contains exactly one selected chapter, then drives the ordinary mounted reader and withdrawal UI. The worker does
 not run this mounted witness; the candidate controller runs it once after integration.
+
+## Book catalogue discovery and shelves
+
+Fixture source revision: `d4e0b8ee26760c93f7456d866e4ef54c884850d7`.
+
+Focused command:
+
+```sh
+cd apps/web && bun scripts/focused.ts --private-network -- bun test tests/native/book-catalogue-journey.host.test.ts
+```
+
+Evidence status: the worker authored the native fixture and mounted journey but did not execute it. No browser or
+native outcome is claimed here. The controller must run this command on a containing candidate and record the
+fixture's actual Search identities, localized Books and type-filtered visits, literary reader identities, shelf
+command, independent Library readback, sign-in return and public authorization boundary. This record is separate
+from the existing Studio publication scenarios above.
