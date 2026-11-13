@@ -50,13 +50,27 @@ Decision: publication reads only the bounded explicit occurrence selection from 
 revision, using the existing route/catalogue/revision/occurrence primary key and stored ordinal order. Empty
 withdrawal verifies that source revision is a structure but issues no placement query. The shared release validator
 still rejects duplicate and unknown IDs and missing ancestors, then assigns dense sibling positions and preorder.
-Current authority, expected-head/publication comparisons, native exact target admission and receipt replay retain
-their existing order. This reduces per-command work; the 512-occurrence request and logical catalogue limits remain.
+
+Decision: publication selection runs in command preparation after `hostedPostAuthorization.prepare`, before
+attachment validation. Only the initial catalogue locator runs earlier to locate the Post authority. Native
+preparation checks Post authorship, container/Board visibility and participation, validates the authority anchor
+and runs Access's `post:revise` formula at the attempt's authoritative time. It admits selection reads; it does not
+grant mutation. Transactional authorization still consumes the bound, single-use proof and rechecks the prepared
+container before receipt lookup; finalization retains its existing checks. No permission formula is duplicated.
+Selection uses the original catalogue partition and snapshot deadline, and attachments retain the command deadline
+outside the write transaction. Only complete preparation retains placements, keyed by that invocation's attempt
+time. Every retry prepares current authority and rereads the exact immutable expected structure and selected rows;
+a failed preparation cannot supply an earlier selection to a later transaction. For admitted authors, selection and
+attachment rejection still precede receipts, while head/publication CAS follows receipts. Exact replay, empty
+withdrawal, responses and events retain their existing behavior. The 512-occurrence limits remain unchanged.
 
 The focused `hosted-release-selection.test.ts` fixture distinguishes source rows selected at the store boundary
-from the final manifest, covers sparse ordering, withdrawal and selection rejection, and retains existing native
-replay acceptance in `hosted-chapters.test.ts`. Run these cases after landing in the dev verifier. Mounted native
-and growth proof remain deferred; this source pass runs changed-file formatting and the affected Kernel typecheck.
+from the final manifest and covers sparse ordering, withdrawal and selection rejection.
+`hosted-release-selection-admission.test.ts` reuses the native hosted fixture to pin owner admission before source
+reads and selection errors, admitted rejection, exact publish/replay after a later draft and current authority on
+replay. Existing replay acceptance in `hosted-chapters.test.ts` remains unchanged. Run these cases after landing in
+the dev verifier. Mounted native and growth proof remain deferred; this source pass runs changed-file formatting
+and the affected Kernel typecheck.
 
 ## Author inventory
 

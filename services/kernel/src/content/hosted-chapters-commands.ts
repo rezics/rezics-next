@@ -3,6 +3,7 @@ import {
   authoritativeTimeValue,
   principalCommandIdentity,
   runCommand,
+  type AuthoritativeTime,
   type CommandAuthorization,
 } from '../command/command.ts';
 import { requestDigest } from '../command/request.ts';
@@ -87,22 +88,7 @@ async function mutate(
   const initial = (await snapshot(deps, catalogueId, context, (client) => hostedCatalogue(client, catalogueId))).value;
   const threadId = mutation.kind === 'create' ? mutation.input.threadId : initial?.thread_id;
   if (!threadId || routeOf(threadId) !== route) throw new ContentNotFoundError();
-  let placements: readonly OrderedHostedPlacement[];
-  if (mutation.kind === 'publish') {
-    const selected = mutation.input;
-    placements = (
-      await snapshot(deps, catalogueId, context, async (client) => {
-        const revision = await hostedRevision(client, catalogueId, selected.expectedRevisionId);
-        if (revision?.kind !== 'structure') throw new ContentNotFoundError();
-        return selectHostedRelease(
-          await hostedReleasePlacements(client, catalogueId, revision.revision_id, selected.occurrenceIds),
-          selected.occurrenceIds,
-        );
-      })
-    ).value;
-  } else {
-    placements = orderHostedPlacements(route, mutation.input.placements);
-  }
+  const authored = mutation.kind === 'publish' ? null : orderHostedPlacements(route, mutation.input.placements);
   const kind = `content.hosted-catalogue.${mutation.kind}`;
   const receipt = {
     kind,
@@ -110,12 +96,32 @@ async function mutate(
     digest: requestDigest(kind, actor, { catalogueId, input: mutation.input }),
   };
   const base = hostedPostAuthorization(deps, actor, threadId, catalogueId, context, receipt);
+  const prepared = new WeakMap<AuthoritativeTime, readonly OrderedHostedPlacement[]>();
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      // The executor repeats native admission before receipt lookup, including exact retries.
+      // Native preparation checks owner/container state and post:revise Access.
+      // Transactional authorization still consumes its proof and rechecks the
+      // container before receipts; preparation alone never permits a write.
       const evidence = await base.prepare!(attempt);
+      const placements =
+        mutation.kind === 'publish'
+          ? (
+              await snapshot(deps, catalogueId, context, async (client) => {
+                const selected = mutation.input;
+                const revision = await hostedRevision(client, catalogueId, selected.expectedRevisionId);
+                if (revision?.kind !== 'structure') throw new ContentNotFoundError();
+                return selectHostedRelease(
+                  await hostedReleasePlacements(client, catalogueId, revision.revision_id, selected.occurrenceIds),
+                  selected.occurrenceIds,
+                );
+              })
+            ).value
+          : authored!;
       await validateHostedChapterAttachments(deps, placements, { actor, deadline: context.deadline });
+      // Only complete preparation supplies this attempt's immutable selection.
+      // A retry repeats admission and selection outside the write transaction.
+      prepared.set(attempt.time, placements);
       return evidence;
     },
   };
@@ -163,7 +169,7 @@ async function mutate(
           authoritativeTimeValue(time),
         ],
       );
-      await insertHostedPlacements(tx, catalogueId, revisionId, placements);
+      await insertHostedPlacements(tx, catalogueId, revisionId, prepared.get(time)!);
       await tx.query(
         `UPDATE content.hosted_catalogue SET ${mutation.kind === 'publish' ? 'publication_id' : 'head_revision_id'}=$3
        WHERE route=$1 AND catalogue_id=$2`,
