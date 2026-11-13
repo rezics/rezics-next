@@ -21,6 +21,9 @@ import {
   type HostedVersionBuilderIndexes,
   type HostedVersionBuilderPage,
   type HostedVersionBuilderPointFact,
+  type HostedVersionBuilderSequenceApplication,
+  type HostedVersionBuilderSequenceItem,
+  type HostedVersionBuilderSequenceState,
   type HostedVersionBuilderSiblingRootChange,
   type HostedVersionBuilderSource,
   type HostedVersionBuilderState,
@@ -35,6 +38,9 @@ export {
   type HostedVersionBuilderIndexes,
   type HostedVersionBuilderPage,
   type HostedVersionBuilderPointFact,
+  type HostedVersionBuilderSequenceApplication,
+  type HostedVersionBuilderSequenceItem,
+  type HostedVersionBuilderSequenceState,
   type HostedVersionBuilderSiblingRootChange,
   type HostedVersionBuilderSource,
   type HostedVersionBuilderState,
@@ -236,6 +242,16 @@ export async function beginHostedVersionBuilder(
     tx,
     work,
     'write',
+    `INSERT INTO content.hosted_version_builder_source
+       (route,catalogue_id,input_id,source_kind,migration_input_id,publication_id,thread_id,actor_binding,created_at)
+     VALUES ($1,$2,$3,'migration',$3,NULL,NULL,NULL,transaction_timestamp())
+     ON CONFLICT (route,catalogue_id,input_id) DO NOTHING`,
+    [route, source.identity.catalogueId, source.inputId],
+  );
+  await trackedQuery(
+    tx,
+    work,
+    'write',
     `INSERT INTO content.hosted_version_builder
        (route,catalogue_id,input_id,source_revision_id,source_kind,base_revision_id,base_placement_count,
         base_root_count,source_high_water,expected_placement_count,frontier_segment,after_ordinal,after_offset,
@@ -384,32 +400,7 @@ export async function buildHostedVersionBuilderPage(
 ): Promise<HostedVersionBuilderApplication> {
   assertPageHeader(state, page);
   const fromCount = hostedVersionBuilderFrontierCount(state.identity, page.fromFrontier);
-  const mutableAncestors = state.activeAncestors.map((ancestor) => ({ ...ancestor }));
-  const pointFacts: HostedVersionBuilderPointFact[] = [];
-  const siblingRoots = new Map<string | null, HostedVersionBuilderSiblingRootChange>();
-  let rootSiblingRootId = state.rootSiblingRootId;
-  let rootNextPosition = state.rootNextPosition;
-  let preorderRootId = state.preorderRootId;
-  let chapterRootId = state.chapterRootId;
-  const pageOccurrences = new Set<string>();
-
-  await requireSequenceCount(indexes.siblings, rootSiblingRootId, BigInt(rootNextPosition));
-  await requireSequenceCount(indexes.preorder, preorderRootId, fromCount);
-
-  for (let index = 0; index < page.result.items.length; index += 1) {
-    const item = page.result.items[index]!;
-    const expectedOrdinal = fromCount + BigInt(index);
-    if (!Number.isSafeInteger(item.ordinal) || BigInt(item.ordinal) !== expectedOrdinal) {
-      throw new HostedVersionBuilderError('invalid-page', 'Hosted version source ordinals are not contiguous');
-    }
-    if (!Number.isSafeInteger(item.position) || item.position < 0 || !item.occurrenceId) {
-      throw new HostedVersionBuilderError('invalid-page', 'Hosted version source placement facts are malformed');
-    }
-    if (pageOccurrences.has(item.occurrenceId)) {
-      throw new HostedVersionBuilderError('invalid-page', 'Hosted version page repeats an occurrence identity');
-    }
-    pageOccurrences.add(item.occurrenceId);
-
+  for (const item of page.result.items) {
     if (item.address.segment === 'base') {
       if (
         item.address.revisionId !== state.identity.baseRevisionId ||
@@ -431,6 +422,55 @@ export async function buildHostedVersionBuilderPage(
         'Hosted version prefix address does not match its pinned stream',
       );
     }
+  }
+
+  const applied = await applyHostedVersionBuilderSequencePage(state, fromCount, page.result.items, indexes);
+  return {
+    ...applied,
+    state: {
+      ...state,
+      ...applied.state,
+      frontier: page.result.frontier,
+      coverageComplete: page.result.coverage.complete,
+    },
+  };
+}
+
+/** Apply ordered entries to the native sibling, preorder and chapter sequences. */
+export async function applyHostedVersionBuilderSequencePage<Address>(
+  state: HostedVersionBuilderSequenceState,
+  fromOrdinal: bigint,
+  items: readonly HostedVersionBuilderSequenceItem<Address>[],
+  indexes: HostedVersionBuilderIndexes,
+): Promise<HostedVersionBuilderSequenceApplication<Address>> {
+  if (items.length > HOSTED_VERSION_BUILDER_PAGE_MAX) {
+    throw new HostedVersionBuilderError('invalid-page', 'Hosted version page exceeds its 20-entry bound');
+  }
+  const mutableAncestors = state.activeAncestors.map((ancestor) => ({ ...ancestor }));
+  const pointFacts: HostedVersionBuilderSequenceApplication<Address>['pointFacts'][number][] = [];
+  const siblingRoots = new Map<string | null, HostedVersionBuilderSiblingRootChange>();
+  let rootSiblingRootId = state.rootSiblingRootId;
+  let rootNextPosition = state.rootNextPosition;
+  let preorderRootId = state.preorderRootId;
+  let chapterRootId = state.chapterRootId;
+  const pageOccurrences = new Set<string>();
+
+  await requireSequenceCount(indexes.siblings, rootSiblingRootId, BigInt(rootNextPosition));
+  await requireSequenceCount(indexes.preorder, preorderRootId, fromOrdinal);
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]!;
+    const expectedOrdinal = fromOrdinal + BigInt(index);
+    if (!Number.isSafeInteger(item.ordinal) || BigInt(item.ordinal) !== expectedOrdinal) {
+      throw new HostedVersionBuilderError('invalid-page', 'Hosted version source ordinals are not contiguous');
+    }
+    if (!Number.isSafeInteger(item.position) || item.position < 0 || !item.occurrenceId) {
+      throw new HostedVersionBuilderError('invalid-page', 'Hosted version source placement facts are malformed');
+    }
+    if (pageOccurrences.has(item.occurrenceId)) {
+      throw new HostedVersionBuilderError('invalid-page', 'Hosted version page repeats an occurrence identity');
+    }
+    pageOccurrences.add(item.occurrenceId);
 
     let parentAncestorIndex = -1;
     if (item.parentId !== null) {
@@ -529,18 +569,14 @@ export async function buildHostedVersionBuilderPage(
     }
   }
 
-  const stateAfter: HostedVersionBuilderState = {
-    ...state,
-    frontier: page.result.frontier,
-    rootSiblingRootId,
-    preorderRootId,
-    chapterRootId,
-    rootNextPosition,
-    activeAncestors: mutableAncestors,
-    coverageComplete: page.result.coverage.complete,
-  };
-  const application: HostedVersionBuilderApplication = {
-    state: stateAfter,
+  return {
+    state: {
+      rootSiblingRootId,
+      preorderRootId,
+      chapterRootId,
+      rootNextPosition,
+      activeAncestors: mutableAncestors,
+    },
     pointFacts,
     siblingRootChanges: [...siblingRoots.values()],
     logicalWork: {
@@ -551,7 +587,6 @@ export async function buildHostedVersionBuilderPage(
       siblingRootsChanged: siblingRoots.size,
     },
   };
-  return application;
 }
 
 function sequenceChanges(indexes: HostedVersionBuilderIndexes): readonly Readonly<Record<string, unknown>>[] {

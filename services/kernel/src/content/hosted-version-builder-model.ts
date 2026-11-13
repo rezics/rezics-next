@@ -38,23 +38,45 @@ export type HostedVersionBuilderAncestor = Readonly<{
   nextChildPosition: number;
 }>;
 
-/** Small resumable state. Candidate values and sequence nodes live in indexed rows. */
-export type HostedVersionBuilderState = Readonly<{
-  inputId: string;
-  identity: HostedMigrationSourceIdentity;
-  frontier: HostedMigrationFrontier;
+/** Sequence roots and the active source path shared by bounded baseline producers. */
+export type HostedVersionBuilderSequenceState = Readonly<{
   rootSiblingRootId: string | null;
   preorderRootId: string | null;
   chapterRootId: string | null;
   rootNextPosition: number;
   activeAncestors: readonly HostedVersionBuilderAncestor[];
-  coverageComplete: boolean;
-  sealed: boolean;
 }>;
 
-export type HostedVersionBuilderPointFact = Readonly<{
+/** Small resumable state. Candidate values and sequence nodes live in indexed rows. */
+export type HostedVersionBuilderState = HostedVersionBuilderSequenceState &
+  Readonly<{
+    inputId: string;
+    identity: HostedMigrationSourceIdentity;
+    frontier: HostedMigrationFrontier;
+    coverageComplete: boolean;
+    sealed: boolean;
+  }>;
+
+type HostedVersionBuilderSequenceEntryBase<Address> = Readonly<{
+  address: Address;
+  occurrenceId: string;
+  parentId: string | null;
+  position: number;
+  ordinal: number;
+}>;
+
+/** Source-specific addresses are carried through the shared outline application untouched. */
+export type HostedVersionBuilderSequenceItem<Address> = HostedVersionBuilderSequenceEntryBase<Address> &
+  (
+    | Readonly<{ availability: 'unavailable'; kind: 'part' }>
+    | Readonly<{ availability: 'available'; kind: 'part'; title: string }>
+    | Readonly<{ availability: 'unavailable'; kind: 'chapter' }>
+    | Readonly<{ availability: 'available'; kind: 'chapter'; title: string; target: HostedChapterTarget }>
+  );
+
+export type HostedVersionBuilderSequencePointFact<Address> = Readonly<{
   sourceOrdinal: number;
-  address: HostedMigrationSourceAddress;
+  address: Address;
   occurrenceId: string;
   parentId: string | null;
   position: number;
@@ -83,12 +105,20 @@ export type HostedVersionBuilderLogicalWork = Readonly<{
   siblingRootsChanged: number;
 }>;
 
-export type HostedVersionBuilderApplication = Readonly<{
-  state: HostedVersionBuilderState;
-  pointFacts: readonly HostedVersionBuilderPointFact[];
+export type HostedVersionBuilderSequenceApplication<Address> = Readonly<{
+  state: HostedVersionBuilderSequenceState;
+  pointFacts: readonly HostedVersionBuilderSequencePointFact<Address>[];
   siblingRootChanges: readonly HostedVersionBuilderSiblingRootChange[];
   logicalWork: HostedVersionBuilderLogicalWork;
 }>;
+
+export type HostedVersionBuilderPointFact = HostedVersionBuilderSequencePointFact<HostedMigrationSourceAddress>;
+
+export type HostedVersionBuilderApplication = Omit<
+  HostedVersionBuilderSequenceApplication<HostedMigrationSourceAddress>,
+  'state'
+> &
+  Readonly<{ state: HostedVersionBuilderState }>;
 
 export type HostedVersionBuilderErrorCode =
   | 'source-mismatch'

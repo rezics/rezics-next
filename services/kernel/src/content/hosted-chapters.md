@@ -208,6 +208,10 @@ that retained manifest by raw ordinal; it reports pointer staleness without foll
 unavailable slots, and relies on immutable publication retention while the ordered-generation builder owns its
 frontier, candidate state and CAS of the original publication ID.
 
+Decision: the public-baseline producer binds the publication, thread and actor-scope hash to a separate resumable
+source identity, reuses the existing builder point, sibling-root, page and sequence stores with the source-neutral
+sequence application, and seals complete coverage without changing catalogue pointers.
+
 ## Book publication contract
 
 Choose one exact public snapshot model with two launch paths: **point publish** for serial work, and
