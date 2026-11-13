@@ -2961,9 +2961,14 @@ a rejected artifact, changed legacy input or missing modern receipt never become
 their verdict and log. Unavailable evidence parks completed source with `typingEvidencePending`, preserving the attempt,
 commits and check IDs instead of creating a source-writing retry.
 
+For the installed Kernel client-output pipeline, the receipt retains its remote host/run binding with the local physical
+check identity. Failure classification may accept replaced generated declarations only when the published output tree
+matches that binding and the receipt's completed generated inventory. This representation check never qualifies a pass;
+pass qualification still requires its existing strict source and prepared-input match.
+
 Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt actionable event naming the authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
 
-Decision: an explicit retry queued after a completed stop supersedes pending compiler evidence only when current compiler inputs prove a terminal failure, all same-attempt check custody is terminal, and no successor, later worker start or live capacity ticket exists; otherwise the retry remains pending. A same-generation `started` intent is reconciled only under that same proof.
+Decision: an explicit retry after a completed stop keeps the existing stop proof. For an ordinary exited attempt, a queued source repair supersedes pending typing evidence only when the exact accepted replacement brief was recorded after exit, the captured branch head remains current, the exact retained command proves a terminal nonzero failure against unchanged source inputs, any replaced Kernel client declarations match the receipt-bound published tree, all same-attempt check custody is terminal, and no successor, later worker start, landing or live capacity ticket exists. Generated-output identity authorizes failure classification only; pass qualification stays strict. Otherwise the retry remains pending and does not enter compiler-only recovery. A same-generation `started` intent is reconciled only under that proof.
 
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 

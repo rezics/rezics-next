@@ -6,7 +6,11 @@ import {
 } from './worker-host-custody.ts';
 import defaults from '../defaults.json';
 import { randomUUID } from 'node:crypto';
-import { reconcileStoppedTypingFailureRetry, recoverWorkerTyping } from './typing-recovery.ts';
+import {
+  hasQueuedTypingSourceRepair,
+  reconcileQueuedTypingFailureRetry,
+  recoverWorkerTyping,
+} from './typing-recovery.ts';
 import { isTypingEvidenceUnavailableResult } from './worker-check-budget.ts';
 import { defaultPolicy } from './policy.ts';
 import {
@@ -356,12 +360,13 @@ export class WorkerJob implements GateOutcomeSink {
           return;
         }
         if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
-          if (!reconcileStoppedTypingFailureRetry(this.tasks, ref)) {
+          if (!reconcileQueuedTypingFailureRetry(this.tasks, ref)) {
             // Keep the unresolved same-generation retry visible to the existing watchdog without waking a second owner.
             if (completed.state === 'stopped') {
               store.recordUnreconciledTypingRetry(ref);
               return;
             }
+            if (hasQueuedTypingSourceRepair(this.tasks, ref)) return;
             await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
             return;
           }
@@ -470,7 +475,7 @@ export class WorkerJob implements GateOutcomeSink {
         .retryIntents()
         .filter((value) => value.status === 'started' && value.nextAttempt === value.attempt)) {
         try {
-          reconcileStoppedTypingFailureRetry(this.tasks, { taskId: intent.taskId, attempt: intent.attempt });
+          reconcileQueuedTypingFailureRetry(this.tasks, { taskId: intent.taskId, attempt: intent.attempt });
         } catch (error) {
           if (!(error instanceof LeaseHeldError)) throw error;
         }

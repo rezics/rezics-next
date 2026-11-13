@@ -38,6 +38,7 @@ import {
   isRetainedKernelTypingCompiler,
   readTypingInputReceipt,
   qualifyTypingInputs,
+  typingFailureInputsMatch,
   type TypingInput,
   type TypingInputReceipt,
 } from './worker-check-typing-inputs.ts';
@@ -240,34 +241,6 @@ function typingFailureResult(source: WorkerCheckHostStampRecord, reason?: string
     `${TYPING_SETTLEMENT_FAILED} Settlement records a typing failure with that run's log, ` +
     'so this attempt is retried instead of landing.';
   return `${summary}\n${reason ?? ''}\n${log}`;
-}
-
-/** A failure receipt is current only when its stable compiler inputs still match the retained source. */
-function typingFailureInputsMatch(
-  worktree: string,
-  receipt: TypingInputReceipt,
-  localPrepared: readonly TypingInput[] = [],
-): boolean {
-  if (!receipt.sourceStable) return false;
-  const current = captureTypingInputs(worktree, receipt.compilerCommand);
-  if (
-    current.runtime !== receipt.completed.runtime ||
-    current.profile !== receipt.completed.profile ||
-    JSON.stringify(current.excludedDocuments) !== JSON.stringify(receipt.completed.excludedDocuments) ||
-    JSON.stringify(current.source) !== JSON.stringify(receipt.completed.source)
-  )
-    return false;
-  const baseline = new Map(localPrepared.map((entry) => [entry.path, entry.digest]));
-  const compiled = new Map(receipt.completed.prepared.map((entry) => [entry.path, entry.digest]));
-  if (
-    current.prepared.some(
-      (entry) => compiled.get(entry.path) !== entry.digest && baseline.get(entry.path) !== entry.digest,
-    )
-  )
-    return false;
-  return localPrepared.every(
-    (entry) => current.prepared.some((currentEntry) => currentEntry.path === entry.path) || entry.digest === 'missing',
-  );
 }
 
 export const TYPING_RECOVERY_ENV = 'GOAL_WORKER_CHECK_TYPING_RECOVERY';
