@@ -246,8 +246,14 @@ test('authenticated typing-recover issues one replayable compiler-only grant aft
     );
     h.store.updateTask(ref, (current) => {
       current.state = 'stopped';
-      current.currentAttempt += 1;
     });
+    h.store.nextAttempt(ref, (number) => ({
+      ...attempt,
+      attempt: number,
+      startedAt: new Date().toISOString(),
+      logPath: join(h.settings.stateDirectory, 'runs', task.id, `${number}.jsonl`),
+      evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(number)),
+    }));
     await expect(recoverWorkerTyping(h.tasks, landing, ref, actor)).rejects.toThrow();
     expect(readdirSync(join(budget, 'typing-recovery')).filter((file) => file.endsWith('.json'))).toHaveLength(2);
   } finally {
