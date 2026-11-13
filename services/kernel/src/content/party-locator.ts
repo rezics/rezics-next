@@ -45,6 +45,7 @@ export async function partyPartition<T>(
 }
 
 const decisionType = 'com.rezics.content.moderation.takedown.v1';
+const revisionDecisionType = 'com.rezics.content.moderation.revision-restricted.v1';
 const operationType = 'com.rezics.content.author-erasure.requested.v1';
 
 /** Commit-event projection, like author_item: read the source, release it, then
@@ -54,15 +55,16 @@ const operationType = 'com.rezics.content.author-erasure.requested.v1';
 export function createPartyLocatorEffect(pool: Pool): Effect {
   return {
     name: 'content_party_locator',
-    types: [decisionType, operationType],
+    types: [decisionType, revisionDecisionType, operationType],
     async run(event) {
       if (
-        (event.type !== decisionType && event.type !== operationType) ||
+        (event.type !== decisionType && event.type !== revisionDecisionType && event.type !== operationType) ||
         !Value.Check(CONTENT_EVENTS()[event.type], event.data)
       )
         throw new TypeError('Invalid party locator event');
       const data = event.data as Record<string, string>;
-      const ownerRoute = partyRoute((event.type === decisionType ? data.targetId : data.operationId)!);
+      const decisionEvent = event.type === decisionType || event.type === revisionDecisionType;
+      const ownerRoute = partyRoute((decisionEvent ? data.targetId : data.operationId)!);
       const source = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);
       if (
         !source ||
@@ -71,7 +73,7 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
         BigInt(event.sequence) < 1n
       )
         throw new TypeError('Invalid party locator source');
-      const kind = event.type === decisionType ? 'decision' : 'operation';
+      const kind = decisionEvent ? 'decision' : 'operation';
       const record = await partyPartition(pool, ownerRoute, async (client) => {
         const anchor = await readPartition(client, partitionOf(ownerRoute));
         if (

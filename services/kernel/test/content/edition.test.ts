@@ -11,6 +11,7 @@ import { readEditionSourceIdentity } from '../../src/content/edition-reads.ts';
 import readIdentityLabels from '../../src/semantic/read-related.sql';
 import { observeSql } from './support/sql-observer.ts';
 import { readContentEditionSaleAuthority } from '../../src/content/edition-sale.ts';
+import { restrictPostRevision } from '../../src/content/moderation.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import { seedGovernanceAuthority, seedResourceDenial } from './support/disclosure-fixtures.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
@@ -262,6 +263,55 @@ test('native immutable authored edition binds exact source revision creator sale
       })
     ).status,
   ).toBe(404);
+});
+
+test('a buyer benefit cannot disclose a hard restricted exact Post revision through a fixed edition', async () => {
+  const f = await fixture();
+  const restrictedBody = fromPlainText('Exact bytes that the buyer later cannot read');
+  const revised = await value<{ post: { revisionId: string } }>(
+    wire(
+      f.token,
+      `/v1/posts/${f.post.id}/revisions`,
+      'POST',
+      { body: restrictedBody },
+      f.post.revisionId,
+    ),
+    201,
+  );
+  const edition = await value<{ editionId: string }>(
+    wire(f.token, '/v1/contentEditions', 'POST', {
+      postId: f.post.id,
+      revisionId: revised.post.revisionId,
+      targetSubjectId: f.targetSubjectId,
+    }),
+    201,
+  );
+  const path = `/v1/contentEditions/${edition.editionId}`;
+  await value(wire(f.token, `${path}:publish`, 'POST', {}, '1'), 200);
+  await seedGovernanceAuthority(f.native.database.pool, f.route, edition.editionId, f.buyer.actor.accountId, [
+    'edition:read',
+  ]);
+  expect(
+    await value<ContentEditionRevisionView>(wire(f.buyer.bearer, `${path}/revision`), 200),
+  ).toMatchObject({ revisionId: revised.post.revisionId, body: restrictedBody });
+
+  const moderator = f.native.actors.moderator;
+  await seedGovernanceAuthority(f.native.database.pool, f.route, f.post.id, moderator.actor.accountId, [
+    'moderation:takedown',
+  ]);
+  await restrictPostRevision(
+    { pool: f.native.database.pool, access: f.native.access, routeKey: f.native.routeKey, clock: () => new Date() },
+    moderator.actor,
+    {
+      postId: f.post.id,
+      revisionId: revised.post.revisionId,
+      mode: 'hard',
+      reason: 'Block exact bytes across editions',
+    },
+    { deadline: Date.now() + 30000, idempotencyKey: randomUUID(), requestId: randomUUID() },
+  );
+
+  expect((await wire(f.buyer.bearer, `${path}/revision`)).status).toBe(404);
 });
 
 test('current creator revocation, terminal unpublication and native source erasure refuse fixed edition bytes', async () => {

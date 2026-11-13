@@ -33,6 +33,8 @@ import erase from './erase-content.sql';
 import erasePostLogicalPage from './erase-post-logical-page.sql';
 import takedown from './takedown.sql';
 import insertDecision from './insert-moderation-decision.sql';
+import restrictRevision from './post-revision-restriction.sql';
+import insertRevisionRestriction from './insert-post-revision-restriction.sql';
 import validatePage from './validate-erasure-page.sql';
 
 export type ErasePostDependencies = Readonly<{
@@ -63,6 +65,14 @@ export type ErasureInitiator = Readonly<{
 
 type Point =
   | Readonly<{ action: 'moderation:takedown'; kind: 'board' | 'thread' | 'post'; id: string; reason: string }>
+  | Readonly<{
+      action: 'moderation:takedown';
+      kind: 'post';
+      id: string;
+      revisionId: string;
+      mode: 'public' | 'hard';
+      reason: string;
+    }>
   | Readonly<{ action: 'post:erase'; kind: 'post'; id: string; reason: string; softDelete?: boolean }>
   | Readonly<{ action: 'media:erase'; kind: 'media'; id: string; reason: string }>;
 type Scope = {
@@ -233,6 +243,59 @@ async function prepareAuthorizedPoint(
     authorization,
     async mutate(tx: CommandTransaction) {
       if (!scope) throw new GrantDeniedError();
+      if (point.action === 'moderation:takedown' && 'revisionId' in point) {
+        const decisionId = newId(route);
+        const restricted = await tx.query<{
+          thread_id: string;
+          post_id: string;
+          revision_id: string;
+          board_id: string;
+          security_revision: string;
+        }>(restrictRevision.sql, [route, point.id, point.revisionId]);
+        const target = restricted.rows[0];
+        if (!target) throw new GrantDeniedError();
+        const decidedAt = authoritativeTimeValue(commandTime(tx)!);
+        await insertDecision.run(tx, {
+          route,
+          decision_id: decisionId,
+          target_kind: 'post',
+          target_id: point.id,
+          revision_id: point.revisionId,
+          statement: point.reason,
+          decider_account_id: identity.principal.id,
+          security_revision: target.security_revision,
+          decided_at: decidedAt,
+          recorded_transaction_id: currentCommand(tx).transactionId,
+          board_id: target.board_id,
+        });
+        await insertRevisionRestriction.run(tx, {
+          route,
+          decision_id: decisionId,
+          thread_id: target.thread_id,
+          post_id: point.id,
+          revision_id: point.revisionId,
+          mode: point.mode,
+          security_revision: target.security_revision,
+          restricted_at: decidedAt,
+        });
+        const value = { targetId: point.id, securityRevision: target.security_revision };
+        return {
+          value,
+          events: [
+            {
+              type: 'com.rezics.content.moderation.revision-restricted.v1',
+              subject: point.id,
+              data: {
+                targetKind: 'post' as const,
+                targetId: point.id,
+                revisionId: point.revisionId,
+                mode: point.mode,
+                securityRevision: target.security_revision,
+              },
+            },
+          ],
+        };
+      }
       parameters.deleted_at =
         point.action === 'post:erase' && point.softDelete ? authoritativeTimeValue(commandTime(tx)!) : null;
       const statement = point.action === 'moderation:takedown' ? takedown : erase;
@@ -251,6 +314,7 @@ async function prepareAuthorizedPoint(
           board_id: point.kind === 'board' ? point.id : scope.board_id,
           target_kind: point.kind,
           target_id: point.id,
+          revision_id: null,
           statement: point.reason,
           decider_account_id: identity.principal.id,
           security_revision: securityRevision,
@@ -307,14 +371,17 @@ async function mutateAuthorizedPoint(
 ): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
   const prepared = await prepareAuthorizedPoint(deps, actor, requested, context);
   const receipt = {
-    kind: `content.${prepared.point.action}`,
+    kind:
+      prepared.point.action === 'moderation:takedown' && 'revisionId' in prepared.point
+        ? 'content.moderation.revision-restriction'
+        : `content.${prepared.point.action}`,
     key: context.idempotencyKey,
     digest: createHash('sha256')
       .update(canonicalize([prepared.identity, prepared.point])!)
       .digest(),
   };
   const discovery =
-    prepared.point.kind === 'media'
+    prepared.point.kind === 'media' || 'revisionId' in prepared.point
       ? null
       : await prepareDiscoveryMutation(deps, {
           identity: prepared.identity,
@@ -355,6 +422,43 @@ export function mutateContentPoint(
   context: ErasePostContext,
 ): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
   return mutateAuthorizedPoint(deps, actor, requested, context);
+}
+
+export type PostRevisionRestrictionInput = Readonly<{
+  postId: string;
+  revisionId: string;
+  mode: 'public' | 'hard';
+  reason: string;
+}>;
+
+/** A sparse revision decision uses the existing moderation authority and
+ * command receipt, while keeping the hold out of Post-wide discovery mutation. */
+export function mutateContentPostRevisionRestriction(
+  deps: ErasePostDependencies,
+  actor: Actor,
+  input: PostRevisionRestrictionInput,
+  context: ErasePostContext,
+): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
+  const postRoute = routeOf(input.postId);
+  if (
+    postRoute === null ||
+    routeOf(input.revisionId) !== postRoute ||
+    (input.mode !== 'public' && input.mode !== 'hard')
+  )
+    throw new RangeError('Invalid Post revision restriction');
+  return mutateAuthorizedPoint(
+    deps,
+    actor,
+    {
+      action: 'moderation:takedown',
+      kind: 'post',
+      id: input.postId,
+      revisionId: input.revisionId,
+      mode: input.mode,
+      reason: input.reason,
+    },
+    context,
+  );
 }
 
 /** Erase one actual post without enumerating its revisions or media. Native

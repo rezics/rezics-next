@@ -7,6 +7,7 @@ import lift from './lift-takedown.sql';
 
 export type LiftTakedownInput = Readonly<{
   target: Readonly<{ kind: 'thread' | 'post'; id: string }>;
+  decisionId?: string;
 }>;
 export type LiftTakedownContext = Readonly<{ events: CommandEvent[] }>;
 
@@ -23,8 +24,8 @@ export async function liftTakedown(
   const { kind, id } = input.target;
   const route = routeOf(id);
   if (route === null || (kind !== 'thread' && kind !== 'post')) throw new RangeError('Invalid lift takedown target');
-  await assertDiscoveryMutationLocked(client, input.target);
-  const parameters = { kind, route, id };
+  if (input.decisionId === undefined) await assertDiscoveryMutationLocked(client, input.target);
+  const parameters = { kind, route, id, decision_id: input.decisionId ?? null };
   const result = await client.query<(typeof lift)['~reylo']['element']>(
     lift.sql,
     lift.params.map((name) => parameters[name as keyof typeof parameters]),
@@ -33,6 +34,20 @@ export async function liftTakedown(
   if (!row) return null;
   const securityRevision = row.security_revision;
   if (securityRevision === null) throw new Error('Restored target is missing its security revision');
+  if (row.revision_id !== null) {
+    const data: ModerationEventData<'com.rezics.content.moderation.revision-restored.v1'> = {
+      targetKind: 'post',
+      targetId: id,
+      revisionId: row.revision_id,
+      securityRevision,
+    };
+    context.events.push({
+      type: 'com.rezics.content.moderation.revision-restored.v1',
+      subject: id,
+      data,
+    });
+    return { targetId: id, securityRevision };
+  }
   const data: ModerationEventData<'com.rezics.content.moderation.restored.v1'> = {
     targetKind: kind,
     targetId: id,

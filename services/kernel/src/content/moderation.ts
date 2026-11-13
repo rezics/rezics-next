@@ -1,7 +1,13 @@
 import type { Pool } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { erasePostLogical, mutateContentPoint, type ErasePostInput } from './erase-post.ts';
+import {
+  erasePostLogical,
+  mutateContentPoint,
+  mutateContentPostRevisionRestriction,
+  type ErasePostInput,
+  type PostRevisionRestrictionInput,
+} from './erase-post.ts';
 import type { MediaId, PostId, RequestContext, ThreadId } from './model.ts';
 
 export type ModerationDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock: () => Date }>;
@@ -31,6 +37,15 @@ export function takedown(
     },
     context,
   );
+}
+
+export function restrictPostRevision(
+  dependencies: ModerationDependencies,
+  actor: Actor,
+  input: PostRevisionRestrictionInput,
+  context: RequestContext,
+): Promise<CommandOutcome<ModerationValue>> {
+  return mutateContentPostRevisionRestriction(dependencies, actor, input, context);
 }
 
 export function erasePost(

@@ -17,7 +17,7 @@ import {
   ModerationHistoryPageSchema,
   ModerationHistoryQuerySchema,
 } from './moderation-history.ts';
-import { erasePost, takedown } from './moderation.ts';
+import { erasePost, restrictPostRevision, takedown } from './moderation.ts';
 import type { ModerationDependencies } from './moderation.ts';
 import { beginAuthorErasure, postEraseReceiptAccess, readOperation } from './operations.ts';
 import type { AuthorErasureDependencies, Operation } from './operation-contract.ts';
@@ -25,6 +25,7 @@ import type { reportRoutes } from './report-routes.ts';
 import type { ContentRuntime } from './runtime.ts';
 import {
   AuthorErasureInputSchema,
+  ContentIdSchema,
   ModerationReasonSchema,
   ModerationResponseSchema,
   OperationSchema,
@@ -40,6 +41,20 @@ function sessionHeader() {
 }
 function reason() {
   return memoizedValue(reason, () => strictContentSchema(ModerationReasonSchema));
+}
+function revisionRestriction() {
+  return memoizedValue(revisionRestriction, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          revisionId: ContentIdSchema,
+          mode: t.Union([t.Literal('public'), t.Literal('hard')]),
+          reason: t.String({ minLength: 1, maxLength: 1024 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
 }
 function response() {
   return memoizedValue(response, () => strictContentSchema(ModerationResponseSchema));
@@ -166,6 +181,7 @@ export function moderationRoutes(
     },
     response: { 200: withHeaders(response(), sessionHeader()), ...writeFailures() },
   };
+  const revisionRestrictionOptions = { ...pointOptions, body: revisionRestriction() };
   return app
     .get(
       '/v1/moderation-decisions/:id',
@@ -270,6 +286,28 @@ export function moderationRoutes(
               deps,
               actor,
               { target: { kind: 'post', id }, reason: body.reason },
+              context(request, job.deadline),
+            );
+            session.record(result);
+            return { securityRevision: result.value.securityRevision };
+          }),
+        );
+      },
+    )
+    .post(
+      customMethod('/v1/posts/:id', 'restrictRevision'),
+      {
+        ...revisionRestrictionOptions,
+        detail: detail('post.revision.restrict', 'moderation:takedown', 'post'),
+      },
+      async ({ params: { id }, actor, body, request, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        return command(() =>
+          admission.run('normal', job, async () => {
+            const result = await restrictPostRevision(
+              deps,
+              actor,
+              { postId: id, revisionId: body.revisionId, mode: body.mode, reason: body.reason },
               context(request, job.deadline),
             );
             session.record(result);

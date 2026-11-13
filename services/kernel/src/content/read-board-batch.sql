@@ -13,6 +13,7 @@ SELECT 'board'::text AS kind, b.board_id AS id, NULL::uuid AS thread_id,
        NULL::bytea AS body, NULL::bytea AS sha256, NULL::text AS thread_kind,
        b.purpose AS board_purpose, NULL::jsonb AS vote_citation, b.realm_id AS realm_id,
        NULL::timestamptz AS deleted_at, false AS restorable, NULL::uuid AS decision_id,
+       NULL::text AS revision_restriction, NULL::uuid AS revision_restriction_decision_id,
        NULL::boolean AS matches
 FROM input i
 CROSS JOIN LATERAL (

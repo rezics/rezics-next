@@ -14,6 +14,7 @@ SELECT 'thread'::text AS kind, t.thread_id AS id, t.thread_id AS thread_id,
        NULL::bytea AS body, NULL::bytea AS sha256, t.kind AS thread_kind,
        NULL::text AS board_purpose, NULL::jsonb AS vote_citation, NULL::uuid AS realm_id,
        NULL::timestamptz AS deleted_at, false AS restorable, NULL::uuid AS decision_id,
+       NULL::text AS revision_restriction, NULL::uuid AS revision_restriction_decision_id,
        NULL::boolean AS matches
 FROM input i
 CROSS JOIN LATERAL (

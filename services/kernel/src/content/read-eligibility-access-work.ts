@@ -46,6 +46,8 @@ function projection(kind: string): object | undefined {
     deleted_at: null,
     restorable: false,
     decision_id: null,
+    revision_restriction: null,
+    revision_restriction_decision_id: null,
   };
   switch (kind) {
     case 'board':
@@ -70,6 +72,8 @@ function projection(kind: string): object | undefined {
         revised_at: timestamp,
         deleted_at: timestamp,
         decision_id: uuid,
+        revision_restriction: 'hard',
+        revision_restriction_decision_id: uuid,
       };
     default:
       // Revision has a different native projection, including digest, arrays and
@@ -111,7 +115,8 @@ export function createReadEligibilityWork<E extends object>(
   // one union output. post: post/head/decision unique points + two equality
   // joins + one union output. decision's (route,kind,id,security_revision) UNIQUE
   // and revision's (route,id) PK bound every intermediate to one, even on misses.
-  const probes = row.kind === 'post' ? 3 : 1;
+  // A post additionally probes its one active exact head restriction.
+  const probes = row.kind === 'post' ? 4 : 1;
   const shape = projection(row.kind);
   const pointBound: AccessWork | undefined =
     shape &&
@@ -119,7 +124,7 @@ export function createReadEligibilityWork<E extends object>(
       keys: probes,
       points: probes + 1,
       witnesses: 0,
-      rows: 1 + probes + (row.kind === 'post' ? 2 : 1) + 1,
+      rows: 1 + probes + (row.kind === 'post' ? 3 : 1) + 1,
       bytes: bytes(parameters) + bytes([shape]),
       emptySeeks: 1,
     });

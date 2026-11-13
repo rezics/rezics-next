@@ -59,6 +59,8 @@ export const REVIEW_DISCOVERY_SOURCE_TYPES = [
   'com.rezics.content.post.restored.v1',
   'com.rezics.content.moderation.takedown.v1',
   'com.rezics.content.moderation.restored.v1',
+  'com.rezics.content.moderation.revision-restricted.v1',
+  'com.rezics.content.moderation.revision-restored.v1',
   'com.rezics.content.moderation.erasure.v1',
   'com.rezics.content.source_fence.taken_down.v1',
   'com.rezics.community.realm-discovery.changed.v1',
@@ -116,6 +118,9 @@ function scopes(event: CloudEvent): Scope[] {
     case 'com.rezics.content.moderation.takedown.v1':
     case 'com.rezics.content.moderation.restored.v1':
       return point(data.targetKind as Gate, data.targetId);
+    case 'com.rezics.content.moderation.revision-restricted.v1':
+    case 'com.rezics.content.moderation.revision-restored.v1':
+      return point('post', data.targetId);
     case 'com.rezics.content.moderation.erasure.v1':
       return point('thread', data.threadId);
     case 'com.rezics.content.source_fence.taken_down.v1':

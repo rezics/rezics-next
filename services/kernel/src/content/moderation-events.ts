@@ -22,6 +22,25 @@ export const MODERATION_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.content.moderation.revision-restricted.v1': Type.Object(
+    {
+      targetKind: Type.Literal('post'),
+      targetId: UUID,
+      revisionId: UUID,
+      mode: Type.Union([Type.Literal('public'), Type.Literal('hard')]),
+      securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    { additionalProperties: false },
+  ),
+  'com.rezics.content.moderation.revision-restored.v1': Type.Object(
+    {
+      targetKind: Type.Literal('post'),
+      targetId: UUID,
+      revisionId: UUID,
+      securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.content.post.erased.v1': Type.Object(
     {
       postId: UUID,

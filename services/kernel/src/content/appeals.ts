@@ -155,6 +155,7 @@ export async function resolveAppeal(
       await admission.authorize(tx, attempt, proof);
       const current = await read.run(tx, { route, appeal_id: id });
       if (!current || current.target_id !== reference.value!.target_id) throw missing();
+      if (current.revision_id !== reference.value!.revision_id) throw missing();
       if (current.decider_account_id === actor.accountId) throw new ProblemError('forbidden');
       return 'execute';
     },
@@ -165,8 +166,9 @@ export async function resolveAppeal(
     key: context.idempotencyKey,
     digest: requestDigest('content.resolve-appeal', actor, { id, ...input }),
   };
+  const exactRevision = reference.value.revision_id !== null;
   const discovery =
-    input.outcome === 'reverse'
+    input.outcome === 'reverse' && !exactRevision
       ? await prepareDiscoveryMutation(deps, {
           identity,
           authorization,
@@ -202,7 +204,10 @@ export async function resolveAppeal(
         if (input.outcome === 'reverse')
           await liftTakedown(
             tx,
-            { target: { kind: reference.value!.target_kind as 'thread' | 'post', id: reference.value!.target_id } },
+            {
+              target: { kind: reference.value!.target_kind as 'thread' | 'post', id: reference.value!.target_id },
+              ...(exactRevision ? { decisionId: reference.value!.decision_id } : {}),
+            },
             { events },
           );
         events.push(...(await applyDiscoveryMutation(tx, discovery)));

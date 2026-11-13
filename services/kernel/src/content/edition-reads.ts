@@ -84,6 +84,10 @@ async function readEditionMetadata(
     await checked();
     if (!(await guard.final())) throw new ContentNotFoundError();
     const result = await checked();
+    // Close the final metadata read against an exact Post hold committed while
+    // its source snapshot was open. A stale edition view may expose its pinned
+    // digest and licence even though it never returns the source body.
+    if (!(await guard.final())) throw new ContentNotFoundError();
     if (!identity) return result;
     const identities = await prepareEditionIdentities(
       deps,
@@ -93,6 +97,7 @@ async function readEditionMetadata(
     );
     if (!(await guard.final())) throw new ContentNotFoundError();
     const final = await checked();
+    if (!(await guard.final())) throw new ContentNotFoundError();
     return { ...final, value: { ...final.value, identity: (await identities()).get(id)! } };
   });
 }
@@ -118,7 +123,7 @@ export async function readContentEditionRevision(deps: Dependencies, id: string,
     );
     if (!(await sale.final())) throw new ContentNotFoundError();
     if (!(await guard.final())) throw new ContentNotFoundError();
-    return editionSnapshot(deps, id, accessContext, async (client): Promise<ContentEditionRevisionView> => {
+    const delivered = await editionSnapshot(deps, id, accessContext, async (client): Promise<ContentEditionRevisionView> => {
       if (
         !sameEdition(await editionRow(client, id), row) ||
         !sameSource(await editionSource(client, row.post_id, row.revision_id, row.target_subject_id), source) ||
@@ -141,6 +146,11 @@ export async function readContentEditionRevision(deps: Dependencies, id: string,
       if (serializeDocument(body) !== text) throw new ContentNotFoundError();
       return { editionId: row.edition_id, revisionId: row.revision_id, sha256: row.sha256, licence: row.licence, body };
     });
+    // The body query used the edition transaction's snapshot. Re-read the
+    // original exact Post authority after releasing it so a hold committed
+    // during that transaction cannot serialize previously prepared bytes.
+    if (!(await guard.final()) || !(await sale.final())) throw new ContentNotFoundError();
+    return delivered;
   });
 }
 

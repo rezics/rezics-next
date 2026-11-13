@@ -35,6 +35,8 @@ const sourceTypes = [
   'com.rezics.content.post.restored.v1',
   'com.rezics.content.moderation.takedown.v1',
   'com.rezics.content.moderation.restored.v1',
+  'com.rezics.content.moderation.revision-restricted.v1',
+  'com.rezics.content.moderation.revision-restored.v1',
   'com.rezics.content.moderation.erasure.v1',
 ] as const satisfies readonly ContentEventType[];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -293,6 +295,11 @@ function targets(event: CloudEvent): Targets {
   const data = event.data as Record<string, unknown>;
   if (type === 'com.rezics.content.moderation.erasure.v1')
     return { postIds: data.postIds as string[], threadId: data.threadId as string, contributedAt: null };
+  if (
+    type === 'com.rezics.content.moderation.revision-restricted.v1' ||
+    type === 'com.rezics.content.moderation.revision-restored.v1'
+  )
+    return { postIds: [data.targetId as string], contributedAt: null };
   if (type === 'com.rezics.content.moderation.takedown.v1' || type === 'com.rezics.content.moderation.restored.v1') {
     return {
       postIds: data.targetKind === 'post' ? [data.targetId as string] : [],

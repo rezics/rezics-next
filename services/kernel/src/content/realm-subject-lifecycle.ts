@@ -36,6 +36,8 @@ const postRestored = 'com.rezics.content.post.restored.v1';
 const postErased = 'com.rezics.content.post.erased.v1';
 const takedown = 'com.rezics.content.moderation.takedown.v1';
 const restored = 'com.rezics.content.moderation.restored.v1';
+const revisionRestricted = 'com.rezics.content.moderation.revision-restricted.v1';
+const revisionRestored = 'com.rezics.content.moderation.revision-restored.v1';
 const boardCreated = 'com.rezics.content.board.created.v1';
 const realmDiscoveryChanged = 'com.rezics.community.realm-discovery.changed.v1';
 const contentSourceTypes = [
@@ -47,6 +49,8 @@ const contentSourceTypes = [
   postErased,
   takedown,
   restored,
+  revisionRestricted,
+  revisionRestored,
   boardCreated,
 ] as const;
 const communitySourceTypes = [
@@ -152,7 +156,8 @@ function sourceId(event: CloudEvent, data: Record<string, unknown>): string {
     return String(data.threadId);
   if (event.type === postRestored) return String(data.postId);
   if (event.type === postErased) return String(data.postId);
-  if (event.type === takedown || event.type === restored) return String(data.targetId);
+  if (event.type === takedown || event.type === restored || event.type === revisionRestricted || event.type === revisionRestored)
+    return String(data.targetId);
   if (event.type === boardCreated) return String(data.boardId);
   const id = data.realmId ?? data.spaceId ?? data.id;
   if (typeof id !== 'string') throw new TypeError('Realm Subject source event has no native subject');
@@ -237,6 +242,8 @@ function currentThreadEvent(event: CloudEvent): boolean {
     postErased,
     takedown,
     restored,
+    revisionRestricted,
+    revisionRestored,
   ].includes(event.type as never);
 }
 
@@ -255,6 +262,8 @@ async function threadIdFor(
       ? data.postId
       : (event.type === takedown || event.type === restored) && data.targetKind === 'post'
         ? data.targetId
+        : (event.type === revisionRestricted || event.type === revisionRestored)
+          ? data.targetId
         : null;
   if (typeof post === 'string') return postThread(pool, post, deadline);
   return null;
@@ -446,6 +455,11 @@ export function createRealmSubjectLifecycle(input: {
     if (
       (event.type === takedown || event.type === restored) &&
       data.targetKind === 'post' &&
+      data.targetId !== native.opening
+    )
+      return;
+    if (
+      (event.type === revisionRestricted || event.type === revisionRestored) &&
       data.targetId !== native.opening
     )
       return;

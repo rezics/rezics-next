@@ -17,6 +17,7 @@ import readHistorySource from './moderation-history-source.sql';
 import projectHistory from './project-moderation-history.sql';
 
 const takedownType = 'com.rezics.content.moderation.takedown.v1';
+const revisionRestrictedType = 'com.rezics.content.moderation.revision-restricted.v1';
 const appealWindowMs = 183 * 24 * 60 * 60 * 1000;
 export const ModerationDecisionSchema = t.Object(
   {
@@ -254,10 +255,13 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
   const appeals = createAppealEffect(pool);
   return {
     name: 'content_moderation_decision',
-    types: [takedownType, ...appeals.types],
+    types: [takedownType, revisionRestrictedType, ...appeals.types],
     async run(event) {
       if (appeals.types.includes(event.type)) return appeals.run(event);
-      if (event.type !== takedownType || !Value.Check(CONTENT_EVENTS()[takedownType], event.data))
+      if (
+        (event.type !== takedownType && event.type !== revisionRestrictedType) ||
+        !Value.Check(CONTENT_EVENTS()[event.type], event.data)
+      )
         throw new TypeError('Invalid moderation decision event');
       const data = event.data as {
         targetKind: 'board' | 'thread' | 'post';

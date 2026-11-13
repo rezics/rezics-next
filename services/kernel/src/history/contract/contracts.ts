@@ -304,6 +304,8 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.content.moderation.appeal-resolved.v1': personal('appellant', 'author', 'operator'),
   'com.rezics.content.moderation.erasure.v1': personal('author', 'operator', 'subject'),
   'com.rezics.content.moderation.restored.v1': personal('author', 'operator', 'subject'),
+  'com.rezics.content.moderation.revision-restricted.v1': personal('author', 'operator', 'subject'),
+  'com.rezics.content.moderation.revision-restored.v1': personal('author', 'operator', 'subject'),
   'com.rezics.content.moderation.takedown.v1': personal('author', 'operator', 'subject'),
   'com.rezics.content.post.created.v1': personal('actor', 'author'),
   'com.rezics.content.post.erased.v1': personal('author', 'operator', 'subject'),

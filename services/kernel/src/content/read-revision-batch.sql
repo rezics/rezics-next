@@ -13,6 +13,7 @@ SELECT 'revision'::text AS kind, r.revision_id AS id, r.thread_id AS thread_id,
        r.body_sha256 AS sha256, NULL::text AS thread_kind, NULL::text AS board_purpose,
        r.vote_citation AS vote_citation, NULL::uuid AS realm_id, NULL::timestamptz AS deleted_at,
        false AS restorable, NULL::uuid AS decision_id,
+       rr.mode AS revision_restriction, rr.decision_id AS revision_restriction_decision_id,
        CASE WHEN options.query = '' THEN true
          ELSE COALESCE(to_tsvector('simple'::regconfig, r.search_text)
            @@ plainto_tsquery('simple'::regconfig, options.query), false) END AS matches
@@ -20,8 +21,11 @@ FROM input i
 CROSS JOIN options
 CROSS JOIN LATERAL (
   SELECT r.revision_id, r.thread_id, r.board_id, r.post_id, r.availability, r.recorded_at,
-         r.licence, r.subject_ids, r.media_ids, r.body, r.body_sha256, r.vote_citation, r.search_text
+         r.licence, r.subject_ids, r.media_ids, r.body, r.body_sha256, r.vote_citation, r.search_text,
+         rr.mode, rr.decision_id
   FROM content.revision r
+  LEFT JOIN content.post_revision_restriction rr
+    ON rr.route = r.route AND rr.revision_id = r.revision_id AND rr.lifted_at IS NULL
   WHERE r.route = i.route AND r.revision_id = i.id
   LIMIT 1
 ) r;

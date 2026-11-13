@@ -18,19 +18,23 @@ SELECT 'post'::text AS kind, p.post_id AS id, p.thread_id AS thread_id,
        NULL::text AS board_purpose, NULL::jsonb AS vote_citation, NULL::uuid AS realm_id,
        p.deleted_at AS deleted_at,
        p.purge_started_at IS NULL AND NOT p.purge_completed AND p.head_availability = 'available' AS restorable,
-       p.decision_id AS decision_id, NULL::boolean AS matches
+       p.decision_id AS decision_id, NULL::boolean AS matches,
+       p.revision_restriction, p.revision_restriction_decision_id
 FROM input i
 CROSS JOIN LATERAL (
   SELECT p.post_id, p.thread_id, p.reply_to_post_id, p.author_account_id, p.head_revision_id,
          p.visibility, p.security_revision, p.availability, p.created_at, p.recorded_transaction_id,
          p.deleted_at, p.purge_started_at, p.purge_completed,
          h.availability AS head_availability, h.recorded_transaction_id AS head_recorded_transaction_id,
-         h.recorded_at AS head_recorded_at, d.decision_id
+         h.recorded_at AS head_recorded_at, d.decision_id,
+         rr.mode AS revision_restriction, rr.decision_id AS revision_restriction_decision_id
   FROM content.post p
   JOIN content.revision h ON h.route = p.route AND h.thread_id = p.thread_id
     AND h.post_id = p.post_id AND h.revision_id = p.head_revision_id
   LEFT JOIN content.moderation_decision d ON d.route = p.route AND d.target_kind = 'post'
     AND d.target_id = p.post_id AND d.security_revision = p.security_revision
+  LEFT JOIN content.post_revision_restriction rr
+    ON rr.route = p.route AND rr.revision_id = p.head_revision_id AND rr.lifted_at IS NULL
   WHERE p.route = i.route AND p.post_id = i.id
   LIMIT 1
 ) p;

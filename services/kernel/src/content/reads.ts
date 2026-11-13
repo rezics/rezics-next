@@ -244,6 +244,8 @@ type Row = {
   deleted_at: Date | null;
   restorable: boolean;
   decision_id: string | null;
+  revision_restriction: 'public' | 'hard' | null;
+  revision_restriction_decision_id: string | null;
   matches?: boolean | null;
 };
 type Chain = { thread: Row; posts: Row[]; revision: Row | null };
@@ -583,6 +585,8 @@ const signature = (row: Row) =>
     row.deleted_at,
     row.restorable,
     row.decision_id,
+    row.revision_restriction,
+    row.revision_restriction_decision_id,
   ]);
 const fingerprint = (value: Chain | null) =>
   value &&
@@ -653,7 +657,14 @@ async function currentBookDisclosure(
   });
 }
 
-function admissible(row: Row, actor: Actor, tombstone: boolean, bookGate?: RevisionDisclosureReaderGate): boolean {
+function admissible(
+  row: Row,
+  actor: Actor,
+  tombstone: boolean,
+  bookGate?: RevisionDisclosureReaderGate,
+  exactRestriction: 'public' | 'hard' | null = null,
+): boolean {
+  if (exactRestriction === 'hard') return false;
   if (
     row.visibility === 'draft' &&
     (actor.kind !== 'account' || row.author_id !== actor.accountId) &&
@@ -674,6 +685,7 @@ export function readResource(
   placeholder = false,
   withheldReference = false,
   bookGate?: RevisionDisclosureReaderGate,
+  revisionPubliclyWithheld = false,
 ): Resource {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
@@ -722,7 +734,7 @@ export function readResource(
         if (placeholder && actor.kind === 'account' && !actor.scopes.includes(action))
           return native.complete(context, false);
         const bookEligible =
-          current.visibility === 'draft' &&
+          (current.visibility === 'draft' || revisionPubliclyWithheld) &&
           bookGate !== undefined &&
           bookGateMatchesRow(bookGate, current) &&
           (await currentBookDisclosure(
@@ -732,7 +744,7 @@ export function readResource(
           ));
         return native.complete(
           context,
-          (current.visibility === 'published' ||
+          ((current.visibility === 'published' && !revisionPubliclyWithheld) ||
             bookEligible ||
             (withheldReference && isCommittedWithheldReference(current) && current.visibility === 'taken_down')) &&
             ((!tombstone && current.availability === 'available') || placeholder),
@@ -755,9 +767,18 @@ async function prepare(
   withheldReference = false,
   sharedContext?: AccessContext,
   bookGate?: RevisionDisclosureReaderGate,
+  revisionPubliclyWithheld = false,
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
-  const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder, withheldReference, bookGate);
+  const resourceWithEligibility = readResource(
+    row,
+    evidence,
+    tombstone,
+    placeholder,
+    withheldReference,
+    bookGate,
+    revisionPubliclyWithheld,
+  );
   const accessContext = sharedContext ?? {
     pool: dependencies.pool,
     deadline: context.deadline,
@@ -979,9 +1000,15 @@ export async function readBoardPageCandidateSnapshot<T>(
   return { board: view, anchor: { value: view, anchor }, candidate: observed.value.candidate };
 }
 
-function contentFloor(row: Row, tombstone: boolean, placeholder: boolean, withheldReference = false): boolean {
+function contentFloor(
+  row: Row,
+  tombstone: boolean,
+  placeholder: boolean,
+  withheldReference = false,
+  exactRestriction: 'public' | 'hard' | null = null,
+): boolean {
   return (
-    (row.visibility === 'published' ||
+    ((row.visibility === 'published' && exactRestriction === null) ||
       (withheldReference && isCommittedWithheldReference(row) && row.visibility === 'taken_down')) &&
     ((!tombstone && row.availability === 'available') || placeholder)
   );
@@ -1049,6 +1076,7 @@ export async function selectBoardThreadCandidates(
           tombstones.get(row.id) ?? false,
           placeholders.get(row.id) ?? false,
           withheld.get(row.id) ?? false,
+          revisionByPost.get(row.id)?.revision_restriction ?? null,
         ),
       ]),
     );
@@ -1081,7 +1109,8 @@ export async function selectBoardThreadCandidates(
         !revision ||
         thread.board_id !== boardId ||
         !decisionAllowed(thread, threadAccess[id], context.actor, tombstones.get(id) ?? false) ||
-        !decisionAllowed(post, postAccess[post.id], context.actor, tombstones.get(post.id) ?? false)
+        !decisionAllowed(post, postAccess[post.id], context.actor, tombstones.get(post.id) ?? false) ||
+        revision.revision_restriction === 'hard'
       )
         continue;
       if (
@@ -1177,6 +1206,7 @@ export async function discloseBoardPageThreads(
           postTombstone.get(row.id) ?? false,
           postPlaceholder.get(row.id) ?? false,
           postWithheld.get(row.id) ?? false,
+          revisionByPost.get(row.id)?.revision_restriction ?? null,
         ),
       ]),
     );
@@ -1212,6 +1242,7 @@ export async function discloseBoardPageThreads(
         (subjectScope && !revision.subject_ids.includes(subjectScope.subjectId)) ||
         !decisionAllowed(thread, threadAccess[id], context.actor, threadTombstone.get(id) ?? false) ||
         !decisionAllowed(post, postAccess[post.id], context.actor, postTombstone.get(post.id) ?? false) ||
+        revision.revision_restriction === 'hard' ||
         (erased && postAccess[post.id]?.explicit !== true && thread.visibility === 'taken_down')
       )
         continue;
@@ -1490,6 +1521,7 @@ async function disclose(
           withheldReference,
           undefined,
           bookGate,
+          row === initial?.posts[0] && initial.revision?.revision_restriction === 'public',
         ),
       );
     }
@@ -1500,6 +1532,9 @@ async function disclose(
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
+    // This keyed policy is checked after the fresh exact chain is selected and
+    // before any metadata or body is formed. It has no author or grant bypass.
+    if (current.revision?.revision_restriction === 'hard') return null;
     if (subjectScope) {
       if (!current.revision?.subject_ids.includes(subjectScope.subjectId) || !current.thread.board_id) return null;
       const boardRoute = route(current.thread.board_id);
@@ -1520,6 +1555,7 @@ async function disclose(
             rows[index]!.availability === 'erased' ||
             (threadReference && isCommittedWithheldReference(rows[index]!)),
           bookGate,
+          rows[index] === current.posts[0] ? current.revision?.revision_restriction : null,
         ) ||
         !(await checks[index]!(client))
       )
@@ -2728,6 +2764,7 @@ async function readExactPublishedRulesInternal(
       );
       const parent = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
       const permitted = new Map<string, boolean>();
+      const explicitPostRead = new Map<string, boolean>();
       const tombstonePermitted = new Map<string, boolean>();
       for (const [kind, rows] of [
         ['thread', threads],
@@ -2747,6 +2784,7 @@ async function readExactPublishedRulesInternal(
               row.id,
               row.availability === 'available' && decisionAllowed(row, allowed[row.id], context.actor, false),
             );
+            if (kind === 'post') explicitPostRead.set(row.id, allowed[row.id]?.explicit === true);
             if (includeAuthoring)
               tombstonePermitted.set(row.id, decisionAllowed(row, allowed[row.id], context.actor, true));
           }
@@ -2797,6 +2835,13 @@ async function readExactPublishedRulesInternal(
         const revision = byRevision.get(ref.revisionId);
         const thread = selected && byThread.get(selected.thread_id!);
         const board = thread && byBoard.get(thread.board_id!);
+        const exactHardDenied = revision?.revision_restriction === 'hard';
+        const exactPublicWithheld = revision?.revision_restriction === 'public';
+        const exactPostAllowed =
+          !!selected &&
+          permitted.get(selected.id) === true &&
+          !exactHardDenied &&
+          (!exactPublicWithheld || explicitPostRead.get(selected.id) === true);
         let currentChain: Row[] = [];
         let completeChain = false;
         if (selected && thread) {
@@ -2829,6 +2874,7 @@ async function readExactPublishedRulesInternal(
         );
         if (includeAuthoring) {
           const readableTombstone = Boolean(
+            exactPostAllowed &&
             exactRelation &&
             thread &&
             tombstonePermitted.get(thread.id) &&
@@ -2846,6 +2892,7 @@ async function readExactPublishedRulesInternal(
             thread &&
             revision?.availability === 'available' &&
             permitted.get(thread.id) &&
+            exactPostAllowed &&
             completeChain &&
             currentChain.every((post) => permitted.get(post.id)),
           );
@@ -2892,6 +2939,7 @@ async function readExactPublishedRulesInternal(
           !revision ||
           !thread ||
           !board ||
+          !exactPostAllowed ||
           !permitted.get(thread.id) ||
           !parent.boards.get(board.id) ||
           !parent.realms.get(ref.realmId) ||
@@ -3138,12 +3186,19 @@ export async function readNoticePostContexts(
                 resourceType: `content.${kind}`,
                 ids: batch.map((row) => row.id),
                 eligibility: async () =>
-                  Object.fromEntries(batch.map((row) => [row.id, contentFloor(row, false, false)])),
+                  Object.fromEntries(
+                    batch.map((row) => [
+                      row.id,
+                      contentFloor(row, false, false, false, kind === 'post' ? row.revision_restriction : null),
+                    ]),
+                  ),
               });
               for (const row of batch)
                 permitted.set(
                   row.id,
-                  row.availability === 'available' && decisionAllowed(row, allowed[row.id], context.actor, false),
+                  row.availability === 'available' &&
+                    !(kind === 'post' && row.revision_restriction === 'hard') &&
+                    decisionAllowed(row, allowed[row.id], context.actor, false),
                 );
             }
           }
@@ -3478,6 +3533,7 @@ async function prepareEditionSourceAuthority(
   const live = (value: Chain | null): value is Chain =>
     !!value &&
     !!value.revision &&
+    value.revision.revision_restriction !== 'hard' &&
     value.revision.id === source.revisionId &&
     value.revision.parent_id === source.postId &&
     value.revision.availability === 'available' &&
@@ -3615,7 +3671,15 @@ async function prepareEditionSourceAuthority(
   for (const row of rows)
     checks.push(
       await authorize(`${row.kind}:read`, {
-        resource: readResource(row, observed),
+        resource: readResource(
+          row,
+          observed,
+          false,
+          false,
+          false,
+          undefined,
+          row === initial.posts[0] && initial.revision.revision_restriction === 'public',
+        ),
         async validate(client) {
           const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
           return !!current && signature(current) === signature(row);
