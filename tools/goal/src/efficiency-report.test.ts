@@ -15,7 +15,7 @@ import {
   renderHourlyEfficiencyReport,
   sendHourlyEfficiencyReport,
 } from './efficiency-report.ts';
-import { recordFlow, type FlowEvent } from './flow.ts';
+import { checkResumeOperationId, recordCheckResumeReady, recordFlow, type FlowEvent } from './flow.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { WorkerStore, workerRecordEndedAtExpression } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -263,6 +263,67 @@ test('hourly aggregation preserves interleaved waits and normalized landings as 
     expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 2 finished attempts.');
     expect(report).toContain('Urgent worker starts / finishes in bucket (excluded from throughput): 2 / 1.');
     expect(report).toContain('Check-slot wait in bucket: 3 completed request/acquire pairs; p90 4m.');
+  } finally {
+    h.close();
+  }
+});
+
+test('hourly report separates direct check execution, completed-check host handoff and its admission reasons', async () => {
+  const h = fixture();
+  const bucket = '2026-10-31T01:00:00.000Z';
+  const start = Date.parse(bucket);
+  const at = (offsetMs: number) => new Date(start + offsetMs).toISOString();
+  try {
+    task(h.db, 'resumed', 'running', 'search');
+    const operationId = checkResumeOperationId('resumed', 1, ['check-a']);
+    const ticketId = 'same-attempt-ticket';
+    recordCheckResumeReady(h.db, {
+      taskId: 'resumed',
+      attempt: 1,
+      stage: 'check',
+      action: 'resume-ready',
+      at: at(-5 * 60_000),
+      operationId,
+      detail: JSON.stringify({
+        source: 'worker-check-history',
+        executionStartedAt: at(-15 * 60_000),
+        terminalAt: at(-5 * 60_000),
+      }),
+    });
+    for (const [action, offsetMs, detail] of [
+      ['resume-ticket-requested', -4 * 60_000, { ticketId }],
+      ['resume-wait-reason', -3 * 60_000, { ticketId, reason: 'worker-slice-reserve' }],
+      ['resume-admitted', -1 * 60_000, { ticketId }],
+      ['resume-started', 2 * 60_000, { ticketId }],
+    ] as const)
+      recordFlow(h.db, {
+        taskId: 'resumed',
+        attempt: 1,
+        stage: 'check',
+        action,
+        at: at(offsetMs),
+        operationId,
+        detail: JSON.stringify(detail),
+      });
+    recordCheckResumeReady(h.db, {
+      taskId: 'legacy',
+      attempt: 2,
+      stage: 'check',
+      action: 'resume-ready-unavailable',
+      at: at(4 * 60_000),
+      operationId: checkResumeOperationId('legacy', 2, ['old-check']),
+      detail: JSON.stringify({ timestamp: 'unavailable', reason: 'old check history lacks exact custody' }),
+    });
+
+    const report = await renderHourlyEfficiencyReport(h.db, { bucket, now: new Date('2026-10-31T02:00:00.000Z') });
+    expect(report).toContain(
+      'Check execution span for handoffs touching bucket: 1 direct physical-history batch spans; p90 10m; 1 timing-unavailable.',
+    );
+    expect(report).toContain('Completed-check handoff delay: 1 direct terminal-to-resume pairs; p90 7m.');
+    expect(report).toContain(
+      'Host admission wait for check resumes: 1 matched ticket/admission pairs; p90 3m; observed blockers: worker-slice-reserve=1; 0 ticket timings unavailable.',
+    );
+    expect(report).toContain('Check-slot wait in bucket: unknown (no completed wait pair recorded).');
   } finally {
     h.close();
   }

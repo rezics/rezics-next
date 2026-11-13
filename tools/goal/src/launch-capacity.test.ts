@@ -18,7 +18,7 @@ import {
 } from './launch.ts';
 import * as launchCapacity from './launch-capacity.ts';
 import { admittedMemoryMiB } from './launch-capacity.ts';
-import type { CapacityLifecycle, HostCapacityStore } from './launch-capacity.ts';
+import type { CapacityLifecycle, CapacityRelease, HostCapacityStore } from './launch-capacity.ts';
 import { HEAVY_WORKER_MIB, workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
@@ -157,6 +157,97 @@ test('legacy unkeyed tickets remain ahead in the FIFO queue', () => {
     writeFileSync(join(queue, mine), '');
     expect(waitersAhead(queue, mine)).toBe(1);
     expect(waitersAhead(queue, older)).toBe(0);
+  } finally {
+    directory.close();
+  }
+});
+
+test('exact completed-check resumes outrank recent starts, coalesce on restart, and yield to aged starts', () => {
+  const directory = temporaryDirectory();
+  const queue = join(directory.path, 'capacity-queue');
+  mkdirSync(queue, { recursive: true });
+  const identity = processIdentity();
+  if (!identity) throw new Error('test process identity unavailable');
+  const now = Date.now();
+  const fairness = defaultPolicy.capacity.criticalHeadStartMs;
+  const save = (name: string, metadata: Record<string, unknown>) =>
+    writeFileSync(join(queue, name), JSON.stringify({ ...identity, ...metadata }));
+  const oldStart = `${String(now - fairness - 1_000).padStart(15, '0')}.00000001-${process.pid}-old-start`;
+  const firstResume = `${String(now - 100).padStart(15, '0')}.00000002-${process.pid}-resume-a`;
+  const restartedResume = `${String(now - 50).padStart(15, '0')}.00000003-${process.pid}-resume-a-restart`;
+  const secondResume = `${String(now - 25).padStart(15, '0')}.00000004-${process.pid}-resume-b`;
+  const recentStart = `${String(now).padStart(15, '0')}.00000005-${process.pid}-recent-start`;
+  const readyTicket = (taskId: string, readyId: string, ticketId: string, queuedAt: number) => ({
+    taskId,
+    attempt: 1,
+    operation: 'resume',
+    queuedAt,
+    resumePriority: true,
+    resumeReadyOperationId: readyId,
+    resumeTicketId: ticketId,
+    memoryMiB: 4096,
+  });
+  try {
+    save(oldStart, {
+      taskId: 'old-start',
+      attempt: 1,
+      operation: 'start',
+      queuedAt: now - fairness - 1_000,
+      memoryMiB: 2048,
+    });
+    save(firstResume, readyTicket('resume-a', 'ready-a', 'ticket-a', now - 100));
+    save(restartedResume, readyTicket('resume-a', 'ready-a', 'ticket-a-restarted', now - 50));
+    save(secondResume, readyTicket('resume-b', 'ready-b', 'ticket-b', now - 25));
+    save(recentStart, {
+      taskId: 'recent-start',
+      attempt: 1,
+      operation: 'start',
+      queuedAt: now,
+      memoryMiB: 2048,
+    });
+
+    expect(waitersAhead(queue, oldStart)).toBe(0);
+    expect(waitersAhead(queue, firstResume)).toBe(1);
+    expect(waitersAhead(queue, secondResume)).toBe(2);
+    // A restarted duplicate for resume-a occupies no second FIFO position.
+    expect(waitersAhead(queue, recentStart)).toBe(3);
+  } finally {
+    directory.close();
+  }
+});
+
+test('legacy critical-start ordering does not make a recent fresh ticket appear aged', () => {
+  const directory = temporaryDirectory();
+  const queue = join(directory.path, 'capacity-queue');
+  mkdirSync(queue, { recursive: true });
+  const identity = processIdentity();
+  if (!identity) throw new Error('test process identity unavailable');
+  const now = Date.now();
+  const fairness = defaultPolicy.capacity.criticalHeadStartMs;
+  const legacyOrder = now - fairness - 500;
+  const oldCriticalStart = `${String(legacyOrder).padStart(15, '0')}.00000001-${process.pid}-legacy-critical`;
+  const readyResume = `${String(now - 100).padStart(15, '0')}.00000002-${process.pid}-ready-resume`;
+  const lifecycle = new Map<string, CapacityLifecycle>([
+    ['legacy-critical', { currentAttempt: 0, taskState: 'ready', priorityHeadStart: true }],
+  ]);
+  try {
+    writeFileSync(
+      join(queue, oldCriticalStart),
+      JSON.stringify({ ...identity, taskId: 'legacy-critical', attempt: 1, operation: 'start', memoryMiB: 2048 }),
+    );
+    writeFileSync(
+      join(queue, readyResume),
+      JSON.stringify({
+        ...identity,
+        taskId: 'ready-resume',
+        attempt: 1,
+        operation: 'resume',
+        queuedAt: now - 100,
+        resumePriority: true,
+        resumeReadyOperationId: 'terminal-check',
+      }),
+    );
+    expect(waitersAhead(queue, readyResume, capacityStore(lifecycle))).toBe(0);
   } finally {
     directory.close();
   }
@@ -369,7 +460,7 @@ test('a resumed attempt reserves four GiB on its ticket and transfers that charg
   const directory = temporaryDirectory();
   const taskId = 'resumed-worker';
   let headroom = 3072;
-  let release: (() => void) | undefined;
+  let release: CapacityRelease | undefined;
   const store = {
     capacityAttemptsCount: () => 0,
     attempts: () => [{ attempt: 1, state: 'waiting' as const }],
@@ -378,6 +469,7 @@ test('a resumed attempt reserves four GiB on its ticket and transfers that charg
   try {
     writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 32, minAvailableMiB: 0 }));
     const policy = { ...defaultPolicy.capacity, maxWorkers: 32, minAvailableMiB: 0, pollIntervalMs: 5 };
+    const waitReasons: string[] = [];
     const options = {
       policy,
       pollIntervalMs: 5,
@@ -387,14 +479,26 @@ test('a resumed attempt reserves four GiB on its ticket and transfers that charg
       availableMiB: () => Infinity,
       pressure: () => ({ memoryFull: 0, ioFull: 0 }),
       workerHeadroomMiB: () => headroom,
+      resumeReadyOperationId: 'ready-check-set',
+      resumeTicketId: 'resume-ticket',
+      onWaitReasons: (reasons: readonly string[]) => waitReasons.push(...reasons),
     };
     const resumed = awaitHostCapacity(store, directory.path, false, taskId, 1, { ...options, resume: true });
     const queue = join(directory.path, 'capacity-queue');
     await new Promise((resolve) => setTimeout(resolve, 15));
     const waiting = readdirSync(queue).find((name) => name.endsWith(`-${taskId}`))!;
-    expect(JSON.parse(readFileSync(join(queue, waiting), 'utf8')).memoryMiB).toBe(4096);
+    expect(JSON.parse(readFileSync(join(queue, waiting), 'utf8'))).toMatchObject({
+      memoryMiB: 4096,
+      resumeReadyOperationId: 'ready-check-set',
+      resumeTicketId: 'resume-ticket',
+      resumePriority: true,
+    });
+    expect(waitReasons).toContain('worker-slice-reserve');
+    expect(waiting.endsWith('.admitted')).toBe(false);
+    expect(admittedMemoryMiB(directory.path, new Set())).toBe(0);
     headroom = 4096;
     release = await resumed;
+    expect(release.ticketId).toBe('resume-ticket');
     const writer = JSON.stringify([taskId, 1]);
     expect(admittedMemoryMiB(directory.path, new Set())).toBe(4096);
     expect(admittedMemoryMiB(directory.path, new Set([writer]))).toBe(0);

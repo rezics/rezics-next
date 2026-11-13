@@ -5,12 +5,16 @@ import { join } from 'node:path';
 import { openDb } from './db.ts';
 import {
   checkFlowAlarms,
+  checkResumeOperationId,
   dispatchDailyStepAudit,
   ensureFlow,
   flowReport,
+  readCheckResumeFlow,
   readFlow,
   readLandingOperations,
+  recordCheckResumeReady,
   recordFlow,
+  summarizeCheckResumeHandoffs,
   summarizeLandingOperations,
   type FlowTask,
 } from './flow.ts';
@@ -472,6 +476,88 @@ test('incomplete lifecycle phases remain unknown instead of receiving inferred t
   });
   expect(result.tasks[0]?.workingMs).toBeNull();
   expect(result.queues.find((q) => q.stage === 'check')).toMatchObject({ length: 1, tasks: ['t1'] });
+});
+
+test('check resume reporting pairs physical execution, the exact ticket and resume while keeping legacy timing unknown', () => {
+  const db = openDb(':memory:');
+  ensureFlow(db);
+  const operationId = checkResumeOperationId('resume', 1, ['check-a', 'check-b']);
+  const ticketId = 'resume-ticket-a';
+  try {
+    expect(
+      recordCheckResumeReady(db, {
+        taskId: 'resume',
+        attempt: 1,
+        stage: 'check',
+        action: 'resume-ready',
+        at: date(10),
+        operationId,
+        detail: JSON.stringify({
+          source: 'worker-check-history',
+          executionStartedAt: date(0),
+          terminalAt: date(10),
+        }),
+      }),
+    ).toBe(true);
+    expect(
+      recordCheckResumeReady(db, {
+        taskId: 'resume',
+        attempt: 1,
+        stage: 'check',
+        action: 'resume-ready',
+        at: date(11),
+        operationId,
+        detail: JSON.stringify({ source: 're-observed' }),
+      }),
+    ).toBe(false);
+    for (const [action, minute, detail] of [
+      ['resume-ticket-requested', 12, { ticketId }],
+      ['resume-wait-reason', 13, { ticketId, reason: 'memory-floor' }],
+      ['resume-admitted', 15, { ticketId }],
+      ['resume-started', 17, { ticketId }],
+    ] as const)
+      recordFlow(db, {
+        taskId: 'resume',
+        attempt: 1,
+        stage: 'check',
+        action,
+        at: date(minute),
+        operationId,
+        detail: JSON.stringify(detail),
+      });
+
+    const legacyOperation = checkResumeOperationId('legacy', 2, ['old-check']);
+    recordCheckResumeReady(db, {
+      taskId: 'legacy',
+      attempt: 2,
+      stage: 'check',
+      action: 'resume-ready-unavailable',
+      at: date(18),
+      operationId: legacyOperation,
+      detail: JSON.stringify({ timestamp: 'unavailable', reason: 'legacy custody' }),
+    });
+
+    const summary = summarizeCheckResumeHandoffs(readFlow(db));
+    expect(summary).toMatchObject({
+      readyCount: 2,
+      readyTimestampUnavailable: 1,
+      resumedCount: 1,
+      readyWithoutResume: 1,
+      ticketTimingUnavailable: 0,
+      checkExecutionMs: { count: 1, totalMs: 10 * 60_000, p90Ms: 10 * 60_000 },
+      terminalToResumeMs: { count: 1, totalMs: 7 * 60_000, p90Ms: 7 * 60_000 },
+      hostAdmissionWaitMs: { count: 1, totalMs: 3 * 60_000, p90Ms: 3 * 60_000 },
+      hostWaitReasons: { 'memory-floor': 1 },
+    });
+    const windowEvents = readCheckResumeFlow(db, date(16), date(18));
+    expect(windowEvents.some((event) => event.operationId === operationId && event.action === 'resume-ready')).toBe(
+      true,
+    );
+    const report = flowReport(readFlow(db), [task('resume'), task('legacy')], Date.parse(date(20)));
+    expect(report.checkResumeHandoffs).toEqual(summary);
+  } finally {
+    db.close();
+  }
 });
 
 test('live queues use the current attempt and settle legacy starts only from observed worker evidence', () => {

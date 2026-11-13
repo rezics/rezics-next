@@ -5,6 +5,7 @@ import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { cleanupReceiptPath, physicalHistoryPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
 import { workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
+import { readFlow } from './flow.ts';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
 import { processIdentity } from './process.ts';
@@ -112,6 +113,12 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>, checks = ['che
   );
   expect(landings).toHaveLength(0);
   return { task, ref: { taskId: task.id, attempt: 1 } };
+}
+
+function localAcceptance(markdown: string, command: readonly string[]): string {
+  return markdown
+    .replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`)
+    .replace('  tests: [acceptance]', '  tests: [acceptance]\n  requires: [root]');
 }
 
 const GIB = 1024 ** 3;
@@ -269,9 +276,9 @@ test('same-session wake forwards the newly persisted minimal source-result and c
     expect(prompt).toContain('return success (blocker null, `"checks":[]`)');
     expect(prompt).toContain('the deferred acceptance, which is neither a blocker nor a reason to wait');
     expect(prompt).toContain('Build the whole outcome in this attempt');
-    expect(prompt).toContain('services/kernel and services/auth may use the compiler database or a check host');
+    expect(prompt).toContain("Kernel/Auth may use compiler DB/host; don't unset KERNEL_CHECK_REMOTE or force local.");
     expect(prompt).not.toContain('Wait for a long command, even one queued for a test slot, in its open session');
-    expect(prompt).toContain('through the check wrapper');
+    expect(prompt).toContain('through their owning runner');
     expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
     expect(prompt).toContain('Commands that finish locally in under a minute');
     expect(prompt).not.toContain('run your acceptance command once');
@@ -283,10 +290,7 @@ test('same-session wake forwards the newly persisted minimal source-result and c
 test('a waiting session uses the registered local command on wake even when its saved contract names the old remote route', async () => {
   const h = harness(waitingCli);
   try {
-    const localMarkdown = markdown.replace(
-      '  command: [bun, test]',
-      '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
-    );
+    const localMarkdown = localAcceptance(markdown, ['bun', 'test', 'apps/web/tests/shell-menus.test.ts']);
     writeFileSync(h.briefFile, localMarkdown);
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
@@ -318,13 +322,7 @@ test('a waiting session uses the registered local command on wake even when its 
 test('an adopted waiting attempt without a resumable session gets the current local protocol', async () => {
   const h = harness(adoptedWaitingCli);
   try {
-    writeFileSync(
-      h.briefFile,
-      markdown.replace(
-        '  command: [bun, test]',
-        '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
-      ),
-    );
+    writeFileSync(h.briefFile, localAcceptance(markdown, ['bun', 'test', 'apps/web/tests/shell-menus.test.ts']));
     const { task, ref } = await startWaitingAttempt(h);
     h.store.updateAttempt(ref, (attempt) => {
       attempt.session = null;
@@ -378,10 +376,7 @@ test('a same-session wake preserves the focused Web command argv under the manag
       '-t',
       selector,
     ];
-    writeFileSync(
-      h.briefFile,
-      markdown.replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`),
-    );
+    writeFileSync(h.briefFile, localAcceptance(markdown, command));
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
     writeFileSync(join(task.worktree, 'scripts/worker-check.ts'), '');
@@ -676,7 +671,7 @@ test('worker instructions start detached checks, keep working, and return waitin
     const task = {
       worktree: h.root,
       branch: 'worker/test',
-      brief: { markdown: 'Do work', kind: 'implementation' },
+      brief: { markdown: 'Do work', kind: 'implementation', goal: 'control-plane' },
     } as unknown as Task;
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
@@ -727,6 +722,27 @@ test('a finished owned check is proved before a resumed writer hands off its exa
       () => JSON.parse(readFileSync(history, 'utf8')).terminalProof?.local === true,
       'the exact physical run terminal proof',
     );
+    await waitForCondition(
+      () =>
+        readFlow(h.store.db).some(
+          (event) =>
+            event.taskId === task.id &&
+            event.attempt === ref.attempt &&
+            (event.action === 'resume-ready' || event.action === 'resume-ready-unavailable'),
+        ),
+      'the direct check readiness event before capacity admission',
+    );
+    const readyBeforeAdmission = readFlow(h.store.db).filter(
+      (event) => event.taskId === task.id && event.attempt === ref.attempt && event.action.startsWith('resume-ready'),
+    );
+    expect(readyBeforeAdmission).toHaveLength(1);
+    expect(readyBeforeAdmission[0]).toMatchObject({
+      stage: 'check',
+      action: 'resume-ready',
+      at: JSON.parse(readFileSync(history, 'utf8')).finishedAt,
+    });
+    const readyOperationId = readyBeforeAdmission[0]!.operationId;
+    expect(readyOperationId).toBeTruthy();
     await waitForCondition(() => snapshots.length > 0, 'the resumed writer capacity observation');
     expect(JSON.parse(readFileSync(history, 'utf8')).terminalProof).toMatchObject({
       local: true,
@@ -743,6 +759,11 @@ test('a finished owned check is proved before a resumed writer hands off its exa
     // A repeated wake observes the same parked generation and cannot create another attempt or resume.
     await job.recoverOrphans();
     expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(
+      readFlow(h.store.db).filter(
+        (event) => event.taskId === task.id && event.attempt === ref.attempt && event.action.startsWith('resume-ready'),
+      ),
+    ).toHaveLength(1);
     expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
 
     writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
@@ -752,6 +773,18 @@ test('a finished owned check is proved before a resumed writer hands off its exa
     expect(h.store.attempt(ref).session).toBe('wake-session');
     expect(h.store.attempts(task.id)).toHaveLength(1);
     expect(readFileSync(join(task.worktree, 'result.txt'), 'utf8')).toBe('resumed');
+    const handoff = readFlow(h.store.db).filter(
+      (event) => event.taskId === task.id && event.attempt === ref.attempt && event.operationId === readyOperationId,
+    );
+    const requested = handoff.find((event) => event.action === 'resume-ticket-requested');
+    const admitted = handoff.find((event) => event.action === 'resume-admitted');
+    const resumed = handoff.find((event) => event.action === 'resume-started');
+    const ticketId = (event: typeof requested) =>
+      event?.detail ? (JSON.parse(event.detail) as { ticketId?: string }).ticketId : undefined;
+    expect(ticketId(requested)).toBeTruthy();
+    expect(ticketId(admitted as typeof requested)).toBe(ticketId(requested));
+    expect(ticketId(resumed as typeof requested)).toBe(ticketId(requested));
+    expect(handoff.some((event) => event.action === 'resume-wait-reason')).toBe(true);
   } finally {
     if (recovery) {
       writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
@@ -781,6 +814,12 @@ test('missing, foreign, and live check custody keep the waiting scope reserve', 
 
       recovery = job.recoverOrphans();
       await waitForCondition(() => snapshots.length > 0, `${custody} capacity observation`);
+      const readiness = readFlow(h.store.db).filter(
+        (event) => event.taskId === task.id && event.attempt === 1 && event.action.startsWith('resume-ready'),
+      );
+      expect(readiness).toHaveLength(1);
+      expect(readiness[0]?.action).toBe('resume-ready-unavailable');
+      expect(JSON.parse(readiness[0]?.detail ?? '{}')).toMatchObject({ timestamp: 'unavailable' });
       expect(snapshots[0]).not.toContain(scope);
       expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
       if (custody === 'missing-history') expect(existsSync(history)).toBe(false);

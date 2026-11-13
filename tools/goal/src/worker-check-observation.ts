@@ -34,6 +34,9 @@ export type WorkerCheckObservationPolicy = {
 };
 
 export type WorkerCheckObservation = { status: 'pending' } | { status: 'terminal'; resumeText: string };
+export type WaitingCheckExecutionTiming =
+  | { executionStartedAt: string; terminalAt: string }
+  | { unavailableReason: string };
 
 type CheckRecordForTerminalProof = {
   id?: unknown;
@@ -82,7 +85,10 @@ function runnerMatchesRecord(record: CheckRecordForTerminalProof, physical: Reco
 }
 
 /** Persist local terminal evidence only for the exact checks owned by this current parked attempt. */
-export async function observeWaitingWorkerCheckTerminalProof(task: Task, attempt: Attempt): Promise<void> {
+export async function observeWaitingWorkerCheckTerminalProof(
+  task: Task,
+  attempt: Attempt,
+): Promise<WaitingCheckExecutionTiming | undefined> {
   if (
     task.id !== attempt.taskId ||
     task.currentAttempt !== attempt.attempt ||
@@ -93,8 +99,13 @@ export async function observeWaitingWorkerCheckTerminalProof(task: Task, attempt
   )
     return;
 
+  const timestamps: { createdAt: number; finishedAt: number }[] = [];
+  let unavailableReason: string | undefined;
   for (const id of attempt.checks) {
-    if (!CHECK_UUID.test(id)) continue;
+    if (!CHECK_UUID.test(id)) {
+      unavailableReason ??= 'check identity is not an exact UUID';
+      continue;
+    }
     const record = readTerminalCheckRecord(task.worktree, id);
     if (
       !record ||
@@ -107,8 +118,10 @@ export async function observeWaitingWorkerCheckTerminalProof(task: Task, attempt
       typeof record.physicalRunId !== 'string' ||
       !CHECK_UUID.test(record.physicalRunId) ||
       !Number.isSafeInteger(record.exitCode)
-    )
+    ) {
+      unavailableReason ??= 'exact owned terminal result is unavailable';
       continue;
+    }
 
     const { observeWorkerCheckTerminal, readWorkerCheckHistory } = await import('../../../scripts/worker-check.ts');
     const physical = readWorkerCheckHistory(id, record.physicalRunId, task.worktree) as
@@ -125,11 +138,35 @@ export async function observeWaitingWorkerCheckTerminalProof(task: Task, attempt
       physical.runnerHost !== hostname() ||
       physical.exitCode !== record.exitCode ||
       !runnerMatchesRecord(record, physical)
-    )
+    ) {
+      unavailableReason ??= 'exact physical check custody is unavailable';
       continue;
+    }
 
-    await observeWorkerCheckTerminal(id, task.worktree, record.physicalRunId);
+    const proof = await observeWorkerCheckTerminal(id, task.worktree, record.physicalRunId);
+    const createdAt = typeof physical.createdAt === 'string' ? Date.parse(physical.createdAt) : Number.NaN;
+    const finishedAt = typeof physical.finishedAt === 'string' ? Date.parse(physical.finishedAt) : Number.NaN;
+    if (
+      !proof ||
+      proof.local !== true ||
+      proof.resultKnown !== true ||
+      (physical.remoteExpected && proof.remote !== true)
+    ) {
+      unavailableReason ??= 'physical check terminal proof is unavailable';
+      continue;
+    }
+    if (!Number.isFinite(createdAt) || !Number.isFinite(finishedAt) || finishedAt < createdAt) {
+      unavailableReason ??= 'physical check history has no exact execution timestamp pair';
+      continue;
+    }
+    timestamps.push({ createdAt, finishedAt });
   }
+  if (unavailableReason || timestamps.length !== attempt.checks.length)
+    return { unavailableReason: unavailableReason ?? 'exact physical check history is incomplete' };
+  return {
+    executionStartedAt: new Date(Math.min(...timestamps.map((value) => value.createdAt))).toISOString(),
+    terminalAt: new Date(Math.max(...timestamps.map((value) => value.finishedAt))).toISOString(),
+  };
 }
 
 function singleLine(value: unknown, limit: number): string {

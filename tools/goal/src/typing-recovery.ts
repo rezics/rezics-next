@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { isKnownTypingCompiler, resolveTypingCompilerCommand } from './worker-check-typing-inputs.ts';
+import {
+  hasKernelClientOutputIntent,
+  isKernelClientEmitterIntent,
+  isKernelClientTypingPipelineIntent,
+  isKnownTypingCompiler,
+  resolveTypingCompilerCommand,
+} from './worker-check-typing-inputs.ts';
 import type { AttemptRef, LandingQueue } from './contracts.ts';
 import { capacityWaiters } from './launch-capacity.ts';
 import { acquireDirectoryLease } from './lease.ts';
@@ -520,7 +526,7 @@ export async function recoverWorkerTyping(
       };
     }
     if (!typing.ok || (withdrawnRetry && !hasWebReceipt)) {
-      const pendingResult = typing.ok
+      const basePendingResult = typing.ok
         ? 'Compiler evidence for the retained Web source is missing; only the installed Web typecheck is authorized.'
         : typing.result;
       const original = (!typing.ok ? typing.command : undefined) ?? attempt.typingEvidencePending?.command ?? [];
@@ -528,13 +534,26 @@ export async function recoverWorkerTyping(
       const resolvedWebCompiler = resolveTypingCompilerCommand(task.worktree, webCompiler);
       if (withdrawnRetry && !resolvedWebCompiler)
         throw new Error('Withdrawn retry recovery requires the installed owning Web typecheck');
-      const commands = withdrawnRetry
-        ? [resolvedWebCompiler!]
-        : expanded
-            .map((command) => resolveTypingCompilerCommand(task.worktree, command) ?? command)
-            .filter(
-              (command) => isTypecheckCommand(command) && (!authority || isKnownTypingCompiler(task.worktree, command)),
-            );
+      const directKernelEmitter = isKernelClientEmitterIntent(original);
+      const exactKernelPipeline = isKernelClientTypingPipelineIntent(original);
+      const kernelOutputIntent =
+        hasKernelClientOutputIntent(original) ||
+        exactKernelPipeline ||
+        expanded.some((command) => hasKernelClientOutputIntent(command));
+      let commands: string[][];
+      if (withdrawnRetry) commands = [resolvedWebCompiler!];
+      else if (directKernelEmitter || exactKernelPipeline) {
+        const resolved = resolveTypingCompilerCommand(task.worktree, original);
+        commands = resolved ? [resolved] : [];
+      } else if (kernelOutputIntent) commands = [];
+      else {
+        commands = expanded
+          .map((command) => resolveTypingCompilerCommand(task.worktree, command) ?? command)
+          .filter((command) => !hasKernelClientOutputIntent(command))
+          .filter(
+            (command) => isTypecheckCommand(command) && (!authority || isKnownTypingCompiler(task.worktree, command)),
+          );
+      }
       const workspaceScoped = expanded.some(
         (command) =>
           (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
@@ -542,7 +561,19 @@ export async function recoverWorkerTyping(
           command[4] === 'typecheck' &&
           ((command[1] === 'run' && command[2] === '--cwd') || (command[1] === '--cwd' && command[3] === 'run')),
       );
-      if (!commands.length && !workspaceScoped) commands.push(['bun', 'scripts/typecheck.ts']);
+      if (!commands.length && !workspaceScoped && !kernelOutputIntent) commands.push(['bun', 'scripts/typecheck.ts']);
+      const supportedKernelPipeline =
+        "sh -c 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck'";
+      const pendingResult =
+        kernelOutputIntent && !commands.length
+          ? [
+              basePendingResult,
+              'The named Kernel client output has no validated recovery command in this compiler graph.',
+              'Keep the same source and attempt. On a containing source that validates the installed owners, run only',
+              `${supportedKernelPipeline} through the current worker-check wrapper, then repeat authenticated`,
+              'typing-recover after its physical result is terminal. No root compiler fallback was issued.',
+            ].join('\n')
+          : basePendingResult;
       const grants = authority
         ? commands.map((command) =>
             grantWorkerTypingRecovery(

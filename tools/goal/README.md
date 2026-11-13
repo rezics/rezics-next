@@ -108,6 +108,11 @@ readable: a missing generation denotes the initial start. For a legacy ticket ta
 its queue timestamp is compared with that attempt's start time so an older first-start ticket is discarded while a
 later check wake remains its exact resume. A ticket for an already advanced start is discarded from the task's
 current-attempt projection, without consulting worktree presence or clearing another generation's reservation.
+Decision: an exact ready-to-resume check ticket precedes fresh starts queued within the existing 30-minute critical
+head-start window; older fresh starts regain priority. Urgent lanes, reservations and every admission gate keep their
+existing limits. Exact check-history times and same-attempt ticket/resume events share a stable operation identity;
+legacy results without exact physical custody keep their timing unavailable. Hourly reporting separates check
+execution spans from host admission waits and reports observed host wait reasons.
 If host limits, system memory and PSI permit admission but a finite worker-slice reserve alone blocks it, the host
 may request up to 4 GiB from clean inactive file pages with `swappiness=0`. Dirty and writeback pages are excluded.
 The shared admission lease is released before the request; the host re-samples slice headroom and actual
@@ -614,6 +619,18 @@ minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks
 few milliseconds or seconds apart from reading to reading. A real reset moves the stamp by a window length, starts a new
 series and is not burn. `status` lists each pool's rate and the ready tasks waiting on it.
 
+Decision: Codex pairs that include an integer `usedPercent` treat one observed point as endpoint uncertainty. Admission,
+near-ceiling and the hourly bridge share `burnEvidence`: the conservative rate is max(0, delta - 1 pp) over actual
+elapsed time. Coarse Codex series also compare four short spans (6 h at the default 90-minute span) so several points
+can still prove sustained excess; that long pair needs a known matching reset. Retention keeps that horizon on disk in
+the existing version-1 `pool-readings.json` shape. Fractional Codex pairs and other providers keep the raw short-span
+slope. The hourly `.rate` is that evidenced short-window value or `null` when there is no baseline or integer precision
+is unresolved, so a 12→13 step is not an alarm and a flat integer sample is not claimed as zero; `observedRate` and
+`evidence` are diagnostics. Token counts are not quota.
+
+Decision: the fewest tests that pin Codex burn evidence are the 12→13 hourly replay with plateau, one 6 h / burst /
+fractional / reset / isolation case, and shared retention with the hourly consumer.
+
 Decision: `policy.maxConcurrent` is an optional positive integer per pool name, not per shared allowance. Selection
 counts that pool's live sessions (pending start and running) and skips a full pool like an exhausted one, for new tasks
 and retries alike. Attempts in state waiting, parked on checks, do not occupy the cap. `status` lists live and waiting
@@ -782,7 +799,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.brief.pathCharacters`                         | `65536`                                                                    | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                                                                  | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated                                                    | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
-| `policy.brief.minimumEstimateLines`                   | `1200`                                                                     | Estimate floor at backlog dispatch.                                                                                                                                                         |
+| `policy.brief.minimumEstimateLines`                   | `1200`                                                                     | Advisory estimate baseline at backlog dispatch; under-floor estimates admit.                                                                                                                |
 | `policy.brief.maximumBodyCharacters`                  | `4000`                                                                     | Body ceiling at backlog dispatch.                                                                                                                                                           |
 | `policy.workerPrompt.characters`                      | `20000`                                                                    | Total worker prompt characters when delivering an owner decision.                                                                                                                           |
 | `policy.workerPrompt.gitBufferBytes`                  | `16777216`                                                                 | Worker prompt changed-path Git output buffer (bytes).                                                                                                                                       |
@@ -933,6 +950,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.pacing.alertUnusedPercent`                    | `20`                                                                       | Unused allowance percentage triggering a near-reset pacing alert.                                                                                                                           |
 | `policy.pacing.alertResetHours`                       | `24`                                                                       | Remaining reset hours qualifying for an unused-allowance alert.                                                                                                                             |
 | `policy.pacing.alertEveryMs`                          | `10800000`                                                                 | Minimum interval between pacing alerts for the same allowance (ms).                                                                                                                         |
+| `policy.pacing.burnSpanMs`                            | `5400000`                                                                  | Short same-window burn comparison (ms). Coarse Codex retention and the long comparison use four times this span.                                                                            |
 | `policy.pacing.nearCeilingPercent`                    | `25`                                                                       | Burn-rate proximity to a pool ceiling that starts gradual admission (%).                                                                                                                    |
 | `policy.pacing.nearCeilingStarts`                     | `2`                                                                        | Maximum new starts per sweep on a pool in the near-ceiling band.                                                                                                                            |
 | `policy.manager.sleepAlarmPerHour`                    | `10`                                                                       | Sleep calls allowed per manager per UTC hour before one alarm.                                                                                                                              |
@@ -2787,9 +2805,13 @@ host's socket. The host skips the minute while the previous child is still runni
   beside `failed/<name>.reason`, and the event names the archived brief. Decision: keep the first failed name and use
   the next numeric suffix for later collisions; write the reason first and resume it only when its brief fingerprint
   matches.
-  A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters` moves to `returned/` with a
-  reason; urgent, research, mechanical, specification and continuation briefs are exempt. One manager instruction
-  lists path-prefix merge candidates; status and hourly reports count them.
+  A product brief over `brief.maximumBodyCharacters` moves to `returned/` with a reason. An estimate below
+  `brief.minimumEstimateLines` is an advisory dispatch observation (`flow_events` action `observed`); the honest
+  estimate is kept for routing and the brief stays in ordinary admission. Urgent, research, mechanical, specification
+  and continuation briefs are exempt from both. One manager instruction lists path-prefix merge candidates for body
+  returns; status and hourly reports count returns. Decision: the old under-floor return interrupted managers for
+  complete 350-line and 850-line Content briefs; omitted estimates still default to 1,500. Next comparison is
+  size-only (body) returns and time from complete brief to accepted start.
   An urgent brief is dispatched under the manager named in its front matter when that manager's live session owns the
   Goal directory. The sweep passes that manager as the submitting actor so an active urgent grant is honoured; without
   a confirmed owner or grant the brief moves to `returned/` with the grant reason. Non-urgent briefs still dispatch
@@ -2800,8 +2822,10 @@ host's socket. The host skips the minute while the previous child is still runni
   ready order across fresh dispatches, retries and dependency releases. `goal backlog status` reports each Goal's
   in-flight count and cap (`exempt` for control-plane); older shared local settings need no new key.
   Decision: omitted estimates on ordinary product briefs count as 1,500 lines, matching parseBrief. Interface, claim and
-  bulk-text are product. Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix
-  overlap, at most three. Invalid YAML in a backlog file is untrusted input and is not a size return.
+  bulk-text are product. `minimumEstimateLines` stays readable as an advisory baseline, including older local settings.
+  Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix overlap, at most three.
+  Invalid YAML in a backlog file is untrusted input and is not a size return. Malformed briefs still fail at parse and
+  move to `failed/`; `after` and other admission checks are unchanged.
   A brief
   left in `.dispatching/` by a host that stopped after creating the task is archived once as
   `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such
@@ -2896,8 +2920,8 @@ last `policy.chain.contextTailBytes` bytes. Urgent, verification, research, clai
 Decision: chain decisions run in the backlog child, not at landing: a chained dispatch creates a worktree and may
 install dependencies, and landing only records the offer.
 
-Decision: product-brief size returns run before chain answers, so a chained brief meets the same size bar as an ordinary
-dispatch.
+Decision: product-brief body-size returns run before chain answers, so a chained brief meets the same body bar as an
+ordinary dispatch. An under-floor estimate is observed at chained admission the same way as ordinary dispatch.
 
 Decision: `report --flow` states chained and unchained tasks on the same terms: landed lines over the worker time those
 tasks spent, with declined offers counted by reason.
@@ -2973,6 +2997,12 @@ typing failures remain source failures. Provider, model CLI and allowance failur
 Decision: recover recognized workspace compiler intent with `bun run --cwd <workspace> typecheck`, and issue one fresh
 recovery grant only after the previous exact check proves terminal SIGTERM before command start, preserving its stamp
 and physical custody.
+
+Decision: recover only the exact Kernel client emitter argv `bun run --cwd services/kernel typecheck --emit-client`
+through the validated fail-fast Kernel emitter plus Client consumer pipeline. Its physical receipt must declare the
+closed `kernel-client-v1` output and verify that output against the same source inputs; an absent declaration stays
+pending. Unsupported named-output commands never fall back to root typecheck. Keep the original task, source, budget
+stamps, receipts and custody, and repeat authenticated recovery through current tooling on a containing source.
 
 Decision: recognize only the installed direct Kernel argv `bun services/kernel/scripts/typecheck.ts` and bind it to
 the same configured Kernel dependency graph as its manifest typecheck script. A retained conservative Kernel receipt
@@ -3739,6 +3769,10 @@ completion. Live tasks and phases without observed end times retain their existi
 
 ### Original integrated journey proofs
 
+Decision: an authenticated first proof for same-Goal integrated originals with empty acceptance argv may declare one
+direct explicit-file Bun or Kernel/Auth check; authorization stores its exact argv/file list, while nonempty originals
+retain whole-argv and union rules.
+
 Current receiving operations (authenticated owning manager or configured operations manager):
 
 - `WorkerTasks.queueProofStart(taskId, { expectedAttempt, brief?, removeAfter? }, actor)` or
@@ -3766,7 +3800,9 @@ choose critical priority, frozen inputs, product paths, a different target or a 
 
 For example, write `.temp/goal/original-proof.md` with the following front matter and a read-only journey description.
 Replace the example source task and full commit with the retained original and captured integration head, and copy
-that original's acceptance argv exactly (the example presumes that exact original command):
+that original's acceptance argv exactly (the example presumes that exact original command). When every source original
+has an empty acceptance command, the authenticated owner may declare one focused explicit-file command for the first
+native observation:
 
 ```yaml
 ---
@@ -3797,17 +3833,23 @@ ordered deduplicated union of explicit Bun test files or Kernel/Auth `bun run --
 with identical raw prefixes, including cwd/env arguments. Service file lists include every helper before, between and
 after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
 integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
-Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
-the captured Git tree before execution can be granted. Direct registration requires the submitted source to equal
-the current integration head. A declared Goal backlog claim is still only a proposal: its first authenticated
-registration captures the current head under the integration train lease, then binds ancestry, per-command-file
-preflight, authorization and the task worktree to that same commit. The accepted task brief records that capture;
-the original claim remains unchanged in the dispatch archive, and authorization retains its digest, original source
-commit and sourceTasks so interrupted archive recovery can find it once. A registered proof keeps its authorized
-source while that commit remains in integration history, even when other work lands before it starts. The retained
-membership Auth/Kernel original may use exactly two finite explicit service file checks, Auth then Kernel, joined
-with `&&`; each service's files are preflighted from its own working directory. Other shell operators and expansion
-remain outside the accepted command grammar.
+Shortened selections, changed flags and broad root/gate campaigns are refused. When every integrated source original
+has an empty acceptance command, the owner or configured operations manager may declare one direct explicit-file Bun
+test or Kernel/Auth check command for the first native observation. It must include a test or spec file and cannot be
+a workspace-wide check or shell composition. Authorization records its exact argv and files in `sourceOnlyCommand`,
+alongside the source task/commit pairs, manager session, source tree and captured commit. The ordinary explicit-file
+preflight checks those inputs in the captured Git tree. A refresh keeps the declared command and journey while
+capturing the next containing candidate; the integrated source brief and history stay unchanged. Explicit command
+files must exist in the captured Git tree before execution can be granted. Direct registration requires the submitted
+source to equal the current integration head. A declared Goal backlog claim is still only a proposal: its first
+authenticated registration captures the current head under the integration train lease, then binds ancestry,
+per-command-file preflight, authorization and the task worktree to that same commit. The accepted task brief records
+that capture; the original claim remains unchanged in the dispatch archive, and authorization retains its digest,
+original source commit and sourceTasks so interrupted archive recovery can find it once. A registered proof keeps its
+authorized source while that commit remains in integration history, even when other work lands before it starts. The
+retained membership Auth/Kernel original may use exactly two finite explicit service file checks, Auth then Kernel,
+joined with `&&`; each service's files are preflighted from its own working directory. Other shell operators and
+expansion remain outside the accepted command grammar.
 Once proof preparation records `proof-command-ready`, launch and same-session resume check the registered fingerprint
 and exact clean captured HEAD/tree. A result on an earlier snapshot cannot verify the new integration head.
 

@@ -5,6 +5,7 @@ import {
   recordedWorkerBootCustody,
 } from './worker-host-custody.ts';
 import defaults from '../defaults.json';
+import { randomUUID } from 'node:crypto';
 import { reconcileStoppedTypingFailureRetry, recoverWorkerTyping } from './typing-recovery.ts';
 import { isTypingEvidenceUnavailableResult } from './worker-check-budget.ts';
 import { defaultPolicy } from './policy.ts';
@@ -31,7 +32,7 @@ import type {
   ManagerInbox,
   AttemptRef,
 } from './contracts.ts';
-import { recordFlow } from './flow.ts';
+import { checkResumeOperationId, recordCheckResumeReady, recordFlow } from './flow.ts';
 import { recordChainOffer } from './chain.ts';
 import {
   liveGroups,
@@ -242,6 +243,7 @@ export class WorkerJob implements GateOutcomeSink {
   }
   private readonly pending = new Set<Promise<void>>();
   private readonly retryIntentsInProgress = new Set<string>();
+  private readonly readyCheckOperations = new Map<string, string>();
   constructor(
     readonly tasks: WorkerTasks,
     readonly landing: LandingQueue,
@@ -645,7 +647,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (observed.status === 'running') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
-    await observeWaitingWorkerCheckTerminalProof(task, attempt);
+    const checkTiming = await observeWaitingWorkerCheckTerminalProof(task, attempt);
     const events = this.tasks.store.events(attempt.taskId, attempt.attempt);
     const freshSessionRequest = events.findLast((event) => event.kind === CURSOR_FRESH_SESSION_EVENT);
     const lastRun = events.findLast((event) => event.kind === 'worker-run-started');
@@ -666,16 +668,63 @@ export class WorkerJob implements GateOutcomeSink {
     }
     if (attempt.checks?.length) {
       const observed = observeWorkerChecks(task, attempt.checks, this.policy.worker);
-      return observed.status === 'pending' ? null : observed.resumeText;
+      if (observed.status === 'pending') return null;
+      const operationId = checkResumeOperationId(attempt.taskId, attempt.attempt, attempt.checks);
+      const now = new Date().toISOString();
+      if (checkTiming && 'terminalAt' in checkTiming) {
+        recordCheckResumeReady(this.tasks.store.db, {
+          taskId: attempt.taskId,
+          attempt: attempt.attempt,
+          stage: 'check',
+          action: 'resume-ready',
+          at: checkTiming.terminalAt,
+          operationId,
+          detail: JSON.stringify({
+            source: 'worker-check-history',
+            executionStartedAt: checkTiming.executionStartedAt,
+            terminalAt: checkTiming.terminalAt,
+          }),
+        });
+      } else {
+        recordCheckResumeReady(this.tasks.store.db, {
+          taskId: attempt.taskId,
+          attempt: attempt.attempt,
+          stage: 'check',
+          action: 'resume-ready-unavailable',
+          at: now,
+          operationId,
+          detail: JSON.stringify({
+            timestamp: 'unavailable',
+            observedAt: now,
+            reason:
+              checkTiming && 'unavailableReason' in checkTiming
+                ? checkTiming.unavailableReason
+                : 'exact physical check history is unavailable',
+          }),
+        });
+      }
+      this.readyCheckOperations.set(JSON.stringify([attempt.taskId, attempt.attempt]), operationId);
+      return observed.resumeText;
     }
     if (hostInterruption) return HOST_INTERRUPTION_RESUME_PROMPT;
     if (transport) return TRANSPORT_RESUME_PROMPT;
     const observed = observeWorkerChecks(task, attempt.checks ?? [], this.policy.worker);
     return observed.status === 'pending' ? null : observed.resumeText;
   }
-  private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
+  private async resumeWaiting(attempt: Attempt, task: Task, message: string, checkOperationId?: string): Promise<void> {
     if (!this.startsAllowed()) return;
     const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
+    const recordResume = (action: string, detail: Record<string, unknown> = {}): void => {
+      if (!checkOperationId) return;
+      recordFlow(this.tasks.store.db, {
+        ...ref,
+        stage: 'check',
+        action,
+        at: new Date().toISOString(),
+        operationId: checkOperationId,
+        detail: JSON.stringify(detail),
+      });
+    };
     const failureCount = () =>
       this.tasks.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed')
         .length;
@@ -698,25 +747,54 @@ export class WorkerJob implements GateOutcomeSink {
         this.onAttemptExit(attempt);
         return;
       }
-      const releaseCapacity = await awaitHostCapacity(
-        this.tasks.store,
-        this.tasks.settings.stateDirectory,
-        startsFirst(task),
-        task.id,
-        ref.attempt,
-        {
-          ...this.capacityAdmissionOptions,
-          policy: this.tasks.settings.policy?.capacity,
-          leasePolicy: this.tasks.settings.policy?.leases,
-          urgent: task.brief.urgent,
-          goal: task.brief.goal,
-          resume: true,
-          // A parked attempt resuming is already in flight: the Goal cap limits new starts only. Applying it here
-          // deadlocked every Goal at or over its cap, since none of its parked attempts could resume (2026-11-06).
-          goalMaxInFlight: Number.POSITIVE_INFINITY,
-          excludeTaskId: task.id,
-        },
-      );
+      const resumeTicketId = randomUUID();
+      const waitReasons = new Set<string>();
+      recordResume('resume-ticket-requested', { ticketId: resumeTicketId });
+      let releaseCapacity: Awaited<ReturnType<typeof awaitHostCapacity>>;
+      try {
+        releaseCapacity = await awaitHostCapacity(
+          this.tasks.store,
+          this.tasks.settings.stateDirectory,
+          startsFirst(task),
+          task.id,
+          ref.attempt,
+          {
+            ...this.capacityAdmissionOptions,
+            policy: this.tasks.settings.policy?.capacity,
+            leasePolicy: this.tasks.settings.policy?.leases,
+            urgent: task.brief.urgent,
+            goal: task.brief.goal,
+            resume: true,
+            // A parked attempt resuming is already in flight: the Goal cap limits new starts only. Applying it here
+            // deadlocked every Goal at or over its cap, since none of its parked attempts could resume (2026-11-06).
+            goalMaxInFlight: Number.POSITIVE_INFINITY,
+            excludeTaskId: task.id,
+            ...(checkOperationId
+              ? {
+                  resumeReadyOperationId: checkOperationId,
+                  resumeTicketId,
+                  onWaitReasons: (reasons: readonly string[]) => {
+                    for (const reason of reasons) {
+                      if (waitReasons.has(reason)) continue;
+                      waitReasons.add(reason);
+                      recordResume('resume-wait-reason', { ticketId: resumeTicketId, reason });
+                    }
+                  },
+                }
+              : {}),
+          },
+        );
+      } catch (error) {
+        recordResume('resume-unavailable', {
+          ticketId: resumeTicketId,
+          reason: 'capacity admission ended before a ticket',
+        });
+        throw error;
+      }
+      recordResume(releaseCapacity.ticketId ? 'resume-admitted' : 'resume-admitted-unavailable', {
+        ...(releaseCapacity.ticketId ? { ticketId: releaseCapacity.ticketId } : {}),
+        ...(releaseCapacity.ticketId ? {} : { reason: 'host admission did not create a capacity ticket' }),
+      });
       let worker: RunningWorker | undefined;
       let lease: DirectoryLease | undefined;
       try {
@@ -733,8 +811,13 @@ export class WorkerJob implements GateOutcomeSink {
           currentTask.currentAttempt !== ref.attempt ||
           currentTask.state !== 'running' ||
           currentAttempt.state !== 'waiting'
-        )
+        ) {
+          recordResume('resume-unavailable', {
+            ...(releaseCapacity.ticketId ? { ticketId: releaseCapacity.ticketId } : {}),
+            reason: 'attempt changed before the resumed worker launch',
+          });
           return;
+        }
         const canResume = agentAdapter(currentAttempt.profile.cli).canResume && !!currentAttempt.session;
         if (currentTask.brief.kind === 'verification' && !canResume) {
           await this.endAsEnvironment(
@@ -777,6 +860,10 @@ export class WorkerJob implements GateOutcomeSink {
           this.tasks.store.updateAttempt(ref, (current) => {
             if (current.driver && sameProcess(current.driver)) current.driver = null;
           });
+          recordResume('resume-unavailable', {
+            ...(releaseCapacity.ticketId ? { ticketId: releaseCapacity.ticketId } : {}),
+            reason: 'no resume pool was available',
+          });
           return;
         }
         worker = await launch(
@@ -789,8 +876,17 @@ export class WorkerJob implements GateOutcomeSink {
           canResume ? currentAttempt.session! : undefined,
           this.tasks.settings.policy,
         );
+        recordResume('resume-started', {
+          ...(releaseCapacity.ticketId ? { ticketId: releaseCapacity.ticketId } : {}),
+        });
       } catch (error) {
-        if (error instanceof StaleAttemptError) return;
+        if (error instanceof StaleAttemptError) {
+          recordResume('resume-unavailable', {
+            ...(releaseCapacity.ticketId ? { ticketId: releaseCapacity.ticketId } : {}),
+            reason: 'attempt became stale before the resumed worker launch',
+          });
+          return;
+        }
         const detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
           .replace(/[\r\n]+/g, ' ')
           .slice(0, this.policy.worker.diagnosticCharacters);
@@ -810,6 +906,11 @@ export class WorkerJob implements GateOutcomeSink {
             detail,
             errorLine,
           });
+        });
+        recordResume('resume-unavailable', {
+          ...(releaseCapacity.ticketId ? { ticketId: releaseCapacity.ticketId } : {}),
+          reason: 'worker CLI failed to resume',
+          errorLine,
         });
         if (task.brief.kind === 'verification' || count >= this.policy.worker.waitingResumeLaunchFailures) {
           await this.endAsEnvironment(ref, new Error(errorLine), lease !== undefined, true);
@@ -1759,13 +1860,16 @@ export class WorkerJob implements GateOutcomeSink {
         if (attempt.state === 'waiting') {
           const message = await this.checkWakeMessage(attempt, store.task(ref.taskId));
           if (!message) continue;
+          const readyKey = JSON.stringify([ref.taskId, ref.attempt]);
+          const checkOperationId = this.readyCheckOperations.get(readyKey);
+          this.readyCheckOperations.delete(readyKey);
           store.updateAttempt(ref, (current) => {
             current.driver = driver;
           });
           lease.release();
           followed = true;
           adopt(
-            this.resumeWaiting(attempt, store.task(ref.taskId), message).catch((error) =>
+            this.resumeWaiting(attempt, store.task(ref.taskId), message, checkOperationId).catch((error) =>
               this.endAsEnvironment(ref, error),
             ),
           );

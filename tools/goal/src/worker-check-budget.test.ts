@@ -47,6 +47,7 @@ import {
   workerCheckHostBudgetLimit,
   workerCheckHostAttemptCheckCustody,
   workerCheckHostAttemptHasResultlessCleanup,
+  workerCheckHostHasRetainedKernelTypingRun,
   workerCheckHostTypingCheckIds,
   workerCheckHostCommandReached,
   workerCheckHostContentTree,
@@ -1307,6 +1308,61 @@ test('missing compiler evidence parks completed source without a model retry, th
     expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
     expect(h.store.attempt(retained.ref).typingEvidencePending).toBeUndefined();
     expect(h.store.retryIntent(retained.ref)?.status).toBe('abandoned');
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
+test('Kernel client-output recovery resumes only through the validated producer and consumer pipeline', async () => {
+  const h = harness();
+  try {
+    const emitter = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-client'];
+    const pipeline = [
+      'sh',
+      '-c',
+      'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck',
+    ];
+    const retained = await settleSuccessWithHostCheck(h, 'Kernel client emitter completed', (budget, worktree) => {
+      prepareDirectKernelCompiler(worktree);
+      mkdirSync(join(worktree, 'packages/client'), { recursive: true });
+      writeFileSync(
+        join(worktree, 'packages/client/package.json'),
+        JSON.stringify({ scripts: { typecheck: 'bun check --no-script -p tsconfig.json' } }),
+      );
+      const stampPath = join(budget, '1');
+      const stamp = JSON.parse(readFileSync(stampPath, 'utf8'));
+      Object.assign(stamp, {
+        exitCode: 0,
+        includedTypecheck: true,
+        typecheckFailed: false,
+        typingRequest: {
+          physicalRunId: randomUUID(),
+          command: emitter,
+          localPrepared: [],
+          capture: 'physical-command',
+        },
+        typingInputsUnavailable: 'Kernel emitter output receipt was not returned',
+      });
+      writeFileSync(stampPath, JSON.stringify(stamp));
+    });
+    const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, retained.ref.attempt);
+    const originalStamp = readFileSync(join(budget, '1'), 'utf8');
+    expect(workerCheckHostHasRetainedKernelTypingRun(budget, retained.task.worktree)).toBe(true);
+    const first = await recoverWorkerTyping(h.tasks, { enqueue: () => {} }, retained.ref);
+    expect(first.status).toBe('pending');
+    expect(recoveryProof(first).commands).toEqual([
+      ['bun', join(h.settings.mainCheckout, 'scripts/worker-check.ts'), '--run', '--', ...pipeline],
+    ]);
+    const second = await recoverWorkerTyping(h.tasks, { enqueue: () => {} }, retained.ref);
+    expect(recoveryProof(second).commands).toEqual(recoveryProof(first).commands);
+    expect(h.store.attempts(retained.task.id)).toHaveLength(1);
+    expect(workerCheckHostRunsUsed(budget)).toBe(1);
+    expect(readFileSync(join(budget, '1'), 'utf8')).toBe(originalStamp);
+    expect(h.store.attempt(retained.ref).typingEvidencePending?.command).toEqual(emitter);
+    unlinkSync(join(retained.task.worktree, 'packages/client/package.json'));
+    const unsupported = await recoverWorkerTyping(h.tasks, { enqueue: () => {} }, retained.ref);
+    expect(recoveryProof(unsupported).commands).toEqual([]);
+    expect('result' in unsupported ? unsupported.result : '').toContain('No root compiler fallback was issued');
   } finally {
     await h.disposeAsync();
   }

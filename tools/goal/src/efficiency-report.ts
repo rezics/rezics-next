@@ -9,7 +9,14 @@ import {
   type HourlyObservationData,
   type ObservationAttribution,
 } from './efficiency-report-delivery.ts';
-import { ensureFlow, readLandingOperations, summarizeLandingOperations, type LandingOperationSummary } from './flow.ts';
+import {
+  ensureFlow,
+  readCheckResumeFlow,
+  readLandingOperations,
+  summarizeCheckResumeHandoffs,
+  summarizeLandingOperations,
+  type LandingOperationSummary,
+} from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
@@ -80,6 +87,7 @@ type BucketSummary = {
   urgentFinishes: number;
   checkWaitCount: number;
   checkWaitP90: number | null;
+  checkHandoffLines: string[];
   landingLines: string[];
 };
 
@@ -499,6 +507,11 @@ function aggregateBucket(
     urgentFinishes: 0,
     checkWaitCount: 0,
     checkWaitP90: null,
+    checkHandoffLines: [
+      'Check execution span for handoffs touching bucket: unknown (flow history unavailable).',
+      'Completed-check handoff delay: unknown (flow history unavailable).',
+      'Host admission wait for check resumes: unknown (flow history unavailable).',
+    ],
     landingLines: [
       'Landings: unknown (timestamped integration history unavailable).',
       'Landing identities: unknown (timestamped integration history unavailable).',
@@ -572,6 +585,23 @@ function aggregateBucket(
   checkWaits.sort((a, b) => a - b);
   summary.checkWaitCount = checkWaits.length;
   summary.checkWaitP90 = checkWaits.length ? checkWaits[Math.ceil(0.9 * checkWaits.length) - 1]! : null;
+  const handoffs = summarizeCheckResumeHandoffs(readCheckResumeFlow(db, bucket.start, bucket.end));
+  const minutes = (value: number | null) => (value === null ? 'unknown' : `${Math.round(value / 60_000)}m`);
+  const reasons = Object.entries(handoffs.hostWaitReasons)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([reason, count]) => `${reason}=${count}`)
+    .join(', ');
+  summary.checkHandoffLines = [
+    handoffs.checkExecutionMs.count || handoffs.readyTimestampUnavailable
+      ? `Check execution span for handoffs touching bucket: ${handoffs.checkExecutionMs.count} direct physical-history batch spans; p90 ${minutes(handoffs.checkExecutionMs.p90Ms)}; ${handoffs.readyTimestampUnavailable} timing-unavailable.`
+      : 'Check execution span for handoffs touching bucket: unknown (no exact physical check timestamps recorded).',
+    handoffs.terminalToResumeMs.count
+      ? `Completed-check handoff delay: ${handoffs.terminalToResumeMs.count} direct terminal-to-resume pairs; p90 ${minutes(handoffs.terminalToResumeMs.p90Ms)}.`
+      : 'Completed-check handoff delay: unknown (no matching direct terminal/resume pair recorded).',
+    handoffs.hostAdmissionWaitMs.count || handoffs.ticketTimingUnavailable || reasons
+      ? `Host admission wait for check resumes: ${handoffs.hostAdmissionWaitMs.count} matched ticket/admission pairs; p90 ${minutes(handoffs.hostAdmissionWaitMs.p90Ms)}; observed blockers: ${reasons || 'none recorded'}; ${handoffs.ticketTimingUnavailable} ticket timings unavailable.`
+      : 'Host admission wait for check resumes: unknown (no matched same-attempt ticket/admission pair recorded).',
+  ];
   summary.landingLines = landingLines(landings, hasLanding, urgentLandings, policy, operationSummary, tasksAvailable);
   return summary;
 }
@@ -894,6 +924,7 @@ function buildHourlyEfficiencyReport(
     landingQueueAge(metrics, landingQueueAvailable),
     waitIdentities(metrics, waitsAvailable, policy),
     checkWaitLine,
+    ...bucketSummary.checkHandoffLines,
     ...lifecycleLines,
     promotionSummary(db, metrics),
     operatorAttention(metrics, policy),

@@ -19,6 +19,7 @@ import {
 import {
   briefPathCloseness,
   parseBrief,
+  productBriefSizeIsReturn,
   productBriefSizeReturnReason,
   productBriefSizeViolation,
   readBriefContinuation,
@@ -562,8 +563,8 @@ function returnProductBriefs(runtime: BacklogRuntime, goals: string[], now: numb
         violation: productBriefSizeViolation(markdown, policy.brief, name),
       });
     }
-    const staying = scanned.filter((entry) => !entry.violation);
-    const leaving = scanned.filter((entry) => entry.violation);
+    const staying = scanned.filter((entry) => !productBriefSizeIsReturn(entry.violation));
+    const leaving = scanned.filter((entry) => productBriefSizeIsReturn(entry.violation));
     for (const item of leaving) {
       const reason = productBriefSizeReturnReason(item.violation!, policy.brief);
       const candidates = closestMergeCandidates(
@@ -587,6 +588,26 @@ function returnProductBriefs(runtime: BacklogRuntime, goals: string[], now: numb
   }
   notifyReturns(runtime, groups);
   return returned;
+}
+
+function observeUnderFloorEstimate(
+  runtime: BacklogRuntime,
+  taskId: string,
+  markdown: string,
+  fileName: string,
+  now: number,
+): void {
+  const policy = runtime.policy ?? defaultPolicy;
+  const violation = productBriefSizeViolation(markdown, policy.brief, fileName);
+  if (violation?.estimateLines === undefined) return;
+  recordFlow(runtime.db, {
+    taskId,
+    attempt: 0,
+    stage: 'dispatch',
+    action: 'observed',
+    at: new Date(now).toISOString(),
+    detail: productBriefSizeReturnReason({ estimateLines: violation.estimateLines }, policy.brief),
+  });
 }
 
 type BriefPick = { goal: string; file: string; allowed: boolean };
@@ -828,6 +849,7 @@ async function chainLanded(
     }
     const goalDirectory = backlogDirectory(runtime.stateDirectory, offer.goal);
     let taskId: string;
+    const chainedMarkdown = readFileSync(claim.claimed, 'utf8');
     try {
       taskId = (await chain.dispatch(claim.claimed, chainLinkFor(offer))).taskId;
     } catch (error) {
@@ -837,6 +859,7 @@ async function chainLanded(
       continue;
     }
     const name = basename(claim.file);
+    observeUnderFloorEstimate(runtime, taskId, chainedMarkdown, name, now);
     const target = join(goalDirectory, DISPATCHED_DIRECTORY);
     mkdirSync(target, { recursive: true });
     renameSync(claim.claimed, join(target, `${taskId}-${name}`));
@@ -1007,6 +1030,7 @@ async function dispatchReady(
         lintWarnings = dispatchedTask.lintWarnings.length
           ? dispatchedTask.lintWarnings
           : taskLintWarnings(runtime.db, taskId);
+        observeUnderFloorEstimate(runtime, taskId, markdown, basename(pick.file), now);
       }
     } catch (error) {
       if (groupedResearch) throw error;

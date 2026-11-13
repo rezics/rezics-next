@@ -87,7 +87,11 @@ function attempt(taskId: string, n: number, directory: string): Attempt {
     approaches: [],
   };
 }
-function registeredFixture(withoutDependencies = false, workerScript?: string) {
+function registeredFixture(
+  withoutDependencies = false,
+  workerScript?: string,
+  sourceCommand = ['bun', 'test', 'fixture.test.ts'],
+) {
   const h = harness(workerScript);
   // Lifecycle-only cases have no dependency manifest, installer or provider to execute.
   if (withoutDependencies) rmSync(join(h.root, 'package.json'));
@@ -102,7 +106,16 @@ export function readWorkerCheckHistory(id, physical, cwd) { return JSON.parse(re
   );
   writeFileSync(join(h.root, 'fixture.test.ts'), 'export {}\n');
   writeFileSync(join(h.root, 'other.test.ts'), 'export {}\n');
-  git(h.root, ['add', 'scripts/worker-check.ts', 'fixture.test.ts', 'other.test.ts', 'package.json']);
+  mkdirSync(join(h.root, 'services/kernel/test/content'), { recursive: true });
+  writeFileSync(join(h.root, 'services/kernel/test/content/hosted-publication-point-http.test.ts'), 'export {}\n');
+  git(h.root, [
+    'add',
+    'scripts/worker-check.ts',
+    'fixture.test.ts',
+    'other.test.ts',
+    'services/kernel/test/content/hosted-publication-point-http.test.ts',
+    'package.json',
+  ]);
   git(h.root, ['commit', '-m', 'Fixture managed check reader']);
   const commit = git(h.root, ['rev-parse', 'HEAD']);
   git(h.root, ['branch', 'dev', commit]);
@@ -112,7 +125,7 @@ export function readWorkerCheckHistory(id, physical, cwd) { return JSON.parse(re
     .query('INSERT INTO manager_sessions VALUES (?,?)')
     .run(actor.id, JSON.stringify({ status: 'running', threadId: actor.sessionId }));
   const sourceBrief = brief();
-  sourceBrief.acceptance.command = ['bun', 'test', 'fixture.test.ts'];
+  sourceBrief.acceptance.command = sourceCommand;
   const source = h.store.createTask(
     sourceBrief,
     { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: commit },
@@ -126,6 +139,13 @@ export function readWorkerCheckHistory(id, physical, cwd) { return JSON.parse(re
     ...sourceBrief,
     kind: 'verification' as const,
     paths: [],
+    acceptance: {
+      ...sourceBrief.acceptance,
+      command:
+        sourceCommand.length > 0
+          ? sourceCommand
+          : ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/content/hosted-publication-point-http.test.ts'],
+    },
     proof: { journey: 'Original journey', sourceTasks: [source.id], sourceCommit: commit },
   };
   const authorization = authorizeProof(h.store, h.root, proofBrief, actor, 'operations', 'dev');
@@ -186,6 +206,7 @@ test('original proof registration retains whole command provenance and rejects s
 test('proof authorization rejects missing identity, foreign Goals, unintegrated sources and non-containing commits', () => {
   const h = registeredFixture();
   try {
+    expect(h.store.task(h.proof.id).proofAuthorization?.sourceOnlyCommand).toBeUndefined();
     expect(() => authorizeProof(h.store, h.root, h.proofBrief, null, 'operations', 'dev')).toThrow('authenticated');
     expect(() =>
       authorizeProof(h.store, h.root, { ...h.proofBrief, goal: 'other' }, h.actor, 'operations', 'dev'),
@@ -194,6 +215,89 @@ test('proof authorization rejects missing identity, foreign Goals, unintegrated 
       task.state = 'ready';
     });
     expect(() => authorizeProof(h.store, h.root, h.proofBrief, h.actor, 'operations', 'dev')).toThrow('integrated');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('authenticated source-only originals bind one explicit native command and retain it across capture refresh', () => {
+  const command = [
+    'bun',
+    'run',
+    '--cwd',
+    'services/kernel',
+    'check',
+    'test/content/hosted-publication-point-http.test.ts',
+  ];
+  const h = registeredFixture(false, undefined, []);
+  try {
+    const original = h.store.task(h.source.id);
+    const originalBrief = original.brief;
+    const registration = { ...h.proofBrief, acceptance: { ...h.proofBrief.acceptance, command } };
+    expect(() => authorizeProof(h.store, h.root, registration, null, 'operations', 'dev')).toThrow('authenticated');
+    expect(() =>
+      authorizeProof(
+        h.store,
+        h.root,
+        {
+          ...registration,
+          acceptance: { ...registration.acceptance, command: ['bun', 'run', '--cwd', 'services/kernel', 'check'] },
+        },
+        h.actor,
+        'operations',
+        'dev',
+      ),
+    ).toThrow('source-only proof must declare one explicit-file command');
+
+    const initialAuthorization = h.store.task(h.proof.id).proofAuthorization!;
+    expect(initialAuthorization).toMatchObject({
+      manager: h.actor.id,
+      sessionId: h.actor.sessionId,
+      sourceTree: git(h.root, ['rev-parse', `${h.binding.sourceCommit}^{tree}`]),
+      originals: [{ taskId: h.source.id, commit: h.binding.sourceCommit, argv: [] }],
+      sourceOnlyCommand: {
+        sourceCommit: h.binding.sourceCommit,
+        argv: command,
+        files: ['test/content/hosted-publication-point-http.test.ts'],
+      },
+    });
+    expect(h.store.task(h.proof.id).brief.acceptance.command).toEqual(command);
+    expect(original.brief.acceptance.command).toEqual([]);
+
+    h.store.close(h.current, 'stopped');
+    writeFileSync(join(h.root, 'refresh-capture'), 'Fresh containing Dev capture\n');
+    git(h.root, ['add', 'refresh-capture']);
+    git(h.root, ['commit', '-m', 'Advance source-only proof capture']);
+    const refreshedCommit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', refreshedCommit]);
+    const refreshedBrief = {
+      ...registration,
+      proof: { ...registration.proof!, sourceCommit: refreshedCommit },
+    };
+    const submitted = submittedProof(h, refreshedBrief);
+    expect(h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1, brief: submitted.path }, h.actor)).toMatchObject({
+      status: 'created',
+      taskId: h.proof.id,
+      attempt: 1,
+    });
+
+    const refreshed = h.store.task(h.proof.id);
+    expect(refreshed.brief.proof).toEqual({ ...registration.proof, sourceCommit: refreshedCommit });
+    expect(refreshed.brief.acceptance.command).toEqual(command);
+    expect(refreshed.proofAuthorization).toMatchObject({
+      manager: h.actor.id,
+      sessionId: h.actor.sessionId,
+      sourceTree: git(h.root, ['rev-parse', `${refreshedCommit}^{tree}`]),
+      originals: [{ taskId: h.source.id, commit: h.binding.sourceCommit, argv: [] }],
+      sourceOnlyCommand: {
+        sourceCommit: refreshedCommit,
+        argv: command,
+        files: ['test/content/hosted-publication-point-http.test.ts'],
+      },
+    });
+    expect(h.store.task(h.source.id).brief).toEqual(originalBrief);
+    expect(h.store.task(h.source.id).state).toBe('integrated');
+    expect(h.store.proofReservation(h.proof.id, 1)?.binding).toEqual(h.binding);
   } finally {
     h.dispose();
   }

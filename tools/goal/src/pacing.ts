@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { allowanceResetPressure, effectiveReserve, isFreshPoolReading } from './allowance.ts';
+import { allowanceResetPressure, burnHorizonMs, effectiveReserve, isFreshPoolReading } from './allowance.ts';
 import type { Pool, PoolReading } from './types.ts';
 
 // Allowances run out on calendars: Claude's week resets on a fixed time and its five-hour window caps how fast it can
@@ -44,14 +44,14 @@ export function readRetainedPoolReadings(stateDirectory: string): PoolReading[] 
   }
 }
 
-/** Keep at most one reading per pool per minute and drop samples older than the burn span. */
+/** Keep at most one reading per pool per minute and drop samples older than the coarse Codex horizon. */
 export function retainPoolReadings(
   stateDirectory: string,
   incoming: readonly PoolReading[],
   now = Date.now(),
   spanMs = defaultPolicy.pacing.burnSpanMs,
 ): PoolReading[] {
-  const start = now - spanMs;
+  const start = now - Math.max(spanMs, burnHorizonMs(spanMs));
   const merged = readRetainedPoolReadings(stateDirectory).filter(
     (reading) => reading.observedAt && Date.parse(reading.observedAt) >= start,
   );
