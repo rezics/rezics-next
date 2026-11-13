@@ -8,6 +8,7 @@ import { contentDeclaration } from './register.ts';
 import { hostedChapterRoutes } from './hosted-chapters-routes.ts';
 import { hostedDraftConversionRoutes } from './hosted-draft-conversion-routes.ts';
 import { knowledgeRoutes } from './knowledge-routes.ts';
+import { revisionDisclosureRoutes } from './revision-disclosure-routes.ts';
 
 /** Explicit operands for Content's HTTP surface. The trusted kernel composition constructs each object; no
  * route reads the environment, the network, a UUID source or a clock by itself. */
@@ -27,7 +28,8 @@ export function mountContentHttp(
 ) {
   const chapters = hostedChapterRoutes(contentRoutes(searched, dependencies.content), dependencies.content);
   const knowledge = knowledgeRoutes(chapters, dependencies.content);
-  const content = hostedDraftConversionRoutes(knowledge, dependencies.content);
+  const converted = hostedDraftConversionRoutes(knowledge, dependencies.content);
+  const content = revisionDisclosureRoutes(converted, dependencies.content);
   noticeRoutes(content as unknown as Parameters<typeof noticeRoutes>[0], dependencies.notice);
   subjectReactionRoutes(app, dependencies.content);
   const media = mediaRoutes(content as unknown as Parameters<typeof mediaRoutes>[0], dependencies.media);
@@ -38,6 +40,7 @@ export function mountContentHttp(
 export type ContentHttpRoutes = ReturnType<typeof contentRoutes> &
   ReturnType<typeof hostedChapterRoutes> &
   ReturnType<typeof hostedDraftConversionRoutes> &
+  ReturnType<typeof revisionDisclosureRoutes> &
   ReturnType<typeof knowledgeRoutes> &
   ReturnType<typeof noticeRoutes> &
   ReturnType<typeof subjectReactionRoutes> &

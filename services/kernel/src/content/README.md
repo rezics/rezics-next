@@ -38,10 +38,12 @@ canonical Document bytes, SHA-256, original Post author and licence. No bodies a
 
 Decision: books and columns share ordinary Post ownership; the book profile adds immutable placements and release
 snapshots. A release never globally publishes a target Post; Book-scoped exact source consent is the hosted-chapters
-contract. Source-side persistence is the unmounted `revision-disclosure` primitive: one exact private opening
-revision, indexed full-key lookup, bounded source erasure locator, and explicit revoke. Public eligibility stays
-independent. Fewest tests: private draft issue/reuse/revoke, unauthorized and mismatch refusal, unchanged direct
-Post visibility.
+contract. Source-side persistence is the native `revision-disclosure` primitive mounted at
+`POST /v1/posts/{id}:issueRevisionDisclosure` and `POST /v1/posts/{id}:revokeRevisionDisclosure`: one exact private
+opening revision, indexed full-key lookup, bounded source erasure locator, and explicit revoke. Catalogue ownership
+and a path UUID alone do not admit. Public eligibility stays independent. Fewest tests: private draft issue/reuse/revoke,
+unauthorized and mismatch refusal, unchanged direct Post visibility, native HTTP author issue/replay, unauthorized
+source and mismatch refusal, exact Book point read after consent, revoke/replay and immediate Book read denial.
 
 Decision: `hosted_catalogue.for_subject` lists current public publications for an existing Subject from indexed
 `subject_thread` rows and same-route published catalogue-post subject references. Empty publications leave that

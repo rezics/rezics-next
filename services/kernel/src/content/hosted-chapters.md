@@ -99,8 +99,9 @@ Interfaces: the shared sequence port is `point`, `children`, `outline`, `project
 `insert`/`move`/`remove` and `apply` in
 [Knowledge workspaces](../../../../docs/knowledge-workspaces.md#shared-versioned-outline-primitive). Persistence
 is a Book adapter over that port; initial SQL is row-per-node temporal as-of indexes. Exact source consent is a
-Content command/read seam: issue, reuse or revoke `(catalogueId, threadId, postId, revisionId, sha256)` under source
-admission, then Book membership proof plus current Access/ancestry/Board/Realm/takedown/erasure on read. Dependencies
+Content command/read seam mounted at the source Post: issue, reuse or revoke
+`(catalogueId, threadId, postId, revisionId, sha256)` under source admission, then Book membership proof plus current
+Access/ancestry/Board/Realm/takedown/erasure on read. Dependencies
 are `versioned-outline-order.ts`, `hosted-chapters-{model,store,commands,reads,attachments}.ts`,
 `readPostMetadata`/`readPost`, and Access [`public-eligibility.ts`](../access/public-eligibility.ts). Knowledge keeps
 `knowledge-order.ts`. No Collection tables, no second permission engine, no new architecture module.
@@ -330,11 +331,25 @@ Book-scoped-consent-readable are separate native observations. Do not infer read
 read, cache a permission callback, or implement consent by loading the body. Public/anonymous projections never
 receive private progress or selection details. Embedded private media stays with Media.
 
-Decision: source-side exact consent is the unmounted `revision-disclosure` primitive. Issue and revoke use source
-`post:revise` plus container admission; attachment metadata is observed after admission and never authorizes issuance.
-Private draft openings are the first scoped case. Already-public targets keep Access public eligibility with no consent
-row. Consent observation does not grant read. Reader membership remains a Book-owned typed seam with no writable
-caller proof. Distinct migration `20261113091251_revision_disclosure.sql`. Staged activation-currentness is unchanged.
+Decision: source-side exact consent is the native `revision-disclosure` primitive mounted at the source Post.
+`POST /v1/posts/{id}:issueRevisionDisclosure` and `POST /v1/posts/{id}:revokeRevisionDisclosure` bind the
+authenticated actor, exact source tuple, intended Book, idempotency key and deadline. Catalogue ownership and a
+path UUID alone do not admit. Issue and revoke reuse the installed source commands and typed receipts; they use
+source `post:revise` plus container admission. Attachment metadata is observed after admission and never authorizes
+issuance. Private draft openings are the first scoped case. Already-public targets keep Access public eligibility
+with no consent row. Consent observation does not grant read. Reader membership remains a Book-owned typed seam with
+no writable caller proof. Distinct migration `20261113091251_revision_disclosure.sql`. Staged activation-currentness
+is unchanged.
+
+| Operation ID                      | Method and path                                | Input                                         |
+| --------------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| `post.issue_revision_disclosure`  | `POST /v1/posts/{id}:issueRevisionDisclosure`  | `catalogueId`, exact `target`                 |
+| `post.revoke_revision_disclosure` | `POST /v1/posts/{id}:revokeRevisionDisclosure` | `disclosureId`, `catalogueId`, exact `target` |
+
+Both commands require an Idempotency-Key, return the original receipt (`disclosureId`, `state`, `catalogueId`,
+`reused`, optional `durableInitiator`) with `Cache-Control: private, no-store`, and replay that receipt. The path
+Post must equal `target.postId`. Native source, container, erasure, public-source and mismatch errors stay as they
+are. Direct Post visibility, other Books and unselected revisions stay unchanged.
 
 ## Prepared Book publication
 
