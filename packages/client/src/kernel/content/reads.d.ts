@@ -149,6 +149,8 @@ type Row = {
     deleted_at: Date | null;
     restorable: boolean;
     decision_id: string | null;
+    revision_restriction: 'public' | 'hard' | null;
+    revision_restriction_decision_id: string | null;
     matches?: boolean | null;
 };
 export declare function contentSourceWitness(value: PostEntry | ThreadView): string | undefined;
@@ -174,7 +176,7 @@ type BoardDisclosureHint = Readonly<{
 export declare function withBoardDisclosure<T>(boardId: BoardId, board: BoardView, work: () => Promise<T>, decisions?: ReadDecisions, options?: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'>): Promise<T>;
 export declare function prepareBoardPageDecisions(dependencies: ContentReadDependencies, context: ReadContext): Promise<ReadDecisions>;
 /** @internal Shared post-read resources: every domain operand uses the evaluator's principal. */
-export declare function readResource(row: Row, evidence: object, tombstone?: boolean, placeholder?: boolean, withheldReference?: boolean, bookGate?: RevisionDisclosureReaderGate): Resource;
+export declare function readResource(row: Row, evidence: object, tombstone?: boolean, placeholder?: boolean, withheldReference?: boolean, bookGate?: RevisionDisclosureReaderGate, revisionPubliclyWithheld?: boolean): Resource;
 export declare function readBoard(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext): Promise<Anchored<import('./model.ts').BoardView | null>>;
 export declare function readBoardPageCandidateSnapshot<T>(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext, decisions: ReadDecisions, candidatePage: (client: AccessClient, partition: Partition) => Promise<T>): Promise<Readonly<{
     board: BoardView;

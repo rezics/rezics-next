@@ -293,6 +293,8 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.content.moderation.appeal-resolved.v1': EventClassification;
     'com.rezics.content.moderation.erasure.v1': EventClassification;
     'com.rezics.content.moderation.restored.v1': EventClassification;
+    'com.rezics.content.moderation.revision-restricted.v1': EventClassification;
+    'com.rezics.content.moderation.revision-restored.v1': EventClassification;
     'com.rezics.content.moderation.takedown.v1': EventClassification;
     'com.rezics.content.post.created.v1': EventClassification;
     'com.rezics.content.post.erased.v1': EventClassification;

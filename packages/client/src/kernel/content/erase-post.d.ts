@@ -35,6 +35,13 @@ type Point = Readonly<{
     id: string;
     reason: string;
 }> | Readonly<{
+    action: 'moderation:takedown';
+    kind: 'post';
+    id: string;
+    revisionId: string;
+    mode: 'public' | 'hard';
+    reason: string;
+}> | Readonly<{
     action: 'post:erase';
     kind: 'post';
     id: string;
@@ -48,6 +55,18 @@ type Point = Readonly<{
 }>;
 /** Ordinary point callers retain the original authenticated-actor boundary. */
 export declare function mutateContentPoint(deps: ErasePostDependencies, actor: Actor, requested: Point, context: ErasePostContext): Promise<CommandOutcome<{
+    targetId: string;
+    securityRevision: string;
+}>>;
+export type PostRevisionRestrictionInput = Readonly<{
+    postId: string;
+    revisionId: string;
+    mode: 'public' | 'hard';
+    reason: string;
+}>;
+/** A sparse revision decision uses the existing moderation authority and
+ * command receipt, while keeping the hold out of Post-wide discovery mutation. */
+export declare function mutateContentPostRevisionRestriction(deps: ErasePostDependencies, actor: Actor, input: PostRevisionRestrictionInput, context: ErasePostContext): Promise<CommandOutcome<{
     targetId: string;
     securityRevision: string;
 }>>;

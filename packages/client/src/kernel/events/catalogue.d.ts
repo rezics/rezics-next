@@ -1041,6 +1041,19 @@ export declare function EVENT_TYPES(): Readonly<{
         targetId: Type.TString;
         securityRevision: Type.TString;
     }>;
+    readonly 'com.rezics.content.moderation.revision-restricted.v1': Type.TObject<{
+        targetKind: Type.TLiteral<"post">;
+        targetId: Type.TString;
+        revisionId: Type.TString;
+        mode: Type.TUnion<[Type.TLiteral<"public">, Type.TLiteral<"hard">]>;
+        securityRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.moderation.revision-restored.v1': Type.TObject<{
+        targetKind: Type.TLiteral<"post">;
+        targetId: Type.TString;
+        revisionId: Type.TString;
+        securityRevision: Type.TString;
+    }>;
     readonly 'com.rezics.content.post.erased.v1': Type.TObject<{
         postId: Type.TString;
         securityRevision: Type.TString;

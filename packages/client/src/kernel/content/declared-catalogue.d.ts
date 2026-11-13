@@ -113,6 +113,19 @@ export declare function contentDeclaredEvents(): Readonly<{
         targetId: import("typebox").TString;
         securityRevision: import("typebox").TString;
     }>;
+    'com.rezics.content.moderation.revision-restricted.v1': import("typebox").TObject<{
+        targetKind: import("typebox").TLiteral<"post">;
+        targetId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        mode: import("typebox").TUnion<[import("typebox").TLiteral<"public">, import("typebox").TLiteral<"hard">]>;
+        securityRevision: import("typebox").TString;
+    }>;
+    'com.rezics.content.moderation.revision-restored.v1': import("typebox").TObject<{
+        targetKind: import("typebox").TLiteral<"post">;
+        targetId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        securityRevision: import("typebox").TString;
+    }>;
     'com.rezics.content.post.erased.v1': import("typebox").TObject<{
         postId: import("typebox").TString;
         securityRevision: import("typebox").TString;
