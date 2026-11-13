@@ -45,6 +45,8 @@ Decision: typecheck repairs preserve existing test assertions and update fixture
 
 Decision: budgeted compiler fixtures require a successful admission containing `stamp` before using its stamp; existing lifecycle assertions remain unchanged.
 
+Decision: Web message readiness follows the generated `messages/_index.js` exports and each leaf's exported catalogue key; retry signatures include only missing and stale evidence.
+
 Decision: under minimal verification a type error blocks a worker's success, and a failing payment, payout, order settlement, points or balance test blocks it when those paths changed. Other tests are not part of the attempt check; the wrapper refuses a test file, native, browser or growth command before any upload, with a message that tests run after landing in the dev verifier. Type errors, boot failures and payment-path failures keep current verifier handling: type errors and payment-path failures revert the landing, boot failures dispatch an urgent repair without reverting. A test failure outside those paths creates or updates one repair for the owning manager and never reverts the landing.
 
 Decision: environment walks run per Goal, not per outcome. An implementation brief declares no `native` or `browser`
