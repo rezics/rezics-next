@@ -19,7 +19,13 @@ import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
-import { CatalogueFileSlot, OrganizationHistorySlot, ReleaseFidelitySlot, SubjectExploreSlot } from './subject-slots';
+import {
+  CatalogueFileSlot,
+  OrganizationHistorySlot,
+  ReleaseFidelitySlot,
+  SubjectExploreSlot,
+  SubjectKnowledgeSlot,
+} from './subject-slots';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { ReleaseFidelityEntry } from '../catalogue/release-fidelity/entry';
 import { CatalogueFileProfileEntry } from '../catalogue/catalogue-file-profile/entry';
@@ -269,6 +275,11 @@ export function SubjectFrame({
         )}
       </header>
       <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+      <SubjectKnowledgeSlot
+        subjectId={frame.id}
+        locale={locale}
+        visitHref={`${location.pathname}${location.searchStr}${location.hash}`}
+      />
       <SubjectExploreSlot
         subjectId={frame.id}
         subjectType={frame.type}

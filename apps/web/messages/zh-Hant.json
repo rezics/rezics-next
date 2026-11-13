@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "解釋",
   "knowledge_reference_role_uses": "使用",
   "knowledge_reference_role_inspired": "啟發自",
-  "knowledge_reference_restore": "還原相容的本文"
+  "knowledge_reference_restore": "還原相容的本文",
+  "knowledge_discovery_continue": "繼續準備",
+  "knowledge_discovery_denied": "以目前的存取權限無法查看此主題的已發布知識。",
+  "knowledge_discovery_empty": "此主題尚無已發布的知識貢獻。",
+  "knowledge_discovery_end": "此次閱讀沒有更多已發布貢獻。",
+  "knowledge_discovery_heading": "已發布知識",
+  "knowledge_discovery_intro": "依提供的發布順序顯示此主題的公開貢獻。",
+  "knowledge_discovery_more": "更多",
+  "knowledge_discovery_open": "開啟此精確發布版本",
+  "knowledge_discovery_preparing": "正在準備此主題的已發布知識…",
+  "knowledge_discovery_restart": "重新開始此次閱讀",
+  "knowledge_discovery_restart_needed": "此次閱讀必須從第一頁重新開始。",
+  "knowledge_discovery_retry": "重試此頁",
+  "knowledge_discovery_return": "返回此主題",
+  "knowledge_discovery_sparse": "此頁沒有貢獻。選擇「更多」可繼續原生閱讀。",
+  "knowledge_discovery_unavailable": "已發布知識暫時無法使用。請重試同一頁。"
 }

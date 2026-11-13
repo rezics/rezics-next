@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "説明",
   "knowledge_reference_role_uses": "使用",
   "knowledge_reference_role_inspired": "着想源",
-  "knowledge_reference_restore": "互換性のある本文を復元"
+  "knowledge_reference_restore": "互換性のある本文を復元",
+  "knowledge_discovery_continue": "準備を続ける",
+  "knowledge_discovery_denied": "現在のアクセスでは、この対象の公開ナレッジを利用できません。",
+  "knowledge_discovery_empty": "この対象には、まだ公開されたナレッジの寄稿が一覧にありません。",
+  "knowledge_discovery_end": "この閲覧に、これ以上の公開寄稿はありません。",
+  "knowledge_discovery_heading": "公開ナレッジ",
+  "knowledge_discovery_intro": "この対象の公開寄稿を、提供された公開順で示します。",
+  "knowledge_discovery_more": "さらに表示",
+  "knowledge_discovery_open": "この正確な公開版を開く",
+  "knowledge_discovery_preparing": "この対象の公開ナレッジを準備しています…",
+  "knowledge_discovery_restart": "この閲覧をやり直す",
+  "knowledge_discovery_restart_needed": "この閲覧は最初のページからやり直す必要があります。",
+  "knowledge_discovery_retry": "このページを再試行",
+  "knowledge_discovery_return": "この対象に戻る",
+  "knowledge_discovery_sparse": "このページに寄稿はありません。「さらに表示」でネイティブの閲覧を続けられます。",
+  "knowledge_discovery_unavailable": "公開ナレッジは現在利用できません。同じページを再試行してください。"
 }

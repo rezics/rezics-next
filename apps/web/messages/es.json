@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "Explica",
   "knowledge_reference_role_uses": "Usa",
   "knowledge_reference_role_inspired": "Inspirado en",
-  "knowledge_reference_restore": "Restaurar el texto compatible"
+  "knowledge_reference_restore": "Restaurar el texto compatible",
+  "knowledge_discovery_continue": "Continuar la preparación",
+  "knowledge_discovery_denied": "El conocimiento publicado de este tema no está disponible con el acceso actual.",
+  "knowledge_discovery_empty": "Aún no hay contribuciones de conocimiento publicadas para este tema.",
+  "knowledge_discovery_end": "No hay más contribuciones publicadas en esta lectura.",
+  "knowledge_discovery_heading": "Conocimiento publicado",
+  "knowledge_discovery_intro": "Contribuciones públicas de este tema, en el orden de publicación suministrado.",
+  "knowledge_discovery_more": "Más",
+  "knowledge_discovery_open": "Abrir esta publicación exacta",
+  "knowledge_discovery_preparing": "Preparando el conocimiento publicado de este tema…",
+  "knowledge_discovery_restart": "Reiniciar esta lectura",
+  "knowledge_discovery_restart_needed": "Esta lectura debe reiniciarse desde la primera página.",
+  "knowledge_discovery_retry": "Reintentar esta página",
+  "knowledge_discovery_return": "Volver a este tema",
+  "knowledge_discovery_sparse": "No hay contribuciones en esta página. Más continúa la lectura nativa.",
+  "knowledge_discovery_unavailable": "El conocimiento publicado no está disponible ahora. Reintenta la misma página."
 }

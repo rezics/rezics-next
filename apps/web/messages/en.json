@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "Explains",
   "knowledge_reference_role_uses": "Uses",
   "knowledge_reference_role_inspired": "Inspired by",
-  "knowledge_reference_restore": "Restore compatible body"
+  "knowledge_reference_restore": "Restore compatible body",
+  "knowledge_discovery_continue": "Continue preparation",
+  "knowledge_discovery_denied": "Published knowledge for this subject is not available with the current access.",
+  "knowledge_discovery_empty": "No published knowledge contributions are listed for this subject yet.",
+  "knowledge_discovery_end": "No further published contributions in this reading.",
+  "knowledge_discovery_heading": "Published knowledge",
+  "knowledge_discovery_intro": "Public contributions for this subject, in the supplied publication order.",
+  "knowledge_discovery_more": "More",
+  "knowledge_discovery_open": "Open this exact publication",
+  "knowledge_discovery_preparing": "Preparing this subject's published knowledge…",
+  "knowledge_discovery_restart": "Restart this reading",
+  "knowledge_discovery_restart_needed": "This reading must be restarted from the first page.",
+  "knowledge_discovery_retry": "Retry this page",
+  "knowledge_discovery_return": "Return to this subject",
+  "knowledge_discovery_sparse": "No contributions on this page. More continues the native reading.",
+  "knowledge_discovery_unavailable": "Published knowledge is unavailable right now. Retry the same page."
 }

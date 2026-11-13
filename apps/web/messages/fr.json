@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "Explique",
   "knowledge_reference_role_uses": "Utilise",
   "knowledge_reference_role_inspired": "Inspiré de",
-  "knowledge_reference_restore": "Restaurer le texte compatible"
+  "knowledge_reference_restore": "Restaurer le texte compatible",
+  "knowledge_discovery_continue": "Poursuivre la préparation",
+  "knowledge_discovery_denied": "Les connaissances publiées de ce sujet ne sont pas disponibles avec l’accès actuel.",
+  "knowledge_discovery_empty": "Aucune contribution de connaissance publiée n’est encore listée pour ce sujet.",
+  "knowledge_discovery_end": "Aucune autre contribution publiée dans cette lecture.",
+  "knowledge_discovery_heading": "Connaissances publiées",
+  "knowledge_discovery_intro": "Contributions publiques de ce sujet, dans l’ordre de publication fourni.",
+  "knowledge_discovery_more": "Plus",
+  "knowledge_discovery_open": "Ouvrir cette publication exacte",
+  "knowledge_discovery_preparing": "Préparation des connaissances publiées de ce sujet…",
+  "knowledge_discovery_restart": "Recommencer cette lecture",
+  "knowledge_discovery_restart_needed": "Cette lecture doit être recommencée depuis la première page.",
+  "knowledge_discovery_retry": "Réessayer cette page",
+  "knowledge_discovery_return": "Revenir à ce sujet",
+  "knowledge_discovery_sparse": "Aucune contribution sur cette page. Plus poursuit la lecture native.",
+  "knowledge_discovery_unavailable": "Les connaissances publiées sont indisponibles pour le moment. Réessayez la même page."
 }

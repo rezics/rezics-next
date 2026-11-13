@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "설명",
   "knowledge_reference_role_uses": "사용",
   "knowledge_reference_role_inspired": "영감",
-  "knowledge_reference_restore": "호환되는 본문 복원"
+  "knowledge_reference_restore": "호환되는 본문 복원",
+  "knowledge_discovery_continue": "준비 계속",
+  "knowledge_discovery_denied": "현재 접근으로는 이 주제의 공개된 지식을 이용할 수 없습니다.",
+  "knowledge_discovery_empty": "이 주제에는 아직 공개된 지식 기여가 목록에 없습니다.",
+  "knowledge_discovery_end": "이 읽기에 더 이상의 공개 기여가 없습니다.",
+  "knowledge_discovery_heading": "공개된 지식",
+  "knowledge_discovery_intro": "이 주제의 공개 기여를 제공된 게시 순서로 보여 줍니다.",
+  "knowledge_discovery_more": "더 보기",
+  "knowledge_discovery_open": "이 정확한 공개본 열기",
+  "knowledge_discovery_preparing": "이 주제의 공개된 지식을 준비하고 있습니다…",
+  "knowledge_discovery_restart": "이 읽기 다시 시작",
+  "knowledge_discovery_restart_needed": "이 읽기는 첫 페이지부터 다시 시작해야 합니다.",
+  "knowledge_discovery_retry": "이 페이지 다시 시도",
+  "knowledge_discovery_return": "이 주제로 돌아가기",
+  "knowledge_discovery_sparse": "이 페이지에는 기여가 없습니다. 더 보기로 네이티브 읽기를 계속할 수 있습니다.",
+  "knowledge_discovery_unavailable": "지금은 공개된 지식을 이용할 수 없습니다. 같은 페이지를 다시 시도하세요."
 }

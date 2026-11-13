@@ -14,6 +14,12 @@ import {
   type KnowledgeReadRequest,
   type KnowledgeReadState,
 } from './public-read';
+import { KnowledgeDiscoveryReturnLink } from './discovery-panel';
+import {
+  knowledgeDiscoverySearch,
+  parseKnowledgeDiscoveryReturn,
+  parseKnowledgeDiscoveryReturnPath,
+} from './discovery-visit';
 
 export { readKnowledgeDocument } from './public-read';
 export { KnowledgeDocumentPage } from './page';
@@ -33,11 +39,12 @@ function retireVisit(visit: KnowledgeDocumentVisit) {
   visit.page = { state: 'preparing' };
 }
 
-export function knowledgeDocumentSearch(search: Record<string, unknown>): { revisionId?: string } {
-  if (!('revisionId' in search) || search.revisionId === undefined || search.revisionId === '') return {};
+export function knowledgeDocumentSearch(search: Record<string, unknown>): { revisionId?: string; returnTo?: string } {
+  const returning = knowledgeDiscoverySearch(search);
+  if (!('revisionId' in search) || search.revisionId === undefined || search.revisionId === '') return returning;
   const revisionId = knowledgeRevisionQuery(search.revisionId);
   if (!revisionId) throw notFound();
-  return { revisionId };
+  return { revisionId, ...returning };
 }
 
 export function knowledgeDocumentRequest(
@@ -93,6 +100,7 @@ export function KnowledgeDocumentRoute() {
       visit={visit}
       request={request}
       loading={loading}
+      returnTo={parseKnowledgeDiscoveryReturnPath(search.returnTo, locale)}
       onRetry={() => {
         void router.invalidate();
       }}
@@ -117,11 +125,13 @@ export function KnowledgeDocumentCaller({
   request,
   loading,
   onRetry,
+  returnTo = null,
 }: {
   visit: KnowledgeDocumentVisit;
   request: KnowledgeReadRequest;
   loading: boolean;
   onRetry: () => void;
+  returnTo?: string | null;
 }) {
   const queryClient = useQueryClient();
   const source = readerSessionSource(queryClient);
@@ -166,27 +176,51 @@ export function KnowledgeDocumentCaller({
     retireVisit(visit);
     onRetry();
   };
+  const subjectReturn =
+    page.state === 'ready'
+      ? parseKnowledgeDiscoveryReturn(returnTo, request.locale, page.document.subjectId)
+      : parseKnowledgeDiscoveryReturnPath(returnTo, request.locale);
 
   return (
-    <KnowledgeDocumentPage
-      request={request}
-      page={page}
-      onRetry={retry}
-      transfer={(document, onSourceLost) => (
-        <KnowledgeTransferCaller
-          key={`${document.documentId}:${document.revisionId}`}
-          source={{ representation: 'public', documentId: document.documentId, revisionId: document.revisionId }}
-          title={document.title}
-          locale={request.locale}
-          onSourceLost={onSourceLost}
-        />
-      )}
-    />
+    <>
+      {subjectReturn ? <KnowledgeDiscoveryReturnLink href={subjectReturn} locale={request.locale} /> : null}
+      <KnowledgeDocumentPage
+        request={request}
+        page={page}
+        onRetry={retry}
+        transfer={(document, onSourceLost) => (
+          <KnowledgeTransferCaller
+            key={`${document.documentId}:${document.revisionId}`}
+            source={{ representation: 'public', documentId: document.documentId, revisionId: document.revisionId }}
+            title={document.title}
+            locale={request.locale}
+            onSourceLost={onSourceLost}
+          />
+        )}
+      />
+    </>
   );
 }
 
 export { KnowledgeNavigationRoute } from './navigation-route';
 export { knowledgeNavigation } from './navigation';
+export { KnowledgeDiscoverySlot, KnowledgeDiscoveryPanel, KnowledgeDiscoveryCaller } from './discovery-panel';
+export type { KnowledgeDiscoverySlotProps, KnowledgeDiscoveryPanelProps } from './discovery-panel';
+export {
+  admitKnowledgeDiscovery,
+  knowledgeDiscoveryExactHref,
+  knowledgeDiscoveryWire,
+  parseKnowledgeDiscoveryCursor,
+  parseKnowledgeDiscoveryRequest,
+  readKnowledgeDiscovery,
+  KNOWLEDGE_DISCOVERY_PAGE_LIMIT,
+} from './discovery';
+export type { KnowledgeDiscoveryDocument, KnowledgeDiscoveryRead, KnowledgeDiscoveryRequest } from './discovery';
+export {
+  KnowledgeDiscoveryReading,
+  parseKnowledgeDiscoveryReturn,
+  parseKnowledgeDiscoveryReturnPath,
+} from './discovery-visit';
 
 export { isKnowledgeId } from './private-knowledge';
 export { KnowledgeNavigationEntry } from './navigation-page';

@@ -47,6 +47,9 @@ Each scenario includes native API observations first, then the browser where use
 1. A saves private revisions, then previews and publishes one selected analysis associated with the Character.
    The public URL and subject contribution directory lead to the selected revision. A private parent, alternate
    ending and future draft remain absent from public body, breadcrumbs, child indicators, metadata and export.
+   Web's public contribution discovery consumer mounts on a readable Subject, opens that exact published revision
+   and returns to the same bounded Subject visit; personal notebooks keep their independent entry. Native physical
+   proof of the list remains Search's.
 2. Editing the working draft changes the author's view only. Updating publication preserves previously selected
    revisions as exact citations in the current publication generation. An unselected intermediate revision remains
    unreadable to B even if its identifier is known.

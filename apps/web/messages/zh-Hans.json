@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "解释",
   "knowledge_reference_role_uses": "使用",
   "knowledge_reference_role_inspired": "启发自",
-  "knowledge_reference_restore": "还原兼容的正文"
+  "knowledge_reference_restore": "还原兼容的正文",
+  "knowledge_discovery_continue": "继续准备",
+  "knowledge_discovery_denied": "以目前的访问权限无法查看此主题的已发布知识。",
+  "knowledge_discovery_empty": "此主题尚无已发布的知识贡献。",
+  "knowledge_discovery_end": "此次阅读没有更多已发布贡献。",
+  "knowledge_discovery_heading": "已发布知识",
+  "knowledge_discovery_intro": "按提供的发布顺序显示此主题的公开贡献。",
+  "knowledge_discovery_more": "更多",
+  "knowledge_discovery_open": "打开此精确发布版本",
+  "knowledge_discovery_preparing": "正在准备此主题的已发布知识…",
+  "knowledge_discovery_restart": "重新开始此次阅读",
+  "knowledge_discovery_restart_needed": "此次阅读必须从第一页重新开始。",
+  "knowledge_discovery_retry": "重试此页",
+  "knowledge_discovery_return": "返回此主题",
+  "knowledge_discovery_sparse": "此页没有贡献。选择“更多”可继续原生阅读。",
+  "knowledge_discovery_unavailable": "已发布知识暂时不可用。请重试同一页。"
 }

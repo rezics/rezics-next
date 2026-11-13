@@ -442,6 +442,31 @@ breadcrumbs, one selected source and one sealed intent/receipt; history changes 
 ceiling. **Growth** O(page + depth) retained data, no tree scans, prefetch, refill, body reads or per-row hydration.
 Content owns native mutation/history costs; consumer bounds do not claim native cost proof.
 
+### Public contribution discovery consumer
+
+Decision: a readable Subject mounts one named Knowledge contribution region. The first page loads on that default
+mount; each later More, preparation Continue, Retry or Restart is explicit. One generated
+`subjects({id}).knowledgeDocuments.get` call carries `limit=20` and the attempted opaque cursor, replacing one
+retained page. Ready-empty, sparse ready continuation, preparing-202 with its native frontier, denial, unavailable
+and restart-required 409 stay distinct. Preparation continuation is a deliberate Continue, never polling or refill.
+Operational retry repeats the failed cursor; explicit restart omits it. Rows keep native order, titles and exact
+revision destinations, with no per-row body, author, permission or Subject hydration. Missing author identity is not
+invented. Public destinations reauthorize at the installed live/exact reader and never receive a private ancestor
+path from this list. Return carries only a bounded same-origin Subject visit path, then the Subject remount rereads
+current admission. Subject, viewer/session/CSRF, locale, source or access replacement retires rows, cursors and late
+work. Missing discovery stays in this region and does not break the rest of the Subject. Personal notebooks keep
+their independent entry.
+
+Consumer cost: **Touches** one generated public page per default mount, More, Continue, Retry or Restart, through
+the existing Web transport. **Bound** one twenty-row page, one opaque cursor and one bounded same-origin return
+path; no bodies, totals or private notebook paths. **Growth** O(page) retained public rows, no prefetch, refill,
+per-row hydration or private inventory. Search owns native physical proof; these bounds do not claim it.
+
+The fewest focused default-mount/wire tests pin native order, exact links, return, one-request bounds, sparse and
+preparing continuation, identical retry, restart and late-response retirement. Illustrative Discovery stories cover
+populated, preparing, sparse, empty and unavailable. Native, browser, visual and promoted-source acceptance remain
+separate.
+
 ## Search, discovery and public value
 
 At launch the subject visit composes its ordinary public facts, a bounded page of published contributions and a

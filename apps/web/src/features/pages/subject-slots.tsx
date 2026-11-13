@@ -4,6 +4,7 @@ import { useFeatureSlots } from '../../shell/feature-slots';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { candidateContext } from './visit-host-port';
+import { KnowledgeDiscoverySlot } from '../../knowledge/route';
 import { graphPublicSourceReturnHref } from './graph-browser/public-visit';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from './subject-visit-navigation';
@@ -212,6 +213,19 @@ export function SubjectExploreSlot({
 
 export function SubjectConceptTags(props: WorkTagReadingProps) {
   return renderWorkTagReading(props);
+}
+
+/** Named public Knowledge contribution region; discovery owns its native reads. */
+export function SubjectKnowledgeSlot({
+  subjectId,
+  locale,
+  visitHref,
+}: {
+  subjectId: string;
+  locale: string;
+  visitHref: string;
+}) {
+  return <KnowledgeDiscoverySlot subjectId={subjectId} locale={locale} visitHref={visitHref} />;
 }
 
 /** Additive Organization companion; no extra subject fetch and no View-enum widening. */

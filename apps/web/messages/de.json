@@ -12017,5 +12017,20 @@
   "knowledge_reference_role_explains": "Erklärt",
   "knowledge_reference_role_uses": "Verwendet",
   "knowledge_reference_role_inspired": "Inspiriert von",
-  "knowledge_reference_restore": "Kompatiblen Text wiederherstellen"
+  "knowledge_reference_restore": "Kompatiblen Text wiederherstellen",
+  "knowledge_discovery_continue": "Vorbereitung fortsetzen",
+  "knowledge_discovery_denied": "Veröffentlichtes Wissen zu diesem Thema ist mit dem aktuellen Zugriff nicht verfügbar.",
+  "knowledge_discovery_empty": "Für dieses Thema sind noch keine veröffentlichten Wissensbeiträge aufgeführt.",
+  "knowledge_discovery_end": "In dieser Ansicht gibt es keine weiteren veröffentlichten Beiträge.",
+  "knowledge_discovery_heading": "Veröffentlichtes Wissen",
+  "knowledge_discovery_intro": "Öffentliche Beiträge zu diesem Thema in der gelieferten Veröffentlichungsreihenfolge.",
+  "knowledge_discovery_more": "Mehr",
+  "knowledge_discovery_open": "Diese genaue Veröffentlichung öffnen",
+  "knowledge_discovery_preparing": "Das veröffentlichte Wissen zu diesem Thema wird vorbereitet…",
+  "knowledge_discovery_restart": "Diese Ansicht neu beginnen",
+  "knowledge_discovery_restart_needed": "Diese Ansicht muss von der ersten Seite neu begonnen werden.",
+  "knowledge_discovery_retry": "Diese Seite erneut laden",
+  "knowledge_discovery_return": "Zu diesem Thema zurückkehren",
+  "knowledge_discovery_sparse": "Auf dieser Seite gibt es keine Beiträge. Mit „Mehr“ setzt du die native Ansicht fort.",
+  "knowledge_discovery_unavailable": "Veröffentlichtes Wissen ist derzeit nicht verfügbar. Lade dieselbe Seite erneut."
 }
