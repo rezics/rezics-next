@@ -177,7 +177,7 @@ async function typingRetryFixture(
   const complete = beginTypingInputReceipt(worktree, env, compiler);
   if (!complete) throw new Error('Compiler fixture did not capture its inputs');
   if (kernelOutput) {
-    mkdirSync(join(worktree, '.temp/goal'), { recursive: true });
+    mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
     const sourceSha256 = 'a'.repeat(64);
     const producerExit = await withKernelClientOutput(
       worktree,
@@ -547,7 +547,9 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     expect(readdirSync(queue)).toHaveLength(0);
 
     occupied = false;
-    used = 51;
+    // Codex integer readings carry one percentage point of rounding uncertainty. Keep a fractional increase so this
+    // fixture still proves a burn-rate violation under the provider's current evidence model.
+    used = 51.1;
     recovery = job.recoverOrphans();
     await recovery;
     recovery = undefined;
