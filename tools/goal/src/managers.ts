@@ -1344,6 +1344,9 @@ export class ManagerSessions {
       this.save(state);
       return;
     }
+    await this.transport.rebindCodexViewer(state, state.threadId!, client, {
+      restoreExited: state.goalState?.status === 'active',
+    });
     this.save(state);
     this.reportStrandedTurn(state);
     let prefix = this.consumeGoalReadings(state);
@@ -1630,7 +1633,9 @@ export class ManagerSessions {
           }
           this.save(current);
           if (current.engine === 'codex' && current.threadId && current.status === 'running' && client) {
-            await this.transport.rebindCodexViewer(current, current.threadId, client);
+            await this.transport.rebindCodexViewer(current, current.threadId, client, {
+              restoreExited: current.goalState?.status === 'active',
+            });
           }
           if (await this.handleGoalUpdate(current)) return;
           if (!(await this.checkLimits(current))) {

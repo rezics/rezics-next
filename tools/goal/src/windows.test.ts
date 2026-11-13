@@ -85,7 +85,7 @@ test('Preserve a manager session when its window status is unavailable', async (
   expect(respawns.some((argv) => argv.includes('respawn-pane') && argv.includes('-k'))).toBe(true);
 });
 
-test('rebinds only a live owned Codex pane whose same-thread command differs only by endpoint', async () => {
+test('rebinds only an owned Codex pane with the same manager, pool, thread, executable, and working directory', async () => {
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   const command = (argv: string[]) => argv.map(quote).join(' ');
   const oldArgv = [
@@ -104,11 +104,16 @@ test('rebinds only a live owned Codex pane whose same-thread command differs onl
   let owned = true;
   let dead = '0';
   let paneCommand = command(oldArgv);
+  let paneCwd = '/cwd';
   const windows = new TermspacesWindows({ socket: '/socket', session: 'stable' }, (_executable, argv) => {
     calls.push(argv);
     if (argv.includes('list-sessions')) return '$1\tstable\tstable';
     if (argv.includes('list-windows')) return owned ? '@3\tmanager' : '@2\tother';
-    if (argv.includes('display-message')) return argv.at(-1) === '#{pane_dead}' ? dead : paneCommand;
+    if (argv.includes('display-message')) {
+      if (argv.at(-1) === '#{pane_dead}') return dead;
+      if (argv.at(-1) === '#{pane_current_path}') return paneCwd;
+      return paneCommand;
+    }
     if (argv.includes('respawn-pane')) paneCommand = argv.at(-1)!;
     return '';
   });
@@ -119,12 +124,36 @@ test('rebinds only a live owned Codex pane whose same-thread command differs onl
   expect(calls.some((argv) => argv.includes('new-window') || argv.includes('apply'))).toBe(false);
 
   expect(await windows.rebindIfStale('manager', currentArgv, '/cwd')).toBe(false);
+  expect(paneCommand).toBe(command(currentArgv));
   const beforeUnrelated = calls.filter((argv) => argv.includes('respawn-pane')).length;
   expect(await windows.rebindIfStale('manager', ['vim'], '/cwd')).toBe(false);
   dead = '1';
   expect(await windows.rebindIfStale('manager', oldArgv, '/cwd')).toBe(false);
+  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd', { restoreExited: true })).toBe(false);
+
+  paneCommand = command(oldArgv);
+  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd')).toBe(false);
+  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd', { restoreExited: true })).toBe(true);
+  expect(paneCommand).toBe(command(currentArgv));
+  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd', { restoreExited: true })).toBe(false);
+
+  paneCommand = command(oldArgv);
+  paneCwd = '/other-working-directory';
+  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd', { restoreExited: true })).toBe(false);
+  paneCwd = '/cwd';
+  const alteredCommands = [
+    ['env', 'CODEX_HOME=/other-pool', 'GOAL_MANAGER=manager', 'codex', 'resume', 'thread-1', '--remote', oldArgv.at(-1)!],
+    ['env', 'CODEX_HOME=/codex', 'GOAL_MANAGER=other-manager', 'codex', 'resume', 'thread-1', '--remote', oldArgv.at(-1)!],
+    ['env', 'CODEX_HOME=/codex', 'GOAL_MANAGER=manager', 'codex', 'resume', 'other-thread', '--remote', oldArgv.at(-1)!],
+    ['env', 'CODEX_HOME=/codex', 'GOAL_MANAGER=manager', 'vim', 'resume', 'thread-1', '--remote', oldArgv.at(-1)!],
+  ];
+  for (const altered of alteredCommands) {
+    paneCommand = command(altered);
+    expect(await windows.rebindIfStale('manager', currentArgv, '/cwd', { restoreExited: true })).toBe(false);
+  }
+
   owned = false;
   expect(await windows.rebindIfStale('manager', oldArgv, '/cwd')).toBe(false);
-  expect(calls.filter((argv) => argv.includes('respawn-pane'))).toHaveLength(beforeUnrelated);
+  expect(calls.filter((argv) => argv.includes('respawn-pane')).length).toBe(beforeUnrelated + 1);
   expect(calls.some((argv) => argv.includes('new-window') || argv.includes('apply'))).toBe(false);
 });

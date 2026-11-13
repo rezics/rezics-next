@@ -233,9 +233,15 @@ export class ManagerSessionTransport {
     spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>,
     threadId: string,
     client: AppServer,
+    options: { restoreExited?: boolean } = {},
   ): Promise<boolean> {
     if (!client.endpoint || !this.services.windows.rebindIfStale) return false;
-    return this.services.windows.rebindIfStale(spec.id, this.codexViewerArgv(spec, threadId, client), spec.cwd);
+    return this.services.windows.rebindIfStale(
+      spec.id,
+      this.codexViewerArgv(spec, threadId, client),
+      spec.cwd,
+      options,
+    );
   }
   private codexViewerArgv(spec: Pick<ManagerSpec, 'id' | 'pool'>, threadId: string, client: AppServer): string[] {
     const viewer = [spec.pool.executable ?? 'codex', 'resume', threadId];

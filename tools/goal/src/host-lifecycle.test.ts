@@ -326,14 +326,14 @@ store.db.close();
   }
 }, 30_000);
 
-test('recovery rebinds a parked Codex viewer without waking or recreating its thread', async () => {
+test('recovery restores a dead stale viewer during active screenshot work and keeps a later parked thread paused', async () => {
   const f = temporaryDirectory();
   mkdirSync(f.path, { recursive: true });
   const db = openDb(join(f.path, 'state.sqlite'));
   const inbox = new SqliteManagerInbox(db, f.path);
   const registrations: { id: string; argv: string[]; cwd: string }[] = [];
   const rebindings: { id: string; argv: string[]; cwd: string }[] = [];
-  const viewers = new Map<string, { argv: string[]; cwd: string }>();
+  const viewers = new Map<string, { argv: string[]; cwd: string; dead: boolean }>();
   const turnStarts: { threadId: string; turnId: string }[] = [];
   const requests: { method: string; params: any }[] = [];
   let notify: ((notification: Notification) => void) | undefined;
@@ -344,15 +344,15 @@ test('recovery rebinds a parked Codex viewer without waking or recreating its th
     windows: {
       register(id: string, argv: string[], cwd: string) {
         registrations.push({ id, argv, cwd });
-        viewers.set(id, { argv, cwd });
+        viewers.set(id, { argv, cwd, dead: false });
         return '@1';
       },
       unregister(id: string) {
         viewers.delete(id);
       },
-      rebindIfStale(id: string, argv: string[], cwd: string) {
+      rebindIfStale(id: string, argv: string[], cwd: string, options?: { restoreExited?: boolean }) {
         const current = viewers.get(id);
-        if (!current) return false;
+        if (!current || current.cwd !== cwd || (current.dead && !options?.restoreExited)) return false;
         const currentRemote = current.argv.indexOf('--remote');
         const nextRemote = argv.indexOf('--remote');
         if (currentRemote < 0 || nextRemote < 0 || current.argv[currentRemote + 1] === argv[nextRemote + 1])
@@ -360,7 +360,7 @@ test('recovery rebinds a parked Codex viewer without waking or recreating its th
         const expected = [...current.argv];
         expected[currentRemote + 1] = argv[nextRemote + 1]!;
         if (JSON.stringify(expected) !== JSON.stringify(argv)) return false;
-        viewers.set(id, { argv, cwd });
+        viewers.set(id, { argv, cwd, dead: current.dead });
         rebindings.push({ id, argv, cwd });
         return true;
       },
@@ -380,7 +380,13 @@ test('recovery rebinds a parked Codex viewer without waking or recreating its th
           turnStarts.push({ threadId: params.threadId, turnId });
           return { turn: { id: turnId } } as T;
         }
-        if (method === 'thread/resume') return { thread: { id: params.threadId, turns: [] } } as T;
+        if (method === 'thread/resume')
+          return {
+            thread: {
+              id: params.threadId,
+              turns: turnStarts.length ? [{ id: turnStarts.at(-1)!.turnId, status: 'inProgress' }] : [],
+            },
+          } as T;
         if (method === 'thread/goal/get')
           return { goal: { status: goalStatus, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } } as T;
         throw new Error(`unexpected RPC ${method}`);
@@ -412,36 +418,40 @@ test('recovery rebinds a parked Codex viewer without waking or recreating its th
   try {
     const started = await first.start(spec);
     const threadId = started.threadId!;
-    notify?.({
-      method: 'turn/completed',
-      params: { threadId, turn: { id: started.activeTurnId, status: 'completed' } },
-    });
-    await first.flush();
-    expect(first.get('accounts')).toMatchObject({
-      threadId,
-      activeTurnId: null,
-      waitingForInbox: true,
-      goalState: { status: 'paused' },
-    });
     await first.close();
     endpoint = 'ws://127.0.0.1:10002';
+    viewers.get('accounts')!.dead = true;
     recovered = new ManagerSessions(db, inbox, services);
     await recovered.recover();
+    expect(recovered.get('accounts')).toMatchObject({
+      threadId,
+      activeTurnId: started.activeTurnId,
+      waitingForInbox: false,
+      goalState: { status: 'active' },
+    });
+    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(1);
+    expect(turnStarts).toHaveLength(1);
+    expect(registrations).toHaveLength(1);
+    expect(rebindings).toHaveLength(1);
+    expect(rebindings[0]!.argv).toContain(threadId);
+    expect(rebindings[0]!.argv).toContain(endpoint);
+    expect(requests.filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
+
+    await recovered.recover();
+    expect(rebindings).toHaveLength(1);
+    notify?.({ method: 'turn/completed', params: { threadId, turn: { id: started.activeTurnId, status: 'completed' } } });
+    await recovered.flush();
     expect(recovered.get('accounts')).toMatchObject({
       threadId,
       activeTurnId: null,
       waitingForInbox: true,
       goalState: { status: 'paused' },
     });
-    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(0);
-    expect(turnStarts).toHaveLength(1);
-    expect(registrations).toHaveLength(1);
-    expect(rebindings).toHaveLength(1);
-    expect(rebindings[0]!.argv).toContain(threadId);
-    expect(rebindings[0]!.argv).toContain(endpoint);
-
+    const resumeCount = requests.filter((request) => request.method === 'thread/resume').length;
     await recovered.recover();
-    expect(rebindings).toHaveLength(1);
+    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(resumeCount);
+    expect(recovered.get('accounts')).toMatchObject({ threadId, activeTurnId: null, waitingForInbox: true });
+
     inbox.deliver({ managerId: 'accounts', kind: 'instruction', summary: 'Continue the same manager thread' });
     await recovered.wake('accounts');
     await recovered.flush();

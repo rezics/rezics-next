@@ -1,5 +1,6 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { runHostProcess } from './process.ts';
+import { resolve } from 'node:path';
 
 export type WindowSettings = {
   policy?: ControlPolicy['windows'] | undefined;
@@ -31,6 +32,34 @@ function differsOnlyByRemoteEndpoint(current: string, argv: string[]): boolean {
   const end = suffix ? current.length - suffix.length : current.length;
   const oldEndpoint = unquote(current.slice(prefix.length, end));
   return oldEndpoint !== undefined && oldEndpoint !== argv[remote + 1];
+}
+function isCodexViewer(argv: string[], manager: string): boolean {
+  if (argv[0] !== 'env') return false;
+  const environment = new Map<string, string>();
+  let index = 1;
+  while (index < argv.length) {
+    if (argv[index] === '-u') {
+      if (!argv[index + 1]) return false;
+      index += 2;
+      continue;
+    }
+    const assignment = argv[index]!.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s);
+    if (!assignment) break;
+    if (environment.has(assignment[1]!)) return false;
+    environment.set(assignment[1]!, assignment[2]!);
+    index += 1;
+  }
+  const [executable, action, threadId, remoteFlag, endpoint, ...extra] = argv.slice(index);
+  return (
+    environment.get('GOAL_MANAGER') === manager &&
+    Boolean(environment.get('CODEX_HOME')) &&
+    Boolean(executable) &&
+    action === 'resume' &&
+    Boolean(threadId) &&
+    remoteFlag === '--remote' &&
+    Boolean(endpoint) &&
+    extra.length === 0
+  );
 }
 /** tmux 3.7c with no locale replaces unprintable `-F` tabs with underscores. */
 function tmuxFields(line: string): string[] {
@@ -88,8 +117,13 @@ export interface ManagerWindows {
   alive?(manager: string): boolean | Promise<boolean>;
   /** Run argv in the manager's window again, replacing whatever it holds. */
   respawn?(manager: string, argv: string[], cwd: string): void | Promise<void>;
-  /** Rebind an existing live Codex viewer only when its owned pane proves that only the remote endpoint is stale. */
-  rebindIfStale?(manager: string, argv: string[], cwd: string): boolean | Promise<boolean>;
+  /** Rebind a proven Codex viewer whose endpoint is stale; exited panes require explicit authorization. */
+  rebindIfStale?(
+    manager: string,
+    argv: string[],
+    cwd: string,
+    options?: { restoreExited?: boolean },
+  ): boolean | Promise<boolean>;
   /** Type a message into the manager's live session and submit it; the session queues it if a turn is running. */
   prompt?(manager: string, text: string): void | Promise<void>;
 }
@@ -190,13 +224,21 @@ export class TermspacesWindows implements ManagerWindows {
     }
     await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
   }
-  async rebindIfStale(manager: string, argv: string[], cwd: string): Promise<boolean> {
+  async rebindIfStale(
+    manager: string,
+    argv: string[],
+    cwd: string,
+    options: { restoreExited?: boolean } = {},
+  ): Promise<boolean> {
+    if (!isCodexViewer(argv, manager)) return false;
     const session = await this.lookupSession();
     if (!session) return false;
     const id = await this.find(session, manager);
     if (!id) return false;
     const dead = await this.observe(() => this.tmux(['display-message', '-p', '-t', id, '#{pane_dead}']));
-    if (dead?.trim() !== '0') return false;
+    if (dead?.trim() !== '0' && !(dead?.trim() === '1' && options.restoreExited)) return false;
+    const paneCwd = await this.observe(() => this.tmux(['display-message', '-p', '-t', id, '#{pane_current_path}']));
+    if (!paneCwd || resolve(paneCwd.trim()) !== resolve(cwd)) return false;
     const startCommand = await this.observe(() =>
       this.tmux(['display-message', '-p', '-t', id, '#{pane_start_command}']),
     );
