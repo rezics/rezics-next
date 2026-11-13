@@ -2,7 +2,13 @@ import { AuthenticationError } from '../access/contract/authentication.ts';
 import { routeOf } from '../route/route.ts';
 import { accessCheck } from './access-port.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
-import { ContentNotFoundError, readPost, snapshot, type PostEntry, type RetainContentRead } from './reads.ts';
+import {
+  ContentNotFoundError,
+  readPostMetadata,
+  snapshot,
+  type NativePostMetadata,
+  type RetainContentRead,
+} from './reads.ts';
 import {
   HOSTED_PAGE_LIMIT,
   InvalidHostedCursorError,
@@ -30,12 +36,12 @@ async function historyAuthority(deps: HostedDependencies, catalogueId: string, c
   const initial = await snapshot(deps, catalogueId, context, (client) => hostedCatalogue(client, catalogueId));
   const catalogue = initial.value;
   if (!catalogue) throw new ContentNotFoundError();
-  const observation: { current?: Parameters<RetainContentRead<PostEntry>>[0] } = {};
-  const disclosed = await readPost(deps, catalogue.thread_id, catalogueId, context, undefined, (current) => {
+  const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
+  const disclosed = await readPostMetadata(deps, catalogue.thread_id, catalogueId, context, undefined, (current) => {
     observation.current = current;
   });
   if (
-    disclosed.value?.availability !== 'available' ||
+    !disclosed.value ||
     disclosed.value.authorId !== actor.accountId ||
     disclosed.anchor.epoch !== initial.anchor.epoch ||
     !observation.current
@@ -49,7 +55,8 @@ async function historyAuthority(deps: HostedDependencies, catalogueId: string, c
     { pool: deps.pool, deadline: context.deadline },
   );
   const retained = observation.current;
-  // Retain native checks and catalogue identity, never the disclosed Post body.
+  // Close the original metadata observation and prepared native checks on each
+  // pass. Admission and final flags must never load the anchor manuscript.
   const finish = async () => {
     const observation: { catalogue?: typeof catalogue } = {};
     const result = await retained(async (client) => {
@@ -59,7 +66,7 @@ async function historyAuthority(deps: HostedDependencies, catalogueId: string, c
       observation.catalogue = current;
     });
     if (
-      result.value?.availability !== 'available' ||
+      !result.value ||
       result.value.authorId !== actor.accountId ||
       result.value.threadId !== catalogue.thread_id ||
       result.anchor.epoch !== initial.anchor.epoch ||

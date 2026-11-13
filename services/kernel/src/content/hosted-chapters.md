@@ -198,6 +198,18 @@ not grant history discovery. A continuation always repeats current admission;
 revoked permissions cannot be recovered from a retained token. Cross-home exact
 catalogue identities use their own route and do not depend on the author inventory.
 
+Decision: author catalogue history uses native `readPostMetadata` and its exact retained original Access/ancestry
+callback for admission and final authorization, selecting zero revision bodies before or after the bounded index
+page. Current author and `post:revise`, catalogue/thread and partition epoch identity, final draft/release flags and
+opaque cursor binding retain their existing behavior. A changed original Post observation withholds the page;
+a fresh head read cannot replace that proof. Body-serving routes keep ordinary body disclosure.
+
+The existing `hosted-chapters-history.test.ts` owner fixture observes zero body selections across initial,
+continued and exhausted pages and rejected cursors, one index read bounded by `limit+1`, and original-observation
+changes at admission and after page selection. Its existing authorization, cursor, exact reopening and wire assertions
+remain unchanged. Run these native tests in the dev verifier after landing; this source pass runs only changed-file
+formatting and the affected Kernel typecheck. Mounted native, browser, Storybook and broad acceptance are deferred.
+
 Ordering is `created_at DESC, revision_id DESC`, preserving database microseconds
 and using UUID order to break ties. A covering index on route, catalogue and that
 ordering supports a strict tuple seek on every page, selecting at most `limit+1`

@@ -1,24 +1,46 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { SESSION_HEADER } from '@rezics/operations/protocol';
 import { nativeGrantor } from './support/native-system.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { HostedHistoryItem } from '../../src/content/hosted-chapters-history-model.ts';
+import * as reads from '../../src/content/reads.ts';
+import readChain from '../../src/content/read-chain.sql';
+import historyPage from '../../src/content/hosted-chapters-history-page.sql';
+import { observeSql } from './support/sql-observer.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
+let observer: ReturnType<typeof observeSql>;
 beforeAll(async () => {
   f = await hostedChaptersFixture();
+  observer = observeSql(f.native.pool);
 });
 afterAll(async () => {
+  await observer?.close();
   await f?.close();
 });
 
-const page = (id: string, cursor?: string, limit = 2) =>
-  f.native.call(
+async function page(id: string, cursor?: string, limit = 2) {
+  const start = observer.records.length;
+  const response = await f.native.call(
     'GET',
     `/v1/hostedCatalogues/${id}/history?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
   );
+  const queries = observer.records.slice(start);
+  const probes = queries.filter((row) => row.statement === readChain.sql);
+  expect(probes.every((row) => row.parameters[readChain.params.indexOf('include_body')] === false)).toBe(true);
+  if (response.status === 200) {
+    const indexReads = queries.filter((row) => row.statement === historyPage.sql);
+    expect(indexReads).toHaveLength(1);
+    expect(indexReads[0]!.parameters[historyPage.params.indexOf('limit')]).toBe(limit + 1);
+    // Both admission and completion close the native metadata observation.
+    expect(
+      probes.filter((row) => row.parameters[readChain.params.indexOf('kind')] === 'revision').length,
+    ).toBeGreaterThanOrEqual(4);
+  }
+  return response;
+}
 
 async function create(postId: string, threadId: string, placements: unknown[] = []) {
   return f.native.command('/v1/hostedCatalogues', { postId, threadId, placements });
@@ -209,4 +231,45 @@ test('history denies public and non-author traversal and rechecks revoked author
   const denied = await page(id, token, 1);
   expect([403, 404]).toContain(denied.status);
   expect(denied.value).not.toHaveProperty('items');
+});
+
+test('history closes the original metadata observation at admission and after page selection', async () => {
+  for (const changedAt of [1, 2]) {
+    const thread = await f.native.thread();
+    const id = thread.firstPost.id;
+    await create(id, thread.id);
+    const nativeRead = reads.readPostMetadata;
+    let observations = 0;
+    let retainedChecks = 0;
+    const hook = spyOn(reads, 'readPostMetadata').mockImplementation(async (...args) => {
+      if (args[2] !== id) return nativeRead(...args);
+      observations++;
+      const retain = args[5]!;
+      args[5] = (finish) =>
+        retain(async (qualify) => {
+          retainedChecks++;
+          expect(qualify).toBeFunction();
+          if (retainedChecks === changedAt) {
+            const revised = await f.native.revise(thread.firstPost, {});
+            expect(revised.status).toBe(200);
+          }
+          return finish(qualify);
+        });
+      return nativeRead(...args);
+    });
+    const start = observer.records.length;
+    try {
+      const denied = await f.native.call('GET', `/v1/hostedCatalogues/${id}/history`);
+      expect(denied.status).toBe(404);
+      expect(denied.value).not.toHaveProperty('items');
+      expect(observations).toBe(1);
+      expect(retainedChecks).toBe(changedAt);
+      expect(observer.records.slice(start).filter((row) => row.statement === historyPage.sql)).toHaveLength(
+        changedAt - 1,
+      );
+    } finally {
+      hook.mockRestore();
+    }
+    expect((await page(id)).status).toBe(200);
+  }
 });
