@@ -13,6 +13,7 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.append_root_chapter` | `POST /v1/hostedCatalogues/{id}:appendRootChapter` | `expectedRevisionId`, `occurrenceId`, `title`, `target`                                              |
 | `hosted_catalogue.insert_draft_point`  | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`  | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
 | `hosted_catalogue.remove_draft_point`  | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`  | `expectedRevisionId`, `occurrenceId`                                                                 |
+| `hosted_catalogue.update_draft_point`  | `POST /v1/hostedCatalogues/{id}:updateDraftPoint`  | `expectedRevisionId`, `occurrenceId`, `title`, explicit nullable `target`                            |
 | `hosted_catalogue.move_draft_point`    | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`    | `expectedRevisionId`, `occurrenceId`, `parentId`, nullable `beforeOccurrenceId`                      |
 | `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
 
@@ -120,6 +121,15 @@ drafts stay on replacement until the ordered-generation builder activates them. 
 `commitHostedVersionRevision` records the new descriptor and CAS-advances the draft pointer. Compatibility readers
 remain for unmapped revisions. Mapped structure revisions fork GET children, outline, navigation and resolve onto the
 versioned indexes so advancing the catalogue head never serves an empty legacy page. Do not add a parallel SQL adapter.
+
+Decision: `updateDraftPoint` requires the new title and resulting exact target state (`null` for a part, the
+complete thread/Post/revision/digest tuple for a chapter); the occurrence kind and bound chapter Thread/Post cannot
+change. After ordinary catalogue author admission it validates the exact target through the existing attachment
+observation, then reads one expected temporal snapshot and writes the occurrence plus its sibling, preorder and
+chapter payloads through one final-per-key overlay. The immutable descriptor and expected draft pointer commit in the
+same catalogue-home transaction; counts, containment, order, descendants and public selection stay unchanged.
+Receipt replay remains after authorization and before draft-head comparison. The logical work follows only the
+selected index paths; physical SQL probes are reported separately from logical probes.
 
 Decision: focused command and HTTP tests pin insert/remove admission, receipt replay before head CAS, stale-head
 412, reused occurrence identity, nested insert, subtree removal that preserves historical snapshots, and GET
