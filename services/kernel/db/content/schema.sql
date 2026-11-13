@@ -1343,6 +1343,22 @@ $$;
 
 
 --
+-- Name: register_hosted_publication_retention_pending(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.register_hosted_publication_retention_pending() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO content.hosted_publication_retention_pending(route,catalogue_id,stage_id,available_at)
+  VALUES (NEW.route,NEW.catalogue_id,NEW.stage_id,NEW.expires_at)
+  ON CONFLICT (route,catalogue_id,stage_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: register_moderation_directory_reference(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -2342,19 +2358,36 @@ CREATE TABLE content.hosted_publication_activation_vector (
 
 
 --
+-- Name: hosted_publication_retention_adoption_cursor; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_retention_adoption_cursor (
+    singleton boolean DEFAULT true NOT NULL,
+    after_route integer,
+    after_catalogue_id uuid,
+    after_stage_id uuid,
+    complete boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT clock_timestamp() CONSTRAINT hosted_publication_retention_adoption_curso_updated_at_not_null NOT NULL,
+    CONSTRAINT hosted_publication_retention_adoption_cursor_check CHECK ((((after_route IS NULL) AND (after_catalogue_id IS NULL) AND (after_stage_id IS NULL)) OR (((after_route >= 0) AND (after_route <= 65535)) AND (after_catalogue_id IS NOT NULL) AND (after_stage_id IS NOT NULL) AND (after_route = ((get_byte(uuid_send(after_catalogue_id), 10) * 256) + get_byte(uuid_send(after_catalogue_id), 11))) AND (after_route = ((get_byte(uuid_send(after_stage_id), 10) * 256) + get_byte(uuid_send(after_stage_id), 11)))))),
+    CONSTRAINT hosted_publication_retention_adoption_cursor_singleton_check CHECK (singleton),
+    CONSTRAINT hosted_publication_retention_adoption_cursor_updated_at_check CHECK (isfinite(updated_at))
+);
+
+
+--
 -- Name: hosted_publication_retention_cursor; Type: TABLE; Schema: content; Owner: -
 --
 
 CREATE TABLE content.hosted_publication_retention_cursor (
     singleton boolean DEFAULT true NOT NULL,
-    after_expires_at timestamp with time zone,
+    after_available_at timestamp with time zone,
     after_route integer,
     after_catalogue_id uuid,
     after_stage_id uuid,
     last_pass_id text,
     last_pass_result jsonb,
     updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    CONSTRAINT hosted_publication_retention_cursor_check CHECK ((((after_expires_at IS NULL) AND (after_route IS NULL) AND (after_catalogue_id IS NULL) AND (after_stage_id IS NULL)) OR ((after_expires_at IS NOT NULL) AND ((after_route >= 0) AND (after_route <= 65535)) AND (after_catalogue_id IS NOT NULL) AND (after_stage_id IS NOT NULL) AND (after_route = ((get_byte(uuid_send(after_catalogue_id), 10) * 256) + get_byte(uuid_send(after_catalogue_id), 11))) AND (after_route = ((get_byte(uuid_send(after_stage_id), 10) * 256) + get_byte(uuid_send(after_stage_id), 11)))))),
+    CONSTRAINT hosted_publication_retention_cursor_check CHECK ((((after_available_at IS NULL) AND (after_route IS NULL) AND (after_catalogue_id IS NULL) AND (after_stage_id IS NULL)) OR ((after_available_at IS NOT NULL) AND ((after_route >= 0) AND (after_route <= 65535)) AND (after_catalogue_id IS NOT NULL) AND (after_stage_id IS NOT NULL) AND (after_route = ((get_byte(uuid_send(after_catalogue_id), 10) * 256) + get_byte(uuid_send(after_catalogue_id), 11))) AND (after_route = ((get_byte(uuid_send(after_stage_id), 10) * 256) + get_byte(uuid_send(after_stage_id), 11)))))),
     CONSTRAINT hosted_publication_retention_cursor_check1 CHECK (((last_pass_id IS NULL) = (last_pass_result IS NULL))),
     CONSTRAINT hosted_publication_retention_cursor_last_pass_result_check CHECK (((last_pass_result IS NULL) OR (jsonb_typeof(last_pass_result) = 'object'::text))),
     CONSTRAINT hosted_publication_retention_cursor_singleton_check CHECK (singleton),
@@ -2381,6 +2414,21 @@ CREATE TABLE content.hosted_publication_retention_issue (
     CONSTRAINT hosted_publication_retention_issue_check3 CHECK (((candidate_generation_id IS NULL) OR (route = ((get_byte(uuid_send(candidate_generation_id), 10) * 256) + get_byte(uuid_send(candidate_generation_id), 11))))),
     CONSTRAINT hosted_publication_retention_issue_observed_at_check CHECK (isfinite(observed_at)),
     CONSTRAINT hosted_publication_retention_issue_owner_epoch_check CHECK ((owner_epoch >= 0))
+);
+
+
+--
+-- Name: hosted_publication_retention_pending; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_retention_pending (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    available_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_publication_retention_pending_available_at_check CHECK (isfinite(available_at)),
+    CONSTRAINT hosted_publication_retention_pending_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_publication_retention_pending_check1 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11))))
 );
 
 
@@ -5262,6 +5310,14 @@ ALTER TABLE ONLY content.hosted_publication_activation_vector
 
 
 --
+-- Name: hosted_publication_retention_adoption_cursor hosted_publication_retention_adoption_cursor_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_retention_adoption_cursor
+    ADD CONSTRAINT hosted_publication_retention_adoption_cursor_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: hosted_publication_retention_cursor hosted_publication_retention_cursor_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -5275,6 +5331,14 @@ ALTER TABLE ONLY content.hosted_publication_retention_cursor
 
 ALTER TABLE ONLY content.hosted_publication_retention_issue
     ADD CONSTRAINT hosted_publication_retention_issue_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_retention_pending hosted_publication_retention_pending_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_retention_pending
+    ADD CONSTRAINT hosted_publication_retention_pending_pkey PRIMARY KEY (route, catalogue_id, stage_id);
 
 
 --
@@ -6633,6 +6697,13 @@ CREATE INDEX hosted_publication_activation_state_idx ON content.hosted_publicati
 
 
 --
+-- Name: hosted_publication_retention_pending_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_retention_pending_due ON content.hosted_publication_retention_pending USING btree (available_at, route, catalogue_id, stage_id);
+
+
+--
 -- Name: hosted_publication_staging_active_ordered_generation; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -6672,13 +6743,6 @@ CREATE INDEX hosted_publication_staging_input_identity ON content.hosted_publica
 --
 
 CREATE INDEX hosted_publication_staging_input_pending ON content.hosted_publication_staging_input USING btree (route, catalogue_id, stage_id, input_position) WHERE (settlement = 'pending'::text);
-
-
---
--- Name: hosted_publication_staging_retention_expiry; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX hosted_publication_staging_retention_expiry ON content.hosted_publication_staging USING btree (expires_at, route, catalogue_id, stage_id);
 
 
 --
@@ -7254,6 +7318,13 @@ CREATE TRIGGER hosted_order_node_version_immutable BEFORE DELETE OR UPDATE ON co
 --
 
 CREATE TRIGGER hosted_placement_immutable BEFORE INSERT OR DELETE OR UPDATE ON content.hosted_placement FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_private_title();
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_retention_pending_insert; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_publication_retention_pending_insert AFTER INSERT ON content.hosted_publication_staging FOR EACH ROW EXECUTE FUNCTION content.register_hosted_publication_retention_pending();
 
 
 --
@@ -7967,6 +8038,14 @@ ALTER TABLE ONLY content.hosted_publication_retention_issue
 
 ALTER TABLE ONLY content.hosted_publication_retention_issue
     ADD CONSTRAINT hosted_publication_retention_i_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_retention_pending hosted_publication_retention_p_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_retention_pending
+    ADD CONSTRAINT hosted_publication_retention_p_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
 
 
 --
