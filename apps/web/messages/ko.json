@@ -10575,6 +10575,7 @@
   "story_arc_title": "이야기 편 편집기",
   "story_arc_work": "작품과 편 순서",
   "story_arc_work_help": "실제로 이 편을 포함하는 작품을 선택합니다. 작품의 이야기 편 관계에 대상 편, 위치 및 시작·끝 부분 근거를 저장합니다. 편을 만들어도 이 관계는 생성되지 않습니다.",
+  "studio_hosted_view_published_book": "출판된 책 보기",
   "studio_account_board": "대상 게시판 ID",
   "studio_account_body": "첫 게시물 내용",
   "studio_account_confirm": "이 저장된 리비전을 확인했으며 게시하려고 합니다.",

@@ -10575,6 +10575,7 @@
   "story_arc_title": "Handlungsbogen bearbeiten",
   "story_arc_work": "Werk und Reihenfolge",
   "story_arc_work_help": "Wähle das tatsächliche Werk dieses Handlungsbogens. Seine Beziehung zu Handlungsbögen speichert Ziel, Position und Belege für Anfang und Ende. Das Erstellen eines Handlungsbogens erzeugt diese Beziehung nicht.",
+  "studio_hosted_view_published_book": "Veröffentlichtes Buch ansehen",
   "studio_account_board": "ID des Zielboards",
   "studio_account_body": "Einleitungstext",
   "studio_account_confirm": "Ich habe genau diese gespeicherte Revision geprüft und möchte sie veröffentlichen.",

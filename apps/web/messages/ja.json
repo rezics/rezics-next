@@ -10575,6 +10575,7 @@
   "story_arc_title": "物語の編の編集",
   "story_arc_work": "作品と編の順序",
   "story_arc_work_help": "実際にこの編を含む作品を選択します。作品の編の関係に、対象の編、位置、開始・終了部分の根拠を保存します。編の作成だけでは関係は作成されません。",
+  "studio_hosted_view_published_book": "公開済みの本を読む",
   "studio_account_board": "投稿先ボード ID",
   "studio_account_body": "冒頭の本文",
   "studio_account_confirm": "この保存済みリビジョンを確認し、公開することを希望します。",

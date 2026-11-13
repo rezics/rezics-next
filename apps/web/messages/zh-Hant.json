@@ -10575,6 +10575,7 @@
   "story_arc_title": "敘事篇章編輯器",
   "story_arc_work": "所屬作品與篇章順序",
   "story_arc_work_help": "選擇實際承載篇章的作品。作品的故事篇章關係保存篇章目標、位置及起迄部分依據。建立篇章不會自動建立此關係。",
+  "studio_hosted_view_published_book": "閱讀已發布的書籍",
   "studio_account_board": "目標討論區 ID",
   "studio_account_body": "開篇正文",
   "studio_account_confirm": "我已核對這個確切的已儲存修訂版，並決定發布。",
