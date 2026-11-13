@@ -204,6 +204,25 @@ scope/cursor/access, session replacement during reads, and exact organizer/publi
 selection assertions remain unchanged. Mounted browser/native/Storybook and broader acceptance are deferred to the
 dev verifier; implementation verification is changed-file formatting and the affected Web typecheck only.
 
+### Native inventory titles
+
+Decision: the shared owner list/exact-get decoder accepts the generated optional `title` as a string bounded to
+512 UTF-16 units. The existing Book link displays that admitted title verbatim, wrapping long unbroken labels;
+only an absent title uses the localized catalogue-ID label. Destination catalogue/account/epoch, opaque cursors,
+session and coverage binding, creation date and visibility retain their existing behavior. Both native methods
+already use the shared decoder, so no adapter change or enrichment request is needed.
+
+Sources read before design: `hosted-contract.ts`, `hosted-native.ts`, `workspace.tsx`, this owner document,
+the existing inventory fixtures and link builder, installed client owner-list/get declarations, and Content's
+[author inventory](../../../../services/kernel/src/content/hosted-chapters.md#author-inventory) note.
+The named native and generated-client dependencies are present on the base; no integration change is needed.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-inventory.test.ts
+ tests/studio-hosted-inventory-view.test.tsx`. Updated transport fixtures cover titles present/absent in both reads
+and the native string bound; the view fixture pins the title, ID fallback, exact destination and unchanged date
+and visibility. Existing assertions remain. This source pass formats changed files and runs one Web typecheck;
+mounted native, browser, Storybook and broader acceptance remain deferred.
+
 ## Exact Book history
 
 Decision: the existing Book organizer mounts author history only when requested, with an isolated read-only exact

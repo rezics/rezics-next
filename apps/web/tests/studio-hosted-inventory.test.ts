@@ -57,12 +57,16 @@ function session() {
 
 test('installed native owner list requests all homes and retains native coverage, timestamps and foreign identities', async () => {
   for (const crossHome of ['partial', 'complete'] as const) {
-    const response = { ...page(), scope: { ...scope, crossHome } };
+    const response = {
+      ...page([item, { ...item, catalogueId: '00000000-0000-8000-8000-000200000006', title: 'Native Book' }]),
+      scope: { ...scope, crossHome },
+    };
     const { native, calls } = transport(response);
     expect(await native.listOwn(accountId, null, signal())).toEqual(ok(response));
     expect(calls[0]!.pathname).toBe(`/v1/accounts/${accountId}/hostedCatalogues`);
     expect(calls[0]!.searchParams.get('scope')).toBe('all-homes');
     expect(calls[0]!.searchParams.get('limit')).toBe('20');
+    expect(calls).toHaveLength(1);
   }
 });
 
@@ -104,9 +108,12 @@ test('native continuation fails closed on changed viewer, scope, access or curso
 });
 
 test('exact native owner selection retains scope and epoch without deriving its home from the account', async () => {
-  const owned: HostedOwnedBook = { scope, viewer, item };
+  const owned: HostedOwnedBook = { scope, viewer, item: { ...item, title: 'Native Book' } };
   const { native, calls } = transport(owned);
   expect(await native.readOwn(accountId, catalogueId, signal(), viewer)).toEqual(ok(owned));
+  expect(calls).toHaveLength(1);
+  const untitled = { ...owned, item };
+  expect(await transport(untitled).native.readOwn(accountId, catalogueId, signal(), viewer)).toEqual(ok(untitled));
   expect(calls[0]!.pathname).toBe(`/v1/accounts/${accountId}/hostedCatalogues/${catalogueId}`);
   expect([...calls[0]!.searchParams]).toEqual([]);
   expect((await native.readOwn(accountId, catalogueId, signal(), { ...viewer, authnEpoch: 6 })).ok).toBe(false);
@@ -114,6 +121,25 @@ test('exact native owner selection retains scope and epoch without deriving its 
   expect(href.searchParams.get('catalogueId')).toBe(catalogueId);
   expect(href.searchParams.get('ownerAccount')).toBe(accountId);
   expect(href.searchParams.get('ownerEpoch')).toBe('7');
+});
+
+test('owner title admission shares native bounds across list and exact get', async () => {
+  for (const [title, admitted] of [
+    ['', true],
+    ['x'.repeat(512), true],
+    ['📚'.repeat(256), true],
+    ['x'.repeat(513), false],
+    [null, false],
+    [42, false],
+  ] as const) {
+    const titled = { ...item, title };
+    expect((await transport({ ...page(), items: [titled] }).native.listOwn(accountId, null, signal())).ok).toBe(
+      admitted,
+    );
+    expect((await transport({ scope, viewer, item: titled }).native.readOwn(accountId, catalogueId, signal())).ok).toBe(
+      admitted,
+    );
+  }
 });
 
 test('sparse pages keep their native continuation and retry the exact failed cursor and binding', async () => {

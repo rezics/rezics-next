@@ -633,10 +633,10 @@ export function HostedBookInventory({ visit, locale }: { visit: HostedInventoryV
                 {page.items.map((book) => (
                   <li key={book.catalogueId}>
                     <a
-                      className="studio-toc-open"
+                      className="studio-toc-open whitespace-normal [overflow-wrap:anywhere]"
                       href={localizeHref(hostedOwnerBookHref(book, page.viewer), { locale })}
                     >
-                      {m.studio_books_open({ id: book.catalogueId }, { locale })}
+                      {book.title ?? m.studio_books_open({ id: book.catalogueId }, { locale })}
                     </a>
                     <span className="studio-help">
                       {book.postVisibility === 'draft'

@@ -100,6 +100,8 @@ export const hostedKey = v.pipe(v.string(), v.uuid());
 const hostedOwnerBook = v.strictObject({
   catalogueId: hostedId,
   threadId: hostedId,
+  // Native owner metadata is bounded in UTF-16 units, independently of outline titles.
+  title: v.optional(v.pipe(v.string(), v.maxLength(512))),
   createdAt: v.pipe(
     v.string(),
     v.check((value) => Number.isFinite(Date.parse(value))),
