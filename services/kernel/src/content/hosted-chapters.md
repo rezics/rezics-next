@@ -87,6 +87,12 @@ are `versioned-outline-order.ts`, `hosted-chapters-{model,store,commands,reads,a
 `readPostMetadata`/`readPost`, and Access [`public-eligibility.ts`](../access/public-eligibility.ts). Knowledge keeps
 `knowledge-order.ts`. No Collection tables, no second permission engine, no new architecture module.
 
+Decision: the private adapter appends route/catalogue-bound node and occurrence versions by generation and sequence,
+stores sibling/preorder/chapter roots explicitly, and collapses each transaction's repeated keys to their final row.
+History seeks use the full equality prefix followed by sequence descending; tombstones are tested after selecting the
+latest row. The generation row is the only head fence. This representation stays unmounted and does not alter legacy
+snapshots or sealed prefixes.
+
 ### Evidence and migration
 
 Sources checked before this decision: this document; Knowledge's
