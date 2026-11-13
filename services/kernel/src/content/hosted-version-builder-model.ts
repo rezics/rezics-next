@@ -21,9 +21,7 @@ export type HostedVersionBuilderSource = Readonly<{
 }>;
 
 /** Adapt the retained migration-input capture without changing its snapshot identity. */
-export function hostedVersionBuilderSource(
-  capture: HostedMigrationInputCaptureResult,
-): HostedVersionBuilderSource {
+export function hostedVersionBuilderSource(capture: HostedMigrationInputCaptureResult): HostedVersionBuilderSource {
   return { inputId: capture.inputId, identity: capture.source, frontier: capture.frontier };
 }
 
@@ -102,7 +100,10 @@ export type HostedVersionBuilderErrorCode =
   | 'sealed';
 
 export class HostedVersionBuilderError extends Error {
-  constructor(readonly code: HostedVersionBuilderErrorCode, message: string) {
+  constructor(
+    readonly code: HostedVersionBuilderErrorCode,
+    message: string,
+  ) {
     super(message);
     this.name = 'HostedVersionBuilderError';
   }
@@ -169,4 +170,3 @@ export function sameHostedVersionBuilderSource(
     left.expectedPlacementCount === right.expectedPlacementCount
   );
 }
-

@@ -1,9 +1,6 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
-import {
-  advanceHostedMigrationInput,
-  captureHostedMigrationInput,
-} from '../../src/content/hosted-migration-input.ts';
+import { advanceHostedMigrationInput, captureHostedMigrationInput } from '../../src/content/hosted-migration-input.ts';
 import {
   applyHostedVersionBuilderPage,
   beginHostedVersionBuilder,
@@ -44,7 +41,10 @@ async function createStructure(
   ).revisionId as string;
 }
 
-async function transaction<T>(fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>, work: (tx: any) => Promise<T>) {
+async function transaction<T>(
+  fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
+  work: (tx: any) => Promise<T>,
+) {
   const tx = await fixture.native.pool.connect();
   await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
   try {

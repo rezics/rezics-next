@@ -178,7 +178,10 @@ function builderSource(capture: HostedMigrationInputCaptureResult): HostedVersio
 function assertSource(source: HostedVersionBuilderSource): void {
   const count = hostedVersionBuilderFrontierCount(source.identity, source.frontier);
   if (count !== 0n) {
-    throw new HostedVersionBuilderError('source-mismatch', 'Hosted version builder must start at the captured source origin');
+    throw new HostedVersionBuilderError(
+      'source-mismatch',
+      'Hosted version builder must start at the captured source origin',
+    );
   }
   if (routeOf(source.identity.catalogueId) !== routeOf(source.inputId)) {
     throw new HostedVersionBuilderError('source-mismatch', 'Hosted version builder identities use different routes');
@@ -208,13 +211,11 @@ async function readBuilder(
 ): Promise<BuilderRow> {
   const route = routeFor(catalogueId, inputId);
   const row = (
-    await trackedQuery<BuilderRow>(
-      tx,
-      work,
-      'read',
-      BUILDER_SELECT + (lock ? ' FOR UPDATE' : ''),
-      [route, catalogueId, inputId],
-    )
+    await trackedQuery<BuilderRow>(tx, work, 'read', BUILDER_SELECT + (lock ? ' FOR UPDATE' : ''), [
+      route,
+      catalogueId,
+      inputId,
+    ])
   ).rows[0];
   if (!row) throw new HostedVersionBuilderError('source-mismatch', 'Hosted version builder has no captured source');
   return row;
@@ -315,13 +316,22 @@ function assertPageHeader(state: HostedVersionBuilderState, page: HostedVersionB
   }
   if (state.sealed) throw new HostedVersionBuilderError('sealed', 'Hosted version builder is already sealed');
   if (!page.result.sourceCurrent) {
-    throw new HostedVersionBuilderError('stale-source', 'Hosted version source is no longer the current catalogue head');
+    throw new HostedVersionBuilderError(
+      'stale-source',
+      'Hosted version source is no longer the current catalogue head',
+    );
   }
   if (!sameHostedVersionBuilderFrontier(state.frontier, page.fromFrontier)) {
-    throw new HostedVersionBuilderError('stale-frontier', 'Hosted version page does not continue the retained frontier');
+    throw new HostedVersionBuilderError(
+      'stale-frontier',
+      'Hosted version page does not continue the retained frontier',
+    );
   }
   if (page.result.status !== 'open' && page.result.status !== 'complete') {
-    throw new HostedVersionBuilderError('incomplete-source', 'Hosted version source is no longer available for building');
+    throw new HostedVersionBuilderError(
+      'incomplete-source',
+      'Hosted version source is no longer available for building',
+    );
   }
   if (page.result.items.length > HOSTED_VERSION_BUILDER_PAGE_MAX) {
     throw new HostedVersionBuilderError('invalid-page', 'Hosted version page exceeds its 20-entry bound');
@@ -334,10 +344,13 @@ function assertPageHeader(state: HostedVersionBuilderState, page: HostedVersionB
     BigInt(page.result.coverage.visited) !== toCount ||
     toCount - fromCount !== BigInt(page.result.items.length) ||
     toCount > expected ||
-    (page.result.coverage.complete !== (page.result.frontier.segment === 'complete')) ||
+    page.result.coverage.complete !== (page.result.frontier.segment === 'complete') ||
     (page.result.status === 'complete') !== page.result.coverage.complete
   ) {
-    throw new HostedVersionBuilderError('incomplete-source', 'Hosted version page coverage does not match its source frontier');
+    throw new HostedVersionBuilderError(
+      'incomplete-source',
+      'Hosted version page coverage does not match its source frontier',
+    );
   }
   if (
     page.result.items.length === 0 &&
@@ -403,21 +416,30 @@ export async function buildHostedVersionBuilderPage(
         item.address.ordinal !== item.ordinal ||
         BigInt(item.ordinal) >= BigInt(state.identity.basePlacementCount)
       ) {
-        throw new HostedVersionBuilderError('invalid-page', 'Hosted version base address does not match its pinned snapshot');
+        throw new HostedVersionBuilderError(
+          'invalid-page',
+          'Hosted version base address does not match its pinned snapshot',
+        );
       }
     } else if (
       state.identity.kind !== 'prefix' ||
       item.address.streamId !== state.identity.baseRevisionId ||
       BigInt(item.ordinal) !== BigInt(state.identity.basePlacementCount) + BigInt(item.address.offset)
     ) {
-      throw new HostedVersionBuilderError('invalid-page', 'Hosted version prefix address does not match its pinned stream');
+      throw new HostedVersionBuilderError(
+        'invalid-page',
+        'Hosted version prefix address does not match its pinned stream',
+      );
     }
 
     let parentAncestorIndex = -1;
     if (item.parentId !== null) {
       parentAncestorIndex = mutableAncestors.findIndex((ancestor) => ancestor.occurrenceId === item.parentId);
       if (parentAncestorIndex < 0) {
-        throw new HostedVersionBuilderError('invalid-tree', 'Hosted version placement parent is outside the active source path');
+        throw new HostedVersionBuilderError(
+          'invalid-tree',
+          'Hosted version placement parent is outside the active source path',
+        );
       }
       mutableAncestors.splice(parentAncestorIndex + 1);
     } else {
@@ -532,9 +554,7 @@ export async function buildHostedVersionBuilderPage(
   return application;
 }
 
-function sequenceChanges(
-  indexes: HostedVersionBuilderIndexes,
-): readonly Readonly<Record<string, unknown>>[] {
+function sequenceChanges(indexes: HostedVersionBuilderIndexes): readonly Readonly<Record<string, unknown>>[] {
   const changes: Record<string, unknown>[] = [];
   for (const [sequenceKind, access] of [
     ['siblings', indexes.siblings],
@@ -632,7 +652,6 @@ async function persistPage(
       ],
     );
   }
-
 }
 
 /** Apply one page and persist its facts, all index writes, root changes and replay receipt atomically. */
@@ -669,7 +688,10 @@ export async function applyHostedVersionBuilderPage(
       receipt.to_after_ordinal !== toOrdinal ||
       receipt.to_after_offset !== toOffset
     ) {
-      throw new HostedVersionBuilderError('stale-frontier', 'Hosted version replay changed its committed source interval');
+      throw new HostedVersionBuilderError(
+        'stale-frontier',
+        'Hosted version replay changed its committed source interval',
+      );
     }
     return {
       replayed: true,
@@ -789,7 +811,10 @@ function assertSealPage(row: BuilderRow, page: HostedVersionBuilderPage): void {
     page.result.inputId !== state.inputId ||
     !sameHostedVersionBuilderSource(state.identity, page.result.source)
   ) {
-    throw new HostedVersionBuilderError('source-mismatch', 'Hosted version seal page changed its captured source identity');
+    throw new HostedVersionBuilderError(
+      'source-mismatch',
+      'Hosted version seal page changed its captured source identity',
+    );
   }
   if (
     !page.result.sourceCurrent ||
@@ -799,10 +824,16 @@ function assertSealPage(row: BuilderRow, page: HostedVersionBuilderPage): void {
     page.result.coverage.expected !== state.identity.expectedPlacementCount ||
     page.result.coverage.visited !== state.identity.expectedPlacementCount
   ) {
-    throw new HostedVersionBuilderError('incomplete-source', 'Hosted version cannot seal stale or incomplete source coverage');
+    throw new HostedVersionBuilderError(
+      'incomplete-source',
+      'Hosted version cannot seal stale or incomplete source coverage',
+    );
   }
   if (!state.coverageComplete || state.frontier.segment !== 'complete') {
-    throw new HostedVersionBuilderError('incomplete-source', 'Hosted version builder has not applied complete source coverage');
+    throw new HostedVersionBuilderError(
+      'incomplete-source',
+      'Hosted version builder has not applied complete source coverage',
+    );
   }
 }
 
@@ -816,16 +847,18 @@ async function readSequenceRoot(
   if (rootId === null) return null;
   const route = routeFor(source.identity.catalogueId, source.inputId);
   return (
-    await trackedQuery<SequenceRow>(
-      tx,
-      work,
-      'read',
-      `SELECT node_id,left_id,right_id,tree_parent_id,height,node_count::text,chapter_weight::text,chapter_count::text
+    (
+      await trackedQuery<SequenceRow>(
+        tx,
+        work,
+        'read',
+        `SELECT node_id,left_id,right_id,tree_parent_id,height,node_count::text,chapter_weight::text,chapter_count::text
        FROM content.hosted_version_builder_sequence_node
        WHERE route=$1 AND catalogue_id=$2 AND input_id=$3 AND sequence_kind=$4 AND node_id=$5`,
-      [route, source.identity.catalogueId, source.inputId, kind, rootId],
-    )
-  ).rows[0] ?? null;
+        [route, source.identity.catalogueId, source.inputId, kind, rootId],
+      )
+    ).rows[0] ?? null
+  );
 }
 
 /** Verify the source fence, complete coverage and all three durable sequence roots before sealing. */
@@ -872,7 +905,10 @@ export async function requireHostedVersionBuilderSealFacts(
     sourceFence.raw_visited !== source.identity.expectedPlacementCount ||
     sourceFence.expected_placement_count !== source.identity.expectedPlacementCount
   ) {
-    throw new HostedVersionBuilderError('stale-source', 'Hosted version source is stale, erased or incomplete at seal time');
+    throw new HostedVersionBuilderError(
+      'stale-source',
+      'Hosted version source is stale, erased or incomplete at seal time',
+    );
   }
   const aggregate = (
     await trackedQuery<AggregateRow>(
@@ -892,10 +928,14 @@ export async function requireHostedVersionBuilderSealFacts(
   const chapterCount = BigInt(aggregate.chapter_count);
   if (
     placementCount !== expectedPlacements ||
-    (expectedPlacements > 0n && (aggregate.first_ordinal !== '0' || BigInt(aggregate.last_ordinal!) !== expectedPlacements - 1n)) ||
+    (expectedPlacements > 0n &&
+      (aggregate.first_ordinal !== '0' || BigInt(aggregate.last_ordinal!) !== expectedPlacements - 1n)) ||
     (expectedPlacements === 0n && aggregate.last_ordinal !== null)
   ) {
-    throw new HostedVersionBuilderError('incomplete-source', 'Hosted version candidate facts do not cover the source ordinals');
+    throw new HostedVersionBuilderError(
+      'incomplete-source',
+      'Hosted version candidate facts do not cover the source ordinals',
+    );
   }
 
   const expectedRoots =
@@ -939,7 +979,10 @@ export async function requireHostedVersionBuilderSealFacts(
     )
   ).rows[0]!;
   if (BigInt(rootMismatch.invalid) !== 0n) {
-    throw new HostedVersionBuilderError('invalid-tree', 'Hosted version sibling roots do not match their sequence nodes');
+    throw new HostedVersionBuilderError(
+      'invalid-tree',
+      'Hosted version sibling roots do not match their sequence nodes',
+    );
   }
 
   return {
@@ -969,4 +1012,3 @@ export async function sealHostedVersionBuilder(
   );
   return facts;
 }
-
