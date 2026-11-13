@@ -55,7 +55,7 @@ are catalogue key/argument parity, the changed-UI detector, changed-file formatt
 ## Native author outline window
 
 Decision: keep a separate exact-revision, one-page author outline reader, now consumed by read-only Book history;
-append remains disabled. `hostedOutlineWindowNative` uses the authenticated session BFF and the installed
+root append uses the separate bounded visit described below. `hostedOutlineWindowNative` uses the authenticated session BFF and the installed
 generated outline route. Its request carries the admitted catalogue/kind/revision/source and an opaque cursor;
 the acting private viewer comes from the prepared session. Both boundaries keep no-store and request cancellation.
 The closed response admits at most 20 slots with nonnegative safe-integer sibling positions, including positions
@@ -80,6 +80,52 @@ tests/studio-hosted-outline.test.ts`. The new source fixture pins exact URL/curs
 safe-integer and closed wire admission, withheld slots, sparse pages, exact revision matching, cancellation, native
 failure categories, exact retry and credential retirement. Existing assertions remain unchanged. Source verification
 formats changed files and runs one affected Web typecheck. Browser, native, Storybook and broad checks are deferred.
+
+## Bounded saved-chapter root append
+
+Decision: add a separate bounded root-append visit from each owned Book entry before complete-tree loading; reuse
+`HostedDraftPicker` and `HostedOutlineWindow`, freeze exact reviewed intent for same-key replay, and keep
+acknowledgement separate from readback. Stale refresh retains saved choice/title and requires fresh review; the
+editor and publication engine remain unchanged.
+
+The additional owned-Book link opens `/studio?catalogueId=…&append=1` with the existing native viewer comparison.
+It reads only one exact owner-head outline page, never the Book Post, complete structure or publication. The author
+explicitly opens the existing account picker and selects one saved own discussion opening. The exact Post port and
+picker retain their existing owner, revision, body/digest and session admission; no second inventory or parser is added.
+Review displays the saved body, timestamp, Post/revision/digest and editable chapter title. Preparing review freezes
+catalogue, expected head, a fresh route-bound occurrence, exact target/title, original key, CSRF and session intent.
+Editing retires review. Unknown results only replay that frozen command; stale results preserve selection and title
+for an explicit owner-head refresh followed by a new review and fresh occurrence/key. There is no automatic rebase,
+resubmission or publication.
+
+The private CSRF/no-store BFF uses the installed `$appendRootChapter.post` and admits the closed HTTP200 receipt
+without the complete-tree `command()` helper. Acknowledgement is final even when separate outline readback fails.
+The returned revision binds a new bounded window; readback recovery retries only its exact failed cursor and cannot
+submit another append. Each explicit page request replaces at most 20 rows, retaining sparse continuations and native
+large sibling positions without refill, draining, per-row reads or synthetic labels. Partial, withheld and oversized
+windows never enter `HostedBook` or its replacement editor. Existing 512-placement/depth limits, working drafts,
+dirty-editor protection, Book/article publication and frozen public reading keep their contracts.
+
+The route owns departure/locale/credential lifetime; source, account and session incarnation changes permanently
+retire the visit, picker, selection and window, abort requests and fence late commands, reads and focus. All actions
+use shared controls, wrapping 44px targets and distinct `studio_root_append_*` messages in all eight launch locales.
+Review and recovery move keyboard focus to the relevant heading; editing returns it to the title field.
+
+Sources read before design: this owner, the [native bounded-root contract](../../../../services/kernel/src/content/hosted-chapters.md#bounded-root-append),
+[Web outcome and acceptance](../../../../docs/goals/web.md#acceptance), installed `hosted-chapters-routes.d.ts`,
+`routes/studio.tsx`, `hosted-contract.ts`, `hosted-native.ts`, `hosted-actions.ts`, `hosted-inventory.ts`,
+`hosted-draft-picker.ts` and its view, `hosted-outline-window.ts`, `post-document-port.ts`, `hosted-workspace.ts`,
+workspace/structure callers, existing picker/outline regressions and Impeccable's craft floor. The base already has
+the generated append operation and bounded readers; no generator, Client declaration or native changes are needed.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-root-append.test.tsx
+ tests/studio-hosted-draft-picker.test.tsx tests/studio-hosted-outline-window.test.ts tests/studio-hosted-outline.test.ts`.
+The authored mounted regression covers the inventory entry, exact reviewed command and receipt, same-key replay,
+stale refresh preserving choice/title, sparse/large-address paging and exact failed-cursor retry, acknowledged append
+with failed readback, same-account replacement, departure/late results and retained complete-tree refusal bounds.
+Source verification is changed-file formatting, message key/argument parity, one explicit changed-UI path detection
+and one affected Web typecheck. Native, keyboard/phone/desktop, legacy parity, browser/Storybook, broad suites and
+promoted-commit acceptance remain separate verifier obligations.
 
 ## Book outline index
 
@@ -314,7 +360,7 @@ revision and viewer generation. Inspection makes one authenticated outline reque
 only that page; it never calls the complete-tree reader, hydrates metadata or traverses parents. Native preorder and
 safe sibling positions survive pages beginning inside a part. The flat read-only list shows withheld slots using only
 their admitted addresses and kind, without a title or target, and synthesizes no ancestry. The draft editor, organize
-and publication command paths keep their complete-tree bounds; append remains disabled.
+and publication command paths keep their complete-tree bounds; root append uses the separate bounded visit described below.
 
 Next explicitly requests the opaque continuation; retry repeats the failed cursor, including rejected continuations.
 Loading or failed replacement pages remove the prior outline. History-page replacement, another selection, closing

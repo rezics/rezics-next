@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import type { StudioFailure, StudioResult } from './contract';
 import {
   hostedCommand,
+  type HostedRootAppendNative,
   hostedCreate,
   hostedId,
   hostedHistoryPage,
@@ -61,7 +62,9 @@ function failure(status: number, mutation: boolean): StudioResult<never> {
 }
 
 /** Uses the existing credential-bearing client and its read-your-writes session-token handling. */
-export function createHostedBookNative(client: KernelClient): HostedBookNative & HostedOutlineWindowNative {
+export function createHostedBookNative(
+  client: KernelClient,
+): HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative {
   const fetchOptions = (signal: AbortSignal) => ({ signal, cache: 'no-store' as const, redirect: 'manual' as const });
   const queryOptions = (signal: AbortSignal, query: Record<string, string>) => ({ query, fetch: fetchOptions(signal) });
   const commandOptions = (signal: AbortSignal, key: string) => ({
@@ -296,6 +299,20 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative &
     }
   }
   return {
+    async appendRootChapter({ catalogueId, body, idempotencyKey }, signal) {
+      if (signal.aborted) return unavailable();
+      try {
+        const response = await client
+          .hostedCatalogues({ id: catalogueId })
+          .$appendRootChapter.post(body, commandOptions(signal, idempotencyKey));
+        if (response.error || response.status !== 200) return failure(response.status, true);
+        const receipt = v.safeParse(hostedCommand, response.data);
+        if (!receipt.success || receipt.output.catalogueId !== catalogueId) return uncertain();
+        return { ok: true, value: receipt.output };
+      } catch {
+        return uncertain();
+      }
+    },
     readOutlineWindow,
     read,
     listHistory,

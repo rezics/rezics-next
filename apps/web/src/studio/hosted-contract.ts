@@ -41,6 +41,9 @@ export const hostedPublish = v.strictObject({
   ),
 });
 export const hostedCommand = v.strictObject({ catalogueId: hostedId, revisionId: hostedId });
+export const hostedRootAppend = v.strictObject({ expectedRevisionId: hostedId, occurrenceId: hostedId, title, target });
+export type HostedRootAppend = v.InferOutput<typeof hostedRootAppend>;
+export type HostedCommandReceipt = v.InferOutput<typeof hostedCommand>;
 const revision = {
   catalogueId: hostedId,
   revisionId: hostedId,
@@ -208,6 +211,22 @@ export type HostedOwnerViewer = v.InferOutput<typeof hostedOwnerViewer>;
 export type HostedOwnerBinding = v.InferOutput<typeof hostedOwnerBinding>;
 export type HostedOwnerInventory = v.InferOutput<typeof hostedOwnerInventoryResponse>;
 export type HostedOwnedBook = v.InferOutput<typeof hostedOwnerBookResponse>;
+
+export const hostedRootAppendRequest = v.strictObject({
+  catalogueId: hostedId,
+  body: hostedRootAppend,
+  idempotencyKey: hostedKey,
+  expectedViewer: hostedOwnerViewer,
+});
+export type HostedRootAppendRequest = v.InferOutput<typeof hostedRootAppendRequest>;
+/** Receipt-only command: never drains an outline or converts a window into an editable tree. */
+export interface HostedRootAppendNative {
+  appendRootChapter(
+    input: HostedRootAppendRequest,
+    signal: AbortSignal,
+    csrfToken?: string,
+  ): Promise<StudioResult<HostedCommandReceipt>>;
+}
 
 /** Expected viewer metadata is a comparison operand, never an authorization credential. */
 export function sameHostedViewer(left: HostedOwnerViewer, right: HostedOwnerViewer): boolean {

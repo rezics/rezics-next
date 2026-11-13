@@ -67,3 +67,5 @@ export type {
 export { HostedInventoryVisit } from './hosted-inventory';
 
 export { HostedDraftPicker } from './hosted-draft-picker';
+
+export { HostedRootAppendEntry } from './hosted-root-append-entry';

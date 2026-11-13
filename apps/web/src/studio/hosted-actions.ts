@@ -17,6 +17,8 @@ import {
   hostedRevise,
   hostedSelection,
   hostedOutlineWindowRequest,
+  hostedRootAppendRequest,
+  type HostedRootAppendNative,
   type HostedOutlineWindowNative,
   type HostedBook,
   type HostedBookNative,
@@ -84,10 +86,11 @@ export const publishHostedBook = createServerFn({ method: 'POST' })
 
 async function admittedOwner<T>(
   run: (
-    native: HostedBookNative & HostedOutlineWindowNative,
+    native: HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative,
     accountId: string,
     signal: AbortSignal,
   ) => Promise<StudioResult<T>>,
+  mutation = false,
 ): Promise<StudioResult<T>> {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
@@ -99,7 +102,7 @@ async function admittedOwner<T>(
     if (!hasKernelOrigin()) return hostedFailure('unavailable', 'The native book service is not configured.');
     return await run(createHostedBookNative(kernelClient(undefined, credential)), accountId, request.signal);
   } catch {
-    return hostedFailure('unavailable', 'The author workspace is unavailable.');
+    return hostedFailure(mutation ? 'uncertain' : 'unavailable', 'The author workspace is unavailable.');
   }
 }
 
@@ -131,7 +134,45 @@ export const readHostedOutlineWindow = createServerFn({ method: 'GET' })
   .handler(({ data }) => admittedOwner((native, _accountId, signal) => native.readOutlineWindow(data, signal)));
 
 export const hostedOutlineWindowNative: HostedOutlineWindowNative = {
-  readOutlineWindow: (data, signal) => readHostedOutlineWindow({ data, signal }),
+  async readOutlineWindow(data, signal) {
+    try {
+      return await readHostedOutlineWindow({ data, signal });
+    } catch {
+      return hostedFailure('unavailable', 'This exact outline page could not be read. Retry this page.');
+    }
+  },
+};
+
+export const appendHostedRootChapter = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => v.parse(hostedRootAppendRequest, input))
+  .handler(({ data }) =>
+    admittedOwner(async (native, accountId, signal) => {
+      if (data.expectedViewer.accountId !== accountId)
+        return hostedFailure('denied', 'This book belongs to a different account.');
+      const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
+      if (!owner.ok) return owner;
+      return native.appendRootChapter(data, signal);
+    }, true),
+  );
+
+export const hostedRootAppendNative: HostedRootAppendNative &
+  HostedOutlineWindowNative &
+  Pick<HostedBookNative, 'readOwn'> = {
+  ...hostedOutlineWindowNative,
+  async readOwn(accountId, catalogueId, signal, expectedViewer) {
+    try {
+      return await readOwnedHostedBook({ data: { accountId, catalogueId, expectedViewer }, signal });
+    } catch {
+      return hostedFailure('unavailable', 'The current Book head could not be read. Retry the refresh.');
+    }
+  },
+  async appendRootChapter(data, signal, csrfToken) {
+    try {
+      return await appendHostedRootChapter({ data, signal, headers: { 'X-CSRF-Token': csrfToken! } });
+    } catch {
+      return hostedFailure('uncertain', 'The command result is unknown. Retry the same operation.');
+    }
+  },
 };
 
 export const readOwnedHostedBook = createServerFn({ method: 'GET' })

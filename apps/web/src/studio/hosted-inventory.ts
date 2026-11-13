@@ -133,11 +133,12 @@ export class HostedInventoryVisit {
 }
 
 /** This URL carries a native viewer comparison, never an account or home authorization claim. */
-export function hostedOwnerBookHref(book: HostedOwnerBook, viewer: HostedOwnerViewer): string {
+export function hostedOwnerBookHref(book: HostedOwnerBook, viewer: HostedOwnerViewer, append = false): string {
   const query = new URLSearchParams({
     catalogueId: book.catalogueId,
     ownerAccount: viewer.accountId,
     ownerEpoch: String(viewer.authnEpoch),
   });
+  if (append) query.set('append', '1');
   return `/studio?${query}`;
 }
