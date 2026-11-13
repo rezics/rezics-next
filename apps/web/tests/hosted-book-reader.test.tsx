@@ -14,7 +14,13 @@ import {
 import { createHostedCatalogueApi } from '../src/books/reader/native-api';
 import type { HostedDiscoveryPage } from '../src/books/reader/discovery';
 import { decodeHostedBookDocument, readHostedBook } from '../src/books/reader/native-mapper';
-import type { BookAddress, BookReadRequest, BookReadResult, HostedBookSource } from '../src/books/reader/source';
+import type {
+  BookAddress,
+  BookDocument,
+  BookReadRequest,
+  BookReadResult,
+  HostedBookSource,
+} from '../src/books/reader/source';
 
 const window = new Window({ url: 'https://reader.test/en/', width: 390, height: 844 });
 const globals = {
@@ -1156,15 +1162,43 @@ test('native checkpoints use body-free metadata for observation and CAS readback
   }
 });
 
-test('checkpoint controls retry an uncertain command unchanged and retire late private results', async () => {
+test('checkpoint save and restore use the authored anchor in a code-only chapter', async () => {
   const actual = { ...(await import('../src/books/reader/native-checkpoint')) };
   const book = createIllustrativeHostedBook();
-  const source = book.source;
-  const reads = mock(async () => ({
-    state: 'ready' as const,
-    csrfToken: 'csrf',
-    value: { state: 'none' as const, subjectId: ids.post },
-  }));
+  const chapter = await book.chapter();
+  const codeDocument = {
+    version: 'rezics-document-v1',
+    profile: 'blocks',
+    doc: {
+      type: 'doc',
+      content: [
+        {
+          type: 'codeBlock',
+          attrs: { id: 'code-anchor', lang: 'ar', dir: 'rtl', language: 'typescript' },
+          content: [{ type: 'text', text: 'const answer = 42;\n' }],
+        },
+      ],
+    },
+  } satisfies BookDocument['document'];
+  const source: HostedBookSource = {
+    getSnapshot: () => book.source.getSnapshot(),
+    subscribe: (retired) => book.source.subscribe(retired),
+    read: async (request, signal) => {
+      const result = await book.source.read(request, signal);
+      if (result.state !== 'ready' || result.page.kind !== 'chapter') return result;
+      return { ...result, page: { ...result.page, body: { ...result.page.body, document: codeDocument } } };
+    },
+  };
+  const savedAddress = {
+    catalogueId: chapter.publication.id,
+    publicationRevisionId: chapter.publication.releaseRevisionId!,
+    occurrenceId: chapter.selection.occurrenceId,
+    targetRevisionId: chapter.selection.body.revisionId,
+    targetSha256: chapter.selection.body.sha256,
+    documentPosition: { blockId: 'code-anchor', offset: 73 },
+  };
+  const read = deferred<Awaited<ReturnType<typeof actual.readNativeHostedCheckpoint>>>();
+  const reads = mock(() => read.promise);
   let writeCount = 0;
   const writes = mock(async (input: Parameters<typeof actual.writeNativeHostedCheckpoint>[0]) => {
     if (++writeCount === 1) throw new TypeError('network unavailable');
@@ -1185,9 +1219,12 @@ test('checkpoint controls retry an uncertain command unchanged and retire late p
     readNativeHostedCheckpoint: reads,
     writeNativeHostedCheckpoint: writes,
   }));
+  const original = window.scrollBy;
+  const scroll = mock(() => {});
+  window.scrollBy = scroll;
   try {
     const { HostedBookCheckpoint } = await import('../src/books/reader/checkpoint');
-    await mount(source, await book.chapter(), {
+    await mount(source, chapter, {
       renderCheckpoint: (page, isCurrent, position) => (
         <HostedBookCheckpoint
           page={page}
@@ -1200,12 +1237,33 @@ test('checkpoint controls retry an uncertain command unchanged and retire late p
         />
       ),
     });
-    const visible = host.querySelector<HTMLElement>('article [data-block-id]')!;
+    const visible = host.querySelector<HTMLElement>('article [data-block-id="code-anchor"]')!;
+    expect(visible).not.toBeNull();
+    expect(visible.tagName).toBe('DIV');
+    expect(visible.getAttribute('lang')).toBe('ar');
+    expect(visible.getAttribute('dir')).toBe('rtl');
+    expect(visible.querySelector('code')?.textContent).toBe('const answer = 42;\n');
+    visible.getBoundingClientRect = () => new window.DOMRect(0, 600, 300, 80) as DOMRect;
+    await act(async () =>
+      read.resolve({
+        state: 'ready',
+        csrfToken: 'csrf',
+        value: {
+          state: 'saved',
+          subjectId: ids.post,
+          revision: '1',
+          resume: { availability: 'available', title: 'Saved' },
+          address: savedAddress,
+        },
+      }),
+    );
+    await settle();
+    expect(scroll.mock.calls).toHaveLength(1);
     visible.getBoundingClientRect = () => new window.DOMRect(0, 120, 300, 80) as DOMRect;
     await click(button(m.book_reader_checkpoint_save()));
     const command = writes.mock.calls[0]![0].data.command;
     expect(command.kind === 'save' && command.address.documentPosition).toEqual({
-      blockId: visible.getAttribute('data-block-id'),
+      blockId: 'code-anchor',
       offset: 0,
     });
     visible.getBoundingClientRect = () => new window.DOMRect(0, -200, 300, 80) as DOMRect;
@@ -1240,6 +1298,7 @@ test('checkpoint controls retry an uncertain command unchanged and retire late p
     );
     expect(host.textContent).not.toContain(m.book_reader_checkpoint_title());
   } finally {
+    window.scrollBy = original;
     mock.module('../src/books/reader/native-checkpoint', () => actual);
   }
 });

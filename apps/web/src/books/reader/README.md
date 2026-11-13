@@ -144,7 +144,9 @@ occurrence and exact target, so a URL Subject never creates authority.
 Decision: explicit Save records the visible stable `data-block-id` within the admitted chapter article with offset
 `0`; native nonzero offsets are preserved on read and resume at their containing block. The shared checkpoint
 controls stay available while scrolling, and all eight locales label the block save. No character precision is
-inferred from geometry. If no visible anchor exists, Save retains the exact chapter with a null position.
+inferred from geometry. If no visible anchor exists, Save retains the exact chapter with a null position. The shared
+renderer keeps authored IDs on code and table defaults or caller-output wrappers, so a code-only chapter can save
+and restore its existing block identity together with its authored language and direction.
 
 `checkpoint-position.ts` binds capture and restoration to one current page and its article ref. Save scans that
 article once, below the sticky checkpoint controls, choosing the innermost block at the viewport's reading edge or
