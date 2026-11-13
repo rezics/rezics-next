@@ -45,6 +45,16 @@ export declare function listHostedChildren(deps: HostedDependencies, catalogueId
         position: bigint;
     }>[];
 }>;
+/** Author outline pages every placement in immutable preorder, including empty
+ * parts. Keep sibling positions intact so a consumer can reconstruct the tree. */
+export declare function listHostedAuthorOutline(deps: HostedDependencies, catalogueId: string, input: Omit<HostedChildrenInput, 'parentId'>, context: ReadContext): Promise<{
+    value: HostedPageView;
+    anchors: Readonly<{
+        partition: import("../partition/partition.ts").Partition;
+        epoch: number;
+        position: bigint;
+    }>[];
+}>;
 export declare function navigateHostedChapters(deps: HostedDependencies, catalogueId: string, input: HostedNavigationInput, context: ReadContext): Promise<{
     value: HostedPageView;
     anchors: Readonly<{

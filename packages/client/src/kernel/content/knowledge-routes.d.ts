@@ -19639,6 +19639,176 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
     v1: {
         hostedCatalogues: {
             ":id": {
+                outline: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            revisionId?: string;
+                            kind?: "publication" | "structure";
+                            cursor?: string;
+                            limit?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication" | "structure";
+                                sourceRevisionId: string | null;
+                                items: ({
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter" | "part";
+                                    availability: "unavailable";
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "part";
+                                    availability: "available";
+                                    title: string;
+                                    target: null;
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter";
+                                    availability: "available";
+                                    title: string;
+                                    target: {
+                                        threadId: string;
+                                        postId: string;
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                })[];
+                                nextCursor: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            413: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            429: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        hostedCatalogues: {
+            ":id": {
                 children: {
                     get: {
                         body: unknown;
