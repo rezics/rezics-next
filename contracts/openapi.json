@@ -485020,6 +485020,15 @@
               "pattern": "^(?:[1-9]|1[0-9]|20)$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "includeTitle",
+            "required": false,
+            "schema": {
+              "const": "1",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -485054,6 +485063,10 @@
                           },
                           "threadId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "title": {
+                            "maxLength": 512,
                             "type": "string"
                           }
                         },

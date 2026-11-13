@@ -21097,6 +21097,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                         query: {
                             cursor?: string;
                             limit?: string;
+                            includeTitle?: "1";
                         };
                         headers: unknown;
                         response: {
@@ -21108,6 +21109,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                     kind: "publication";
                                     sourceRevisionId: string | null;
                                     threadId: string;
+                                    title?: string;
                                 }[];
                                 nextCursor: string | null;
                             };

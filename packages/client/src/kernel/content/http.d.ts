@@ -21113,6 +21113,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                             query: {
                                 cursor?: string;
                                 limit?: string;
+                                includeTitle?: "1";
                             };
                             headers: unknown;
                             response: {
@@ -21124,6 +21125,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         kind: "publication";
                                         sourceRevisionId: string | null;
                                         threadId: string;
+                                        title?: string;
                                     }[];
                                     nextCursor: string | null;
                                 };

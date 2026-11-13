@@ -21117,16 +21117,19 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 input: {
                     cursor?: string;
                     limit?: string;
+                    includeTitle?: "1";
                 };
                 output: {
                     cursor?: string;
                     limit?: string;
+                    includeTitle?: "1";
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     cursor?: string;
                     limit?: string;
+                    includeTitle?: "1";
                 };
                 issues?: never;
             } | {
@@ -21139,10 +21142,12 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 input: () => import("typebox").TObject<{
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
+                    includeTitle: import("typebox").TOptional<import("typebox").TLiteral<"1">>;
                 }>;
                 output: () => import("typebox").TObject<{
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
+                    includeTitle: import("typebox").TOptional<import("typebox").TLiteral<"1">>;
                 }>;
             };
         };
@@ -21301,6 +21306,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: "publication";
                             sourceRevisionId: string | null;
                             threadId: string;
+                            title?: string;
                         }[];
                         nextCursor: string | null;
                     };
@@ -21312,6 +21318,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: "publication";
                             sourceRevisionId: string | null;
                             threadId: string;
+                            title?: string;
                         }[];
                         nextCursor: string | null;
                     };
@@ -21325,6 +21332,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: "publication";
                             sourceRevisionId: string | null;
                             threadId: string;
+                            title?: string;
                         }[];
                         nextCursor: string | null;
                     };
@@ -21344,6 +21352,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: import("typebox").TLiteral<"publication">;
                             sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             threadId: import("typebox").TString;
+                            title: import("typebox").TOptional<import("typebox").TString>;
                         }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
@@ -21355,6 +21364,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: import("typebox").TLiteral<"publication">;
                             sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             threadId: import("typebox").TString;
+                            title: import("typebox").TOptional<import("typebox").TString>;
                         }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
@@ -21502,6 +21512,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 kind: "publication";
                 sourceRevisionId: string | null;
                 threadId: string;
+                title?: string;
             }[];
             nextCursor: string | null;
         };
@@ -21625,6 +21636,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 kind: "publication";
                 sourceRevisionId: string | null;
                 threadId: string;
+                title?: string;
             }[];
             nextCursor: string | null;
         };
@@ -21641,16 +21653,19 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                     input: {
                         cursor?: string;
                         limit?: string;
+                        includeTitle?: "1";
                     };
                     output: {
                         cursor?: string;
                         limit?: string;
+                        includeTitle?: "1";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
                         cursor?: string;
                         limit?: string;
+                        includeTitle?: "1";
                     };
                     issues?: never;
                 } | {
@@ -21663,10 +21678,12 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                     input: () => import("typebox").TObject<{
                         cursor: import("typebox").TOptional<import("typebox").TString>;
                         limit: import("typebox").TOptional<import("typebox").TString>;
+                        includeTitle: import("typebox").TOptional<import("typebox").TLiteral<"1">>;
                     }>;
                     output: () => import("typebox").TObject<{
                         cursor: import("typebox").TOptional<import("typebox").TString>;
                         limit: import("typebox").TOptional<import("typebox").TString>;
+                        includeTitle: import("typebox").TOptional<import("typebox").TLiteral<"1">>;
                     }>;
                 };
             };
@@ -21825,6 +21842,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                                 kind: "publication";
                                 sourceRevisionId: string | null;
                                 threadId: string;
+                                title?: string;
                             }[];
                             nextCursor: string | null;
                         };
@@ -21836,6 +21854,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                                 kind: "publication";
                                 sourceRevisionId: string | null;
                                 threadId: string;
+                                title?: string;
                             }[];
                             nextCursor: string | null;
                         };
@@ -21849,6 +21868,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                                 kind: "publication";
                                 sourceRevisionId: string | null;
                                 threadId: string;
+                                title?: string;
                             }[];
                             nextCursor: string | null;
                         };
@@ -21868,6 +21888,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                                 kind: import("typebox").TLiteral<"publication">;
                                 sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                                 threadId: import("typebox").TString;
+                                title: import("typebox").TOptional<import("typebox").TString>;
                             }>>;
                             nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         }>;
@@ -21879,6 +21900,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                                 kind: import("typebox").TLiteral<"publication">;
                                 sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                                 threadId: import("typebox").TString;
+                                title: import("typebox").TOptional<import("typebox").TString>;
                             }>>;
                             nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         }>;
@@ -21925,6 +21947,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
     query: {
         cursor?: string;
         limit?: string;
+        includeTitle?: "1";
     };
     params: {
         id: string;
@@ -21954,6 +21977,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
         kind: 'publication';
         sourceRevisionId: string | null;
         threadId: string;
+        title?: string;
     }>[];
 }>, {
     params: import("typebox").TObject<{
@@ -21967,16 +21991,19 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 input: {
                     cursor?: string;
                     limit?: string;
+                    includeTitle?: "1";
                 };
                 output: {
                     cursor?: string;
                     limit?: string;
+                    includeTitle?: "1";
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     cursor?: string;
                     limit?: string;
+                    includeTitle?: "1";
                 };
                 issues?: never;
             } | {
@@ -21989,10 +22016,12 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 input: () => import("typebox").TObject<{
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
+                    includeTitle: import("typebox").TOptional<import("typebox").TLiteral<"1">>;
                 }>;
                 output: () => import("typebox").TObject<{
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
+                    includeTitle: import("typebox").TOptional<import("typebox").TLiteral<"1">>;
                 }>;
             };
         };
@@ -22151,6 +22180,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: "publication";
                             sourceRevisionId: string | null;
                             threadId: string;
+                            title?: string;
                         }[];
                         nextCursor: string | null;
                     };
@@ -22162,6 +22192,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: "publication";
                             sourceRevisionId: string | null;
                             threadId: string;
+                            title?: string;
                         }[];
                         nextCursor: string | null;
                     };
@@ -22175,6 +22206,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: "publication";
                             sourceRevisionId: string | null;
                             threadId: string;
+                            title?: string;
                         }[];
                         nextCursor: string | null;
                     };
@@ -22194,6 +22226,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: import("typebox").TLiteral<"publication">;
                             sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             threadId: import("typebox").TString;
+                            title: import("typebox").TOptional<import("typebox").TString>;
                         }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
@@ -22205,6 +22238,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             kind: import("typebox").TLiteral<"publication">;
                             sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             threadId: import("typebox").TString;
+                            title: import("typebox").TOptional<import("typebox").TString>;
                         }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;

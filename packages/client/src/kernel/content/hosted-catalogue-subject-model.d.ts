@@ -6,6 +6,7 @@ export type HostedSubjectCatalogueItem = Readonly<{
     kind: 'publication';
     sourceRevisionId: string | null;
     threadId: string;
+    title?: string;
 }>;
 export type HostedSubjectCataloguePage = Readonly<{
     subjectId: string;
@@ -15,6 +16,7 @@ export type HostedSubjectCataloguePage = Readonly<{
 export type HostedSubjectCatalogueQuery = Readonly<{
     limit?: number;
     cursor?: string;
+    includeTitle?: '1';
 }>;
 export type HostedSubjectCatalogueRow = Readonly<{
     route: number;
