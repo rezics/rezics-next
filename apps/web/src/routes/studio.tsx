@@ -106,7 +106,13 @@ function StudioRoute() {
 
   if (search.catalogueId) {
     if (!loaded || !('ok' in loaded) || !loaded.ok)
-      return <StudioMessage message={loaded && 'ok' in loaded ? loaded.error.message : 'This book is unavailable.'} />;
+      return (
+        <StudioMessage
+          message={
+            loaded && 'ok' in loaded ? loaded.error.message : m.studio_workspace_book_unavailable({}, { locale })
+          }
+        />
+      );
     return (
       <BookStudioEntry
         append={search.append === '1'}
@@ -377,7 +383,9 @@ function waitForSession() {
 
 function StudioResultMessage({ result }: { result: StudioResult<unknown> | null }) {
   return result ? (
-    <StudioMessage message={result.ok ? 'The Studio visit could not be opened.' : result.error.message} />
+    <StudioMessage
+      message={result.ok ? m.studio_workspace_open_failed({}, { locale: getLocale() }) : result.error.message}
+    />
   ) : (
     waitForSession()
   );
@@ -455,12 +463,12 @@ function BookStudioVisit({
         postId === book.catalogueId || Boolean(attachedTarget(postId)) || Boolean(picker?.admitsPost(postId)),
     });
     const resolveTarget = async (document: ExactDocument, signal: AbortSignal): Promise<StudioResult<HostedTarget>> => {
-      if (signal.aborted || !isCurrent()) return hostedFailure('denied', 'This Studio visit has ended.');
+      if (signal.aborted || !isCurrent()) return hostedFailure('denied', m.studio_workspace_ended({}, { locale }));
       const threadId = document.postId === book.catalogueId ? book.threadId : attachedTarget(document.postId)?.threadId;
       const target = threadId ? { threadId, ...document } : picker?.target(document);
       return target
         ? { ok: true, value: target }
-        : hostedFailure('unavailable', 'Open a saved own draft before placing it in this book.');
+        : hostedFailure('unavailable', m.studio_workspace_open_saved({}, { locale }));
     };
     const run = async () => {
       let initialSelection: StudioSelection | undefined;
@@ -471,7 +479,7 @@ function BookStudioVisit({
         ? documentRow(initialSelection, book.postVisibility)
         : {
             postId: book.catalogueId,
-            title: 'Book post',
+            title: book.title ?? '',
             revisionId: book.postRevisionId,
             updatedAt: book.createdAt,
             state: book.postVisibility,
@@ -479,7 +487,7 @@ function BookStudioVisit({
       const input: HostedStudioInput = {
         visitKey: JSON.stringify([accountId, origin.generation, book.catalogueId]),
         projectId: book.catalogueId,
-        title: initialSelection?.revision.title ?? 'Book Studio',
+        title: initialSelection?.revision.title ?? book.title ?? m.studio_workspace_book_title({}, { locale }),
         documents: { items: [document], nextCursor: null },
         publications: { items: [], nextCursor: null },
         ...(initialSelection ? { initialSelection } : {}),

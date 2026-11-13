@@ -40,6 +40,32 @@ export type StudioSelection = Readonly<{
   }>;
   permissions: Readonly<{ edit: boolean; publish: boolean }>;
 }>;
+/** Stable visit identities. Translated progress and feedback must never control editor or command lifetimes. */
+export type StudioOperation =
+  | 'open'
+  | 'create'
+  | 'native-create'
+  | 'save'
+  | 'documents'
+  | 'versions'
+  | 'revision'
+  | 'organize'
+  | 'review'
+  | 'withdraw-review'
+  | 'publish'
+  | 'withdraw'
+  | 'publications';
+export type StudioFeedback =
+  | 'discarded'
+  | 'created'
+  | 'native-created'
+  | 'saved'
+  | 'saved-newer'
+  | 'restored'
+  | 'organized'
+  | 'published'
+  | 'article-published'
+  | 'withdrawn';
 export type StudioFailure = Readonly<{
   kind: 'denied' | 'unavailable' | 'stale' | 'withdrawn' | 'invalid' | 'uncertain';
   /** Safe, user-facing native explanation; never an exception or transport response. */

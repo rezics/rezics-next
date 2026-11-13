@@ -1,7 +1,6 @@
 import { checkDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
-import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { workspaceFailureMessage, workspaceFeedbackMessage, workspaceOperationMessage } from './workspace-language';
 import { bookChapterOccurrences, bookPublicationTarget, bookTocIndex, bookTocRows } from './book-toc';
 import {
   sameExact,
@@ -15,6 +14,8 @@ import {
   type PublicationTarget,
   type StudioDocument,
   type StudioFailure,
+  type StudioOperation,
+  type StudioFeedback,
   type StudioInput,
   type StudioPage,
   type StudioPort,
@@ -47,20 +48,15 @@ export type StudioState = Readonly<{
   historical: StudioRevision | null;
   review: PublicationReview | null;
   published: PublicationRecord | null;
+  /** Presentation only; use operation for behavior. */
   busy: string | null;
+  operation: StudioOperation | null;
+  result: StudioFeedback | null;
   issue: StudioFailure | null;
   message: string;
   failedDocumentCursor: string | null;
 }>;
-const unavailable: StudioFailure = { kind: 'unavailable', message: 'This read is unavailable. Try again.' };
-const uncertain: StudioFailure = {
-  kind: 'uncertain',
-  message: 'The result is unknown. Retry the same operation to recover its result.',
-};
-const invalid: StudioFailure = {
-  kind: 'invalid',
-  message: 'The response did not match the selected document or exact version. Refresh before continuing.',
-};
+const failure = (kind: StudioFailure['kind']): StudioFailure => ({ kind, message: workspaceFailureMessage(kind) });
 
 function sameTarget(a: PublicationTarget, b: PublicationTarget): boolean {
   if (a.kind === 'article') return b.kind === 'article' && sameExact(a.document, b.document);
@@ -235,6 +231,8 @@ export class StudioController {
       review: null,
       published: null,
       busy: null,
+      operation: null,
+      result: null,
       issue: null,
       message: '',
       failedDocumentCursor: null,
@@ -251,7 +249,7 @@ export class StudioController {
       this.connected = false;
       this.request?.abort();
       this.request = null;
-      this.patch({ busy: null, review: null, historical: null });
+      this.patch({ busy: null, operation: null, review: null, historical: null });
     };
   };
   current = (): boolean => this.connected && this.port.isCurrent();
@@ -263,6 +261,9 @@ export class StudioController {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
+  private complete(result: StudioFeedback, patch: Partial<StudioState> = {}) {
+    this.patch({ ...patch, result, message: workspaceFeedbackMessage(result) });
+  }
   private canMutate() {
     return this.current() && !this.state.busy && !this.hasUnresolvedCommand();
   }
@@ -272,7 +273,7 @@ export class StudioController {
     );
   canOrganize = (): boolean => Boolean(this.bookPort && this.state.structure?.canOrganize);
   private async run<T>(
-    name: string,
+    operation: StudioOperation,
     action: (signal: AbortSignal) => Promise<StudioResult<T>>,
     apply: (value: T) => void,
     mutation = false,
@@ -280,7 +281,7 @@ export class StudioController {
     if (!this.current() || this.state.busy) return false;
     const request = new AbortController();
     this.request = request;
-    this.patch({ busy: name, issue: null, message: '' });
+    this.patch({ operation, busy: workspaceOperationMessage(operation), issue: null, result: null, message: '' });
     try {
       const result = await action(request.signal);
       if (!this.current() || request.signal.aborted || this.request !== request) return false;
@@ -292,12 +293,12 @@ export class StudioController {
       return true;
     } catch {
       if (this.current() && !request.signal.aborted && this.request === request)
-        this.patch({ issue: mutation ? uncertain : unavailable });
+        this.patch({ issue: failure(mutation ? 'uncertain' : 'unavailable') });
       return false;
     } finally {
       if (this.request === request) {
         this.request = null;
-        if (this.connected) this.patch({ busy: null });
+        if (this.connected) this.patch({ busy: null, operation: null });
       }
     }
   }
@@ -346,12 +347,12 @@ export class StudioController {
     // Never leave an old readable body beneath a new selection or a refused read.
     this.patch({ selected: null, historical: null, versions: null, review: null });
     return this.run<StudioSelection>(
-      'Opening draft',
+      'open',
       async (signal) => {
         const result = await this.port.open({ projectId: this.input.projectId, postId }, signal);
         if (!result.ok) return result;
         if (result.value.revision.exact.postId !== postId || !(await validRevision(result.value.revision)))
-          return { ok: false, error: invalid };
+          return { ok: false, error: failure('invalid') };
         return result;
       },
       (selection) =>
@@ -361,11 +362,10 @@ export class StudioController {
   discard = () => {
     if (!this.canMutate() || !this.state.selected || this.state.selected.uploading) return;
     const selected = this.state.selected;
-    this.patch({
+    this.complete('discarded', {
       selected: working(selected.source, ++this.editorSequence),
       issue: null,
       review: null,
-      message: 'Local changes discarded. The last saved draft is open.',
     });
   };
   createDraft = async (title: string): Promise<boolean> => {
@@ -388,25 +388,24 @@ export class StudioController {
     }
     const attempt = this.createAttempt;
     return this.run<StudioSelection>(
-      'Creating draft',
+      'create',
       async (signal) => {
         const result = await this.port.createDraft(attempt, signal);
         if (!result.ok) {
           if (result.error.kind !== 'uncertain' && result.error.kind !== 'unavailable') this.createAttempt = null;
           return result;
         }
-        if (!(await validRevision(result.value.revision))) return { ok: false, error: uncertain };
+        if (!(await validRevision(result.value.revision))) return { ok: false, error: failure('uncertain') };
         return result;
       },
       (selection) => {
         this.createAttempt = null;
-        this.patch({
+        this.complete('created', {
           selected: working(selection, ++this.editorSequence),
           documents: this.updateSummary(selection),
           versions: null,
           historical: null,
           review: null,
-          message: 'Private draft created.',
         });
       },
       true,
@@ -446,7 +445,7 @@ export class StudioController {
     }
     const attempt = this.saveAttempt;
     return this.run<StudioSelection>(
-      'Saving draft',
+      'save',
       async (signal) => {
         const result = await this.port.saveDraft(attempt, signal);
         if (!result.ok) {
@@ -460,7 +459,7 @@ export class StudioController {
           !(await validRevision(revision)) ||
           serializeDocument(revision.body) !== serializeDocument(attempt.body)
         )
-          return { ok: false, error: uncertain };
+          return { ok: false, error: failure('uncertain') };
         return result;
       },
       (selection) => {
@@ -471,7 +470,7 @@ export class StudioController {
           live.invalid ||
           live.title.trim() !== attempt.title ||
           serializeDocument(live.body) !== serializeDocument(attempt.body);
-        this.patch({
+        this.complete(newer ? 'saved-newer' : 'saved', {
           selected: {
             ...live,
             source: selection,
@@ -481,7 +480,6 @@ export class StudioController {
           documents: this.updateSummary(selection),
           versions: null,
           review: null,
-          message: newer ? 'Draft saved. Newer edits are waiting to save.' : 'Draft saved privately.',
         });
       },
       true,
@@ -500,7 +498,7 @@ export class StudioController {
     const cursor = this.state.documents.nextCursor;
     if (!cursor || this.hasUnresolvedCommand()) return;
     const loaded = await this.run(
-      'Loading drafts',
+      'documents',
       (signal) => this.port.documents({ projectId: this.input.projectId, cursor }, signal),
       (documents) => {
         this.patch({ documents, failedDocumentCursor: null });
@@ -537,7 +535,7 @@ export class StudioController {
     }
     const attempt = this.nativeCreateAttempt;
     return this.run<StudioSelection>(
-      'Creating private draft',
+      'native-create',
       async (signal) => {
         const result = await this.port.createNativeDraft!(attempt, signal);
         if (!result.ok) {
@@ -551,18 +549,17 @@ export class StudioController {
           !(await validRevision(result.value.revision)) ||
           serializeDocument(result.value.revision.body) !== serializeDocument(attempt.body)
         )
-          return { ok: false, error: uncertain };
+          return { ok: false, error: failure('uncertain') };
         return result;
       },
       (selection) => {
         this.nativeCreateAttempt = null;
-        this.patch({
+        this.complete('native-created', {
           selected: working(selection, ++this.editorSequence),
           documents: this.updateSummary(selection),
           versions: null,
           historical: null,
           review: null,
-          message: m.studio_account_created({}, { locale: getLocale() }),
         });
       },
       true,
@@ -574,14 +571,14 @@ export class StudioController {
     const cursor = more ? this.state.versions?.nextCursor : null;
     if (more && !cursor) return;
     await this.run<StudioPage<VersionSummary>>(
-      'Loading versions',
+      'versions',
       async (signal) => {
         const result = await this.port.versions(
           { projectId: this.input.projectId, postId, cursor: cursor ?? null },
           signal,
         );
         if (result.ok && result.value.items.some((row) => row.exact.postId !== postId))
-          return { ok: false, error: invalid };
+          return { ok: false, error: failure('invalid') };
         return result;
       },
       (versions) => this.patch({ versions, historical: null }),
@@ -591,10 +588,11 @@ export class StudioController {
     if (this.hasUnresolvedCommand() || document.postId !== this.state.selected?.source.revision.exact.postId) return;
     this.patch({ historical: null });
     await this.run<StudioRevision>(
-      'Reading exact version',
+      'revision',
       async (signal) => {
         const result = await this.port.revision({ projectId: this.input.projectId, document }, signal);
-        if (result.ok && !(await validRevision(result.value, document))) return { ok: false, error: invalid };
+        if (result.ok && !(await validRevision(result.value, document)))
+          return { ok: false, error: failure('invalid') };
         return result;
       },
       (historical) => this.patch({ historical }),
@@ -619,7 +617,7 @@ export class StudioController {
       snapshotPending: false,
       editorGeneration: ++this.editorSequence,
     });
-    this.patch({ message: 'Version copied into the working draft. Save to create a new revision.' });
+    this.complete('restored');
   };
   toggleOccurrence = (occurrenceId: string, checked: boolean) => {
     const placement = this.state.structure?.placements.find((row) => row.occurrenceId === occurrenceId);
@@ -659,14 +657,14 @@ export class StudioController {
       };
     const attempt = this.organizeAttempt;
     return this.run<BookStructure>(
-      'Saving table of contents',
+      'organize',
       async (signal) => {
         const result = await bookPort.change(attempt, signal);
         if (!result.ok) {
           if (result.error.kind !== 'uncertain' && result.error.kind !== 'unavailable') this.organizeAttempt = null;
           return result;
         }
-        if (result.value.catalogueId !== attempt.catalogueId) return { ok: false, error: uncertain };
+        if (result.value.catalogueId !== attempt.catalogueId) return { ok: false, error: failure('uncertain') };
         bookTocRows(result.value);
         return result;
       },
@@ -675,7 +673,7 @@ export class StudioController {
         const chapterIds = new Set(
           next.placements.filter((row) => row.target.kind === 'chapter').map((row) => row.occurrenceId),
         );
-        this.patch({
+        this.complete('organized', {
           structure: next,
           documents: {
             ...this.state.documents,
@@ -688,7 +686,6 @@ export class StudioController {
           review: null,
           published: null,
           selectedOccurrences: new Set([...this.state.selectedOccurrences].filter((id) => chapterIds.has(id))),
-          message: 'Table of contents saved. Publication is unchanged.',
         });
       },
       true,
@@ -733,7 +730,7 @@ export class StudioController {
     if (!target || (withdrawal && !release)) return;
     this.patch({ review: null, published: null });
     await this.run<PublicationReview>(
-      withdrawal ? m.studio_withdraw_reviewing({}, { locale: getLocale() }) : 'Reviewing publication',
+      withdrawal ? 'withdraw-review' : 'review',
       async (signal) => {
         const result =
           withdrawal && target.kind === 'book' && release && this.port.reviewWithdrawal
@@ -754,7 +751,7 @@ export class StudioController {
             !reviewMatches(result.value, target, this.state.structure) ||
             (result.value.authority !== 'local' && Date.parse(result.value.expiresAt) <= Date.now()))
         )
-          return { ok: false, error: invalid };
+          return { ok: false, error: failure('invalid') };
         return result;
       },
       (review) => {
@@ -790,7 +787,7 @@ export class StudioController {
       ) {
         this.patch({
           review: null,
-          issue: { kind: 'stale', message: 'Review the current saved versions again before publishing.' },
+          issue: { kind: 'stale', message: workspaceFeedbackMessage('review-required') },
         });
         return false;
       }
@@ -798,9 +795,7 @@ export class StudioController {
     }
     const attempt = this.publishAttempt;
     return this.run<PublicationRecord>(
-      attempt.review.withdrawal
-        ? m.studio_withdraw_pending({}, { locale: getLocale() })
-        : 'Publishing reviewed versions',
+      attempt.review.withdrawal ? 'withdraw' : 'publish',
       async (signal) => {
         const result = await this.port.publish(attempt, signal);
         if (!result.ok) {
@@ -834,40 +829,42 @@ export class StudioController {
               );
             });
         if (result.value.state !== (attempt.review.withdrawal ? 'withdrawn' : 'published') || !validLocalReadback)
-          return { ok: false, error: uncertain };
+          return { ok: false, error: failure('uncertain') };
         return result;
       },
       (published) => {
         this.publishAttempt = null;
         const ids = new Set(published.entries.map((entry) => entry.document.postId));
-        this.patch({
-          ...(published.readbackSelection && this.state.selected
-            ? { selected: { ...this.state.selected, source: published.readbackSelection, dirty: false } }
-            : {}),
-          published,
-          ...(attempt.review.target.kind === 'book' ? { currentBookPublication: published } : {}),
-          review: null,
-          message: attempt.review.withdrawal
-            ? m.studio_withdraw_done({}, { locale: getLocale() })
+        this.complete(
+          attempt.review.withdrawal
+            ? 'withdrawn'
             : attempt.review.authority === 'local'
-              ? m.studio_account_published({}, { locale: getLocale() })
-              : 'The reviewed versions were published.',
-          documents: {
-            ...this.state.documents,
-            items: this.state.documents.items.map((row) =>
-              ids.has(row.postId) ? { ...row, state: 'published' } : row,
-            ),
-          },
-          publications: {
-            ...this.state.publications,
-            items: [
-              published,
-              ...this.state.publications.items.filter(
-                (row) => row.publicationId !== published.publicationId || row.revision !== published.revision,
+              ? 'article-published'
+              : 'published',
+          {
+            ...(published.readbackSelection && this.state.selected
+              ? { selected: { ...this.state.selected, source: published.readbackSelection, dirty: false } }
+              : {}),
+            published,
+            ...(attempt.review.target.kind === 'book' ? { currentBookPublication: published } : {}),
+            review: null,
+            documents: {
+              ...this.state.documents,
+              items: this.state.documents.items.map((row) =>
+                ids.has(row.postId) ? { ...row, state: 'published' } : row,
               ),
-            ],
+            },
+            publications: {
+              ...this.state.publications,
+              items: [
+                published,
+                ...this.state.publications.items.filter(
+                  (row) => row.publicationId !== published.publicationId || row.revision !== published.revision,
+                ),
+              ],
+            },
           },
-        });
+        );
       },
       true,
     );
@@ -876,7 +873,7 @@ export class StudioController {
     const cursor = this.state.publications.nextCursor;
     if (!cursor || this.hasUnresolvedCommand()) return;
     await this.run(
-      'Loading publication history',
+      'publications',
       (signal) => this.port.publications({ projectId: this.input.projectId, cursor }, signal),
       (publications) => this.patch({ publications }),
     );

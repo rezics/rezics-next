@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { fromPlainText, hasDocumentContent } from '@rezics/document';
 import { RichTextEditor } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -6,6 +6,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { DocumentBody } from '../document-body';
 import type { BookOrganizerPort, StudioInput, StudioPort, StudioPresentation } from './contract';
 import { StudioController } from './controller';
+import { workspaceEditorLabels, workspaceFailureMessage } from './workspace-language';
 import { BookOrganizer } from './book-organizer';
 import { ExactVersionDetails, StudioVersions } from './revisions';
 import { StudioPublication } from './publication';
@@ -46,8 +47,7 @@ export type StudioWorkspaceProps = {
 
 /** Production composition surface. No route, generated-operation binding or public authority is inferred here. */
 export function StudioWorkspace(props: StudioWorkspaceProps) {
-  if (!props.port.isCurrent())
-    return <p role="status">This Studio visit has ended. Reopen the workspace to continue.</p>;
+  if (!props.port.isCurrent()) return <p role="status">{m.studio_workspace_ended({}, { locale: getLocale() })}</p>;
   return <StudioVisit key={props.input.visitKey} {...props} />;
 }
 function StudioVisit({
@@ -83,7 +83,14 @@ function StudioVisit({
   const editorHeading = useRef<HTMLHeadingElement>(null);
   const previousPost = useRef<string | null>(null);
   const id = useId();
+  const locale = getLocale();
+  const options = { locale };
   const selected = state.selected;
+  const editorPresentation = selected ? presentation.editor?.(selected.source.revision.exact) : undefined;
+  const editorLabels = useMemo(
+    () => ({ ...workspaceEditorLabels(locale), ...editorPresentation?.labels }),
+    [locale, editorPresentation?.labels],
+  );
   const postId = selected?.source.revision.exact.postId ?? null;
   const editorGeneration = selected?.editorGeneration ?? 0;
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
@@ -178,27 +185,31 @@ function StudioVisit({
       setTab('write');
     }
   }
-  if (!port.isCurrent()) return <p role="status">This Studio visit has ended. Reopen the workspace to continue.</p>;
+  if (!port.isCurrent()) return <p role="status">{m.studio_workspace_ended({}, { locale: getLocale() })}</p>;
   return (
-    <section className="studio-workspace" aria-label={`${input.title} Studio`}>
+    <section className="studio-workspace" aria-label={m.studio_workspace_region({ title: input.title }, options)}>
       <header className="studio-header">
         <div>
-          <p className="studio-eyebrow">Studio · {input.profile.kind === 'book' ? 'Book Library' : 'Articles'}</p>
           <h1>{input.title}</h1>
+          <p className="studio-help">
+            {input.profile.kind === 'book'
+              ? m.studio_workspace_book_profile({}, options)
+              : m.studio_workspace_articles({}, options)}
+          </p>
           {input.profile.kind === 'articles' && input.profile.seriesTitle ? <p>{input.profile.seriesTitle}</p> : null}
         </div>
         <a className="studio-skip" href={`#${id}-document`}>
-          Skip to document
+          {m.studio_workspace_skip({}, options)}
         </a>
-        <p className="studio-help">Drafts save privately. Publishing requires a separate review.</p>
+        <p className="studio-help">{m.studio_workspace_private_help({}, options)}</p>
       </header>
       <div className="studio-status" aria-live="polite" aria-atomic="true">
-        {state.busy ? <p role="status">{state.busy}…</p> : state.message ? <p role="status">{state.message}</p> : null}
+        {state.busy ? <p role="status">{state.busy}</p> : state.message ? <p role="status">{state.message}</p> : null}
         {state.issue ? (
           <div role="alert" className="studio-stack">
-            <p>{state.issue.message}</p>
-            {state.issue.kind === 'stale' ? (
-              <p>Your working draft is retained. Copy your text before discarding and reopening the current draft.</p>
+            <p>{workspaceFailureMessage(state.issue.kind, locale)}</p>
+            {state.issue.message !== workspaceFailureMessage(state.issue.kind, locale) ? (
+              <p>{state.issue.message}</p>
             ) : null}
             {unresolved ? (
               <Button
@@ -207,7 +218,7 @@ function StudioVisit({
                 disabled={Boolean(state.busy)}
                 onClick={() => void controller.retry()}
               >
-                Retry the same operation
+                {m.studio_workspace_retry({}, options)}
               </Button>
             ) : null}
             {!unresolved && state.failedDocumentCursor ? (
@@ -219,16 +230,19 @@ function StudioVisit({
         ) : null}
       </div>
       {pendingOpen ? (
-        <section className="studio-navigation-confirm studio-stack" aria-label="Unsaved draft changes">
-          <h2>Keep your changes before switching</h2>
-          <p>Save this draft to continue, or discard its local changes.</p>
+        <section
+          className="studio-navigation-confirm studio-stack"
+          aria-label={m.studio_workspace_switch_region({}, options)}
+        >
+          <h2>{m.studio_workspace_switch_heading({}, options)}</h2>
+          <p>{m.studio_workspace_switch_help({}, options)}</p>
           <div className="studio-action-row">
             <Button
               type="button"
               disabled={blocked || Boolean(selected?.snapshotPending || selected?.invalid || selected?.uploading)}
               onClick={() => void continueToDraft(true)}
             >
-              Save and switch
+              {m.studio_workspace_save_switch({}, options)}
             </Button>
             <Button
               type="button"
@@ -236,10 +250,10 @@ function StudioVisit({
               disabled={blocked || Boolean(selected?.uploading)}
               onClick={() => void continueToDraft(false)}
             >
-              Discard and switch
+              {m.studio_workspace_discard_switch({}, options)}
             </Button>
             <Button type="button" variant="outline" onClick={() => setPendingOpen(null)}>
-              Keep editing
+              {m.studio_workspace_keep_editing({}, options)}
             </Button>
           </div>
         </section>
@@ -258,23 +272,23 @@ function StudioVisit({
             <>
               <header className="studio-document-heading">
                 <h2 ref={editorHeading} tabIndex={-1}>
-                  {selected.title || 'Untitled draft'}
+                  {selected.title || selected.source.revision.exact.postId}
                 </h2>
                 <p className="studio-help" role="status">
                   {selected.invalid
-                    ? 'The editor snapshot needs attention before saving.'
+                    ? m.studio_workspace_snapshot_error({}, options)
                     : selected.uploading
-                      ? 'Finish or remove pending attachments before saving.'
+                      ? m.studio_workspace_upload_pending({}, options)
                       : selected.snapshotPending
-                        ? 'Preparing editor changes…'
+                        ? m.studio_workspace_snapshot_pending({}, options)
                         : selected.dirty
-                          ? 'Unsaved changes'
-                          : `Saved privately · ${selected.source.revision.savedAt}`}
+                          ? m.studio_workspace_unsaved({}, options)
+                          : m.studio_workspace_saved_at({ savedAt: selected.source.revision.savedAt }, options)}
                 </p>
                 <ExactVersionDetails exact={selected.source.revision.exact} />
               </header>
               <div className="studio-document-toolbar">
-                <nav className="studio-action-row" aria-label="Document views">
+                <nav className="studio-action-row" aria-label={m.studio_workspace_views({}, options)}>
                   {(['write', 'preview', 'versions'] as const).map((view) => (
                     <Button
                       key={view}
@@ -286,7 +300,11 @@ function StudioVisit({
                       }
                       onClick={() => setTab(view)}
                     >
-                      {view === 'write' ? 'Write' : view === 'preview' ? 'Preview' : 'Versions'}
+                      {view === 'write'
+                        ? m.studio_workspace_write({}, options)
+                        : view === 'preview'
+                          ? m.studio_workspace_preview({}, options)
+                          : m.studio_workspace_versions({}, options)}
                     </Button>
                   ))}
                 </nav>
@@ -304,35 +322,47 @@ function StudioVisit({
                   }
                   onClick={() => void controller.save()}
                 >
-                  Save draft
+                  {m.studio_workspace_save({}, options)}
                 </Button>
               </div>
               {/* Keep the editor mounted across previews so its undo and upload owners survive tab changes. */}
-              <section hidden={tab !== 'write'} aria-label="Write document" className="studio-stack">
-                <label htmlFor={`${id}-title`}>Document title</label>
+              <section
+                hidden={tab !== 'write'}
+                aria-label={m.studio_workspace_write_region({}, options)}
+                className="studio-stack"
+              >
+                <label htmlFor={`${id}-title`}>{m.studio_workspace_title({}, options)}</label>
                 <Input
                   id={`${id}-title`}
                   value={selected.title}
                   disabled={
                     !selected.source.permissions.edit ||
                     startingBook ||
-                    Boolean(state.busy === 'Publishing reviewed versions') ||
+                    state.operation === 'publish' ||
+                    state.operation === 'withdraw' ||
                     (unresolved && Boolean(state.review))
                   }
                   onChange={(event) => controller.changeTitle(event.target.value)}
                 />
-                {!selected.source.permissions.edit ? <p>This document is read only for your current role.</p> : null}
+                {!selected.source.permissions.edit ? <p>{m.studio_workspace_readonly({}, options)}</p> : null}
                 <RichTextEditor
-                  {...presentation.editor?.(selected.source.revision.exact)}
+                  {...editorPresentation}
+                  labels={editorLabels}
+                  lang={editorPresentation?.lang ?? locale}
                   key={`${postId}:${selected.editorGeneration}`}
                   value={selected.body}
-                  label={input.profile.kind === 'book' ? 'Chapter document' : 'Article document'}
+                  label={
+                    input.profile.kind === 'book'
+                      ? m.studio_workspace_chapter_document({}, options)
+                      : m.studio_workspace_article_document({}, options)
+                  }
                   className="studio-rich-text"
                   toolbar="auto"
                   readOnly={!selected.source.permissions.edit || startingBook}
                   disabled={
                     startingBook ||
-                    Boolean(state.busy === 'Publishing reviewed versions') ||
+                    state.operation === 'publish' ||
+                    state.operation === 'withdraw' ||
                     (unresolved && Boolean(state.review))
                   }
                   onChange={(body) => {
@@ -352,7 +382,7 @@ function StudioVisit({
                 <div className="studio-action-row">
                   {discard ? (
                     <>
-                      <p>Discard local changes and return to the last saved draft?</p>
+                      <p>{m.studio_workspace_discard_prompt({}, options)}</p>
                       <Button
                         type="button"
                         variant="destructive"
@@ -362,10 +392,10 @@ function StudioVisit({
                           setDiscard(false);
                         }}
                       >
-                        Discard changes
+                        {m.studio_workspace_discard({}, options)}
                       </Button>
                       <Button type="button" variant="outline" onClick={() => setDiscard(false)}>
-                        Keep changes
+                        {m.studio_workspace_keep_changes({}, options)}
                       </Button>
                     </>
                   ) : (
@@ -375,7 +405,7 @@ function StudioVisit({
                       disabled={blocked || !selected.dirty || selected.uploading}
                       onClick={() => setDiscard(true)}
                     >
-                      Discard changes…
+                      {m.studio_workspace_discard_review({}, options)}
                     </Button>
                   )}
                   <Button
@@ -384,15 +414,20 @@ function StudioVisit({
                     disabled={blocked || selected.dirty || selected.snapshotPending || selected.uploading}
                     onClick={() => void controller.open(selected.source.revision.exact.postId)}
                   >
-                    Reload saved draft
+                    {m.studio_workspace_reload({}, options)}
                   </Button>
                 </div>
               </section>
               {tab === 'preview' ? (
-                <section className="studio-preview studio-stack" aria-label="Private draft preview">
+                <section
+                  className="studio-preview studio-stack"
+                  aria-label={m.studio_workspace_preview_region({}, options)}
+                >
                   <h2>{selected.title}</h2>
                   <p className="studio-preview-notice">
-                    Private preview · {selected.dirty ? 'includes unsaved changes' : 'saved draft version'}
+                    {selected.dirty
+                      ? m.studio_workspace_preview_unsaved({}, options)
+                      : m.studio_workspace_preview_saved({}, options)}
                   </p>
                   <DocumentBody
                     {...presentation.reader?.(selected.source.revision.exact)}
@@ -407,11 +442,11 @@ function StudioVisit({
             </>
           ) : (
             <section className="studio-empty">
-              <h2>Make room for your next page</h2>
+              <h2>{m.studio_workspace_empty_heading({}, options)}</h2>
               <p>
                 {input.canCreateDraft
-                  ? 'Open a draft or create a new document to start writing.'
-                  : 'Open a chapter or article from the list to continue editing.'}
+                  ? m.studio_workspace_empty_create({}, options)
+                  : m.studio_workspace_empty_open({}, options)}
               </p>
               {input.canCreateDraft && !input.nativeDrafts ? (
                 <NewDraft controller={controller} disabled={blocked} />
@@ -421,13 +456,17 @@ function StudioVisit({
           <StudioPublication controller={controller} state={state} />
           {hostedReleaseReader ? <HostedReleaseReaderLink binding={hostedReleaseReader} /> : null}
         </div>
-        <aside className="studio-sidebar" aria-label="Workspace navigation">
+        <aside className="studio-sidebar" aria-label={m.studio_workspace_navigation({}, options)}>
           <details
             open={navigation}
             onToggle={(event) => setNavigation(event.currentTarget.open)}
             className="studio-mobile-navigation"
           >
-            <summary>Documents and {input.profile.kind === 'book' ? 'table of contents' : 'articles'}</summary>
+            <summary>
+              {input.profile.kind === 'book'
+                ? m.studio_workspace_book_navigation({}, options)
+                : m.studio_workspace_article_navigation({}, options)}
+            </summary>
             <div className="studio-stack">
               {state.structure ? (
                 <BookOrganizer
@@ -438,14 +477,22 @@ function StudioVisit({
                 />
               ) : null}
               <section
-                aria-label={input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}
+                aria-label={
+                  input.profile.kind === 'book'
+                    ? m.studio_workspace_drafts({}, options)
+                    : m.studio_workspace_articles({}, options)
+                }
                 className="studio-stack"
               >
-                <h2>{input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}</h2>
+                <h2>
+                  {input.profile.kind === 'book'
+                    ? m.studio_workspace_drafts({}, options)
+                    : m.studio_workspace_articles({}, options)}
+                </h2>
                 <p className="studio-help">
                   {input.profile.kind === 'book'
-                    ? 'Documents can be placed as chapters after saving.'
-                    : 'Each article has its own saved revisions and publication.'}
+                    ? m.studio_workspace_book_drafts_help({}, options)
+                    : m.studio_workspace_article_drafts_help({}, options)}
                 </p>
                 {draftPicker ? (
                   <HostedDraftPickerView
@@ -464,23 +511,23 @@ function StudioVisit({
                         disabled={blocked || document.openable === false}
                         onClick={() => open(document.postId)}
                       >
-                        {document.title || 'Untitled draft'}
+                        {document.title || document.postId}
                       </Button>
                       <span className="studio-help">
                         {document.openable === false
                           ? m.studio_account_continue_drafts({}, { locale: getLocale() })
                           : document.state === 'published'
-                            ? 'Published document'
+                            ? m.studio_workspace_published_document({}, options)
                             : document.state === 'protected'
-                              ? 'Protected document'
+                              ? m.studio_workspace_protected_document({}, options)
                               : document.state === 'taken_down'
-                                ? 'Taken down'
-                                : 'Private draft'}
+                                ? m.studio_workspace_taken_down({}, options)
+                                : m.studio_workspace_private_draft({}, options)}
                       </span>
                     </li>
                   ))}
                 </ol>
-                {!state.documents.items.length ? <p>No drafts on this page.</p> : null}
+                {!state.documents.items.length ? <p>{m.studio_workspace_empty_page({}, options)}</p> : null}
                 {state.documents.nextCursor ? (
                   <Button
                     type="button"
@@ -490,7 +537,7 @@ function StudioVisit({
                   >
                     {controller.failedPageCursor() === state.documents.nextCursor
                       ? m.own_drafts_retry({}, { locale: getLocale() })
-                      : 'Next drafts'}
+                      : m.studio_workspace_next({}, options)}
                   </Button>
                 ) : null}
                 {input.nativeDrafts ? (
@@ -514,6 +561,7 @@ function StudioVisit({
 }
 function NewDraft({ controller, disabled }: { controller: StudioController; disabled: boolean }) {
   const [title, setTitle] = useState('');
+  const options = { locale: getLocale() };
   const id = useId();
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -521,14 +569,12 @@ function NewDraft({ controller, disabled }: { controller: StudioController; disa
   }
   return (
     <form className="studio-new-draft studio-stack" onSubmit={(event) => void submit(event)}>
-      <label htmlFor={id}>New document title</label>
+      <label htmlFor={id}>{m.studio_workspace_new_title({}, options)}</label>
       <Input id={id} value={title} required disabled={disabled} onChange={(event) => setTitle(event.target.value)} />
       <Button type="submit" disabled={disabled || !title.trim()}>
-        Create private draft
+        {m.studio_workspace_create({}, options)}
       </Button>
-      {disabled ? (
-        <p className="studio-help">Finish the current operation and save changes before creating another draft.</p>
-      ) : null}
+      {disabled ? <p className="studio-help">{m.studio_workspace_create_wait({}, options)}</p> : null}
     </form>
   );
 }
@@ -546,19 +592,14 @@ function NativeDraftComposer({ controller, disabled }: { controller: StudioContr
   const id = useId();
   const locale = getLocale();
   useEffect(() => {
-    if (
-      !selectedId ||
-      selectedId === lastCreatedId.current ||
-      state.message !== m.studio_account_created({}, { locale })
-    )
-      return;
+    if (!selectedId || selectedId === lastCreatedId.current || state.result !== 'native-created') return;
     lastCreatedId.current = selectedId;
     setBoardId('');
     setTitle('');
     setBody('');
     setSubjects('');
     setMedia('');
-  }, [locale, selectedId, state.message]);
+  }, [selectedId, state.result]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     const document = fromPlainText(body, 'blocks');
