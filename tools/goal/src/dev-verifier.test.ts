@@ -1356,7 +1356,7 @@ test('boot phase evidence is bound to one command receipt and its replay is idem
   expect(first).toMatchObject({ passed: true, result: 'pass' });
 });
 
-test('boot timeout budget charges the measured execution phase and excludes queue and preparation', async () => {
+test('a terminal phase receipt does not start the boot execution budget', async () => {
   const root = repo();
   const ctx = setup(root);
   const store = verifierReceiptStore();
@@ -1399,7 +1399,10 @@ test('boot timeout budget charges the measured execution phase and excludes queu
     'boot-phase-timeout-round',
     true,
   );
-  expect(result).toMatchObject({ passed: false, result: 'infrastructure', timedOut: true });
+  expect(result).toMatchObject({ passed: true, result: 'pass', timedOut: false });
+  expect(store.devVerifierRun(result.commandRunIds![0]!)?.execution?.phaseEvidence).toMatchObject({
+    phases: { execution: { status: 'measured', durationMs: 120_001 } },
+  });
 });
 
 test('a successful wrapper with an authoritative unreached boot phase remains unknown', async () => {

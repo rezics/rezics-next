@@ -20,7 +20,7 @@ import {
   workerCheckHostBudgetLimit,
   workerCheckHostAttemptCheckCustody,
   workerCheckHostAttemptHasResultlessCleanup,
-  workerCheckHostHasDirectKernelTypingRun,
+  workerCheckHostHasRetainedKernelTypingRun,
   workerCheckHostTypingCheckIds,
   workerCheckHostHasTypecheckRun,
   workerCheckHostTypingSettlement,
@@ -393,11 +393,11 @@ export async function recoverWorkerTyping(
       limit: workerCheckHostBudgetLimit(task, ref.attempt),
     });
     const checkIds = workerCheckHostTypingCheckIds(directory, attempt.checks ?? []);
-    const directKernelRun = workerCheckHostHasDirectKernelTypingRun(directory, task.worktree);
-    const checkCustody = directKernelRun
+    const retainedKernelRun = workerCheckHostHasRetainedKernelTypingRun(directory, task.worktree);
+    const checkCustody = retainedKernelRun
       ? workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds)
       : 'terminal';
-    if (directKernelRun && checkCustody !== 'terminal')
+    if (retainedKernelRun && checkCustody !== 'terminal')
       return {
         ...ref,
         status: 'pending' as const,
@@ -406,7 +406,7 @@ export async function recoverWorkerTyping(
       };
     const pendingCommand = !typing.ok ? (typing.command ?? attempt.typingEvidencePending?.command) : undefined;
     const resultlessCleanupRecovery = Boolean(
-      directKernelRun &&
+      retainedKernelRun &&
       pendingCommand &&
       workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand),
     );

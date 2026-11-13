@@ -33,8 +33,8 @@ import { readMeasurement } from './records.ts';
 import type { Task, Attempt, RetryIntent } from './types.ts';
 import {
   captureTypingInputs,
-  isDirectKernelTypingCompiler,
   isKnownTypingCompiler,
+  isRetainedKernelTypingCompiler,
   readTypingInputReceipt,
   qualifyTypingInputs,
   type TypingInput,
@@ -1275,13 +1275,13 @@ export function workerCheckHostAttemptHasResultlessCleanup(
   });
 }
 
-/** A direct Kernel receipt can be earlier than the last stamp when later recovery checks were abandoned. */
-export function workerCheckHostHasDirectKernelTypingRun(directory: string, worktree: string): boolean {
+/** A retained Kernel receipt can be earlier than the last stamp when later recovery checks were abandoned. */
+export function workerCheckHostHasRetainedKernelTypingRun(directory: string, worktree: string): boolean {
   try {
     return stampNames(directory).some((name) => {
       const stamp = readWorkerCheckHostStamp(directory, name);
       return [stamp.typingRequest?.command, stamp.typingInputs?.compilerCommand].some(
-        (command) => command !== undefined && isDirectKernelTypingCompiler(worktree, command),
+        (command) => command !== undefined && isRetainedKernelTypingCompiler(worktree, command),
       );
     });
   } catch (error) {
@@ -2012,7 +2012,7 @@ export function workerCheckHostTypingSettlement(input: {
       const retainedKernelPass =
         index !== newestIndex &&
         receipt !== undefined &&
-        isDirectKernelTypingCompiler(input.worktree, receipt.compilerCommand);
+        isRetainedKernelTypingCompiler(input.worktree, receipt.compilerCommand);
       if (index !== newestIndex && !retainedKernelPass) continue;
 
       const qualification = receipt

@@ -82,15 +82,25 @@ ordinary tasks never consume the urgent sublimit. Urgent work still waits for `m
 Only running sessions and pending launch reservations occupy slots; attempts parked for checks release them.
 Decision: a verified parked scope keeps its actual charge but releases its writing reserve; resume reacquires 4 GiB
 through the existing admission ticket before the task lease and launch.
-The worker slice always charges aggregate actual memory. Only the indexed current attempt's owned detached runner,
-with matching live process, worker scope and physical remote-check generation, releases its scope's writing reserve.
-Active scopes retain their measured-peak reserve; stale or unknown scopes retain conservative accounting and cannot
-stand in for an unidentified current writer. Check wakes use the existing capacity ticket and task lease to reserve
-the active minimum before launch. That ticket's memory charge transfers to the reconciled current writer's scope;
-pending or unreconciled launches keep their ticket charge until start or explicit release. Memory floors, PSI,
-worker caps and check slots remain independent limits.
-Decision: Admission folds tickets by task generation and operation, and may request one bounded reclaim from clean
-inactive file cache per slice-deficit episode.
+Decision: exact locally terminal custody for every check on the waiting current attempt retires only the
+future-writing reserve of that task and generation's historical scopes; it does not infer remote terminality or
+cleanup. Aggregate memory, current, replacement and unknown writers, pending tickets, and host and allowance limits
+remain charged. Reclaim episodes record actual `memory.current` before and after each request, allow at most three
+requests at least one second apart, and reopen after a 64 MiB measured memory drop, ticket-reserve release, writer
+completion, newly proved terminal scope, or measured safe-headroom increase. A migrated one-shot latch without a
+baseline can reopen immediately only on exact terminal-scope proof. Clean-cache estimates size a request and never
+count as progress.
+The worker slice always charges aggregate actual memory. The indexed current attempt's owned detached runner releases
+its scope reserve only with a matching live process, worker scope and physical remote-check generation. A waiting
+current attempt with no runner process can also release the future-writing reserve on its exact historical scopes
+when every listed check has an exactly owned finished result and physical history, a local terminal proof, and a
+locally terminal runner identity. This local proof does not settle remote execution or cleanup. Active, current,
+replacement and unknown scopes retain conservative accounting and cannot stand in for an unidentified current writer.
+Check wakes use the existing capacity ticket and task lease to reserve the active minimum before launch. That ticket's
+memory charge transfers to the reconciled current writer's scope; pending or unreconciled launches keep their ticket
+charge until start or explicit release. Memory floors, PSI, worker caps and check slots remain independent limits.
+Decision: Admission folds tickets by task generation and operation, and may request bounded reclaim from clean
+inactive file cache during a slice-deficit episode.
 Every new ticket records its target attempt and whether it starts a new generation or resumes the exact parked one.
 The oldest live, lifecycle-valid ticket owns the operation; duplicates remain successors without consuming FIFO
 positions or a second reservation. When its process ends, the next valid ticket takes over. Old tickets remain
@@ -100,9 +110,14 @@ later check wake remains its exact resume. A ticket for an already advanced star
 current-attempt projection, without consulting worktree presence or clearing another generation's reservation.
 If host limits, system memory and PSI permit admission but a finite worker-slice reserve alone blocks it, the host
 may request up to 4 GiB from clean inactive file pages with `swappiness=0`. Dirty and writeback pages are excluded.
-The shared admission lease is released before the request; the host re-samples slice headroom before launching. One
-durable latch coalesces requests until headroom recovers for a heavy worker. Unsupported or unwritable reclaim is
-ignored, and ordinary memory, PSI, lane and Goal limits continue to gate starts.
+The shared admission lease is released before the request; the host re-samples slice headroom and actual
+`memory.current` before launching. A durable episode records the current attempt and its requested amount, error and
+measured before/after values. It does not retry more than three times or faster than once per second. A further
+request needs a material safe change: at least 64 MiB of measured memory drop or safe-headroom increase, released
+ticket reserve, a finished writer, or a newly proved terminal scope. The former one-shot latch has no baseline, so
+only exact local terminal-scope proof can reopen it immediately; otherwise it waits for a measured change.
+Inactive-file estimates never count as reclaimed memory. Unsupported or unwritable reclaim is recorded without
+changing ordinary memory, PSI, lane and Goal gates.
 Urgent admission enforces its limits even without `capacity.json`; ordinary admission retains its opt-in behaviour.
 `status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
 ordinary throughput. Resource usage totals still include urgent work.
@@ -165,6 +180,7 @@ landing nor a source-writing retry. Failing tests alone keep today's handling. T
 per attempt in its state directory, not the worktree. Proof-run, registered-proof and acceptance-requiring briefs keep
 their declared checks; urgent and control-plane tasks are exempt. `status` shows `checksUsed` and `checkBudget` on each
 running or waiting attempt.
+Decision: Schema-emission evidence admits only exact Kernel workspace argv with one installed selector; capture local files and artifacts, and project only the stable, absent remote-check marker trio with existing terminal proof and compiler-consumption checks intact.
 A check-host run that ends with infrastructure exit 75 before the check command ran (probe, upload or transport
 failure) gives that stamp back, so it does not count toward the one check and one rerun. The wrapper releases the
 stamp where it records the run's final exit code. A run that reached the check command keeps its stamp, including
@@ -1002,7 +1018,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.verifier.findingAssertions`                   | `64`                                                                       | Maximum stable assertions per verifier result; larger results remain infrastructure/unverified.                                                                                             |
 | `policy.verifier.diagnosticCharacters`                | `6000`                                                                     | Maximum output characters included per failure in an urgent verifier repair.                                                                                                                |
 | `policy.verifier.residentPollMs`                      | `60000`                                                                    | Pause between completed resident verifier passes (ms).                                                                                                                                      |
-| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Boot-smoke deadline per test (ms); structured execution timing measures only the command phase, while missing phase evidence keeps the current wrapper deadline.                            |
+| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Boot-smoke budget per test (ms); placed Kernel execution uses its live start marker, with the spawn timeout as fallback when evidence is missing or conflicting.                            |
 | `policy.verifier.roundIntervalMs`                     | `3600000`                                                                  | Minimum time between verifier rounds (ms).                                                                                                                                                  |
 | `policy.verifier.roundDeadlineMs`                     | `3300000`                                                                  | Maximum elapsed time scheduled for one verifier round (ms); unstarted checks carry into the next round.                                                                                     |
 | `policy.verifier.maxSelectionCommits`                 | `1000`                                                                     | Largest changed commit range selected by changed paths before using the complete configured test set.                                                                                       |
@@ -2949,6 +2965,11 @@ exact result bytes and referenced Root authorization bytes/row, and its physical
 unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer compiler failure
 for matching current inputs remains authoritative. Withdrawn Web recovery uses the same exact-input failure rule.
 
+Decision: exact `bun run --cwd services/kernel typecheck` and `bun run --cwd apps/web typecheck` receipts may project
+only the complete stable, absent remote-preparation marker trio from an otherwise identical configured source
+inventory. Prepared inputs and the existing physical/terminal budget custody remain required. Forward capture keeps
+the marker digests so the receipt retains its full-trio proof.
+
 Decision: authenticated `typing-recover` may replace one consumed compiler grant only when unchanged source's exact resultless check, SIGTERM, Root authorization, local/remote terminal proof and verified cleanup receipt bind the same task, attempt, physical run and command. A missing predecessor authorizes no new run. Preserve cancellation and receipt; fence checks with compiler results, live or unknown custody, manual cancellation and later attempts. Keep the exact no-command-start recovery proof. Never retry source or infer compiler success.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
@@ -3520,6 +3541,11 @@ does not rerun them at the previous head or bisect integrated prefixes. Each fai
 and head with its assertions. Failures are batched into one urgent repair per owning Goal. Infrastructure and unknown
 results remain visible but never hold progress, and every completed round advances dev-verified to its captured
 head. Findings and round summaries use the bounded dev_verifier_findings and dev_verifier_runs stores.
+
+Decision: the placed Kernel boot check carries schema-1 phase events over a per-command nonce on inherited FD 3. A
+matching live `execution-started` event begins the boot execution budget; the spawn timeout remains active until that
+marker and is restored when channel evidence conflicts. Missing or malformed evidence stays unknown. Terminal phase
+receipts never start the execution budget, and the round abort/deadline remains authoritative.
 
 ### Verifier diagnostics and owner routing
 
