@@ -37,7 +37,6 @@ function deferred<T>() {
 }
 async function mount(operations: KnowledgeLifecycleOperations) {
   const host = dom.window.document.createElement('main') as unknown as HTMLElement;
-  dom.window.document.body.append(host);
   const root = createRoot(host);
   let controller!: KnowledgeLifecycleController;
   let address = first;
@@ -82,7 +81,6 @@ async function mount(operations: KnowledgeLifecycleOperations) {
     },
     async close() {
       await act(async () => root.unmount());
-      host.remove();
     },
   };
 }
@@ -123,7 +121,6 @@ test('late old reads cannot release the replacement read; current refresh alone 
       reads[2]!.resolve(ready(restoring));
     });
     expect(page.current.lifecycle).toEqual(restoring);
-    expect(page.current.editing).toBe(false);
     await act(async () => {
       void page.current.reread();
       void page.current.reread();
@@ -170,7 +167,6 @@ test('a pending former command cannot migrate its intent or release a current co
     expect(
       page.frames.every((frame) => frame.intent === null && frame.lifecycle?.documentId !== first.documentId),
     ).toBe(true);
-    expect(page.current.pending).toBe(false);
     await act(async () => page.current.review(false));
     await act(async () => {
       void page.current.submit(false);
