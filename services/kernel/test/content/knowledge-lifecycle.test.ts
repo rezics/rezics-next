@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createKnowledgeDiscoverySource } from '../../src/content/knowledge-discovery.ts';
+import { advanceKnowledgeLifecycleRestorePage } from '../../src/content/knowledge-lifecycle-work.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { postPublicationFixture } from './support/post-publication-fixture.ts';
 
@@ -231,58 +232,107 @@ test('native leaf trash fences every representation and lagged discovery; restor
   expect(JSON.stringify(events.rows)).not.toContain('Private v');
 });
 
-test('subtree admission is truthfully incomplete; current ancestors and moves fence lifecycle commands', async () => {
+test('subtree trash fences descendants and durable restore resumes privately around nested trash', async () => {
   const w = await workspace();
   const root = await w.create('Root');
   const child = await w.create('Child', root.placementId);
-  const sibling = await w.create('Sibling');
-  const trashRoot = `/v1/knowledge/documents/${root.documentId}:trash`;
-  const incomplete = await f.call('POST', trashRoot, w.input('0'));
-  expect(incomplete.status).toBe(200);
-  expect(incomplete.value).toMatchObject({
+  const nested = await w.create('Nested trashed root', child.placementId);
+  const nestedChild = await w.create('Nested child', nested.placementId);
+  const unrelated = await w.create('Unrelated branch');
+  const publish = async (note: { documentId: string; revisionId: string }) =>
+    f.command(
+      `/v1/knowledge/documents/${note.documentId}/publication:select`,
+      { expectedHeadRevisionId: note.revisionId, expectedPublicationId: null, revisionId: note.revisionId },
+      200,
+    );
+  const childPublication = await publish({ documentId: child.documentId, revisionId: child.revisionId });
+  await publish({ documentId: nestedChild.documentId, revisionId: nestedChild.revisionId });
+
+  const nestedTrash = await f.call('POST', `/v1/knowledge/documents/${nested.documentId}:trash`, w.input('0'));
+  expect(nestedTrash.value).toMatchObject({ complete: true, state: 'trashed', generation: '1' });
+  const rootTrash = await f.call('POST', `/v1/knowledge/documents/${root.documentId}:trash`, w.input('0'));
+  expect(rootTrash.status).toBe(200);
+  expect(rootTrash.value).toMatchObject({ complete: true, reason: null, state: 'trashed', generation: '1' });
+  for (const id of [root.documentId, child.documentId, nested.documentId, nestedChild.documentId])
+    expect((await f.call('GET', w.privatePath(id))).status).toBe(404);
+  expect((await f.call('GET', w.privatePath(unrelated.documentId))).status).toBe(200);
+  expect(
+    (await f.call('GET', `/v1/knowledge/documents/${child.documentId}`, undefined, { anonymous: true })).status,
+  ).toBe(404);
+
+  const restore = await f.call('POST', `/v1/knowledge/documents/${root.documentId}:restore`, w.input('1'));
+  expect(restore.value).toMatchObject({
     complete: false,
-    reason: 'subtree_work_required',
-    state: 'active',
-    generation: '0',
+    reason: 'restoring',
+    generation: '2',
+    state: 'trashed',
+    restoreProgress: { processedDocuments: '0', pendingPlacements: '1' },
   });
-  expect((await f.call('GET', w.privatePath(child.documentId))).status).toBe(200);
-  const oldInput = w.input('0');
-  const moved = await f.command(
-    `/v1/knowledge/notebooks/${w.notebook.notebookId}/placements/${child.placementId}:move`,
-    {
-      expectedStructureRevisionId: w.structure(),
-      destinationParentPlacementId: sibling.placementId,
-      beforePlacementId: null,
-    },
-    200,
-  );
-  expect((await f.call('POST', `/v1/knowledge/documents/${child.documentId}:trash`, oldInput)).status).toBe(412);
-  // A future subtree root uses the same current ancestor eligibility, without rewriting its descendants.
-  await setLifecycle(
-    sibling.documentId,
-    'deleted_at=clock_timestamp(),lifecycle_generation=1,current_publication_id=NULL',
-  );
+  const lifecyclePath = `${w.privatePath(root.documentId)}/lifecycle`;
+  expect((await f.call('GET', lifecyclePath)).value.restoreProgress).toEqual(restore.value.restoreProgress);
+  expect(JSON.stringify((await f.call('GET', lifecyclePath)).value)).not.toContain('Child');
+  expect((await f.call('GET', w.privatePath(child.documentId))).status).toBe(404);
   expect(
     (
-      await f.call('POST', `/v1/knowledge/documents/${child.documentId}:trash`, {
-        expectedStructureRevisionId: moved.structureRevisionId,
-        expectedGeneration: '0',
+      await f.call('POST', `/v1/knowledge/documents/${child.documentId}/revisions:revise`, {
+        ...body('Blocked during restore'),
+        expectedHeadRevisionId: child.revisionId,
       })
     ).status,
   ).toBe(404);
-  expect((await f.call('GET', w.privatePath(child.documentId))).status).toBe(404);
-  expect((await f.call('GET', `${w.privatePath(child.documentId)}/history`)).status).toBe(404);
-  const restoreIncomplete = await f.call('POST', `/v1/knowledge/documents/${sibling.documentId}:restore`, {
-    expectedStructureRevisionId: moved.structureRevisionId,
-    expectedGeneration: '1',
-  });
-  expect(restoreIncomplete.value).toMatchObject({
-    complete: false,
-    reason: 'subtree_work_required',
-    state: 'trashed',
-    generation: '1',
-  });
+  const moveChildOut = await f.call(
+    'POST',
+    `/v1/knowledge/notebooks/${w.notebook.notebookId}/placements/${child.placementId}:move`,
+    {
+      expectedStructureRevisionId: w.structure(),
+      destinationParentPlacementId: null,
+      beforePlacementId: null,
+    },
+  );
+  expect(moveChildOut.status).toBe(404);
+  const moveUnrelatedIn = await f.call(
+    'POST',
+    `/v1/knowledge/notebooks/${w.notebook.notebookId}/placements/${unrelated.placementId}:move`,
+    {
+      expectedStructureRevisionId: w.structure(),
+      destinationParentPlacementId: root.placementId,
+      beforePlacementId: null,
+    },
+  );
+  expect(moveUnrelatedIn.status).toBe(404);
+
+  // Unrelated structure work proceeds while the hidden subtree is frozen.
+  const another = await w.create('Another unrelated branch');
+  expect((await f.call('GET', w.privatePath(another.documentId))).status).toBe(200);
+  const operation = await f.pool.query<{ operation_id: string }>(
+    `SELECT operation_id FROM content.knowledge_lifecycle_restore
+     WHERE route=$1 AND root_document_id=$2 AND state='running'`,
+    [routeOf(root.documentId), root.documentId],
+  );
+  const operationId = operation.rows[0]!.operation_id;
+
+  // Each call is a fresh worker invocation. The committed cursor, not process memory, resumes the walk.
+  const firstPage = await advanceKnowledgeLifecycleRestorePage(f.pool, f.system.access, operationId, () => new Date());
+  expect(firstPage).toMatchObject({ state: 'running', complete: false, processedDocuments: '1' });
+  expect((await f.call('GET', w.privatePath(root.documentId))).status).toBe(404);
+  const secondPage = await advanceKnowledgeLifecycleRestorePage(f.pool, f.system.access, operationId, () => new Date());
+  expect(secondPage).toMatchObject({ state: 'complete', complete: true, pendingPlacements: '0' });
+
   expect((await f.call('GET', w.privatePath(root.documentId))).status).toBe(200);
+  const restoredChild = (await f.call('GET', w.privatePath(child.documentId))).value.document;
+  expect(restoredChild.publicationId).toBeNull();
+  expect((await f.call('GET', w.privatePath(nested.documentId))).status).toBe(404);
+  expect((await f.call('GET', w.privatePath(nestedChild.documentId))).status).toBe(404);
+  expect((await f.call('GET', w.privatePath(another.documentId))).status).toBe(200);
+
+  // A delayed old selection cannot pass the child's advanced lifecycle generation.
+  await f.pool.query(
+    `UPDATE content.knowledge_document SET current_publication_id=$3 WHERE route=$1 AND document_id=$2`,
+    [routeOf(child.documentId), child.documentId, childPublication.publicationId],
+  );
+  expect(
+    (await f.call('GET', `/v1/knowledge/documents/${child.documentId}`, undefined, { anonymous: true })).status,
+  ).toBe(404);
 });
 
 test('retention, purge start and completed purge deny recovery and old receipts; competing generations have one winner', async () => {

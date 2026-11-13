@@ -1648,6 +1648,60 @@ CREATE TABLE content.knowledge_document (
 
 
 --
+-- Name: knowledge_lifecycle_frontier; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_lifecycle_frontier (
+    route integer NOT NULL,
+    notebook_id uuid NOT NULL,
+    root_document_id uuid NOT NULL,
+    parent_placement_id uuid NOT NULL,
+    after_position numeric(38,0),
+    after_placement_id uuid,
+    exhausted boolean DEFAULT false NOT NULL,
+    CONSTRAINT knowledge_lifecycle_frontier_check CHECK (((after_position IS NULL) = (after_placement_id IS NULL)))
+);
+
+
+--
+-- Name: knowledge_lifecycle_restore; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_lifecycle_restore (
+    route integer NOT NULL,
+    notebook_id uuid NOT NULL,
+    root_document_id uuid NOT NULL,
+    operation_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner_account_id uuid NOT NULL,
+    actor_client_id text,
+    actor_scopes text[],
+    actor_requested_by text,
+    actor_authn_epoch integer,
+    root_generation bigint NOT NULL,
+    restore_until timestamp with time zone NOT NULL,
+    state text NOT NULL,
+    processed_documents bigint DEFAULT 0 NOT NULL,
+    pending_placements bigint DEFAULT 1 NOT NULL,
+    page_number bigint DEFAULT 0 NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT knowledge_lifecycle_restore_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
+    CONSTRAINT knowledge_lifecycle_restore_check1 CHECK ((route = ((get_byte(uuid_send(root_document_id), 10) * 256) + get_byte(uuid_send(root_document_id), 11)))),
+    CONSTRAINT knowledge_lifecycle_restore_check2 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT knowledge_lifecycle_restore_check3 CHECK ((((actor_client_id IS NULL) AND (actor_scopes IS NULL) AND (actor_requested_by IS NULL) AND (actor_authn_epoch IS NULL)) OR ((actor_client_id IS NOT NULL) AND (actor_scopes IS NOT NULL) AND (actor_authn_epoch IS NOT NULL)))),
+    CONSTRAINT knowledge_lifecycle_restore_completed_at_check CHECK (((completed_at IS NULL) OR isfinite(completed_at))),
+    CONSTRAINT knowledge_lifecycle_restore_page_number_check CHECK ((page_number >= 0)),
+    CONSTRAINT knowledge_lifecycle_restore_pending_placements_check CHECK ((pending_placements >= 0)),
+    CONSTRAINT knowledge_lifecycle_restore_processed_documents_check CHECK ((processed_documents >= 0)),
+    CONSTRAINT knowledge_lifecycle_restore_restore_until_check CHECK (isfinite(restore_until)),
+    CONSTRAINT knowledge_lifecycle_restore_root_generation_check CHECK ((root_generation >= 0)),
+    CONSTRAINT knowledge_lifecycle_restore_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT knowledge_lifecycle_restore_started_at_check CHECK (isfinite(started_at)),
+    CONSTRAINT knowledge_lifecycle_restore_state_check CHECK ((state = ANY (ARRAY['running'::text, 'complete'::text, 'expired'::text, 'purged'::text, 'superseded'::text])))
+);
+
+
+--
 -- Name: knowledge_notebook; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -3375,6 +3429,38 @@ ALTER TABLE ONLY content.knowledge_document
 
 
 --
+-- Name: knowledge_lifecycle_frontier knowledge_lifecycle_frontier_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_lifecycle_frontier
+    ADD CONSTRAINT knowledge_lifecycle_frontier_pkey PRIMARY KEY (route, notebook_id, root_document_id, parent_placement_id);
+
+
+--
+-- Name: knowledge_lifecycle_restore knowledge_lifecycle_restore_operation_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_lifecycle_restore
+    ADD CONSTRAINT knowledge_lifecycle_restore_operation_id_key UNIQUE (operation_id);
+
+
+--
+-- Name: knowledge_lifecycle_restore knowledge_lifecycle_restore_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_lifecycle_restore
+    ADD CONSTRAINT knowledge_lifecycle_restore_pkey PRIMARY KEY (route, root_document_id);
+
+
+--
+-- Name: knowledge_lifecycle_restore knowledge_lifecycle_restore_route_notebook_id_root_document_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_lifecycle_restore
+    ADD CONSTRAINT knowledge_lifecycle_restore_route_notebook_id_root_document_key UNIQUE (route, notebook_id, root_document_id);
+
+
+--
 -- Name: knowledge_notebook knowledge_notebook_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -4272,6 +4358,20 @@ CREATE INDEX hosted_structure_revision_history_idx ON content.hosted_structure_r
 
 
 --
+-- Name: knowledge_lifecycle_frontier_pending; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_lifecycle_frontier_pending ON content.knowledge_lifecycle_frontier USING btree (route, notebook_id, root_document_id, parent_placement_id) WHERE (NOT exhausted);
+
+
+--
+-- Name: knowledge_lifecycle_restore_pending; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_lifecycle_restore_pending ON content.knowledge_lifecycle_restore USING btree (route, started_at, root_document_id) WHERE (state = 'running'::text);
+
+
+--
 -- Name: knowledge_notebook_owner_page; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -5074,6 +5174,22 @@ ALTER TABLE ONLY content.knowledge_document
 
 ALTER TABLE ONLY content.knowledge_document
     ADD CONSTRAINT knowledge_document_notebook_fk FOREIGN KEY (route, notebook_id) REFERENCES content.knowledge_notebook(route, notebook_id);
+
+
+--
+-- Name: knowledge_lifecycle_frontier knowledge_lifecycle_frontier_route_notebook_id_root_docume_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_lifecycle_frontier
+    ADD CONSTRAINT knowledge_lifecycle_frontier_route_notebook_id_root_docume_fkey FOREIGN KEY (route, notebook_id, root_document_id) REFERENCES content.knowledge_lifecycle_restore(route, notebook_id, root_document_id) ON DELETE CASCADE;
+
+
+--
+-- Name: knowledge_lifecycle_restore knowledge_lifecycle_restore_route_notebook_id_root_documen_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_lifecycle_restore
+    ADD CONSTRAINT knowledge_lifecycle_restore_route_notebook_id_root_documen_fkey FOREIGN KEY (route, notebook_id, root_document_id) REFERENCES content.knowledge_document(route, notebook_id, document_id) ON DELETE CASCADE;
 
 
 --

@@ -4761,25 +4761,27 @@ They omit notebook/account identity and depend on current Content selection, inc
 Knowledge permits 32 primary placements per ancestor chain and 64 revision Subject references plus the notebook
 Subject. Notebook size is uncapped; canonical bytes use the existing 2 MiB validator.
 
-### Single-document lifecycle
+### Trash and restore lifecycle
 
 [Access and lifecycle](../../../../docs/knowledge-workspaces.md#access-and-lifecycle) owns the product contract.
 Native `documents/{id}:trash` and `:restore` require expected structure revision and lifecycle generation. They lock
-the notebook then the keyed document, authorize current ownership/retention before receipts, and admit a leaf using
-one indexed child existence probe. A non-leaf returns `complete: false, reason: subtree_work_required` with no effect.
-The owner document `/lifecycle` address is metadata-only recovery. Each transition advances generation and clears
-publication; selectors require both current eligibility and matching publication generation. Restore keeps identity
-and private revision history, respects the strict 30-day deadline and purge fence, and never republishes. Legal hold
-is preserved; it suspends future automatic purge, not the restore deadline. Future purge writers use the same locks.
+the notebook then the keyed document and authorize current ownership/retention before receipts. Trash updates the
+selected root immediately; current ancestor eligibility conceals every descendant without walking it. Leaf restore
+is synchronous. Nonleaf restore persists an owner-scoped operation and a placement-keyset frontier, advances at most
+64 direct children per native command, clears each live descendant's publication pointer and advances its lifecycle
+generation, and reopens the root only after the final frontier page commits. Independently trashed roots are skipped.
+The owner `/lifecycle` read returns only processed/pending counts while traversal runs. Restore keeps identity and
+private revision history, respects the strict 30-day deadline and purge fence, and never republishes. Legal hold is
+preserved; it suspends future automatic purge, not the restore deadline. Existing notebook locks, current Access and
+ancestor eligibility fence subtree edits, insertion and moves while the root is hidden; unrelated branches proceed.
 
-Cost: one notebook/document pair, at most 32 keyed ancestors, one child probe, one document update, and at most two
-registered events (lifecycle and publication withdrawal). No reference traversal, sibling walk, body rewrite or new
-trash store. Existing writers take the notebook fence before receipt lookup; source selection, history, outlines,
-export/copy and discovery share current lifecycle eligibility. Historical outline cursors advance over hidden rows.
-Native receiving coverage in `test/content/knowledge-lifecycle.test.ts` pins replay/denial, stale structure/generation,
-competing trash commands, retained history, disclosure and lagged-index refusal, legal holds, expiry/purge guards and
-truthful subtree incompleteness. Native, browser and growth checks run after landing; subtree traversal/purge remains
-separate work. Existing first-loop, transfer and history assertions remain unchanged.
+Cost: one notebook/document lock, at most 32 keyed ancestors, one indexed child page of at most 64 rows, and at most
+128 registered lifecycle/publication events per restore page. No reference traversal, sibling-wide read, body rewrite
+or second worker runtime. Source selection, history, outlines, export/copy and discovery share current lifecycle
+eligibility. Historical outline cursors advance over hidden rows. `test/content/knowledge-lifecycle.test.ts` pins
+subtree concealment, persisted progress/resume, nested trash, unrelated work and old-publication retirement alongside
+leaf replay/denial, retained history, legal holds and expiry/purge guards. Native, browser and growth checks run after
+landing; the real relay/default-worker races remain deferred verifier evidence.
 
 ### Single-document export and copy
 

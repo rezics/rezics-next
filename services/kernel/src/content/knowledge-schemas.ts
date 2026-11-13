@@ -296,6 +296,10 @@ export function KnowledgeDocumentCompareSchema() {
 }
 
 const knowledgeGeneration = t.String({ pattern: '^(?:0|[1-9][0-9]{0,18})$' });
+const knowledgeRestoreProgress = t.Object(
+  { processedDocuments: knowledgeGeneration, pendingPlacements: knowledgeGeneration },
+  { additionalProperties: false },
+);
 export const KnowledgeLifecycleCommandSchema = t.Object(
   { expectedStructureRevisionId: UUID, expectedGeneration: knowledgeGeneration },
   { additionalProperties: false },
@@ -307,9 +311,10 @@ const lifecycleFields = {
   generation: knowledgeGeneration,
   state: t.Union([t.Literal('active'), t.Literal('trashed')]),
   restoreUntil: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+  restoreProgress: t.Union([knowledgeRestoreProgress, t.Null()]),
 };
 export const KnowledgeLifecycleSchema = t.Object(lifecycleFields, { additionalProperties: false });
 export const KnowledgeLifecycleResultSchema = t.Object(
-  { ...lifecycleFields, complete: t.Boolean(), reason: t.Union([t.Literal('subtree_work_required'), t.Null()]) },
+  { ...lifecycleFields, complete: t.Boolean(), reason: t.Union([t.Literal('restoring'), t.Null()]) },
   { additionalProperties: false },
 );

@@ -25,6 +25,10 @@ import { createContentWork } from './work.ts';
 import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts';
 import { registerFeedWork } from './feed-work.ts';
 import { registerReportLocatorWork } from './report-locator-work.ts';
+import {
+  createKnowledgeLifecycleRestoreEffect,
+  registerKnowledgeLifecycleRestoreWork,
+} from './knowledge-lifecycle-work.ts';
 import { createConversationActivityEffect } from './conversation-activity.ts';
 import { FEED_OPERATION_DECLARATIONS } from './feed-operation-declarations.ts';
 import { contentViewerActionResources } from './viewer-actions.ts';
@@ -170,6 +174,7 @@ export function contentDeclaredEffects(
   return Object.freeze([
     createConversationActivityEffect(pool as Parameters<typeof createConversationActivityEffect>[0]),
     ...contentEffects(pool as Parameters<typeof contentEffects>[0], client, readIdentityMappings),
+    createKnowledgeLifecycleRestoreEffect(pool as Parameters<typeof contentEffects>[0], client),
     ...contentNoticeEffects(pool as Parameters<typeof contentNoticeEffects>[0], access),
   ]);
 }
@@ -211,6 +216,7 @@ export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule
         now,
         ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
       }).register(context);
+      registerKnowledgeLifecycleRestoreWork(context, access);
       registerReportLocatorWork(context);
       registerModerationDirectoryWork(context);
       context.addEffects([

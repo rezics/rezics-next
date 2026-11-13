@@ -26,6 +26,10 @@ import {
   CONTENT_NOTICE_RETENTION_SCHEDULE,
 } from '../../src/content/work.ts';
 import { OWN_DRAFT_REPAIR_WORKFLOW } from '../../src/content/own-drafts-index.ts';
+import {
+  KNOWLEDGE_LIFECYCLE_RESTORE_STEP,
+  KNOWLEDGE_LIFECYCLE_RESTORE_WORKFLOW,
+} from '../../src/content/knowledge-lifecycle-work.ts';
 import { REVIEW_CENSUS_SCHEDULE, REVIEW_CENSUS_WORKFLOW } from '../../src/content/review-census-work.ts';
 import {
   REALM_SUBJECT_CENSUS_SCHEDULE,
@@ -220,8 +224,10 @@ if (process.argv.includes('--content-registration')) {
         'content.board-slow.recovery',
         'content.board-slow.retention',
         'content.erasePostRevisions',
+        KNOWLEDGE_LIFECYCLE_RESTORE_WORKFLOW,
       ]),
     );
+    expect(registration.steps).toContain(KNOWLEDGE_LIFECYCLE_RESTORE_STEP);
     expect(registration.effects.map((effect) => effect.name)).toEqual([
       'content_review_discovery_source',
       'content_review_discovery_dispatch',
@@ -248,6 +254,7 @@ if (process.argv.includes('--content-registration')) {
       'content_url_import',
       'content_subject_reaction_merge',
       'content_realm_subject_lifecycle',
+      'content_knowledge_lifecycle_restore',
       'content_mention_notice',
       'content_reply_notice',
       'content_thread_watch_notice',

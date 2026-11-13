@@ -365,8 +365,12 @@ subject visit. Canonical identity aggregation consumes Semantic's admitted mappi
 mapping cannot be approximated by scanning all originals.
 
 Trash, restoration, erasure, legal holds, moderation and account termination follow [Deletion](deletion.md).
-Decision: native lifecycle admits one leaf; a primary child returns `complete: false, reason: subtree_work_required`
-without mutation. Subtree restore/purge requires separate durable work. References and unrelated branches are untouched.
+Decision: trash commits the selected root fence synchronously, so shared ancestor eligibility immediately conceals
+all primary descendants while references and unrelated branches remain intact. Leaf restore stays synchronous;
+nonleaf restore keeps the root trashed while Content Work advances a durable placement-keyset frontier, retires each
+live descendant's lifecycle/publication generation in bounded commands, skips independently trashed roots, and opens
+the root privately only in the final command. The owner lifecycle read recovers processed/pending counts without
+document content. Restore never republishes; publication selection remains explicit.
 
 `POST /v1/knowledge/documents/{id}:trash` and `:restore` require current owner `account:update`,
 `expectedStructureRevisionId` and exact decimal `expectedGeneration`. Both use native receipts. Notebook structure
@@ -378,9 +382,11 @@ explicit and creates a fresh publication.
 
 Shared eligibility checks at most 32 primary placements, rejecting hidden/purging ancestors and incomplete chains.
 It fences private/history/compare, current/historical outlines, public selection, lagged discovery, copy/export and
-writers. Moves cannot bypass trash; historical pages advance over hidden candidates without exposing titles or locators. Future subtree work must keep its
-root hidden, freeze its structure, retire every descendant's public generation through durable traversal, and only
-then reactivate the root. Independently trashed nested roots remain hidden. Purge/expiry must share those fences, preserve holds and use the erasure disposition below.
+writers. Moves cannot bypass trash; historical pages advance over hidden candidates without exposing titles or locators.
+The restore frontier persists its child keyset cursor and discovered primary placements, so a restarted worker resumes
+without rediscovering the tree. Existing notebook locks and current eligibility fence subtree edits, insertion and
+moves while the root is hidden; unrelated branches remain writable. Independently trashed nested roots remain hidden.
+Purge/expiry must share those fences, preserve holds and use the erasure disposition below.
 
 For account erasure, private drafts and never-published revisions are erased. Eligible published contributions may
 remain under the existing de-identified public-contribution policy. The retained publication must be independent of
