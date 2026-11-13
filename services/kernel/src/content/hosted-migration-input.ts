@@ -701,6 +701,8 @@ async function readCommittedPage(
   committed: PageCommit,
   context: HostedCommandContext,
 ): Promise<HostedMigrationInputPageResult> {
+  requireAccount(actor);
+  const ownerAccountId = actor.accountId;
   const route = routeFor(catalogueId, inputId);
   const request = { catalogueId, inputId, committed };
   const readReceipt = {
@@ -720,7 +722,7 @@ async function readCommittedPage(
     },
     async (tx, { time }) => {
       const row = await loadInput(tx, route, catalogueId, inputId, true);
-      if (!row || row.owner_account_id !== actor.accountId) throw new ContentNotFoundError();
+      if (!row || row.owner_account_id !== ownerAccountId) throw new ContentNotFoundError();
       let status = row.state;
       if (
         (status === 'open' || status === 'complete' || status === 'incomplete') &&
@@ -809,7 +811,7 @@ async function readCommittedPage(
     },
     async (tx, { time }) => {
       const row = await loadInput(tx, route, catalogueId, inputId, true);
-      if (!row || row.owner_account_id !== actor.accountId) throw new ContentNotFoundError();
+      if (!row || row.owner_account_id !== ownerAccountId) throw new ContentNotFoundError();
       let status = row.state;
       if (
         (status === 'open' || status === 'complete' || status === 'incomplete') &&

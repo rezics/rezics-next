@@ -245,13 +245,13 @@ test('unavailable exact targets consume their raw slot without disclosing copied
       { accountId: other.actor.accountId, bearer: other.bearer },
     );
     await markAuthorErased.run(fixture.native.pool, {
-      route: routeOf(target.postId),
+      route: routeOf(target.postId)!,
       account_id: other.actor.accountId,
       item_kind: 'post',
       item_id: target.postId,
     });
     await disposeItem.run(fixture.native.pool, {
-      route: routeOf(target.postId),
+      route: routeOf(target.postId)!,
       account_id: other.actor.accountId,
       item_kind: 'post',
       item_id: target.postId,
@@ -478,7 +478,7 @@ test('native source erasure overrides an active hold and retains no title payloa
       { accountId: fixture.native.author.actor.accountId, bearer: fixture.native.author.bearer },
     );
     await markAuthorErased.run(fixture.native.pool, {
-      route: routeOf(fixture.catalogueId),
+      route: routeOf(fixture.catalogueId)!,
       account_id: fixture.native.author.actor.accountId,
       item_kind: 'post',
       item_id: fixture.catalogueId,
@@ -492,7 +492,7 @@ test('native source erasure overrides an active hold and retains no title payloa
     expect(await referenceCount(fixture, captured.value.inputId)).toBe(0);
 
     await disposeItem.run(fixture.native.pool, {
-      route: routeOf(fixture.catalogueId),
+      route: routeOf(fixture.catalogueId)!,
       account_id: fixture.native.author.actor.accountId,
       item_kind: 'post',
       item_id: fixture.catalogueId,
