@@ -31,6 +31,14 @@ non-null `restoreProgress` until the durable traversal finishes. The adapter adm
 counts of work already processed and placements still pending, not a total or percentage. Missing/malformed counts
 or progress on an active response are invalid HTTP input: reads become unavailable and mutation outcomes uncertain.
 
+Decision: each mounted lifecycle effect generation owns its reads, commands, completion flags and retained review.
+Address, viewer, CSRF/session credential observation, operations or read-admission replacement immediately hides the
+former metadata and intent and starts a fresh read. The parent session/exposure/locale owner still retires its
+mounted editor. Late former completions cannot release a current read or command, retire the current visit, or
+reopen editing. A former unresolved command remains unknown for its original document and is never retried against
+the replacement; exact retries are retained only within the same live visit. Focused controller fixtures cover late
+completion, replacement reads, current refresh and review/credential retirement; existing acceptance stays intact.
+
 Reload reads the same owner metadata and recovers progress without submitting a command. The progress panel has an
 explicit refresh control; neither it nor the controller starts polling, performs background writes, traverses a
 subtree or starts another restore while progress exists. Acknowledged commands reread lifecycle once through the

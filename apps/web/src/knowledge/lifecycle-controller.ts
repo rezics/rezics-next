@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgePrivateAddress } from './private-knowledge';
 import {
   knowledgeRestoreExpired,
@@ -11,6 +11,28 @@ import {
 
 type Admission = 'unknown' | 'available' | 'denied' | 'unavailable';
 type Observation = Extract<KnowledgeLifecycleRead, { state: 'ready' }>;
+type Visit = {
+  identity: object;
+  active: boolean;
+  reading: boolean;
+  inFlight: boolean;
+};
+type State = {
+  visit: Visit | null;
+  observation: Observation | null;
+  readState: string;
+  commandState: string;
+  intent: KnowledgeLifecycleIntent | null;
+  revision: number;
+};
+const initial: State = {
+  visit: null,
+  observation: null,
+  readState: 'preparing',
+  commandState: 'idle',
+  intent: null,
+  revision: 0,
+};
 
 /** One private visit owns metadata, review and exact retries; none enter a shared cache. */
 export function useKnowledgeLifecycle({
@@ -30,121 +52,126 @@ export function useKnowledgeLifecycle({
   restoreAdmission: Admission;
   onRetire: (state: 'denied' | 'signed-out' | 'retired') => void;
 }) {
-  const [observation, setObservation] = useState<Observation | null>(null);
-  const [readState, setReadState] = useState('preparing');
-  const [commandState, setCommandState] = useState('idle');
-  const [intent, setIntent] = useState<KnowledgeLifecycleIntent | null>(null);
-  const [revision, setRevision] = useState(0);
-  const mounted = useRef(false);
-  const sequence = useRef(0);
-  const inFlight = useRef(false);
-  const reading = useRef(false);
+  const [state, setState] = useState(initial);
+  const current = useRef<Visit | null>(null);
   const retireRef = useRef(onRetire);
   retireRef.current = onRetire;
   const enabled = !!address && !!operations;
+  const identity = useMemo(
+    () => ({}),
+    [address?.notebookId, address?.documentId, expected.viewer, expected.csrfToken, operations, admission],
+  );
+  // Hide former metadata and reviews during the replacement render, before effect cleanup.
+  const snapshot = state.visit?.identity === identity && state.visit === current.current ? state : initial;
 
-  function retire(state: 'denied' | 'signed-out' | 'retired') {
-    sequence.current++;
-    setObservation(null);
-    setIntent(null);
-    setReadState(state);
-    setCommandState('idle');
-    retireRef.current(state);
+  function isCurrent(visit: Visit) {
+    return visit.active && current.current === visit;
   }
 
-  async function reread() {
-    if (!address || !operations || admission !== 'available' || reading.current || !mounted.current) return;
-    const attempt = ++sequence.current;
-    reading.current = true;
-    setReadState('preparing');
+  function update(visit: Visit, change: Partial<State>) {
+    if (!isCurrent(visit)) return;
+    setState((previous) => (previous.visit === visit ? { ...previous, ...change } : previous));
+  }
+
+  function retire(visit: Visit, readState: 'denied' | 'signed-out' | 'retired') {
+    if (!isCurrent(visit)) return;
+    update(visit, { observation: null, intent: null, readState, commandState: 'idle' });
+    visit.active = false;
+    retireRef.current(readState);
+  }
+
+  async function reread(visit: Visit) {
+    if (!address || !operations || admission !== 'available' || visit.reading || !isCurrent(visit)) return;
+    visit.reading = true;
+    update(visit, { readState: 'preparing' });
     try {
       const result = await operations.read(address, expected);
-      if (!mounted.current || sequence.current !== attempt) return;
+      if (!isCurrent(visit)) return;
       if (result.state === 'ready') {
         if (result.binding.viewer !== expected.viewer || result.binding.csrfToken !== expected.csrfToken) {
-          retire('retired');
+          retire(visit, 'retired');
           return;
         }
-        setObservation(result);
-        setReadState('ready');
-        setRevision((current) => current + 1);
+        setState((previous) =>
+          previous.visit === visit
+            ? { ...previous, observation: result, readState: 'ready', revision: previous.revision + 1 }
+            : previous,
+        );
       } else if (result.state === 'denied' || result.state === 'retired' || result.state === 'signed-out') {
-        retire(result.state);
+        retire(visit, result.state);
       } else {
-        setObservation(null);
-        setReadState(result.state);
+        update(visit, { observation: null, readState: result.state });
       }
     } catch {
-      if (mounted.current && sequence.current === attempt) {
-        setObservation(null);
-        setReadState('unavailable');
-      }
+      update(visit, { observation: null, readState: 'unavailable' });
     } finally {
-      reading.current = false;
+      // This flag belongs to this effect generation, including Strict Mode replacements.
+      visit.reading = false;
     }
   }
 
   useEffect(() => {
-    mounted.current = true;
+    const visit: Visit = { identity, active: true, reading: false, inFlight: false };
+    current.current = visit;
+    setState({ ...initial, visit });
     if (enabled) {
-      if (admission === 'available') void reread();
-      else setReadState(admission === 'unknown' ? 'preparing' : admission);
+      if (admission === 'available') void reread(visit);
+      else update(visit, { readState: admission === 'unknown' ? 'preparing' : admission });
     }
     return () => {
-      mounted.current = false;
-      sequence.current++;
-      reading.current = false;
+      visit.active = false;
+      if (current.current === visit) current.current = null;
     };
-  }, [address?.notebookId, address?.documentId, expected.viewer, expected.csrfToken, operations, admission]);
+  }, [identity]);
 
+  const { observation, readState, commandState, intent, revision } = snapshot;
   const lifecycle = observation?.lifecycle ?? null;
   const allowed = (action: 'trash' | 'restore') =>
     (action === 'trash' ? trashAdmission : restoreAdmission) === 'available';
 
   function review(blocked: boolean) {
-    if (blocked || !observation || readState !== 'ready' || intent || inFlight.current) return;
+    const visit = snapshot.visit;
+    if (blocked || !visit || !isCurrent(visit) || !observation || readState !== 'ready' || intent || visit.inFlight)
+      return;
     if (observation.lifecycle.restoreProgress) return;
     const action = observation.lifecycle.state === 'active' ? 'trash' : 'restore';
     if (!allowed(action)) return;
     if (action === 'restore' && knowledgeRestoreExpired(observation.lifecycle)) {
-      setCommandState('expired');
+      update(visit, { commandState: 'expired' });
       return;
     }
-    setIntent(reviewKnowledgeLifecycle(observation.lifecycle, observation.binding, action));
-    setCommandState('confirm');
+    update(visit, {
+      intent: reviewKnowledgeLifecycle(observation.lifecycle, observation.binding, action),
+      commandState: 'confirm',
+    });
   }
 
   async function submit(blocked: boolean) {
-    if (blocked || !intent || !operations || !allowed(intent.action) || inFlight.current || !mounted.current) return;
+    const visit = snapshot.visit;
+    if (blocked || !visit || !isCurrent(visit) || !intent || !operations || !allowed(intent.action) || visit.inFlight)
+      return;
     if (commandState === 'confirm' && intent.action === 'restore' && lifecycle && knowledgeRestoreExpired(lifecycle)) {
-      setIntent(null);
-      setCommandState('expired');
+      update(visit, { intent: null, commandState: 'expired' });
       return;
     }
-    const attempt = sequence.current;
-    inFlight.current = true;
-    setCommandState('pending');
+    visit.inFlight = true;
+    update(visit, { commandState: 'pending' });
     try {
       const result = await operations.change(intent);
-      if (!mounted.current || sequence.current !== attempt) return;
+      if (!isCurrent(visit)) return;
       if (result.state === 'denied' || result.state === 'retired' || result.state === 'signed-out') {
-        retire(result.state);
-      } else if (result.state === 'acknowledged') {
-        setIntent(null);
-        setCommandState('acknowledged');
-        await reread();
-      } else if (result.state === 'conflict' || result.state === 'not-found') {
-        setIntent(null);
-        setCommandState(result.state);
-        await reread();
+        retire(visit, result.state);
+      } else if (result.state === 'acknowledged' || result.state === 'conflict' || result.state === 'not-found') {
+        update(visit, { intent: null, commandState: result.state });
+        await reread(visit);
       } else {
         // Transport failure does not establish whether the command took effect.
-        setCommandState(result.state);
+        update(visit, { commandState: result.state });
       }
     } catch {
-      if (mounted.current && sequence.current === attempt) setCommandState('uncertain');
+      update(visit, { commandState: 'uncertain' });
     } finally {
-      inFlight.current = false;
+      visit.inFlight = false;
     }
   }
 
@@ -164,13 +191,14 @@ export function useKnowledgeLifecycle({
     review,
     submit,
     async reread() {
-      if (intent || inFlight.current) return;
-      await reread();
+      const visit = snapshot.visit;
+      if (!visit || intent || visit.inFlight) return;
+      await reread(visit);
     },
     cancel() {
-      if (commandState !== 'confirm') return;
-      setIntent(null);
-      setCommandState('idle');
+      const visit = snapshot.visit;
+      if (!visit || commandState !== 'confirm') return;
+      update(visit, { intent: null, commandState: 'idle' });
     },
   };
 }
