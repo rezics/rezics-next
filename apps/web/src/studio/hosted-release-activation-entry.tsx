@@ -30,8 +30,15 @@ export function HostedReleaseActivationEntry(props: Props) {
     setMounted({ props, visit });
     return visit.dispose;
   }, [owner, prepared, locale, source, csrfToken, native]);
-  if (mounted && mounted.props.owner === owner && mounted.props.prepared === prepared && mounted.props.locale === locale &&
-    mounted.props.source === source && mounted.props.csrfToken === csrfToken && mounted.props.native === native)
+  if (
+    mounted &&
+    mounted.props.owner === owner &&
+    mounted.props.prepared === prepared &&
+    mounted.props.locale === locale &&
+    mounted.props.source === source &&
+    mounted.props.csrfToken === csrfToken &&
+    mounted.props.native === native
+  )
     return <HostedReleaseActivationView visit={mounted.visit} locale={locale} />;
   return <p role="status">{activationCopy[locale].review}</p>;
 }

@@ -1,29 +1,26 @@
 import * as v from 'valibot';
 import type { StudioResult } from './contract';
-import { hostedId, type HostedBookNative, type HostedOwnerViewer, type HostedPublicationPointNative } from './hosted-contract';
+import {
+  hostedId,
+  type HostedBookNative,
+  type HostedOwnerViewer,
+  type HostedPublicationPointNative,
+} from './hosted-contract';
 import type { HostedReleaseReaderAdmission } from './hosted-release-reader-link';
 
 const count = v.pipe(v.string(), v.regex(/^(0|[1-9][0-9]*)$/));
 /** Content's native progress, without a browser authority projection or a publication claim from readiness. */
-export const activationProgress = v.pipe(
-  v.strictObject({
-    catalogueId: hostedId,
-    stageId: hostedId,
-    state: v.picklist(['checking', 'ready', 'restart', 'activated']),
-    passId: hostedId,
-    checkedTargetCount: count,
-    totalTargetCount: count,
-    candidateGenerationId: hostedId,
-    publicationId: v.nullable(hostedId),
-    restartRequired: v.boolean(),
-  }),
-  v.check((value) =>
-    BigInt(value.checkedTargetCount) <= BigInt(value.totalTargetCount) &&
-    value.restartRequired === (value.state === 'restart') &&
-    (value.state === 'activated' ? value.publicationId !== null : value.publicationId === null) &&
-    (!['ready', 'activated'].includes(value.state) || value.checkedTargetCount === value.totalTargetCount),
-  ),
-);
+export const activationProgress = v.strictObject({
+  catalogueId: hostedId,
+  stageId: hostedId,
+  state: v.picklist(['checking', 'ready', 'restart', 'activated']),
+  passId: hostedId,
+  checkedTargetCount: count,
+  totalTargetCount: count,
+  candidateGenerationId: hostedId,
+  publicationId: v.nullable(hostedId),
+  restartRequired: v.boolean(),
+});
 export type ActivationProgress = v.InferOutput<typeof activationProgress>;
 export type ActivationKind = 'start' | 'advance' | 'activate';
 export type ActivationRequest = Readonly<{

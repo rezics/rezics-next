@@ -31,17 +31,21 @@ export function HostedReleasePreparationView({
   }, [visit, phase]);
   if (state.kind === 'ended') return <p role="alert">{state.reason === 'denied' ? copy.denied : copy.ended}</p>;
   const { progress, review, owner } = state;
-  if (activation && state.phase === 'prepared' && progress) return (
-    <main className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8">
-      <header className="studio-header space-y-3">
-        <h1>{activationCopy[locale].heading}</h1>
-        <a className="studio-skip inline-flex min-h-11 items-center" href={localizeHref('/studio?books=1', { locale })}>
-          {m.studio_root_append_return({}, { locale })}
-        </a>
-      </header>
-      <HostedReleaseActivationEntry {...activation} owner={owner} prepared={progress} locale={locale} />
-    </main>
-  );
+  if (activation && state.phase === 'prepared' && progress)
+    return (
+      <main className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8">
+        <header className="studio-header space-y-3">
+          <h1>{activationCopy[locale].heading}</h1>
+          <a
+            className="studio-skip inline-flex min-h-11 items-center"
+            href={localizeHref('/studio?books=1', { locale })}
+          >
+            {m.studio_root_append_return({}, { locale })}
+          </a>
+        </header>
+        <HostedReleaseActivationEntry {...activation} owner={owner} prepared={progress} locale={locale} />
+      </main>
+    );
   const failure = ['unknown', 'invalid', 'stale', 'unavailable', 'expired', 'cancelled', 'failed'].includes(phase);
   const message = {
     review: copy.review,

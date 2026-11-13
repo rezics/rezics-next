@@ -3,7 +3,12 @@ import type { HistoricalReaderSource } from '../threads/historical-reader-proven
 import type { StudioFailure } from './contract';
 import type { HostedOwnedBook } from './hosted-contract';
 import type { ReleaseProgress } from './hosted-release-preparation-contract';
-import type { ActivationKind, ActivationProgress, ActivationRequest, HostedReleaseActivationTransport } from './hosted-release-activation-contract';
+import type {
+  ActivationKind,
+  ActivationProgress,
+  ActivationRequest,
+  HostedReleaseActivationTransport,
+} from './hosted-release-activation-contract';
 import { HostedReleaseReaderLinkProjection } from './hosted-release-reader-link';
 
 export type ActivationReview = Readonly<{
@@ -23,12 +28,17 @@ export type ActivationReview = Readonly<{
 export function preparedActivationReview(owner: HostedOwnedBook, prepared: ReleaseProgress): ActivationReview | null {
   const { stage, candidate } = prepared;
   if (
-    !prepared.candidateReady || !candidate?.sealed || !candidate.coverageComplete ||
+    !prepared.candidateReady ||
+    !candidate?.sealed ||
+    !candidate.coverageComplete ||
     prepared.catalogueId !== owner.item.catalogueId ||
-    stage.locator.catalogueId !== prepared.catalogueId || stage.locator.stageId !== prepared.stageId ||
-    !stage.sourceRevisionId || stage.sourceRevisionId !== stage.expectedHeadRevisionId ||
+    stage.locator.catalogueId !== prepared.catalogueId ||
+    stage.locator.stageId !== prepared.stageId ||
+    !stage.sourceRevisionId ||
+    stage.sourceRevisionId !== stage.expectedHeadRevisionId ||
     !Object.prototype.hasOwnProperty.call(stage, 'expectedPublicationId')
-  ) return null;
+  )
+    return null;
   return {
     catalogueId: prepared.catalogueId,
     title: owner.item.title ?? '',
@@ -44,7 +54,15 @@ export function preparedActivationReview(owner: HostedOwnedBook, prepared: Relea
 }
 
 export type ActivationPhase = 'review' | 'checking' | 'ready' | 'restart' | 'unknown' | 'blocked' | 'activated';
-export type ActivationReadback = 'idle' | 'reading' | 'observed' | 'unavailable' | 'different' | 'not-public' | 'empty' | 'verified';
+export type ActivationReadback =
+  | 'idle'
+  | 'reading'
+  | 'observed'
+  | 'unavailable'
+  | 'different'
+  | 'not-public'
+  | 'empty'
+  | 'verified';
 export type ActivationState =
   | { kind: 'ended'; reason: 'session' | 'denied' }
   | {
@@ -83,11 +101,25 @@ export class HostedReleaseActivationVisit {
   constructor(private readonly options: ActivationOptions) {
     this.origin = options.source.read();
     this.state = {
-      kind: 'active', review: options.review, phase: 'review', progress: null, receipt: null,
-      pending: null, paused: false, busy: false, readback: 'idle', observedPublicationId: undefined, error: null,
+      kind: 'active',
+      review: options.review,
+      phase: 'review',
+      progress: null,
+      receipt: null,
+      pending: null,
+      paused: false,
+      busy: false,
+      readback: 'idle',
+      observedPublicationId:
+        options.owner.item.publicationId !== options.review.expectedPublicationId
+          ? options.owner.item.publicationId
+          : undefined,
+      error: null,
     };
     this.readerLink = new HostedReleaseReaderLinkProjection(
-      options.review.catalogueId, this.isCurrent, options.native.admitPublic,
+      options.review.catalogueId,
+      this.isCurrent,
+      options.native.admitPublic,
     );
     this.unsubscribe = options.source.subscribe(() => {
       if (!this.isCurrent()) this.retire();
@@ -101,11 +133,21 @@ export class HostedReleaseActivationVisit {
   };
   isCurrent = () => {
     const now = this.options.source.read();
-    return !this.retired && this.origin.healthy && now.healthy && this.origin.csrfReady && now.csrfReady &&
-      this.origin.state === 'signed-in' && now.state === 'signed-in' &&
-      this.origin.credentialMode === 'session' && now.credentialMode === 'session' &&
-      this.origin.subject === this.options.owner.viewer.accountId && now.subject === this.origin.subject &&
-      now.sourceId === this.origin.sourceId && now.generation === this.origin.generation;
+    return (
+      !this.retired &&
+      this.origin.healthy &&
+      now.healthy &&
+      this.origin.csrfReady &&
+      now.csrfReady &&
+      this.origin.state === 'signed-in' &&
+      now.state === 'signed-in' &&
+      this.origin.credentialMode === 'session' &&
+      now.credentialMode === 'session' &&
+      this.origin.subject === this.options.owner.viewer.accountId &&
+      now.subject === this.origin.subject &&
+      now.sourceId === this.origin.sourceId &&
+      now.generation === this.origin.generation
+    );
   };
   private update(state: ActivationState) {
     this.state = state;
@@ -160,15 +202,18 @@ export class HostedReleaseActivationVisit {
     if (!this.idle() || this.state.kind !== 'active') return;
     const state = this.state;
     const request = new AbortController();
-    const command: ActivationRequest = kind === 'retry' ? state.pending! : {
-      kind,
-      catalogueId: state.review.catalogueId,
-      stageId: state.review.stageId,
-      candidateGenerationId: state.review.candidateGenerationId,
-      expectedViewer: { ...this.options.owner.viewer },
-      idempotencyKey: crypto.randomUUID(),
-      body: { stageId: state.review.stageId },
-    };
+    const command: ActivationRequest =
+      kind === 'retry'
+        ? state.pending!
+        : {
+            kind,
+            catalogueId: state.review.catalogueId,
+            stageId: state.review.stageId,
+            candidateGenerationId: state.review.candidateGenerationId,
+            expectedViewer: { ...this.options.owner.viewer },
+            idempotencyKey: crypto.randomUUID(),
+            body: { stageId: state.review.stageId },
+          };
     this.request = request;
     this.readerLink.clear();
     this.update({ ...state, busy: true, pending: command, error: null });
@@ -180,15 +225,28 @@ export class HostedReleaseActivationVisit {
       if (!result.ok) {
         if (result.error.kind === 'denied') return this.retire('denied');
         const uncertain = result.error.kind === 'uncertain';
-        this.update({ ...active, phase: uncertain ? 'unknown' : 'blocked', busy: false,
-          pending: uncertain ? command : null, error: result.error });
+        this.update({
+          ...active,
+          phase: uncertain ? 'unknown' : 'blocked',
+          busy: false,
+          pending: uncertain ? command : null,
+          error: result.error,
+        });
         return;
       }
       const progress = result.value;
       acknowledged = progress.state === 'activated';
-      this.update({ ...active, progress, phase: progress.state, pending: null, busy: false,
+      this.update({
+        ...active,
+        progress,
+        phase: progress.state,
+        pending: null,
+        busy: false,
         paused: active.paused && progress.state === 'checking',
-        receipt: acknowledged ? progress : null, readback: 'idle', error: null });
+        receipt: acknowledged ? progress : null,
+        readback: 'idle',
+        error: null,
+      });
     } finally {
       if (this.request === request) this.request = null;
     }
@@ -205,7 +263,10 @@ export class HostedReleaseActivationVisit {
     this.update({ ...state, busy: true, readback: 'reading', error: null });
     try {
       const result = await this.options.native.readOwn(
-        this.options.owner.viewer.accountId, state.review.catalogueId, request.signal, this.options.owner.viewer,
+        this.options.owner.viewer.accountId,
+        state.review.catalogueId,
+        request.signal,
+        this.options.owner.viewer,
       );
       if (!this.current(request) || this.state.kind !== 'active') return;
       if (!result.ok) {
@@ -225,27 +286,44 @@ export class HostedReleaseActivationVisit {
         this.update({ ...this.state, busy: false, readback: 'different' });
         return;
       }
-      const metadata = await this.options.native.readMetadata({
-        catalogueId: state.review.catalogueId, kind: 'publication', revisionId: receipt.publicationId!,
-      }, request.signal);
+      const metadata = await this.options.native.readMetadata(
+        {
+          catalogueId: state.review.catalogueId,
+          kind: 'publication',
+          revisionId: receipt.publicationId!,
+        },
+        request.signal,
+      );
       if (!this.current(request) || this.state.kind !== 'active') return;
       if (!metadata.ok) {
         if (metadata.error.kind === 'denied') return this.retire('denied');
         this.update({ ...this.state, busy: false, readback: 'unavailable', error: metadata.error });
         return;
       }
-      if (metadata.value.catalogueId !== owner.catalogueId || metadata.value.kind !== 'publication' ||
-        metadata.value.revisionId !== receipt.publicationId) {
+      if (
+        metadata.value.catalogueId !== owner.catalogueId ||
+        metadata.value.kind !== 'publication' ||
+        metadata.value.revisionId !== receipt.publicationId
+      ) {
         this.update({ ...this.state, busy: false, readback: 'different' });
         return;
       }
       const nonempty = BigInt(state.review.chapterCount) > 0n;
-      await this.readerLink.confirmBounded(owner, {
-        catalogueId: owner.catalogueId, revisionId: receipt.publicationId!, nonempty,
-      }, request.signal);
+      await this.readerLink.confirmBounded(
+        owner,
+        {
+          catalogueId: owner.catalogueId,
+          revisionId: receipt.publicationId!,
+          nonempty,
+        },
+        request.signal,
+      );
       if (!this.current(request) || this.state.kind !== 'active') return;
-      this.update({ ...this.state, busy: false,
-        readback: this.readerLink.snapshot() ? 'verified' : nonempty ? 'not-public' : 'empty' });
+      this.update({
+        ...this.state,
+        busy: false,
+        readback: this.readerLink.snapshot() ? 'verified' : nonempty ? 'not-public' : 'empty',
+      });
     } catch (error) {
       if (!(error instanceof TypeError || (error instanceof DOMException && error.name === 'AbortError'))) throw error;
       if (this.current(request) && this.state.kind === 'active')

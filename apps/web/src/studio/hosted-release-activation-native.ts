@@ -38,8 +38,17 @@ export function createHostedReleaseActivationTransport(
       parsed.output.catalogueId !== input.catalogueId ||
       parsed.output.stageId !== input.stageId ||
       parsed.output.candidateGenerationId !== input.candidateGenerationId
-    ) return activationUnknown();
-    return { ok: true, value: parsed.output };
+    )
+      return activationUnknown();
+    const value = parsed.output;
+    if (
+      BigInt(value.checkedTargetCount) > BigInt(value.totalTargetCount) ||
+      value.restartRequired !== (value.state === 'restart') ||
+      (value.state === 'activated' ? value.publicationId === null : value.publicationId !== null) ||
+      (['ready', 'activated'].includes(value.state) && value.checkedTargetCount !== value.totalTargetCount)
+    )
+      return activationUnknown();
+    return { ok: true, value };
   };
   return {
     command,
