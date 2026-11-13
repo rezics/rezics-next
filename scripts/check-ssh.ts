@@ -350,7 +350,7 @@ async function masterControl(
   });
   const child = transport.child;
   const output = Promise.all([
-    new Response(child.stdout).text(),
+    new Response(child.stdout as ReadableStream<Uint8Array>).text(),
     child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
   ]).then(([stdout, stderr]) => stdout + stderr);
   const code = await within(timeoutMs, child.exited);
@@ -619,7 +619,7 @@ export async function acquireHostControl(
       );
       const child = transport.child;
       const output = Promise.all([
-        new Response(child.stdout).text(),
+        new Response(child.stdout as ReadableStream<Uint8Array>).text(),
         child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
       ]).then(([stdout, stderr]) => stdout + stderr);
       const code = await within(timeoutMs, child.exited);
