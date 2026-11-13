@@ -1,33 +1,41 @@
+import { memoizedValue } from '../memoized.ts';
 import { KnowledgeReferencesSchema, KnowledgeProvenanceSchema } from './knowledge-portable.ts';
 import { t } from 'elysia';
 
 const UUID = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
-const documentInput = {
-  title: t.String({ minLength: 1, maxLength: 512 }),
-  language: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 64 }), t.Null()])),
-  body: t.Unknown(),
-  references: t.Optional(KnowledgeReferencesSchema),
-  licence: t.String({ minLength: 1, maxLength: 128 }),
-  subjectIds: t.Array(UUID, { maxItems: 64, uniqueItems: true }),
-};
+function documentInput() {
+  return memoizedValue(documentInput, () => ({
+    title: t.String({ minLength: 1, maxLength: 512 }),
+    language: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 64 }), t.Null()])),
+    body: t.Unknown(),
+    references: t.Optional(KnowledgeReferencesSchema),
+    licence: t.String({ minLength: 1, maxLength: 128 }),
+    subjectIds: t.Array(UUID, { maxItems: 64, uniqueItems: true }),
+  }));
+}
 
 export const KnowledgeIdSchema = UUID;
 export const KnowledgeNotebookCreateSchema = t.Object(
   { subjectId: UUID, title: t.String({ minLength: 1, maxLength: 256 }) },
   { additionalProperties: false },
 );
-export const KnowledgeDocumentCreateSchema = t.Object(
-  {
-    ...documentInput,
-    expectedStructureRevisionId: UUID,
-    parentPlacementId: t.Union([UUID, t.Null()]),
-  },
-  { additionalProperties: false },
-);
-export const KnowledgeDocumentReviseSchema = t.Object(
-  { ...documentInput, expectedHeadRevisionId: UUID },
-  { additionalProperties: false },
-);
+export function KnowledgeDocumentCreateSchema() {
+  return memoizedValue(KnowledgeDocumentCreateSchema, () =>
+    t.Object(
+      {
+        ...documentInput(),
+        expectedStructureRevisionId: UUID,
+        parentPlacementId: t.Union([UUID, t.Null()]),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+export function KnowledgeDocumentReviseSchema() {
+  return memoizedValue(KnowledgeDocumentReviseSchema, () =>
+    t.Object({ ...documentInput(), expectedHeadRevisionId: UUID }, { additionalProperties: false }),
+  );
+}
 export const KnowledgePublicationSchema = t.Object(
   {
     expectedHeadRevisionId: UUID,
@@ -75,42 +83,52 @@ export const KnowledgeCommandResponseSchema = t.Object(
   },
   { additionalProperties: false },
 );
-const byteDocument = {
-  documentId: UUID,
-  revisionId: UUID,
-  title: t.String({ minLength: 1, maxLength: 512 }),
-  language: t.Union([t.String({ minLength: 1, maxLength: 64 }), t.Null()]),
-  references: KnowledgeReferencesSchema,
-  provenance: t.Union([KnowledgeProvenanceSchema, t.Null()]),
-  canonicalBytes: t.String(),
-  sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
-  licence: t.String({ minLength: 1, maxLength: 128 }),
-  subjectIds: t.Array(UUID, { maxItems: 64 }),
-};
-export const KnowledgePrivateDocumentSchema = t.Object(
-  {
-    document: t.Object(
-      { ...byteDocument, notebookId: UUID, publicationId: t.Union([UUID, t.Null()]) },
-      { additionalProperties: false },
-    ),
-  },
-  { additionalProperties: false },
-);
-export const KnowledgePublicDocumentSchema = t.Object(
-  {
-    document: t.Object(
+function byteDocument() {
+  return memoizedValue(byteDocument, () => ({
+    documentId: UUID,
+    revisionId: UUID,
+    title: t.String({ minLength: 1, maxLength: 512 }),
+    language: t.Union([t.String({ minLength: 1, maxLength: 64 }), t.Null()]),
+    references: KnowledgeReferencesSchema,
+    provenance: t.Union([KnowledgeProvenanceSchema, t.Null()]),
+    canonicalBytes: t.String(),
+    sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    licence: t.String({ minLength: 1, maxLength: 128 }),
+    subjectIds: t.Array(UUID, { maxItems: 64 }),
+  }));
+}
+export function KnowledgePrivateDocumentSchema() {
+  return memoizedValue(KnowledgePrivateDocumentSchema, () =>
+    t.Object(
       {
-        ...byteDocument,
-        publicationId: UUID,
-        subjectId: UUID,
-        publishedAt: t.String({ format: 'date-time' }),
-        authorId: t.Union([UUID, t.Null()]),
+        document: t.Object(
+          { ...byteDocument(), notebookId: UUID, publicationId: t.Union([UUID, t.Null()]) },
+          { additionalProperties: false },
+        ),
       },
       { additionalProperties: false },
     ),
-  },
-  { additionalProperties: false },
-);
+  );
+}
+export function KnowledgePublicDocumentSchema() {
+  return memoizedValue(KnowledgePublicDocumentSchema, () =>
+    t.Object(
+      {
+        document: t.Object(
+          {
+            ...byteDocument(),
+            publicationId: UUID,
+            subjectId: UUID,
+            publishedAt: t.String({ format: 'date-time' }),
+            authorId: t.Union([UUID, t.Null()]),
+          },
+          { additionalProperties: false },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 
 const nextSchema = t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]);
 const knowledgePosition = t.String({ pattern: '^(?:0|[1-9][0-9]{0,37})$' });
@@ -264,14 +282,18 @@ export const KnowledgeDocumentHistorySchema = t.Object(
   },
   { additionalProperties: false },
 );
-export const KnowledgeDocumentCompareSchema = t.Object(
-  {
-    documentId: UUID,
-    left: t.Object(byteDocument, { additionalProperties: false }),
-    right: t.Object(byteDocument, { additionalProperties: false }),
-  },
-  { additionalProperties: false },
-);
+export function KnowledgeDocumentCompareSchema() {
+  return memoizedValue(KnowledgeDocumentCompareSchema, () =>
+    t.Object(
+      {
+        documentId: UUID,
+        left: t.Object(byteDocument(), { additionalProperties: false }),
+        right: t.Object(byteDocument(), { additionalProperties: false }),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 
 const knowledgeGeneration = t.String({ pattern: '^(?:0|[1-9][0-9]{0,18})$' });
 export const KnowledgeLifecycleCommandSchema = t.Object(

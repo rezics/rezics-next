@@ -77,13 +77,6 @@ function existingId(id: string): void {
   if (routeOf(id) === null) throw new ProblemError('not_found');
 }
 
-const reportQueryKeys = Object.freeze(Object.keys(ReportPageQuerySchema.properties));
-
-function rejectRepeatedReportQueryKeys(request: Request): void {
-  const search = new URL(request.url).searchParams;
-  if (reportQueryKeys.some((key) => search.getAll(key).length > 1)) throw new ProblemError('invalid_request');
-}
-
 function component(anchor: AnchoredPosition) {
   return { partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position };
 }
@@ -112,6 +105,12 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
  * and budget charging. No handler may spend again or verify a one-use proof.
  */
 export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencies: ReportRouteDependencies) {
+  const reportQueryKeys = Object.freeze(Object.keys(ReportPageQuerySchema.properties));
+  function rejectRepeatedReportQueryKeys(request: Request): void {
+    const search = new URL(request.url).searchParams;
+    if (reportQueryKeys.some((key) => search.getAll(key).length > 1)) throw new ProblemError('invalid_request');
+  }
+
   const history = createReporterHistory(dependencies);
   const oversized = new WeakSet<Request>();
   const created = app

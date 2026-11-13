@@ -4814,6 +4814,9 @@ reads only its notebook, parent path and indexed sibling maximum. `test/content/
 artifact validation and local remapping; `test/content/knowledge-transfer.test.ts` pins native owner/public selection,
 private copy, CAS, replay, target withdrawal and disclosure. Native acceptance remains controller-deferred.
 
+Decision: Knowledge route schemas are memoized factories over the portable references/provenance schemas and are
+constructed during route installation; report repeated-query keys are derived from the page schema at installation.
+
 ### Notebook reorganization and revision recovery
 
 Decision: preserve current adjacency reads and record each revision with a copy-on-write AVL sibling root; keep bounded

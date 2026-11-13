@@ -376,7 +376,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         params: idParams(),
         query: strictContentSchema(KnowledgeExactReadQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(KnowledgePublicDocumentSchema), responseHeaders),
+          200: withHeaders(strictContentSchema(KnowledgePublicDocumentSchema()), responseHeaders),
           ...failures(),
         },
         detail: {
@@ -404,7 +404,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         params: privateParams(),
         query: strictContentSchema(KnowledgeExactReadQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(KnowledgePrivateDocumentSchema), responseHeaders),
+          200: withHeaders(strictContentSchema(KnowledgePrivateDocumentSchema()), responseHeaders),
           ...failures(),
         },
         detail: {
@@ -468,7 +468,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         params: privateParams(),
         query: strictContentSchema(KnowledgeDocumentCompareQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(KnowledgeDocumentCompareSchema), responseHeaders),
+          200: withHeaders(strictContentSchema(KnowledgeDocumentCompareSchema()), responseHeaders),
           ...failures(),
         },
         detail: {
@@ -627,7 +627,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       {
         params: idParams(),
         headers,
-        body: strictContentSchema(KnowledgeDocumentCreateSchema),
+        body: strictContentSchema(KnowledgeDocumentCreateSchema()),
         response: {
           201: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
           ...failures(),
@@ -688,7 +688,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       {
         params: idParams(),
         headers,
-        body: strictContentSchema(KnowledgeDocumentReviseSchema),
+        body: strictContentSchema(KnowledgeDocumentReviseSchema()),
         response: {
           200: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
           ...failures(),
