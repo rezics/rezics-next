@@ -300,6 +300,8 @@ caller proof. Distinct migration `20261113091251_revision_disclosure.sql`. Stage
 
 ## Prepared Book publication
 
+Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
+
 Decision: private staging uses a source-ordered candidate generation, 20-row replayable steps and selection batches of
 at most 512; exact target observations stay separate from current authority proof, source titles remain source-owned
 for terminal redaction, and this slice exposes no activation.
