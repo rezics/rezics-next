@@ -16,6 +16,7 @@ import {
 } from './commands.ts';
 import { snapshot } from './reads.ts';
 import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
+import { insertHostedRootAppend } from './hosted-chapters-append.ts';
 import { orderHostedPlacements, selectHostedRelease } from './hosted-chapters-tree.ts';
 import {
   hostedCatalogue,
@@ -31,6 +32,7 @@ import {
   type HostedDependencies,
   type HostedReviseInput,
   type HostedPublishInput,
+  type HostedRootAppendInput,
   type OrderedHostedPlacement,
 } from './hosted-chapters-model.ts';
 
@@ -38,6 +40,7 @@ export type HostedCommandDependencies = HostedDependencies & ContentCommandDepen
 type Mutation =
   | { kind: 'create'; input: HostedCreateInput }
   | { kind: 'revise'; input: HostedReviseInput }
+  | { kind: 'append'; input: HostedRootAppendInput }
   | { kind: 'publish'; input: HostedPublishInput };
 
 export function createHostedCatalogue(
@@ -67,6 +70,19 @@ export function publishHostedCatalogue(
   return mutate(deps, actor, catalogueId, { kind: 'publish', input }, context);
 }
 
+/** Internal source operation only. Exposure requires mixed-revision readers and
+ * lifecycle support described in hosted-chapters.md. Shares native edit authority,
+ * deadlines, receipt replay, transaction retries and final container checks. */
+export function appendHostedRootChapter(
+  deps: HostedCommandDependencies,
+  actor: Actor,
+  catalogueId: string,
+  input: HostedRootAppendInput,
+  context: HostedCommandContext,
+) {
+  return mutate(deps, actor, catalogueId, { kind: 'append', input }, context);
+}
+
 async function mutate(
   deps: HostedCommandDependencies,
   actor: Actor,
@@ -88,7 +104,24 @@ async function mutate(
   const initial = (await snapshot(deps, catalogueId, context, (client) => hostedCatalogue(client, catalogueId))).value;
   const threadId = mutation.kind === 'create' ? mutation.input.threadId : initial?.thread_id;
   if (!threadId || routeOf(threadId) !== route) throw new ContentNotFoundError();
-  const authored = mutation.kind === 'publish' ? null : orderHostedPlacements(route, mutation.input.placements);
+  const authored =
+    mutation.kind === 'publish'
+      ? null
+      : orderHostedPlacements(
+          route,
+          mutation.kind === 'append'
+            ? [
+                {
+                  occurrenceId: mutation.input.occurrenceId,
+                  parentId: null,
+                  position: 0,
+                  title: mutation.input.title,
+                  kind: 'chapter',
+                  target: mutation.input.target,
+                },
+              ]
+            : mutation.input.placements,
+        );
   const kind = `content.hosted-catalogue.${mutation.kind}`;
   const receipt = {
     kind,
@@ -169,7 +202,17 @@ async function mutate(
           authoritativeTimeValue(time),
         ],
       );
-      await insertHostedPlacements(tx, catalogueId, revisionId, prepared.get(time)!);
+      if (mutation.kind === 'append') {
+        await insertHostedRootAppend(
+          tx,
+          catalogueId,
+          mutation.input.expectedRevisionId,
+          revisionId,
+          prepared.get(time)![0] as Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
+        );
+      } else {
+        await insertHostedPlacements(tx, catalogueId, revisionId, prepared.get(time)!);
+      }
       await tx.query(
         `UPDATE content.hosted_catalogue SET ${mutation.kind === 'publish' ? 'publication_id' : 'head_revision_id'}=$3
        WHERE route=$1 AND catalogue_id=$2`,
@@ -179,7 +222,11 @@ async function mutate(
       return {
         value,
         events: [
-          { type: `com.rezics.content.hosted-catalogue.${mutation.kind}.v1`, subject: catalogueId, data: value },
+          {
+            type: `com.rezics.content.hosted-catalogue.${mutation.kind === 'append' ? 'revise' : mutation.kind}.v1`,
+            subject: catalogueId,
+            data: value,
+          },
         ],
       };
     },
