@@ -352,6 +352,13 @@ contract work. Existing shared reading-card, feed and exact-reader contracts do 
 
 ## Native post history selection
 
+Decision: ordinary Post read access belongs to the Post and its current container/account admission, so every
+immutable revision inherits it and anonymous reads of a public Post include history. A keyed exact-revision policy may
+remove only the public eligibility floor or hard-deny all metadata and bytes; hard denial survives author, writer,
+buyer and Book grants. Private drafts keep their existing author policy. Direct, history, Book and fixed-edition reads
+recheck the selected revision, exact URLs never substitute a different revision, and moderation reversal changes only
+the exact policy state while retaining decision evidence, stored bytes, Book pins and accepted orders.
+
 `listPostRevisions(dependencies, threadId, postId, context, cursor?, limit?)` retains its existing
 `entries`, `nextCursor` and `anchor` interface and adds the exact disclosed `posts`, source `anchors`,
 current `currentHead` and retained `revalidate()` check. The mounted

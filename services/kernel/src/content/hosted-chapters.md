@@ -306,6 +306,10 @@ A point operation never needs a complete manifest write or validation pass.
 
 ### Private-to-public boundary
 
+Every selected target also passes Content's current exact-revision disclosure policy at metadata and body reads; a
+hard restriction defeats Book membership and source consent. This section continues to own Book-scoped consent only
+for a genuinely private source. See [Content's Post revision access decision](README.md#native-post-history-selection).
+
 [`validateHostedChapterAttachments`](hosted-chapters-attachments.ts) proves attachment identity/read admission,
 not public Post eligibility. [`resolveHostedOccurrenceMetadata`](hosted-chapters-reads.ts) and exact body opening
 separately run current target disclosure. Selecting a manifest neither globally publishes a Post nor changes its
