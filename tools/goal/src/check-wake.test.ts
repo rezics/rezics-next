@@ -115,6 +115,12 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>, checks = ['che
   return { task, ref: { taskId: task.id, attempt: 1 } };
 }
 
+function localAcceptance(markdown: string, command: readonly string[]): string {
+  return markdown
+    .replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`)
+    .replace('  tests: [acceptance]', '  tests: [acceptance]\n  requires: [root]');
+}
+
 const GIB = 1024 ** 3;
 
 function terminalCheckFixture(
@@ -272,7 +278,7 @@ test('same-session wake forwards the newly persisted minimal source-result and c
     expect(prompt).toContain('Build the whole outcome in this attempt');
     expect(prompt).toContain("Kernel/Auth may use compiler DB/host; don't unset KERNEL_CHECK_REMOTE or force local.");
     expect(prompt).not.toContain('Wait for a long command, even one queued for a test slot, in its open session');
-    expect(prompt).toContain('through the check wrapper');
+    expect(prompt).toContain('through their owning runner');
     expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
     expect(prompt).toContain('Commands that finish locally in under a minute');
     expect(prompt).not.toContain('run your acceptance command once');
@@ -284,9 +290,7 @@ test('same-session wake forwards the newly persisted minimal source-result and c
 test('a waiting session uses the registered local command on wake even when its saved contract names the old remote route', async () => {
   const h = harness(waitingCli);
   try {
-    const localMarkdown = markdown
-      .replace('goal: fixture', 'goal: control-plane')
-      .replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local');
+    const localMarkdown = localAcceptance(markdown, ['bun', 'test', 'apps/web/tests/shell-menus.test.ts']);
     writeFileSync(h.briefFile, localMarkdown);
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
@@ -320,9 +324,7 @@ test('an adopted waiting attempt without a resumable session gets the current lo
   try {
     writeFileSync(
       h.briefFile,
-      markdown
-        .replace('goal: fixture', 'goal: control-plane')
-        .replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local'),
+      localAcceptance(markdown, ['bun', 'test', 'apps/web/tests/shell-menus.test.ts']),
     );
     const { task, ref } = await startWaitingAttempt(h);
     h.store.updateAttempt(ref, (attempt) => {
@@ -379,9 +381,7 @@ test('a same-session wake preserves the focused Web command argv under the manag
     ];
     writeFileSync(
       h.briefFile,
-      markdown
-        .replace('goal: fixture', 'goal: control-plane')
-        .replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`),
+      localAcceptance(markdown, command),
     );
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
