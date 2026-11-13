@@ -810,9 +810,7 @@ function retainedConfiguredRemotePreparationSourceMatches(
   return projected.every((entry) => {
     const digest = currentInputs.get(entry.path);
     if (digest === undefined) return false;
-    return entry.path === schemaOutput
-      ? digest === inputDigest || digest === outputDigest
-      : digest === entry.digest;
+    return entry.path === schemaOutput ? digest === inputDigest || digest === outputDigest : digest === entry.digest;
   });
 }
 

@@ -725,7 +725,9 @@ test('the exact Kernel schema emitter settles only its selected output with stab
   schemaComplete(0);
   const schemaReceipt = readTypingInputReceipt(root, schemaPhysical, command)!;
   expect(schemaReceipt.sourceStable).toBe(false);
-  expect(schemaReceipt.started.source.find(({ path }) => path === 'services/kernel/db/content/schema.sql')?.digest).not.toBe(
+  expect(
+    schemaReceipt.started.source.find(({ path }) => path === 'services/kernel/db/content/schema.sql')?.digest,
+  ).not.toBe(
     schemaReceipt.completed.source.find(({ path }) => path === 'services/kernel/db/content/schema.sql')?.digest,
   );
 
@@ -743,9 +745,9 @@ test('the exact Kernel schema emitter settles only its selected output with stab
   write(root, 'services/kernel/db/content/migrations/001_fixture.sql', 'SELECT 1;');
 
   const authCommand = [...command.slice(0, 5), '--emit-schema=auth'];
-  expect(
-    qualifyTypingInputs(root, { ...schemaReceipt, command: authCommand, compilerCommand: authCommand }),
-  ).toBe('source-changed');
+  expect(qualifyTypingInputs(root, { ...schemaReceipt, command: authCommand, compilerCommand: authCommand })).toBe(
+    'source-changed',
+  );
   const selectedSchemaPath = 'services/kernel/db/content/schema.sql';
   const missingInputDigest: TypingInputReceipt = {
     ...schemaReceipt,
