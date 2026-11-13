@@ -108,6 +108,11 @@ readable: a missing generation denotes the initial start. For a legacy ticket ta
 its queue timestamp is compared with that attempt's start time so an older first-start ticket is discarded while a
 later check wake remains its exact resume. A ticket for an already advanced start is discarded from the task's
 current-attempt projection, without consulting worktree presence or clearing another generation's reservation.
+Decision: an exact ready-to-resume check ticket precedes fresh starts queued within the existing 30-minute critical
+head-start window; older fresh starts regain priority. Urgent lanes, reservations and every admission gate keep their
+existing limits. Exact check-history times and same-attempt ticket/resume events share a stable operation identity;
+legacy results without exact physical custody keep their timing unavailable. Hourly reporting separates check
+execution spans from host admission waits and reports observed host wait reasons.
 If host limits, system memory and PSI permit admission but a finite worker-slice reserve alone blocks it, the host
 may request up to 4 GiB from clean inactive file pages with `swappiness=0`. Dirty and writeback pages are excluded.
 The shared admission lease is released before the request; the host re-samples slice headroom and actual
