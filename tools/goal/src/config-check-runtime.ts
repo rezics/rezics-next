@@ -82,7 +82,8 @@ export function createCheckRuntime(options: CheckRuntimeOptions) {
       checkResultOptions,
       settings.policy?.merge,
     );
-  // Boot smoke is local and bounded; it uses neither remote-check nor worker-slot admission.
+  // The process group stays local; a placed Kernel wrapper keeps its existing remote-check placement.
+  // executeCheck opts that wrapper into its per-command phase channel only for boot accounting.
   const bootSmokeGate: GateRunner =
     options.runGate ??
     processGroupRunner(

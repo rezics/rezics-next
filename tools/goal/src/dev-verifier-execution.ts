@@ -12,6 +12,7 @@ import {
   type DevVerifierPhaseBinding,
   type DevVerifierPhaseEvidence,
 } from './dev-verifier-phase.ts';
+import { isPlacedKernelCheckCommand, type VerifierPhaseChannelBinding } from './dev-verifier-phase-channel.ts';
 import type { DevVerifierCheck } from './dev-verifier-plan.ts';
 import {
   beginCommandRun,
@@ -362,13 +363,35 @@ export async function executeCheck(
       break;
     }
 
+    const phaseBinding: DevVerifierPhaseBinding = {
+      executionId: id,
+      command: check.command,
+      executionBudgetMs: policy.verifier.bootSmokeTimeoutMs,
+      ...(check.cwd ? { cwd: check.cwd } : {}),
+    };
+    const phaseChannelBinding: VerifierPhaseChannelBinding | undefined =
+      phaseAccounting && isPlacedKernelCheckCommand(check.command)
+        ? {
+            executionId: id,
+            command: check.command,
+            executionBudgetMs: policy.verifier.bootSmokeTimeoutMs,
+            ...(check.cwd ? { cwd: check.cwd } : {}),
+          }
+        : undefined;
     let final: GateOutcome;
     try {
+      const runOptions =
+        signal || phaseChannelBinding
+          ? {
+              ...(signal ? { signal } : {}),
+              ...(phaseChannelBinding ? { phaseChannel: phaseChannelBinding } : {}),
+            }
+          : undefined;
       final = await run(
         withTreeBun(check.command, tree, execution.settings.mainCheckout),
         check.cwd ? join(tree, check.cwd) : tree,
         finalLog,
-        signal ? { signal } : undefined,
+        runOptions,
       );
     } catch (error) {
       final = {
@@ -378,36 +401,17 @@ export async function executeCheck(
       };
     }
     const completedAt = new Date().toISOString();
-    const phaseBinding: DevVerifierPhaseBinding = {
-      executionId: id,
-      command: check.command,
-      executionBudgetMs: policy.verifier.bootSmokeTimeoutMs,
-      ...(check.cwd ? { cwd: check.cwd } : {}),
-    };
     const phaseEvidence: DevVerifierPhaseEvidence | undefined = phaseAccounting
       ? consumeVerifierPhaseReceipt(final.phaseReceipt, phaseBinding)
       : undefined;
     const unexecutedSuccess = final.passed && phaseEvidence?.phases.execution.status === 'unreached';
-    const measuredExecution = phaseEvidence?.phases.execution;
-    const executionBudgetExceeded =
-      phaseAccounting &&
-      final.passed &&
-      measuredExecution?.status === 'measured' &&
-      measuredExecution.durationMs >= (phaseEvidence?.executionBudgetMs ?? policy.verifier.bootSmokeTimeoutMs);
     const terminalResult = unexecutedSuccess
       ? {
           ...final,
           passed: false,
           output: `${final.output}${final.output ? '\n' : ''}Verifier phase receipt says the boot command was unreached; the wrapper result is not a boot pass.`,
         }
-      : executionBudgetExceeded
-        ? {
-            ...final,
-            passed: false,
-            timedOut: true,
-            output: `${final.output}${final.output ? '\n' : ''}Verifier boot execution phase exceeded its ${phaseEvidence?.executionBudgetMs ?? policy.verifier.bootSmokeTimeoutMs} ms budget.`,
-          }
-        : final;
+      : final;
     const baseEvidence = createEvidence(commit, check, terminalResult, finalLog, execution.settings.policy?.verifier);
     const evidence = unexecutedSuccess ? { ...baseEvidence, result: 'unknown' as const } : baseEvidence;
     const completed: DevVerifierRun = {

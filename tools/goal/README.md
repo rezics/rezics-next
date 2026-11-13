@@ -1002,7 +1002,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.verifier.findingAssertions`                   | `64`                                                                       | Maximum stable assertions per verifier result; larger results remain infrastructure/unverified.                                                                                             |
 | `policy.verifier.diagnosticCharacters`                | `6000`                                                                     | Maximum output characters included per failure in an urgent verifier repair.                                                                                                                |
 | `policy.verifier.residentPollMs`                      | `60000`                                                                    | Pause between completed resident verifier passes (ms).                                                                                                                                      |
-| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Boot-smoke deadline per test (ms); structured execution timing measures only the command phase, while missing phase evidence keeps the current wrapper deadline.                            |
+| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Boot-smoke budget per test (ms); placed Kernel execution uses its live start marker, with the spawn timeout as fallback when evidence is missing or conflicting.                            |
 | `policy.verifier.roundIntervalMs`                     | `3600000`                                                                  | Minimum time between verifier rounds (ms).                                                                                                                                                  |
 | `policy.verifier.roundDeadlineMs`                     | `3300000`                                                                  | Maximum elapsed time scheduled for one verifier round (ms); unstarted checks carry into the next round.                                                                                     |
 | `policy.verifier.maxSelectionCommits`                 | `1000`                                                                     | Largest changed commit range selected by changed paths before using the complete configured test set.                                                                                       |
@@ -3520,6 +3520,11 @@ does not rerun them at the previous head or bisect integrated prefixes. Each fai
 and head with its assertions. Failures are batched into one urgent repair per owning Goal. Infrastructure and unknown
 results remain visible but never hold progress, and every completed round advances dev-verified to its captured
 head. Findings and round summaries use the bounded dev_verifier_findings and dev_verifier_runs stores.
+
+Decision: the placed Kernel boot check carries schema-1 phase events over a per-command nonce on inherited FD 3. A
+matching live `execution-started` event begins the boot execution budget; the spawn timeout remains active until that
+marker and is restored when channel evidence conflicts. Missing or malformed evidence stays unknown. Terminal phase
+receipts never start the execution budget, and the round abort/deadline remains authoritative.
 
 ### Verifier diagnostics and owner routing
 

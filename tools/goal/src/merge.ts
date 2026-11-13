@@ -6,6 +6,10 @@ import { dirname, join, resolve } from 'node:path';
 import { processIdentity } from '../../../scripts/check-custody.ts';
 import { readCompilerSettlement, compilerSettlementFailure } from '../../../scripts/compiler-settlement.ts';
 import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
+import {
+  createVerifierPhaseChannel,
+  type VerifierPhaseChannelBinding,
+} from './dev-verifier-phase-channel.ts';
 import type { FirstFailure } from './contracts.ts';
 import {
   checkResultKey,
@@ -101,9 +105,10 @@ export type GateResult = {
   timedOut: boolean;
   commandExitCode?: number | null;
   wrapperExitCode?: number | null;
+  phaseReceipt?: unknown;
 };
 /** Cancellation belongs to one invocation, never to all commands in a controller process. */
-export type GateRunOptions = { signal?: AbortSignal };
+export type GateRunOptions = { signal?: AbortSignal; phaseChannel?: VerifierPhaseChannelBinding };
 export type GateRunner = (
   argv: readonly string[],
   cwd: string,
@@ -178,16 +183,37 @@ export function processGroupRunner(
     const temporary = ownedTemporaryDirectory(join(cwd, '.temp'), 'gate-tmp-');
     const compilerInvocation = randomUUID();
     const compilerSettlementFile = join(temporary.path, 'compiler-settlement.json');
+    let fallbackDeadlineAt: number | undefined;
+    let setTimeoutDeadline: (deadline: number | undefined) => void = () => {};
+    const phaseChannelBinding = options?.phaseChannel;
+    const phaseChannel = phaseChannelBinding
+      ? createVerifierPhaseChannel(phaseChannelBinding, {
+          executionStarted: () =>
+            setTimeoutDeadline(
+              fallbackDeadlineAt !== undefined && fallbackDeadlineAt <= Date.now()
+                ? fallbackDeadlineAt
+                : Date.now() + phaseChannelBinding.executionBudgetMs,
+            ),
+          invalid: () => setTimeoutDeadline(fallbackDeadlineAt),
+        })
+      : undefined;
+    const inheritedEnvironment = sanitizeEnvironment
+      ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
+      : parent;
+    const {
+      REMOTE_CHECK_RECEIPT_FD: _inheritedReceiptFd,
+      REMOTE_CHECK_RECEIPT_NONCE: _inheritedReceiptNonce,
+      ...commandEnvironment
+    } = inheritedEnvironment;
     return await new Promise<GateResult>((resolve, reject) => {
       let finishCleanup!: () => void;
       const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
-      const child = spawn(argv[0]!, argv.slice(1), {
+      const spawnOptions = {
         cwd,
         env: {
-          ...(sanitizeEnvironment
-            ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
-            : parent),
+          ...commandEnvironment,
           ...temporary.env,
+          ...phaseChannel?.environment,
           ...(isRootTypecheck(argv)
             ? {
                 REZICS_COMPILER_SETTLEMENT_FILE: compilerSettlementFile,
@@ -196,14 +222,22 @@ export function processGroupRunner(
             : {}),
         },
         detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+      };
+      const child = phaseChannel
+        ? spawn(argv[0]!, argv.slice(1), {
+            ...spawnOptions,
+            stdio: ['ignore', 'pipe', 'pipe', 'pipe'] as const,
+          })
+        : spawn(argv[0]!, argv.slice(1), { ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] as const });
       const pid = child.pid;
       const localIdentity = pid === undefined ? null : processIdentity(pid);
       let output = '';
       let compilerExitCode: number | undefined;
       let timedOut = false;
       let settled = false;
+      let phaseReceipt: unknown | undefined;
+      let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+      let timeoutGeneration = 0;
       let stopPromise: Promise<boolean> | undefined;
       const signalGroup = (signal: NodeJS.Signals) => {
         if (pid === undefined) return;
@@ -238,6 +272,25 @@ export function processGroupRunner(
         })();
         return stopPromise;
       };
+      setTimeoutDeadline = (deadline) => {
+        timeoutGeneration++;
+        const generation = timeoutGeneration;
+        if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+        timeoutTimer = undefined;
+        if (deadline === undefined) return;
+        if (deadline <= Date.now()) {
+          timedOut = true;
+          void stopGroup();
+          return;
+        }
+        timeoutTimer = setTimeout(() => {
+          if (generation !== timeoutGeneration) return;
+          timedOut = true;
+          void stopGroup();
+        }, deadline - Date.now());
+      };
+      fallbackDeadlineAt = timeoutMs === undefined ? undefined : Date.now() + timeoutMs;
+      setTimeoutDeadline(fallbackDeadlineAt);
       if (pid !== undefined)
         activeCommandGroups.set(pid, async () => {
           await stopGroup();
@@ -248,19 +301,17 @@ export function processGroupRunner(
         output += text;
         appendFileSync(logPath, text);
       };
-      child.stdout.on('data', collect);
-      child.stderr.on('data', collect);
+      child.stdout!.on('data', collect);
+      child.stderr!.on('data', collect);
+      const receiptStream = phaseChannel ? child.stdio[3] : undefined;
+      if (phaseChannel && receiptStream && typeof receiptStream !== 'number')
+        receiptStream.on('data', (chunk: Buffer) => phaseChannel.receive(chunk.toString()));
       cancelOwnedCommand(child, options?.signal);
-      const timer =
-        timeoutMs === undefined
-          ? undefined
-          : setTimeout(() => {
-              timedOut = true;
-              void stopGroup();
-            }, timeoutMs);
       const cleanup = async () => {
         try {
-          if (timer !== undefined) clearTimeout(timer);
+          phaseReceipt = phaseChannel?.finish();
+          timeoutGeneration++;
+          if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
           const groupStopped = await stopGroup();
           let remoteCompiler: ReturnType<typeof readCompilerSettlement>;
           try {
@@ -333,6 +384,7 @@ export function processGroupRunner(
               timedOut,
               commandExitCode: compilerExitCode ?? code,
               wrapperExitCode: code,
+              ...(phaseReceipt === undefined ? {} : { phaseReceipt }),
             }),
           (error) =>
             resolve({
@@ -341,6 +393,7 @@ export function processGroupRunner(
               timedOut,
               commandExitCode: compilerExitCode ?? code,
               wrapperExitCode: code,
+              ...(phaseReceipt === undefined ? {} : { phaseReceipt }),
             }),
         );
       });
