@@ -12041,5 +12041,10 @@
   "knowledge_discovery_retry": "このページを再試行",
   "knowledge_discovery_return": "この対象に戻る",
   "knowledge_discovery_sparse": "このページに寄稿はありません。「さらに表示」でネイティブの閲覧を続けられます。",
-  "knowledge_discovery_unavailable": "公開ナレッジは現在利用できません。同じページを再試行してください。"
+  "knowledge_discovery_unavailable": "公開ナレッジは現在利用できません。同じページを再試行してください。",
+  "studio_book_release_all": "すべての章",
+  "studio_book_release_part": "「{title}」内の章を次の公開に含める",
+  "studio_book_release_chapter": "「{title}」を次の公開に含める",
+  "studio_book_release_count": "{total} 章中 {selected} 章を選択",
+  "studio_book_release_help": "次の公開に含める章を選択してください。固定されたバージョンは変わりません。"
 }

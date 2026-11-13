@@ -12041,5 +12041,10 @@
   "knowledge_discovery_retry": "Retry this page",
   "knowledge_discovery_return": "Return to this subject",
   "knowledge_discovery_sparse": "No contributions on this page. More continues the native reading.",
-  "knowledge_discovery_unavailable": "Published knowledge is unavailable right now. Retry the same page."
+  "knowledge_discovery_unavailable": "Published knowledge is unavailable right now. Retry the same page.",
+  "studio_book_release_all": "All chapters",
+  "studio_book_release_part": "Include chapters in {title} in the next release",
+  "studio_book_release_chapter": "Include {title} in the next release",
+  "studio_book_release_count": "{selected} of {total} chapters selected",
+  "studio_book_release_help": "Select chapters for the next release. Pinned versions stay unchanged."
 }

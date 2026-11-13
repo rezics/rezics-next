@@ -51,6 +51,32 @@ exact chapter versions; existing placement, focus and release assertions remain 
 changed-file formatting and one Web typecheck; ordinary acceptance, native, browser, Storybook and broader suites
 are deferred.
 
+## Book release selection
+
+Decision: Book and part checkboxes share one atomic current-outline chapter selection operation. A mixed checkbox
+selects all descendant chapters; a checked checkbox clears them. Empty parts and an empty Book stay unchecked and
+disabled. Individual chapter selection remains available. Localized counts describe each part and the whole Book;
+one reverse-preorder pass derives checked and mixed states without per-row outline scans.
+
+The controller resolves current admitted chapter occurrences through the outline's child index, preserves selection
+outside the chosen subtree, and emits once only when selection changes. Unknown or removed occurrences and empty
+subtrees are no-ops; malformed outlines throw before any selection update. No-op clicks retain exact review, while
+real changes retire it once. Selection never writes a draft or publication. Exact pinned targets, preorder, draft
+revision and the current release remain unchanged; explicit review, publication CAS, withdrawal and repair retain
+authority. Selection is unavailable without publication permission, during a command or after visit retirement.
+
+Sources read before design: this owner document, `book-toc.ts`, `book-organizer.tsx`, `controller.ts`, `contract.ts`,
+`hosted-workspace.ts` `reviewFor`, the outline/placement/hosted publication and withdrawal tests, and the shared UI
+[choice controls](../../../../packages/ui/README.md#choice-controls), Checkbox and Field implementations. The named
+direct-move dependency is already integrated in the base; no merge or cherry-pick is needed.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-book-selection.test.tsx
+ tests/studio-book-outline.test.ts tests/studio-book-placement.test.tsx tests/studio-hosted-publication.test.ts
+ src/studio/publication-withdrawal.test.tsx`. New selection cases cover atomic nested/root selection, individual
+selection, no-op review retention, current-outline resolution, exact preorder, empty and invalid outlines, current
+release preservation, availability and checkbox states. Existing assertions stay unchanged. Source verification is
+changed-file formatting and one Web typecheck; acceptance, mounted native, browser and broader suites are deferred.
+
 ## Direct Book moves
 
 Decision: Each occurrence's organization disclosure offers Move to with shared labelled Selects for Book root or

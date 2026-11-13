@@ -84,6 +84,47 @@ export function bookTocIndex(structure: BookStructure): BookTocIndex {
   return { rows, byId, children, maxDescendantDepth, maxDepth: structure.limits.maxDepth };
 }
 
+export type BookChapterSelection = Readonly<{ total: number; selected: number }>;
+
+/** Count each chapter once, then accumulate subtree states in reverse preorder, including the Book root. */
+export function bookChapterSelection(
+  outline: BookTocIndex,
+  selected: ReadonlySet<string>,
+): ReadonlyMap<string | null, BookChapterSelection> {
+  const counts = new Map<string | null, { total: number; selected: number }>([[null, { total: 0, selected: 0 }]]);
+  for (const { placement } of outline.rows) {
+    const chapter = placement.target.kind === 'chapter';
+    counts.set(placement.occurrenceId, {
+      total: chapter ? 1 : 0,
+      selected: chapter && selected.has(placement.occurrenceId) ? 1 : 0,
+    });
+  }
+  for (let index = outline.rows.length - 1; index >= 0; index--) {
+    const { occurrenceId, parentOccurrenceId } = outline.rows[index]!.placement;
+    const subtree = counts.get(occurrenceId)!;
+    const parent = counts.get(parentOccurrenceId)!;
+    parent.total += subtree.total;
+    parent.selected += subtree.selected;
+  }
+  return counts;
+}
+
+/** Resolve only admitted chapter occurrences in this subtree; null addresses the entire current draft. */
+export function bookChapterOccurrences(outline: BookTocIndex, occurrenceId: string | null): readonly string[] {
+  const chapters: string[] = [];
+  const visit = (row: BookTocRow) => {
+    if (row.placement.target.kind === 'chapter') chapters.push(row.placement.occurrenceId);
+    else for (const child of outline.children.get(row.placement.occurrenceId) ?? []) visit(child);
+  };
+  if (occurrenceId === null) {
+    for (const row of outline.children.get(null) ?? []) visit(row);
+  } else {
+    const row = outline.byId.get(occurrenceId);
+    if (row) visit(row);
+  }
+  return chapters;
+}
+
 export function bookPublicationTarget(
   structure: BookStructure,
   selected: ReadonlySet<string>,

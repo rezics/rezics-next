@@ -12041,5 +12041,10 @@
   "knowledge_discovery_retry": "Réessayer cette page",
   "knowledge_discovery_return": "Revenir à ce sujet",
   "knowledge_discovery_sparse": "Aucune contribution sur cette page. Plus poursuit la lecture native.",
-  "knowledge_discovery_unavailable": "Les connaissances publiées sont indisponibles pour le moment. Réessayez la même page."
+  "knowledge_discovery_unavailable": "Les connaissances publiées sont indisponibles pour le moment. Réessayez la même page.",
+  "studio_book_release_all": "Tous les chapitres",
+  "studio_book_release_part": "Inclure les chapitres de {title} dans la prochaine publication",
+  "studio_book_release_chapter": "Inclure {title} dans la prochaine publication",
+  "studio_book_release_count": "{selected} chapitres sélectionnés sur {total}",
+  "studio_book_release_help": "Sélectionnez les chapitres de la prochaine publication. Les versions épinglées restent inchangées."
 }

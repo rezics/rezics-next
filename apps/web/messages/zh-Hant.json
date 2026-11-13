@@ -12041,5 +12041,10 @@
   "knowledge_discovery_retry": "重試此頁",
   "knowledge_discovery_return": "返回此主題",
   "knowledge_discovery_sparse": "此頁沒有貢獻。選擇「更多」可繼續原生閱讀。",
-  "knowledge_discovery_unavailable": "已發布知識暫時無法使用。請重試同一頁。"
+  "knowledge_discovery_unavailable": "已發布知識暫時無法使用。請重試同一頁。",
+  "studio_book_release_all": "全部章節",
+  "studio_book_release_part": "在下次發佈中包含「{title}」內的章節",
+  "studio_book_release_chapter": "在下次發佈中包含「{title}」",
+  "studio_book_release_count": "已選取 {selected} / {total} 個章節",
+  "studio_book_release_help": "選取下次發佈的章節。固定版本維持不變。"
 }

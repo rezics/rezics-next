@@ -12041,5 +12041,10 @@
   "knowledge_discovery_retry": "Diese Seite erneut laden",
   "knowledge_discovery_return": "Zu diesem Thema zurückkehren",
   "knowledge_discovery_sparse": "Auf dieser Seite gibt es keine Beiträge. Mit „Mehr“ setzt du die native Ansicht fort.",
-  "knowledge_discovery_unavailable": "Veröffentlichtes Wissen ist derzeit nicht verfügbar. Lade dieselbe Seite erneut."
+  "knowledge_discovery_unavailable": "Veröffentlichtes Wissen ist derzeit nicht verfügbar. Lade dieselbe Seite erneut.",
+  "studio_book_release_all": "Alle Kapitel",
+  "studio_book_release_part": "Kapitel in {title} in die nächste Veröffentlichung aufnehmen",
+  "studio_book_release_chapter": "{title} in die nächste Veröffentlichung aufnehmen",
+  "studio_book_release_count": "{selected} von {total} Kapiteln ausgewählt",
+  "studio_book_release_help": "Kapitel für die nächste Veröffentlichung auswählen. Die angehefteten Versionen bleiben unverändert."
 }

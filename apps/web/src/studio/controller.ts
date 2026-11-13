@@ -2,7 +2,7 @@ import { checkDocument, serializeDocument, type DocumentSnapshot } from '@rezics
 import { editionDocumentDigest } from '../content-editions/edition-model';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { bookPublicationTarget, bookTocRows } from './book-toc';
+import { bookChapterOccurrences, bookPublicationTarget, bookTocIndex, bookTocRows } from './book-toc';
 import {
   sameExact,
   type BookOrganizerPort,
@@ -607,13 +607,21 @@ export class StudioController {
     this.patch({ message: 'Version copied into the working draft. Save to create a new revision.' });
   };
   toggleOccurrence = (occurrenceId: string, checked: boolean) => {
-    if (!this.canMutate() || !this.state.structure) return;
-    const placement = this.state.structure.placements.find((row) => row.occurrenceId === occurrenceId);
+    const placement = this.state.structure?.placements.find((row) => row.occurrenceId === occurrenceId);
     if (placement?.target.kind !== 'chapter') return;
-    const next = new Set(this.state.selectedOccurrences);
-    if (checked) next.add(occurrenceId);
-    else next.delete(occurrenceId);
-    this.patch({ selectedOccurrences: next, review: null, published: null });
+    this.selectBookChapters(occurrenceId, checked);
+  };
+  selectBookChapters = (occurrenceId: string | null, checked: boolean) => {
+    if (!this.canMutate() || !this.input.canPublish || !this.state.structure) return;
+    const chapters = bookChapterOccurrences(bookTocIndex(this.state.structure), occurrenceId);
+    let next: Set<string> | null = null;
+    for (const id of chapters) {
+      if (this.state.selectedOccurrences.has(id) === checked) continue;
+      next ??= new Set(this.state.selectedOccurrences);
+      if (checked) next.add(id);
+      else next.delete(id);
+    }
+    if (next) this.patch({ selectedOccurrences: next, review: null, published: null });
   };
   organize = async (change: BookStructureChange): Promise<boolean> => {
     const structure = this.state.structure;

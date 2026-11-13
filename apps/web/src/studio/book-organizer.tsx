@@ -1,14 +1,17 @@
 import { useId, useMemo, useState, type FormEvent } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import {
+  bookChapterSelection,
   bookMoveDestinations,
   bookMovePositions,
   bookTocIndex,
   moveBookOccurrence,
   moveBookOccurrenceTo,
+  type BookChapterSelection,
   type BookTocIndex,
   type BookTocRow,
 } from './book-toc';
@@ -42,6 +45,9 @@ export function BookOrganizer({
   if (!structure) return null;
   if (adapter.error) return <p role="alert">{adapter.error}</p>;
   const outline = adapter.outline!;
+  const selections = bookChapterSelection(outline, state.selectedOccurrences);
+  const locale = getLocale();
+  const selectionDisabled = Boolean(state.busy) || controller.hasUnresolvedCommand() || !controller.input.canPublish;
   const editable = controller.canOrganize() && !state.busy && !controller.hasUnresolvedCommand();
   return (
     <section aria-label="Book table of contents" className="studio-toc">
@@ -51,12 +57,21 @@ export function BookOrganizer({
           {outline.rows.length} / {structure.limits.maxPlacements}
         </span>
       </div>
-      <p className="studio-help">Select chapters for the next release. Each placement keeps its own exact version.</p>
+      <p className="studio-help">{m.studio_book_release_help({}, { locale })}</p>
+      <ReleaseChoice
+        label={m.studio_book_release_all({}, { locale })}
+        selection={selections.get(null)!}
+        disabled={selectionDisabled}
+        visibleLabel
+        onChange={(checked) => controller.selectBookChapters(null, checked)}
+      />
+      <p className="studio-help">{m.studio_book_release_count(selections.get(null)!, { locale })}</p>
       {!controller.canOrganize() ? <p className="studio-help">Organization is unavailable for this visit.</p> : null}
       {outline.rows.length ? (
         <TocBranch
           parent={null}
           outline={outline}
+          selections={selections}
           state={state}
           controller={controller}
           editable={editable}
@@ -88,6 +103,37 @@ export function BookOrganizer({
     </section>
   );
 }
+
+function ReleaseChoice({
+  label,
+  selection,
+  disabled,
+  visibleLabel = false,
+  onChange,
+}: {
+  label: string;
+  selection: BookChapterSelection;
+  disabled: boolean;
+  visibleLabel?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const id = useId();
+  return (
+    <Field orientation="horizontal" className="w-auto shrink-0">
+      <FieldLabel htmlFor={id} className={visibleLabel ? 'min-h-11 items-center' : 'studio-release-choice'}>
+        <Checkbox
+          id={id}
+          checked={selection.total > 0 && selection.selected === selection.total}
+          indeterminate={selection.selected > 0 && selection.selected < selection.total}
+          disabled={disabled || selection.total === 0}
+          onCheckedChange={onChange}
+        />
+        <span className={visibleLabel ? undefined : 'sr-only'}>{label}</span>
+      </FieldLabel>
+    </Field>
+  );
+}
+
 function TocBranch({
   parent,
   outline,
@@ -95,6 +141,7 @@ function TocBranch({
 }: {
   parent: string | null;
   outline: BookTocIndex;
+  selections: ReadonlyMap<string | null, BookChapterSelection>;
   state: StudioState;
   controller: StudioController;
   editable: boolean;
@@ -117,6 +164,7 @@ function TocBranch({
 function TocEntry({
   row,
   outline,
+  selections,
   state,
   controller,
   editable,
@@ -124,6 +172,7 @@ function TocEntry({
 }: {
   row: BookTocRow;
   outline: BookTocIndex;
+  selections: ReadonlyMap<string | null, BookChapterSelection>;
   state: StudioState;
   controller: StudioController;
   editable: boolean;
@@ -136,6 +185,7 @@ function TocEntry({
   const locale = getLocale();
   const renameId = useId();
   const target = placement.target;
+  const selection = selections.get(placement.occurrenceId)!;
   const current = state.selected;
   const pin =
     target.kind === 'chapter' &&
@@ -151,35 +201,40 @@ function TocEntry({
   return (
     <div className="studio-toc-entry">
       <div className="studio-toc-title">
+        <ReleaseChoice
+          label={
+            target.kind === 'chapter'
+              ? m.studio_book_release_chapter({ title: placement.title }, { locale })
+              : m.studio_book_release_part({ title: placement.title }, { locale })
+          }
+          selection={selection}
+          disabled={Boolean(state.busy) || controller.hasUnresolvedCommand() || !controller.input.canPublish}
+          onChange={(checked) =>
+            target.kind === 'chapter'
+              ? controller.toggleOccurrence(placement.occurrenceId, checked)
+              : controller.selectBookChapters(placement.occurrenceId, checked)
+          }
+        />
         {target.kind === 'chapter' ? (
-          <>
-            <label className="studio-release-choice">
-              <input
-                type="checkbox"
-                checked={state.selectedOccurrences.has(placement.occurrenceId)}
-                disabled={Boolean(state.busy) || controller.hasUnresolvedCommand() || !controller.input.canPublish}
-                onChange={(event) => controller.toggleOccurrence(placement.occurrenceId, event.target.checked)}
-              />
-              <span className="studio-sr-only">Include {placement.title} in the next release</span>
-            </label>
-            <Button
-              type="button"
-              variant="ghost"
-              className="studio-toc-open"
-              aria-current={current?.source.revision.exact.postId === target.document.postId ? 'true' : undefined}
-              disabled={Boolean(state.busy) || controller.hasUnresolvedCommand()}
-              onClick={() => onOpen(target.document.postId)}
-            >
-              {placement.title}
-            </Button>
-          </>
+          <Button
+            type="button"
+            variant="ghost"
+            className="studio-toc-open"
+            aria-current={current?.source.revision.exact.postId === target.document.postId ? 'true' : undefined}
+            disabled={Boolean(state.busy) || controller.hasUnresolvedCommand()}
+            onClick={() => onOpen(target.document.postId)}
+          >
+            {placement.title}
+          </Button>
         ) : (
           <strong className="studio-part-title">{placement.title}</strong>
         )}
       </div>
       {target.kind === 'chapter' ? (
         <p className="studio-help studio-break">Pinned version: {target.document.revisionId}</p>
-      ) : null}
+      ) : (
+        <p className="studio-help">{m.studio_book_release_count(selection, { locale })}</p>
+      )}
       <details className="studio-toc-actions">
         <summary>
           Organize <span className="studio-sr-only">{placement.title}</span>

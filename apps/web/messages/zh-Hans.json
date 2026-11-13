@@ -12041,5 +12041,10 @@
   "knowledge_discovery_retry": "重试此页",
   "knowledge_discovery_return": "返回此主题",
   "knowledge_discovery_sparse": "此页没有贡献。选择“更多”可继续原生阅读。",
-  "knowledge_discovery_unavailable": "已发布知识暂时不可用。请重试同一页。"
+  "knowledge_discovery_unavailable": "已发布知识暂时不可用。请重试同一页。",
+  "studio_book_release_all": "全部章节",
+  "studio_book_release_part": "在下次发布中包含「{title}」内的章节",
+  "studio_book_release_chapter": "在下次发布中包含「{title}」",
+  "studio_book_release_count": "已选择 {selected} / {total} 个章节",
+  "studio_book_release_help": "选择下次发布的章节。固定版本保持不变。"
 }
