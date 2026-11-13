@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { DocumentBody } from '../document-body';
+import { KnowledgeReferenceBody } from './reference-view';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -241,9 +241,10 @@ export function KnowledgeDocumentPage({
       ) : null}
       {!preparing && document ? (
         <>
-          <DocumentBody
+          <KnowledgeReferenceBody
             key={`${document.documentId}:${document.revisionId}`}
             document={document.body}
+            references={document.references}
             locale={locale}
           />
           <KnowledgeCitation href={exactHref} origin={origin} clipboard={clipboard} />

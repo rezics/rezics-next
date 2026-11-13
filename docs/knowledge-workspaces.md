@@ -275,6 +275,17 @@ published by its author is distinct from resolver-fetched text. Legally permitte
 content with attribution, not a hidden target cache. Current erasure and moderation policy still governs retained
 copies. Access control cannot retract bytes a recipient already downloaded or prevent deliberate manual disclosure.
 
+Decision: The Web editor retains each admitted reference manifest beside its compatible body and freezes both in
+create/revise intents, including exact uncertain retries. Inline reference editing requires explicit Apply or Cancel;
+body/manifest inconsistencies require explicit component restoration, unavailable-entry retention, duplicate removal,
+or source-anchor detachment before Save. Existing source block IDs stay stable. Literal labels remain authored
+component fallback text. Reference review distinguishes Subject, live document and exact revision/digest/block;
+selected inspection uses one native public read or an explicitly addressed authorized private read, with no fallback
+between them. Public rendering uses only the native source disclosure manifest. Consumer cost is O(B + R), with
+manifest64/selected1: at most 64 source entries and one retained inspected target body, no background target reads
+or recursive expansion. Focused source tests and three illustrative Reference stories accompany this behavior;
+native save/reopen/publish/exact-read and browser/visual acceptance run after landing in the dev verifier.
+
 ## Copy and portable export
 
 Launch export is one selected document, with an optional separately requested Markdown rendering. The primary

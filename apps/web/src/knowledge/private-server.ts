@@ -1,3 +1,5 @@
+import { admitReferenceManifest, parseReferenceTarget } from './reference-model';
+import { inspectKnowledgeReference, type ReferenceInspection } from './reference-read';
 import {
   parseOrganizationRequest,
   readOrganization,
@@ -435,6 +437,9 @@ function createDocumentInput(value: unknown): Omit<KnowledgeDocumentCommand, 'au
   if (!record(value) || !isKnowledgeId(value.subjectId) || !isKnowledgeId(value.notebookId))
     throw new Error('Invalid Knowledge document command');
   const expected = expectedSession(value);
+  const body = documentBody(value.body);
+  const references = admitReferenceManifest(body, value.references);
+  if (!references) throw new Error('Invalid Knowledge reference manifest or component');
   return {
     ...expected,
     credential: credential(value.credential),
@@ -445,7 +450,8 @@ function createDocumentInput(value: unknown): Omit<KnowledgeDocumentCommand, 'au
     parentPlacementId: parentPlacement(value.parentPlacementId),
     title: boundedText(value.title, 512, 'document title'),
     language: language(value.language),
-    body: documentBody(value.body),
+    body,
+    references,
     licence: boundedText(value.licence, 128, 'licence'),
   };
 }
@@ -521,6 +527,9 @@ function reviseInput(value: unknown): Omit<KnowledgeRevisionCommand, 'authorizat
   const expected = expectedSession(value);
   if (!Array.isArray(value.subjectIds) || value.subjectIds.length > 64 || !value.subjectIds.every(isKnowledgeId))
     throw new Error('Invalid Knowledge revision subjects');
+  const body = documentBody(value.body);
+  const references = admitReferenceManifest(body, value.references);
+  if (!references) throw new Error('Invalid Knowledge reference manifest or component');
   return {
     ...expected,
     credential: credential(value.credential),
@@ -529,7 +538,8 @@ function reviseInput(value: unknown): Omit<KnowledgeRevisionCommand, 'authorizat
     expectedHeadRevisionId: boundedId(value.expectedHeadRevisionId, 'head revision'),
     title: boundedText(value.title, 512, 'document title'),
     language: language(value.language),
-    body: documentBody(value.body),
+    body,
+    references,
     licence: boundedText(value.licence, 128, 'licence'),
     subjectIds: [...value.subjectIds],
   };
@@ -798,4 +808,29 @@ export const moveKnowledgeOrganizationPlacement = createServerFn({ method: 'POST
     } catch (error) {
       return isPlatformClosedError(error) ? { state: 'unavailable' } : { state: 'uncertain' };
     }
+  });
+
+/** Selected inspection reuses the editor's session/CSRF fence, never a browser-supplied account. */
+export const inspectKnowledgePrivateReferenceRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge reference inspection');
+    const target = parseReferenceTarget(value.target);
+    if (!target) throw new Error('Invalid Knowledge reference target');
+    if (value.notebookId !== null && !isKnowledgeId(value.notebookId))
+      throw new Error('Invalid Knowledge target notebook');
+    return {
+      target,
+      notebookId: value.notebookId as string | null,
+      locale: boundedText(value.locale, 64, 'locale'),
+      expected: expectedSession(value.expected),
+    };
+  })
+  .handler(async ({ data }): Promise<ReferenceInspection> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return { state: identity.state };
+    return inspectKnowledgeReference(kernelClient(data.locale), data, {
+      accountId: identity.viewer,
+      authorization: identity.authorization,
+    });
   });

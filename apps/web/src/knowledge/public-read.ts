@@ -1,3 +1,4 @@
+import { admitReferenceManifest, type KnowledgeReference } from './reference-model';
 import type { KernelClient } from '@rezics/client';
 import { parseDocument, type DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
@@ -28,6 +29,9 @@ export type KnowledgePublicDocument = {
   licence: string;
   publishedAt: string;
   body: DocumentSnapshot;
+  references?: readonly KnowledgeReference[];
+  sha256?: string;
+  source?: string;
 };
 
 export type KnowledgeReadState =
@@ -184,7 +188,8 @@ export function admitKnowledgePublicResponse(
   if (documentId !== request.documentId) return { state: 'unavailable', status: 502 };
   if (request.revisionId !== null && revisionId !== request.revisionId) return { state: 'unavailable', status: 502 };
   const parsed = decodeCanonicalDocument(document.canonicalBytes);
-  if (!parsed) return { state: 'unavailable', status: 502 };
+  const references = parsed ? admitReferenceManifest(parsed, document.references) : null;
+  if (!parsed || !references) return { state: 'unavailable', status: 502 };
   return {
     state: 'ready',
     document: {
@@ -197,6 +202,9 @@ export function admitKnowledgePublicResponse(
       licence,
       publishedAt: published,
       body: parsed,
+      references,
+      sha256,
+      source: new TextDecoder().decode(Uint8Array.from(atob(document.canonicalBytes), (code) => code.charCodeAt(0))),
     },
   };
 }

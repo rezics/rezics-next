@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { DocumentBody } from '../document-body';
+import { KnowledgeReferenceBody } from './reference-view';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
@@ -405,7 +405,12 @@ export function KnowledgePublicationPanel({
             <p>{m.knowledge_publication_withdraw_scope({}, options)}</p>
           ) : (
             <div className="min-w-0 max-w-prose border-t border-border pt-4">
-              <DocumentBody document={currentReview.head.body} locale={locale} />
+              <KnowledgeReferenceBody
+                document={currentReview.head.body}
+                references={currentReview.head.references}
+                locale={locale}
+                inspectable={false}
+              />
             </div>
           )}
           <div className="flex min-w-0 flex-wrap gap-3">

@@ -222,3 +222,22 @@ Illustrative `Pages/Knowledge/Organization` stories show MoveReview, Moved, Stru
 Unavailable for the owner, phone390/desktop1280, both themes and every launch locale. They are authored fixtures,
 not native, mounted keyboard, visual or promotion evidence. Execute organization and existing navigation/private
 suites through Web's focused runner after integration; those acceptance gates remain separate from source typing.
+
+### Deliberate Knowledge references
+
+1. In the existing editor, author a problem citing an exact theorem and definition, with native revision IDs,
+   SHA-256 digests and an optional theorem block. Add a live reference and a Subject reference. Apply each reference,
+   save, reopen, and explicitly publish the saved revision. The body components, manifest IDs, roles, source blocks,
+   labels and exact selections survive; subsequent private edits do not change the published selection.
+2. Reopen a copied manifest, edit its literal label and role, and change surrounding writing. Existing source block
+   IDs and untouched targets remain unchanged. A removed component or source block presents explicit repair and
+   retains the compatible draft. A stale-head conflict retains that writing and manifest during reread and adoption;
+   uncertain retry repeats the original body, manifest, key, expected head and sealed credential.
+3. Review live versus exact meaning. Inspect only one selected target at a time. A wrong digest, missing exact block,
+   unavailable revision or withdrawn target retains the citation and never reads a newer head or nearby block.
+   Private inspection requires an explicit notebook address and current session/CSRF. A changed session, exposure,
+   locale, source or routed address retires inspection results and callbacks. Public output contains only native
+   disclosed targets, and a null target remains an unavailable citation.
+4. All eight locales support keyboard authoring, wrapping controls of at least 44px, and review at 390/1280 widths.
+   Source tests cover wire retention, source block stability, explicit repair, conflict, frozen retry and retirement.
+   ReferenceAuthoring, ExactCitation and TargetUnavailable are illustrative states. Budget: manifest64/selected1.

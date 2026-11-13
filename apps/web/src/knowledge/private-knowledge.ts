@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { admitReferenceManifest, type KnowledgeReference } from './reference-model';
 import { parseDocument, type DocumentSnapshot } from '@rezics/document';
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -12,11 +13,14 @@ export type KnowledgePrivateHead = Readonly<{
   documentId: string;
   revisionId: string;
   publicationId: string | null;
+  sha256?: string;
+  source?: string;
   title: string;
   language: string | null;
   licence: string;
   subjectIds: readonly string[];
   body: DocumentSnapshot;
+  references?: readonly KnowledgeReference[];
 }>;
 export type KnowledgePrivateRead =
   | { state: 'ready'; head: KnowledgePrivateHead }
@@ -56,6 +60,7 @@ export type KnowledgeDocumentCommand = Readonly<{
   title: string;
   language: string | null;
   body: DocumentSnapshot;
+  references?: readonly KnowledgeReference[];
   licence: string;
   idempotencyKey: string;
   authorization: string;
@@ -66,6 +71,7 @@ export type KnowledgeRevisionCommand = Readonly<{
   title: string;
   language: string | null;
   body: DocumentSnapshot;
+  references?: readonly KnowledgeReference[];
   licence: string;
   subjectIds: readonly string[];
   idempotencyKey: string;
@@ -161,7 +167,10 @@ export async function admitKnowledgePrivateHead(
   const bytes = decodeBase64(canonicalBytes);
   if (!bytes || (await sha256(bytes)) !== digest) return { state: 'unavailable', status: 502 };
   try {
-    const parsed = parseDocument(JSON.parse(new TextDecoder().decode(bytes)));
+    const source = new TextDecoder().decode(bytes);
+    const parsed = parseDocument(JSON.parse(source));
+    const references = admitReferenceManifest(parsed, member(document, 'references'));
+    if (!references) return { state: 'unavailable', status: 502 };
     return {
       state: 'ready',
       head: {
@@ -175,6 +184,9 @@ export async function admitKnowledgePrivateHead(
         licence,
         subjectIds,
         body: parsed,
+        references,
+        source,
+        sha256: digest,
       },
     };
   } catch {
@@ -263,6 +275,7 @@ export async function createKnowledgePrivateDocument(
       title: input.title,
       language: input.language,
       body: input.body,
+      references: [...(input.references ?? [])],
       licence: input.licence,
       subjectIds: [input.subjectId],
       expectedStructureRevisionId: input.structureRevisionId,
@@ -291,6 +304,7 @@ export async function reviseKnowledgePrivateDocument(
       title: input.title,
       language: input.language,
       body: input.body,
+      references: [...(input.references ?? [])],
       licence: input.licence,
       subjectIds: [...input.subjectIds],
       expectedHeadRevisionId: input.expectedHeadRevisionId,
