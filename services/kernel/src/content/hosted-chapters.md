@@ -91,12 +91,13 @@ Decision: a cross-parent move cuts the stable occurrence subtree's contiguous pr
 splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
 ancestor summaries, without visiting descendants.
 
-Decision: keep the hosted move planner unmounted until the native version adapter provides expected-snapshot
-selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and expected-head CAS. Once
-available, bind it through the admitted-author `runCommand`: resolve all anchors and ancestor paths from one pinned
-draft, stage all three sequence workspaces in that transaction, then commit sequence roots, occurrence parent,
-changed ancestor summaries, receipt/event and expected-head CAS atomically. The planner remains pure and owns no
-command or persistence authority.
+Decision: keep the hosted move planner pure and its route unmounted until the native version adapter provides
+expected-snapshot selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and
+expected-head CAS. Its admitted-author `runCommand` binder lives in
+[`hosted-version-draft-edit-command.ts`](hosted-version-draft-edit-command.ts) and consumes that adapter contract;
+it resolves all anchors and ancestor paths from one pinned draft, stages all three sequence workspaces in that
+transaction, then commits sequence roots, occurrence parent, changed ancestor summaries, receipt/event and
+expected-head CAS atomically. The legacy placement snapshot is not a move backend.
 
 Decision: point insertion and subtree removal resolve one expected snapshot and update the existing sibling,
 preorder and chapter indexes; removal cuts ranges by stored aggregates without visiting descendants, preserving
