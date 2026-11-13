@@ -24,6 +24,7 @@ const active: KnowledgeLifecycle = {
   generation: '0',
   state: 'active',
   restoreUntil: null,
+  restoreProgress: null,
 };
 const trashed: KnowledgeLifecycle = {
   ...active,
@@ -153,7 +154,7 @@ test('dirty draft prevents trash; review locks editing and an uncertain command 
   }
 });
 
-test('subtree no-effect and structure conflict reread native state without reporting a completed trash', async () => {
+test('structure conflict rereads native state before reviewing a new trash', async () => {
   const page = await harness();
   let value = active;
   const intents: KnowledgeLifecycleIntent[] = [];
@@ -161,8 +162,6 @@ test('subtree no-effect and structure conflict reread native state without repor
     read: async () => ready(value),
     change: async (intent) => {
       intents.push(intent);
-      if (intents.length === 1)
-        return { state: 'acknowledged', receipt: { ...active, complete: false, reason: 'subtree_work_required' } };
       value = { ...active, generation: '3', structureRevisionId: viewer };
       return { state: 'conflict', status: 412 };
     },
@@ -172,15 +171,11 @@ test('subtree no-effect and structure conflict reread native state without repor
     await view.findInput('Document title');
     await view.click(view.button('Move document to trash'));
     await view.click(view.button('Confirm move to trash'));
-    await view.findText('No lifecycle change was completed');
-    view.expectMissingText('Document in trash');
-    await view.click(view.button('Move document to trash'));
-    await view.click(view.button('Confirm move to trash'));
     await view.findText('Review the freshly read status');
     await view.click(view.button('Move document to trash'));
     await view.click(view.button('Confirm move to trash'));
-    expect(intents[2]).toMatchObject({ expectedGeneration: '3', expectedStructureRevisionId: viewer });
-    expect(intents[2]!.idempotencyKey).not.toBe(intents[1]!.idempotencyKey);
+    expect(intents[1]).toMatchObject({ expectedGeneration: '3', expectedStructureRevisionId: viewer });
+    expect(intents[1]!.idempotencyKey).not.toBe(intents[0]!.idempotencyKey);
   } finally {
     await page.close();
   }
@@ -223,6 +218,102 @@ test('expiry and denied restore never disclose the editor; replaced visits ignor
     await page.flush();
     view.expectMissingText('Document title');
     view.expectMissingText(head.title);
+  } finally {
+    await page.close();
+  }
+});
+
+test('subtree trash and durable restore survive reload; refresh alone reopens a fresh private head without publishing', async () => {
+  let page = await harness();
+  let value: KnowledgeLifecycle = active;
+  let reads = 0;
+  let heads = 0;
+  let publications = 0;
+  let unavailable = false;
+  const intents: KnowledgeLifecycleIntent[] = [];
+  const restoring = {
+    ...trashed,
+    generation: '2',
+    restoreProgress: { processedDocuments: '64', pendingPlacements: '3' },
+  };
+  const base = operations({
+    read: async () => {
+      reads++;
+      return unavailable ? { state: 'unavailable', status: 503 } : ready(value);
+    },
+    change: async (intent) => {
+      intents.push(structuredClone(intent));
+      if (intent.action === 'trash') {
+        value = trashed;
+        return { state: 'acknowledged', receipt: { ...value, complete: true, reason: null } };
+      }
+      value = restoring;
+      if (intents.length === 2) return { state: 'uncertain' };
+      return { state: 'acknowledged', receipt: { ...restoring, complete: false, reason: 'restoring' } };
+    },
+  });
+  let release!: (result: Awaited<ReturnType<KnowledgePrivateOperations['read']>>) => void;
+  const ops: KnowledgePrivateOperations = {
+    ...base,
+    read: async () => {
+      heads++;
+      if (heads === 1) return { state: 'ready', ...binding, head };
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    },
+    selectPublication: async () => {
+      publications++;
+      return { state: 'unavailable', status: 503 };
+    },
+  };
+  try {
+    let view = await page.mount(address, ops, admitted);
+    await view.findInput('Document title');
+    await view.click(view.button('Move document to trash'));
+    await view.click(view.button('Confirm move to trash'));
+    await view.findText('Document in trash');
+    view.expectMissingText('Document title');
+    view.expectMissingText('Publication');
+    await view.click(view.button('Restore document'));
+    await view.click(view.button('Confirm restore'));
+    await view.findText('The command outcome is unknown.');
+    await view.click(view.button('Retry exact command'));
+    await view.findText('Processed documents: 64. Pending placements: 3.');
+    expect(intents[2]).toEqual(intents[1]);
+    view.expectMissingText('Restore document');
+    const before = reads;
+    await page.flush();
+    expect(reads).toBe(before);
+    expect(heads).toBe(1);
+    await page.close();
+    page = await harness();
+    view = await page.mount(address, ops, admitted);
+    await view.findText('Restoring document subtree');
+    view.expectMissingText('Document title');
+    view.expectMissingText('Publication');
+    value = { ...restoring, restoreProgress: { processedDocuments: '9007199254740993', pendingPlacements: '1' } };
+    await view.click(view.button('Refresh restore status'));
+    await view.findText('Processed documents: 9007199254740993. Pending placements: 1.');
+    expect(heads).toBe(1);
+    unavailable = true;
+    await view.click(view.button('Refresh restore status'));
+    await view.findText('Document status is unavailable.');
+    view.expectMissingText('Document title');
+    view.expectMissingText('Restore document');
+    expect(heads).toBe(1);
+    unavailable = false;
+    await view.click(view.button('Read document status again'));
+    await view.findText('Restoring document subtree');
+    value = { ...active, generation: '3' };
+    await view.click(view.button('Refresh restore status'));
+    view.expectMissingText('Document title');
+    release({ state: 'ready', ...binding, head: { ...head, title: 'Fresh restored subtree' } });
+    await page.flush();
+    expect((await view.findInput('Document title')).value).toBe('Fresh restored subtree');
+    expect(heads).toBe(2);
+    expect(intents).toHaveLength(3);
+    expect(publications).toBe(0);
   } finally {
     await page.close();
   }

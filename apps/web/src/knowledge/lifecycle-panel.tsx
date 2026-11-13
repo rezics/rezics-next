@@ -20,8 +20,10 @@ export function KnowledgeLifecyclePanel({
   if (!controller.enabled) return null;
   const { lifecycle, readState, commandState, intent } = controller;
   const trashed = lifecycle?.state === 'trashed';
+  const progress = lifecycle?.restoreProgress;
   const expired = !!lifecycle && knowledgeRestoreExpired(lifecycle);
-  const canAct = controller.actionAdmission === 'available' && !blocked && !expired && readState === 'ready';
+  const canAct =
+    controller.actionAdmission === 'available' && !blocked && !expired && !progress && readState === 'ready';
   const failure =
     readState === 'not-found'
       ? m.knowledge_lifecycle_missing({}, options)
@@ -33,15 +35,30 @@ export function KnowledgeLifecyclePanel({
   return (
     <section className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6" aria-labelledby={titleId}>
       <h2 id={titleId} className="text-lg font-semibold">
-        {trashed ? m.knowledge_lifecycle_trashed({}, options) : m.knowledge_lifecycle_heading({}, options)}
+        {progress
+          ? m.knowledge_lifecycle_restoring({}, options)
+          : trashed
+            ? m.knowledge_lifecycle_trashed({}, options)
+            : m.knowledge_lifecycle_heading({}, options)}
       </h2>
       {readState === 'preparing' ? <p role="status">{m.knowledge_lifecycle_loading({}, options)}</p> : null}
       {failure ? <p role="alert">{failure}</p> : null}
       {readState === 'ready' && lifecycle ? (
         <>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {trashed ? m.knowledge_lifecycle_hidden({}, options) : m.knowledge_lifecycle_leaf({}, options)}
+            {trashed ? m.knowledge_lifecycle_hidden({}, options) : m.knowledge_lifecycle_subtree_scope({}, options)}
           </p>
+          {progress ? (
+            <div role="status" className="space-y-2">
+              <p>{m.knowledge_lifecycle_restore_running({}, options)}</p>
+              <p>
+                {m.knowledge_lifecycle_restore_counts(
+                  { processed: progress.processedDocuments, pending: progress.pendingPlacements },
+                  options,
+                )}
+              </p>
+            </div>
+          ) : null}
           {trashed && lifecycle.restoreUntil ? (
             <p>
               {m.knowledge_lifecycle_window({}, options)}{' '}
@@ -56,7 +73,7 @@ export function KnowledgeLifecyclePanel({
             <p role="status">{m.knowledge_lifecycle_expired({}, options)}</p>
           ) : null}
           {blocked ? <p role="status">{m.knowledge_lifecycle_save_first({}, options)}</p> : null}
-          {controller.actionAdmission !== 'available' ? (
+          {!progress && controller.actionAdmission !== 'available' ? (
             <p role="status">{m.knowledge_lifecycle_action_unavailable({}, options)}</p>
           ) : null}
           {intent && commandState === 'confirm' ? (
@@ -83,7 +100,7 @@ export function KnowledgeLifecyclePanel({
                 </Button>
               </div>
             </div>
-          ) : !intent ? (
+          ) : !intent && !progress ? (
             <Button
               type="button"
               variant="outline"
@@ -97,7 +114,6 @@ export function KnowledgeLifecyclePanel({
         </>
       ) : null}
       {commandState === 'pending' ? <p role="status">{m.knowledge_lifecycle_pending({}, options)}</p> : null}
-      {commandState === 'subtree' ? <p role="status">{m.knowledge_lifecycle_subtree({}, options)}</p> : null}
       {commandState === 'conflict' ? <p role="alert">{m.knowledge_lifecycle_conflict({}, options)}</p> : null}
       {commandState === 'not-found' ? <p role="alert">{m.knowledge_lifecycle_missing({}, options)}</p> : null}
       {controller.unresolved && !controller.pending ? (
@@ -114,9 +130,15 @@ export function KnowledgeLifecyclePanel({
           </Button>
         </div>
       ) : null}
-      {readState !== 'ready' && readState !== 'preparing' && !controller.unresolved ? (
-        <Button type="button" variant="outline" className={control} onClick={() => void controller.reread()}>
-          {m.knowledge_lifecycle_reread({}, options)}
+      {readState !== 'preparing' && (readState !== 'ready' || trashed) && !intent ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          disabled={controller.pending}
+          onClick={() => void controller.reread()}
+        >
+          {progress ? m.knowledge_lifecycle_refresh({}, options) : m.knowledge_lifecycle_reread({}, options)}
         </Button>
       ) : null}
     </section>
