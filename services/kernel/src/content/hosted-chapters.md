@@ -322,6 +322,8 @@ caller proof. Distinct migration `20261113091251_revision_disclosure.sql`. Stage
 
 ## Prepared Book publication
 
+Decision: the mounted author API uses expected draft/publication IDs only as stale-intent preconditions, gives each source-pinned stage a 24-hour lifetime from native command time, and returns only retained progress and candidate counts; preparation never selects the publication pointer.
+
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
 Decision: private staging uses a source-ordered candidate generation, 20-row replayable steps and selection batches of

@@ -1,0 +1,442 @@
+import type { Actor, AccessClient } from '../request/access.ts';
+import {
+  authoritativeTimeValue,
+  principalCommandIdentity,
+  runCommand,
+  type AuthoritativeTime,
+  type CommandAuthorization,
+  type CommandOutcome,
+  type CommandTransaction,
+} from '../command/command.ts';
+import { requestDigest } from '../command/request.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import {
+  ContentNotFoundError,
+  RevisionPreconditionError,
+  hostedPostAuthorization,
+  type ContentCommandDependencies,
+} from './commands.ts';
+import { snapshot } from './reads.ts';
+import { hostedCatalogue } from './hosted-chapters-store.ts';
+import type { HostedCommandContext, HostedDependencies } from './hosted-chapters-model.ts';
+import {
+  advanceHostedPublicationStaging,
+  appendHostedPublicationSelectionBatch,
+  beginHostedPublicationStaging,
+  cancelHostedPublicationStaging,
+  freezeHostedPublicationSelection,
+  readHostedPublicationStagingProgress,
+  sealHostedPublicationStaging,
+} from './hosted-publication-staging.ts';
+import type {
+  HostedPublicationStagingBatchResult,
+  HostedPublicationStagingCheckpoint,
+  HostedPublicationStagingLocator,
+} from './hosted-publication-staging-model.ts';
+import {
+  applyHostedVersionReleaseCandidatePage,
+  beginHostedVersionReleaseCandidate,
+  sealHostedVersionReleaseCandidate,
+} from './hosted-version-release-candidate.ts';
+import type { HostedVersionReleaseCandidateCheckpoint } from './hosted-version-release-candidate-model.ts';
+
+export type HostedPublicationPreparationDependencies = HostedDependencies & ContentCommandDependencies;
+
+export type HostedPublicationPreparationCandidate = Readonly<{
+  candidateId: string;
+  generationId: string;
+  afterSourceOrder: string | null;
+  placementCount: string;
+  rootCount: string;
+  chapterCount: string;
+  coverageComplete: boolean;
+  sealed: boolean;
+}>;
+
+export type HostedPublicationPreparationProgress = Readonly<{
+  catalogueId: string;
+  stageId: string;
+  stage: HostedPublicationStagingCheckpoint;
+  batch?: HostedPublicationStagingBatchResult;
+  candidate: HostedPublicationPreparationCandidate | null;
+  candidateReady: boolean;
+}>;
+
+type PreparationWork = (
+  tx: CommandTransaction,
+  time: AuthoritativeTime,
+) => Promise<HostedPublicationPreparationProgress>;
+type StageBinding = Readonly<{ stageId: string; allowMissing: boolean }>;
+
+const PREPARATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const PREPARATION_EVENT = 'com.rezics.content.hosted-catalogue.preparation.changed.v1';
+
+function candidateProgress(checkpoint: HostedVersionReleaseCandidateCheckpoint): HostedPublicationPreparationCandidate {
+  return {
+    candidateId: checkpoint.candidateId,
+    generationId: checkpoint.generationId,
+    afterSourceOrder: checkpoint.afterSourceOrder,
+    placementCount: checkpoint.placementCount,
+    rootCount: checkpoint.rootCount,
+    chapterCount: checkpoint.chapterCount,
+    coverageComplete: checkpoint.coverageComplete,
+    sealed: checkpoint.sealed,
+  };
+}
+
+function progress(
+  catalogueId: string,
+  stage: HostedPublicationStagingCheckpoint,
+  candidate: HostedPublicationPreparationCandidate | null = null,
+  batch?: HostedPublicationStagingBatchResult,
+): HostedPublicationPreparationProgress {
+  return {
+    catalogueId,
+    stageId: stage.locator.stageId,
+    stage,
+    ...(batch === undefined ? {} : { batch }),
+    candidate,
+    candidateReady: candidate?.sealed === true,
+  };
+}
+
+/** Every mutation is an ordinary catalogue-home command. `runCommand` performs
+ * current Post/container/revise authorization before it reads the retained
+ * receipt, so exact retries keep their original response after later progress. */
+function preparationCommand(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  operation: string,
+  intent: unknown,
+  context: HostedCommandContext,
+  work: PreparationWork,
+  stageBinding?: StageBinding,
+): Promise<CommandOutcome<HostedPublicationPreparationProgress>> {
+  const route = routeOf(catalogueId);
+  if (route === null || actor.kind !== 'account') throw new ContentNotFoundError();
+  return (async () => {
+    const initial = (await snapshot(deps, catalogueId, context, (client) => hostedCatalogue(client, catalogueId)))
+      .value;
+    if (!initial) throw new ContentNotFoundError();
+
+    const kind = `content.hosted-catalogue.preparation.${operation}`;
+    const receipt = {
+      kind,
+      key: context.idempotencyKey,
+      digest: requestDigest(kind, actor, { catalogueId, input: intent }),
+    };
+    const baseAuthorization = hostedPostAuthorization(deps, actor, initial.thread_id, catalogueId, context, receipt);
+    const authorization: CommandAuthorization = {
+      ...baseAuthorization,
+      async prepare(attempt) {
+        const evidence = await baseAuthorization.prepare!(attempt);
+        if (stageBinding) {
+          const staged = (
+            await snapshot(deps, catalogueId, context, (client) =>
+              client.query<{ initiator_account_id: string; owner_epoch: string }>(
+                `SELECT initiator_account_id,owner_epoch::text AS owner_epoch
+                 FROM content.hosted_publication_staging
+                 WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+                [route, catalogueId, stageBinding.stageId],
+              ),
+            )
+          ).value.rows[0];
+          if (!staged) {
+            if (!stageBinding.allowMissing) throw new ContentNotFoundError();
+          } else if (
+            staged.initiator_account_id !== actor.accountId ||
+            staged.owner_epoch !== String(actor.authnEpoch)
+          ) {
+            throw new ContentNotFoundError();
+          }
+        }
+        return evidence;
+      },
+    };
+    return runCommand<HostedPublicationPreparationProgress>(
+      deps.pool,
+      {
+        ...principalCommandIdentity(actor),
+        partition: partitionOf(route),
+        deadline: context.deadline,
+        clock: deps.clock,
+        receipt,
+        authorization,
+      },
+      async (tx, { time }) => {
+        const value = await work(tx, time);
+        return {
+          value,
+          events: [
+            {
+              type: PREPARATION_EVENT,
+              subject: catalogueId,
+              data: { catalogueId, stageId: value.stageId },
+            },
+          ],
+        };
+      },
+    );
+  })();
+}
+
+function locator(catalogueId: string, stageId: string): HostedPublicationStagingLocator {
+  return { catalogueId, stageId };
+}
+
+/** Start a whole or explicit selection stage from the expected live Book source.
+ * The expected IDs are stale-intent preconditions; the stage captures the exact
+ * descriptor and current publication pointer inside this transaction. */
+export function startHostedPublicationPreparation(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  input: Readonly<{
+    stageId: string;
+    expectedRevisionId: string;
+    expectedPublicationId: string | null;
+    mode: 'whole' | 'selection';
+  }>,
+  context: HostedCommandContext,
+) {
+  return preparationCommand(
+    deps,
+    actor,
+    catalogueId,
+    'start',
+    input,
+    context,
+    async (tx, time) => {
+      const current = await hostedCatalogue(tx as AccessClient, catalogueId, true);
+      if (!current) throw new ContentNotFoundError();
+      if (
+        current.head_revision_id !== input.expectedRevisionId ||
+        current.publication_id !== input.expectedPublicationId
+      )
+        throw new RevisionPreconditionError();
+
+      const expiresAt = new Date(Date.parse(authoritativeTimeValue(time)) + PREPARATION_LIFETIME_MS);
+      const begun = await beginHostedPublicationStaging(tx as AccessClient, actor, {
+        catalogueId,
+        stageId: input.stageId,
+        expectedHeadRevisionId: current.head_revision_id,
+        expectedPublicationId: current.publication_id,
+        mode: input.mode,
+        expiresAt,
+      });
+      return progress(catalogueId, begun.progress);
+    },
+    { stageId: input.stageId, allowMissing: true },
+  );
+}
+
+export function appendHostedPublicationPreparationBatch(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  stageId: string,
+  input: Readonly<{ batchId: string; occurrenceIds: readonly string[] }>,
+  context: HostedCommandContext,
+) {
+  return preparationCommand(
+    deps,
+    actor,
+    catalogueId,
+    'batch',
+    { stageId, ...input },
+    context,
+    async (tx) => {
+      const batch = await appendHostedPublicationSelectionBatch(tx as AccessClient, actor, {
+        ...locator(catalogueId, stageId),
+        ...input,
+      });
+      const stage = await readHostedPublicationStagingProgress(
+        tx as AccessClient,
+        actor,
+        locator(catalogueId, stageId),
+      );
+      return progress(catalogueId, stage, null, batch);
+    },
+    { stageId, allowMissing: false },
+  );
+}
+
+export function freezeHostedPublicationPreparationSelection(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  stageId: string,
+  context: HostedCommandContext,
+) {
+  return preparationCommand(
+    deps,
+    actor,
+    catalogueId,
+    'freeze',
+    { stageId },
+    context,
+    async (tx) => {
+      const stage = await freezeHostedPublicationSelection(tx as AccessClient, actor, locator(catalogueId, stageId));
+      return progress(catalogueId, stage);
+    },
+    { stageId, allowMissing: false },
+  );
+}
+
+async function candidateAfterSourceSeal(
+  tx: CommandTransaction,
+  actor: Actor,
+  stageId: string,
+  catalogueId: string,
+): Promise<HostedVersionReleaseCandidateCheckpoint> {
+  const source = await sealHostedPublicationStaging(tx as AccessClient, actor, locator(catalogueId, stageId));
+  const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
+  return candidate.checkpoint;
+}
+
+/** Advance exactly one retained staging or candidate page. The choice of source
+ * phase and frontier comes only from native progress and candidate checkpoints. */
+export function advanceHostedPublicationPreparation(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  stageId: string,
+  stepId: string,
+  context: HostedCommandContext,
+) {
+  return preparationCommand(
+    deps,
+    actor,
+    catalogueId,
+    'advance',
+    { stageId, stepId },
+    context,
+    async (tx) => {
+      const stageLocator = locator(catalogueId, stageId);
+      const stage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
+
+      if (stage.state === 'building' || stage.state === 'closing' || stage.state === 'collecting') {
+        const advanced = await advanceHostedPublicationStaging(
+          deps,
+          tx as AccessClient,
+          actor,
+          stageLocator,
+          stepId,
+          context.deadline,
+        );
+        return progress(catalogueId, advanced.progress);
+      }
+
+      if (stage.state === 'ready') {
+        const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
+        const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
+        const sealedStage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
+        return progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint));
+      }
+
+      if (stage.state === 'sealed') {
+        const checkpoint = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
+        if (checkpoint.coverageComplete) return progress(catalogueId, stage, candidateProgress(checkpoint));
+        const advanced = await applyHostedVersionReleaseCandidatePage(
+          tx,
+          actor,
+          checkpoint.sourceSeal,
+          checkpoint.afterSourceOrder,
+        );
+        return progress(catalogueId, stage, candidateProgress(advanced.checkpoint));
+      }
+
+      return progress(catalogueId, stage);
+    },
+    { stageId, allowMissing: false },
+  );
+}
+
+export function readHostedPublicationPreparationProgress(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  stageId: string,
+  context: HostedCommandContext,
+) {
+  return preparationCommand(
+    deps,
+    actor,
+    catalogueId,
+    'progress',
+    { stageId },
+    context,
+    async (tx) => {
+      const stage = await readHostedPublicationStagingProgress(
+        tx as AccessClient,
+        actor,
+        locator(catalogueId, stageId),
+      );
+      if (stage.state !== 'sealed') return progress(catalogueId, stage);
+      const candidate = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
+      return progress(catalogueId, stage, candidateProgress(candidate));
+    },
+    { stageId, allowMissing: false },
+  );
+}
+
+export function cancelHostedPublicationPreparation(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  stageId: string,
+  context: HostedCommandContext,
+) {
+  return preparationCommand(
+    deps,
+    actor,
+    catalogueId,
+    'cancel',
+    { stageId },
+    context,
+    async (tx) => {
+      const stage = await cancelHostedPublicationStaging(tx as AccessClient, actor, locator(catalogueId, stageId));
+      return progress(catalogueId, stage);
+    },
+    { stageId, allowMissing: false },
+  );
+}
+
+/** Seal coverage when complete, then seal the exact private candidate only after
+ * its retained page frontier proves full source coverage. */
+export function sealHostedPublicationPreparation(
+  deps: HostedPublicationPreparationDependencies,
+  actor: Actor,
+  catalogueId: string,
+  stageId: string,
+  context: HostedCommandContext,
+) {
+  return preparationCommand(
+    deps,
+    actor,
+    catalogueId,
+    'seal',
+    { stageId },
+    context,
+    async (tx) => {
+      const stageLocator = locator(catalogueId, stageId);
+      const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
+      const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
+      let checkpoint = candidate.checkpoint;
+      if (checkpoint.coverageComplete && !checkpoint.sealed) {
+        const sealed = await sealHostedVersionReleaseCandidate(tx, actor, candidate.checkpoint.sourceSeal);
+        checkpoint = {
+          ...checkpoint,
+          placementCount: sealed.candidate.coverage.placementCount,
+          rootCount: sealed.candidate.coverage.rootCount,
+          chapterCount: sealed.candidate.coverage.chapterCount,
+          sealed: true,
+        };
+      }
+      const stage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
+      return progress(catalogueId, stage, candidateProgress(checkpoint));
+    },
+    { stageId, allowMissing: false },
+  );
+}

@@ -54,6 +54,7 @@ import {
   hostedSubjectCataloguePageSchema,
   hostedSubjectCatalogueQuerySchema,
 } from './hosted-catalogue-subject-schemas.ts';
+import { hostedPublicationPreparationRoutes } from './hosted-publication-preparation-routes.ts';
 import {
   HostedIdSchema,
   HostedCreateSchema,
@@ -169,6 +170,7 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
   const moveDependencies = Object.assign(Object.create(deps) as HostedVersionDraftMoveCommandDependencies, {
     versionAdapter: createHostedVersionDraftMoveNativeAdapter(),
   });
+  hostedPublicationPreparationRoutes(app, deps);
   app.wrap((handle) => async (request) => {
     const response = await handle(request);
     const path = new URL(request.url).pathname;
