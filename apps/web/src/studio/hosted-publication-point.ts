@@ -80,7 +80,7 @@ export function publicationPointAncestors(state: Active): readonly Ancestor[] | 
   let parentId = state.chapter?.item.parentId ?? null;
   while (parentId !== null) {
     const ancestor = state.ancestors.find((item) => item.draft.item.occurrenceId === parentId);
-    if (!ancestor || chain.length === 15 || chain.includes(ancestor)) return null;
+    if (!ancestor || chain.length === 15) return null;
     chain.unshift(ancestor);
     parentId = ancestor.draft.item.parentId;
   }

@@ -29,10 +29,7 @@ import {
   hostedSelection,
   type HostedBook,
   type HostedBookNative,
-  type HostedCreate,
   type HostedPlacement,
-  type HostedPublish,
-  type HostedRevise,
   type HostedSelection,
 } from './hosted-contract';
 import { hostedBookStructure } from './hosted-structure';
