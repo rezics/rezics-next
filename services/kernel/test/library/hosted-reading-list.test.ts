@@ -13,8 +13,11 @@ beforeAll(async () => {
   f = await hostedChaptersFixture();
 });
 afterAll(async () => {
+  restorePositionProjection?.();
   await f?.close();
 });
+
+let restorePositionProjection: (() => void) | undefined;
 
 function watchChapterBodyReads(pool: Pool) {
   let reads = 0;
@@ -77,6 +80,33 @@ function watchHostedReadingPort() {
       mutablePort.readMetadata = originalMetadata;
       mutablePort.resolveExact = originalExact;
     },
+  };
+}
+
+function projectHostedReadingPosition(occurrenceId: string, position: number) {
+  const port = peekHostedReadingPort();
+  if (!port) throw new Error('Hosted reading Content port is not composed');
+  const mutablePort = port as unknown as {
+    readMetadata: HostedReadingPort['readMetadata'];
+    resolveExact: HostedReadingPort['resolveExact'];
+  };
+  const originalMetadata = port.readMetadata;
+  const originalExact = port.resolveExact;
+  mutablePort.readMetadata = async (...args) => {
+    const result = await Reflect.apply(originalMetadata, port, args);
+    return result.availability === 'available' && result.occurrenceId === occurrenceId
+      ? { ...result, position }
+      : result;
+  };
+  mutablePort.resolveExact = async (...args) => {
+    const result = await Reflect.apply(originalExact, port, args);
+    return result.availability === 'available' && result.occurrenceId === occurrenceId
+      ? { ...result, position }
+      : result;
+  };
+  return () => {
+    mutablePort.readMetadata = originalMetadata;
+    mutablePort.resolveExact = originalExact;
   };
 }
 
@@ -162,6 +192,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   });
   expect(savedOne.status).toBe(200);
   expect(savedTwo.status).toBe(200);
+  restorePositionProjection = projectHostedReadingPosition(firstOccurrence, 512);
 
   const readingPort = watchHostedReadingPort();
   const metadataBodyReads = watchChapterBodyReads(f.native.pool);
@@ -194,6 +225,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
       metadata: {
         availability: 'available',
         occurrenceId: firstOccurrence,
+        position: 512,
         title: 'First chapter',
         target: firstTarget,
       },
@@ -249,6 +281,17 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     );
     expect(nextPage.status).toBe(200);
     expect(nextPage.value.items.map((item: { subjectId: string }) => item.subjectId)).toEqual([subjectOne]);
+    expect(nextPage.value.items[0]).toMatchObject({
+      subjectId: subjectOne,
+      address: {
+        catalogueId: f.catalogueId,
+        publicationRevisionId: publication.value.revisionId,
+        occurrenceId: firstOccurrence,
+        targetRevisionId: firstTarget.revisionId,
+        targetSha256: firstTarget.sha256,
+      },
+      metadata: { availability: 'available', position: 512, title: 'First chapter', target: firstTarget },
+    });
     expect(bodyReads.count()).toBe(0);
     expect(
       (
@@ -346,7 +389,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     const historical = current.value.items.find((item: { subjectId: string }) => item.subjectId === subjectOne);
     expect(historical).toMatchObject({
       address: { publicationRevisionId: publication.value.revisionId, occurrenceId: firstOccurrence },
-      metadata: { availability: 'available', position: 0, title: 'First chapter', target: firstTarget },
+      metadata: { availability: 'available', position: 512, title: 'First chapter', target: firstTarget },
     });
     expect(historicalBodyReads.count()).toBe(0);
     const opened = await f.native.call('GET', `/v1/libraryHostedReading?subjectId=${subjectOne}`, undefined, {
@@ -358,6 +401,8 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
       address: historical.address,
       resume: {
         availability: 'available',
+        position: 512,
+        target: firstTarget,
         document: {
           canonicalBytes: exactBytes.toString('base64'),
           sha256: createHash('sha256').update(exactBytes).digest('hex'),
@@ -368,6 +413,8 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   } finally {
     historicalBodyReads.restore();
   }
+  restorePositionProjection?.();
+  restorePositionProjection = undefined;
 
   const cleared = await f.native.call(
     'POST',

@@ -33,6 +33,7 @@ const id = t.String({
 });
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const revision = t.String({ pattern: '^[1-9][0-9]{0,18}$' });
+const readPosition = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
 const position = t.Object(
   {
     blockId: t.String({ minLength: 1, maxLength: HOSTED_READING_POSITION_BLOCK_MAX }),
@@ -65,7 +66,7 @@ const resume = t.Union([
       availability: t.Literal('available'),
       occurrenceId: id,
       parentId: t.Union([id, t.Null()]),
-      position: t.Integer({ minimum: 0, maximum: 511 }),
+      position: readPosition,
       kind: t.Literal('chapter'),
       title: t.String({ minLength: 1, maxLength: 256 }),
       target,
@@ -88,7 +89,7 @@ const metadata = t.Union([
       availability: t.Literal('available'),
       occurrenceId: id,
       parentId: t.Union([id, t.Null()]),
-      position: t.Integer({ minimum: 0, maximum: 511 }),
+      position: readPosition,
       kind: t.Literal('chapter'),
       title: t.String({ minLength: 1, maxLength: 256 }),
       target,
