@@ -11,6 +11,7 @@ import {
   createCheckRunFinalSettlement,
   decodeCheckRunSettlement,
   getCheckRunStatus,
+  listCheckRunInvocationIds,
   markCheckRunNativeTerminal,
   markCheckRunQueued,
   reconcileCheckRunInvocation,
@@ -84,6 +85,23 @@ function finalMessage(registration: Awaited<ReturnType<typeof registerCheckRunIn
 
 afterAll(() => {
   for (const directory of directories) rmSync(directory, { recursive: true, force: true });
+});
+
+test('maintenance inventory pages sorted invocation IDs with a resumable cursor and bounded page size', async () => {
+  const state = stateDirectory();
+  const ids = ['00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001'];
+  for (const invocationId of ids) await registerCheckRunInvocation(binding(), { stateDirectory: state, invocationId });
+
+  const first = listCheckRunInvocationIds({ stateDirectory: state, limit: 1 });
+  expect(first.ids).toEqual([ids[1]]);
+  expect(first.nextCursor).toBe(ids[1]);
+  expect(first.hasMore).toBe(true);
+  const resumed = listCheckRunInvocationIds({ stateDirectory: state, after: first.nextCursor, limit: 1 });
+  expect(resumed.ids).toEqual([ids[0]]);
+  expect(resumed.hasMore).toBe(false);
+  expect(resumed.directoryEntriesListed).toBeGreaterThanOrEqual(2);
+  expect(() => listCheckRunInvocationIds({ stateDirectory: state, after: 'bad-cursor' })).toThrow(/cursor/i);
+  expect(() => listCheckRunInvocationIds({ stateDirectory: state, limit: 65 })).toThrow(/page size/i);
 });
 
 test('final bounded authenticated invocation binding rejects replay mismatch and partial messages', async () => {

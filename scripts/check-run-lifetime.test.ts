@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unl
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
+  maintainCheckRunSnapshots,
   reapRetainedTransportChild,
   reconcileCheckRunPreparationIntent,
   reconcileRegisteredCheckRun,
@@ -239,8 +240,233 @@ function procStat(pid: number, start: string): string {
   return `${pid} (inert mocked child) ${fields.join(' ')}\n`;
 }
 
+function git(cwd: string, args: string[]): string {
+  const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-C', cwd, ...args], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr || `git ${args[0]} failed`);
+  return result.stdout.trim();
+}
+
+function gitCandidate(root: string): { candidate: string; sourceRevision: string } {
+  const candidate = privateDirectory(root, 'candidate-repo');
+  git(candidate, ['init', '-b', 'main']);
+  git(candidate, ['config', 'user.name', 'Check Run Fixture']);
+  git(candidate, ['config', 'user.email', 'check-run-fixture@example.invalid']);
+  writeFileSync(join(candidate, 'source.txt'), 'retained source fixture\n');
+  git(candidate, ['add', 'source.txt']);
+  git(candidate, ['commit', '-m', 'fixture source']);
+  return { candidate, sourceRevision: git(candidate, ['rev-parse', 'HEAD']) };
+}
+
+function gitSnapshot(candidate: string, sourceRevision: string, invocationId: string) {
+  const temp = privateDirectory(candidate, '.temp');
+  const scratch = join(temp, `check-run-${invocationId}`);
+  mkdirSync(scratch, { mode: 0o700 });
+  const workspace = join(scratch, 'workspace');
+  git(candidate, ['worktree', 'add', '--detach', workspace, sourceRevision]);
+  return { workspace, scratch, sourceSha256: binding().sourceSha256, inputFiles: [] as string[] };
+}
+
+async function registerMaintenanceSnapshot(
+  state: string,
+  candidate: string,
+  sourceRevision: string,
+  invocationId: string,
+) {
+  const selectedBinding = { ...binding(), sourceRevision };
+  const snapshot = gitSnapshot(candidate, sourceRevision, invocationId);
+  const registration = await registerCheckRunInvocation(selectedBinding, {
+    stateDirectory: state,
+    invocationId,
+    candidateWorkspace: candidate,
+    snapshot,
+    returns: [],
+  });
+  return { registration, snapshot, selectedBinding };
+}
+
+function maintenanceFinal(
+  registration: CheckRunRegistration,
+  returns: CheckRunFinalSettlement['returns'] = {
+    status: 'empty',
+    declarationsSha256: registration.binding.returnsSha256,
+    entries: [],
+    missing: [],
+    failures: [],
+  },
+): CheckRunFinalSettlement {
+  return createCheckRunFinalSettlement({
+    invocationId: registration.invocationId,
+    nonce: registration.nonce,
+    binding: registration.binding,
+    physical: { host: 'a', run: 'maintenance-run-123' },
+    native: { exitCode: 0, lifetimeFailure: false, receiptSha256: '6'.repeat(64) },
+    preparedInputs: {
+      status: 'verified',
+      sourceSha256: registration.binding.sourceSha256,
+      manifestSha256: '5'.repeat(64),
+      fileCount: 1,
+      totalBytes: 12,
+    },
+    returns,
+    cleanup: {
+      disposition: 'unknown',
+      remote: 'verified',
+      transportChild: 'reaped',
+      source: 'verified',
+      localWorktree: 'retained',
+      failures: ['local Git cleanup will be retried by maintenance'],
+    },
+    failures: { primary: [], cleanup: ['local Git cleanup will be retried by maintenance'] },
+  });
+}
+
+async function finishMaintenanceInvocation(
+  registration: CheckRunRegistration,
+  state: string,
+  final: CheckRunFinalSettlement,
+): Promise<void> {
+  const options = { stateDirectory: state };
+  await markCheckRunQueued(registration.invocationId, registration.nonce, options);
+  await beginCheckRunAllocation(registration.invocationId, registration.nonce, options);
+  await allocateCheckRunPhysical(registration.invocationId, registration.nonce, 'a', 'maintenance-run-123', options);
+  await withCheckRunSpawnPermit(
+    registration.invocationId,
+    registration.nonce,
+    'a',
+    'maintenance-run-123',
+    () => undefined,
+    options,
+  );
+  await markCheckRunNativeTerminal(
+    registration.invocationId,
+    registration.nonce,
+    { host: 'a', run: 'maintenance-run-123', exitCode: 0, receiptSha256: '6'.repeat(64) },
+    options,
+  );
+  await acceptCheckRunFinalSettlement(`${encodeCheckRunFinalSettlement(final)}\n`, options);
+}
+
 afterAll(() => {
   for (const fixture of fixtures) rmSync(fixture, { recursive: true, force: true });
+});
+
+test('bounded maintenance removes a successful artifact-free snapshot through Git cleanup and records release', async () => {
+  const root = fixtureRoot();
+  const state = privateDirectory(root, 'state');
+  const { candidate, sourceRevision } = gitCandidate(root);
+  const invocationId = '00000000-0000-4000-8000-000000000003';
+  const { registration, snapshot } = await registerMaintenanceSnapshot(state, candidate, sourceRevision, invocationId);
+  await finishMaintenanceInvocation(registration, state, maintenanceFinal(registration));
+
+  const report = await maintainCheckRunSnapshots({
+    stateDirectory: state,
+    limit: 1,
+    apply: true,
+    maxRemovals: 1,
+    readIoPressure: () => 0,
+  });
+  expect(report.accounting).toMatchObject({ recordsChecked: 1, ready: 0, removed: 1 });
+  expect(report.items[0]).toMatchObject({
+    invocationId,
+    disposition: 'removed',
+    releaseKind: 'successful-delivered-no-artifacts',
+  });
+  expect(existsSync(snapshot.workspace)).toBe(false);
+  expect(existsSync(snapshot.scratch)).toBe(false);
+  expect((await getCheckRunStatus(invocationId, { stateDirectory: state })).snapshotCustody).toBe('removed');
+});
+
+test('bounded maintenance resumes by checked UUID and releases only completed prelaunch fences', async () => {
+  const root = fixtureRoot();
+  const state = privateDirectory(root, 'state');
+  const { candidate, sourceRevision } = gitCandidate(root);
+  const ids = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
+  const snapshots: Array<{ workspace: string; scratch: string; sourceSha256: string; inputFiles: string[] }> = [];
+  for (const invocationId of ids) {
+    const { registration, snapshot } = await registerMaintenanceSnapshot(
+      state,
+      candidate,
+      sourceRevision,
+      invocationId,
+    );
+    snapshots.push(snapshot);
+    const options = { stateDirectory: state };
+    await cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, options);
+    const cancelled = await reconcileCheckRunInvocation(registration.invocationId, { ...options, force: true });
+    expect(cancelled.phase).toBe('cancelled');
+    expect(cancelled.physical).toBeNull();
+  }
+
+  const pressure = await maintainCheckRunSnapshots({
+    stateDirectory: state,
+    limit: 1,
+    apply: true,
+    readIoPressure: () => 21,
+  });
+  expect(pressure.ioPressure.paused).toBe(true);
+  expect(pressure.accounting.recordsChecked).toBe(0);
+  expect(pressure.cursor.output).toBeNull();
+
+  const first = await maintainCheckRunSnapshots({
+    stateDirectory: state,
+    limit: 2,
+    apply: true,
+    maxRemovals: 1,
+    readIoPressure: () => 0,
+  });
+  expect(first.cursor).toMatchObject({ output: ids[0], hasMore: true });
+  expect(first.accounting.removed).toBe(1);
+  expect(first.items).toMatchObject([
+    { disposition: 'removed', releaseKind: 'cancelled-before-start' },
+    { disposition: 'ready', reason: 'per-pass removal bound reached' },
+  ]);
+  const second = await maintainCheckRunSnapshots({
+    stateDirectory: state,
+    cursor: first.cursor.output,
+    limit: 1,
+    apply: true,
+    maxRemovals: 1,
+    readIoPressure: () => 0,
+  });
+  expect(second.cursor).toMatchObject({ output: ids[1], hasMore: false });
+  expect(second.accounting.removed).toBe(1);
+  expect(snapshots.every(({ workspace, scratch }) => !existsSync(workspace) && !existsSync(scratch))).toBe(true);
+});
+
+test('maintenance retains unknown custody and snapshots that still contain returned artifact evidence', async () => {
+  const root = fixtureRoot();
+  const state = privateDirectory(root, 'state');
+  const { candidate, sourceRevision } = gitCandidate(root);
+  const unknownId = '00000000-0000-4000-8000-000000000004';
+  const artifactId = '00000000-0000-4000-8000-000000000005';
+  const unknown = await registerMaintenanceSnapshot(state, candidate, sourceRevision, unknownId);
+  const artifact = await registerMaintenanceSnapshot(state, candidate, sourceRevision, artifactId);
+  await setCheckRunUnknown(unknownId, unknown.registration.nonce, 'original invocation identity is unresolved', {
+    stateDirectory: state,
+  });
+  await finishMaintenanceInvocation(
+    artifact.registration,
+    state,
+    maintenanceFinal(artifact.registration, {
+      status: 'restored',
+      declarationsSha256: artifact.registration.binding.returnsSha256,
+      entries: [{ path: 'artifacts/report.bin', size: 4, sha256: digest('data') }],
+      missing: [],
+      failures: [],
+    }),
+  );
+
+  const report = await maintainCheckRunSnapshots({ stateDirectory: state, limit: 2, readIoPressure: () => 0 });
+  expect(report.items).toMatchObject([
+    { invocationId: unknownId, disposition: 'retained', reason: 'invocation custody is unknown' },
+    {
+      invocationId: artifactId,
+      disposition: 'retained',
+      reason: 'the final settlement still references returned artifacts',
+    },
+  ]);
+  expect(existsSync(unknown.snapshot.workspace)).toBe(true);
+  expect(existsSync(artifact.snapshot.workspace)).toBe(true);
 });
 
 test('Original prepared invocation retains durable input and cleanup custody across cancellation process loss unreadable child identity and unknown final reconciliation without replay replacement allocation lost cleanup reference or false settlement', async () => {

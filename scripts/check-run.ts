@@ -19,7 +19,7 @@ import {
   symlinkSync,
   writeSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
   EMPTY_DIRECTORY_DIGEST,
@@ -70,6 +70,7 @@ import {
   cancelCheckRunInvocation,
   claimCheckRunPreparedInvocation,
   checkRunBindingHash,
+  checkRunSnapshotReleaseKind,
   checkRunSettlementStateDirectory,
   createCheckRunFinalSettlement,
   createCheckRunNativeTerminalMessage,
@@ -87,6 +88,8 @@ import {
   readCheckRunCancellation,
   readCheckRunPreparationIntentReference,
   reconcileCheckRunInvocation,
+  listCheckRunInvocationIds,
+  releaseCheckRunSnapshot,
   registerCheckRunInvocation,
   setCheckRunUnknown,
   checkRunPreparationIntentFile,
@@ -103,6 +106,7 @@ import {
   type CheckRunPreparedInputs,
   type CheckRunReturnDisposition,
   type CheckRunStateOptions,
+  type CheckRunSnapshotReleaseKind,
   type CheckRunTransportChildIdentity,
   type CheckRunTransportIdentityState,
   type CheckRunReconciliation,
@@ -790,6 +794,350 @@ function cleanupWorktree(workspace: string, worktree: string, scratch: string): 
   if (result.exitCode !== 0)
     throw new CheckRunUnavailable(`check-run: frozen worktree cleanup failed: ${result.stderr.toString().trim()}`);
   rmSync(scratch, { recursive: true, force: true });
+}
+
+export const CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT = 20;
+export const CHECK_RUN_MAINTENANCE_MAX_REMOVALS = 2;
+
+export type CheckRunSnapshotMaintenanceItem = {
+  invocationId: string;
+  phase?: string;
+  snapshotWorkspace?: string;
+  disposition: 'ready' | 'removed' | 'retained' | 'already-released' | 'missing';
+  releaseKind?: CheckRunSnapshotReleaseKind;
+  reason: string;
+  nextObservation: string;
+};
+
+export type CheckRunSnapshotMaintenanceReport = {
+  schema: 1;
+  apply: boolean;
+  cursor: { input: string | null; output: string | null; hasMore: boolean | null };
+  accounting: {
+    directoryEntriesListed: number;
+    recordsSelected: number;
+    recordsChecked: number;
+    ready: number;
+    removed: number;
+  };
+  ioPressure: { avg10: number | null; limit: number; paused: boolean };
+  items: CheckRunSnapshotMaintenanceItem[];
+};
+
+type CheckRunSnapshotMaintenanceOptions = CheckRunStateOptions & {
+  cursor?: string | null;
+  limit?: number;
+  apply?: boolean;
+  maxRemovals?: number;
+  /** Injectable only for focused tests; production reads the host's PSI sample. */
+  readIoPressure?: () => number | null;
+};
+
+function readCheckRunIoPressure(): number | null {
+  try {
+    const line = readFileSync('/proc/pressure/io', 'utf8')
+      .split('\n')
+      .find((row) => row.startsWith('some '));
+    const value = /(?:^| )avg10=([\d.]+)/.exec(line ?? '')?.[1];
+    if (value === undefined) return null;
+    const pressure = Number(value);
+    return Number.isFinite(pressure) && pressure >= 0 ? pressure : null;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotRemovalHold(record: CheckRunInvocationRecord): { reason: string; nextObservation: string } {
+  if (record.snapshotCustody === 'removed')
+    return { reason: 'record already marks the frozen snapshot removed', nextObservation: 'none' };
+  if (!record.snapshot || !record.candidateWorkspace)
+    return {
+      reason: 'snapshot or candidate identity is missing',
+      nextObservation: 'recover the exact snapshot and candidate paths from the preparation record',
+    };
+  if (record.snapshotCustody !== 'owned')
+    return {
+      reason: `snapshot custody is ${record.snapshotCustody ?? 'unknown'}`,
+      nextObservation: 'reconcile the exact invocation and snapshot custody',
+    };
+  if (
+    record.phase === 'running' ||
+    record.phase === 'uploading' ||
+    record.phase === 'queued' ||
+    record.phase === 'claimed' ||
+    record.phase === 'prepared' ||
+    record.phase === 'cancel-requested'
+  )
+    return {
+      reason: `invocation is still ${record.phase} or has no terminal start fence`,
+      nextObservation: 'observe the original invocation through its durable cancellation or terminal receipt',
+    };
+  if (record.final?.returns.status !== undefined && record.final.returns.status !== 'empty')
+    return {
+      reason: 'the final settlement still references returned artifacts',
+      nextObservation: 'complete artifact delivery or repair before releasing the frozen source',
+    };
+  if (record.physical && !record.final)
+    return {
+      reason: record.physicalCleanup
+        ? 'physical cleanup is recorded but the command result remains unresolved'
+        : 'the original physical result or cleanup is unresolved',
+      nextObservation: record.physicalCleanup
+        ? 'recover the original native/final result or close its repair disposition'
+        : `reconcile exact host ${record.physical.host} run ${record.physical.run} and local transport identity`,
+    };
+  if (record.final && record.final.native?.exitCode !== 0)
+    return {
+      reason: 'the original command did not complete successfully',
+      nextObservation: 'retain the frozen source until the original failure is no longer needed for repair',
+    };
+  if (
+    record.final &&
+    (record.final.cleanup.remote !== 'verified' ||
+      record.final.cleanup.transportChild !== 'reaped' ||
+      record.final.cleanup.source !== 'verified')
+  )
+    return {
+      reason: 'remote, transport, or frozen-source cleanup is not positively verified',
+      nextObservation: 'reconcile the exact original physical host/run and transport identity',
+    };
+  if (record.phase === 'unknown')
+    return {
+      reason: 'invocation custody is unknown',
+      nextObservation: record.physical
+        ? `reconcile exact host ${record.physical.host} run ${record.physical.run}`
+        : 'establish the original invocation start fence and source custody',
+    };
+  return {
+    reason: 'no durable release evidence matches this invocation',
+    nextObservation: 'retain the snapshot until the original invocation reaches a provable terminal state',
+  };
+}
+
+function assertExactSnapshotWorktree(record: CheckRunInvocationRecord): void {
+  const candidate = record.candidateWorkspace;
+  const snapshot = record.snapshot;
+  if (!candidate || !snapshot || resolve(candidate) !== candidate)
+    throw new CheckRunUnavailable('check-run: retained candidate identity is not canonical');
+  const scratch = resolve(snapshot.scratch);
+  const worktree = resolve(snapshot.workspace);
+  const tempRoot = dirname(scratch);
+  const snapshotRepository = dirname(tempRoot);
+  if (
+    scratch !== snapshot.scratch ||
+    worktree !== snapshot.workspace ||
+    basename(tempRoot) !== '.temp' ||
+    worktree !== join(scratch, 'workspace') ||
+    !/^check-run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-?$/i.test(basename(scratch))
+  )
+    throw new CheckRunUnavailable('check-run: retained snapshot path does not match an exact check-run worktree');
+  if (
+    realpathSync(candidate) !== candidate ||
+    realpathSync(snapshotRepository) !== snapshotRepository ||
+    realpathSync(tempRoot) !== tempRoot
+  )
+    throw new CheckRunUnavailable('check-run: retained candidate or snapshot parent is not canonical');
+  const tempStats = lstatSync(tempRoot);
+  if (!tempStats.isDirectory() || tempStats.isSymbolicLink())
+    throw new CheckRunUnavailable('check-run: snapshot parent is not a real .temp directory');
+  for (const [path, label, privateDirectory] of [
+    [scratch, 'snapshot scratch', true],
+    [worktree, 'snapshot worktree', false],
+  ] as const) {
+    const stats = lstatSync(path);
+    if (!stats.isDirectory() || stats.isSymbolicLink() || (privateDirectory && (stats.mode & 0o077) !== 0))
+      throw new CheckRunUnavailable(`check-run: ${label} is not the recorded real directory`);
+    if (typeof process.getuid === 'function' && stats.uid !== process.getuid())
+      throw new CheckRunUnavailable(`check-run: ${label} is owned by another user`);
+    if (realpathSync(path) !== path) throw new CheckRunUnavailable(`check-run: ${label} path changed`);
+  }
+  if (resolve(git(candidate, ['rev-parse', '--show-toplevel'])) !== candidate)
+    throw new CheckRunUnavailable('check-run: retained candidate is no longer the recorded Git root');
+  if (
+    resolve(git(snapshotRepository, ['rev-parse', '--show-toplevel'])) !== snapshotRepository ||
+    git(candidate, ['rev-parse', '--path-format=absolute', '--git-common-dir']) !==
+      git(snapshotRepository, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  )
+    throw new CheckRunUnavailable('check-run: snapshot directory is outside the recorded candidate Git repository');
+  if (
+    resolve(git(worktree, ['rev-parse', '--show-toplevel'])) !== worktree ||
+    git(worktree, ['rev-parse', '--verify', 'HEAD^{commit}']) !== record.binding.sourceRevision ||
+    snapshot.sourceSha256 !== record.binding.sourceSha256
+  )
+    throw new CheckRunUnavailable(
+      'check-run: exact frozen worktree revision or source identity differs from its record',
+    );
+}
+
+/** Bounded, resumable inventory and release pass for check-run snapshots. */
+export async function maintainCheckRunSnapshots(
+  options: CheckRunSnapshotMaintenanceOptions = {},
+): Promise<CheckRunSnapshotMaintenanceReport> {
+  const apply = options.apply ?? false;
+  const limit = options.limit ?? 32;
+  const maxRemovals = options.maxRemovals ?? CHECK_RUN_MAINTENANCE_MAX_REMOVALS;
+  if (!Number.isSafeInteger(maxRemovals) || maxRemovals < 0 || maxRemovals > CHECK_RUN_MAINTENANCE_MAX_REMOVALS)
+    throw new Error(`check-run: maintenance removals must be between 0 and ${CHECK_RUN_MAINTENANCE_MAX_REMOVALS}`);
+  const pressureSource = options.readIoPressure ?? readCheckRunIoPressure;
+  const initialPressure = pressureSource();
+  const pressurePaused = initialPressure !== null && initialPressure > CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT;
+  const page = listCheckRunInvocationIds({
+    ...(options.stateDirectory ? { stateDirectory: options.stateDirectory } : {}),
+    after: options.cursor ?? null,
+    limit,
+  });
+  const report: CheckRunSnapshotMaintenanceReport = {
+    schema: 1,
+    apply,
+    cursor: {
+      input: page.after,
+      output: pressurePaused ? page.after : page.nextCursor,
+      hasMore: pressurePaused ? null : page.hasMore,
+    },
+    accounting: {
+      directoryEntriesListed: page.directoryEntriesListed,
+      recordsSelected: pressurePaused ? 0 : page.ids.length,
+      recordsChecked: 0,
+      ready: 0,
+      removed: 0,
+    },
+    ioPressure: { avg10: initialPressure, limit: CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT, paused: pressurePaused },
+    items: [],
+  };
+  if (pressurePaused) return report;
+
+  let removalsPaused = false;
+  let resumeBefore: string | null | undefined;
+  for (const [pageIndex, invocationId] of page.ids.entries()) {
+    let record: CheckRunInvocationRecord;
+    try {
+      record = await getCheckRunStatus(invocationId, options);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && !(error instanceof Error && error.message.startsWith('check-run-settlement:')))
+        throw error;
+      report.accounting.recordsChecked++;
+      report.items.push({
+        invocationId,
+        disposition: code === 'ENOENT' ? 'missing' : 'retained',
+        reason:
+          code === 'ENOENT' ? 'invocation record disappeared during this page' : (error as Error).message.slice(0, 512),
+        nextObservation: 'restore or validate this exact invocation record before any cleanup',
+      });
+      continue;
+    }
+    report.accounting.recordsChecked++;
+    if (record.invocationId !== invocationId) {
+      report.items.push({
+        invocationId,
+        phase: record.phase,
+        disposition: 'retained',
+        reason: 'record contents identify a different invocation than its filename',
+        nextObservation: 'repair the record identity under its original check-custody lock',
+      });
+      continue;
+    }
+    const common = {
+      invocationId,
+      phase: record.phase,
+      ...(record.snapshot ? { snapshotWorkspace: record.snapshot.workspace } : {}),
+    };
+    const releaseKind = checkRunSnapshotReleaseKind(record);
+    if (!releaseKind) {
+      if (record.snapshotCustody === 'removed') {
+        report.items.push({
+          ...common,
+          disposition: 'already-released',
+          reason: 'durable record already marks this snapshot removed',
+          nextObservation: 'none',
+        });
+      } else {
+        const hold = snapshotRemovalHold(record);
+        report.items.push({ ...common, disposition: 'retained', ...hold });
+      }
+      continue;
+    }
+    if (!apply) {
+      report.accounting.ready++;
+      report.items.push({
+        ...common,
+        disposition: 'ready',
+        releaseKind,
+        reason:
+          releaseKind === 'cancelled-before-start'
+            ? 'durable cancellation phase and absent physical identity prove the command never launched'
+            : 'successful final delivery, empty returns, verified remote cleanup, reaped transport, and verified source permit release',
+        nextObservation: 'apply this exact snapshot through the bounded Git worktree cleanup pass',
+      });
+      continue;
+    }
+    if (report.accounting.removed >= maxRemovals || removalsPaused) {
+      resumeBefore ??= pageIndex === 0 ? page.after : page.ids[pageIndex - 1]!;
+      report.accounting.ready++;
+      report.items.push({
+        ...common,
+        disposition: 'ready',
+        releaseKind,
+        reason: removalsPaused
+          ? 'measured I/O pressure rose above the maintenance threshold'
+          : 'per-pass removal bound reached',
+        nextObservation: 'resume with this page cursor when cleanup capacity is available',
+      });
+      continue;
+    }
+    const currentPressure = pressureSource();
+    report.ioPressure.avg10 = currentPressure;
+    if (currentPressure !== null && currentPressure > CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT) {
+      report.ioPressure.paused = true;
+      removalsPaused = true;
+      resumeBefore ??= pageIndex === 0 ? page.after : page.ids[pageIndex - 1]!;
+      report.accounting.ready++;
+      report.items.push({
+        ...common,
+        disposition: 'ready',
+        releaseKind,
+        reason: 'measured I/O pressure rose above the maintenance threshold',
+        nextObservation: 'resume this page after measured I/O pressure falls to the threshold or below',
+      });
+      continue;
+    }
+    try {
+      await releaseCheckRunSnapshot(
+        invocationId,
+        record.nonce,
+        releaseKind,
+        (current) => {
+          const snapshot = current.snapshot;
+          const candidateWorkspace = current.candidateWorkspace;
+          if (!snapshot || !candidateWorkspace)
+            throw new CheckRunUnavailable('check-run: releasable snapshot identity disappeared');
+          assertExactSnapshotWorktree(current);
+          cleanupWorktree(candidateWorkspace, snapshot.workspace, snapshot.scratch);
+          if (existsSync(snapshot.workspace) || existsSync(snapshot.scratch))
+            throw new CheckRunUnavailable('check-run: maintenance worktree removal was not verified');
+        },
+        options,
+      );
+      report.accounting.removed++;
+      report.items.push({
+        ...common,
+        disposition: 'removed',
+        releaseKind,
+        reason: 'exact Git worktree cleanup completed and durable snapshot custody was updated',
+        nextObservation: 'none',
+      });
+    } catch (error) {
+      report.items.push({
+        ...common,
+        disposition: 'retained',
+        releaseKind,
+        reason: error instanceof Error ? error.message.slice(0, 512) : String(error).slice(0, 512),
+        nextObservation: 'recheck this exact worktree and record after the reported cleanup condition is repaired',
+      });
+    }
+  }
+  if (resumeBefore !== undefined) report.cursor = { input: page.after, output: resumeBefore, hasMore: true };
+  return report;
 }
 
 type ReturnedOutputResult = {

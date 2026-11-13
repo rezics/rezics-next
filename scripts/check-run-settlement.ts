@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   linkSync,
@@ -250,6 +251,16 @@ export type CheckRunStateOptions = {
   stateDirectory?: string;
   /** Narrow fault-injection seam for durable cleanup tests. Production callers omit it. */
   removePrivateFile?: (path: string) => void;
+};
+
+export type CheckRunSnapshotReleaseKind = 'cancelled-before-start' | 'successful-delivered-no-artifacts';
+
+export type CheckRunInvocationPage = {
+  ids: string[];
+  after: string | null;
+  nextCursor: string | null;
+  hasMore: boolean;
+  directoryEntriesListed: number;
 };
 
 export type CheckRunMessageExpectation = {
@@ -1133,6 +1144,37 @@ export function checkRunSettlementStateDirectory(options: CheckRunStateOptions =
   return directory;
 }
 
+/** Read one shallow page of invocation identities; callers inspect at most the returned record files. */
+export function listCheckRunInvocationIds(
+  options: CheckRunStateOptions & { after?: string | null; limit?: number } = {},
+): CheckRunInvocationPage {
+  const after = options.after ?? null;
+  if (after !== null && !UUID.test(after)) throw new Error('check-run-settlement: invalid maintenance cursor');
+  const limit = options.limit ?? 32;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > CHECK_RUN_SETTLEMENT_MAX_ITEMS)
+    throw new Error(`check-run-settlement: maintenance page size must be 1-${CHECK_RUN_SETTLEMENT_MAX_ITEMS}`);
+  const directory = checkRunSettlementStateDirectory(options);
+  const entries = readdirSync(directory, { withFileTypes: true });
+  const ids = [
+    ...new Set(
+      entries
+        .map(({ name }) => name.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/i)?.[1])
+        .filter((id): id is string => id !== undefined)
+        .map((id) => id.toLowerCase()),
+    ),
+  ].sort();
+  const cursor = after?.toLowerCase() ?? null;
+  const remaining = ids.filter((id) => cursor === null || id > cursor);
+  const page = remaining.slice(0, limit);
+  return {
+    ids: page,
+    after: cursor,
+    nextCursor: page.at(-1) ?? cursor,
+    hasMore: remaining.length > page.length,
+    directoryEntriesListed: entries.length,
+  };
+}
+
 function assertOutsideCandidate(stateDirectory: string, workspace?: string): void {
   if (!workspace) return;
   const root = realpathSync(workspace);
@@ -1438,6 +1480,57 @@ function validateFinalCustodyIdentity(record: CheckRunInvocationRecord, custody:
   )
     return 'retained private-file identity differs from the original invocation';
   return '';
+}
+
+/** Return the only durable states that release a frozen snapshot without another remote observation. */
+export function checkRunSnapshotReleaseKind(record: CheckRunInvocationRecord): CheckRunSnapshotReleaseKind | null {
+  if (
+    record.snapshotCustody !== 'owned' ||
+    !record.snapshot ||
+    !record.candidateWorkspace ||
+    record.snapshot.sourceSha256 !== record.binding.sourceSha256
+  )
+    return null;
+  if (
+    record.phase === 'cancelled' &&
+    record.cancellation.requested &&
+    record.physical === null &&
+    record.transportChild === null &&
+    record.native === null &&
+    record.final === null &&
+    record.failure === null
+  )
+    return 'cancelled-before-start';
+
+  const final = record.final;
+  const custody = record.finalCustody;
+  if (!final || !custody || record.failure !== null || !record.physical) return null;
+  if (
+    final.invocationId !== record.invocationId ||
+    final.nonce !== record.nonce ||
+    checkRunBindingHash(final.binding) !== checkRunBindingHash(record.binding) ||
+    final.physical.host !== record.physical.host ||
+    final.physical.run !== record.physical.run ||
+    final.native?.exitCode !== 0 ||
+    final.native.lifetimeFailure ||
+    final.preparedInputs.status !== 'verified' ||
+    final.preparedInputs.sourceSha256 !== record.binding.sourceSha256 ||
+    final.returns.status !== 'empty' ||
+    final.returns.entries.length !== 0 ||
+    final.returns.missing.length !== 0 ||
+    final.returns.failures.length !== 0 ||
+    final.failures.primary.length !== 0 ||
+    final.cleanup.disposition !== 'unknown' ||
+    final.cleanup.remote !== 'verified' ||
+    final.cleanup.transportChild !== 'reaped' ||
+    final.cleanup.source !== 'verified' ||
+    final.cleanup.localWorktree !== 'retained' ||
+    !['delivered', 'received', 'reconciled', 'not-required'].includes(custody.delivery) ||
+    custody.privateFiles !== 'settled' ||
+    validateFinalCustodyIdentity(record, custody) !== ''
+  )
+    return null;
+  return 'successful-delivered-no-artifacts';
 }
 
 function validateReconciliationCandidate(
@@ -2844,6 +2937,26 @@ export async function markCheckRunPreparedSnapshotCustody(
   });
 }
 
+/** Remove a snapshot only while its invocation fence still proves one of the releasable terminal states. */
+export async function releaseCheckRunSnapshot(
+  invocationId: string,
+  nonce: string,
+  kind: CheckRunSnapshotReleaseKind,
+  remove: (record: CheckRunInvocationRecord) => void | Promise<void>,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (checkRunSnapshotReleaseKind(record) !== kind)
+      throw new Error('check-run-settlement: frozen snapshot no longer has releasable terminal evidence');
+    if (!record.snapshot || !record.candidateWorkspace)
+      throw new Error('check-run-settlement: releasable snapshot identity is unavailable');
+    await remove(record);
+    const updated = await updateRecord(directory, record, { snapshotCustody: 'removed' });
+    return (await cleanupPrivateReferencesUnderLock(directory, updated, options)).record;
+  });
+}
+
 export async function discardCheckRunPreparedExecution(
   invocationId: string,
   nonce: string,
@@ -2952,6 +3065,7 @@ function usage(): string {
     '  bun scripts/check-run-settlement.ts cancel <invocation-id> [--signal 1|2|15] [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--cleanup-only] [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
+    '  bun scripts/check-run-settlement.ts maintain [--cursor <invocation-id>] [--limit 1-64] [--apply] [--max-removals 0-2] [--state-dir <absolute-dir>]',
   ].join('\n');
 }
 
@@ -3007,6 +3121,28 @@ if (import.meta.main) {
             ...(cleanupOnly ? { cleanupOnly: true } : {}),
           });
       process.stdout.write(`${JSON.stringify(reconciled)}\n`);
+    } else if (operation === 'maintain') {
+      const cursorAt = args.indexOf('--cursor');
+      const limitAt = args.indexOf('--limit');
+      const removalsAt = args.indexOf('--max-removals');
+      const cursor = cursorAt < 0 ? null : args[cursorAt + 1]!;
+      const limit = limitAt < 0 ? 32 : Number(args[limitAt + 1]);
+      const maxRemovals = removalsAt < 0 ? 2 : Number(args[removalsAt + 1]);
+      if (
+        (cursorAt >= 0 && !cursor) ||
+        (limitAt >= 0 && (!Number.isSafeInteger(limit) || limit < 1 || limit > CHECK_RUN_SETTLEMENT_MAX_ITEMS)) ||
+        (removalsAt >= 0 && (!Number.isSafeInteger(maxRemovals) || maxRemovals < 0 || maxRemovals > 2))
+      )
+        throw new Error('maintain needs a valid cursor, a page limit from 1-64, and a removal limit from 0-2');
+      const checkRun = await import('./check-run.ts');
+      const report = await checkRun.maintainCheckRunSnapshots({
+        ...stateOptions,
+        cursor,
+        limit,
+        maxRemovals,
+        apply: args.includes('--apply'),
+      });
+      process.stdout.write(`${JSON.stringify(report)}\n`);
     } else {
       throw new Error(usage());
     }
