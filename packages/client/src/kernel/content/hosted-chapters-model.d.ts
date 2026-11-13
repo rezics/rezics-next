@@ -38,7 +38,7 @@ export type HostedCreateInput = HostedStructureInput & Readonly<{
 export type HostedReviseInput = HostedStructureInput & Readonly<{
     expectedRevisionId: string;
 }>;
-/** Internal-only single root chapter append; no mounted schema or route. */
+/** One bounded root chapter append against an exact structure head. */
 export type HostedRootAppendInput = Readonly<{
     expectedRevisionId: string;
     occurrenceId: string;

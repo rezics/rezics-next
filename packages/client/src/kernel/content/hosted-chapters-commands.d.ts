@@ -14,8 +14,7 @@ export declare function publishHostedCatalogue(deps: HostedCommandDependencies, 
     catalogueId: string;
     revisionId: string;
 }>>>;
-/** Internal source operation only. Exposure requires mixed-revision readers and
- * lifecycle support described in hosted-chapters.md. Shares native edit authority,
+/** Appends one root chapter to an exact draft head. Shares native edit authority,
  * deadlines, receipt replay, transaction retries and final container checks. */
 export declare function appendHostedRootChapter(deps: HostedCommandDependencies, actor: Actor, catalogueId: string, input: HostedRootAppendInput, context: HostedCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
     catalogueId: string;
