@@ -18,7 +18,7 @@ import {
 } from './launch.ts';
 import * as launchCapacity from './launch-capacity.ts';
 import { admittedMemoryMiB } from './launch-capacity.ts';
-import type { CapacityLifecycle, HostCapacityStore } from './launch-capacity.ts';
+import type { CapacityLifecycle, CapacityRelease, HostCapacityStore } from './launch-capacity.ts';
 import { HEAVY_WORKER_MIB, workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
@@ -460,7 +460,7 @@ test('a resumed attempt reserves four GiB on its ticket and transfers that charg
   const directory = temporaryDirectory();
   const taskId = 'resumed-worker';
   let headroom = 3072;
-  let release: (() => void) | undefined;
+  let release: CapacityRelease | undefined;
   const store = {
     capacityAttemptsCount: () => 0,
     attempts: () => [{ attempt: 1, state: 'waiting' as const }],
