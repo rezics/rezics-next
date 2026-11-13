@@ -156842,6 +156842,17 @@
                         "closureMissingCount": {
                           "type": "string"
                         },
+                        "expectedHeadRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "expectedPublicationId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "failure": {
                           "type": [
                             "string",
@@ -156886,6 +156897,10 @@
                           "type": "boolean"
                         },
                         "sourceFrontier": {
+                          "type": "string"
+                        },
+                        "sourceRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "state": {
@@ -158043,6 +158058,17 @@
                         "closureMissingCount": {
                           "type": "string"
                         },
+                        "expectedHeadRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "expectedPublicationId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "failure": {
                           "type": [
                             "string",
@@ -158087,6 +158113,10 @@
                           "type": "boolean"
                         },
                         "sourceFrontier": {
+                          "type": "string"
+                        },
+                        "sourceRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "state": {
@@ -159227,6 +159257,17 @@
                         "closureMissingCount": {
                           "type": "string"
                         },
+                        "expectedHeadRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "expectedPublicationId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "failure": {
                           "type": [
                             "string",
@@ -159271,6 +159312,10 @@
                           "type": "boolean"
                         },
                         "sourceFrontier": {
+                          "type": "string"
+                        },
+                        "sourceRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "state": {
@@ -160411,6 +160456,17 @@
                         "closureMissingCount": {
                           "type": "string"
                         },
+                        "expectedHeadRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "expectedPublicationId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "failure": {
                           "type": [
                             "string",
@@ -160455,6 +160511,10 @@
                           "type": "boolean"
                         },
                         "sourceFrontier": {
+                          "type": "string"
+                        },
+                        "sourceRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "state": {
@@ -161595,6 +161655,17 @@
                         "closureMissingCount": {
                           "type": "string"
                         },
+                        "expectedHeadRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "expectedPublicationId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "failure": {
                           "type": [
                             "string",
@@ -161639,6 +161710,10 @@
                           "type": "boolean"
                         },
                         "sourceFrontier": {
+                          "type": "string"
+                        },
+                        "sourceRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "state": {
@@ -162779,6 +162854,17 @@
                         "closureMissingCount": {
                           "type": "string"
                         },
+                        "expectedHeadRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "expectedPublicationId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "failure": {
                           "type": [
                             "string",
@@ -162823,6 +162909,10 @@
                           "type": "boolean"
                         },
                         "sourceFrontier": {
+                          "type": "string"
+                        },
+                        "sourceRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "state": {
@@ -169864,6 +169954,17 @@
                         "closureMissingCount": {
                           "type": "string"
                         },
+                        "expectedHeadRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "expectedPublicationId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "failure": {
                           "type": [
                             "string",
@@ -169908,6 +170009,10 @@
                           "type": "boolean"
                         },
                         "sourceFrontier": {
+                          "type": "string"
+                        },
+                        "sourceRevisionId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "state": {
