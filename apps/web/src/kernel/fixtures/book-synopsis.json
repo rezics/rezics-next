@@ -1,0 +1,81 @@
+{
+  "body": {
+    "version": "rezics-document-v1",
+    "profile": "text",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "b29e56cf-bc5c-47a2-a1d5-b27655bba28e",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "In a harbour city where the tide returns lost objects, apprentice cartographer Sora finds an atlas that records days nobody remembers living. Each map belongs to a stranger; every borrowed day must eventually be returned."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "491b9e01-9b7a-4065-b6b8-8172106eeb41",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Following the margins from a night market to an observatory built beneath the sea, Sora meets a retired translator, a girl who writes letters to her future self, and a ferryman who has forgotten his own name. Their separate stories form a quietly intricate novel about friendship, migration and the work of remembering."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "56ae1e71-d7fb-4ac3-973b-b1f4ae104349",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "The book alternates its central journey with fifteen short interludes, each written in a different voice. Leila Haddad’s original map illustrations are part of the work; translated editions retain their own publication and translation credits."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "c45652e2-9d05-43fb-8539-2d1a2861113e",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "The closing movement returns to the harbour during the festival of low water. Small choices from the opening chapters acquire new meanings, while the city’s many languages remain deliberately visible. "
+            },
+            {
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ],
+              "text": "An atlas cannot tell you where to belong. It can only show who travelled beside you."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "digest": "4108659bee96f151a075df6a9154bf0196d29d85d04e15447da086a377423407"
+}

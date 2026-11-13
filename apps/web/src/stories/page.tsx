@@ -145,6 +145,7 @@ export function PageStory({
   ratingsFixture,
   labelsFixture,
   homeFeedFixture,
+  previewNewTabs = false,
 }: {
   visitor: 'Signed In' | 'Signed Out';
   path: string;
@@ -153,6 +154,7 @@ export function PageStory({
   ratingsFixture?: RatingsFixtureName;
   labelsFixture?: Parameters<typeof selectLabelStory>[0];
   homeFeedFixture?: HomeFeedStory;
+  previewNewTabs?: boolean;
 }) {
   const entry = localizedEntry(path);
   const [limitation, setLimitation] = useState<string>();
@@ -186,8 +188,9 @@ export function PageStory({
         deLocalizeUrl,
         onLocation: (url) => setStoryRequestContext({ visitor, url }),
         onLimitation: setLimitation,
+        previewNewTabs,
       }),
-    [router, visitor],
+    [router, visitor, previewNewTabs],
   );
   return (
     <RatingsPreviewContext.Provider value={ratings}>

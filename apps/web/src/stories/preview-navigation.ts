@@ -15,12 +15,15 @@ export function bindPreviewNavigation({
   deLocalizeUrl,
   onLocation,
   onLimitation,
+  previewNewTabs = false,
 }: {
   router: AnyRouter;
   document: Document;
   deLocalizeUrl: (url: URL) => URL;
   onLocation: (href: string) => void;
   onLimitation: (message: string | undefined) => void;
+  /** Keep a connected product demonstration in the preview when its reader opens related pages in a new tab. */
+  previewNewTabs?: boolean;
 }): () => void {
   const window = document.defaultView!;
   const navigation = (window as Window & { navigation?: EventTarget }).navigation;
@@ -66,7 +69,7 @@ export function bindPreviewNavigation({
     const anchor = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;
     if (
       !anchor ||
-      (anchor.target && anchor.target !== '_self') ||
+      (anchor.target && anchor.target !== '_self' && !(previewNewTabs && anchor.target === '_blank')) ||
       anchor.hasAttribute('download') ||
       anchor.relList.contains('external')
     )

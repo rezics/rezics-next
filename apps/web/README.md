@@ -749,6 +749,38 @@ account authority, and no bearer is injected into a browser.
 
 ### Storybook and page recordings
 
+Decision: the canonical Book product showcase lives at **Library/Books**, with stable
+`pages-library-books--*` IDs; `pages-subjects-subject--*` retains generic Subject coverage. Its comprehensive,
+coherent synthetic bibliography combines invented works, editions, series, people and community activity. This
+provenance appears in story documentation once; these fixtures are neither API recordings nor native acceptance.
+The showcase uses the application shell, released Book composition, real router and existing fake transport.
+Every applicable released tab must have a served direct entry and preserve viewer, context and related identity
+through navigation and return. Hosted chapter reading remains a separate destination. Shared locale, viewport and
+theme globals cover responsive and multilingual review without duplicated or locked stories. Web's existing
+publisher owns deployment and TG delivery of these stable entries.
+
+The composition and domain boundaries follow [Read a literary work](../../docs/subject-pages.md#read-a-literary-work)
+and [Subject pages, relations, editions and credits](../../docs/goals/web.capabilities.md#subject-pages-relations-editions-and-credits).
+
+Canonical entries for the existing publisher:
+
+- `pages-library-books--rich-member` is the main Book overview; `pages-library-books--rich-signed-out` is its public visit.
+- Direct tabs: `pages-library-books--editions`, `--contents`, `--characters`, `--credits`, `--relations`,
+  `--reviews`, `--discussion`, `--lists` and `--details` (each suffix uses the same `pages-library-books` prefix).
+- Connected identity returns: `pages-library-books--edition-return` and `pages-library-books--series-return`.
+- Named states: `pages-library-books--sparse-data`, `--section-retry`, `--permission-limited`,
+  `--long-multilingual-text` and `--member-readback` (the same prefix applies).
+
+The Book module answers the released read plans, including ordinary continuations; it keeps work, edition,
+series and catalogue interlude identities separate. Interlude metadata does not promise hosted chapter text.
+Local illustrated covers are served from `.storybook/media/`. Personal library and vote writes read back per
+subject for the mounted visit; the limited member receives native write denials without changing saved state.
+Book-only preview navigation keeps related-page links in the mounted application router, including links that
+normally open a new tab. Other stories retain their navigation policy.
+`src/stories/book-showcase.stories.tsx` exercises complete tab navigation, Back/Forward, continuation, identity
+returns, failed-section retry and personal readback. `tests/book-showcase.test.ts` pins the transport and released
+view contract. The dev verifier runs acceptance and browser checks after landing.
+
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
 `src/kernel/fixtures/`; add no new routes or entries to `fake.ts` or `fixtures.json`. Each route module exports a
 `routes` array typed as `FakeRoute[]` from `fake-modules.ts`: each route has a `method`, an exact pathname or regular
