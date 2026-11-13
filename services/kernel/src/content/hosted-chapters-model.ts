@@ -21,6 +21,22 @@ export type OrderedHostedPlacement = HostedPlacement & Readonly<{ ordinal: numbe
 export type HostedStructureInput = Readonly<{ placements: readonly HostedPlacement[] }>;
 export type HostedCreateInput = HostedStructureInput & Readonly<{ postId: string; threadId: string }>;
 export type HostedReviseInput = HostedStructureInput & Readonly<{ expectedRevisionId: string }>;
+/** Internal-only single root chapter append; no mounted schema or route. */
+export type HostedRootAppendInput = Readonly<{
+  expectedRevisionId: string;
+  occurrenceId: string;
+  title: string;
+  target: HostedChapterTarget;
+}>;
+/** Exactly one sealed legacy base and one immutable prefix; never a chain.
+ * The base revision also identifies the append stream. Empty prefixes use -1. */
+export type HostedAppendDescriptor = Readonly<{
+  revisionId: string;
+  baseRevisionId: string;
+  basePlacementCount: bigint;
+  baseRootCount: bigint;
+  highWater: bigint;
+}>;
 export type HostedPublishInput = Readonly<{
   expectedRevisionId: string;
   expectedPublicationId: string | null;
