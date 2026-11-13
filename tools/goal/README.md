@@ -2756,7 +2756,14 @@ cancellation stays with its existing controller custody, and a terminal original
 requires no repeat action. If a driver stopped before proof settlement, the current authenticated, contract-bound
 owner decision `preserved-terminal-native-proof` (optionally suffixed by a date as `-YYYYMMDD`) can preserve the
 stop only when its exact owned original check is terminal. Neither classification claims acceptance or changes
-process identity, original results, or cancellation. Ordinary stops and unproved preservation requests remain actionable.
+process identity, original results, or cancellation. An owner decision may also name an accepted successor by exact
+task ID and commit; it suppresses only a successful source stop, and only while that commit appears in the named
+task's integration record. A consumed typing-recovery grant suppresses action only while its exact result is absent
+under unresolved custody or its matching check-host runner remains live. Grants awaiting execution, terminal or
+invalid results, verified cleanup or replacement, failed source, superseded decisions and unproved successor links
+remain actionable. Stopped rows and all native proof records remain visible.
+
+Decision: width and expiry share this classifier; accepted successors require an authenticated current-attempt decision and exact integrated commit for a successful source stop, while consumed typing recovery is quiet only for its current unresolved exact check, leaving grants awaiting execution, terminal or invalid results, cleanup, replacement, failures and superseded events actionable.
 
 #### Goal backlogs
 
