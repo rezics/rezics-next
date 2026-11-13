@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   pressureBrake,
@@ -117,7 +117,7 @@ test('retirement exemptions bind to one cgroup incarnation and an active same-sc
     expect(exempted - noRetirement).toBeCloseTo(5_120 - 256, 1);
     expect(replacementWriter).toBeCloseTo(noRetirement, 1);
 
-    rmSync(scope, { recursive: true });
+    renameSync(scope, `${scope}.old`);
     mkdirSync(scope);
     put(join(scope, 'memory.current'), 0.25);
     put(join(scope, 'memory.peak'), 5);

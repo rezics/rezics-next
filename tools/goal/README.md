@@ -1389,6 +1389,14 @@ operator worker slice enables aggregate memory admission: product code starts re
 and unknown starts 4 GiB. Existing worker scopes reserve at least 4 GiB or their measured peak, whichever is larger;
 support services' current memory and admitted reservations are included. The 12 GiB per-worker hard limit remains a
 burst safety ceiling, not an expected working set. Support growth can still compete within the hard aggregate.
+Decision: positive terminal proof retires only the writing reserve of its exact task, attempt and scope incarnation.
+That proof survives a subsequent check or resume in another scope; changing the current check list cannot recharge
+an already retired scope. Aggregate actual memory, including surviving shared SSH masters, stays charged. A current
+or replacement writer retains its reservation, and an unknown scope gains no exemption from another scope's proof.
+Implementation: `<state>/capacity-retired-scopes.json` binds each retirement to its task, attempt and worktree, the
+finished check's id, physical run and runner identity, and the cgroup device, inode and ctime. Admission reapplies it
+only to the same extant incarnation created before that check started, prunes missing or replaced cgroups, and
+suppresses retirement while current writer or check custody is unknown.
 Linux memory-full PSI at 1% or I/O-full at 10% pauses new starts. Recovery requires 30 seconds continuously below
 0.2% and 2% respectively, sampled in the existing admission loop without another watcher or model turn.
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`

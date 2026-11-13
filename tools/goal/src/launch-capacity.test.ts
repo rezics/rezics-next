@@ -714,6 +714,7 @@ test('terminal scope retirement survives a later check without exempting its new
     };
     expect(oldRetirement.scopes.map((scope) => scope.name)).toEqual([fixture.terminalScope]);
     expect(oldRetirement.scopes[0]?.checks[0]).toMatchObject({ id: fixture.checkId });
+    bypassMemory = true;
 
     const nextScope = `rezics-worker-${fixture.taskId}-1-newscope.scope`;
     fixture.createScope(nextScope, 0.25, 1.5);
