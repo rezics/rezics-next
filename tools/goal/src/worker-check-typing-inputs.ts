@@ -749,7 +749,7 @@ function verifiedPublishedKernelClientOutput(root: string, receipt: TypingInputR
     const transport = owner.readOutputTreeFile(root, owner.KERNEL_CLIENT_OUTPUT.transport);
     const publicationPath = join(dirname(owner.KERNEL_CLIENT_OUTPUT.root), '.kernel-output-tree/receipt.json');
     const publication = JSON.parse(owner.readOutputTreeFile(root, publicationPath, 4096).toString('utf8')) as {
-      authority?: { run?: unknown };
+      authority?: { host?: unknown; run?: unknown };
     };
     if (publication.authority?.host !== outputBinding.host || publication.authority?.run !== outputBinding.run) return false;
     owner.verifyPublishedOutputTree(root, transport);
