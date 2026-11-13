@@ -113,8 +113,7 @@ function freshness(pool: Pool, reading: PoolReading, now: number): HourlyPoolSta
   const observedAt = reading.observedAt;
   if (!observedAt) return { status: 'unavailable', observedAt: null, ageMs: null, maxAgeMs: pool.policy.maxAgeMs };
   const observed = Date.parse(observedAt);
-  if (!Number.isFinite(observed))
-    return { status: 'invalid', observedAt, ageMs: null, maxAgeMs: pool.policy.maxAgeMs };
+  if (!Number.isFinite(observed)) return { status: 'invalid', observedAt, ageMs: null, maxAgeMs: pool.policy.maxAgeMs };
   const ageMs = now - observed;
   if (observed > now + defaultPolicy.provider.observationClockSkewMs)
     return { status: 'future', observedAt, ageMs, maxAgeMs: pool.policy.maxAgeMs };
