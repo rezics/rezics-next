@@ -374,7 +374,7 @@ test('recovery restores all five stale viewers without losing drafts or starting
     },
     checkCompletion: async () => ({ passed: false, evidencePath: 'completion.log', summary: 'not complete' }),
     connect: async (pool: { codexHome: string }): Promise<AppServer> => ({
-      endpoint: endpoints.get(pool.codexHome),
+      endpoint: endpoints.get(pool.codexHome)!,
       async request<T>(method: string, params: any): Promise<T> {
         requests.push({ method, params, pool: pool.codexHome });
         if (method === 'thread/start') {
