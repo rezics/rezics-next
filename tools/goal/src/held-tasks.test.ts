@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import type { GateOutcome, ManagerEvent } from './contracts.ts';
+import { completeContinuation } from './continuation.ts';
+import { parseBrief } from './briefs.ts';
+import { authenticatedManager } from './priority-authority.ts';
 import { WorkerJob } from './job.ts';
 import { promote } from './promotion.ts';
 import { harness, markdown } from './test-support.ts';
@@ -253,6 +257,169 @@ test('a brief after a stabilize task that dev does not contain yet is held at di
     const laterBrief = join(h.root, '.temp/goal/later.md');
     writeFileSync(laterBrief, markdown.replace('waiting: []', `waiting: []\nafter: [${fix.id}]`));
     expect(h.tasks.dispatch(laterBrief).state).toBe('held');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a continuation keeps its parent source-required edge even when its draft omits it', () => {
+  const ownership = { version: 1 as const, areas: {} };
+  const predecessor = 'producer-one';
+  const parentMarkdown = markdown.replace(
+    'waiting: []',
+    `waiting: []\nafter: [${predecessor}]\nafterSource: [${predecessor}]`,
+  );
+  const parent = { id: 'parent-task', brief: parseBrief(parentMarkdown, ownership) };
+  const draft = parentMarkdown.replace(
+    `after: [${predecessor}]\nafterSource: [${predecessor}]`,
+    'after: []',
+  );
+
+  const completed = completeContinuation(draft, parent, ownership);
+
+  expect(parseBrief(completed, ownership)).toMatchObject({
+    after: [predecessor, parent.id],
+    afterSource: [predecessor],
+  });
+});
+
+test('a stopped source producer stays held until its commit is integrated into the target branch', async () => {
+  const h = harness(), inbox: ManagerEvent[] = [];
+  try {
+    const producer = h.tasks.dispatch(h.briefFile);
+    writeFileSync(join(producer.worktree, 'retained-http-source.ts'), 'export const route = "/book";\n');
+    git(producer.worktree, 'add', 'retained-http-source.ts');
+    git(producer.worktree, 'commit', '-m', 'Retain unlanded HTTP source');
+    const producerCommit = git(producer.worktree, 'rev-parse', 'HEAD');
+    await h.tasks.stop(producer.id);
+
+    const strictBrief = join(h.root, '.temp/goal/source-required.md');
+    writeFileSync(
+      strictBrief,
+      markdown.replace(
+        'waiting: []',
+        `waiting: []\nafter: [${producer.id}]\nafterSource: [${producer.id}]`,
+      ),
+    );
+    const strict = h.tasks.dispatch(strictBrief);
+    expect(strict).toMatchObject({ state: 'held', currentAttempt: 0 });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
+    await job.recoverOrphans({ adoptRunning: false });
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]?.taskId).toBe(producer.id);
+    expect(inbox[0]?.summary).toContain(strict.id);
+    expect(inbox[0]?.summary).toContain('authenticated reshape');
+
+    const advisoryBrief = join(h.root, '.temp/goal/advisory.md');
+    writeFileSync(advisoryBrief, markdown.replace('waiting: []', `waiting: []\nafter: [${producer.id}]`));
+    const advisory = h.tasks.dispatch(advisoryBrief);
+    expect(advisory.state).toBe('ready');
+    await job.start(advisory.id);
+    expect(h.store.task(advisory.id).currentAttempt).toBe(1);
+    expect(h.store.task(strict.id)).toMatchObject({ state: 'held', currentAttempt: 0 });
+
+    h.store.updateTask({ taskId: producer.id, attempt: 0 }, (task) => {
+      task.state = 'integrated';
+    });
+    expect(h.tasks.dependenciesMet(h.store.task(strict.id))).toBe(false);
+    h.store.updateTask({ taskId: producer.id, attempt: 0 }, (task) => {
+      task.integratedCommit = producerCommit;
+    });
+    expect(h.tasks.dependenciesMet(h.store.task(strict.id))).toBe(false);
+
+    const devBefore = git(h.root, 'rev-parse', 'refs/heads/dev');
+    git(h.root, 'update-ref', 'refs/heads/dev', producerCommit, devBefore);
+    expect(h.tasks.dependenciesMet(h.store.task(strict.id))).toBe(true);
+
+    await job.recoverOrphans();
+    await job.drain();
+    await job.recoverOrphans();
+    await job.drain();
+    expect(h.store.task(strict.id).currentAttempt).toBe(1);
+    expect(h.store.events(strict.id).filter((event) => event.kind === 'worker-run-started')).toHaveLength(1);
+    expect(h.store.events(strict.id).filter((event) => event.kind === 'held-task-released')).toHaveLength(1);
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
+test('an authenticated current-generation reshape can replace a stopped source edge with integrated evidence', async () => {
+  const h = harness();
+  try {
+    const stopped = h.tasks.dispatch(h.briefFile);
+    writeFileSync(join(stopped.worktree, 'unlanded-http-source.ts'), 'export const route = "/book";\n');
+    git(stopped.worktree, 'add', 'unlanded-http-source.ts');
+    git(stopped.worktree, 'commit', '-m', 'Retain stopped HTTP source');
+    await h.tasks.stop(stopped.id);
+
+    const waitingBrief = join(h.root, '.temp/goal/waiting-source.md');
+    writeFileSync(
+      waitingBrief,
+      markdown.replace('waiting: []', `waiting: []\nafter: [${stopped.id}]\nafterSource: [${stopped.id}]`),
+    );
+    const consumer = h.tasks.dispatch(waitingBrief);
+    expect(consumer.state).toBe('held');
+    const retryConsumer = h.tasks.dispatch(waitingBrief);
+    expect(retryConsumer.state).toBe('held');
+
+    const replacement = h.tasks.dispatch(h.briefFile);
+    writeFileSync(join(replacement.worktree, 'integrated-http-source.ts'), 'export const route = "/book";\n');
+    git(replacement.worktree, 'add', 'integrated-http-source.ts');
+    git(replacement.worktree, 'commit', '-m', 'Integrate replacement HTTP source');
+    const replacementCommit = git(replacement.worktree, 'rev-parse', 'HEAD');
+    const devBefore = git(h.root, 'rev-parse', 'refs/heads/dev');
+    git(h.root, 'update-ref', 'refs/heads/dev', replacementCommit, devBefore);
+    h.store.updateTask({ taskId: replacement.id, attempt: 0 }, (task) => {
+      task.state = 'integrated';
+      task.integratedCommit = replacementCommit;
+    });
+
+    const replacementBrief = join(h.root, '.temp/goal/replacement.md');
+    writeFileSync(
+      replacementBrief,
+      markdown
+        .replace('waiting: []', `waiting: []\nafter: [${replacement.id}]\nafterSource: [${replacement.id}]`)
+        .replace('Write the requested result and commit it.', `Evidence: ${replacementCommit} is on dev.`),
+    );
+    const sessionId = randomUUID();
+    h.store.db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+      'fixture',
+      JSON.stringify({
+        id: 'fixture',
+        kind: 'managed',
+        provider: 'codex',
+        engine: 'codex',
+        status: 'running',
+        threadId: sessionId,
+      }),
+    );
+    const owner = authenticatedManager(h.store.db, { GOAL_MANAGER: 'fixture', CODEX_THREAD_ID: sessionId });
+    expect(owner).toBeDefined();
+    if (!owner) throw new Error('fixture manager session failed authentication');
+
+    expect(() =>
+      h.tasks.queueRetry(retryConsumer.id, { expectedAttempt: 0, brief: replacementBrief }, null),
+    ).toThrow('source-required dependency reshapes require the authenticated owning or operations manager');
+    h.tasks.queueRetry(retryConsumer.id, { expectedAttempt: 0, brief: replacementBrief }, owner);
+    expect(h.store.task(retryConsumer.id)).toMatchObject({
+      state: 'held',
+      currentAttempt: 0,
+      brief: { after: [replacement.id], afterSource: [replacement.id] },
+    });
+
+    expect(() => h.tasks.amend(consumer.id, { expectedAttempt: 0, brief: replacementBrief }, null)).toThrow(
+      'authenticated owning or operations manager',
+    );
+    expect(() => h.tasks.amend(consumer.id, { expectedAttempt: 1, brief: replacementBrief }, owner)).toThrow(
+      'prelaunch amendment refused stale/current generation',
+    );
+    expect(h.tasks.amend(consumer.id, { expectedAttempt: 0, brief: replacementBrief }, owner).status).toBe('amended');
+    expect(h.store.task(consumer.id)).toMatchObject({
+      state: 'ready',
+      currentAttempt: 0,
+      brief: { after: [replacement.id], afterSource: [replacement.id] },
+    });
   } finally {
     h.dispose();
   }

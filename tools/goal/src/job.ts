@@ -1503,7 +1503,13 @@ export class WorkerJob implements GateOutcomeSink {
     const tasks = store.activeTasks();
     const notices = new Map<
       string,
-      { dependencyId: string; state: 'cancelled' | 'stopped'; managerId: string; taskId: string }
+      {
+        dependencyId: string;
+        state: 'cancelled' | 'stopped';
+        managerId: string;
+        sourceTaskIds: string[];
+        advisoryTaskIds: string[];
+      }
     >();
     for (const task of tasks) {
       if (task.state !== 'held') continue;
@@ -1511,19 +1517,31 @@ export class WorkerJob implements GateOutcomeSink {
         const state = store.taskState(dependencyId);
         if (state !== 'cancelled' && state !== 'stopped') continue;
         const key = `${dependencyId}:${task.brief.manager}`;
-        notices.set(key, { dependencyId, state, managerId: task.brief.manager, taskId: task.id });
+        const notice = notices.get(key) ?? {
+          dependencyId,
+          state,
+          managerId: task.brief.manager,
+          sourceTaskIds: [],
+          advisoryTaskIds: [],
+        };
+        const taskIds = task.brief.afterSource?.includes(dependencyId) ? notice.sourceTaskIds : notice.advisoryTaskIds;
+        if (!taskIds.includes(task.id)) taskIds.push(task.id);
+        notices.set(key, notice);
       }
     }
     for (const notice of notices.values()) {
       try {
         const predecessor = store.task(notice.dependencyId);
+        const summary = notice.sourceTaskIds.length
+          ? `Predecessor ${predecessor.id} ended ${notice.state} without integration; source-required held task(s) ${notice.sourceTaskIds.join(', ')} remain held. Integrate a commit from that predecessor into each task's target branch, or use an authenticated reshape to remove or replace afterSource with evidence.${notice.advisoryTaskIds.length ? ` Advisory held tasks ${notice.advisoryTaskIds.join(', ')} retain ordinary after release behavior.` : ''}`
+          : `${notice.state === 'cancelled' ? 'Cancelled' : 'Stopped'} predecessor ${predecessor.id} ended without landing; held tasks ${notice.advisoryTaskIds.join(', ')} no longer wait for it.`;
         store.notifyDroppedDependency(
           { taskId: predecessor.id, attempt: predecessor.currentAttempt },
           {
             managerId: notice.managerId,
             taskId: predecessor.id,
             kind: 'instruction',
-            summary: `Predecessor ${predecessor.id} ended ${notice.state} without landing; held task ${notice.taskId} no longer waits for it.`,
+            summary,
           },
           (event) => this.inbox.deliver(event),
         );

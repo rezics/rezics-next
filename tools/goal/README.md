@@ -3120,10 +3120,12 @@ Product work integrating into dev can be retried at any generation: `retry <task
 start, which keeps its place in that order and its options. Other work refuses a second retry while one is pending;
 before its first start it is amended with `amend` or, for verification, registered with the proof start below.
 `cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. A predecessor
-that ends cancelled or stopped without landing is dropped from dependent `after` gates: the host releases held tasks and
-notifies each owner with the predecessor ID. Continuation overlap admission ignores these ended tasks. Cancellation
-notices use the committed terminal generation without reopening ordinary worker writes; genuinely stale command
-generations still refuse.
+that ends cancelled or stopped without landing is dropped from ordinary `after` gates: the host releases held tasks and
+notifies each owner with the predecessor ID. A held `afterSource` edge remains unmet and receives an actionable notice;
+it releases only after an integrated or merged producer commit is present in the target branch, or after an authenticated
+reshape changes the edge with evidence. Continuation overlap admission ignores ended tasks. Cancellation notices use
+the committed terminal generation without reopening ordinary worker writes; genuinely stale command generations
+still refuse.
 A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
 The next host sweep can then release it under the task lease and start the amended contract from the updated base.
 An unstarted held task can use `retry --brief` on the same task id to replace the brief and dependency edges while keeping attempt 0, its branch, worktree and uncommitted files. The host creates its first attempt once the new dependencies are merged.
@@ -3350,8 +3352,27 @@ delivered after the manager stops. Manager events are attributed through `GOAL_M
 priority authorization requires the persisted provider session identity described above, so a worker-supplied
 `GOAL_MANAGER` cannot grant or consume critical priority. Workers get fresh session identities.
 Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has integrated or merged;
-unknown task ids are refused, and already integrated or merged dependencies are ready immediately. A dependency that
-ends cancelled or stopped without landing is dropped and releases its held dependents. For a Goal that uses
+unknown task ids are refused, and already integrated or merged dependencies are ready immediately for ordinary edges. A dependency that
+ends cancelled or stopped without landing is dropped and releases its held dependents. `afterSource: [task-id, ...]`
+marks a subset of `after` whose producer source is required:
+
+```yaml
+after: [producer-task]
+afterSource: [producer-task]
+```
+
+A source-required dependency releases only when it is integrated or merged with a commit present in the dependent's
+target branch; a missing commit does not establish source presence. A stopped or cancelled producer leaves that task
+held and sends its owner one instruction to integrate the producer commit or submit an authenticated evidence-bearing
+reshape that removes or replaces the `afterSource` edge. Use `bun tools/goal/src/cli.ts amend <task> --expected-attempt 0 --brief <file>`
+for a never-started task, or `bun tools/goal/src/cli.ts retry <task> --brief <file>` for a later attempt. Continuations
+retain source-required edges from the brief they continue.
+
+Decision: `afterSource` is an optional subset of `after`; it requires an integrated or merged producer commit contained
+in the dependent's target branch, survives producer stop or cancellation, and can be removed or replaced only by an
+authenticated reshape. Existing `after` edges keep their advisory stop/cancellation release behavior.
+
+For a Goal that uses
 `after`, once an integration leaves no ready, running, landing, held or integrated tasks, the control plane delivers one
 waking `goal-idle` event to its manager; replayed integration outcomes do not deliver it again. The host releases held
 tasks under their task lease and starts them from the updated target branch. A pending attempt whose launcher was

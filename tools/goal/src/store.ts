@@ -2188,9 +2188,13 @@ export class WorkerStore implements AttemptFence {
         const dependencies = new Map(after.map((id) => [id, this.dependency(id)]));
         for (const dependency of after)
           if (!dependencies.get(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
-        const state = after.every((dependency) =>
-          ['integrated', 'merged', 'stopped', 'cancelled'].includes(dependencies.get(dependency)?.state ?? ''),
-        )
+        const sourceRequired = new Set(brief.afterSource ?? []);
+        const state = after.every((dependency) => {
+          const projected = dependencies.get(dependency);
+          if (sourceRequired.has(dependency))
+            return ['integrated', 'merged'].includes(projected?.state ?? '') && Boolean(projected?.task_commit);
+          return ['integrated', 'merged', 'stopped', 'cancelled'].includes(projected?.state ?? '');
+        })
           ? 'ready'
           : 'held';
         const sequence = (

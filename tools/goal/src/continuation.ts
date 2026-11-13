@@ -466,8 +466,17 @@ export function completeContinuation(
   front.estimate ??= task.brief.estimate;
   front.criticalPath = flag(front.criticalPath);
   front.waiting = list(front.waiting, []);
-  front.after = list(front.after, []);
-  if (Array.isArray(front.after) && !front.after.includes(task.id)) front.after = [...front.after, task.id];
+  const dependencyList = (field: 'after' | 'afterSource', value: unknown): string[] => {
+    const dependencies = list(value, []);
+    if (!Array.isArray(dependencies) || dependencies.some((dependency) => typeof dependency !== 'string'))
+      throw new Error(`continuation ${field} must contain only task ids`);
+    return dependencies;
+  };
+  const after = dependencyList('after', front.after);
+  const afterSource = [...new Set([...(task.brief.afterSource ?? []), ...dependencyList('afterSource', front.afterSource)])];
+  if (afterSource.length) front.afterSource = afterSource;
+  else delete front.afterSource;
+  front.after = [...new Set([...after, ...afterSource, task.id])];
   const areas = list(front.riskAreas, []);
   const paths = front.paths;
   if (ownership && Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string')) {
