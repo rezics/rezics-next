@@ -230,6 +230,8 @@ export const webViteWalkClientOptimizeDeps = {
   include: [
     '@base-ui/react/*',
     '@inlang/paraglide-js/urlpattern-polyfill',
+    '@puckeditor/core > flat',
+    '@puckeditor/core > object-hash',
     '@tanstack/react-query',
     '@tanstack/react-router > @tanstack/react-store',
     '@tanstack/react-router-ssr-query',

@@ -41,6 +41,9 @@ cache identity.
 The authored cold `/en` gate asserts hydration, Home mount and shell interaction; browser acceptance remains unverified
 until the deferred owner run.
 
+Decision: the selector ESM adapter serves both browser and Worker graphs, while the bounded browser optimizer includes
+Puck's nested `flat` and `object-hash` dependencies; startup entries remain empty and other client modules load on demand.
+
 Causal record: retained boot `1794067367118-boot.log` reached Vite SSR dependency re-optimization and logged
 `bundling dependencies...` without completion. Later boot `1794074596302-boot.log` recorded the second message-readiness
 check from Vite's localization config hook, but omitted the Vite child identity and next hook, so its exact pending

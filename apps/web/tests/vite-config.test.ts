@@ -511,23 +511,19 @@ test('the Worker TypeBox stubs load live ESM from the installed Elysia files', a
   expect(code).toContain('typebox-type-live.mjs');
 });
 
-test('the Worker selector dependency resolves to ESM while the client keeps the package implementation', async () => {
+test('the selector dependency resolves to the shared ESM adapter for client and Worker', async () => {
   const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
   const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
   const selector = plugins.find(
-    (plugin) =>
-      plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-worker-selector-esm',
+    (plugin) => plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-selector-esm',
   ) as
     | {
-        applyToEnvironment?: (environment: { name: string }) => boolean;
         resolveId?: ((id: string) => unknown) | { handler: (id: string) => unknown };
       }
     | undefined;
   const resolveId = typeof selector?.resolveId === 'function' ? selector.resolveId : selector?.resolveId?.handler;
 
   expect(selector).toBeDefined();
-  expect(selector?.applyToEnvironment?.({ name: 'ssr' })).toBe(true);
-  expect(selector?.applyToEnvironment?.({ name: 'client' })).toBe(false);
   expect(resolveId?.(workerSelectorImport)).toBe(join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts'));
 });
 

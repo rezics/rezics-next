@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 test('installed serve composition bounds client dependency optimization without crawling the server entry', () => {
   // Resolve under Node, like the installed Vite CLI. The unmerged app configuration cannot reveal entries added
-  // by TanStack and Cloudflare's environment hooks. No server, compiler or native service is started here.
+  // by TanStack and Cloudflare's environment hooks. No network listener or native service is started here.
   const result = Bun.spawnSync({
     cmd: [
       'node',
@@ -11,7 +11,8 @@ test('installed serve composition bounds client dependency optimization without 
       '-e',
       `
         import assert from 'node:assert/strict';
-        import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+        import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+        import { createRequire } from 'node:module';
         import { resolve } from 'node:path';
         import { createServer, resolveConfig } from 'vite';
         import { tanStackRouterCodeSplitter, tanstackRouterGenerator } from '@tanstack/router-plugin/vite';
@@ -34,6 +35,9 @@ test('installed serve composition bounds client dependency optimization without 
           assert.ok(options.include.includes('@base-ui/react/*'), name + ': shell primitives are prebundled');
           assert.ok(options.include.includes('lucide-react'), name + ': navigation icons are prebundled');
         }
+        for (const dependency of ['@puckeditor/core > flat', '@puckeditor/core > object-hash']) {
+          assert.ok(config.environments.client.optimizeDeps.include.includes(dependency), 'client prebundles ' + dependency);
+        }
         const clientShim = config.environments.client.resolve.alias.find(
           (alias) => alias.find instanceof RegExp && alias.find.test('use-sync-external-store/shim'),
         );
@@ -50,6 +54,70 @@ test('installed serve composition bounds client dependency optimization without 
         assert.ok(worker.include.includes('typebox/type'));
         assert.ok(worker.include.includes('lucide-react'));
         assert.ok(worker.include.includes('@base-ui/react/*'));
+        assert.ok(worker.include.includes('@puckeditor/core > flat'));
+        assert.ok(worker.include.includes('@puckeditor/core > object-hash'));
+
+        const tempRoot = resolve('../../.temp');
+        await mkdir(tempRoot, { recursive: true });
+        const cacheRoot = await mkdtemp(resolve(tempRoot, 'client-module-boundary-'));
+        const selectorPlugin = config.plugins.find((plugin) => plugin.name === 'web-selector-esm');
+        assert.ok(selectorPlugin, 'the installed config includes its shared selector adapter');
+        let clientServer;
+        try {
+          const clientIncludes = ['@puckeditor/core > flat', '@puckeditor/core > object-hash', 'react'];
+          clientServer = await createServer({
+            configFile: false,
+            root: process.cwd(),
+            cacheDir: resolve(cacheRoot, 'vite'),
+            plugins: [selectorPlugin],
+            resolve: config.environments.client.resolve,
+            optimizeDeps: {
+              ...config.environments.client.optimizeDeps,
+              entries: [],
+              include: clientIncludes,
+              force: true,
+            },
+            server: { ...config.server, middlewareMode: true, watch: null, hmr: false },
+            appType: 'custom',
+            logLevel: 'silent',
+          });
+          const clientEnvironment = clientServer.environments.client;
+          const optimizer = clientEnvironment.depsOptimizer;
+          assert.ok(optimizer, 'the installed client environment owns a dependency optimizer');
+          await optimizer.init();
+          assert.deepEqual(optimizer.options.entries, [], 'the installed optimizer keeps startup entries empty');
+          assert.equal(optimizer.options.noDiscovery, true, 'the installed optimizer keeps discovery bounded');
+          const pending = Object.values(optimizer.metadata.discovered).flatMap((dependency) =>
+            dependency.processing ? [dependency.processing] : [],
+          );
+          await Promise.all(pending);
+          const flat = optimizer.metadata.optimized['@puckeditor/core > flat'];
+          const objectHash = optimizer.metadata.optimized['@puckeditor/core > object-hash'];
+          assert.ok(flat, 'installed Puck flat dependency is optimized in the client environment');
+          assert.ok(objectHash, 'installed Puck object-hash dependency is optimized in the client environment');
+          const flatCode = await readFile(flat.file, 'utf8');
+          const objectHashCode = await readFile(objectHash.file, 'utf8');
+          assert.match(flatCode, /export\\s*\\{[^}]*\\bas\\s+default\\b/s, 'optimized flat supplies a default export');
+          assert.match(flatCode, /\\bflatten\\b/);
+          assert.match(flatCode, /\\bunflatten\\b/);
+          assert.match(objectHashCode, /\\bexport\\b/, 'optimized object-hash supplies ESM exports');
+
+          const baseUi = createRequire(resolve('package.json')).resolve('@base-ui/react');
+          const baseUiRequire = createRequire(baseUi);
+          for (const shim of ['index.js', 'with-selector.js']) {
+            const shimPath = baseUiRequire.resolve('use-sync-external-store/shim/' + shim);
+            const transformed = await clientEnvironment.transformRequest('/@fs' + shimPath.replace(/\\\\/g, '/'));
+            assert.ok(transformed, 'installed client transforms the selector shim ' + shim);
+            const expectedExport = shim === 'index.js' ? 'useSyncExternalStore' : 'useSyncExternalStoreWithSelector';
+            assert.ok(transformed.code.includes(expectedExport), shim + ': ESM selector export reaches React');
+            assert.ok(!transformed.code.includes('module.exports'), shim + ': raw CommonJS is replaced');
+          }
+          const composition = await clientEnvironment.transformRequest('/src/features/zones/editor/composition.tsx');
+          assert.ok(composition?.code.includes('Puck'), 'the installed Puck client entry transforms');
+        } finally {
+          await clientServer?.close();
+          await rm(cacheRoot, { recursive: true, force: true });
+        }
         const routeSplitOptions = {
           routesDirectory: 'src/routes',
           generatedRouteTree: 'src/routeTree.gen.ts',

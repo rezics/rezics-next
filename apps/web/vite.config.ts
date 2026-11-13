@@ -14,6 +14,7 @@ import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 import { ensureMessagesReady } from './scripts/messages-ready.ts';
 import { messageImports } from './scripts/message-imports.ts';
 import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
+import { clientModuleSelectorEsm } from './scripts/client-module-esm.ts';
 import { traceWebVitePlugins, webStartupLog, webStartupMode, webStartupTraceId } from './scripts/web-startup.ts';
 import {
   alignViteLockfileHashes,
@@ -627,27 +628,7 @@ export default defineConfig((context) => {
         },
       },
       // Before the denied-dependency loader, which returns raw file contents for denied paths.
-      {
-        name: 'web-worker-selector-esm',
-        enforce: 'pre',
-        applyToEnvironment(environment) {
-          return environment.name !== 'client';
-        },
-        resolveId(id) {
-          if (id === workerSelectorImport || id === `${workerSelectorImport}.js`) return workerSelectorShimPath;
-          return null;
-        },
-        // Raw CommonJS shims are replaced by file identity: TipTap imports these files by path, which bypasses the
-        // bare-specifier mapping above. React exports useSyncExternalStore itself, so the index needs no shim.
-        load(id) {
-          const path = filePathOf(id);
-          if (path.endsWith('/use-sync-external-store/shim/index.js'))
-            return { code: "export { useSyncExternalStore } from 'react';\n", map: null };
-          if (path.endsWith('/use-sync-external-store/shim/with-selector.js'))
-            return { code: `export * from ${JSON.stringify(workerSelectorShimPath)};\n`, map: null };
-          return null;
-        },
-      },
+      clientModuleSelectorEsm(workerSelectorImport, workerSelectorShimPath),
       workerDeniedDependencies(),
       webStartupEvidencePlugin(),
     ] as PluginOption[]),
