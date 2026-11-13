@@ -2,8 +2,10 @@
 
 ## Outcome
 
-People and API consumers receive predictable work bounds as catalogue, history and tenant populations grow.
-Contributors demonstrate those bounds with shared native evidence, rather than machine speed.
+People and API consumers receive predictable work bounds as catalogue, history and tenant populations grow,
+including the first release's [several-billion-record design scenarios](../architecture.md#first-release-growth).
+Contributors demonstrate logical bounds with shared native evidence and derive physical capacity separately under
+that architecture contract, rather than treating machine speed or small fixtures as deployed capacity evidence.
 
 ## Done when
 

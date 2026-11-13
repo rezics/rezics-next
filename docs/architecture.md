@@ -59,6 +59,65 @@ multiple interfaces, trace the shared client boundary first. Fix the earliest sh
 interaction or component that causes the failure, and verify representative consumers. Use a page-local fix only
 when the failure is specific to that page. Representation does not determine semantic meaning or authority.
 
+### First-release growth
+
+Decision: the first release is designed for several billion logical records. Evaluate 1 billion and 3 billion as
+scenarios, not cardinality limits, production measurements, an assumed object mix or permission to seed production.
+
+Use each owner's existing Cost entry, with distinct variables: global population `N`; largest relevant partition or
+hot key `H`; actually selected or changed population `n`; page count `k_rows` and admitted bytes `k_bytes` (the two
+units of `k`); query fanout `p`. Vary `N` and `H` independently of `n` and `k`. Name the indexed relations and key
+prefixes: a seek costs `O(log N)` in a global index or `O(log H)` in a partition-local index, not a constant probe.
+For each operation, record concrete ceilings or admitted inputs for candidate keys, reads including nested
+authorization, index probes, locks and lock duration, writes, events, peak heap, transferred/stored bytes and retries.
+Include indirect effects, cascades, projections and cleanup. Set finite page, byte, fanout and per-step ceilings;
+response size alone does not bound any of these costs.
+
+- **Point operations:** use exact full-key indexed access. Bound the number of candidate keys and nested reads,
+  authorization operands, probes, locks, changed rows and events independently of `N` and `H`, plus their index
+  descent and admitted body bytes. Denial and absence obey the same bound.
+- **Ordinary cursor pages:** where the filter/order/disclosure contract admits a merged indexed range, examine
+  at most `k_rows + p` candidates, including source lookahead. With at most `a` nested indexed reads/authorization
+  probes per candidate, charge up to `p + a (k_rows + p)` probes plus the range reads. Derive their global/local
+  descent costs separately; without nested probes the range costs `O(p log N + k_rows)` in a global index.
+  Heap and transfer grow only with the admitted page representation and `k_bytes`. Cap `p` and `a`; cursor depth
+  adds no prefix scan. A plan fetching a page per source must instead charge up to `p k_rows` candidates.
+  Reads take no mutation locks and produce no writes/events unless the owner names and bounds those effects.
+  Named exceptions such as residual disclosure filtering, exact counts or unindexed sorting state their actual
+  candidate, scan, sort and authorization cost in `N`, `H`, `n` and `p`. Bound the next step and persist continuation,
+  or supply an indexed point/staged alternative; a short or denied page cannot hide discarded candidates.
+- **Local changes:** changing one chapter touches only that chapter and bounded affected index paths, independent
+  of book size except indexed seeks. One status step updates bounded progress/frontier state without reading or
+  rewriting accumulated progress. Charge affected index entries, history and events explicitly; a small response
+  does not make a whole-book validation or progress rewrite local.
+- **Whole-scope work:** enumerate the actual scope `n` in total `O(n)` or `O(n log n)` logical work, with the
+  separately derived indexed-seek costs. Keep a persistent frontier committed with each step's effects, finite
+  examined keys, writes, events, bytes, heap and lock duration, and no repeated full-prefix scans. Schedule fairly
+  across scopes/homes so a large or hot scope cannot starve others. State the admitted concurrent-change and restart
+  semantics. Sum all steps: for `w` row writes and `i` maintained index entries per row, charge `O(w i)` index
+  mutations plus their seek costs, emitted events and serialized bytes separately from page size. Count every
+  failed/replayed attempt's reads, locks, writes and bytes; bound retries per invocation, persist resumable work on
+  exhaustion and make replay effects idempotent. State total retry assumptions instead of claiming a finite
+  completion bound under unlimited contention.
+
+Prove logical work with the existing [three-scale native counters](../services/kernel/performance-contract.md#growth-checks)
+and Cost entries, using the audit and follow-up above as the existing review queue. Grow unrelated population and
+history independently, and exercise skew/hot homes, deep cursors, denied and empty results. Compare native access
+plans across scales, including candidate removal and nested authorization/index probes; measure request/response,
+stored and expanded bytes and peak heap where meaningful. Small fixtures test the derivation, not billion-row
+capacity. Keep native evidence distinct from portable/source evidence; no new checklist or whole-site gate follows.
+
+Derive physical capacity separately for both population scenarios under named workload and storage assumptions:
+object/relationship/history mix, size distributions, retention, request mix, concurrency, arrival rates and skew.
+Estimate primary bytes as the sum of each population times its measured per-record bytes, then itemize index and
+search amplification, WAL rate/retention, replicas, temporary space and free-space headroom. State active partition
+placement, working-set memory and I/O, hot-key lock contention and serialized service rates; sharding does not split
+a required write order. Compare measured service rates with foreground arrivals and background maintenance demand.
+For a backlog `B`, arrival rate `lambda` and sustainable drain rate `mu` in the same work units, catch-up takes
+`B / (mu - lambda)` only when `mu > lambda`; otherwise it cannot drain under those assumptions. Include index,
+event and retry amplification in those rates. Report estimates and their assumptions separately from measured
+deployment results: neither a small fixture, a shard count nor a Big-O derivation proves deployed capacity.
+
 ### Release selection and retention
 
 A release selects an exact immutable version under its owner's current publication authority. A point publish
