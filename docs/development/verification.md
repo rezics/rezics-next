@@ -318,6 +318,10 @@ Missing or mismatched binding, no reservation identity, ambiguous attempts or in
 unknown with custody retained. Do not reconstruct a host/run from log text, host names or timestamps, and do not
 signal another run or launch a replacement check during recovery.
 
+Decision: Cancelled cleanup validates stored remote attempt IDs with the same 1–96 ASCII letter, digit and hyphen
+contract as `reconcileRemoteRun`; local physical run IDs remain UUIDs, and cleanup still requires explicit cancellation
+and matching ownership and custody.
+
 Provision c with `performance: true`, 10 slots, `memoryMaxGiB: 20`, `cpuQuotaPercent: 3200` and
 `processorsPerSlot: 1`. These admission limits apply in addition to its `rezics-check.slice` limit of 24 GiB and
 4800% CPU; preserve at least 12 GiB of workstation memory for worker admission. Keep addresses and identity paths

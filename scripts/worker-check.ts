@@ -2886,7 +2886,7 @@ function cancelledRemoteCleanupTarget(
   const attempt = unresolved[0] ?? verified[0]!;
   if (
     !['running', 'uncertain', 'terminal'].includes(attempt.status) ||
-    !isPhysicalRunId(attempt.id) ||
+    !/^[a-zA-Z0-9-]{1,96}$/.test(attempt.id) ||
     !/^[a-z][a-z0-9-]{0,62}$/.test(attempt.host)
   )
     return undefined;

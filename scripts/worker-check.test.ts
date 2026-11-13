@@ -1327,13 +1327,16 @@ test('durable cancellation preceding a transport exit prevents local fallback an
   }
 });
 
-test.each([false, true])(
-  'retired cancelled remote runner records only exact physical cleanup when native result is absent (mismatch: %s)',
-  async (mismatch) => {
+test.each([
+  { mismatch: false, remoteRun: 'mwe3smbp-065bf821', shouldInvoke: true },
+  { mismatch: true, remoteRun: 'mwe3smbp-065bf821', shouldInvoke: true },
+  { mismatch: false, remoteRun: 'bad/run', shouldInvoke: false },
+])(
+  'retired cancelled remote runner records only exact physical cleanup when native result is absent (%s)',
+  async ({ mismatch, remoteRun, shouldInvoke }) => {
     const fixture = workerFixture();
     const lost = await writeLostRemoteCheck(fixture.root, 'pending');
     const hostsFile = writeHosts(fixture);
-    const remoteRun = randomUUID();
     const custodyFile = remoteRunCustodyPath(fixture.root, lost.physicalRunId);
     const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
       binding: Record<string, unknown>;
@@ -1410,7 +1413,17 @@ test.each([false, true])(
         remoteReconcile,
       }),
     ).toBe(143);
-    expect(transportCalls).toHaveLength(1);
+    expect(transportCalls).toHaveLength(shouldInvoke ? 1 : 0);
+    if (!shouldInvoke) {
+      const remoteCustody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+        status: string;
+        attempts: Array<Record<string, unknown>>;
+      };
+      expect(remoteCustody.status).toBe('running');
+      expect(remoteCustody.attempts[0]?.physicalCleanup).toBeUndefined();
+      expect(readWorkerCheckCleanupReceipt(lost.id, lost.physicalRunId, fixture.root)?.physicalCleanup).toBeUndefined();
+      return;
+    }
     expect(transportCalls[0]).toMatchObject({
       physical: { host: 'check-a', run: remoteRun },
       returns: [],
