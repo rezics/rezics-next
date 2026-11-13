@@ -186,6 +186,13 @@ the old draft and all old readers/writers remain authoritative. A racing append/
 it cannot become a mixed baseline. Preparation restart/expiry releases its holds and reclaims its abandoned nodes
 in bounded work. Old descriptors, links, receipts and cursors keep their addresses.
 
+Decision: a nonempty sealed private builder activates by copying its existing occurrence facts, sibling/preorder/chapter
+nodes and sibling roots into one private draft generation through the temporal store in bounded replayable pages,
+retaining parent subtree accumulators until exact coverage is recorded; commit then writes the immutable structure
+revision and CAS-advances only the current source draft head. Empty complete sources stay on the first-point-write
+path; cancelled, erased, expired or stale sources keep the previous head, old exact revisions, cursors and the public
+pointer. Unavailable titles stay null. No HTTP route and no publication pointer change.
+
 Retain the 512-row snapshot writer and explicit-selection publisher as compatibility operations. A replacement
 may intentionally shrink a larger draft; the client must identify it as whole replacement, never a saved page. Existing exact snapshots, descriptors, publications, receipts, checkpoints and cursors retain
 their addresses and current Access behavior. Never rewrite old versions into the current forest or infer that an
