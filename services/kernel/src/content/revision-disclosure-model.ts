@@ -158,7 +158,7 @@ export type RevisionDisclosureRow = Readonly<{
   audience_kind: string;
   policy_version: string;
   actor_client_id: string;
-  actor_scopes: string[];
+  actor_scopes: readonly string[];
   actor_requested_by: string | null;
   actor_authn_epoch: string;
   original_minimum_authn_epoch: string;

@@ -154,18 +154,86 @@ export function revisionDisclosureCatalogueHome(catalogueId: string): number | n
   return routedRevisionDisclosureId(catalogueId);
 }
 
-type RevisionDisclosureSqlRow = Omit<RevisionDisclosureRow, 'actor_scopes'> & {
-  actor_scopes: readonly (string | null)[];
+type RevisionDisclosureSqlRow = {
+  [K in keyof RevisionDisclosureRow]: K extends 'actor_scopes' ? readonly (string | null)[] : RevisionDisclosureRow[K];
 };
 
-/** Compiled SQL types `text[]` as `(string | null)[]`; stored scopes are non-null. */
+/** Compiled SQL types `text[]` as `(string | null)[]`; stored scopes match AccountActor. */
 export function revisionDisclosureFromSql(
   row: RevisionDisclosureSqlRow | null | undefined,
 ): RevisionDisclosureRow | null {
   if (!row) return null;
   const actor_scopes = row.actor_scopes;
   if (!actor_scopes.every((scope): scope is string => scope !== null)) return null;
-  return { ...row, actor_scopes: [...actor_scopes] };
+  const {
+    route,
+    disclosure_id,
+    operation_id,
+    thread_id,
+    post_id,
+    revision_id,
+    sha256,
+    licence,
+    catalogue_id,
+    catalogue_route,
+    source_post_transaction_id,
+    source_thread_transaction_id,
+    source_post_security_revision,
+    source_thread_security_revision,
+    issuer_account_id,
+    issued_transaction_id,
+    issued_at,
+    audience_kind,
+    policy_version,
+    actor_client_id,
+    actor_requested_by,
+    actor_authn_epoch,
+    original_minimum_authn_epoch,
+    original_operator_account_id,
+    original_delegation_transaction_id,
+    original_delegation_issued_valid,
+    source_digest,
+    creation_idempotency_key,
+    creation_request_digest,
+    revoked_at,
+    revocation_transaction_id,
+    revoker_account_id,
+  } = row;
+  return {
+    route,
+    disclosure_id,
+    operation_id,
+    thread_id,
+    post_id,
+    revision_id,
+    sha256,
+    licence,
+    catalogue_id,
+    catalogue_route,
+    source_post_transaction_id,
+    source_thread_transaction_id,
+    source_post_security_revision,
+    source_thread_security_revision,
+    issuer_account_id,
+    issued_transaction_id,
+    issued_at,
+    audience_kind,
+    policy_version,
+    actor_client_id,
+    actor_scopes,
+    actor_requested_by,
+    actor_authn_epoch,
+    original_minimum_authn_epoch,
+    original_operator_account_id,
+    original_delegation_transaction_id,
+    original_delegation_issued_valid,
+    source_digest,
+    creation_idempotency_key,
+    creation_request_digest,
+    revoked_at,
+    revocation_transaction_id,
+    revoker_account_id,
+  };
 }
 
 export async function revisionDisclosureRow(
