@@ -165,7 +165,7 @@ export function revisionDisclosureFromSql(
   if (!row) return null;
   const actor_scopes = row.actor_scopes;
   if (!actor_scopes.every((scope): scope is string => scope !== null)) return null;
-  return { ...row, actor_scopes };
+  return { ...row, actor_scopes: [...actor_scopes] };
 }
 
 export async function revisionDisclosureRow(
