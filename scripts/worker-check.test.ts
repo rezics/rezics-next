@@ -36,6 +36,7 @@ import {
   controllerProofExecutionArgv,
   stopWorkerCheck,
   waitWorkerCheck,
+  summarizeFailureOutput,
   requestWorkerCheckCancellation,
   workerCheckCancellation,
 } from './worker-check.ts';
@@ -570,6 +571,27 @@ test('worker-check keeps exit status and writes a log plus failure summary with 
     ?.trim();
   expect(log).toBeTruthy();
   expect(readFileSync(log!, 'utf8')).toContain('failure marker');
+});
+
+test('failure summaries keep recovered command diagnostics primary and leave cleanup secondary', () => {
+  const summary = summarizeFailureOutput(
+    [
+      'remote-check: reconnected to a in 0.250 s',
+      'remote-check: recovered command output after disconnect run=check-123',
+      '(fail) assertion: expected 3, received 4',
+      'remote-check: end recovered command output run=check-123',
+      'remote-check: cleanup timed out after terminal command result',
+    ].join('\n'),
+  );
+  expect(summary.indexOf('command diagnostics')).toBeLessThan(summary.indexOf('transport and cleanup (secondary)'));
+  expect(summary).toContain('(fail) assertion: expected 3, received 4');
+  expect(summary).toContain('remote-check: cleanup timed out after terminal command result');
+  expect(summary).not.toContain('remote-check: reconnected');
+
+  const unknown = summarizeFailureOutput('remote-check: cleanup timed out after terminal command result');
+  expect(unknown).toContain('(the original command diagnostic was not observed)');
+  expect(unknown).toContain('transport and cleanup (secondary)');
+  expect(unknown).not.toContain('assertion: expected');
 });
 
 test('a queued memory lease writes its waiting line repeatedly into the check log', async () => {

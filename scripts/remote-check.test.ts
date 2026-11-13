@@ -1013,6 +1013,14 @@ if (script.includes('/proc/loadavg')) {
       console.log(result);
     } else console.log('STARTED');
   }
+  if (existsSync(statusFile) && config.recoveredOutput) {
+    const runId = readFileSync(dir + '/' + hostKey + '.run-id', 'utf8');
+    process.stderr.write(
+      'remote-check: recovered command output after disconnect run=' + runId + '\n' +
+      config.recoveredOutput + '\nremote-check: end recovered command output run=' + runId + '\n',
+    );
+    if (config.cleanupError) process.stderr.write(config.cleanupError + '\n');
+  }
 } else if (script.includes('REMOTE_CHECK_RUN_LIFETIME_STATUS')) {
   log({ kind: 'lifetime-status', slotHeld: slotHeld() });
   const receipt = dir + '/' + hostKey + '.lifetime';
@@ -1074,6 +1082,8 @@ if (script.includes('/proc/loadavg')) {
   const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
   const releaseFile = config.controlledRuns ? dir + '/' + hostKey + '.release-run.' + process.pid : undefined;
   log({ kind: 'run', script, launchCommand, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld(), releaseFile });
+  const runId = script.match(/--unit=rezics-check-([a-z0-9-]+)/)?.[1];
+  if (runId) writeFileSync(dir + '/' + hostKey + '.run-id', runId);
   if (config.proxyDescendant) {
     const proxy = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'], {
       stdio: 'inherit',
@@ -1344,6 +1354,8 @@ type HostConfig = {
   statusCleaningProbes?: number[];
   statusCompleteAfter?: number;
   statusWarning?: string;
+  recoveredOutput?: string;
+  cleanupError?: string;
   rsyncExit?: number;
   rsyncBackExit?: number;
   rsyncBackFailures?: number;
@@ -3682,6 +3694,29 @@ test('a dropped run reconnects through repeated status losses, then returns its 
   expect(events().filter((event) => event.kind === 'stop')).toHaveLength(0);
 });
 
+test('reconnect recovers a command diagnostic retained before streaming and keeps cleanup secondary', async () => {
+  const diagnostic = '(fail) retained assertion: expected 1, received 2';
+  const { env, events } = scenario({
+    a: {
+      available: 8e9,
+      transportFailures: 1,
+      statusCompleteAfter: 2,
+      exit: 7,
+      recoveredOutput: diagnostic,
+      cleanupError: 'remote-check: cleanup timed out after terminal command result',
+    },
+  });
+  env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(7);
+  expect(result.stderr.match(/retained assertion/g)).toHaveLength(1);
+  expect(result.stderr).toContain('remote-check: recovered command output after disconnect run=');
+  expect(result.stderr).toContain('remote-check: cleanup timed out after terminal command result');
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(events().filter((event) => event.kind === 'status')).toHaveLength(2);
+});
+
 test('a reconnect treats a root result as cleaning until the host publishes terminal exit status', async () => {
   const { env, events } = scenario({
     a: {
@@ -3713,16 +3748,44 @@ test('a reconnect treats a root result as cleaning until the host publishes term
 test('the reconnect status script hides retained root and lifetime results until cleanup is terminal', () => {
   const directory = mkdtempSync(join(tmpdir(), 'remote-check-cleanup-status-'));
   try {
+    const host = 'a';
+    const run = 'status-fixture';
+    writeFileSync(join(directory, '.remote-check-supervisor'), JSON.stringify({ schema: 1, host, run }));
     writeFileSync(join(directory, '.command-result'), '7\n');
-    const pending = spawnSync('sh', ['-c', statusScript(directory)], { encoding: 'utf8' });
+    const pending = spawnSync('sh', ['-c', statusScript(directory, host, run, false)], { encoding: 'utf8' });
     expect(pending.status).toBe(0);
     expect(pending.stdout.trim()).toBe('CLEANING');
     writeFileSync(join(directory, 'run-lifetime-status.json'), '{}\n');
-    const lifetime = spawnSync('sh', ['-c', statusScript(directory)], { encoding: 'utf8' });
+    const lifetime = spawnSync('sh', ['-c', statusScript(directory, host, run, false)], { encoding: 'utf8' });
     expect(lifetime.stdout.trim()).toBe('CLEANING');
     writeFileSync(join(directory, 'exit-status'), '7\n');
-    const terminal = spawnSync('sh', ['-c', statusScript(directory)], { encoding: 'utf8' });
+    const terminal = spawnSync('sh', ['-c', statusScript(directory, host, run, false)], { encoding: 'utf8' });
     expect(terminal.stdout.trim()).toBe('7');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('unknown or mismatched run identity cannot return a foreign status or diagnostic tail', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'remote-check-status-identity-'));
+  try {
+    const foreignTail = join(directory, '.temp/check-host/disconnected-output');
+    mkdirSync(join(directory, '.temp/check-host'), { recursive: true });
+    writeFileSync(join(directory, 'exit-status'), '7\n');
+    writeFileSync(foreignTail, 'foreign command assertion\n');
+    for (const marker of [
+      undefined,
+      JSON.stringify({ schema: 1, host: 'b', run: 'foreign-run' }),
+      JSON.stringify({ schema: 1, host: 'a', run: 'foreign-run' }),
+    ]) {
+      if (marker === undefined) rmSync(join(directory, '.remote-check-supervisor'), { force: true });
+      else writeFileSync(join(directory, '.remote-check-supervisor'), marker);
+      const result = spawnSync('sh', ['-c', statusScript(directory, 'a', 'expected-run')], { encoding: 'utf8' });
+      expect(result.status).toBe(75);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).not.toContain('foreign command assertion');
+      expect(result.stderr).toContain('run identity unavailable');
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -6127,7 +6190,9 @@ test('unavailable run-volume evidence keeps the native root result nonterminal',
     rootExitCode: 7,
   });
   expect(existsSync(join(runDirectory, 'exit-status'))).toBe(false);
-  expect(spawnSync('sh', ['-c', statusScript(runDirectory)], { encoding: 'utf8' }).stdout.trim()).toBe('CLEANING');
+  expect(spawnSync('sh', ['-c', statusScript(runDirectory, 'a', id, false)], { encoding: 'utf8' }).stdout.trim()).toBe(
+    'CLEANING',
+  );
 });
 
 test('a run whose client stops renewing its liveness file is stopped by the next run that starts on the host, with its slice and containers', async () => {
@@ -8420,44 +8485,53 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   );
 });
 
-test.skipIf(process.platform !== 'linux')('a disconnected output reader does not kill the host-owned check', () => {
-  const root = mkdtempSync(join(tmpdir(), 'rezics-disconnected-output-'));
-  try {
-    mkdirSync(join(root, '.temp/check-host'), { recursive: true });
-    const harness = String.raw`
-import pathlib, subprocess, sys
+test.skipIf(process.platform !== 'linux')(
+  'reconnect recovers a bounded command tail without an observed BrokenPipe',
+  () => {
+    const root = mkdtempSync(join(tmpdir(), 'rezics-disconnected-output-'));
+    try {
+      mkdirSync(join(root, '.temp/check-host'), { recursive: true });
+      const harness = String.raw`
+import json, pathlib, subprocess, sys
 root = pathlib.Path(sys.argv[1])
+identity = {'schema': 1, 'host': 'a', 'run': 'disconnected'}
+(root / '.remote-check-supervisor').write_text(json.dumps(identity))
 program = root / 'supervisor.py'
 program.write_text(sys.stdin.read())
-command = 'read -r start; touch "$1/.bun-install-complete"; printf fixture-stdout; printf fixture-stderr >&2; exit 7'
+command = 'touch "$1/.bun-install-complete"; touch "$1/command-started"; python3 -c \'import sys; sys.stdout.write("x"*100000+"fixture-stdout"); sys.stderr.write("fixture-stderr")\'; exit 7'
 child = subprocess.Popen([sys.executable, str(program), 'supervise', '5000', 'a', 'disconnected',
                           str(root), 'sh', '-c', command, 'fixture', str(root)],
-                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-child.stdout.close()
-child.stderr.close()
-child.stdin.write(b'start\n')
+                         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 child.stdin.close()
 print(child.wait(timeout=10))
 `;
-    const result = spawnSync('python3', ['-c', harness, root], {
-      input: dependencyPreparationProgram,
-      encoding: 'utf8',
-      timeout: 12_000,
-    });
-    expect(result.stderr).toBe('');
-    expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe('7');
-    expect(existsSync(join(root, 'preparation-status.json'))).toBe(false);
-    writeFileSync(join(root, 'exit-status'), '7\n');
-    const recovered = spawnSync('sh', ['-c', statusScript(root)], { encoding: 'utf8' });
-    expect(recovered.stdout).toBe('7\n');
-    expect(recovered.stderr).toContain('remote-check: recovered output after disconnect');
-    expect(recovered.stderr).toContain('fixture-stdout');
-    expect(recovered.stderr).toContain('fixture-stderr');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
+      const result = spawnSync('python3', ['-c', harness, root], {
+        input: dependencyPreparationProgram,
+        encoding: 'utf8',
+        timeout: 12_000,
+      });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe('7');
+      expect(existsSync(join(root, 'preparation-status.json'))).toBe(false);
+      const retained = readFileSync(join(root, '.temp/check-host/disconnected-output'));
+      expect(retained.byteLength).toBe(65_536);
+      expect(retained.toString()).toContain('fixture-stdout');
+      expect(retained.toString()).toContain('fixture-stderr');
+      expect(existsSync(join(root, '.temp/check-host/disconnected-output.pending'))).toBe(false);
+      writeFileSync(join(root, 'exit-status'), '7\n');
+      const recovered = spawnSync('sh', ['-c', statusScript(root, 'a', 'disconnected')], { encoding: 'utf8' });
+      expect(recovered.stdout).toBe('7\n');
+      expect(recovered.stderr).toContain('remote-check: recovered command output after disconnect run=disconnected');
+      expect(recovered.stderr).toContain('fixture-stdout');
+      expect(recovered.stderr).toContain('fixture-stderr');
+      expect(recovered.stderr.match(/fixture-stdout/g)).toHaveLength(1);
+      expect(recovered.stderr.match(/fixture-stderr/g)).toHaveLength(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 function sweepArtifacts(directory: string, program = dependencyPreparationProgram) {
   const result = spawnSync('python3', ['-c', program, 'sweep', join(directory, 'dependency-artifacts')], {
@@ -9659,7 +9733,9 @@ sys.exit(7)`;
   const running = run.start();
   try {
     await waitFor(() => existsSync(join(run.run, '.command-result')));
-    const reconnect = spawnSync('sh', ['-c', statusScript(run.run)], { encoding: 'utf8' });
+    const reconnect = spawnSync('sh', ['-c', statusScript(run.run, 'a', run.run.split('/').at(-1)!)], {
+      encoding: 'utf8',
+    });
     expect(reconnect.status).toBe(0);
     expect(reconnect.stdout.trim()).toBe('CLEANING');
     expect(readFileSync(join(run.run, '.command-result'), 'utf8')).toBe('7\n');
