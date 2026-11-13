@@ -744,7 +744,9 @@ workspace typecheck after commit. Native, browser, ordinary acceptance, root and
 
 Decision: retain the complete injectable consumer and preparation-only Studio until Content mounts and generates
 activation operations after native currentness acceptance; bind that producer directly. Point publication stays
-independent. One visit retains the exact catalogue, stage, source, sealed candidate generation and previous release.
+independent. Deliver the generated transport binding and its focused transport and ordinary-entry assertions together
+once that producer exists, retaining the injectable assertions. One visit retains the exact catalogue, stage, source,
+sealed candidate generation and previous release.
 Each explicit check advances one native page of at most 20 targets; pause retains the candidate, and a native restart
 uses explicit advance to reset authority without preparing or sealing again. Readiness never activates a release.
 The final Activate action is separate. Progress, pass identity and decimal counts come from native replies.
@@ -772,6 +774,10 @@ generated KernelClient lack these operations. Bind them to
 `createHostedReleaseActivationTransport` through `HostedReleasePreparationEntry.activation` with current private
 admission/no-store, existing owner/publication reads and anonymous exact-reader admission. No guessed endpoint,
 handwritten Client method or Studio fixture supplies this producer.
+
+Binding preflight reads that handoff, `services/kernel/src/content/hosted-publication-preparation-routes.ts`, generated
+`packages/client/src/kernel/content/hosted-chapters-routes.d.ts`, the activation contract/native transport/entry,
+preparation entry and `apps/web/tests/studio-hosted-release-activation.test.tsx` before choosing the integration.
 
 Deferred acceptance: after integration, run `bun run --cwd apps/web test tests/studio-hosted-release-activation.test.tsx`.
 Focused cases cover explicit checks/activation, pause/restart, same-intent replay, observations versus receipts,
