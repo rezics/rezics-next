@@ -18640,6 +18640,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         createdAt: string;
                                         postRevisionId: string;
                                         postVisibility: "draft" | "protected" | "published";
+                                        title?: string;
                                         headRevisionId: string;
                                         publicationId: string | null;
                                     }[];
@@ -18793,6 +18794,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             createdAt: string;
                                             postRevisionId: string;
                                             postVisibility: "draft" | "protected" | "published";
+                                            title?: string;
                                             headRevisionId: string;
                                             publicationId: string | null;
                                         };

@@ -103,7 +103,9 @@ export type NativeDraftMetadata = Readonly<{
         realmId: string | null;
     };
 }>;
-/** Exact Post identity under ordinary current disclosure, with no revision body selected. */
+/** Exact Post identity under ordinary current disclosure, with no revision body selected.
+ * The bounded opening-Post title shares this retained Thread observation; replies
+ * never inherit the conversation title. This is internal metadata, not a Post DTO. */
 export type NativePostMetadata = Readonly<{
     id: string;
     threadId: string;
@@ -114,6 +116,7 @@ export type NativePostMetadata = Readonly<{
     visibility: Visibility;
     kind: 'discussion' | 'review';
     documentKind: 'opening' | 'reply';
+    title: string | null;
     subjectIds: readonly string[];
 }>;
 export type { Actor };

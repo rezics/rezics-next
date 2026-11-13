@@ -8421,6 +8421,10 @@
                           "threadId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "title": {
+                            "maxLength": 512,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -9520,6 +9524,10 @@
                         },
                         "threadId": {
                           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "title": {
+                          "maxLength": 512,
                           "type": "string"
                         }
                       },

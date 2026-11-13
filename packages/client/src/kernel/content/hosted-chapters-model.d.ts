@@ -93,6 +93,8 @@ export type HostedOwnerInventoryEntry = Readonly<{
     createdAt: string;
     postRevisionId: string;
     postVisibility: 'draft' | 'published' | 'protected';
+    /** At most 512 characters from the retained native opening Post; absent for replies. */
+    title?: string;
     headRevisionId: string;
     publicationId: string | null;
 }>;

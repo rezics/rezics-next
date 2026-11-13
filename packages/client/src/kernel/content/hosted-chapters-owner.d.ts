@@ -37,6 +37,7 @@ export declare function readOwnHostedCatalogue(deps: HostedDependencies, account
             createdAt: string;
             postRevisionId: string;
             postVisibility: 'draft' | 'published' | 'protected';
+            title?: string;
             headRevisionId: string;
             publicationId: string | null;
         }>;

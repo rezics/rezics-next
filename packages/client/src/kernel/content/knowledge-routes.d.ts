@@ -18624,6 +18624,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                     createdAt: string;
                                     postRevisionId: string;
                                     postVisibility: "draft" | "protected" | "published";
+                                    title?: string;
                                     headRevisionId: string;
                                     publicationId: string | null;
                                 }[];
@@ -18777,6 +18778,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                         createdAt: string;
                                         postRevisionId: string;
                                         postVisibility: "draft" | "protected" | "published";
+                                        title?: string;
                                         headRevisionId: string;
                                         publicationId: string | null;
                                     };
