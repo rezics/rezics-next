@@ -3739,6 +3739,10 @@ completion. Live tasks and phases without observed end times retain their existi
 
 ### Original integrated journey proofs
 
+Decision: an authenticated first proof for same-Goal integrated originals with empty acceptance argv may declare one
+direct explicit-file Bun or Kernel/Auth check; authorization stores its exact argv/file list, while nonempty originals
+retain whole-argv and union rules.
+
 Current receiving operations (authenticated owning manager or configured operations manager):
 
 - `WorkerTasks.queueProofStart(taskId, { expectedAttempt, brief?, removeAfter? }, actor)` or
@@ -3766,7 +3770,9 @@ choose critical priority, frozen inputs, product paths, a different target or a 
 
 For example, write `.temp/goal/original-proof.md` with the following front matter and a read-only journey description.
 Replace the example source task and full commit with the retained original and captured integration head, and copy
-that original's acceptance argv exactly (the example presumes that exact original command):
+that original's acceptance argv exactly (the example presumes that exact original command). When every source original
+has an empty acceptance command, the authenticated owner may declare one focused explicit-file command for the first
+native observation:
 
 ```yaml
 ---
@@ -3797,17 +3803,23 @@ ordered deduplicated union of explicit Bun test files or Kernel/Auth `bun run --
 with identical raw prefixes, including cwd/env arguments. Service file lists include every helper before, between and
 after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
 integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
-Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
-the captured Git tree before execution can be granted. Direct registration requires the submitted source to equal
-the current integration head. A declared Goal backlog claim is still only a proposal: its first authenticated
-registration captures the current head under the integration train lease, then binds ancestry, per-command-file
-preflight, authorization and the task worktree to that same commit. The accepted task brief records that capture;
-the original claim remains unchanged in the dispatch archive, and authorization retains its digest, original source
-commit and sourceTasks so interrupted archive recovery can find it once. A registered proof keeps its authorized
-source while that commit remains in integration history, even when other work lands before it starts. The retained
-membership Auth/Kernel original may use exactly two finite explicit service file checks, Auth then Kernel, joined
-with `&&`; each service's files are preflighted from its own working directory. Other shell operators and expansion
-remain outside the accepted command grammar.
+Shortened selections, changed flags and broad root/gate campaigns are refused. When every integrated source original
+has an empty acceptance command, the owner or configured operations manager may declare one direct explicit-file Bun
+test or Kernel/Auth check command for the first native observation. It must include a test or spec file and cannot be
+a workspace-wide check or shell composition. Authorization records its exact argv and files in `sourceOnlyCommand`,
+alongside the source task/commit pairs, manager session, source tree and captured commit. The ordinary explicit-file
+preflight checks those inputs in the captured Git tree. A refresh keeps the declared command and journey while
+capturing the next containing candidate; the integrated source brief and history stay unchanged. Explicit command
+files must exist in the captured Git tree before execution can be granted. Direct registration requires the submitted
+source to equal the current integration head. A declared Goal backlog claim is still only a proposal: its first
+authenticated registration captures the current head under the integration train lease, then binds ancestry,
+per-command-file preflight, authorization and the task worktree to that same commit. The accepted task brief records
+that capture; the original claim remains unchanged in the dispatch archive, and authorization retains its digest,
+original source commit and sourceTasks so interrupted archive recovery can find it once. A registered proof keeps its
+authorized source while that commit remains in integration history, even when other work lands before it starts. The
+retained membership Auth/Kernel original may use exactly two finite explicit service file checks, Auth then Kernel,
+joined with `&&`; each service's files are preflighted from its own working directory. Other shell operators and
+expansion remain outside the accepted command grammar.
 Once proof preparation records `proof-command-ready`, launch and same-session resume check the registered fingerprint
 and exact clean captured HEAD/tree. A result on an earlier snapshot cannot verify the new integration head.
 
