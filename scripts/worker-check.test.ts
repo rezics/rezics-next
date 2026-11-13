@@ -202,7 +202,7 @@ test('an ordinary product attempt refuses a test, native, browser or growth comm
   }
 });
 
-test('Kernel migration filename failures refuse before budget admission and launch', () => {
+test('Kernel migration version and header failures refuse before budget admission and launch', () => {
   const root = mkdtempSync(join(suiteRoot, 'worker-check-kernel-migrations-'));
   dirs.push(root);
   const migrations = join(root, 'services/kernel/db/core/migrations');
@@ -218,7 +218,7 @@ test('Kernel migration filename failures refuse before budget admission and laun
     }),
   );
   const futureMigration = join(migrations, '29991231235959_future.sql');
-  writeFileSync(futureMigration, 'select 1;\n');
+  writeFileSync(futureMigration, '-- migrate:up\nselect 1;\n');
   writeFileSync(join(root, 'tracked.txt'), 'base\n');
   git(root, 'init', '-b', 'worker');
   git(root, 'config', 'user.email', 'worker-check@example.test');
@@ -262,7 +262,23 @@ test('Kernel migration filename failures refuse before budget admission and laun
     expect(existsSync(join(root, '.temp/goal/checks'))).toBe(false);
 
     rmSync(futureMigration);
-    writeFileSync(join(migrations, '20200101000000_valid.sql'), 'select 1;\n');
+    const migration = join(migrations, '20200101000000_valid.sql');
+    writeFileSync(migration, '-- migrate:down\nselect 1;\n');
+    let headerFailure: unknown;
+    try {
+      startWorkerCheck(command, root, (record) => launched.push(record.argv));
+    } catch (error) {
+      headerFailure = error;
+    }
+    expect(headerFailure).toBeInstanceOf(Error);
+    expect((headerFailure as Error).message).toContain(
+      'db/core/migrations/20200101000000_valid.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL',
+    );
+    expect(launched).toEqual([]);
+    expect(existsSync(budget)).toBe(false);
+    expect(existsSync(join(root, '.temp/goal/checks'))).toBe(false);
+
+    writeFileSync(migration, '-- migrate:up transaction:false\nselect 1;\n');
     const id = startWorkerCheck(command, root, (record) => launched.push(record.argv));
     expect(id).toMatch(/^[0-9a-f-]{36}$/i);
     expect(launched).toEqual([command]);

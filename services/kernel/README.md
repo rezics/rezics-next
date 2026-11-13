@@ -622,6 +622,10 @@ directory in version order, so a module migration may merge behind a newer migra
 migration is merged, never rename or edit it. Run `bun run derived schema` to regenerate every committed schema dump
 from a fresh database, or `bun run db dump` to refresh those files from the local development database.
 
+Decision: worker-check reads at most 512 header bytes from each inventoried migration for dbmate's `-- migrate:up`
+marker (including `transaction:false`) before check admission; the bounded local read shifts cost from remote setup,
+and all 653 current migration markers fit within 216 bytes.
+
 Only kernel migrations create PostgreSQL extensions. A module that needs an extension asks the kernel to install it;
 module migrations may use extensions but must not create them.
 
