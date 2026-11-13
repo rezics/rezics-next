@@ -119,16 +119,23 @@ state, owner links, blockers and next actions. Resume only when authorized.
 
 # Delivery ownership
 
-The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns implementation to producers and
-outcomes to resident managers. Producers choose interfaces; outcome owners decide shared choices after one exchange
-with concerned managers. Record the reason and proceed when the supermanager or maintainer is unreachable. Park only
-work that genuinely depends on an unavailable decision.
+The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns delivery to resident managers
+and implementation to workers. The manager owns a continuously workable queue: prioritize outcomes, assign each
+ready worker a clear next result and write boundary, change assignments or width as work and capacity change,
+and replace stalled or spent work promptly. The controller executes admission, retries and landings. It does
+not replace the manager's scheduling judgment.
 
-A manager keeps the ordered list of outcomes for its Goal and short outcome briefs in its backlog, cross-Goal contracts
-and their frozen acceptance, answers to escalations, and a review of a sample of about two landings an hour whose
-defects become briefs. It synthesizes what its workers report into decisions and the next briefs. It does not
-dispatch, approve retries, preflight product briefs, write per-task acceptance, receive results, track custody,
-review evidence per task or send status messages and receipts.
+Workers can find defects, define a repair within the accepted scope, and ask for or propose their next assignment.
+They may continue evidenced work inside their assigned boundary and coordinate before taking another boundary.
+Managers review worker proposals for priority, ownership and overlap; a proposal does not have to originate with a
+manager. When an assignment parks, keep its commits and exact next action and offer independent work to the
+available worker or slot. Review a small sample of delivered work for recurring defects rather than auditing every task.
+
+Managers and workers communicate directly with the owner who can act. Managers settle reversible cross-Goal
+decisions peer to peer: the producer owns its interface and the outcome owner decides shared choices after one
+exchange with affected owners. Proceed and record the decision if a response is late and the choice is reversible.
+Escalate to the supermanager only a cross-Goal impasse, a scope or resource trade-off outside local authority, or a
+fault requiring live control-plane access. Neither reporting lines nor delayed responses should serialize independent work.
 
 Efficiency is measured without model tokens. An hourly report to the project's Telegram group, in Traditional
 Chinese, leads with new product code landed in the last full clock hour under apps, services and packages, excluding
@@ -139,8 +146,9 @@ tasks, and no product landing for 60 minutes. The supermanager acts on alarms. W
 commissions a one-off measurement from session logs and the task store instead of a standing review. Lines are a
 measure, never a goal: quality comes first.
 
-Control-plane owns delivery-tool defects; Performance owns check-host health. Managers keep complete ready briefs
-available for free width. A token-free watchdog [supervises the resident supermanager](supermanager.md).
+The control plane exists to maximize sustained delivery of useful, accepted work per unit of time and allowance.
+Remove orchestration steps that add waiting without improving delivery. Control-plane owns delivery-tool defects;
+Performance owns check-host health. A token-free watchdog [supervises the resident supermanager](supermanager.md).
 
 Runtime release, authenticated authority receiving, physical custody, workflow execution and delivered evidence are
 distinct facts. Source integration and a successful compiler command do not certify native runtime release or consume

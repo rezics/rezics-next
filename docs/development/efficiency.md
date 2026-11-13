@@ -103,17 +103,13 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   the maintainer. It reports the decision afterwards.
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
   one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
-- Decision: manager and worker prompts link here; managers keep the next independent writable slice ready, and workers
-  checkpoint then repair in-scope evidence, parking only blocked checks or dependencies.
-- Give each worker a writable outcome and an owned boundary. Name the failing behaviour, current evidence and the
-  smallest required check. Let the worker choose the repair order and take the next evidenced fix within that
-  boundary; coordinate a new boundary before touching another worker's scope. Checkpoint coherent source and keep
-  the next independent repair ready before the current one parks. While its check runs, admit that repair within
-  existing limits. Return exact failures to their source owner. At review, track writing, ready repairs, admission
-  waits and verification separately; distinguish missing implementation from unintegrated or unverified source.
-- Use the hourly report to detect lost writing time and empty writable queues. The supermanager acts on the
-  largest evidenced loss and checks the next sample without a maintainer prompt. Managers turn defects and
-  [worker proposals](delivery.md#checkout-and-landing-discipline) into ready repairs before raising width.
+- Follow [delivery ownership](delivery.md#delivery-ownership). Keep the next independent assignment ready before
+  the current one parks. Use worker proposals and existing defects to refill; do not wait for the manager to
+  discover every repair personally.
+- Separate coding, ready work, admission waits and verification in the flow report. Return actionable failures to
+  their source owners in batches. When a check parks one slice, admit independent implementations within measured
+  capacity. Only the dependent change waits. The supermanager acts on the largest observed loss without waiting for
+  the maintainer and checks the next comparable sample.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.
@@ -171,8 +167,12 @@ exploration. Use event-driven waits and fresh continuations rather than polling 
 Apply the [brief preflight](delivery.md#brief-preflight) before spending an attempt. Keep independent and overlapping
 work moving under the delivery dependency rules; remove artificial dependencies. Avoid restarting unchanged work or repeating checks without new evidence.
 
-Set concurrency from measured worker memory, check capacity, queueing and journey throughput. Worker and heavy-check
-admission are separate controls. More workers are useful only when journey throughput justifies their cost.
+Set implementation width from runnable outcomes, writing progress, observed worker memory and accepted delivery.
+Raise or lower it as those conditions change. Running experiments or checks are a separate load: admit and measure
+them separately, and use the configured a/b check hosts for heavy verification. Concentrate the
+[minimum worker checks](verification.md#check-selection-and-failures) at the end of each coherent source batch.
+Run broader tests against a pinned revision in the verifier, report failures together, and keep unrelated
+implementation moving while results are pending.
 
 Keep routing policy in tracked configuration and private allowance settings locally. Compare profiles on representative
 accepted work before changing defaults.
