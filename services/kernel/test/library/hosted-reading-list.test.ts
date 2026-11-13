@@ -182,8 +182,14 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const ownerId = f.native.system.actors.other.actor.accountId;
   const ownerRoute = routeOf(ownerId)!;
   const catalogueRoute = routeOf(f.catalogueId)!;
-  const subjectOne = await subjectOnRoute(catalogueRoute);
-  const subjectTwo = await f.subjectOutsidePartition(partitionOf(catalogueRoute));
+  const subjectRoutes = [ownerRoute, ownerRoute ^ 0x10, ownerRoute ^ 0x20, ownerRoute ^ 0x30];
+  const subjectOne = await subjectOnRoute(subjectRoutes[0]!);
+  const subjectTwo = await subjectOnRoute(subjectRoutes[1]!);
+  const subjectThree = await subjectOnRoute(subjectRoutes[2]!);
+  const subjectFour = await subjectOnRoute(subjectRoutes[3]!);
+  const subjects = [subjectOne, subjectTwo, subjectThree, subjectFour];
+  expect(subjects.map((subjectId) => routeOf(subjectId))).toEqual(subjectRoutes);
+  expect(new Set(subjects.map((subjectId) => partitionOf(routeOf(subjectId)!))).size).toBe(subjects.length);
   const catalogueState = await f.native.state(f.catalogueId);
   const associationRevision = await f.native.revise(
     {
@@ -191,7 +197,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
       revisionId: String(catalogueState.head_revision_id),
       visibility: 'published',
     },
-    { subjectIds: [subjectOne, subjectTwo] },
+    { subjectIds: subjects },
   );
   expect(associationRevision.status, JSON.stringify(associationRevision.value)).toBe(200);
   const saveOne = {
@@ -220,7 +226,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const directAssociationProjection = await f.native.pool.query(
     `SELECT 1 FROM content.subject_thread
      WHERE route=$1 AND subject_id=$2 AND thread_route=$3 AND thread_id=$4`,
-    [catalogueRoute, subjectOne, catalogueRoute, f.threadId],
+    [routeOf(subjectOne), subjectOne, catalogueRoute, f.threadId],
   );
   expect(directAssociationProjection.rows).toHaveLength(0);
   await f.projectSubjectThread(f.threadId);
@@ -235,6 +241,18 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     key: 'hosted-reading-save-two',
   });
   expect(savedTwo.status, JSON.stringify(savedTwo.value)).toBe(200);
+  const saveThree = { ...saveOne, subjectId: subjectThree };
+  const savedThree = await f.native.call('PUT', '/v1/libraryHostedReading', saveThree, {
+    other: true,
+    key: 'hosted-reading-save-three',
+  });
+  expect(savedThree.status, JSON.stringify(savedThree.value)).toBe(200);
+  const saveFour = { ...saveTwo, subjectId: subjectFour };
+  const savedFour = await f.native.call('PUT', '/v1/libraryHostedReading', saveFour, {
+    other: true,
+    key: 'hosted-reading-save-four',
+  });
+  expect(savedFour.status, JSON.stringify(savedFour.value)).toBe(200);
   restorePositionProjection = projectHostedReadingPosition(firstOccurrence, 512);
 
   const readingPort = watchHostedReadingPort();
@@ -300,7 +318,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     expect(firstPage.status).toBe(200);
     expect(firstPage.value.items).toHaveLength(1);
     expect(firstPage.value.items[0]).toMatchObject({
-      subjectId: subjectTwo,
+      subjectId: subjectFour,
       revision: '1',
       address: {
         catalogueId: f.catalogueId,
@@ -316,16 +334,16 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
       },
     });
     expect(firstPage.value.nextCursor).toEqual(expect.any(String));
-    const nextPage = await f.native.call(
+    const secondPage = await f.native.call(
       'GET',
       `/v1/libraryHostedReading/checkpoints?limit=1&cursor=${encodeURIComponent(firstPage.value.nextCursor)}`,
       undefined,
       { other: true },
     );
-    expect(nextPage.status).toBe(200);
-    expect(nextPage.value.items.map((item: { subjectId: string }) => item.subjectId)).toEqual([subjectOne]);
-    expect(nextPage.value.items[0]).toMatchObject({
-      subjectId: subjectOne,
+    expect(secondPage.status).toBe(200);
+    expect(secondPage.value.items.map((item: { subjectId: string }) => item.subjectId)).toEqual([subjectThree]);
+    expect(secondPage.value.items[0]).toMatchObject({
+      subjectId: subjectThree,
       address: {
         catalogueId: f.catalogueId,
         publicationRevisionId: publication.value.revisionId,
@@ -335,7 +353,58 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
       },
       metadata: { availability: 'available', position: 512, title: 'First chapter', target: firstTarget },
     });
+    expect(secondPage.value.nextCursor).toEqual(expect.any(String));
+    const thirdPage = await f.native.call(
+      'GET',
+      `/v1/libraryHostedReading/checkpoints?limit=1&cursor=${encodeURIComponent(secondPage.value.nextCursor)}`,
+      undefined,
+      { other: true },
+    );
+    expect(thirdPage.status).toBe(200);
+    expect(thirdPage.value.items.map((item: { subjectId: string }) => item.subjectId)).toEqual([subjectTwo]);
+    expect(thirdPage.value.nextCursor).toEqual(expect.any(String));
+    const fourthPage = await f.native.call(
+      'GET',
+      `/v1/libraryHostedReading/checkpoints?limit=1&cursor=${encodeURIComponent(thirdPage.value.nextCursor)}`,
+      undefined,
+      { other: true },
+    );
+    expect(fourthPage.status).toBe(200);
+    expect(fourthPage.value.items.map((item: { subjectId: string }) => item.subjectId)).toEqual([subjectOne]);
+    const pages = [firstPage, secondPage, thirdPage, fourthPage];
+    expect(pages.flatMap((page) => page.value.items.map((item: { subjectId: string }) => item.subjectId))).toEqual([
+      subjectFour,
+      subjectThree,
+      subjectTwo,
+      subjectOne,
+    ]);
+    expect(
+      new Set(pages.flatMap((page) => page.value.items.map((item: { subjectId: string }) => item.subjectId))).size,
+    ).toBe(subjects.length);
+    expect(fourthPage.value.nextCursor).toBeNull();
+    const laterPageSubjectId = fourthPage.value.items[0].subjectId;
+    const laterPageAddress = fourthPage.value.items[0].address;
+    expect(laterPageAddress).toEqual(savedOne.value.address);
     expect(bodyReads.count()).toBe(0);
+    const opened = await f.native.call('GET', `/v1/libraryHostedReading?subjectId=${laterPageSubjectId}`, undefined, {
+      other: true,
+    });
+    expect(opened.status).toBe(200);
+    const exactBytes = Buffer.from(serializeDocument(firstDocument), 'utf8');
+    expect(opened.value).toMatchObject({
+      state: 'saved',
+      address: laterPageAddress,
+      resume: {
+        availability: 'available',
+        position: 512,
+        target: firstTarget,
+        document: {
+          canonicalBytes: exactBytes.toString('base64'),
+          sha256: createHash('sha256').update(exactBytes).digest('hex'),
+        },
+      },
+    });
+    expect(bodyReads.count()).toBeGreaterThan(0);
     expect(
       (
         await f.native.call(
@@ -554,6 +623,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
       },
       metadata: { availability: 'available', position: 512, title: 'First chapter', target: firstTarget },
     });
+    expect(historical.address).toEqual(currentWrite.value.address);
     expect(current.value.items.find((item: { subjectId: string }) => item.subjectId === subjectTwo)).toMatchObject({
       subjectId: subjectTwo,
       address: { occurrenceId: secondOccurrence, targetRevisionId: secondTarget.revisionId },
@@ -591,6 +661,20 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     { other: true, key: crypto.randomUUID() },
   );
   expect(cleared.status).toBe(200);
+  const clearedThree = await f.native.call(
+    'POST',
+    '/v1/libraryHostedReading/$clear',
+    { subjectId: subjectThree, expectedRevision: savedThree.value.revision },
+    { other: true, key: crypto.randomUUID() },
+  );
+  expect(clearedThree.status).toBe(200);
+  const clearedFour = await f.native.call(
+    'POST',
+    '/v1/libraryHostedReading/$clear',
+    { subjectId: subjectFour, expectedRevision: savedFour.value.revision },
+    { other: true, key: crypto.randomUUID() },
+  );
+  expect(clearedFour.status).toBe(200);
   const afterClear = await f.native.call('GET', '/v1/libraryHostedReading/checkpoints', undefined, { other: true });
   expect(afterClear.value.items.map((item: { subjectId: string }) => item.subjectId)).toEqual([subjectOne]);
 
