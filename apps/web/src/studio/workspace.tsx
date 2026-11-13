@@ -20,6 +20,8 @@ import {
   type HostedBookStartState,
 } from './hosted-book-start';
 import { HostedBookStartAction } from './hosted-book-start-action';
+import { HostedReleaseReaderLink } from './hosted-release-reader-link-action';
+import type { HostedReleaseReaderBinding } from './hosted-release-reader-link';
 import './studio.css';
 
 const noBookStart: HostedBookStartState = { kind: 'idle' };
@@ -31,6 +33,7 @@ export type StudioWorkspaceProps = {
   port: StudioPort;
   bookPort?: BookOrganizerPort;
   bookHistory?: HostedHistoryBinding;
+  hostedReleaseReader?: HostedReleaseReaderBinding;
   /** Only the account-draft route supplies this capability; other document workspaces cannot start Books. */
   bookStart?: HostedBookStartBinding;
   presentation?: StudioPresentation;
@@ -49,6 +52,7 @@ function StudioVisit({
   port,
   bookPort,
   bookHistory,
+  hostedReleaseReader,
   bookStart,
   presentation = {},
   onDepartureRiskChange,
@@ -407,6 +411,7 @@ function StudioVisit({
             </section>
           )}
           <StudioPublication controller={controller} state={state} />
+          {hostedReleaseReader ? <HostedReleaseReaderLink binding={hostedReleaseReader} /> : null}
         </div>
         <aside className="studio-sidebar" aria-label="Workspace navigation">
           <details

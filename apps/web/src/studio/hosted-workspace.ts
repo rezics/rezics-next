@@ -12,6 +12,7 @@ import { HostedBookAdapter } from './hosted-adapter';
 import { hostedFailure } from './hosted-native';
 import { bookTocIndex } from './book-toc';
 import { hostedBookStructure } from './hosted-structure';
+import { HostedReleaseReaderLinkProjection, type HostedReleaseReaderAdmission } from './hosted-release-reader-link';
 
 /** These are the shared draft/document lifecycle operations, not a second authoring store. */
 export type StudioDocumentPort = Pick<
@@ -20,7 +21,7 @@ export type StudioDocumentPort = Pick<
 >;
 export type HostedStudioInput = Omit<StudioInput, 'profile' | 'canPublish' | 'publicationUnavailableReason'>;
 export type HostedStudioBinding = Readonly<{
-  workspace: Pick<StudioWorkspaceProps, 'input' | 'port' | 'bookPort' | 'bookHistory'>;
+  workspace: Pick<StudioWorkspaceProps, 'input' | 'port' | 'bookPort' | 'bookHistory' | 'hostedReleaseReader'>;
   book: HostedBookAdapter;
 }>;
 
@@ -119,6 +120,8 @@ export async function openHostedStudio(
     isCurrent: () => boolean;
     native?: HostedBookNative;
     owner?: HostedOwnedBook;
+    /** Defaults to the anonymous native catalogue metadata reader, never the owner-only reader. */
+    admitPublicRelease?: HostedReleaseReaderAdmission;
   },
   signal: AbortSignal,
 ): Promise<StudioResult<HostedStudioBinding>> {
@@ -126,6 +129,11 @@ export async function openHostedStudio(
   const native = options.native ?? (await import('./hosted-actions')).hostedBookNative;
   const current = () => options.isCurrent() && documents.isCurrent();
   const ended = () => hostedFailure('denied', 'This Studio visit has ended.');
+  const releaseReader = new HostedReleaseReaderLinkProjection(options.catalogueId, current, async (address, signal) =>
+    options.admitPublicRelease
+      ? options.admitPublicRelease(address, signal)
+      : (await import('./hosted-release-reader-link-public')).admitPublicHostedRelease(address, signal),
+  );
   if (!current() || signal.aborted) return ended();
   const owner = await native.readOwn(options.accountId, options.catalogueId, signal, options.owner?.viewer);
   if (!current() || signal.aborted) return ended();
@@ -165,6 +173,9 @@ export async function openHostedStudio(
   )
     return hostedFailure('stale', 'The book changed while it was opening. Reopen the book.');
 
+  await releaseReader.confirm(confirmed.value.item, currentPublication, signal);
+  if (!current() || signal.aborted) return ended();
+
   async function documentOperation<T>(
     projectId: string,
     requestSignal: AbortSignal,
@@ -197,12 +208,15 @@ export async function openHostedStudio(
         return hostedFailure('denied', 'This Studio visit has ended.');
       const structure = book.currentStructure();
       if (!structure) return hostedFailure('stale', 'Reload the book structure before reviewing publication.');
+      releaseReader.clear();
       const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal, viewer);
       if (!current() || requestSignal.aborted) return ended();
       if (!freshOwner.ok) return freshOwner;
       if (freshOwner.value.item.headRevisionId !== structure.revision)
         return hostedFailure('stale', 'The book changed. Reload the structure before reviewing publication.');
       publicationId = freshOwner.value.item.publicationId;
+      await releaseReader.confirm(freshOwner.value.item, currentPublication, requestSignal);
+      if (!current() || requestSignal.aborted) return ended();
       const review = reviewFor(structure, request.target, publicationId);
       return review
         ? { ok: true, value: review }
@@ -213,6 +227,7 @@ export async function openHostedStudio(
       const structure = book.currentStructure();
       if (!structure || request.catalogueId !== options.catalogueId || request.structureRevision !== structure.revision)
         return hostedFailure('stale', 'Reload the current book before reviewing withdrawal.');
+      releaseReader.clear();
       const freshOwner = await native.readOwn(options.accountId, options.catalogueId, requestSignal, viewer);
       if (!current() || requestSignal.aborted) return ended();
       if (!freshOwner.ok) return freshOwner;
@@ -230,6 +245,8 @@ export async function openHostedStudio(
       if (release.value.placements.length === 0)
         return hostedFailure('stale', 'This book is already withdrawn. Reopen it to read its current release.');
       publicationId = item.publicationId;
+      await releaseReader.confirm(item, publicationRecord(publicationId, release.value), requestSignal);
+      if (!current() || requestSignal.aborted) return ended();
       return {
         ok: true,
         value: {
@@ -273,6 +290,7 @@ export async function openHostedStudio(
       )
         return hostedFailure('invalid', 'Use the explicit withdrawal review to remove the current publication.');
       pendingPublication = { key: request.idempotencyKey, reviewId: review.reviewId };
+      releaseReader.clear();
       const result = await book.publish(
         {
           target: review.target,
@@ -330,6 +348,8 @@ export async function openHostedStudio(
         })
       )
         return hostedFailure('uncertain', 'The published snapshot did not match the reviewed chapter selection.');
+      await releaseReader.confirm(freshOwner.value.item, record, requestSignal);
+      if (!current() || requestSignal.aborted) return ended();
       publicationId = nextPublicationId;
       currentPublication = record;
       pendingPublication = null;
@@ -355,6 +375,7 @@ export async function openHostedStudio(
         port,
         bookPort: book,
         bookHistory: { native, accountId: options.accountId, catalogueId: options.catalogueId, isCurrent: current },
+        hostedReleaseReader: releaseReader,
       },
     },
   };

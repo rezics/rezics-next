@@ -11,16 +11,21 @@ export function HostedBookReaderLink({
   releaseRevisionId,
   locale = getLocale(),
   children,
+  target,
 }: {
   catalogueId: string;
   subjectId?: string;
   releaseRevisionId?: string;
   locale?: Locale;
   children?: ReactNode;
+  /** Studio keeps its private working document mounted while opening the public reader. */
+  target?: '_blank';
 }) {
   return (
     <a
       href={hostedBookHref(catalogueId, locale, { release: releaseRevisionId, subject: subjectId })}
+      target={target}
+      rel={target === '_blank' ? 'noopener' : undefined}
       className={buttonVariants({ variant: 'outline', className: 'min-h-11 min-w-11 whitespace-normal text-start' })}
     >
       {children ?? m.book_reader_contents({}, { locale })}

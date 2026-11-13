@@ -10575,6 +10575,7 @@
   "story_arc_title": "Editor de arcos narrativos",
   "story_arc_work": "Obra y orden del arco",
   "story_arc_work_help": "Selecciona la obra que realmente contiene este arco. Su relación de arcos guarda el destino, la posición y las pruebas de la primera y última parte. Crear el arco no crea esta relación.",
+  "studio_hosted_view_published_book": "Ver el libro publicado",
   "studio_account_board": "ID del tablero de destino",
   "studio_account_body": "Texto inicial",
   "studio_account_confirm": "Revisé esta versión guardada exacta y quiero publicarla.",

@@ -10575,6 +10575,7 @@
   "story_arc_title": "Éditeur d’arcs narratifs",
   "story_arc_work": "Œuvre et ordre de l’arc",
   "story_arc_work_help": "Sélectionnez l’œuvre qui contient réellement cet arc. Sa relation d’arcs conserve la cible, la position et les preuves des première et dernière parties. Créer l’arc ne crée pas cette relation.",
+  "studio_hosted_view_published_book": "Voir le livre publié",
   "studio_account_board": "ID du forum de destination",
   "studio_account_body": "Texte d’ouverture",
   "studio_account_confirm": "J’ai vérifié exactement cette révision enregistrée et je souhaite la publier.",

@@ -112,6 +112,7 @@ async function fixture(visibility: 'draft' | 'published' = 'published', initial:
       catalogueId,
       accountId: catalogueId,
       native,
+      admitPublicRelease: async () => true,
       documents,
       isCurrent: () => current,
       resolveTarget: async () => failure('unavailable'),

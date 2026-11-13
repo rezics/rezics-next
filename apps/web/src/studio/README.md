@@ -396,3 +396,34 @@ Start a Book → Book Studio path, retained retry, existing Book reopen, stale v
 placement. Source fixtures do not claim native/browser proof. Existing assertions remain unchanged. Source validation
 formats changed files and runs one affected Web typecheck; ordinary acceptance, native/browser, root and growth
 suites remain deferred.
+
+## Open the published Book
+
+Decision: a dedicated action beside the publication panel uses the shared localized `HostedBookReaderLink` and
+pins the current confirmed nonempty release in `release`. It never selects the draft or an implicit latest release.
+The owner-only read is insufficient: the catalogue Post must be published and one anonymous native catalogue
+metadata read must admit that exact publication. This read uses the existing generated operation without author
+credentials, chapter bodies, outline hydration or per-entry requests. The destination performs normal current
+reader admission again. Private/protected catalogues, denied/unavailable public reads, draft-only Books and empty
+withdrawal manifests have no action.
+
+The action is a visit-local projection bound by `hosted-workspace.ts`. Fresh owner observations reconfirm or remove
+it; starting a publication command clears it. Only the verified release and matching owner pointer can restore it,
+including recovery with the original idempotency key. Failed/uncertain commands and session retirement cannot
+leave a stale action. The optional workspace binding occupies one slot after `StudioPublication`; the publication
+panel, draft picker and history retain their owners. Following the link uses the existing reader and changes no
+Studio draft, working document or chapter selection: it opens a new tab with `noopener`, leaving Studio mounted.
+The shared link's optional new-tab target retains its default navigation elsewhere and supplies the existing
+localized new-tab hint here.
+
+Sources read before design: this owner document, [Web acceptance](../../../../docs/goals/web.md#acceptance),
+`hosted-workspace.ts`, `hosted-adapter.ts` confirmation/readback, `controller.ts`, `contract.ts`, the mounted workspace
+and route callers, `books/reader/link.tsx`, its address/native API contracts, and Content's
+[hosted reading contract](../../../../services/kernel/src/content/hosted-chapters.md#reading).
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-release-reader-link.test.tsx
+ src/studio/publication-withdrawal.test.tsx`. The focused fixture pins the real-shaped exact localized href, a single
+anonymous metadata request, private/public refusal, draft-only and withdrawn states, replacement/recovery, unchanged
+selection and structure, and session retirement during admission. The withdrawal fixture supplies the new public
+admission dependency with existing assertions unchanged. Source verification uses changed-file formatting and one
+affected Web typecheck after commit; ordinary acceptance, native, browser, Storybook and broader checks are deferred.

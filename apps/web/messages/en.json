@@ -10575,6 +10575,7 @@
   "story_arc_title": "Narrative story-arc editor",
   "story_arc_work": "Work and arc order",
   "story_arc_work_help": "Select the actual work that carries this arc. Its Story arcs relation stores the arc target, position and first/last part evidence. Creating an arc does not create this relation.",
+  "studio_hosted_view_published_book": "View published Book",
   "studio_account_board": "Destination board ID",
   "studio_account_body": "Opening text",
   "studio_account_confirm": "I have reviewed this exact saved revision and want to publish it.",
