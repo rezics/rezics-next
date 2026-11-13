@@ -114,6 +114,7 @@ import {
   readJsonFile,
   writeAtomicJson,
   type CheckRemoteAttempt,
+  type CheckRemotePhysicalCleanup,
   type CheckRemoteRunCustody,
 } from './check-custody.ts';
 
@@ -398,17 +399,7 @@ export type RemoteReturnManifest = {
   failures: string[];
 };
 
-export type RemoteCleanupReceipt = {
-  schema: 1;
-  host: string;
-  run: string;
-  status: 'verified' | 'unknown';
-  supervisorStopped: boolean;
-  commandGroupTerminal: boolean;
-  containersRemoved: boolean;
-  runDirectoryRemoved: boolean;
-  failures: string[];
-};
+export type RemoteCleanupReceipt = CheckRemotePhysicalCleanup;
 
 export type RemoteCheckSettlement = {
   schema: 1;
@@ -7854,6 +7845,8 @@ export async function reconcileRemoteRun(
     returns?: string[];
     expectedSourceSha256?: string;
     allowedHosts?: string[];
+    /** Stop and clean only this exact run, without receiving native results or declared outputs. */
+    cleanupOnly?: boolean;
     transferTimeoutMs?: number;
     controlProbeTimeoutMs?: number;
   },
@@ -7870,6 +7863,7 @@ async function reconcileRemoteRunOwned(
     returns?: string[];
     expectedSourceSha256?: string;
     allowedHosts?: string[];
+    cleanupOnly?: boolean;
     transferTimeoutMs?: number;
     controlProbeTimeoutMs?: number;
   },
@@ -7893,6 +7887,34 @@ async function reconcileRemoteRunOwned(
     prepared.connectionId,
     options.controlProbeTimeoutMs ?? DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   );
+  if (options.cleanupOnly) {
+    let cleanup: RemoteCleanupReceipt;
+    try {
+      cleanup = await cleanupPreparedRun(prepared);
+    } catch (error) {
+      cleanup = {
+        schema: 1,
+        host: hostName,
+        run: runId,
+        status: 'unknown',
+        supervisorStopped: false,
+        commandGroupTerminal: false,
+        containersRemoved: false,
+        runDirectoryRemoved: false,
+        failures: [error instanceof Error ? error.message.slice(0, 512) : 'cleanup-only reconciliation failed'],
+      };
+    }
+    return {
+      schema: 1,
+      host: hostName,
+      run: runId,
+      native: null,
+      preparedInputs: null,
+      returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
+      cleanup,
+      transportChildReaped: true,
+    };
+  }
   const reader = String.raw`import json
 from pathlib import Path
 root=Path(${JSON.stringify(`${ROOT}/receipts/${runId}`)})

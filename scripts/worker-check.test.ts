@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
@@ -25,12 +25,14 @@ import {
   processTreeCpuTicks,
   readWorkerCheckHistory,
   readWorkerCheckCleanupHistory,
+  readWorkerCheckCleanupReceipt,
   readWorkerCheckRecord,
   runWorkerCheck,
   resolveRepositoryBun,
   scopeRootTypecheck,
   startWorkerCheck,
   startControllerWorkerCheck,
+  cancelWorkerCheck,
   controllerProofExecutionArgv,
   stopWorkerCheck,
   waitWorkerCheck,
@@ -1324,6 +1326,150 @@ test('durable cancellation preceding a transport exit prevents local fallback an
     restoreWorkerEnvironment(old);
   }
 });
+
+test.each([false, true])(
+  'retired cancelled remote runner records only exact physical cleanup when native result is absent (mismatch: %s)',
+  async (mismatch) => {
+    const fixture = workerFixture();
+    const lost = await writeLostRemoteCheck(fixture.root, 'pending');
+    const hostsFile = writeHosts(fixture);
+    const remoteRun = randomUUID();
+    const custodyFile = remoteRunCustodyPath(fixture.root, lost.physicalRunId);
+    const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+      binding: Record<string, unknown>;
+      attempts: Array<Record<string, unknown>>;
+    };
+    custody.binding = { ...custody.binding, hostsFile, returns: [] };
+    custody.attempts = [{ host: 'check-a', id: remoteRun, status: 'running', startedAt: new Date().toISOString() }];
+    writeAtomicJson(custodyFile, { ...custody, status: 'running', updatedAt: new Date().toISOString() });
+
+    const resultPath = join(fixture.root, '.temp/goal/checks/results', `${lost.id}.json`);
+    const recordBytes = readFileSync(resultPath);
+    const record = JSON.parse(recordBytes.toString('utf8')) as {
+      argv: string[];
+      ownership: { taskId: string; attempt: number };
+    };
+    const rootReceipt = join(suiteRoot, `root-cancel-${randomUUID()}.json`);
+    const rootReceiptBytes = Buffer.from(
+      JSON.stringify({
+        records: [
+          { id: lost.id, taskId: record.ownership.taskId, attempt: record.ownership.attempt, argv: record.argv },
+        ],
+      }),
+    );
+    writeFileSync(rootReceipt, rootReceiptBytes);
+    expect(
+      (
+        await cancelWorkerCheck(
+          {
+            version: 1,
+            issuer: 'rezics-root',
+            checkId: lost.id,
+            ownership: record.ownership,
+            expectedRecordPath: resultPath,
+            expectedRecordSha256: createHash('sha256').update(recordBytes).digest('hex'),
+            expectedArgv: record.argv,
+            receiptReference: rootReceipt,
+            receiptSha256: createHash('sha256').update(rootReceiptBytes).digest('hex'),
+          },
+          fixture.root,
+        )
+      ).disposition,
+    ).toBe('logically-cancelled-physical-cleanup-unknown');
+    requestWorkerCheckCancellation(lost.id, fixture.root);
+
+    const cleanup = {
+      schema: 1 as const,
+      host: 'check-a',
+      run: mismatch ? randomUUID() : remoteRun,
+      status: 'verified' as const,
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    };
+    const transportCalls: unknown[] = [];
+    const output: string[] = [];
+    const remoteReconcile = async (request: { physical: { host: string; run: string } }) => {
+      transportCalls.push(request);
+      return {
+        schema: 1 as const,
+        host: 'check-a',
+        run: mismatch ? randomUUID() : remoteRun,
+        native: null,
+        preparedInputs: null,
+        returns: { schema: 1 as const, status: 'empty' as const, entries: [], missing: [], failures: [] },
+        cleanup,
+        transportChildReaped: true,
+      } satisfies RemoteCheckSettlement;
+    };
+    expect(
+      await waitWorkerCheck(lost.id, fixture.root, 100, {
+        write: (line) => output.push(line),
+        remoteReconcile,
+      }),
+    ).toBe(143);
+    expect(transportCalls).toHaveLength(1);
+    expect(transportCalls[0]).toMatchObject({
+      physical: { host: 'check-a', run: remoteRun },
+      returns: [],
+      allowedHosts: ['check-a'],
+      cleanupOnly: true,
+    });
+
+    const current = readWorkerCheckRecord(lost.id, fixture.root);
+    expect(current).toMatchObject({ status: 'running', physicalRunId: lost.physicalRunId });
+    expect(current.exitCode).toBeUndefined();
+    const remoteCustody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+      status: string;
+      attempts: Array<Record<string, unknown>>;
+    };
+    const receipt = readWorkerCheckCleanupReceipt(lost.id, lost.physicalRunId, fixture.root);
+    if (mismatch) {
+      expect(remoteCustody.status).toBe('running');
+      expect(remoteCustody.attempts[0]?.physicalCleanup).toBeUndefined();
+      expect(receipt?.physicalCleanup).toBeUndefined();
+      expect(output.join('')).not.toContain('remote physical cleanup is verified');
+      return;
+    }
+
+    expect(remoteCustody).toMatchObject({
+      status: 'terminal',
+      attempts: [{ status: 'terminal', physicalCleanup: cleanup }],
+    });
+    expect(remoteCustody.attempts[0]?.nativeReference).toBeUndefined();
+    expect(remoteCustody.attempts[0]?.settlementReference).toBeUndefined();
+    expect(receipt).toMatchObject({
+      disposition: 'uncertain',
+      localTerminal: true,
+      remoteTerminal: true,
+      resultTerminal: false,
+      physicalCleanup: cleanup,
+    });
+    expect(readWorkerCheckHistory(lost.id, lost.physicalRunId, fixture.root)?.terminalProof).toMatchObject({
+      local: true,
+      remote: true,
+      resultKnown: false,
+    });
+    expect(output.join('')).toContain('compiler result remains unavailable');
+    expect(await waitWorkerCheck(lost.id, fixture.root, 100, { remoteReconcile, write: () => {} })).toBe(143);
+    expect(
+      await stopWorkerCheck(
+        lost.id,
+        fixture.root,
+        {
+          ownership: record.ownership,
+          physicalRunId: lost.physicalRunId,
+          runnerHost: hostname(),
+          runnerIdentity: lost.runnerIdentity,
+        },
+        { remoteReconcile },
+      ),
+    ).toEqual(receipt);
+    expect(transportCalls).toHaveLength(1);
+  },
+);
 
 test('local cancellation reaps its TERM-resistant detached descendants before returning capacity and preserves a peer', async () => {
   const fixture = workerFixture();

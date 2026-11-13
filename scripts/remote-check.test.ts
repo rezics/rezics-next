@@ -60,6 +60,7 @@ import {
   landingMarkerScript,
   returnsProbe,
   readHosts,
+  reconcileRemoteRun,
   runScript,
   statusScript,
   repositoryBun,
@@ -1977,6 +1978,59 @@ function workspace(tmpfs = false): string {
   linkRepositoryBun(directory);
   return directory;
 }
+
+test('cleanup-only reconciliation removes one exact run without a native receipt or output probe', async () => {
+  const fixture = scenario({ a: {} });
+  const previous = {
+    PATH: process.env.PATH,
+    FAKE_DIR: process.env.FAKE_DIR,
+    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+    KERNEL_CHECK_REMOTE: process.env.KERNEL_CHECK_REMOTE,
+  };
+  Object.assign(process.env, {
+    PATH: fixture.env.PATH,
+    FAKE_DIR: fixture.env.FAKE_DIR,
+    XDG_RUNTIME_DIR: fixture.env.XDG_RUNTIME_DIR,
+    KERNEL_CHECK_REMOTE: fixture.env.KERNEL_CHECK_REMOTE,
+  });
+  const physical = { host: 'a', run: randomUUID() };
+  try {
+    const settlement = await reconcileRemoteRun({
+      hosts: readHosts(fixture.env.KERNEL_CHECK_REMOTE!),
+      physical,
+      workspace: root,
+      returns: [],
+      allowedHosts: ['a'],
+      cleanupOnly: true,
+    });
+    expect(settlement).toMatchObject({
+      host: physical.host,
+      run: physical.run,
+      native: null,
+      returns: { status: 'empty', entries: [], missing: [], failures: [] },
+      cleanup: {
+        status: 'verified',
+        host: physical.host,
+        run: physical.run,
+        supervisorStopped: true,
+        commandGroupTerminal: true,
+        containersRemoved: true,
+        runDirectoryRemoved: true,
+        failures: [],
+      },
+      transportChildReaped: true,
+    });
+    const events = fixture.events();
+    expect(events.some((event) => event.kind === 'cleanup')).toBe(true);
+    expect(events.some((event) => event.kind === 'status')).toBe(false);
+    expect(events.some((event) => event.kind === 'returns')).toBe(false);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 
 async function remote(
   environment: Record<string, string>,

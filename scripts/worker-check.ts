@@ -112,6 +112,7 @@ import {
   type CheckCustodyExpectation,
   type CheckOwnership,
   type CheckRegistration,
+  type CheckRemotePhysicalCleanup,
   type CheckRemoteRunCustody,
   type CheckRemoteEvidenceReference,
   type CheckRemoteEvidenceIdentity,
@@ -124,6 +125,7 @@ export type {
   CheckCleanupReceipt,
   CheckCustodyExpectation,
   CheckOwnership,
+  CheckRemotePhysicalCleanup,
   CheckRemoteAttempt,
   CheckRemoteObservation,
   CheckRemoteRunCustody,
@@ -341,6 +343,8 @@ type CheckMonitor = {
   pollMs?: number;
   rerunStallMs?: number;
   write?: (text: string) => void;
+  /** Narrow transport seam for deterministic cleanup recovery tests; production callers omit it. */
+  remoteReconcile?: typeof reconcileRemoteRun;
 };
 
 /** Sum Linux process CPU ticks for a command and all descendants, or return undefined when procfs is unavailable. */
@@ -2786,6 +2790,250 @@ function matchingRemoteCustody(
   );
 }
 
+type CancelledRemoteCleanupTarget = {
+  custodyFile: string;
+  custody: CheckRemoteRunCustody;
+  physical: CheckPhysicalRecord;
+  attempt: CheckRemoteRunCustody['attempts'][number];
+};
+
+function exactWorkerCheckCancellation(record: CheckRecord, root: string, id: string): boolean {
+  const logical = checkCancelled(root, id);
+  if (logical) {
+    return Boolean(
+      logical.version === 1 &&
+      logical.checkId === id &&
+      logical.disposition === 'logically-cancelled-physical-cleanup-unknown' &&
+      logical.physicalRunId === record.physicalRunId &&
+      sameOwnership(logical.ownership, record.ownership),
+    );
+  }
+  return executionCancellation(workerCheckCancellation(id, root)) !== null;
+}
+
+function verifiedPhysicalCleanup(value: unknown, host: string, run: string): value is CheckRemotePhysicalCleanup {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const cleanup = value as Partial<CheckRemotePhysicalCleanup>;
+  return Boolean(
+    cleanup.schema === 1 &&
+    cleanup.host === host &&
+    cleanup.run === run &&
+    cleanup.status === 'verified' &&
+    cleanup.supervisorStopped === true &&
+    cleanup.commandGroupTerminal === true &&
+    cleanup.containersRemoved === true &&
+    cleanup.runDirectoryRemoved === true &&
+    Array.isArray(cleanup.failures) &&
+    cleanup.failures.length === 0,
+  );
+}
+
+function cancelledRemoteCleanupTarget(
+  record: CheckRecord,
+  root: string,
+  id: string,
+): CancelledRemoteCleanupTarget | undefined {
+  if (
+    !record.ownership ||
+    !record.physicalRunId ||
+    record.status !== 'running' ||
+    record.exitCode !== undefined ||
+    record.physicalRun !== undefined ||
+    record.physicalRunReference !== undefined ||
+    record.controllerProof ||
+    !record.runnerIdentity ||
+    record.runnerHost !== hostname() ||
+    !exactWorkerCheckCancellation(record, root, id) ||
+    sameProcess(record.runnerIdentity) ||
+    !detachedGroupTerminal(record.runnerIdentity)
+  )
+    return undefined;
+
+  const physical = readPhysicalRecord(root, id, record.physicalRunId);
+  const custodyFile = remoteRunCustodyPath(root, record.physicalRunId);
+  const custody = readJsonFile<CheckRemoteRunCustody>(custodyFile);
+  if (
+    !physical ||
+    (physical.status !== 'running' && physical.status !== 'unknown') ||
+    physical.exitCode !== undefined ||
+    !physical.remoteExpected ||
+    physical.runnerHost !== record.runnerHost ||
+    !sameOwnership(physical.ownership, record.ownership) ||
+    !sameRunnerIdentity(physical.runnerIdentity, record.runnerIdentity) ||
+    !matchingRemoteCustody(record, physical, custody) ||
+    !custody?.binding ||
+    !custody.binding.hostsFile
+  )
+    return undefined;
+
+  if (
+    custody.attempts.some(
+      (attempt) =>
+        attempt.physicalCleanup !== undefined &&
+        !verifiedPhysicalCleanup(attempt.physicalCleanup, attempt.host, attempt.id),
+    )
+  )
+    return undefined;
+  const verified = custody.attempts.filter((attempt) =>
+    verifiedPhysicalCleanup(attempt.physicalCleanup, attempt.host, attempt.id),
+  );
+  const unresolved = custody.attempts.filter(
+    (attempt) =>
+      attempt.status !== 'not-started' && !verifiedPhysicalCleanup(attempt.physicalCleanup, attempt.host, attempt.id),
+  );
+  if (!((unresolved.length === 1 && verified.length === 0) || (unresolved.length === 0 && verified.length === 1)))
+    return undefined;
+  const attempt = unresolved[0] ?? verified[0]!;
+  if (
+    !['running', 'uncertain', 'terminal'].includes(attempt.status) ||
+    !isPhysicalRunId(attempt.id) ||
+    !/^[a-z][a-z0-9-]{0,62}$/.test(attempt.host)
+  )
+    return undefined;
+  return { custodyFile, custody, physical, attempt };
+}
+
+/** Clean only one explicitly cancelled, owned remote run after the local runner's full process group is gone. */
+async function reconcileCancelledRemoteCleanup(
+  record: CheckRecord,
+  root: string,
+  id: string,
+  remoteReconcile: typeof reconcileRemoteRun = reconcileRemoteRun,
+): Promise<CheckRemotePhysicalCleanup | undefined> {
+  const target = cancelledRemoteCleanupTarget(record, root, id);
+  if (!target) return undefined;
+  const { attempt, custody, custodyFile } = target;
+  const existing = attempt.physicalCleanup;
+  if (existing && verifiedPhysicalCleanup(existing, attempt.host, attempt.id)) {
+    const priorReceipt = readWorkerCheckCleanupReceipt(id, record.physicalRunId!, root);
+    if (
+      !priorReceipt ||
+      !verifiedPhysicalCleanup(priorReceipt.physicalCleanup, attempt.host, attempt.id) ||
+      !priorReceipt.localTerminal ||
+      priorReceipt.resultTerminal
+    ) {
+      const expected = {
+        ownership: record.ownership!,
+        physicalRunId: record.physicalRunId!,
+        runnerHost: record.runnerHost!,
+        runnerIdentity: record.runnerIdentity!,
+      };
+      persistCleanupReceipt(
+        root,
+        receiptFor(
+          id,
+          expected,
+          'uncertain',
+          true,
+          true,
+          'remote cleanup is verified; the original compiler result is unavailable',
+          { host: attempt.host, id: attempt.id },
+          false,
+          existing,
+        ),
+      );
+    }
+    return existing;
+  }
+
+  const hostsFile = custody.binding?.hostsFile;
+  if (!hostsFile || !isAbsolute(hostsFile)) return undefined;
+  const hosts = performanceHosts(readHosts(hostsFile));
+  if (!hosts.some((host) => host.name === attempt.host)) return undefined;
+  let settlement: RemoteCheckSettlement;
+  try {
+    settlement = await remoteReconcile({
+      hosts,
+      physical: { host: attempt.host, run: attempt.id },
+      workspace: root,
+      returns: [],
+      allowedHosts: [attempt.host],
+      cleanupOnly: true,
+    });
+  } catch (error) {
+    if (error instanceof RemoteTransportError) return undefined;
+    throw error;
+  }
+  if (
+    settlement.host !== attempt.host ||
+    settlement.run !== attempt.id ||
+    settlement.transportChildReaped !== true ||
+    !verifiedPhysicalCleanup(settlement.cleanup, attempt.host, attempt.id)
+  )
+    return undefined;
+
+  return await withCheckFence(root, id, () => {
+    const latest = readRecord(root, id);
+    const current = cancelledRemoteCleanupTarget(latest, root, id);
+    if (
+      !current ||
+      latest.physicalRunId !== record.physicalRunId ||
+      current.attempt.host !== attempt.host ||
+      current.attempt.id !== attempt.id
+    )
+      return undefined;
+    const currentAttempt = current.attempt;
+    if (currentAttempt.physicalCleanup) {
+      return verifiedPhysicalCleanup(currentAttempt.physicalCleanup, attempt.host, attempt.id)
+        ? currentAttempt.physicalCleanup
+        : undefined;
+    }
+    const attempts = [...current.custody.attempts];
+    const index = attempts.findIndex((item) => item.host === attempt.host && item.id === attempt.id);
+    if (index < 0) return undefined;
+    attempts[index] = {
+      ...attempts[index]!,
+      status: 'terminal',
+      endedAt: attempts[index]!.endedAt ?? new Date().toISOString(),
+      physicalCleanup: settlement.cleanup,
+    };
+    const terminal = attempts.every((item) => item.status === 'terminal' || item.status === 'not-started');
+    writeAtomicJson(
+      custodyFile,
+      {
+        ...current.custody,
+        status: terminal ? 'terminal' : attempts.some((item) => item.status === 'uncertain') ? 'uncertain' : 'running',
+        attempts,
+        updatedAt: new Date().toISOString(),
+      },
+      true,
+      CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
+    );
+    updatePhysicalRecord(root, id, latest.physicalRunId!, (physical) => ({
+      ...physical,
+      status: physical.status === 'running' ? 'unknown' : physical.status,
+      finishedAt: physical.finishedAt ?? new Date().toISOString(),
+      terminalProof: {
+        local: true,
+        remote: true,
+        resultKnown: false,
+        observedAt: new Date().toISOString(),
+      },
+    }));
+    const expected = {
+      ownership: latest.ownership!,
+      physicalRunId: latest.physicalRunId!,
+      runnerHost: latest.runnerHost!,
+      runnerIdentity: latest.runnerIdentity!,
+    };
+    persistCleanupReceipt(
+      root,
+      receiptFor(
+        id,
+        expected,
+        'uncertain',
+        true,
+        true,
+        'remote cleanup is verified; the original compiler result is unavailable',
+        { host: attempt.host, id: attempt.id },
+        false,
+        settlement.cleanup,
+      ),
+    );
+    return settlement.cleanup;
+  });
+}
+
 async function reconcileRetainedRemoteResult(record: CheckRecord, root: string, id: string): Promise<boolean> {
   if (!record.physicalRunId) return false;
   const custodyFile = remoteRunCustodyPath(root, record.physicalRunId);
@@ -3040,6 +3288,7 @@ function receiptFor(
   reason?: string,
   remoteRun?: CheckCleanupReceipt['remoteRun'],
   resultTerminal = false,
+  physicalCleanup?: CheckRemotePhysicalCleanup,
 ): CheckCleanupReceipt {
   return {
     version: 1,
@@ -3054,6 +3303,7 @@ function receiptFor(
     remoteTerminal,
     resultTerminal,
     ...(remoteRun === undefined ? {} : { remoteRun }),
+    ...(physicalCleanup === undefined ? {} : { physicalCleanup }),
     ...(reason === undefined ? {} : { reason }),
     completedAt: new Date().toISOString(),
   };
@@ -3137,6 +3387,7 @@ async function stopWorkerCheckOwned(
   cwd: string,
   expected: CheckCustodyExpectation,
   purpose: 'requested' | 'watchdog',
+  remoteReconcile: typeof reconcileRemoteRun = reconcileRemoteRun,
 ): Promise<CheckCleanupReceipt> {
   const root = resolve(cwd);
   if (!isCheckId(id) || !isPhysicalRunId(expected?.physicalRunId))
@@ -3209,6 +3460,14 @@ async function stopWorkerCheckOwned(
     existing.localTerminal &&
     existing.resultTerminal &&
     (existing.remoteTerminal === null || existing.remoteTerminal)
+  ) {
+    return existing;
+  }
+  if (
+    existing?.localTerminal &&
+    existing.remoteTerminal === true &&
+    !existing.resultTerminal &&
+    verifiedPhysicalCleanup(existing.physicalCleanup, existing.remoteRun?.host ?? '', existing.remoteRun?.id ?? '')
   ) {
     return existing;
   }
@@ -3297,10 +3556,23 @@ async function stopWorkerCheckOwned(
     }
   }
 
-  let remote = history.remoteExpected
-    ? remoteTerminalState(root, expected.physicalRunId)
-    : { terminal: null as boolean | null };
-  if (history.remoteExpected && !remote.terminal) {
+  const currentHead = readRecord(root, id);
+  const cleanupRequested =
+    history.remoteExpected && localTerminal && exactWorkerCheckCancellation(currentHead, root, id);
+  const physicalCleanup = cleanupRequested
+    ? await reconcileCancelledRemoteCleanup(currentHead, root, id, remoteReconcile)
+    : undefined;
+  if (physicalCleanup) {
+    const retained = readWorkerCheckCleanupReceipt(id, expected.physicalRunId, root);
+    if (retained) return retained;
+  }
+
+  let remote = physicalCleanup
+    ? { terminal: true, run: { host: physicalCleanup.host, id: physicalCleanup.run } }
+    : history.remoteExpected
+      ? remoteTerminalState(root, expected.physicalRunId)
+      : { terminal: null as boolean | null };
+  if (history.remoteExpected && !remote.terminal && !cleanupRequested) {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline && !remote.terminal) {
       await new Promise<void>((done) => setTimeout(done, 25));
@@ -3309,7 +3581,7 @@ async function stopWorkerCheckOwned(
   }
   const remoteTerminal = remote.terminal;
   let resultTerminal = false;
-  if (localTerminal) {
+  if (localTerminal && !physicalCleanup) {
     const resultDeadline = Date.now() + 2_000;
     while (Date.now() < resultDeadline && !resultTerminal) {
       const latestPhysical = readPhysicalRecord(root, id, expected.physicalRunId);
@@ -3330,6 +3602,7 @@ async function stopWorkerCheckOwned(
     terminal ? undefined : 'local, remote, or original result terminality is unknown',
     remote.run,
     resultTerminal,
+    physicalCleanup,
   );
   persistCleanupReceipt(root, receipt);
   if (localTerminal && (remoteTerminal === null || remoteTerminal === true)) {
@@ -3355,8 +3628,9 @@ export async function stopWorkerCheck(
   id: string,
   cwd: string,
   expected: CheckCustodyExpectation,
+  monitor: Pick<CheckMonitor, 'remoteReconcile'> = {},
 ): Promise<CheckCleanupReceipt> {
-  return await stopWorkerCheckOwned(id, cwd, expected, 'requested');
+  return await stopWorkerCheckOwned(id, cwd, expected, 'requested', monitor.remoteReconcile);
 }
 
 function cancellationRefusal(
@@ -3522,11 +3796,16 @@ export async function waitWorkerCheck(
   while (record.status === 'running') {
     const cancellation = executionCancellation(workerCheckCancellation(id, root));
     if (cancellation) {
+      const cleanup = await reconcileCancelledRemoteCleanup(record, root, id, monitor.remoteReconcile);
+      if (cleanup) write('worker-check: remote physical cleanup is verified; compiler result remains unavailable\n');
       write('check: cancellation requested; automatic restart is disabled\n');
       return 128 + cancellation.signal;
     }
-    if (checkCancelled(root, id)) {
-      write('worker-check: logically cancelled; physical cleanup remains unknown\n');
+    const logicalCancellation = checkCancelled(root, id);
+    if (logicalCancellation) {
+      const cleanup = await reconcileCancelledRemoteCleanup(record, root, id, monitor.remoteReconcile);
+      if (cleanup) write('worker-check: remote physical cleanup is verified; compiler result remains unavailable\n');
+      else write('worker-check: logically cancelled; physical cleanup remains unknown\n');
       return 125;
     }
     const stopIntent = checkStopIntent(root, id, record.physicalRunId);
