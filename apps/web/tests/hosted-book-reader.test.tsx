@@ -814,25 +814,15 @@ test('Subject discovery keeps sparse continuation and a current publication link
   expect(chapterLink.searchParams.get('release')).toBe(ids.release);
 });
 
-test('native checkpoints use exact CAS operands, withhold unavailable resume and discard disclosed body bytes', async () => {
+test('native checkpoints use body-free metadata for observation and CAS readback', async () => {
   const { readHostedCheckpoint, writeHostedCheckpoint } = await import('../src/books/reader/checkpoint-api');
-  const book = createIllustrativeHostedBook();
-  const { api } = await book.ready;
-  const chapter = await book.chapter();
-  const resolution = await api.resolve(ids.catalogue, ids.first, { kind: 'publication', revisionId: ids.release });
-  if (
-    resolution.state !== 'ready' ||
-    resolution.value.occurrence.availability !== 'available' ||
-    resolution.value.occurrence.kind !== 'chapter' ||
-    !resolution.value.document
-  )
-    throw new Error('Expected native chapter');
+  const sha256 = 'a'.repeat(64);
   const address = {
     catalogueId: ids.catalogue,
     publicationRevisionId: ids.release,
     occurrenceId: ids.first,
-    targetRevisionId: chapter.selection.body.revisionId,
-    targetSha256: chapter.selection.body.sha256,
+    targetRevisionId: ids.revision,
+    targetSha256: sha256,
     documentPosition: { blockId: 'saved-native-block', offset: 37 },
   };
   const saved = {
@@ -840,41 +830,102 @@ test('native checkpoints use exact CAS operands, withhold unavailable resume and
     subjectId: ids.post,
     revision: '2',
     address,
-    resume: { ...resolution.value.occurrence, document: resolution.value.document },
+    metadata: {
+      availability: 'available' as const,
+      occurrenceId: ids.first,
+      parentId: ids.nested,
+      position: 0,
+      kind: 'chapter' as const,
+      title: 'Dawn / 黎明',
+      target: { threadId: ids.thread, postId: ids.post, revisionId: ids.revision, sha256 },
+    },
   };
-  let response: unknown = saved;
+  let response: unknown = { state: 'none', subjectId: ids.post };
   const requests: Request[] = [];
   const native = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const request = new Request(input, init);
       requests.push(request);
       expect(request.headers.get('authorization')).toBe('Bearer member');
+      const url = new URL(request.url);
+      if (request.method === 'GET') {
+        expect(url.pathname).toBe('/v1/libraryHostedReading/metadata');
+        expect([...url.searchParams.entries()]).toEqual([['subjectId', ids.post]]);
+        expect(request.cache).toBe('no-store');
+        expect(request.redirect).toBe('manual');
+        return Response.json(response);
+      }
       if (request.method === 'PUT') return Response.json({ subjectId: ids.post, revision: '2', address });
       if (request.method === 'POST') {
         response = { state: 'none', subjectId: ids.post };
         return Response.json({ subjectId: ids.post, cleared: true });
       }
-      return Response.json(response);
+      throw new Error(`Unexpected checkpoint request: ${request.method} ${url.pathname}`);
     },
   });
   const signal = new AbortController().signal;
+  const metadataReads = () =>
+    requests.filter(
+      (request) => request.method === 'GET' && new URL(request.url).pathname === '/v1/libraryHostedReading/metadata',
+    );
+  const expectMetadataReads = (count: number) => {
+    expect(metadataReads()).toHaveLength(count);
+    expect(
+      requests.some(
+        (request) => request.method === 'GET' && new URL(request.url).pathname === '/v1/libraryHostedReading',
+      ),
+    ).toBe(false);
+  };
+  expect(await readHostedCheckpoint(native, 'Bearer member', ids.post, signal)).toEqual({
+    state: 'ready',
+    value: { state: 'none', subjectId: ids.post },
+  });
+  expectMetadataReads(1);
+  response = saved;
   const available = await readHostedCheckpoint(native, 'Bearer member', ids.post, signal);
   expect(available.state === 'ready' && available.value.state === 'saved' && available.value.resume.availability).toBe(
     'available',
   );
   expect(JSON.stringify(available)).not.toContain('canonicalBytes');
+  expect(available.state === 'ready' && available.value.state === 'saved' && available.value.resume).toEqual({
+    availability: 'available',
+    title: 'Dawn / 黎明',
+  });
   expect(available.state === 'ready' && available.value.state === 'saved' && available.value.address).toEqual(address);
-  response = { ...saved, resume: { availability: 'unavailable', occurrenceId: ids.first, kind: 'chapter' } };
+  expectMetadataReads(2);
+  response = {
+    ...saved,
+    metadata: { availability: 'unavailable', occurrenceId: ids.first, kind: 'chapter' },
+  };
   const withheld = await readHostedCheckpoint(native, 'Bearer member', ids.post, signal);
   expect(withheld.state === 'ready' && withheld.value.state === 'saved' && withheld.value.address).toEqual(address);
   expect(withheld.state === 'ready' && withheld.value.state === 'saved' && withheld.value.resume.availability).toBe(
     'unavailable',
   );
+  expectMetadataReads(3);
+  response = { state: 'none', subjectId: ids.post };
+  expect(await readHostedCheckpoint(native, 'Bearer member', ids.post, signal)).toEqual({
+    state: 'ready',
+    value: { state: 'none', subjectId: ids.post },
+  });
+  expectMetadataReads(4);
+  response = saved;
   const command = { kind: 'save' as const, subjectId: ids.post, expectedRevision: '1', address };
-  await writeHostedCheckpoint(native, 'Bearer member', command, 'save-same-key', signal);
+  const written = await writeHostedCheckpoint(native, 'Bearer member', command, 'save-same-key', signal);
+  expect(written).toEqual({
+    state: 'ready',
+    value: {
+      state: 'saved',
+      subjectId: ids.post,
+      revision: '2',
+      address,
+      resume: { availability: 'available', title: 'Dawn / 黎明' },
+    },
+  });
   const put = requests.find((request) => request.method === 'PUT')!;
   expect(put.headers.get('idempotency-key')).toBe('save-same-key');
   expect(await put.json()).toEqual({ ...address, subjectId: ids.post, expectedRevision: '1' });
+  expectMetadataReads(5);
   const cleared = await writeHostedCheckpoint(
     native,
     'Bearer member',
@@ -885,11 +936,13 @@ test('native checkpoints use exact CAS operands, withhold unavailable resume and
   expect(cleared).toEqual({ state: 'ready', value: { state: 'none', subjectId: ids.post } });
   const clear = requests.find((request) => request.method === 'POST')!;
   expect(await clear.json()).toEqual({ subjectId: ids.post, expectedRevision: '2' });
+  expectMetadataReads(6);
   response = {
     ...saved,
-    resume: { ...saved.resume, target: { ...saved.resume.target, revisionId: ids.currentRelease } },
+    metadata: { ...saved.metadata, target: { ...saved.metadata.target, revisionId: ids.currentRelease } },
   };
   expect(await readHostedCheckpoint(native, 'Bearer member', ids.post, signal)).toEqual({ state: 'unavailable' });
+  expectMetadataReads(7);
 });
 
 test('checkpoint controls retry an uncertain command unchanged and retire late private results', async () => {

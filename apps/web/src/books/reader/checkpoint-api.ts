@@ -17,39 +17,33 @@ export const checkpointAddressSchema = v.strictObject({
   documentPosition: v.nullable(position),
 });
 const savedAddress = { subjectId: hostedId, revision, address: checkpointAddressSchema };
+const metadata = v.variant('availability', [
+  v.strictObject({
+    availability: v.literal('unavailable'),
+    occurrenceId: hostedId,
+    kind: v.picklist(['chapter', 'part', 'unknown']),
+  }),
+  v.strictObject({
+    availability: v.literal('available'),
+    occurrenceId: hostedId,
+    parentId: v.nullable(hostedId),
+    position: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(511)),
+    kind: v.literal('chapter'),
+    title: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+    target: v.strictObject({ threadId: hostedId, postId: hostedId, revisionId: hostedId, sha256: digest }),
+  }),
+]);
 const responseSchema = v.variant('state', [
   v.strictObject({ state: v.literal('none'), subjectId: hostedId }),
   v.strictObject({
     state: v.literal('saved'),
     ...savedAddress,
-    resume: v.variant('availability', [
-      v.strictObject({
-        availability: v.literal('unavailable'),
-        occurrenceId: hostedId,
-        kind: v.picklist(['chapter', 'part', 'unknown']),
-      }),
-      v.strictObject({
-        availability: v.literal('available'),
-        occurrenceId: hostedId,
-        parentId: v.nullable(hostedId),
-        position: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(511)),
-        kind: v.literal('chapter'),
-        title: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
-        target: v.strictObject({ threadId: hostedId, postId: hostedId, revisionId: hostedId, sha256: digest }),
-        document: v.strictObject({
-          encoding: v.literal('base64'),
-          canonicalBytes: v.pipe(v.string(), v.maxLength(Math.ceil(2097152 / 3) * 4)),
-          sha256: digest,
-          authorId: hostedId,
-          licence: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
-        }),
-      }),
-    ]),
+    metadata,
   }),
 ]);
-type WireView = NonNullable<Awaited<ReturnType<KernelClient['libraryHostedReading']['get']>>['data']>;
+type WireView = NonNullable<Awaited<ReturnType<KernelClient['libraryHostedReading']['metadata']['get']>>['data']>;
 export type CheckpointAddress = Extract<WireView, { state: 'saved' }>['address'];
-/** The checkpoint response may disclose a body; the browser only needs its exact address and availability. */
+/** The metadata response contains no body; the browser needs only its exact address and availability. */
 export type CheckpointView =
   | { state: 'none'; subjectId: string }
   | {
@@ -77,7 +71,7 @@ export async function readHostedCheckpoint(
   subjectId: string,
   signal: AbortSignal,
 ): Promise<HostedRead<CheckpointView>> {
-  const result = await client.libraryHostedReading.get({
+  const result = await client.libraryHostedReading.metadata.get({
     query: { subjectId },
     headers: { authorization },
     fetch: { signal, cache: 'no-store', redirect: 'manual' },
@@ -88,14 +82,12 @@ export async function readHostedCheckpoint(
   if (!parsed.success || parsed.output.subjectId !== subjectId) return { state: 'unavailable' };
   const value: WireView = parsed.output;
   if (value.state === 'none') return { state: 'ready', value };
-  const { address, resume } = value;
+  const { address, metadata } = value;
   // A mismatched third-party target must never make another chapter a resume destination.
   if (
-    resume.occurrenceId !== address.occurrenceId ||
-    (resume.availability === 'available' &&
-      (resume.target.revisionId !== address.targetRevisionId ||
-        resume.target.sha256 !== address.targetSha256 ||
-        resume.document.sha256 !== address.targetSha256))
+    metadata.occurrenceId !== address.occurrenceId ||
+    (metadata.availability === 'available' &&
+      (metadata.target.revisionId !== address.targetRevisionId || metadata.target.sha256 !== address.targetSha256))
   )
     return { state: 'unavailable' };
   return {
@@ -106,8 +98,8 @@ export async function readHostedCheckpoint(
       revision: value.revision,
       address,
       resume:
-        resume.availability === 'available'
-          ? { availability: 'available', title: resume.title }
+        metadata.availability === 'available'
+          ? { availability: 'available', title: metadata.title }
           : { availability: 'unavailable' },
     },
   };

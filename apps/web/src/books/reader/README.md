@@ -106,8 +106,13 @@ and interactive controls, modifiers, held keys and input methods. Controls wrap 
 area spacing; the document's language/direction is independent of the interface locale. Eight launch locales cover
 controls and recovery: en, zh-Hant, zh-Hans, ja, ko, de, fr and es.
 
+Decision: initial checkpoint observation and successful save/clear readback use the published
+`libraryHostedReading.metadata.get` endpoint, one body-free private request per observation. The checkpoint UI never
+uses the byte-bearing checkpoint get; opening a chapter keeps its existing Content admission and exact canonical-byte
+verification.
+
 `checkpoint.tsx` renders the native Library checkpoint within the admitted page lifetime. It makes one private
-`libraryHostedReading.get` after the chapter or contents is ready, using the prepared session and expected viewer.
+metadata request after the chapter or contents is ready, using the prepared session and expected viewer.
 Anonymous and catalogue-only visits perform no private read. Subject discovery links supply the Subject; callers
 may also pass it to `HostedBookReaderLink`. The native save validates the Subject/catalogue association, publication,
 occurrence and exact target, so a URL Subject never creates authority.
@@ -135,7 +140,7 @@ document bytes. The external-response boundary rejects a mismatched occurrence, 
 than linking to a different saved chapter.
 
 Save and clear use native CAS revisions, idempotency keys and the installed POST BFF's session/CSRF checks. Each
-successful command is followed by one current native get before showing the result. An uncertain delivery keeps
+successful command is followed by one current body-free metadata read before showing the result. An uncertain delivery keeps
 its exact command and key for Retry. A conflict or changed selection requires a fresh visit; there is no optimistic
 checkpoint success. Reading retirement aborts private requests and fences completion and controls. Ordinary Library
 Progress, page units and Continue remain independent, as owned by [Library](../../../../../services/kernel/src/library/README.md).
@@ -151,6 +156,9 @@ most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + a
 Each operation retains Content's own bounds. Body bytes are at most 2 MiB per resolution; frozen/current resolution
 can read two bodies. Consumer cursors allow 8,192 characters; native/route cursors allow 4,096. There is no growing
 page cache, cursor chain, hydrated tree or new progress store.
+
+Checkpoint transport costs one body-free metadata request on initial observation and one after each successful
+save or clear. A later chapter open still performs its existing exact-body admission and canonical-byte verification.
 
 `illustrative-source.ts` supplies labelled native-format examples through the actual mapper, exclusively for tests
 and stories. It is never a production source. Story IDs remain `interfaces-hosted-book-reader` with named states
