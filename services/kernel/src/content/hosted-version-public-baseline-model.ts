@@ -10,7 +10,7 @@ export type HostedVersionPublicBaselineStatus = 'materializing' | 'complete';
 export type HostedVersionPublicBaselineCursor = Readonly<{
   phase: HostedVersionPublicBaselinePhase;
   occurrenceAfterOrdinal: string;
-  nodeAfterKind: string;
+  nodeAfterKind: '' | 'chapters' | 'preorder' | 'siblings';
   nodeAfterId: string;
   rootNullDone: boolean;
   rootAfterParentId: string;

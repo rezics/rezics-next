@@ -19,6 +19,7 @@ import { prepareHostedPublicationPoint, type HostedPublicationPointPreparation }
 import type { HostedPointSelectionReads, HostedPublicationPointInput } from './hosted-publication-point-selection.ts';
 import { commitHostedVersionPublicationPoint } from './hosted-version-publication-write.ts';
 import { HostedVersionPublicationWriteError } from './hosted-version-publication-write-model.ts';
+import { completedHostedLegacyPublicBaseline } from './hosted-legacy-public-baseline.ts';
 import { snapshot } from './reads.ts';
 import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
 import { insertHostedRootAppend } from './hosted-chapters-append.ts';
@@ -214,15 +215,19 @@ export async function publishHostedPublicationPoint(
         throw new RevisionPreconditionError();
 
       try {
+        const preparedBaseline = await completedHostedLegacyPublicBaseline(
+          tx,
+          actor,
+          catalogueId,
+          operation.input.expectedPublicationId,
+        );
         await commitHostedVersionPublicationPoint(tx, {
           catalogueId,
           revisionId,
           recordedTransactionId: transactionId,
           recordedAt: authoritativeTimeValue(time),
           selection: command.prepared(time).selection,
-          // No active sealed legacy baseline export exists. The native route
-          // binds ordered candidate descriptors only.
-          preparedBaseline: null,
+          preparedBaseline,
         });
       } catch (error) {
         if (error instanceof HostedVersionPublicationWriteError) throw new RevisionPreconditionError();
