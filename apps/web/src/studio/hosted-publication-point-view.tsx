@@ -389,7 +389,7 @@ export function HostedPublicationPointView({
           {review && visit.sourceConsent ? (
             <HostedSourceConsentView
               visit={visit.sourceConsent}
-              bookTitle={state.owner.title}
+              bookTitle={state.owner.title ?? m.threads_untitled({}, options)}
               locale={locale}
               disabled={phase === 'submitting'}
             />

@@ -104,7 +104,7 @@ function pointFixture() {
   const consent = mock(answer);
   const publish = mock(async () => hostedFailure('denied', 'Native Book admission denied.'));
   const visit = new HostedPublicationPointVisit({
-    owner,
+    owner: { ...owner, item: { ...owner.item, title: undefined } },
     source: s.source,
     locale: 'en',
     csrfToken: 'original-csrf',
@@ -144,6 +144,7 @@ test('point review makes no consent request; issue and exact revoke never publis
     await act(async () => root.render(<HostedPublicationPointView visit={f.visit} locale="en" />));
     expect(f.consent.mock.calls).toHaveLength(0);
     expect(host.textContent).toContain('The exact saved bytes.');
+    expect(host.textContent).toContain('Book: Untitled');
     expect(host.textContent).toContain(target.sha256);
     expect(host.textContent).toContain('Permission state is unknown');
     expect(host.textContent).toContain('Already-public sources do not need this permission');
