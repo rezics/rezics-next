@@ -392,6 +392,61 @@ test('official capture requires physical prepared custody, runs once, and never 
     ).rejects.toThrow('physical custody');
   }));
 
+test('filesystem prepared-input evidence refuses missing and foreign receipts before compilation', () =>
+  isolatedArtifactEnvironment(async () => {
+    const { withKernelClientOutput } = await import('./check-output-tree.ts');
+    const recognize = () => ({
+      outcome: 'admitted' as const,
+      runId: source.run,
+      scope: 'fixture.scope',
+      supervisor: { pid: 1, started: '1', group: 1 },
+    });
+    for (const mode of ['missing', 'foreign'] as const) {
+      const root = workspace();
+      const receiptRoot = join(root, '.prepared-receipts');
+      mkdirSync(receiptRoot, { recursive: true });
+      put(
+        root,
+        '.remote-check-supervisor',
+        JSON.stringify({
+          schema: 1,
+          host: source.host,
+          run: source.run,
+          pid: 1,
+          started: '1',
+          group: 1,
+          uid: 1,
+        }) + '\n',
+      );
+      if (mode === 'foreign')
+        put(
+          receiptRoot,
+          `${source.run}/prepared-inputs.json`,
+          JSON.stringify({
+            schema: 1,
+            host: 'd',
+            run: source.run,
+            sourceSha256: source.sourceSha256,
+            manifestSha256: 'b'.repeat(64),
+            fileCount: 1,
+            totalBytes: 1,
+          }) + '\n',
+        );
+      let runs = 0;
+      await expect(
+        withKernelClientOutput(
+          root,
+          async () => {
+            runs++;
+            return 0;
+          },
+          { recognize, preparedReceiptRoot: receiptRoot },
+        ),
+      ).rejects.toThrow(mode === 'missing' ? 'ENOENT' : 'prepared source and physical marker disagree');
+      expect(runs).toBe(0);
+    }
+  }));
+
 test.each([0, 23])('official capture stages mixed schema output with honest terminal status %i', (code) =>
   isolatedArtifactEnvironment(async () => {
     const { withKernelClientOutput } = await import('./check-output-tree.ts');

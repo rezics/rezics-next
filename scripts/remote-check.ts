@@ -4804,6 +4804,8 @@ export function runScript(
   artifactBudgetBytes?: number,
   memoryPerRunGiB = CHECK_RUN_MEMORY_GIB,
 ): string {
+  if (commandRequestsKernelClientOutput(command) && expectedSourceSha256 === undefined)
+    throw new Error('remote-check: client output requires source-fingerprinted prepared inputs');
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = runtime;
   const wrapperDirectory = `${directory}/.temp/check-host`;
@@ -5087,6 +5089,12 @@ printf '%s' ${quote(Buffer.from(dependencyPreparationProgram).toString('base64')
 exec python3 ${quote(`${wrapperDirectory}/prepare.py`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} ${preparationTimeoutMs} ${quote(priorityClass)} 3<<'${delimiter}'
 ${script}
 ${delimiter}`;
+}
+
+function commandRequestsKernelClientOutput(command: readonly string[]): boolean {
+  return command.some(
+    (argument) => argument === '--emit-client' || /(?:^|\s)--emit-client(?=\s|[;&|]|$)/.test(argument),
+  );
 }
 
 // Only this fixed receiver and a length/digest cross argv. The authenticated script stays on stdin and an
@@ -8676,28 +8684,27 @@ async function runLeased(
   return code;
 }
 
-async function withOutputTreeSource(options: RemoteCheck): Promise<RemoteCheck> {
+export async function withOutputTreeSource(
+  options: RemoteCheck,
+  sourceForWorkspace?: (workspace: string, returns: readonly string[]) => Promise<ExpectedSourceManifest>,
+): Promise<RemoteCheck> {
   let declarations = validateArtifactDeclarations(options.returns ?? []);
-  const nested = declarations.some((path) => /^\.temp\/goal\/checks\/artifact-returns\/[a-f0-9-]{36}$/.test(path));
-  const requested =
-    hasOutputTreeReturn(declarations) ||
-    (nested &&
-      options.command.some(
-        // A combined shell command may terminate the emitter option directly with an operator.
-        (argument) => argument === '--emit-client' || /(?:^|\s)--emit-client(?=\s|[;&|]|$)/.test(argument),
-      ));
+  const requested = hasOutputTreeReturn(declarations) || commandRequestsKernelClientOutput(options.command);
   if (!requested) return options;
   if (!hasOutputTreeReturn(declarations)) {
-    // A nested official emitter must reserve the same closed profile before upload/admission.
+    // The official emitter always needs the same closed transport before upload/admission.
     // An already frozen caller must have declared it when freezing its source.
     if (options.expectedSourceManifest)
       throw new Error('remote-check: frozen emitter lacks the named output declaration');
     declarations = validateArtifactDeclarations([...declarations, KERNEL_CLIENT_OUTPUT.transport]);
     options = { ...options, returns: declarations };
   }
+  if ((options.expectedSourceSha256 === undefined) !== (options.expectedSourceManifest === undefined))
+    throw new Error('remote-check: generic source evidence requires both its fingerprint and manifest');
   if (options.expectedSourceManifest) return options;
-  const { currentCheckSourceManifest } = await import('./check-run.ts');
-  const manifest = await currentCheckSourceManifest(options.workspace, declarations);
+  const manifest = sourceForWorkspace
+    ? await sourceForWorkspace(options.workspace, declarations)
+    : await (await import('./check-run.ts')).currentCheckSourceManifest(options.workspace, declarations);
   return { ...options, expectedSourceSha256: manifest.sourceSha256, expectedSourceManifest: manifest };
 }
 

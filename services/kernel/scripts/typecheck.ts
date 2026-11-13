@@ -259,6 +259,7 @@ export async function runKernelTypecheck(
       return compilerInfrastructureFailure(label, databasePhase, error);
     }
   };
+  // Verify prepared source custody outside the callback so refusal happens before database and compiler work.
   return emitClient
     ? compilerInfrastructurePhase(label, 'output-publication', () =>
         (dependencies.outputTree ?? withKernelClientOutput)(repository, run, { returns: returns ?? [] }),

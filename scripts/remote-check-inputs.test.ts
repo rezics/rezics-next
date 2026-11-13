@@ -23,7 +23,10 @@ import {
   validateCandidateUploadPaths,
   validateExpectedSourceManifest,
   EMPTY_DIRECTORY_DIGEST,
+  withOutputTreeSource,
+  type RemoteCheck,
 } from './remote-check.ts';
+import { KERNEL_CLIENT_OUTPUT } from './check-output-tree.ts';
 
 type SourceEntry = {
   path: string;
@@ -205,6 +208,51 @@ function generatedScript(fixture: Fixture): string {
     fixture.manifest.sourceSha256,
   );
 }
+
+test('direct Kernel client emission is source-pinned before producer launch', async () => {
+  const fixture = createFixture();
+  try {
+    const command = ['bun', 'services/kernel/scripts/typecheck.ts', '--emit-client'];
+    const options: RemoteCheck = { hosts: [], workspace: fixture.root, command, returns: [] };
+    const pinned = await withOutputTreeSource(options, async (workspace, returns) => {
+      expect(workspace).toBe(fixture.root);
+      expect(returns).toEqual([KERNEL_CLIENT_OUTPUT.transport]);
+      return fixture.manifest;
+    });
+    expect(pinned.returns).toContain(KERNEL_CLIENT_OUTPUT.transport);
+    expect(pinned.expectedSourceSha256).toBe(fixture.manifest.sourceSha256);
+    expect(pinned.expectedSourceManifest).toEqual(fixture.manifest);
+
+    expect(() =>
+      runScript(fixture.run, fixture.root, '.', command, fixture.host, {
+        version: '1.2.3',
+        revision: 'a'.repeat(40),
+      }),
+    ).toThrow('client output requires source-fingerprinted prepared inputs');
+    const generated = runScript(
+      fixture.run,
+      fixture.root,
+      '.',
+      command,
+      fixture.host,
+      { version: '1.2.3', revision: 'a'.repeat(40) },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [],
+      pinned.expectedSourceSha256,
+    );
+    const receipt = generated.indexOf('prepared input evidence unavailable');
+    expect(receipt).toBeGreaterThanOrEqual(0);
+    expect(receipt).toBeLessThan(generated.indexOf('command-started'));
+  } finally {
+    cleanup(fixture);
+  }
+});
 
 function addPreparedControls(fixture: Fixture, cacheState: 'hit' | 'miss' = 'miss'): void {
   writeOwned(fixture.root, '.bun-install-complete', '');
