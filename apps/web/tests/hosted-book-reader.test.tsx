@@ -607,7 +607,10 @@ test('native host uses the admitted current title with frozen exact targets and 
   const catalogue = mock(async (...args: Parameters<typeof api.catalogue>) => {
     const result = await api.catalogue(...args);
     return result.state === 'ready'
-      ? { ...result, value: { ...result.value, title: args[1].revisionId ? 'Ignore a historical response label' : title } }
+      ? {
+          ...result,
+          value: { ...result.value, title: args[1].revisionId ? 'Ignore a historical response label' : title },
+        }
       : result;
   });
   const resolve = mock(api.resolve);
@@ -649,7 +652,10 @@ test('native host uses the admitted current title with frozen exact targets and 
     [ids.first, { kind: 'publication', revisionId: ids.release }],
   ]);
   await mount(
-    { ...book.source, read: (request, signal) => readHostedBook(api, request, visit.admission.publicationTitle, signal) },
+    {
+      ...book.source,
+      read: (request, signal) => readHostedBook(api, request, visit.admission.publicationTitle, signal),
+    },
     visit.address,
   );
   expect(host.querySelector('header > p')?.textContent).toBe(title!);
@@ -664,12 +670,14 @@ test('native host uses the admitted current title with frozen exact targets and 
   ]) {
     const deniedCatalogue = mock(async () => refused);
     metadata.mockClear();
-    expect(await observeHostedBookVisit(
-      { ...native, catalogue: deniedCatalogue },
-      { catalogueId: ids.catalogue, locale: 'en', search: { release: ids.release, occurrence: ids.first } },
-      { kind: 'anonymous' },
-      m.book_reader_title(),
-    )).toEqual({ state: refused.state === 'denied' ? 'denied' : 'unavailable' });
+    expect(
+      await observeHostedBookVisit(
+        { ...native, catalogue: deniedCatalogue },
+        { catalogueId: ids.catalogue, locale: 'en', search: { release: ids.release, occurrence: ids.first } },
+        { kind: 'anonymous' },
+        m.book_reader_title(),
+      ),
+    ).toEqual({ state: refused.state === 'denied' ? 'denied' : 'unavailable' });
     expect(deniedCatalogue).toHaveBeenCalledTimes(1);
     expect(metadata).not.toHaveBeenCalled();
   }
@@ -685,8 +693,12 @@ test('native host uses the admitted current title with frozen exact targets and 
         { kind: 'anonymous' },
         m.book_reader_title({}, { locale: 'ja' }),
       );
-      expect(rootVisit.state === 'ready' && rootVisit.address.publication.releaseRevisionId).toBe(release ?? ids.currentRelease);
-      expect(rootVisit.state === 'ready' && rootVisit.admission.publicationTitle).toBe(title || m.book_reader_title({}, { locale: 'ja' }));
+      expect(rootVisit.state === 'ready' && rootVisit.address.publication.releaseRevisionId).toBe(
+        release ?? ids.currentRelease,
+      );
+      expect(rootVisit.state === 'ready' && rootVisit.admission.publicationTitle).toBe(
+        title || m.book_reader_title({}, { locale: 'ja' }),
+      );
       expect(catalogue.mock.calls.map((call) => call[1])).toEqual([
         { kind: 'publication', includeTitle: '1' },
         ...(release ? [{ kind: 'publication', revisionId: release }] : []),
@@ -732,21 +744,33 @@ test('the default production route reads native contents and exact chapters, the
   const { api } = await book.ready;
   let title: string | undefined = 'The public opening';
   const pointReads: URL[] = [];
-  const point = createHostedCatalogueApi(createKernelClient('https://kernel.test', {
-    fetch: async (input) => {
-      const url = new URL(String(input));
-      pointReads.push(url);
-      const result = await api.catalogue(ids.catalogue, { kind: 'publication' });
-      if (result.state !== 'ready') throw new Error('Expected publication');
-      return Response.json({ ...result.value, ...(url.searchParams.get('includeTitle') === '1' && title !== undefined ? { title } : {}) });
-    },
-  }), null, new AbortController().signal);
+  const point = createHostedCatalogueApi(
+    createKernelClient('https://kernel.test', {
+      fetch: async (input) => {
+        const url = new URL(String(input));
+        pointReads.push(url);
+        const result = await api.catalogue(ids.catalogue, { kind: 'publication' });
+        if (result.state !== 'ready') throw new Error('Expected publication');
+        return Response.json({
+          ...result.value,
+          ...(url.searchParams.get('includeTitle') === '1' && title !== undefined ? { title } : {}),
+        });
+      },
+    }),
+    null,
+    new AbortController().signal,
+  );
   const sourceReads: BookReadRequest[] = [];
   const hostReads: unknown[] = [];
   mock.module('../src/books/reader/native-visit', () => ({
     readHostedBookVisit: async ({ data }: Parameters<typeof actualVisit.readHostedBookVisit>[0]) => {
       hostReads.push(data);
-      return observeHostedBookVisit({ ...api, catalogue: point.catalogue }, data, { kind: 'anonymous' }, m.book_reader_title());
+      return observeHostedBookVisit(
+        { ...api, catalogue: point.catalogue },
+        data,
+        { kind: 'anonymous' },
+        m.book_reader_title(),
+      );
     },
   }));
   mock.module('../src/books/reader/native-read', () => ({
@@ -835,7 +859,15 @@ test('the default production route reads native contents and exact chapters, the
     expect(document.activeElement?.getAttribute('aria-current')).toBe('location');
     expect(hostReads).toHaveLength(sourceReads.length);
     expect(pointReads).toHaveLength(hostReads.length);
-    expect(pointReads.every((url) => url.pathname === `/v1/hostedCatalogues/${ids.catalogue}` && url.searchParams.get('kind') === 'publication' && url.searchParams.get('includeTitle') === '1' && !url.searchParams.has('revisionId'))).toBe(true);
+    expect(
+      pointReads.every(
+        (url) =>
+          url.pathname === `/v1/hostedCatalogues/${ids.catalogue}` &&
+          url.searchParams.get('kind') === 'publication' &&
+          url.searchParams.get('includeTitle') === '1' &&
+          !url.searchParams.has('revisionId'),
+      ),
+    ).toBe(true);
   } finally {
     canonical.remove();
     mock.module('../src/books/reader/native-visit', () => actualVisit);
