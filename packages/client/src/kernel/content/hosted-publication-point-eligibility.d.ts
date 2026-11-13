@@ -1,6 +1,11 @@
 import type { ReadContext } from './model.ts';
 import type { AccessClient } from '../request/access.ts';
 import type { HostedChapterTarget, HostedDependencies } from './hosted-chapters-model.ts';
+export type HostedPublicationAuthorityObservation = Readonly<{
+    authorId: string;
+    licence: string;
+    homes: readonly number[];
+}>;
 export type HostedPointPublicEligibility = Readonly<{
     /** Recheck the original native observations. A false result is a private refusal. */
     final(): Promise<boolean>;
@@ -17,6 +22,22 @@ export type HostedPointDisclosureEligibility = Readonly<{
  * checks for a later recheck.
  */
 export declare function prepareHostedPointPublicEligibility(deps: HostedDependencies, catalogueOpening: HostedChapterTarget, newlySelectedTargets: readonly HostedChapterTarget[], context: ReadContext): Promise<HostedPointPublicEligibility | null>;
+/**
+ * Observe one exact target through current anonymous public eligibility or
+ * exact catalogue consent. It reads metadata only, then records every native
+ * home whose state can close the proof: source, account, Board, Realm and Space.
+ * The caller must have captured its fixed home vector before calling this.
+ */
+export declare function observeHostedPublicationActivationTarget(deps: HostedDependencies, input: Readonly<{
+    catalogueId: string;
+    activationRevisionId: string;
+    target: HostedChapterTarget;
+    occurrenceId: string;
+    additionalAuthorityIds?: readonly string[];
+    expectedAuthorId?: string;
+    expectedLicence?: string;
+    opening?: boolean;
+}>, context: ReadContext): Promise<HostedPublicationAuthorityObservation | null>;
 /**
  * Prepare the public catalogue opening and each changed exact target. Public
  * targets retain their anonymous Access observation; a private opening can use
