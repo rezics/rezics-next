@@ -242,6 +242,7 @@ test('an unresolved consumed Web grant reports its check and foreign custody sta
     const landing = { enqueue: (_value: unknown) => {} };
     const first = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
     const second = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
+    if (!('result' in first) || !('result' in second)) throw new Error('unresolved Web recovery lost its pending reason');
 
     expect(first).toMatchObject({ status: 'pending' });
     expect('proof' in first).toBe(false);
