@@ -2,28 +2,12 @@ import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import type { StudioResult } from './contract';
 import { hostedFailure } from './hosted-native';
-import {
-  releaseProgress,
-  type ReleaseProgress,
-  type ReleaseRequest,
-  type ReleaseStartBody,
-} from './hosted-release-preparation-contract';
+import { releaseProgress, type ReleaseProgress, type ReleaseRequest } from './hosted-release-preparation-contract';
 
 type Result = { status: number; data?: unknown; error?: unknown };
 type Options = {
   headers: Record<string, string>;
   fetch: { signal: AbortSignal; cache: 'no-store'; redirect: 'manual' };
-};
-type Method<Body> = { post(body: Body, options: Options): Promise<Result> };
-/** Mounted routes missing from client emission; Eden's existing proxy supplies these methods unchanged. */
-type PreparationClient = ReturnType<KernelClient['hostedCatalogues']> & {
-  $prepareRelease: Method<ReleaseStartBody>;
-  publicationPreparations(locator: { stageId: string }): {
-    $advance: Method<{ stepId: string }>;
-    $progress: Method<Record<string, never>>;
-    $seal: Method<Record<string, never>>;
-    $cancel: Method<Record<string, never>>;
-  };
 };
 export type ReleaseCommand = (
   input: ReleaseRequest,
@@ -35,7 +19,7 @@ export const releaseUnknown = () =>
 
 export function createReleaseCommand(client: KernelClient): ReleaseCommand {
   return async (input, signal) => {
-    const book = client.hostedCatalogues({ id: input.catalogueId }) as PreparationClient;
+    const book = client.hostedCatalogues({ id: input.catalogueId });
     const options: Options = {
       headers: { 'idempotency-key': JSON.stringify(input.idempotencyKey) },
       fetch: { signal, cache: 'no-store', redirect: 'manual' },

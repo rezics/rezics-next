@@ -173,8 +173,8 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
   const moveDependencies = Object.assign(Object.create(deps) as HostedVersionDraftMoveCommandDependencies, {
     versionAdapter: createHostedVersionDraftMoveNativeAdapter(),
   });
-  hostedPublicationPreparationRoutes(app, deps);
-  app.wrap((handle) => async (request) => {
+  const preparationRoutes = hostedPublicationPreparationRoutes(app, deps);
+  preparationRoutes.wrap((handle) => async (request) => {
     const response = await handle(request);
     const path = new URL(request.url).pathname;
     if (
@@ -185,7 +185,7 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
       response.headers.set('cache-control', 'private, no-store');
     return response;
   });
-  return app
+  return preparationRoutes
     .get(
       '/v1/accounts/:accountId/hostedCatalogues',
       {
