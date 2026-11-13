@@ -13,6 +13,7 @@ import { HostedDraftPointView } from './hosted-draft-point-view';
 import { HostedPublicationPointVisit } from './hosted-publication-point';
 import { HostedPublicationPointView } from './hosted-publication-point-view';
 import { admitPublicHostedRelease } from './hosted-release-reader-link-public';
+import { hostedSourceConsentTransport } from './hosted-source-consent-actions';
 
 type Props = {
   owner: HostedOwnedBook;
@@ -71,6 +72,7 @@ export function HostedDraftPointEntry(props: Props) {
           locale,
           csrfToken,
           native: hostedPublicationPointNative,
+          consent: hostedSourceConsentTransport,
           readVersion: (target, signal) =>
             documents.revision({ projectId: owner.item.catalogueId, document: target }, signal),
           admit: admitPublicHostedRelease,

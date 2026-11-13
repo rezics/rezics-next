@@ -667,3 +667,29 @@ desktop and expired narrow stories. The mounted preparation methods are absent f
 the existing typed proxy extension seam binds them locally. Deferred acceptance: `bun run --cwd apps/web test
 tests/studio-hosted-release-preparation.test.tsx`; browser, native, ordinary acceptance and Storybook builds stay with
 the dev verifier. Source verification uses changed-file formatting and the Web workspace typecheck.
+
+## Exact source permission in point review
+
+Decision: the exact saved-version point review offers an explicit source Post issue command for one version and
+one Book, followed by explicit revoke of only the receipt acknowledged in that author visit. Initial native state
+is unknown: there is no consent lookup, durable list or extra request for an already-public source. The selected
+thread/Post/revision/digest and Book are frozen with a new key per deliberate command; uncertain replies replay
+that same command and CSRF binding. Source, account, session or visit replacement clears receipts and fences late
+replies. Raw receipts, locators and command keys stay in memory, outside rendered copy, URLs and storage.
+
+Issue does not publish the source or Book, retry publication or confer client-side source authority. Native Post
+admission decides issue/revoke and exposes denial independently of native Book publication and current Access.
+Generic failures leave permission state unknown. HTTP receipt validation binds the Book, expected issued/revoked
+state and, for revoke, the exact receipt ID. Whole-release preparation is unchanged.
+
+Sources read before design: Content's [Private-to-public boundary](../../../../services/kernel/src/content/hosted-chapters.md#private-to-public-boundary),
+`revision-disclosure-routes.ts`, `revision-disclosure-schemas.ts`, generated Post client operations, this owner,
+`hosted-publication-point.ts`, `hosted-publication-point-view.tsx`, `hosted-draft-point-entry.tsx`,
+`hosted-release-preparation-actions.ts` and the existing point/preparation fixtures. The base has native operations
+but no mounted source permission controls; the backend write migration retains that installed contract.
+
+Deferred acceptance: `bun run --cwd apps/web test tests/studio-hosted-source-consent.test.tsx`. Focused coverage
+pins explicit issue/revoke without publication, exact retry operands and key, denial, selection/session retirement
+and response identity/state checks. Illustrative stories show same-author desktop review, issue and explicit
+revoke, plus narrow denial and lost-reply replay. Source verification formats changed files and runs the Web
+workspace typecheck after commit. Native, browser, ordinary acceptance, root and Storybook checks stay deferred.

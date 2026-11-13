@@ -10,6 +10,7 @@ import {
   type PublicationPointAnchor,
 } from './hosted-publication-point';
 import { HostedReleaseReaderLink } from './hosted-release-reader-link-action';
+import { HostedSourceConsentView } from './hosted-source-consent-view';
 import './studio.css';
 
 function Anchor({ anchor, empty }: { anchor: PublicationPointAnchor | null; empty: string }) {
@@ -385,6 +386,14 @@ export function HostedPublicationPointView({
             </p>
           ) : null}
           {state.readbackError ? <p role="alert">{m.studio_point_readback_help({}, options)}</p> : null}
+          {review && visit.sourceConsent ? (
+            <HostedSourceConsentView
+              visit={visit.sourceConsent}
+              bookTitle={state.owner.title}
+              locale={locale}
+              disabled={phase === 'submitting'}
+            />
+          ) : null}
           {['loading', 'selecting', 'submitting'].includes(phase) ? (
             <p role="status">{m.studio_draft_point_loading({}, options)}</p>
           ) : null}

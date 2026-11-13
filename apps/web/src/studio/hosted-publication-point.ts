@@ -13,6 +13,7 @@ import type {
 import type { DraftCommandIntent, DraftCommandTransport } from './hosted-draft-point-lifecycle';
 import { HostedOutlineWindow } from './hosted-outline-window';
 import { HostedReleaseReaderLinkProjection, type HostedReleaseReaderAdmission } from './hosted-release-reader-link';
+import { HostedSourceConsentVisit, type SourceConsentTransport } from './hosted-source-consent';
 
 type Row = Extract<HostedOutlineWindowPage['items'][number], { availability: 'available' }>;
 export type PublicationPointAnchor = Readonly<{ revisionId: string; observation: number; item: Row }>;
@@ -65,6 +66,7 @@ export type PublicationPointOptions = {
   native: PublicationPointTransport;
   readVersion(target: HostedTarget, signal: AbortSignal): Promise<StudioResult<StudioRevision>>;
   admit: HostedReleaseReaderAdmission;
+  consent?: SourceConsentTransport;
 };
 
 function currentAnchor(state: Active, anchor: PublicationPointAnchor | null, publicSnapshot = false): boolean {
@@ -140,6 +142,7 @@ export class HostedPublicationPointVisit {
   private readRequest: AbortController | null = null;
   private retired = false;
   readonly readerLink: HostedReleaseReaderLinkProjection;
+  readonly sourceConsent: HostedSourceConsentVisit | null;
 
   constructor(private readonly options: PublicationPointOptions) {
     this.origin = options.source.read();
@@ -169,6 +172,15 @@ export class HostedPublicationPointVisit {
       this.isCurrent,
       options.admit,
     );
+    this.sourceConsent = options.consent
+      ? new HostedSourceConsentVisit({
+          source: options.source,
+          viewer: options.owner.viewer,
+          csrfToken: options.csrfToken,
+          isCurrent: this.isCurrent,
+          native: options.consent,
+        })
+      : null;
     this.unsubscribe = options.source.subscribe(() => {
       if (!this.isCurrent()) this.retire();
     });
@@ -206,6 +218,17 @@ export class HostedPublicationPointVisit {
   }
   private update(state: PublicationPointState) {
     this.state = state;
+    // Only the already-opened exact version supplies operands; a page observation alone never does.
+    this.sourceConsent?.select(
+      state.kind === 'active' &&
+        state.chapter?.item.kind === 'chapter' &&
+        currentAnchor(state, state.chapter) &&
+        state.version &&
+        state.versionObservation === state.observation &&
+        sameExact(state.version.exact, state.chapter.item.target)
+        ? { catalogueId: state.owner.catalogueId, target: state.chapter.item.target }
+        : null,
+    );
     this.listeners.forEach((fn) => fn());
   }
   private retire() {
@@ -218,6 +241,7 @@ export class HostedPublicationPointVisit {
       this.state.publication?.dispose();
     }
     this.readerLink.clear();
+    this.sourceConsent?.dispose();
     this.update({ kind: 'ended' });
   }
   dispose = () => {
