@@ -20,6 +20,10 @@ Required states remain discoverable
 even when a folder contains more than eight. Review the same IDs with the `phone390` and `desktop1280` viewport
 globals, locale and theme; see the [catalogue rules](../../../docs/development/storybook.md).
 
+Both previews leave the initial viewport unset so Storybook opens at its responsive default. Viewport options are
+manual choices; do not initialize an unregistered `responsive` option, which the installed Storybook resolves through
+its first available device before clearing it. Normal story opening must not traverse phone sizes.
+
 ## Build and review locally
 
 From the repository root, run:
