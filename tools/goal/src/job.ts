@@ -14,6 +14,7 @@ import {
   ProofUnavailableError,
   readReservationObservation,
   readProofObservation,
+  proofObservationCheckId,
   refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
@@ -73,6 +74,7 @@ import {
   finalReportPending,
   isSqliteContention,
   retrySettlementPersistence,
+  reconcileStoppedOrdinaryProof,
   settle,
 } from './settle.ts';
 import { CURSOR_FRESH_SESSION_EVENT, CURSOR_FRESH_SESSION_PROMPT } from './agents/shared.ts';
@@ -644,7 +646,13 @@ export class WorkerJob implements GateOutcomeSink {
   private async checkWakeMessage(attempt: Attempt, task: Task): Promise<string | null> {
     if (task.brief.kind === 'verification') {
       const observed = await readProofObservation(task, attempt.checks);
-      if (observed.status === 'running') return null;
+      const actualId = proofObservationCheckId(observed);
+      if (actualId && (attempt.checks?.length !== 1 || attempt.checks[0] !== actualId))
+        this.tasks.store.updateAttempt({ taskId: attempt.taskId, attempt: attempt.attempt }, (current) => {
+          current.checks = [actualId];
+        });
+      // Running stays parked. Unknown is an observation defect and must not wake as a product assertion.
+      if (observed.status !== 'terminal') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
     const checkTiming = await observeWaitingWorkerCheckTerminalProof(task, attempt);
@@ -1578,6 +1586,16 @@ export class WorkerJob implements GateOutcomeSink {
         }
       }
     }
+    if (adoptRunning) {
+      for (const task of store.activeTasks()) {
+        if (task.state !== 'stopped' || task.brief.kind !== 'verification' || !task.currentAttempt) continue;
+        try {
+          await reconcileStoppedOrdinaryProof(this.tasks, { taskId: task.id, attempt: task.currentAttempt });
+        } catch (error) {
+          this.recoveryFailed(task.id, 'ordinary proof reconciliation', error);
+        }
+      }
+    }
     if (adoptRunning)
       for (const run of store.activeProofReservations()) {
         try {
@@ -2024,6 +2042,7 @@ export class WorkerJob implements GateOutcomeSink {
         if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
         const proof = store.record(ref)?.proof;
         const captureOnly = task.state === 'stopped' && kind === null && proof?.status === 'terminal' && proof.passed;
+        const observationUnavailable = !proof || proof.status !== 'terminal';
         store.updateTask(ref, (current) => {
           current.state = 'stopped';
         });
@@ -2033,10 +2052,12 @@ export class WorkerJob implements GateOutcomeSink {
         const event = {
           managerId: task.brief.manager,
           taskId: task.id,
-          kind: 'instruction' as const,
-          summary: (captureOnly
-            ? `Original proof passed on its captured source; current integration requires a fresh authenticated proof registration. ${attempt.result}`
-            : `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`
+          kind: (observationUnavailable ? 'environment' : 'instruction') as 'environment' | 'instruction',
+          summary: (observationUnavailable
+            ? `Original proof observation unavailable; retained the current attempt and records. ${attempt.result}`
+            : captureOnly
+              ? `Original proof passed on its captured source; current integration requires a fresh authenticated proof registration. ${attempt.result}`
+              : `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`
           ).slice(0, 1000),
           evidencePath: attempt.evidencePath,
         };

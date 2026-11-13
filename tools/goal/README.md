@@ -3967,6 +3967,17 @@ unchanged. A still-running wrapper is awaited by its exact UUID even when the wo
 check IDs; duplicate wakes read that same record. Missing, mismatched or ambiguous ownership remains unknown and
 keeps custody. Optional native evidence retains its separate, strict acceptance path.
 
+Decision: a worker-reported ordinary-proof check UUID is a hint only. Wait, wake and settlement use the unique
+current-attempt native record on the exact registered worktree after ownership, cwd and argv checks. A missing,
+transposed or foreign hint stays bounded diagnostics and cannot displace that record. Zero, several, wrong-attempt,
+wrong-cwd or wrong-argv records remain unknown. An observation defect does not route as a product assertion, and
+the stopped-task sweep retains only that live owned runner (birth/group plus the authorized capture), never the
+whole worktree, a stale or foreign check, an explicit stop/cancel, or a settled runner. A stopped attempt is
+reconciled on the same generation only after that exact record is terminal; a still-running record whose local
+runner is already gone stays unknown, with original status, logs and receipt retained, and no later attempt is
+started. Book import proof ec36303b attempt 4 keeps that remaining gap: physical
+af80a375-0973-4624-aa10-c353289cd967 has no local PID and no terminal exit, and remote final state is unobserved.
+
 Disposition: fb066745 attempt 1 is unknown and custody stays retained because no durable authoritative host/run
 binding exists; do not reconstruct it from logs, signal or replay Auth, infer success, or fabricate a receipt.
 Reports count `verifiedProofs` separately from landed source tasks; verification does not complete a Goal. Failures

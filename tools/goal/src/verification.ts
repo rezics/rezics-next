@@ -228,7 +228,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import { hostname } from 'node:os';
-import { runHostProcess, sameProcess, type ProcessIdentity } from './process.ts';
+import { identityLive, runHostProcess, sameProcess, type ProcessIdentity } from './process.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -284,6 +284,8 @@ export type ProofObservation = {
   cause: string;
   record: unknown;
   physical: unknown[];
+  /** Worker-reported UUID when it differs from the unique owned current-attempt record. */
+  reportedHint?: string;
 };
 export function proofFingerprint(brief: Pick<Brief, 'goal' | 'manager' | 'kind' | 'proof' | 'acceptance'>): string {
   return createHash('sha256')
@@ -804,6 +806,127 @@ export function observeProof(binding: ProofBinding, reader: ProofReader): ProofO
     return result('unknown', false, String(error));
   }
 }
+const ORDINARY_PROOF_RESULTS = '.temp/goal/checks/results';
+
+function ordinaryProofResultsDirectory(task: Task): string {
+  return join(task.worktree, ORDINARY_PROOF_RESULTS);
+}
+
+/** A worker-supplied waiting token is a hint only when it is one bare native UUID. */
+export function reportedOrdinaryProofHint(checkIds?: string[]): string | undefined {
+  return checkIds?.length === 1 && nativeCheckId.test(checkIds[0]!) ? checkIds[0] : undefined;
+}
+
+/**
+ * Current-attempt native invocations on the exact registered worktree. Ownership selects the set; a worker UUID never
+ * adds a foreign, wrong-attempt or extra record.
+ */
+export function currentOrdinaryProofInvocations(task: Task): { id: string; record: unknown }[] {
+  const directory = ordinaryProofResultsDirectory(task);
+  const owned: { id: string; record: unknown }[] = [];
+  for (const name of readdirSync(directory)) {
+    if (!name.endsWith('.json')) continue;
+    const id = name.slice(0, -5);
+    if (!nativeCheckId.test(id)) continue;
+    let record: unknown;
+    try {
+      record = JSON.parse(readFileSync(join(directory, name), 'utf8'));
+    } catch {
+      continue; // An unreadable historical result is not this current invocation's evidence.
+    }
+    if (
+      isObject(record) &&
+      isObject(record.ownership) &&
+      record.ownership.taskId === task.id &&
+      record.ownership.attempt === task.currentAttempt
+    )
+      owned.push({ id, record });
+  }
+  return owned;
+}
+
+/** The sole current-attempt native invocation, or undefined when zero or several records match. */
+export function ownedCurrentOrdinaryProofInvocation(task: Task): { id: string; record: unknown } | undefined {
+  const owned = currentOrdinaryProofInvocations(task);
+  return owned.length === 1 ? owned[0] : undefined;
+}
+
+export function proofObservationCheckId(observation: ProofObservation | undefined): string | undefined {
+  if (
+    !observation ||
+    !observation.record ||
+    typeof observation.record !== 'object' ||
+    Array.isArray(observation.record)
+  )
+    return undefined;
+  const id = (observation.record as { id?: unknown }).id;
+  return typeof id === 'string' && nativeCheckId.test(id) ? id : undefined;
+}
+
+function withReportedOrdinaryProofHint(
+  observation: ProofObservation,
+  hint: string | undefined,
+  actualId: string | undefined,
+): ProofObservation {
+  if (!hint || hint === actualId) return observation;
+  return {
+    ...observation,
+    cause: `${observation.cause}; reported hint ${hint}`,
+    reportedHint: hint,
+  };
+}
+
+export type ActiveOrdinaryProofRunner = {
+  checkId: string;
+  physicalRunId?: string;
+  runnerHost: string;
+  runnerIdentity: ProcessIdentity;
+};
+
+/**
+ * The live local runner of a stopped registered ordinary proof whose unique current-attempt record is still running.
+ * Explicit stop/cancel, settled, stale, foreign and missing unique records yield nothing.
+ */
+export function activeOrdinaryProofRunner(
+  task: Task,
+  process?: ProcessIdentity,
+): ActiveOrdinaryProofRunner | undefined {
+  if (task.state !== 'stopped' || task.workspace || task.proofRun) return;
+  if (!registeredProof(task.brief, task.proofAuthorization)) return;
+  let owned: { id: string; record: unknown } | undefined;
+  try {
+    owned = ownedCurrentOrdinaryProofInvocation(task);
+  } catch {
+    return;
+  }
+  if (!owned || observeOrdinaryProof(task, owned.id, owned.record).status !== 'running' || !isObject(owned.record))
+    return;
+  const identity = runnerIdentity(owned.record.runnerIdentity);
+  if (!identity || typeof owned.record.runnerHost !== 'string' || owned.record.runnerHost !== hostname()) return;
+  if (!identityLive(identity)) return;
+  const root = join(task.worktree, '.temp/goal/checks');
+  const physicalRunId = typeof owned.record.physicalRunId === 'string' ? owned.record.physicalRunId : undefined;
+  if (
+    existsSync(join(root, 'cancellations', `${owned.id}.json`)) ||
+    existsSync(join(root, 'custody', 'cancelled', `${owned.id}.json`)) ||
+    (physicalRunId !== undefined && existsSync(join(root, 'custody', 'stopping', `${owned.id}.${physicalRunId}.json`)))
+  )
+    return;
+  if (
+    process &&
+    (identity.group !== process.group ||
+      identity.boot !== process.boot ||
+      BigInt(process.start) < BigInt(identity.start))
+  )
+    return;
+  return {
+    checkId: owned.id,
+    ...(physicalRunId ? { physicalRunId } : {}),
+    runnerHost: owned.record.runnerHost,
+    runnerIdentity: identity,
+  };
+}
+
 /** Terminal observation and revocation share the producer fence with all physical incarnation publication. */
 export async function readReservationObservation(
   run: ProofReservation,
@@ -855,37 +978,29 @@ export async function readProofObservation(task: Task, checkIds?: string[]): Pro
     record,
     physical: [],
   });
-  const directory = join(task.worktree, '.temp/goal/checks/results');
+  const registeredOrdinary = registeredProof(task.brief, task.proofAuthorization) && !task.proofRun;
+  const hint = reportedOrdinaryProofHint(checkIds);
   try {
-    if (checkIds?.length && (checkIds.length !== 1 || !nativeCheckId.test(checkIds[0]!)))
+    if (!registeredOrdinary && checkIds?.length && !hint)
       return unknown('Proof waiting requires one bare wrapper UUID');
-    const ids = readdirSync(directory)
-      .filter((name) => name.endsWith('.json') && nativeCheckId.test(name.slice(0, -5)))
-      .map((name) => name.slice(0, -5));
-    const owned: { id: string; record: unknown }[] = [];
-    for (const id of ids) {
-      let record: unknown;
-      try {
-        record = JSON.parse(readFileSync(join(directory, `${id}.json`), 'utf8'));
-      } catch (error) {
-        if (checkIds?.includes(id)) return unknown(`Original wrapper result unreadable: ${String(error)}`);
-        continue; // An unrelated historical result is not this current invocation's evidence.
-      }
-      if (
-        (isObject(record) &&
-          isObject(record.ownership) &&
-          record.ownership.taskId === task.id &&
-          record.ownership.attempt === task.currentAttempt) ||
-        checkIds?.includes(id)
-      )
-        owned.push({ id, record });
-    }
-    if (checkIds?.length && !owned.some(({ id }) => id === checkIds[0]))
-      return unknown(`Original wrapper result missing for ${checkIds[0]}`);
-    if (owned.length !== 1) return unknown('Expected exactly one ordinary original invocation for this attempt', owned);
-    return observeOrdinaryProof(task, owned[0]!.id, owned[0]!.record);
+    const owned = currentOrdinaryProofInvocations(task);
+    if (owned.length !== 1)
+      return withReportedOrdinaryProofHint(
+        unknown('Expected exactly one ordinary original invocation for this attempt', owned),
+        hint,
+        undefined,
+      );
+    return withReportedOrdinaryProofHint(
+      observeOrdinaryProof(task, owned[0]!.id, owned[0]!.record),
+      hint,
+      owned[0]!.id,
+    );
   } catch (error) {
-    return unknown(`Original wrapper result unavailable: ${String(error)}`);
+    return withReportedOrdinaryProofHint(
+      unknown(`Original wrapper result unavailable: ${String(error)}`),
+      hint,
+      undefined,
+    );
   }
 }
 

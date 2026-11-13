@@ -4,10 +4,17 @@ import {
   HOST_INTERRUPTION_RETAINED,
   primaryWorkerStderr,
 } from './worker-host-custody.ts';
-import { readProofObservation, proofSourceStatus, nativeCheckId, registeredProof } from './verification.ts';
+import {
+  readProofObservation,
+  proofSourceStatus,
+  proofObservationCheckId,
+  nativeCheckId,
+  registeredProof,
+  type ProofObservation,
+} from './verification.ts';
 import { createHash } from 'node:crypto';
 import { parseAgentExit } from './agents.ts';
-import type { LandingQueue } from './contracts.ts';
+import type { AttemptRef, LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
 import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSuccess } from './records.ts';
 import { agentAdapter } from './agents.ts';
@@ -58,18 +65,17 @@ function unchangedSource(task: Task, head: string): boolean {
     .some((path) => path && !frozen.has(path));
 }
 
-function proofObservationCheckId(
-  observation: Awaited<ReturnType<typeof readProofObservation>> | undefined,
-): string | undefined {
-  if (
-    !observation ||
-    !observation.record ||
-    typeof observation.record !== 'object' ||
-    Array.isArray(observation.record)
-  )
-    return undefined;
-  const id = (observation.record as { id?: unknown }).id;
-  return typeof id === 'string' && nativeCheckId.test(id) ? id : undefined;
+function registeredOrdinaryProof(task: Task): boolean {
+  return registeredProof(task.brief, task.proofAuthorization) && !task.proofRun;
+}
+
+function ordinaryProofWaitingChecks(
+  observation: ProofObservation | undefined,
+  fallback?: string[],
+): string[] | undefined {
+  const actualId = proofObservationCheckId(observation);
+  if (actualId) return [actualId];
+  return fallback?.length ? fallback : undefined;
 }
 
 const SQLITE_CONTENTION = /SQLITE_(?:BUSY|LOCKED)|database (?:table )?is locked/i;
@@ -174,12 +180,9 @@ export async function settle(
         )
       : undefined;
     const proofCheckId = proofObservationCheckId(proofObservation);
+    const ordinaryRegistered = proofTask && registeredOrdinaryProof(proofTaskRecord);
     const ownedOrdinaryProofPass = Boolean(
-      proofTask &&
-      !proofTaskRecord.proofRun &&
-      registeredProof(proofTaskRecord.brief, proofTaskRecord.proofAuthorization) &&
-      proofObservation?.status === 'terminal' &&
-      proofObservation.passed,
+      ordinaryRegistered && proofObservation?.status === 'terminal' && proofObservation.passed,
     );
     const currentBoot = processIdentity()?.boot ?? null;
     const bootCustody = currentAttempt.process
@@ -379,16 +382,26 @@ export async function settle(
       const lostReportWaitingId =
         proofTask && proofExit === null && proofObservation?.status === 'running' ? proofCheckId : undefined;
       const proofWaitingId = waitingId ?? lostReportWaitingId;
+      const ordinaryWaitingChecks = ordinaryProofWaitingChecks(
+        proofObservation,
+        pendingChecks?.length ? pendingChecks : proofWaitingId ? [proofWaitingId] : undefined,
+      );
+      const waitRegisteredOrdinary =
+        ordinaryRegistered &&
+        (proofObservation?.status === 'running' ||
+          proofObservation?.status === 'unknown' ||
+          (proofObservation?.status === 'terminal' && Boolean(pendingChecks?.length || waitingId)));
       if (
-        (pendingChecks?.length || lostReportWaitingId) &&
-        (!proofTask ||
-          (proofWaitingId &&
-            (!pendingChecks?.length || (pendingChecks.length === 1 && pendingChecks[0] === proofWaitingId)) &&
-            (proofObservation?.status === 'running' || proofObservation?.status === 'terminal')))
+        waitRegisteredOrdinary ||
+        ((pendingChecks?.length || lostReportWaitingId) &&
+          (!proofTask ||
+            (proofWaitingId &&
+              (!pendingChecks?.length || (pendingChecks.length === 1 && pendingChecks[0] === proofWaitingId)) &&
+              (proofObservation?.status === 'running' || proofObservation?.status === 'terminal'))))
       ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
-          attempt.checks = pendingChecks?.length ? pendingChecks : [proofWaitingId!];
+          attempt.checks = ordinaryWaitingChecks ?? (pendingChecks?.length ? pendingChecks : [proofWaitingId!]);
           attempt.process = null;
           attempt.driver = null;
           attempt.exitCode = code;
@@ -635,6 +648,22 @@ export async function settle(
         return;
       }
       if (finalMeasurement.failureKind && !proofTask) return;
+      if (proofTask && proofObservation && proofObservation.status !== 'terminal') {
+        // A missing, wrong or foreign hint is an observation defect, not a product assertion.
+        store.updateAttempt(ref, (current) => {
+          current.failureKind = 'tool';
+          current.result = `${finalMeasurement.result}\n${proofObservation.cause}`;
+        });
+        store.putRecord(makeRecord(task, attempt, finalMeasurement, 'stopped'));
+        store.updateTask(ref, (current) => {
+          current.state = 'stopped';
+        });
+        store.event(ref, 'proof-observation-unavailable', {
+          observation: proofObservation,
+          reportedHint: proofObservation.reportedHint ?? waitingId ?? pendingChecks?.[0],
+        });
+        return;
+      }
       if (proofTask && proofObservation) {
         const run = task.proofRun;
         const exit = parseAgentExit(finalMeasurement.result, agentAdapter(attempt.profile.cli));
@@ -755,6 +784,94 @@ export async function settle(
     }
     // Start only after the enqueue transaction commits; a busy train is awaited through its lease.
     if (queued) await startTrain();
+  } finally {
+    lease.release();
+  }
+}
+
+/**
+ * Settle a stopped registered ordinary proof from its unique owned current-attempt record once that record is
+ * terminal. Does not start a later attempt, rewrite wrapper custody, or invent a pass from a still-running record.
+ */
+export async function reconcileStoppedOrdinaryProof(tasks: WorkerTasks, ref: AttemptRef): Promise<boolean> {
+  const store = tasks.store;
+  const task = store.task(ref.taskId);
+  const attempt = store.attempt(ref);
+  if (
+    task.brief.kind !== 'verification' ||
+    task.state !== 'stopped' ||
+    task.currentAttempt !== ref.attempt ||
+    !registeredOrdinaryProof(task) ||
+    attempt.terminationIntent?.operation === 'stop' ||
+    attempt.terminationIntent?.operation === 'cancel'
+  )
+    return false;
+  const observation = await readProofObservation(task, attempt.checks);
+  if (observation.status !== 'terminal') return false;
+  let lease;
+  try {
+    lease = acquireDirectoryLease(`${attempt.logPath}.settle`, tasks.settings.policy?.leases ?? defaultPolicy.leases);
+  } catch (error) {
+    if (error instanceof LeaseHeldError) return false;
+    throw error;
+  }
+  try {
+    let settled = false;
+    await retrySettlementPersistence(
+      () => {
+        store.write(ref, () => {
+          const currentTask = store.task(ref.taskId);
+          const currentAttempt = store.attempt(ref);
+          if (
+            currentTask.state !== 'stopped' ||
+            currentTask.currentAttempt !== ref.attempt ||
+            currentAttempt.terminationIntent?.operation === 'stop' ||
+            currentAttempt.terminationIntent?.operation === 'cancel'
+          )
+            return;
+          const sourceStatus = proofSourceStatus(
+            currentTask,
+            tasks.settings.integrationBranch,
+            tasks.settings.policy?.proof,
+          );
+          const passed = observation.passed;
+          const verified = passed && sourceStatus === 'current';
+          const captureOnly = passed && sourceStatus === 'integration-not-current';
+          const measurement = readMeasurement(currentAttempt, {
+            policy: tasks.settings.policy ?? defaultPolicy,
+          });
+          const proofRecord = makeRecord(currentTask, currentAttempt, measurement, verified ? 'verified' : 'stopped');
+          proofRecord.proof = observation;
+          store.putRecord(proofRecord);
+          store.updateTask(ref, (value) => {
+            value.state = verified ? 'verified' : 'stopped';
+          });
+          store.updateAttempt(ref, (value) => {
+            value.failureKind = verified || captureOnly ? null : 'tool';
+            value.result = `${currentAttempt.result}\n${observation.cause}${
+              sourceStatus === 'capture-changed'
+                ? '; captured source changed'
+                : sourceStatus === 'integration-not-current'
+                  ? '; capture is not current integration'
+                  : ''
+            }`;
+            const actualId = proofObservationCheckId(observation);
+            if (actualId) value.checks = [actualId];
+          });
+          store.releaseExitedProofReservations(ref);
+          store.event(ref, verified ? 'proof-verified' : captureOnly ? 'proof-capture-not-current' : 'proof-failed', {
+            observation,
+            sourceStatus,
+            unchanged: sourceStatus === 'current',
+            reconciledStoppedOrdinary: true,
+          });
+          settled = true;
+        });
+      },
+      (tasks.settings.policy ?? defaultPolicy).worker.settlementBackoffMs,
+    );
+    if (settled) evidenceBundle(store.task(ref.taskId), store.attempt(ref), undefined, store.policy.evidence);
+    return settled;
   } finally {
     lease.release();
   }

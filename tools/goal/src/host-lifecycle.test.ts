@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 import { join, relative } from 'node:path';
+import type { Attempt } from './types.ts';
 import { createInterface } from 'node:readline';
 import type { AppServer } from './app-server.ts';
 import { openDb } from './db.ts';
@@ -9,7 +12,10 @@ import { dispatchDailyStepAudit, ensureFlow } from './flow.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
-import { harness, temporaryDirectory } from './test-support.ts';
+import { brief, harness, temporaryDirectory } from './test-support.ts';
+import { stoppedTaskSweepRetainsOrdinaryProof } from './manager-host.ts';
+import { authorizeProof } from './verification.ts';
+import { git } from './tasks.ts';
 import { hostRequest } from './integration-cli.ts';
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
@@ -833,3 +839,112 @@ test('a host that loaded one tools/goal revision retires once main publishes ano
     f.close();
   }
 }, 20_000);
+
+test('the stopped-task sweep retains only the live owned ordinary-proof runner', () => {
+  const h = harness();
+  try {
+    const identity = processIdentity();
+    if (!identity) throw new Error('test process identity unavailable');
+    const commit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['branch', 'dev', commit]);
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    const actor = { id: 'operations', sessionId: 'proof-owner-session' };
+    h.store.db
+      .query('INSERT INTO manager_sessions VALUES (?,?)')
+      .run(actor.id, JSON.stringify({ status: 'running', threadId: actor.sessionId }));
+    const sourceBrief = brief();
+    sourceBrief.acceptance.command = ['bun', 'test', 'fixture.test.ts'];
+    const source = h.store.createTask(
+      sourceBrief,
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: commit },
+      'implementation',
+    );
+    h.store.updateTask({ taskId: source.id, attempt: 0 }, (task) => {
+      task.state = 'integrated';
+      task.integratedCommit = commit;
+    });
+    const proofBrief = {
+      ...sourceBrief,
+      kind: 'verification' as const,
+      paths: [],
+      proof: { journey: 'Original journey', sourceTasks: [source.id], sourceCommit: commit },
+    };
+    const authorization = authorizeProof(h.store, h.root, proofBrief, actor, 'operations', 'dev');
+    const proof = h.store.createTask(
+      proofBrief,
+      { briefPath: h.briefFile, worktree: h.root, branch: 'worker/proof', base: commit },
+      'implementation',
+    );
+    const attempt = h.store.nextAttempt({ taskId: proof.id, attempt: 0 }, (n): Attempt => ({
+      taskId: proof.id,
+      attempt: n,
+      state: 'exited',
+      profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+      pool: 'fixture',
+      tableVersion: 'fixture',
+      experiment: null,
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      process: null,
+      driver: null,
+      session: 'proof-session',
+      logPath: join(h.settings.stateDirectory, 'runs', proof.id, `${n}.jsonl`),
+      evidencePath: join(h.settings.stateDirectory, 'evidence', proof.id, String(n)),
+      auxiliaryProcesses: [],
+      fixRound: 0,
+      consulted: false,
+      previousFailure: null,
+      failure: null,
+      escalation: null,
+      before: null,
+      after: null,
+      exitCode: 0,
+      result: '',
+      blocker: null,
+      approaches: [],
+    }));
+    h.store.updateTask(attempt, (task) => {
+      task.proofAuthorization = authorization;
+      task.state = 'stopped';
+    });
+    const checkId = randomUUID();
+    mkdirSync(join(h.root, '.temp/goal/checks/results'), { recursive: true });
+    writeFileSync(
+      join(h.root, '.temp/goal/checks/results', `${checkId}.json`),
+      JSON.stringify({
+        id: checkId,
+        cwd: h.root,
+        argv: ['bun', 'test', 'fixture.test.ts'],
+        ownership: { taskId: proof.id, attempt: 1 },
+        status: 'running',
+        runnerHost: hostname(),
+        runnerPid: identity.pid,
+        runnerIdentity: identity,
+        physicalRunId: randomUUID(),
+        log: '.temp/goal/checks/original.log',
+      }),
+    );
+    expect(stoppedTaskSweepRetainsOrdinaryProof(h.store.db, proof.id, h.root, identity)).toBe(true);
+    expect(
+      stoppedTaskSweepRetainsOrdinaryProof(h.store.db, proof.id, h.root, {
+        ...identity,
+        group: identity.group + 1,
+        pid: identity.pid + 1,
+      }),
+    ).toBe(false);
+    h.store.updateAttempt(attempt, (current) => {
+      current.terminationIntent = {
+        operation: 'stop',
+        requestedAt: new Date().toISOString(),
+        state: 'complete',
+        processIdentity: 'known',
+        process: identity,
+        auxiliaryProcesses: [],
+        settledAt: new Date().toISOString(),
+      };
+    });
+    expect(stoppedTaskSweepRetainsOrdinaryProof(h.store.db, proof.id, h.root, identity)).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});

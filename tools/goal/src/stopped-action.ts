@@ -5,7 +5,7 @@ import { acceptedSuccessorDisposition, preservesTerminalProof } from './owner-de
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { WorkerEvent } from './store.ts';
 import type { Task } from './types.ts';
-import { nativeCheckId, observeOrdinaryProof } from './verification.ts';
+import { nativeCheckId, observeOrdinaryProof, ownedCurrentOrdinaryProofInvocation } from './verification.ts';
 import {
   workerCheckBudgetDirectory,
   workerCheckHostActiveTypingRecovery,
@@ -200,6 +200,22 @@ function successfulSourceAttempt(attempt: {
   );
 }
 
+function liveOrdinaryProofStop(task: Task, attemptBody: { terminationIntent?: { operation?: unknown } }): boolean {
+  if (
+    task.brief.kind !== 'verification' ||
+    task.state !== 'stopped' ||
+    attemptBody.terminationIntent?.operation === 'stop' ||
+    attemptBody.terminationIntent?.operation === 'cancel'
+  )
+    return false;
+  try {
+    const owned = ownedCurrentOrdinaryProofInvocation(task);
+    return Boolean(owned && observeOrdinaryProof(task, owned.id, owned.record).status === 'running');
+  } catch {
+    return false;
+  }
+}
+
 export function isActionableStop(
   db: Database,
   taskId: string,
@@ -208,6 +224,19 @@ export function isActionableStop(
   policy = defaultPolicy,
 ): boolean {
   if (hint === 'preserved') return false;
+  try {
+    const liveRow = db
+      .query<{ task: string; attemptBody: string }, [string, number]>(
+        `SELECT t.body AS task, a.body AS attemptBody
+         FROM worker_tasks t JOIN worker_attempts a ON a.task_id=t.id AND a.attempt=t.current_attempt
+         WHERE t.id=? AND t.current_attempt=?`,
+      )
+      .get(taskId, attempt);
+    if (liveRow && liveOrdinaryProofStop(JSON.parse(liveRow.task) as Task, JSON.parse(liveRow.attemptBody)))
+      return false;
+  } catch {
+    /* Observation defects do not invent an actionable product stop. */
+  }
   if (hint !== 'inspect-proof' && hint !== 'typing-recovery') return true;
   try {
     const row = db
@@ -253,10 +282,12 @@ export function isActionableStop(
       !nativeCheckId.test(checks[0])
     )
       return true;
-    const path = join(task.worktree, '.temp/goal/checks/results', `${checks[0]}.json`);
+    const owned = ownedCurrentOrdinaryProofInvocation(task);
+    if (!owned) return true;
+    const path = join(task.worktree, '.temp/goal/checks/results', `${owned.id}.json`);
     const stat = lstatSync(path);
     if (!stat.isFile() || stat.size > policy.proof.sourceBufferBytes) return true;
-    return observeOrdinaryProof(task, checks[0], JSON.parse(readFileSync(path, 'utf8'))).status !== 'terminal';
+    return observeOrdinaryProof(task, owned.id, JSON.parse(readFileSync(path, 'utf8'))).status !== 'terminal';
   } catch {
     // No unverifiable owner decision, compiler handoff or result silently suppresses an ordinary action.
     return true;
