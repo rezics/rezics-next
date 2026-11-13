@@ -4541,7 +4541,6 @@ CREATE TABLE content.revision_disclosure (
     CONSTRAINT revision_disclosure_check3 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT revision_disclosure_check4 CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT revision_disclosure_check5 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
-    CONSTRAINT revision_disclosure_check6 CHECK ((route = ((get_byte(uuid_send(issuer_account_id), 10) * 256) + get_byte(uuid_send(issuer_account_id), 11)))),
     CONSTRAINT revision_disclosure_check7 CHECK ((route = ((get_byte(uuid_send(issued_transaction_id), 10) * 256) + get_byte(uuid_send(issued_transaction_id), 11)))),
     CONSTRAINT revision_disclosure_check8 CHECK ((route = ((get_byte(uuid_send(source_post_transaction_id), 10) * 256) + get_byte(uuid_send(source_post_transaction_id), 11)))),
     CONSTRAINT revision_disclosure_check9 CHECK ((route = ((get_byte(uuid_send(source_thread_transaction_id), 10) * 256) + get_byte(uuid_send(source_thread_transaction_id), 11)))),
