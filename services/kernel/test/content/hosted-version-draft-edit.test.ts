@@ -1,16 +1,20 @@
 import { expect, test } from 'bun:test';
+import type { CommandTransaction } from '../../src/command/command.ts';
 import {
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
   type VersionedOutlineSequenceSnapshotReader,
 } from '../../src/content/versioned-outline-sequence.ts';
+import { commitHostedVersionDraftMoveInTransaction } from '../../src/content/hosted-version-draft-edit-command.ts';
 import { prepareHostedVersionDraftMovePlan } from '../../src/content/hosted-version-draft-edit.ts';
 import {
   HostedVersionDraftMoveError,
   type HostedVersionDraftMoveInput,
+  type HostedVersionDraftMoveNativeAdapter,
   type HostedVersionDraftMoveIndexes,
   type HostedVersionDraftMoveSelection,
 } from '../../src/content/hosted-version-draft-edit-model.ts';
+import { RevisionPreconditionError } from '../../src/content/commands.ts';
 
 type Snapshot = Map<string, VersionedOutlineSequenceNode<string>>;
 
@@ -227,4 +231,148 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
   );
   expect(noOp.result).toBe('no-op');
   expect(noOp.work.siblings.writtenNodeCount + noOp.work.preorder.writtenNodeCount).toBe(0);
+});
+
+test('binds staged move roots to one adapter commit, skips adjacent no-ops, and rejects a lost head CAS', async () => {
+  const revisionId = 'draft-v7';
+  const input: HostedVersionDraftMoveInput = {
+    expectedRevisionId: revisionId,
+    occurrenceId: 'source',
+    parentId: 'parent-b',
+    beforeOccurrenceId: 'anchor',
+  };
+  const siblingA = buildSequence(['source']);
+  const siblingB = buildSequence(['anchor']);
+  const oldChapters = ['source', 'anchor'];
+  const preorder = buildSequence(['parent-a', 'source', 'parent-b', 'anchor'], new Set(oldChapters));
+  const chapters = buildSequence(oldChapters, new Set(oldChapters));
+  const original = {
+    siblings: new Map([...siblingA.nodes, ...siblingB.nodes]),
+    preorder: preorder.nodes,
+    chapters: chapters.nodes,
+  };
+  const selection: HostedVersionDraftMoveSelection = {
+    snapshotId: revisionId,
+    headRevisionId: revisionId,
+    source: {
+      snapshotId: revisionId,
+      occurrenceId: 'source',
+      parentId: 'parent-a',
+      kind: 'chapter',
+      subtreeSize: 1n,
+      subtreeHeight: 0,
+      chapterCount: 1n,
+    },
+    destinationParent: {
+      snapshotId: revisionId,
+      occurrenceId: 'parent-b',
+      parentId: null,
+      kind: 'part',
+      subtreeSize: 2n,
+      subtreeHeight: 1,
+      chapterCount: 1n,
+    },
+    before: {
+      snapshotId: revisionId,
+      occurrenceId: 'anchor',
+      parentId: 'parent-b',
+      kind: 'chapter',
+      subtreeSize: 1n,
+      subtreeHeight: 0,
+      chapterCount: 1n,
+    },
+    sourceAncestors: [
+      { snapshotId: revisionId, occurrenceId: 'parent-a', parentId: null, subtreeSize: 2n, chapterCount: 1n },
+    ],
+    destinationAncestors: [
+      { snapshotId: revisionId, occurrenceId: 'parent-b', parentId: null, subtreeSize: 2n, chapterCount: 1n },
+    ],
+    sourceSiblingRootId: siblingA.rootId,
+    destinationSiblingRootId: siblingB.rootId,
+    preorderRootId: preorder.rootId,
+    chapterRootId: chapters.rootId,
+  };
+  const tx = {} as CommandTransaction;
+  const write = {
+    catalogueId: 'catalogue-1',
+    input,
+    revisionId: 'draft-v8',
+    transactionId: 'transaction-1',
+    recordedAt: '2026-11-13T00:00:00.000Z',
+  };
+  const stagedWrites: number[] = [];
+
+  for (const commitResult of [true, false]) {
+    const indexes = makeIndexes(original);
+    const adapter: HostedVersionDraftMoveNativeAdapter<CommandTransaction> = {
+      async selectExpectedSnapshot(selectedTx, catalogueId, selectedInput) {
+        expect(selectedTx).toBe(tx);
+        expect(catalogueId).toBe(write.catalogueId);
+        expect(selectedInput).toEqual(input);
+        return { selection, indexes };
+      },
+      async commitMove(selectedTx, committed) {
+        expect(selectedTx).toBe(tx);
+        expect(committed.plan.result).toBe('moved');
+        expect(committed.snapshot).toEqual({ selection, indexes });
+        const counts = [
+          committed.snapshot.indexes.siblings.nodeWrites.size,
+          committed.snapshot.indexes.preorder.nodeWrites.size,
+          committed.snapshot.indexes.chapters.nodeWrites.size,
+        ];
+        expect(counts.every((count) => count > 0)).toBe(true);
+        stagedWrites.push(...counts);
+        return commitResult;
+      },
+    };
+
+    if (commitResult) {
+      const result = await commitHostedVersionDraftMoveInTransaction(adapter, tx, write);
+      expect(result.value).toEqual({ catalogueId: write.catalogueId, revisionId: write.revisionId });
+      expect(result.events).toEqual([
+        {
+          type: 'com.rezics.content.hosted-catalogue.revise.v1',
+          subject: write.catalogueId,
+          data: result.value,
+        },
+      ]);
+    } else {
+      await expect(commitHostedVersionDraftMoveInTransaction(adapter, tx, write)).rejects.toBeInstanceOf(
+        RevisionPreconditionError,
+      );
+    }
+  }
+  expect(stagedWrites).toHaveLength(6);
+
+  const noOpInput: HostedVersionDraftMoveInput = {
+    ...input,
+    parentId: 'parent-a',
+    beforeOccurrenceId: null,
+  };
+  const noOpSelection: HostedVersionDraftMoveSelection = {
+    ...selection,
+    destinationParent: {
+      ...selection.destinationParent,
+      occurrenceId: 'parent-a',
+      subtreeSize: 2n,
+      chapterCount: 1n,
+    },
+    before: null,
+    destinationAncestors: selection.sourceAncestors,
+    destinationSiblingRootId: selection.sourceSiblingRootId,
+  };
+  let noOpCommits = 0;
+  const noOpAdapter: HostedVersionDraftMoveNativeAdapter<CommandTransaction> = {
+    async selectExpectedSnapshot() {
+      return { selection: noOpSelection, indexes: makeIndexes(original) };
+    },
+    async commitMove() {
+      noOpCommits += 1;
+      return true;
+    },
+  };
+  const noOp = await commitHostedVersionDraftMoveInTransaction(noOpAdapter, tx, { ...write, input: noOpInput });
+  expect(noOp.value.revisionId).toBe(revisionId);
+  expect(noOp.events).toEqual([]);
+  expect(noOpCommits).toBe(0);
 });

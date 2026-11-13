@@ -2,6 +2,7 @@ import type {
   VersionedOutlineSequenceReadWriteSet,
   VersionedOutlineSequenceWork,
 } from './versioned-outline-sequence.ts';
+import type { HostedVersionRevisionResolution } from './hosted-version-revision.ts';
 
 /** A request to move one existing occurrence and its unchanged subtree. */
 export type HostedVersionDraftMoveInput = Readonly<{
@@ -49,6 +50,41 @@ export type HostedVersionDraftMoveIndexes = Readonly<{
   siblings: VersionedOutlineSequenceReadWriteSet<string>;
   preorder: VersionedOutlineSequenceReadWriteSet<string>;
   chapters: VersionedOutlineSequenceReadWriteSet<string>;
+}>;
+
+/** One native transaction view of the exact expected draft and all three
+ * sequence workspaces. The workspace readers stay pinned to this snapshot while
+ * writes made by the planner remain local until the adapter commits them. */
+export type HostedVersionDraftMoveNativeSnapshot = Readonly<{
+  selection: HostedVersionDraftMoveSelection;
+  indexes: HostedVersionDraftMoveIndexes;
+}>;
+
+/** Owner writes that must commit with the version-head compare-and-swap. */
+export type HostedVersionDraftMoveNativeWrite = Readonly<{
+  catalogueId: string;
+  input: HostedVersionDraftMoveInput;
+  snapshot: HostedVersionDraftMoveNativeSnapshot;
+  plan: HostedVersionDraftMovePlan;
+  revisionId: string;
+  transactionId: string;
+  recordedAt: string;
+}>;
+
+/** Storage contract for the native version adapter. Selection must resolve the
+ * source, destination, optional anchor and both ancestor paths from one current
+ * expected draft. Commit persists staged sibling/preorder/chapter nodes, the
+ * moved occurrence and changed summaries, the revision/event facts and the
+ * expected-head CAS in the caller's transaction. A false result means only that
+ * the expected-head CAS lost; all other failures throw and roll back. */
+export type HostedVersionDraftMoveNativeAdapter<Transaction> = Readonly<{
+  selectExpectedSnapshot(
+    tx: Transaction,
+    catalogueId: string,
+    input: HostedVersionDraftMoveInput,
+    revision: Extract<HostedVersionRevisionResolution, { kind: 'ordered' }>,
+  ): Promise<HostedVersionDraftMoveNativeSnapshot>;
+  commitMove(tx: Transaction, write: HostedVersionDraftMoveNativeWrite): Promise<boolean>;
 }>;
 
 export type HostedVersionDraftMoveAncestorDelta = Readonly<{

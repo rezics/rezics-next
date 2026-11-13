@@ -93,12 +93,11 @@ Decision: a cross-parent move cuts the stable occurrence subtree's contiguous pr
 splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
 ancestor summaries, without visiting descendants.
 
-Decision: keep the hosted move planner unmounted until the native version adapter provides expected-snapshot
-selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and expected-head CAS. Once
-available, bind it through the admitted-author `runCommand`: resolve all anchors and ancestor paths from one pinned
-draft, stage all three sequence workspaces in that transaction, then commit sequence roots, occurrence parent,
-changed ancestor summaries, receipt/event and expected-head CAS atomically. The planner remains pure and owns no
-command or persistence authority.
+Decision: the retained binder resolves the expected immutable structure descriptor after author admission; the
+native adapter proves selected membership and bounded containment paths in that draft snapshot, then commits all
+three final index roots, moved containment and changed size/chapter summaries through one store overlay with the
+revision-head CAS. Adjacent no-op retains the existing revision; selection and writes never enumerate the subtree
+or load target bodies. Route mounting remains with its owner.
 
 Decision: point insertion and subtree removal resolve one expected snapshot and update the existing sibling,
 preorder and chapter indexes; removal cuts ranges by stored aggregates without visiting descendants, preserving
@@ -130,11 +129,11 @@ draft generations and publication writes require candidate generations. After bo
 generation-kind foreign keys in `20261113121340_hosted_version_revision_snapshot_fk.sql` because the descriptor table
 did not exist at the store producer timestamp.
 
-Decision: Content binds each ordered Book revision to one immutable `(catalogue, generation, sequence)` snapshot.
-Exact reads distinguish ordered, compatibility and missing revisions; structure revisions bind draft generations,
-publication revisions bind candidate generations and retain the expected draft as source. The shared transaction
-seam inserts the native revision and descriptor before CAS-advancing only the caller's draft or publication pointer.
-The temporal store owner adds the snapshot and generation-kind foreign keys with its producer migration.
+Decision: the private adapter appends route/catalogue-bound node and occurrence versions by generation and sequence,
+stores sibling/preorder/chapter roots explicitly, and collapses each transaction's repeated keys to their final row.
+History seeks use the full equality prefix followed by sequence descending; tombstones are tested after selecting the
+latest row. The generation row is the only head fence. This representation stays unmounted and does not alter legacy
+snapshots or sealed prefixes.
 
 ### Evidence and migration
 
