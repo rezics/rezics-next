@@ -36,6 +36,10 @@ const placement = t.Union([
 const placements = t.Array(placement, { maxItems: HOSTED_PLACEMENT_LIMIT });
 export const HostedCreateSchema = t.Object({ postId: HostedIdSchema, threadId: HostedIdSchema, placements }, closed);
 export const HostedReviseSchema = t.Object({ expectedRevisionId: HostedIdSchema, placements }, closed);
+export const HostedRootAppendSchema = t.Object(
+  { expectedRevisionId: HostedIdSchema, occurrenceId: HostedIdSchema, title, target },
+  closed,
+);
 export const HostedPublishSchema = t.Object(
   {
     expectedRevisionId: HostedIdSchema,

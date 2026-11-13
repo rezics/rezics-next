@@ -22,8 +22,9 @@ grants draft access. Authors publish selected Posts through that existing bounda
 drafts stay private. Later body or structure edits do not change a released revision's bytes. Releasing an empty
 selection withdraws the current TOC; explicit historical manifests still obey current catalogue and target Access.
 
-The mounted `/v1/hostedCatalogues` operations create, revise, publish, read metadata, page children and resolve
-an occurrence at an explicit structure or publication revision. `GET /v1/subjects/{id}/hostedCatalogues`
+The mounted `/v1/hostedCatalogues` operations create and revise structures, append a root chapter, publish, read
+metadata, page children and resolve an occurrence at an explicit structure or publication revision.
+`GET /v1/subjects/{id}/hostedCatalogues`
 (`hosted_catalogue.for_subject`) lists current public publications for an existing Subject from indexed
 `subject_thread` candidates and same-route published catalogue-post subject references. Empty publications
 leave that page; historical exact reads stay on resolve and still obey current Access. Omitted read revision selects the current release;

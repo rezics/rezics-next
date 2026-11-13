@@ -180,6 +180,7 @@ const typed = [
   'POST /v1/hostedCatalogues',
   'POST /v1/hostedCatalogues/:id/$publish',
   'POST /v1/hostedCatalogues/:id/$revise',
+  'POST /v1/hostedCatalogues/:id/$appendRootChapter',
   'POST /v1/knowledge/documents/:id/publication/$select',
   'POST /v1/knowledge/documents/:id/revisions/$revise',
   'POST /v1/knowledge/documents/:id/$trash',
@@ -611,6 +612,13 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   expect(paths['/v1/libraryImports/anilist/{importId}:applyLabels']?.post?.operationId).toBe(
     'library_import_anilist.apply_labels',
   );
+  expect(paths['/v1/hostedCatalogues/{id}:appendRootChapter']?.post).toMatchObject({
+    operationId: 'hosted_catalogue.append_root_chapter',
+    'x-action': 'post:revise',
+    'x-exposure': 'public',
+    'x-rate-limit': { family: 'write', units: 1 },
+    security: [{ bearerAuth: [] }],
+  });
   expect([complete, precise]).toEqual([true, true]);
   expect(served.sort()).toEqual([...typed].sort());
 });

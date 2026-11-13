@@ -21,7 +21,7 @@ export type OrderedHostedPlacement = HostedPlacement & Readonly<{ ordinal: numbe
 export type HostedStructureInput = Readonly<{ placements: readonly HostedPlacement[] }>;
 export type HostedCreateInput = HostedStructureInput & Readonly<{ postId: string; threadId: string }>;
 export type HostedReviseInput = HostedStructureInput & Readonly<{ expectedRevisionId: string }>;
-/** Internal-only single root chapter append; no mounted schema or route. */
+/** One bounded root chapter append against an exact structure head. */
 export type HostedRootAppendInput = Readonly<{
   expectedRevisionId: string;
   occurrenceId: string;

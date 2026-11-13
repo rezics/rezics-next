@@ -25,6 +25,7 @@ import {
 import {
   createHostedCatalogue,
   reviseHostedCatalogue,
+  appendHostedRootChapter,
   publishHostedCatalogue,
   type HostedCommandDependencies,
 } from './hosted-chapters-commands.ts';
@@ -47,6 +48,7 @@ import {
   HostedIdSchema,
   HostedCreateSchema,
   HostedReviseSchema,
+  HostedRootAppendSchema,
   HostedPublishSchema,
   HostedCommandSchema,
   HostedRevisionSchema,
@@ -245,6 +247,27 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
         const result = await operation(() =>
           admission.run('normal', job, () =>
             reviseHostedCatalogue(deps, actor, id, body, commandContext(request, job.deadline)),
+          ),
+        );
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/hostedCatalogues/:id', 'appendRootChapter'),
+      {
+        params: params(),
+        headers,
+        body: strictContentSchema(HostedRootAppendSchema),
+        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures() },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.append_root_chapter' },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            appendHostedRootChapter(deps, actor, id, body, commandContext(request, job.deadline)),
           ),
         );
         session.record(result);

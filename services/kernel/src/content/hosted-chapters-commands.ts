@@ -70,8 +70,7 @@ export function publishHostedCatalogue(
   return mutate(deps, actor, catalogueId, { kind: 'publish', input }, context);
 }
 
-/** Internal source operation only. Exposure requires mixed-revision readers and
- * lifecycle support described in hosted-chapters.md. Shares native edit authority,
+/** Appends one root chapter to an exact draft head. Shares native edit authority,
  * deadlines, receipt replay, transaction retries and final container checks. */
 export function appendHostedRootChapter(
   deps: HostedCommandDependencies,

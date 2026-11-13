@@ -6,16 +6,17 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 
 ## Authoring and release
 
-| Operation ID               | Method and path                          | Input                                                                   |
-| -------------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
-| `hosted_catalogue.create`  | `POST /v1/hostedCatalogues`              | `postId`, `threadId`, `placements`                                      |
-| `hosted_catalogue.revise`  | `POST /v1/hostedCatalogues/{id}:revise`  | `expectedRevisionId`, `placements`                                      |
-| `hosted_catalogue.publish` | `POST /v1/hostedCatalogues/{id}:publish` | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds` |
+| Operation ID                           | Method and path                                    | Input                                                                   |
+| -------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `hosted_catalogue.create`              | `POST /v1/hostedCatalogues`                        | `postId`, `threadId`, `placements`                                      |
+| `hosted_catalogue.revise`              | `POST /v1/hostedCatalogues/{id}:revise`            | `expectedRevisionId`, `placements`                                      |
+| `hosted_catalogue.append_root_chapter` | `POST /v1/hostedCatalogues/{id}:appendRootChapter` | `expectedRevisionId`, `occurrenceId`, `title`, `target`                 |
+| `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds` |
 
 Every command requires an Idempotency-Key and returns `catalogueId` and the newly selected `revisionId`. Create
-returns 201; revise and publish return 200. A fresh command with a stale head or release returns 412. Native
-authorization precedes receipt lookup, while concurrency comparisons follow it: an authorized exact retry can
-return its original immutable revision after later changes. An altered request under the same key conflicts.
+returns 201; revise, root append and publish return 200. A fresh command with a stale head or release returns 412.
+Native authorization precedes receipt lookup, while concurrency comparisons follow it: an authorized exact retry
+can return its original immutable revision after later changes. An altered request under the same key conflicts.
 
 Each placement supplies `occurrenceId`, nullable `parentId`, zero-based sibling `position`, `title` and `kind`.
 Parts have no target. Chapters supply a target containing `threadId`, `postId`, `revisionId` and lowercase SHA-256
@@ -76,8 +77,11 @@ and the affected Kernel typecheck.
 
 ## Bounded root append
 
-Decision: use one sealed legacy snapshot and one indexed append prefix per immutable draft. The internal root
-command and mixed-revision reader are implemented; append remains unmounted pending the receiving work below.
+Decision: expose the existing root-only append as `hosted_catalogue.append_root_chapter` at
+`POST /v1/hostedCatalogues/{id}:appendRootChapter`. Its closed body is `expectedRevisionId`, fresh
+`occurrenceId`, bounded `title` and exact `target`; its success body is the existing `{catalogueId, revisionId}`
+response. The existing sealed-base/prefix command, native admission, receipt replay and mixed-revision reader remain
+the implementation. This route is mounted on Dev; installed Client and Web receiving are separate work.
 The [Book requirement](../../../../docs/goals/content.md) still includes nested parts, arbitrary add/reorder/move,
 frozen publication and exact links. This root-only slice does not close it or remove every logical limit.
 
@@ -148,8 +152,8 @@ remains charged. The internal root fixtures pin these bounds, replay, races and 
 ### Pinned mixed-revision reads
 
 Decision: read each exact draft through its immutable descriptor, seek at most `limit+1` candidates per indexed
-base/prefix segment and merge once; preserve legacy snapshot/publication semantics, widen only read addresses and
-cursor frontiers to safe integers, and keep append unmounted.
+base/prefix segment and merge once; preserve legacy snapshot/publication semantics and widen only read addresses and
+cursor frontiers to safe integers. Full replacement remains on its original bounded contract.
 
 Selection reads the revision and optional descriptor in one partition snapshot. Missing descriptors retain the
 legacy snapshot key; frozen publications use their original manifests without a descriptor probe. Current native
@@ -181,21 +185,24 @@ Depth 16, title length 256, page size 20, 512 release IDs and bounded complete-r
 limits. Exact full replacement may intentionally shrink a larger draft; it is not a merge, and stale replacement
 still gets 412. Existing snapshots, publications, exact identities, links and receipts remain immutable.
 
-Before exposure, the following must receive the representation:
+The receiving contract and remaining release gates are:
 
-- Release selection must probe only explicit IDs across the pinned base/prefix, verify membership/ancestors and
-  build the existing separate dense manifest. This is implemented in `hostedReleasePlacements`, with native
-  authority, target admission, receipts and CAS unchanged. `hosted-append-release.test.ts` pins mixed ordering,
-  exact targets/replay and links, later-prefix withholding, withdrawal and zero unselected/body reads. Its native
-  acceptance runs after landing in the dev verifier; this source pass uses changed-file formatting and Kernel
-  typecheck only. Lifecycle and exposure remain outstanding below.
-- Lifecycle erasure/cleanup must receive the [bounded private-title disposition](hosted-append-lifecycle.md).
-  Its tombstone persistence and exact replayable pages are implemented; native workflows must still retain shared
-  identities/bases, consume terminal-only payload pages and persist completion before acknowledgement. Index
-  affordances do not constitute lifecycle integration or authorize an unbounded cascade.
-- The additive HTTP operation, installed Client and Web must receive large-address responses. Old Web must refuse
-  oversized outlines and never save a partial tree; new Web must append from an exact head and bounded outline
-  window without draining pages. Unsupported organizing stays explicit pending its own immutable-order design.
+- The mounted Dev operation is `hosted_catalogue.append_root_chapter`, exposed to generated clients as
+  `POST /v1/hostedCatalogues/{id}:appendRootChapter`. Its closed JSON input is `{expectedRevisionId, occurrenceId,
+  title, target}`; success is HTTP 200 with `{catalogueId, revisionId}`. It uses the ordinary `Idempotency-Key`,
+  authenticated `post:revise` action, write rate limit, session anchor and `private, no-store` response. Client
+  generation/receiving is unchanged and remains a separate gate.
+- Release selection reads explicit IDs from the pinned base/prefix and builds the existing separate dense manifest.
+  Native authorization, target admission, receipts and CAS remain unchanged. `hosted-append-release.test.ts` pins
+  mixed ordering, exact targets/replay and links, later-prefix withholding, withdrawal and zero unselected/body reads.
+- Lifecycle erasure/cleanup uses the [bounded private-title disposition](hosted-append-lifecycle.md). The tombstone
+  persistence, exact replayable pages and both native workflow receivers are implemented; lifecycle/native
+  acceptance remains deferred to the Dev verifier.
+- Mounted HTTP witness execution, native fixture execution, query-plan/growth proof and installed Client/Web
+  receiving remain deferred to their owners and the Dev verifier. This Dev exposure does not publish Main or authorize public
+  rollout. Old Web must refuse oversized outlines and never save a partial tree; new Web must append from an exact
+  head and bounded outline window without draining pages. Unsupported organizing remains explicit pending its own
+  immutable-order design.
 
 The mixed-reader fixtures `test/content/hosted-append-read*.test.ts` cover cross-segment order, root/preorder address
 differences, nested children, exact prefix membership, old links, zero-body metadata, concealed raw progression,
@@ -438,10 +445,10 @@ the controller.
 
 ## Cost and integration boundaries
 
-Complete-replacement and release mutations validate at most 512 placements; internal root append validates one.
+Complete-replacement and release mutations validate at most 512 placements; mounted root append validates one.
 Each reads its distinct exact selected targets through the existing native
 metadata reader, including a final retained check, with zero revision body loads. Complete replacements write one snapshot and bounded
-placement/identity inserts under the catalogue home transaction. Internal append writes one occurrence, one append
+placement/identity inserts under the catalogue home transaction. Root append writes one occurrence, one append
 row and one descriptor; the first append additionally installs the empty sealed-base descriptor.
 Publication reads only explicitly selected source placements and processes their attachments. Reads perform exact
 catalogue and revision probes, at most one parent/origin probe and one indexed page query of at most 21 rows.

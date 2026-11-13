@@ -5,59 +5,22 @@ import readChain from '../../src/content/read-chain.sql';
 import * as reads from '../../src/content/reads.ts';
 import { RevisionPreconditionError } from '../../src/content/commands.ts';
 import { hostedAppendDescriptor } from '../../src/content/hosted-chapters-append.ts';
-import type { HostedPlacement, HostedRootAppendInput } from '../../src/content/hosted-chapters-model.ts';
-import { routeOf } from '../../src/route/route.ts';
+import type { HostedRootAppendInput } from '../../src/content/hosted-chapters-model.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
+import { hostedRootAppendBase } from './support/hosted-root-append-setup.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';
 
 setDefaultTimeout(180_000);
 
-/** The source command is deliberately called directly. The installed API has no
- * append operation until its mixed readers and lifecycle have been delivered. */
-test('internal root append retains old drafts/releases, races heads, and replays exact receipts beyond 512', async () => {
+/** Native command details complement the mounted author API witness. */
+test('native root append retains old drafts/releases, races heads, and replays exact receipts beyond 512', async () => {
   const f = await hostedChaptersFixture();
   const observer = observeSql(f.native.pool);
   try {
-    const route = routeOf(f.catalogueId)!;
-    const parameters = [route, f.catalogueId];
-    const path = `/v1/hostedCatalogues/${f.catalogueId}`;
-    const source = await f.native.thread();
-    const target = f.target(source);
+    const { route, parameters, path, source, target, placements, created, published } = await hostedRootAppendBase(f);
     const migration = readFileSync(
       new URL('../../db/content/migrations/20261113025800_hosted_root_append.sql', import.meta.url),
       'utf8',
-    );
-    const parts = Array.from({ length: 16 }, () => f.newOccurrenceId());
-    const placements: HostedPlacement[] = parts.map((occurrenceId, i) => ({
-      occurrenceId,
-      parentId: parts[i - 1] ?? null,
-      position: 0,
-      title: `Depth ${i + 1}`,
-      kind: 'part',
-    }));
-    placements.push(
-      ...Array.from({ length: 496 }, (_, i): HostedPlacement => ({
-        occurrenceId: f.newOccurrenceId(),
-        parentId: null,
-        position: i + 1,
-        title: `Chapter ${i}`,
-        kind: 'chapter',
-        target,
-      })),
-    );
-    const created = await f.native.command('/v1/hostedCatalogues', {
-      postId: f.catalogueId,
-      threadId: f.threadId,
-      placements,
-    });
-    const published = await f.native.command(
-      `${path}:publish`,
-      {
-        expectedRevisionId: created.revisionId,
-        expectedPublicationId: null,
-        occurrenceIds: [placements[511]!.occurrenceId],
-      },
-      200,
     );
     const oldRows = async () =>
       (
