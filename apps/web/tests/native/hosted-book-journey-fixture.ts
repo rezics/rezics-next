@@ -18,6 +18,8 @@ export type HostedBookJourneySeed = Readonly<{
   subjectId: string;
   subjectTitle: string;
   boardId: string;
+  authorAccountId: string;
+  memberAccountId: string;
   author: KernelClient;
   anonymous: KernelClient;
   opening: JourneyPost;
@@ -28,6 +30,8 @@ export type HostedBookJourneySeed = Readonly<{
 export type HostedReaderControl = Readonly<{
   subjectId: string;
   subjectTitle: string;
+  authorAccountId: string;
+  memberAccountId: string;
   author: KernelClient;
   member: KernelClient;
   anonymous: KernelClient;
@@ -82,6 +86,7 @@ async function createJourneySubject(stack: NativeWebStack, label: string) {
   const board = await createPublishAttachmentWorkBoard(stack);
   const credential = await stack.authPersona('alice');
   const author = nativeKernelClient(stack, 'alice', credential.authorization);
+  const memberCredential = await stack.authPersona('bob');
   const subjectTitle = `${label} · The Lantern Ferry`;
   const created = await author.subjects.post(
     { type: 'schema:Book', labels: { en: subjectTitle } },
@@ -91,9 +96,11 @@ async function createJourneySubject(stack: NativeWebStack, label: string) {
   return {
     board,
     author,
+    authorAccountId: credential.accountId,
     subjectId: data.subject.id,
     subjectTitle,
-    member: nativeKernelClient(stack, 'bob', (await stack.authPersona('bob')).authorization),
+    member: nativeKernelClient(stack, 'bob', memberCredential.authorization),
+    memberAccountId: memberCredential.accountId,
     anonymous: nativeKernelClient(stack, 'anonymous'),
   };
 }
@@ -173,6 +180,8 @@ export async function createHostedBookJourneySeed(
     subjectId: base.subjectId,
     subjectTitle: base.subjectTitle,
     boardId: base.board.boardId,
+    authorAccountId: base.authorAccountId,
+    memberAccountId: base.memberAccountId,
     author: base.author,
     anonymous: base.anonymous,
     opening,
@@ -252,6 +261,8 @@ export async function createPrepublishedReaderControl(stack: NativeWebStack): Pr
   return {
     subjectId: base.subjectId,
     subjectTitle: base.subjectTitle,
+    authorAccountId: base.authorAccountId,
+    memberAccountId: base.memberAccountId,
     author: base.author,
     member: base.member,
     anonymous: base.anonymous,

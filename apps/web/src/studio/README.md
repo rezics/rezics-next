@@ -637,12 +637,36 @@ affected Web typecheck after commit; ordinary acceptance, native, browser, Story
 
 ## Hosted Book author-to-reader witness
 
-Decision: the mounted witness keeps the private saved-draft journey independent from a one-chapter prepublished
-reader control. The private journey creates deterministic original drafts through generated native APIs, saves and
-organizes them through Studio and Root Append, and publishes only after the ordinary exact-version review. A missing
-private selected-body release path is a labeled failure; the control's generated one-chapter release is reported
-separately and cannot satisfy that author stage. The control covers anonymous exact reading, member Library
-save/continue, old-link stability after a later move, and ordinary Studio withdrawal.
+Decision: keep the private author and prepublished reader journals independent; compare and preview saved revisions,
+organize and select exact draft occurrences through mounted Studio, recover and seal the selected candidate, record
+initial activation as unreached with its immutable operands, and use supplied catalogue titles with the existing
+fallback.
+
+The private author journal creates deterministic drafts through generated native setup, saves and compares exact
+Post revisions in the mounted Studio, previews the saved chapter, and creates, reorders, moves and nests chapter
+occurrences through current controls. It then confirms the current draft and absent release, selects one exact root
+chapter, reloads through its selected-stage locator, freezes the single occurrence, advances and seals a private
+candidate. The mounted route stops there: the producer `activateHostedPublicationCandidate` has no installed HTTP
+route or generated KernelClient operation. The journal retains the catalogue, native owner and epoch, source head,
+absent expected release, stage ID, selected occurrence and exact Post/revision/digest as immutable operands. It does
+not call the old batch publication route or claim that the sealed candidate is public. A later private Post revision
+and structure move verify that the current draft still names the candidate's original exact source. The private
+author's anonymous release bytes, member progress and stable reader link remain unreached.
+
+The independent control begins with its native one-chapter release, then uses mounted Studio to save another exact
+version of that private Post, add a second draft occurrence, issue exact source permission during point review, and
+explicitly publish that occurrence. The journal checks that permission alone leaves the current release unchanged,
+then checks the exact published bytes and direct-Post privacy. A different member discovers the supplied Book title,
+reads the original exact chapter, saves and resumes a Library checkpoint, and opens the old release/occurrence link
+after a later move and withdrawal. This control demonstrates the installed point-consent and reader paths; it does
+not complete the private author's missing initial activation.
+
+Legacy parity comparison: at `legacy-final` revision `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d`, chapter history
+and comparison, ordered nested Book contents, reading progress and resume already existed. The mounted witness pins
+those same user behaviors. Legacy reader links addressed a Book and node without explicit release and occurrence
+coordinates; the current canonical reader carries both, and the independent control has an assertion for its frozen
+old link after a move. That source comparison and assertion are recorded here; the current mounted result remains
+unverified until the controller run.
 
 The command and stage report are documented in the native test
 [README](../../tests/native/README.md#hosted-book-author-to-reader-journey). The candidate controller runs the mounted
@@ -706,8 +730,9 @@ state and, for revoke, the exact receipt ID. Whole-release preparation is unchan
 Sources read before design: Content's [Private-to-public boundary](../../../../services/kernel/src/content/hosted-chapters.md#private-to-public-boundary),
 `revision-disclosure-routes.ts`, `revision-disclosure-schemas.ts`, generated Post client operations, this owner,
 `hosted-publication-point.ts`, `hosted-publication-point-view.tsx`, `hosted-draft-point-entry.tsx`,
-`hosted-release-preparation-actions.ts` and the existing point/preparation fixtures. The base has native operations
-but no mounted source permission controls; the backend write migration retains that installed contract.
+`hosted-source-consent-view.tsx`, `hosted-release-preparation-actions.ts` and the existing point/preparation fixtures.
+The point route and exact-version source permission controls are mounted. The journey uses them only on the
+prepublished control, where point publication is available; they do not supply the missing initial activation route.
 
 Deferred acceptance: `bun run --cwd apps/web test tests/studio-hosted-source-consent.test.tsx`. Focused coverage
 pins explicit issue/revoke without publication, exact retry operands and key, denial, selection/session retirement

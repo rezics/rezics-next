@@ -60,9 +60,10 @@ Vite Worker can start. A test that needs a driver control not yet present is als
 
 ## Hosted Book author-to-reader journey
 
-Decision: keep the real private-draft journey red on any missing Studio publication step, and use a separately
-reported one-chapter prepublished control only for later reader, Library checkpoint, stable-link and withdrawal
-stages. The control uses generated native setup/readback and never publishes the private journey's drafts.
+Decision: keep the private author and prepublished reader journals independent; compare and preview saved revisions,
+organize and select exact draft occurrences through mounted Studio, recover and seal the selected candidate, record
+initial activation as unreached with its immutable operands, and use supplied catalogue titles with the existing
+fallback.
 
 Run the mounted witness with:
 
@@ -70,11 +71,55 @@ Run the mounted witness with:
 bun run --cwd apps/web test tests/native/hosted-book-journey.host.test.ts
 ```
 
-The private journey saves two original chapter drafts and a deterministic cover in Studio, creates a part, appends a
-second saved draft at Book root, moves it under the part, selects one exact version, and explicitly reviews and
-publishes it. Its stage journal preserves observations and labels dependent stages unreached. The independent control
-contains exactly one selected chapter, then drives the ordinary mounted reader and withdrawal UI. The worker does
-not run this mounted witness; the candidate controller runs it once after integration.
+The private author journal saves two private chapter revisions and a deterministic cover in Studio, previews and
+compares the first chapter's saved revisions, creates a part, root-appends and reorders the second chapter, then moves
+it under that part. It selects one exact root occurrence in private release preparation, reloads by the retained stage
+ID, freezes that selection and seals the candidate. The journal records the immutable owner, draft, stage, occurrence
+and Post/revision/digest operands. The mounted initial-publication producer
+`activateHostedPublicationCandidate` has no HTTP route or generated KernelClient operation, so activation, anonymous
+author-release bytes, author discovery, progress and its old reader link are explicitly unreached. Later private
+editing and moving must leave the draft occurrence pinned to the selected saved revision.
+
+The independent control starts from a generated native one-chapter public release. Studio saves a newer exact private
+source revision, adds a draft occurrence, issues permission in point review, and explicitly publishes that exact
+occurrence. The journal checks permission does not publish, reads the anonymous exact bytes, and confirms direct Post
+privacy. Another member discovers the Book using its supplied title (with the existing numbered fallback), opens the
+original chapter, saves and resumes a Library checkpoint, then follows its old release/occurrence URL after a later
+move and withdrawal. The control does not satisfy the private author's initial activation stage.
+
+Legacy parity comparison: `legacy-final` at `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d` already had chapter revision
+history and comparison, ordered nested contents, and reader progress/resume. This fixture exercises those behaviors
+through current mounted controls. Current canonical reader links also carry explicit frozen release and occurrence
+coordinates; the control's old-link-after-move stage checks that addition. These are source assertions only until the
+controller runs the native witness.
+
+The focused native command is:
+
+```sh
+bun run --cwd apps/web test tests/native/hosted-book-journey.host.test.ts
+```
+
+The source worker does not start a stack or run this command. The candidate controller runs it once after integration
+and records the private-author and control journals separately. A passing control is not a passing author release;
+only a reached mounted initial activation followed by exact anonymous bytes, member progress/continue and stable old
+link completes the private author outcome.
+
+The required private-author stages are `save chapter one and upload the deterministic original cover in Studio`,
+`preview the saved chapter privately through the mounted Studio view`, `compare the original and current saved chapter
+revisions in Studio`, `save chapter two as a separate private exact draft in Studio`, `anonymous direct reads conceal
+private chapter drafts before release`, `start the private Book from the saved opening in Studio`, `create a part
+through the Book Studio outline`, `append the second saved draft at Book root through the mounted Root Append route`,
+`reorder the appended root chapter before its part in Book Studio`, `move the reordered exact placement into its part
+in Book Studio`, `review, recover, and seal the exact selected private candidate`, `save a later private chapter
+revision after candidate sealing`, and `move the selected source placement after the sealed candidate`. The initial
+activation and private-author reader stages must reach a mounted release receipt, exact anonymous bytes, discovery,
+progress/continue, and a stable old link before author acceptance; an `unreached` producer boundary is not a pass.
+
+The independent control must separately reach `permit the exact private version, then publish that selected occurrence
+through point review`, `member opens the control through current Book subject discovery`, `member saves and resumes the
+exact hosted chapter through the Library checkpoint`, `move the control placement after publication through Book
+Studio`, and `the emitted old reader URL still serves its exact release after a later move` (the journal also records
+the post-move withdrawal readback). It does not substitute for any private-author stage.
 
 ## Book catalogue discovery and shelves
 
