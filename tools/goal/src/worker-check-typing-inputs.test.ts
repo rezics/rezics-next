@@ -14,6 +14,7 @@ import {
   isKnownTypingCompiler,
   isDirectKernelTypingCompiler,
   resolveTypingCompilerCommand,
+  typingInputsReceiptPath,
   type TypingInputReceipt,
 } from './worker-check-typing-inputs.ts';
 import {
@@ -422,8 +423,14 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
   expect(result.exitCode).toBe(0);
   const receipt = readTypingInputReceipt(root, physical, clientPipeline)!;
   expect(receipt.outputs).toEqual(['kernel-client-v1']);
+  expect(receipt.physicalRunId).toBe(physical);
   expect(receipt.sourceStable).toBe(true);
   expect(qualifyTypingInputs(root, receipt)).toBe('evidence-unavailable');
+  const undeclared = { ...receipt };
+  delete undeclared.outputs;
+  expect(qualifyTypingInputs(root, undeclared)).toBe('evidence-unavailable');
+  write(root, typingInputsReceiptPath(physical), JSON.stringify(undeclared));
+  expect(() => readTypingInputReceipt(root, physical, clientPipeline)).toThrow('binding or inventory is invalid');
   const bytes = readFileSync(join(root, KERNEL_CLIENT_OUTPUT.transport));
   restoreOutputTree(root, bytes, {
     host: 'c',
@@ -899,7 +906,7 @@ test('exact configured Kernel and Web workspace receipts project only the comple
   expect(qualifyTypingInputs(root, preparedMarker)).toBe('source-changed');
 });
 
-test('typing recovery canonicalizes only a recognized misordered workspace compiler intent', () => {
+test('typing recovery canonicalizes installed workspace intent and only the exact Kernel output emitter', () => {
   const root = standardFixture();
   const misordered = ['bun', '--cwd', 'services/kernel', 'run', 'typecheck'];
   expect(isKnownTypingCompiler(root, misordered)).toBe(false);
@@ -918,6 +925,15 @@ test('typing recovery canonicalizes only a recognized misordered workspace compi
     'typecheck',
   ]);
   expect(resolveTypingCompilerCommand(root, ['bun', '--cwd', 'unknown', 'run', 'typecheck'])).toBeUndefined();
+
+  const outputRoot = pipelineFixture();
+  const emitter = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-client'];
+  expect(isKnownTypingCompiler(outputRoot, emitter)).toBe(false);
+  expect(resolveTypingCompilerCommand(outputRoot, emitter)).toEqual(clientPipeline);
+  expect(resolveTypingCompilerCommand(outputRoot, [...emitter, '--emit-schema=semantic'])).toBeUndefined();
+  expect(
+    resolveTypingCompilerCommand(outputRoot, ['sh', '-c', `${clientPipeline[2]} && bun test other.test.ts`]),
+  ).toBeUndefined();
 });
 
 test.each(['services/kernel', 'services/auth', 'apps/web', 'chain'])(

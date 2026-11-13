@@ -2993,6 +2993,12 @@ Decision: recover recognized workspace compiler intent with `bun run --cwd <work
 recovery grant only after the previous exact check proves terminal SIGTERM before command start, preserving its stamp
 and physical custody.
 
+Decision: recover only the exact Kernel client emitter argv `bun run --cwd services/kernel typecheck --emit-client`
+through the validated fail-fast Kernel emitter plus Client consumer pipeline. Its physical receipt must declare the
+closed `kernel-client-v1` output and verify that output against the same source inputs; an absent declaration stays
+pending. Unsupported named-output commands never fall back to root typecheck. Keep the original task, source, budget
+stamps, receipts and custody, and repeat authenticated recovery through current tooling on a containing source.
+
 Decision: recognize only the installed direct Kernel argv `bun services/kernel/scripts/typecheck.ts` and bind it to
 the same configured Kernel dependency graph as its manifest typecheck script. A retained conservative Kernel receipt
 qualifies only when every current source input and prepared dependency identity matches; projection omits only

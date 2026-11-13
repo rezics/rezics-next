@@ -33,6 +33,7 @@ import { readMeasurement } from './records.ts';
 import type { Task, Attempt, RetryIntent } from './types.ts';
 import {
   captureTypingInputs,
+  hasKernelClientOutputIntent,
   isKnownTypingCompiler,
   isRetainedKernelTypingCompiler,
   readTypingInputReceipt,
@@ -1302,7 +1303,9 @@ export function workerCheckHostHasRetainedKernelTypingRun(directory: string, wor
     return stampNames(directory).some((name) => {
       const stamp = readWorkerCheckHostStamp(directory, name);
       return [stamp.typingRequest?.command, stamp.typingInputs?.compilerCommand].some(
-        (command) => command !== undefined && isRetainedKernelTypingCompiler(worktree, command),
+        (command) =>
+          command !== undefined &&
+          (hasKernelClientOutputIntent(command) || isRetainedKernelTypingCompiler(worktree, command)),
       );
     });
   } catch (error) {
