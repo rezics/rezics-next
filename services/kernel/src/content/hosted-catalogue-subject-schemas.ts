@@ -18,6 +18,7 @@ function hostedSubjectCatalogueItemSchema() {
         kind: t.Literal('publication'),
         sourceRevisionId: nullableIdSchema(),
         threadId: HostedIdSchema,
+        title: t.Optional(t.String({ maxLength: 512 })),
       },
       closed,
     ),
@@ -30,6 +31,7 @@ export function hostedSubjectCatalogueQuerySchema() {
       {
         cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
         limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+        includeTitle: t.Optional(t.Literal('1')),
       },
       closed,
     ),

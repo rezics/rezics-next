@@ -142,6 +142,11 @@ test('continuations bind the subject, limit and viewer without catalogue bytes',
   const binding = hostedSubjectCursorBinding(subjectId, { actor, deadline: Date.now() + 1000 }, 20);
   expect(binding.operation).toBe('content.hosted-catalogue.for-subject');
   expect(binding.parameters).toMatchObject({ subjectId, limit: 20 });
+  expect(Object.keys(binding.parameters)).toEqual(['subjectId', 'limit', 'viewer']);
+  expect(hostedSubjectCursorBinding(subjectId, { actor, deadline: Date.now() + 1000 }, 20, true).parameters).toEqual({
+    ...binding.parameters,
+    includeTitle: true,
+  });
   expect(JSON.stringify(binding)).not.toContain('canonicalBytes');
 });
 
