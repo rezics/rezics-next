@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFile
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
+import { cleanupReceiptPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
 import { openDb } from './db.ts';
 import { STOPPED_TASK_LIMIT_MS, sweepBacklog } from './backlog.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -19,7 +20,13 @@ import {
 } from './worker-check-typing-inputs.ts';
 import { WorkerStore } from './store.ts';
 import { processIdentity } from './process.ts';
-import { brief, harness, temporaryDirectory } from './test-support.ts';
+import {
+  brief,
+  harness,
+  prepareKernelCompilerFixture,
+  temporaryDirectory,
+  writeVerifiedResultlessCleanupEvidence,
+} from './test-support.ts';
 import type { Attempt, Settings } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import type { WorkerTasks } from './tasks.ts';
@@ -39,6 +46,7 @@ import {
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
   workerCheckHostAttemptCheckCustody,
+  workerCheckHostAttemptHasResultlessCleanup,
   workerCheckHostTypingCheckIds,
   workerCheckHostCommandReached,
   workerCheckHostContentTree,
@@ -46,6 +54,7 @@ import {
   workerCheckHostTypecheckFailed,
   workerCheckHostStaleTypingFailureSelection,
   workerCheckHostTypingSettlement,
+  grantWorkerTypingRecovery,
   WORKER_CHECK_HOST_BUDGET_REFUSAL,
   WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
   WORKER_CHECK_HOST_RUN_LIMIT,
@@ -611,15 +620,7 @@ async function settleSuccessWithHostCheck(
 const directKernelCompiler = ['bun', 'services/kernel/scripts/typecheck.ts'];
 
 function prepareDirectKernelCompiler(worktree: string): void {
-  mkdirSync(join(worktree, 'services/kernel/scripts'), { recursive: true });
-  mkdirSync(join(worktree, 'services/kernel/src'), { recursive: true });
-  writeFileSync(
-    join(worktree, 'services/kernel/package.json'),
-    JSON.stringify({ name: '@rezics/kernel', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
-  );
-  writeFileSync(join(worktree, 'services/kernel/tsconfig.json'), '{"include":["src/**/*.ts"]}');
-  writeFileSync(join(worktree, 'services/kernel/scripts/typecheck.ts'), 'export {};');
-  writeFileSync(join(worktree, 'services/kernel/src/index.ts'), 'export const ready = true;');
+  prepareKernelCompilerFixture(worktree);
 }
 
 function prepareWebCompiler(worktree: string): void {
@@ -731,6 +732,52 @@ function writeLaterCancelledCheck(
     },
   };
 }
+
+test('a resultless SIGTERM cleanup is terminal only while exact owner, runner and remote cleanup evidence agree', () => {
+  const worktree = temporaryDirectory();
+  const authorization = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    const taskId = randomUUID();
+    const checkId = randomUUID();
+    const physicalRunId = randomUUID();
+    const command = ['bun', 'services/kernel/scripts/typecheck.ts'];
+    const evidence = {
+      worktree: worktree.path,
+      stateDirectory: authorization.path,
+      taskId,
+      attempt: 1,
+      checkId,
+      physicalRunId,
+      command,
+    };
+    writeVerifiedResultlessCleanupEvidence(evidence);
+    const custody = () => workerCheckHostAttemptCheckCustody(worktree.path, taskId, 1, [checkId]);
+    expect(custody()).toBe('terminal');
+    expect(workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], command)).toBe(true);
+
+    const cleanupPath = cleanupReceiptPath(worktree.path, checkId, physicalRunId);
+    const cleanup = JSON.parse(readFileSync(cleanupPath, 'utf8'));
+    cleanup.ownership.attempt = 2;
+    writeFileSync(cleanupPath, JSON.stringify(cleanup));
+    expect(custody()).toBe('unknown');
+    writeVerifiedResultlessCleanupEvidence(evidence);
+
+    const remotePath = remoteRunCustodyPath(worktree.path, physicalRunId);
+    const remote = JSON.parse(readFileSync(remotePath, 'utf8'));
+    remote.attempts[0].status = 'running';
+    writeFileSync(remotePath, JSON.stringify(remote));
+    expect(custody()).toBe('unknown');
+    writeVerifiedResultlessCleanupEvidence(evidence);
+
+    writeVerifiedResultlessCleanupEvidence(evidence);
+    unlinkSync(cleanupPath);
+    expect(custody()).toBe('unknown');
+  } finally {
+    worktree.close();
+    authorization.close();
+  }
+});
 
 test('a retained Kernel pass waits for later cancellation custody and then reuses the original attempt without another run', async () => {
   const h = harness();

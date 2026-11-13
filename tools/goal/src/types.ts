@@ -1,6 +1,7 @@
 import type { ProcessIdentity } from './process.ts';
 import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts';
 import type { GuardId } from './guards.ts';
+import type { DevVerifierPhaseEvidence } from './dev-verifier-phase.ts';
 
 export type Cli = 'codex' | 'grok' | 'cursor' | 'claude';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -335,6 +336,8 @@ export type DevVerifierExecutionReceipt = {
   startedAt?: string;
   completedAt?: string;
   durationMs: number | null;
+  /** Optional for compatibility with durable command receipts written before phase accounting. */
+  phaseEvidence?: DevVerifierPhaseEvidence;
 };
 export type DevVerifierRun = {
   key: string;

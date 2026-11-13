@@ -18,8 +18,10 @@ import { Database } from 'bun:sqlite';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { identityLive, sameProcess } from './process.ts';
 import {
+  cleanupReceiptPath,
   isCheckId,
   isPhysicalRunId,
+  physicalHistoryPath,
   remoteRunCustodyPath,
   validateRunnerIdentity,
   writeAtomicJson,
@@ -335,6 +337,15 @@ type CheckEvidence = {
   native?: unknown;
   remoteExpected?: unknown;
   terminalProof?: { local?: unknown; resultKnown?: unknown; remote?: unknown };
+  signal?: unknown;
+  schema?: unknown;
+  remoteRun?: { host?: unknown; id?: unknown };
+  physicalCleanup?: unknown;
+  resultTerminal?: unknown;
+  localTerminal?: unknown;
+  remoteTerminal?: unknown;
+  receiptId?: unknown;
+  physicalRunReference?: unknown;
 };
 
 function readCheckEvidence(path: string): CheckEvidence | undefined {
@@ -1018,6 +1029,181 @@ function terminalCancelledPhysicalCheck(
   );
 }
 
+function verifiedRemotePhysicalCleanup(value: unknown, host: string, run: string): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const cleanup = value as Record<string, unknown>;
+  return (
+    cleanup.schema === 1 &&
+    cleanup.host === host &&
+    cleanup.run === run &&
+    cleanup.status === 'verified' &&
+    cleanup.supervisorStopped === true &&
+    cleanup.commandGroupTerminal === true &&
+    cleanup.containersRemoved === true &&
+    cleanup.runDirectoryRemoved === true &&
+    Array.isArray(cleanup.failures) &&
+    cleanup.failures.length === 0
+  );
+}
+
+/** Resultless execution cancellation is terminal only with the exact remote cleanup recorded by Dev. */
+function terminalCleanedCancelledPhysicalCheck(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  resultPath: string,
+  record: CheckEvidence,
+): boolean {
+  if (
+    record.status !== 'running' ||
+    typeof record.id !== 'string' ||
+    !isCheckId(record.id) ||
+    typeof record.physicalRunId !== 'string' ||
+    !isPhysicalRunId(record.physicalRunId) ||
+    record.cwd !== worktree ||
+    record.ownership?.taskId !== taskId ||
+    record.ownership.attempt !== attempt ||
+    record.exitCode !== undefined ||
+    record.physicalRun !== undefined ||
+    record.physicalRunReference !== undefined ||
+    !checkEvidenceArgv(record.argv)
+  )
+    return false;
+
+  if (!terminalCancelledPhysicalCheck(worktree, taskId, attempt, resultPath, record)) return false;
+  const historySource = readOptionalCheckEvidence(physicalHistoryPath(worktree, record.id, record.physicalRunId));
+  const cleanupSource = readOptionalCheckEvidence(cleanupReceiptPath(worktree, record.id, record.physicalRunId));
+  const custodySource = readOptionalCheckEvidence(remoteRunCustodyPath(worktree, record.physicalRunId));
+  const history = historySource.state === 'present' ? historySource.value : undefined;
+  const cleanupReceipt = cleanupSource.state === 'present' ? cleanupSource.value : undefined;
+  const custody = custodySource.state === 'present' ? custodySource.value : undefined;
+  const physicalRunner = history ? ownedRunnerIdentity(history.runnerIdentity) : undefined;
+  const resultRunner = ownedRunnerIdentity(record.runnerIdentity);
+  if (
+    !history ||
+    !cleanupReceipt ||
+    !custody ||
+    !resultRunner ||
+    !physicalRunner ||
+    record.runnerPid !== resultRunner.pid ||
+    typeof record.runnerHost !== 'string' ||
+    record.runnerHost.length === 0 ||
+    history.version !== 1 ||
+    history.id !== record.id ||
+    history.cwd !== worktree ||
+    history.physicalRunId !== record.physicalRunId ||
+    history.status !== 'unknown' ||
+    history.exitCode !== undefined ||
+    history.ownership?.taskId !== taskId ||
+    history.ownership.attempt !== attempt ||
+    history.runnerHost !== record.runnerHost ||
+    !isDeepStrictEqual(physicalRunner, resultRunner) ||
+    history.remoteExpected !== true ||
+    !history.terminalProof ||
+    history.terminalProof.local !== true ||
+    history.terminalProof.remote !== true ||
+    history.terminalProof.resultKnown !== false ||
+    !checkEvidenceArgv(history.argv) ||
+    !isDeepStrictEqual(history.argv, record.argv) ||
+    !checkEvidenceArgv(history.remoteArgv)
+  )
+    return false;
+
+  const receiptRunner = ownedRunnerIdentity(cleanupReceipt.runnerIdentity);
+  const remoteRun = cleanupReceipt.remoteRun;
+  if (
+    cleanupReceipt.version !== 1 ||
+    typeof cleanupReceipt.receiptId !== 'string' ||
+    !isCheckId(cleanupReceipt.receiptId) ||
+    cleanupReceipt.checkId !== record.id ||
+    cleanupReceipt.physicalRunId !== record.physicalRunId ||
+    cleanupReceipt.ownership?.taskId !== taskId ||
+    cleanupReceipt.ownership.attempt !== attempt ||
+    cleanupReceipt.runnerHost !== record.runnerHost ||
+    !receiptRunner ||
+    !isDeepStrictEqual(receiptRunner, resultRunner) ||
+    cleanupReceipt.disposition !== 'uncertain' ||
+    cleanupReceipt.localTerminal !== true ||
+    cleanupReceipt.remoteTerminal !== true ||
+    cleanupReceipt.resultTerminal !== false ||
+    !remoteRun ||
+    typeof remoteRun.host !== 'string' ||
+    !/^[a-z][a-z0-9-]{0,62}$/.test(remoteRun.host) ||
+    typeof remoteRun.id !== 'string' ||
+    !/^[a-zA-Z0-9-]{1,96}$/.test(remoteRun.id) ||
+    !verifiedRemotePhysicalCleanup(cleanupReceipt.physicalCleanup, remoteRun.host, remoteRun.id)
+  )
+    return false;
+
+  const binding = custody.binding;
+  const attempts = custody.attempts;
+  if (
+    custody.version !== 1 ||
+    custody.physicalRunId !== record.physicalRunId ||
+    custody.status !== 'terminal' ||
+    !binding ||
+    binding.checkId !== record.id ||
+    binding.ownership?.taskId !== taskId ||
+    binding.ownership.attempt !== attempt ||
+    !checkEvidenceArgv(binding.argv) ||
+    !isDeepStrictEqual(binding.argv, record.argv) ||
+    !checkEvidenceArgv(binding.remoteArgv) ||
+    !isDeepStrictEqual(binding.remoteArgv, history.remoteArgv) ||
+    !Array.isArray(attempts)
+  )
+    return false;
+
+  const managedAttempts = attempts.filter(
+    (item): item is CheckEvidence => item !== null && typeof item === 'object' && !Array.isArray(item),
+  );
+  if (managedAttempts.length !== attempts.length) return false;
+  const completed = managedAttempts.filter((item) => item.status === 'terminal');
+  if (completed.length !== 1) return false;
+  const remoteAttempt = completed[0]!;
+  const physicalCleanup = cleanupReceipt.physicalCleanup;
+  return Boolean(
+    remoteAttempt.host === remoteRun.host &&
+    remoteAttempt.id === remoteRun.id &&
+    remoteAttempt.physicalCleanup !== undefined &&
+    remoteAttempt.native === undefined &&
+    remoteAttempt.settlement === undefined &&
+    verifiedRemotePhysicalCleanup(remoteAttempt.physicalCleanup, remoteRun.host, remoteRun.id) &&
+    isDeepStrictEqual(remoteAttempt.physicalCleanup, physicalCleanup) &&
+    managedAttempts.every(
+      (item) =>
+        item === remoteAttempt ||
+        (item.status === 'not-started' &&
+          item.physicalCleanup === undefined &&
+          item.native === undefined &&
+          item.settlement === undefined),
+    ),
+  );
+}
+
+type ExecutionCancellationEvidence =
+  | { state: 'absent' }
+  | { state: 'invalid' }
+  | { state: 'present'; signal: 1 | 2 | 15 };
+
+function readExecutionCancellation(worktree: string, checkId: string): ExecutionCancellationEvidence {
+  const path = join(worktree, '.temp', 'goal', 'checks', 'cancellations', `${checkId}.json`);
+  const source = readOptionalCheckEvidence(path);
+  if (source.state !== 'present') return { state: source.state };
+  const value = source.value;
+  const keys = Object.keys(value).sort();
+  if (
+    keys.length !== 3 ||
+    keys[0] !== 'id' ||
+    keys[1] !== 'schema' ||
+    keys[2] !== 'signal' ||
+    value.schema !== 1 ||
+    value.id !== checkId ||
+    ![1, 2, 15].includes(value.signal as number)
+  )
+    return { state: 'invalid' };
+  return { state: 'present', signal: value.signal as 1 | 2 | 15 };
+}
+
 /** Terminal custody for compiler recovery accepts a retained cancellation only with its exact physical proof. */
 export function workerCheckHostAttemptCheckCustody(
   worktree: string,
@@ -1043,17 +1229,50 @@ export function workerCheckHostAttemptCheckCustody(
     if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return 'unknown';
     found.add(record.id);
     const cancelled = existsSync(join(root, 'custody', 'cancelled', `${record.id}.json`));
+    const executionCancellation = readExecutionCancellation(worktree, record.id);
     if (
       record.cwd !== worktree ||
       file !== `${record.id}.json` ||
-      existsSync(join(root, 'cancellations', `${record.id}.json`)) ||
-      (cancelled
-        ? !terminalCancelledPhysicalCheck(worktree, taskId, attempt, resultPath, record)
-        : record.status !== 'finished' || !terminalPhysicalHistory(worktree, record.id, record.physicalRunId))
+      executionCancellation.state === 'invalid' ||
+      (executionCancellation.state === 'present'
+        ? executionCancellation.signal !== 15 ||
+          !terminalCleanedCancelledPhysicalCheck(worktree, taskId, attempt, resultPath, record)
+        : cancelled
+          ? !terminalCancelledPhysicalCheck(worktree, taskId, attempt, resultPath, record)
+          : record.status !== 'finished' || !terminalPhysicalHistory(worktree, record.id, record.physicalRunId))
     )
       return 'unknown';
   }
   return checkIds.every((id) => found.has(id)) ? 'terminal' : 'unknown';
+}
+
+/** Whether an exact compiler check needs authenticated recovery after verified resultless remote cleanup. */
+export function workerCheckHostAttemptHasResultlessCleanup(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+  command: readonly string[],
+): boolean {
+  const resultDirectory = join(worktree, '.temp', 'goal', 'checks', 'results');
+  return checkIds.some((checkId) => {
+    if (!isCheckId(checkId)) return false;
+    const record = readCheckEvidence(join(resultDirectory, `${checkId}.json`));
+    if (
+      !record ||
+      record.id !== checkId ||
+      record.ownership?.taskId !== taskId ||
+      record.ownership.attempt !== attempt ||
+      JSON.stringify(record.argv) !== JSON.stringify(command)
+    )
+      return false;
+    const cancellation = readExecutionCancellation(worktree, checkId);
+    return (
+      cancellation.state === 'present' &&
+      cancellation.signal === 15 &&
+      terminalCleanedCancelledPhysicalCheck(worktree, taskId, attempt, join(resultDirectory, `${checkId}.json`), record)
+    );
+  });
 }
 
 /** A direct Kernel receipt can be earlier than the last stamp when later recovery checks were abandoned. */
@@ -1157,12 +1376,40 @@ function provenPreCompilerRecoveryCancellation(grant: TypingRecoveryGrant, direc
   return currentFound;
 }
 
+/** A resultless SIGTERM grant can be replaced once only after exact cleanup and unchanged retained source. */
+function provenResultlessCleanupRecoveryCancellation(grant: TypingRecoveryGrant, directory: string): boolean {
+  if (!grant.stamp || !STAMP_NAME.test(grant.stamp)) return false;
+  if (stampNames(directory).some((stamp) => Number(stamp) > Number(grant.stamp))) return false;
+  const stamp = readWorkerCheckHostStamp(directory, grant.stamp);
+  const recovery = stamp.typingRecovery;
+  if (
+    !recovery ||
+    recovery.token !== grant.token ||
+    recovery.checkId !== grant.checkId ||
+    recovery.physicalRunId !== grant.physicalRunId ||
+    typeof stamp.content !== 'string' ||
+    workerCheckHostContentTree(grant.worktree) !== stamp.content ||
+    !workerCheckHostAttemptHasResultlessCleanup(
+      grant.worktree,
+      grant.taskId,
+      grant.attempt,
+      [grant.checkId],
+      grant.command,
+    )
+  )
+    return false;
+  return (
+    workerCheckHostAttemptCheckCustody(grant.worktree, grant.taskId, grant.attempt, [grant.checkId]) === 'terminal'
+  );
+}
+
 /** Called only after typing-recover authenticates the owner/operations manager under the current task lease. */
 export function grantWorkerTypingRecovery(
   input: Omit<
     TypingRecoveryGrant,
     'version' | 'token' | 'identity' | 'checkId' | 'physicalRunId' | 'stamp' | 'replacementOf'
   >,
+  options: { requireResultlessCleanupReplacement?: boolean } = {},
 ): TypingRecoveryGrant {
   const directory = workerCheckBudgetDirectory(input.stateDirectory, input.taskId, input.attempt);
   mkdirSync(directory, { recursive: true });
@@ -1188,6 +1435,27 @@ export function grantWorkerTypingRecovery(
       )
         matching.push(prior);
     }
+    const cleanedPredecessor = sameAttempt.find((prior) =>
+      workerCheckHostAttemptHasResultlessCleanup(
+        prior.worktree,
+        input.taskId,
+        input.attempt,
+        [prior.checkId],
+        prior.command,
+      ),
+    );
+    const cleanupReplacementExists =
+      cleanedPredecessor !== undefined && sameAttempt.some((prior) => prior.replacementOf === cleanedPredecessor.token);
+    if (options.requireResultlessCleanupReplacement && !cleanedPredecessor)
+      throw new Error('Verified resultless cleanup has no consumed compiler grant to replace');
+    if (
+      cleanedPredecessor &&
+      (cleanedPredecessor.worktree !== input.worktree ||
+        cleanedPredecessor.identity !== identity ||
+        JSON.stringify(cleanedPredecessor.command) !== JSON.stringify(input.command) ||
+        (!cleanupReplacementExists && !provenResultlessCleanupRecoveryCancellation(cleanedPredecessor, directory)))
+    )
+      throw new Error('Typing recovery source or compiler command changed after resultless cleanup');
     if (input.recoveryKind === 'withdrawn-budget-stop') {
       if (
         sameAttempt.some(
@@ -1234,7 +1502,11 @@ export function grantWorkerTypingRecovery(
     if (original) {
       const replacement = matching.find((prior) => prior.replacementOf === original.token);
       if (replacement) return replacement;
-      if (matching.length !== 1 || !provenPreCompilerRecoveryCancellation(original, directory)) return original;
+      const mayReplace =
+        matching.length === 1 &&
+        (provenPreCompilerRecoveryCancellation(original, directory) ||
+          (sameAttempt.length === 1 && provenResultlessCleanupRecoveryCancellation(original, directory)));
+      if (!mayReplace) return original;
       const grant: TypingRecoveryGrant = {
         ...input,
         version: 1,
