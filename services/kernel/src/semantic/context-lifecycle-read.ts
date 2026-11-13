@@ -20,6 +20,31 @@ export type NativeContextMetadata = ContextDirectoryEntry & {
   actorOwner: boolean;
 };
 
+type ContextOwnerGrant = { id: string; account: string };
+
+/** Keep each owner-grant query at its existing sentinel while admitting bounded candidate slices. */
+async function readContextOwnerGrants(
+  tx: ContextQueryClient,
+  ids: readonly string[],
+  at: string,
+): Promise<ContextOwnerGrant[]> {
+  if (!ids.length) return [];
+  const grants = await tx.query<ContextOwnerGrant>(
+    `SELECT resource_id::text AS id,subject_id::text AS account FROM access.resource_role_grant
+     WHERE (route,resource_id) IN (SELECT * FROM unnest($1::int[],$2::uuid[]))
+       AND subject_kind='identity' AND subject_role='' AND grant_role='semantic.context.owner'
+       AND valid @> $3::timestamptz ORDER BY resource_id,subject_id LIMIT 101`,
+    [ids.map((id) => routeOf(id)!), [...ids], at],
+  );
+  if (grants.rows.length <= 100) return grants.rows;
+  if (ids.length === 1) throw new ContextDirectoryPreparingError();
+  const middle = Math.floor(ids.length / 2);
+  return [
+    ...(await readContextOwnerGrants(tx, ids.slice(0, middle), at)),
+    ...(await readContextOwnerGrants(tx, ids.slice(middle), at)),
+  ];
+}
+
 /** Each Source snapshot is released before any foreign Account checkout, including pool max=1. */
 export async function readNativeContextMetadata(
   pool: Pool,
@@ -55,20 +80,12 @@ export async function readNativeContextMetadata(
            AND (state='active' OR (state='deleted' AND $3::timestamptz<purge_after))`,
           [keys.map((id) => routeOf(id)!), keys, at],
         );
-        const grants = await tx.query<{ id: string; account: string }>(
-          `SELECT resource_id::text AS id,subject_id::text AS account FROM access.resource_role_grant
-         WHERE (route,resource_id) IN (SELECT * FROM unnest($1::int[],$2::uuid[]))
-           AND subject_kind='identity' AND subject_role='' AND grant_role='semantic.context.owner'
-           AND valid @> $3::timestamptz ORDER BY resource_id,subject_id LIMIT 101`,
-          [keys.map((id) => routeOf(id)!), keys, at],
-        );
-        if (grants.rows.length > 100) throw new ContextDirectoryPreparingError();
+        const grants = await readContextOwnerGrants(tx, keys, at);
         return native.rows.map((row) => ({
           ...row,
           epoch: owner.epoch,
-          owners: grants.rows.filter((g) => g.id === row.id).map((g) => g.account),
-          actorOwner:
-            actor.kind === 'account' && grants.rows.some((g) => g.id === row.id && g.account === actor.accountId),
+          owners: grants.filter((g) => g.id === row.id).map((g) => g.account),
+          actorOwner: actor.kind === 'account' && grants.some((g) => g.id === row.id && g.account === actor.accountId),
         }));
       })),
     );
@@ -164,14 +181,11 @@ export async function authorizedContextMetadata(
              AND (state='active' OR (state='deleted' AND $3::timestamptz<purge_after))`,
           [rows.map((row) => routeOf(row.id)!), rows.map((row) => row.id), at],
         );
-        const grants = await tx.query<{ id: string; account: string }>(
-          `SELECT resource_id::text AS id,subject_id::text AS account FROM access.resource_role_grant
-           WHERE (route,resource_id) IN (SELECT * FROM unnest($1::int[],$2::uuid[]))
-             AND subject_kind='identity' AND subject_role='' AND grant_role='semantic.context.owner'
-             AND valid @> $3::timestamptz ORDER BY resource_id,subject_id LIMIT 101`,
-          [rows.map((row) => routeOf(row.id)!), rows.map((row) => row.id), at],
+        const grants = await readContextOwnerGrants(
+          tx,
+          rows.map((row) => row.id),
+          at,
         );
-        if (grants.rows.length > 100) throw new ContextDirectoryPreparingError();
         const ids = rows.map((row) => row.id);
         const read = await decisions.decide(
           tx,
@@ -198,7 +212,7 @@ export async function authorizedContextMetadata(
         const nativeActions = await contextNativeActions(tx, ids, input.actor, time);
         for (const row of rows) {
           // A grant change after the released Account anchors invalidates this row's prepared evidence.
-          const currentOwners = grants.rows.filter((grant) => grant.id === row.id).map((grant) => grant.account);
+          const currentOwners = grants.filter((grant) => grant.id === row.id).map((grant) => grant.account);
           if (JSON.stringify(currentOwners) !== JSON.stringify(row.owners)) continue;
           if (!nativeActions[row.id]?.includes('context:read')) continue;
           if (!current.rows.some((r) => r.id === row.id && r.version === row.version) || !read[row.id]?.allowed)
