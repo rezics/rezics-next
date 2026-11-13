@@ -265,7 +265,7 @@ export class StudioController {
     this.patch({ ...patch, result, message: workspaceFeedbackMessage(result) });
   }
   private canMutate() {
-    return this.current() && !this.state.busy && !this.hasUnresolvedCommand();
+    return this.current() && !this.state.operation && !this.hasUnresolvedCommand();
   }
   hasUnresolvedCommand = (): boolean =>
     Boolean(
@@ -278,7 +278,7 @@ export class StudioController {
     apply: (value: T) => void,
     mutation = false,
   ): Promise<boolean> {
-    if (!this.current() || this.state.busy) return false;
+    if (!this.current() || this.state.operation) return false;
     const request = new AbortController();
     this.request = request;
     this.patch({ operation, busy: workspaceOperationMessage(operation), issue: null, result: null, message: '' });
@@ -371,7 +371,7 @@ export class StudioController {
   createDraft = async (title: string): Promise<boolean> => {
     if (
       !this.current() ||
-      this.state.busy ||
+      this.state.operation ||
       !this.input.canCreateDraft ||
       this.state.selected?.dirty ||
       this.state.selected?.uploading ||
@@ -415,7 +415,7 @@ export class StudioController {
     const selected = this.state.selected;
     if (
       !this.current() ||
-      this.state.busy ||
+      this.state.operation ||
       !selected?.source.permissions.edit ||
       (this.hasUnresolvedCommand() && !this.saveAttempt)
     )
@@ -510,7 +510,7 @@ export class StudioController {
   createNativeDraft = async (input: NativeDraftCreate): Promise<boolean> => {
     if (
       !this.current() ||
-      this.state.busy ||
+      this.state.operation ||
       !this.input.canCreateDraft ||
       !this.input.nativeDrafts ||
       !this.port.createNativeDraft ||
@@ -644,7 +644,7 @@ export class StudioController {
       !bookPort ||
       !structure.canOrganize ||
       !this.current() ||
-      this.state.busy ||
+      this.state.operation ||
       (this.hasUnresolvedCommand() && !this.organizeAttempt)
     )
       return false;
@@ -767,7 +767,7 @@ export class StudioController {
   publish = async (): Promise<boolean> => {
     if (
       !this.current() ||
-      this.state.busy ||
+      this.state.operation ||
       !this.input.canPublish ||
       (this.hasUnresolvedCommand() && !this.publishAttempt)
     )

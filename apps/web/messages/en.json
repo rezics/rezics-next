@@ -12317,7 +12317,7 @@
   "studio_workspace_published": "The reviewed versions were published.",
   "studio_workspace_review_required": "Review the current saved versions again before publishing.",
   "studio_workspace_failure_denied": "Your current role cannot perform this operation. Reopen Studio with an authorized account.",
-  "studio_workspace_failure_unavailable": "This operation is unavailable. Your working text is retained. Retry the pending operation, or reopen the saved draft when no command is pending.",
+  "studio_workspace_failure_unavailable": "This operation is unavailable. Retry the pending operation, or reopen the saved draft when no command is pending.",
   "studio_workspace_failure_stale": "The saved state has changed. Your working draft is retained. Copy your text before discarding and reopening the current draft; review again before publishing.",
   "studio_workspace_failure_withdrawn": "This document has been withdrawn. Reopen Studio to check your current access.",
   "studio_workspace_failure_invalid": "The response did not match the selected document or exact version. Refresh before continuing.",

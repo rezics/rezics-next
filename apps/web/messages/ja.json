@@ -12317,7 +12317,7 @@
   "studio_workspace_published": "確認した版を公開しました。",
   "studio_workspace_review_required": "公開する前に、現在保存されている版を再確認してください。",
   "studio_workspace_failure_denied": "現在の権限ではこの操作を実行できません。権限のあるアカウントでStudioを開き直してください。",
-  "studio_workspace_failure_unavailable": "この操作は利用できません。作業中の文章は保持されています。保留中の操作を再試行するか、保留中のコマンドがなければ保存済みの下書きを開き直してください。",
+  "studio_workspace_failure_unavailable": "この操作は利用できません。保留中の操作を再試行するか、保留中のコマンドがなければ保存済みの下書きを開き直してください。",
   "studio_workspace_failure_stale": "保存状態が変更されました。作業中の下書きは保持されています。文章をコピーしてから変更を破棄し、現在の下書きを開き直してください。公開前に再確認が必要です。",
   "studio_workspace_failure_withdrawn": "この文書は取り下げられました。Studioを開き直して現在のアクセス権を確認してください。",
   "studio_workspace_failure_invalid": "応答が選択した文書または指定した版と一致しません。続ける前に再読み込みしてください。",

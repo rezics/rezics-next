@@ -12317,7 +12317,7 @@
   "studio_workspace_published": "Die geprüften Versionen wurden veröffentlicht.",
   "studio_workspace_review_required": "Prüfe die aktuell gespeicherten Versionen vor der Veröffentlichung erneut.",
   "studio_workspace_failure_denied": "Deine aktuelle Rolle darf diesen Vorgang nicht ausführen. Öffne Studio mit einem berechtigten Konto erneut.",
-  "studio_workspace_failure_unavailable": "Dieser Vorgang ist nicht verfügbar. Dein Arbeitstext bleibt erhalten. Versuche den ausstehenden Vorgang erneut oder öffne den gespeicherten Entwurf, wenn kein Befehl aussteht.",
+  "studio_workspace_failure_unavailable": "Dieser Vorgang ist nicht verfügbar. Versuche den ausstehenden Vorgang erneut oder öffne den gespeicherten Entwurf, wenn kein Befehl aussteht.",
   "studio_workspace_failure_stale": "Der gespeicherte Stand hat sich geändert. Dein Arbeitsentwurf bleibt erhalten. Kopiere deinen Text, bevor du ihn verwirfst und den aktuellen Entwurf öffnest; prüfe vor dem Veröffentlichen erneut.",
   "studio_workspace_failure_withdrawn": "Dieses Dokument wurde zurückgezogen. Öffne Studio erneut, um deinen aktuellen Zugriff zu prüfen.",
   "studio_workspace_failure_invalid": "Die Antwort stimmt nicht mit dem ausgewählten Dokument oder der exakten Version überein. Aktualisiere vor dem Fortfahren.",

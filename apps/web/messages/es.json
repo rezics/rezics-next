@@ -12317,7 +12317,7 @@
   "studio_workspace_published": "Se publicaron las versiones revisadas.",
   "studio_workspace_review_required": "Vuelve a revisar las versiones guardadas actuales antes de publicar.",
   "studio_workspace_failure_denied": "Tu rol actual no permite esta operación. Vuelve a abrir Studio con una cuenta autorizada.",
-  "studio_workspace_failure_unavailable": "Esta operación no está disponible. Se conserva tu texto de trabajo. Reintenta la operación pendiente o vuelve a abrir el borrador guardado cuando no haya comandos pendientes.",
+  "studio_workspace_failure_unavailable": "Esta operación no está disponible. Reintenta la operación pendiente o vuelve a abrir el borrador guardado cuando no haya comandos pendientes.",
   "studio_workspace_failure_stale": "El estado guardado ha cambiado. Se conserva tu borrador de trabajo. Copia tu texto antes de descartarlo y abrir el borrador actual; revisa de nuevo antes de publicar.",
   "studio_workspace_failure_withdrawn": "Este documento se ha retirado. Vuelve a abrir Studio para comprobar tu acceso actual.",
   "studio_workspace_failure_invalid": "La respuesta no coincide con el documento seleccionado o la versión exacta. Actualiza antes de continuar.",

@@ -96,16 +96,21 @@ function StudioVisit({
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
   const unresolved = controller.hasUnresolvedCommand();
   const atRisk = Boolean(
-    selected?.dirty || selected?.snapshotPending || selected?.uploading || state.busy || unresolved || startingBook,
+    selected?.dirty ||
+    selected?.snapshotPending ||
+    selected?.uploading ||
+    state.operation ||
+    unresolved ||
+    startingBook,
   );
-  const blocked = Boolean(state.busy) || unresolved || startingBook;
+  const blocked = Boolean(state.operation) || unresolved || startingBook;
 
   useEffect(() => controller.connect(), [controller]);
   useEffect(() => starter?.connect(), [starter]);
   useEffect(() => draftPicker?.connect(), [draftPicker]);
   useEffect(() => {
-    if (!state.busy) draftPicker?.retainSelection(selected?.source ?? null);
-  }, [draftPicker, selected?.source, state.busy]);
+    if (!state.operation) draftPicker?.retainSelection(selected?.source ?? null);
+  }, [draftPicker, selected?.source, state.operation]);
   useEffect(() => {
     const wideLayout = window.matchMedia('(min-width: 64rem)');
     const syncNavigation = () => setNavigation(wideLayout.matches);
@@ -215,7 +220,7 @@ function StudioVisit({
               <Button
                 type="button"
                 variant="outline"
-                disabled={Boolean(state.busy)}
+                disabled={Boolean(state.operation)}
                 onClick={() => void controller.retry()}
               >
                 {m.studio_workspace_retry({}, options)}
@@ -312,7 +317,7 @@ function StudioVisit({
                   type="button"
                   disabled={
                     !selected.source.permissions.edit ||
-                    Boolean(state.busy) ||
+                    Boolean(state.operation) ||
                     (unresolved && state.issue?.kind !== 'uncertain' && state.issue?.kind !== 'unavailable') ||
                     selected.snapshotPending ||
                     selected.invalid ||

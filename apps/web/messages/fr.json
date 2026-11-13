@@ -12317,7 +12317,7 @@
   "studio_workspace_published": "Les versions vérifiées ont été publiées.",
   "studio_workspace_review_required": "Vérifiez à nouveau les versions enregistrées actuelles avant de publier.",
   "studio_workspace_failure_denied": "Votre rôle actuel ne permet pas cette opération. Rouvrez Studio avec un compte autorisé.",
-  "studio_workspace_failure_unavailable": "Cette opération est indisponible. Votre texte de travail est conservé. Réessayez l’opération en attente ou rouvrez le brouillon enregistré si aucune commande n’est en attente.",
+  "studio_workspace_failure_unavailable": "Cette opération est indisponible. Réessayez l’opération en attente ou rouvrez le brouillon enregistré si aucune commande n’est en attente.",
   "studio_workspace_failure_stale": "L’état enregistré a changé. Votre brouillon de travail est conservé. Copiez votre texte avant d’abandonner les modifications et de rouvrir le brouillon actuel ; vérifiez à nouveau avant de publier.",
   "studio_workspace_failure_withdrawn": "Ce document a été retiré. Rouvrez Studio pour vérifier votre accès actuel.",
   "studio_workspace_failure_invalid": "La réponse ne correspond pas au document sélectionné ou à la version exacte. Actualisez avant de continuer.",
