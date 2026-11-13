@@ -404,6 +404,8 @@ remains charged.
 
 Decision: private migration input pins the admitted current structure revision and its immutable append descriptor/high-water, advances a durable ordinal/offset frontier in bounded pages, stores no source payload in receipts, reconstructs committed intervals under fresh admission, and holds the source for 30 days until consumption, expiry or cancellation; source erasure releases the hold, while unavailable/redacted slots advance raw coverage without title or target metadata disclosure.
 
+Decision: hosted version building applies at most 20 contiguous source-order entries per page, replays by the exact starting source frontier, and writes only isolated candidate facts and sibling/preorder/chapter indexes; unavailable titles and targets remain null, and sealing requires current complete coverage without changing live catalogue pointers.
+
 ### Pinned mixed-revision reads
 
 Select revision/descriptor in one partition snapshot; absent descriptor means legacy snapshot. Publication manifests
