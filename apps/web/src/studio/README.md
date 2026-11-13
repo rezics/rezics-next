@@ -51,6 +51,33 @@ exact chapter versions; existing placement, focus and release assertions remain 
 changed-file formatting and one Web typecheck; ordinary acceptance, native, browser, Storybook and broader suites
 are deferred.
 
+## Direct Book moves
+
+Decision: Each occurrence's organization disclosure offers Move to with shared labelled Selects for Book root or
+an eligible part and an exact sibling insertion point, including a labelled end-of-list option. Values are stable
+occurrence IDs; outline numbering distinguishes repeated titles. Options reuse the current outline index, exclude
+the source and descendants, account for the deepest moved descendant, and omit invalid anchors and unchanged
+positions. Destination enumeration happens only for an opened move form and visits the indexed child lists once.
+
+Submission resolves the retained identities against the controller's current structure before issuing the existing
+organize command. A removed or reparented destination/anchor, newly excessive subtree depth or already completed
+move cannot submit a stale form. The form closes on acknowledgment or explicit cancellation and retains failed
+choices. The controller and hosted adapter continue to own stale/uncertain recovery and conditional native revision
+writes. Moving a chapter or whole part subtree makes one draft revision and keeps occurrence IDs, exact Post
+versions, release selection and the current publication. Quick moves retain their existing behavior.
+
+Sources read before design: this Studio owner document, `book-toc.ts`, `book-organizer.tsx`, `contract.ts`,
+`controller.ts` `organize`, `hosted-adapter.ts` `change`, the placement/outline/hosted publication tests,
+[UI form fields](../../../../packages/ui/README.md#form-fields) and Select implementation, and Content's
+[authoring and release](../../../../services/kernel/src/content/hosted-chapters.md#authoring-and-release) contract.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-book-outline.test.ts
+ tests/studio-book-placement.test.tsx tests/studio-hosted-publication.test.ts`. Added cases cover exact destination
+and sibling identities, repeated titles, root and empty parts, subtree depth/cycles, no-op exclusion, form retention,
+current-structure rechecks and one native revision preserving pinned targets and selection. Existing assertions stay
+unchanged. Source verification is changed-file formatting and one affected Web typecheck; acceptance, browser,
+mounted native, Storybook and broad suites remain deferred.
+
 ## Native author outline
 
 Decision: Book Studio reads the installed private author outline stream, with one bounded request per page,

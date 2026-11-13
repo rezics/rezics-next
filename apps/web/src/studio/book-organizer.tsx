@@ -3,7 +3,17 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
-import { bookTocIndex, moveBookOccurrence, type BookTocIndex, type BookTocRow } from './book-toc';
+import {
+  bookMoveDestinations,
+  bookMovePositions,
+  bookTocIndex,
+  moveBookOccurrence,
+  moveBookOccurrenceTo,
+  type BookTocIndex,
+  type BookTocRow,
+} from './book-toc';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { sameExact, type BookStructure, type BookStructureChange } from './contract';
 import { HostedHistoryDisclosure } from './hosted-history-view';
 import type { HostedHistoryBinding } from './hosted-history';
@@ -122,6 +132,8 @@ function TocEntry({
   const { placement } = row;
   const [title, setTitle] = useState(placement.title);
   const [removing, setRemoving] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const locale = getLocale();
   const renameId = useId();
   const target = placement.target;
   const current = state.selected;
@@ -173,6 +185,9 @@ function TocEntry({
           Organize <span className="studio-sr-only">{placement.title}</span>
         </summary>
         <div className="studio-action-row">
+          <Button type="button" variant="outline" disabled={!editable} onClick={() => setMoving(true)}>
+            {m.studio_book_move_to({}, { locale })}
+          </Button>
           {(['up', 'down', 'in', 'out'] as const).map((direction) => {
             const change = moveBookOccurrence(row, direction, outline);
             return (
@@ -203,6 +218,15 @@ function TocEntry({
             </Button>
           ) : null}
         </div>
+        {moving ? (
+          <MoveForm
+            occurrenceId={placement.occurrenceId}
+            outline={outline}
+            controller={controller}
+            disabled={!editable}
+            onClose={() => setMoving(false)}
+          />
+        ) : null}
         <form
           className="studio-stack"
           onSubmit={(event) => {
@@ -256,6 +280,132 @@ function TocEntry({
     </div>
   );
 }
+/** Numbering distinguishes repeated titles; submitted values remain exact occurrence IDs. */
+function moveRowLabel(row: BookTocRow, outline: BookTocIndex): string {
+  const position = [...row.ancestors.map((id) => outline.byId.get(id)!.index + 1), row.index + 1].join('.');
+  return `${position} · ${row.placement.title}`;
+}
+
+function MoveForm({
+  occurrenceId,
+  outline,
+  controller,
+  disabled,
+  onClose,
+}: {
+  occurrenceId: string;
+  outline: BookTocIndex;
+  controller: StudioController;
+  disabled: boolean;
+  onClose: () => void;
+}) {
+  const id = useId();
+  const locale = getLocale();
+  const destinations = useMemo(() => bookMoveDestinations(occurrenceId, outline), [occurrenceId, outline]);
+  const [parent, setParent] = useState<string | null>(() => {
+    const current = outline.byId.get(occurrenceId)!.placement.parentOccurrenceId;
+    return destinations.includes(current) ? current : (destinations[0] ?? null);
+  });
+  const positions = useMemo(() => bookMovePositions(occurrenceId, parent, outline), [occurrenceId, parent, outline]);
+  const [before, setBefore] = useState<string | null>(() => (positions.includes(null) ? null : (positions[0] ?? null)));
+  const parents = destinations.map((value) => ({
+    value,
+    label: value === null ? m.studio_book_move_root({}, { locale }) : moveRowLabel(outline.byId.get(value)!, outline),
+  }));
+  const anchors = positions.map((value) => ({
+    value,
+    label: value === null ? m.studio_book_move_end({}, { locale }) : moveRowLabel(outline.byId.get(value)!, outline),
+  }));
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const current = controller.snapshot();
+    if (
+      disabled ||
+      !controller.canOrganize() ||
+      current.busy ||
+      controller.hasUnresolvedCommand() ||
+      !current.structure
+    )
+      return;
+    // A retained form may outlive a refresh or quick move. Recheck identities and bounds on the current revision.
+    const latest = bookTocIndex(current.structure);
+    const change = moveBookOccurrenceTo(occurrenceId, parent, before, latest);
+    if (change && (await controller.organize(change))) onClose();
+  }
+  return (
+    <form className="studio-stack studio-move-form" onSubmit={(event) => void submit(event)}>
+      {destinations.length ? (
+        <>
+          <Field>
+            <FieldLabel htmlFor={`${id}-parent`}>{m.studio_book_move_destination({}, { locale })}</FieldLabel>
+            <Select<string>
+              items={parents}
+              value={parent}
+              disabled={disabled}
+              onValueChange={(value) => {
+                setParent(value);
+                const next = bookMovePositions(occurrenceId, value, outline);
+                setBefore(next.includes(null) ? null : (next[0] ?? null));
+              }}
+            >
+              <SelectTrigger id={`${id}-parent`} className="min-h-11 w-full">
+                <SelectValue>
+                  {parents.find((item) => item.value === parent)?.label ??
+                    m.studio_book_move_choose_destination({}, { locale })}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {parents.map(({ value, label }) => (
+                    <SelectItem key={value ?? ''} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${id}-before`}>{m.studio_book_move_before({}, { locale })}</FieldLabel>
+            <Select<string>
+              items={anchors}
+              value={before}
+              disabled={disabled || !positions.length}
+              onValueChange={setBefore}
+            >
+              <SelectTrigger id={`${id}-before`} className="min-h-11 w-full">
+                <SelectValue>
+                  {anchors.find((item) => item.value === before)?.label ??
+                    m.studio_book_move_choose_position({}, { locale })}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {anchors.map(({ value, label }) => (
+                    <SelectItem key={value ?? ''} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+        </>
+      ) : (
+        <p className="studio-help">{m.studio_book_move_unavailable({}, { locale })}</p>
+      )}
+      <div className="studio-action-row">
+        <Button type="submit" disabled={disabled || !moveBookOccurrenceTo(occurrenceId, parent, before, outline)}>
+          {m.studio_book_move_action({}, { locale })}
+        </Button>
+        <Button type="button" variant="outline" disabled={disabled} onClick={onClose}>
+          {m.action_cancel({}, { locale })}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function PlacementForm({
   structure,
   rows,

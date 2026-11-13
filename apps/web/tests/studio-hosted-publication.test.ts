@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import { bookPublicationTarget } from '../src/studio/book-toc';
+import { bookPublicationTarget, bookTocIndex, moveBookOccurrenceTo } from '../src/studio/book-toc';
 import type { StudioResult } from '../src/studio/contract';
 import { HostedBookAdapter } from '../src/studio/hosted-adapter';
-import type { HostedBook, HostedBookNative, HostedPublish } from '../src/studio/hosted-contract';
+import type { HostedBook, HostedBookNative, HostedPublish, HostedRevise } from '../src/studio/hosted-contract';
 
 const catalogueId = '00000000-0000-8000-8000-000000000001';
 const structureRevisionId = '00000000-0000-8000-8000-000000000002';
@@ -116,4 +116,63 @@ test('hosted Book publication freezes only selected exact chapter occurrences an
     expectedPublicationId: null,
     occurrenceIds: [partId, firstChapterId],
   });
+});
+
+test('a distant subtree move writes one native draft revision with the same occurrences and exact Post targets', async () => {
+  const destination = '00000000-0000-8000-8000-000000000014';
+  const anchor = '00000000-0000-8000-8000-000000000015';
+  const book: HostedBook = {
+    ...structure,
+    placements: [
+      ...structure.placements,
+      { occurrenceId: destination, parentId: null, position: 1, title: 'Volume Two', kind: 'part' },
+      { ...structure.placements[1]!, occurrenceId: anchor, parentId: destination, position: 0 },
+    ],
+  };
+  const revisions: HostedRevise[] = [];
+  const unused = async () => ({ ok: false as const, error: { kind: 'unavailable' as const, message: 'Unused' } });
+  const native: HostedBookNative = {
+    listHistory: unused,
+    listOwn: unused,
+    readOwn: unused,
+    create: unused,
+    publish: unused,
+    read: async () => ok(book),
+    revise: async (_id, input) => {
+      revisions.push(input);
+      return ok({
+        ...book,
+        revision: { ...book.revision, revisionId: publicationRevisionId },
+        placements: input.placements,
+      });
+    },
+  };
+  const adapter = new HostedBookAdapter(native, () => true, unused);
+  const signal = new AbortController().signal;
+  const loaded = await adapter.load(catalogueId, signal);
+  expect(loaded.ok).toBe(true);
+  if (!loaded.ok) return;
+  const change = moveBookOccurrenceTo(partId, destination, anchor, bookTocIndex(loaded.value))!;
+  expect(change).not.toBeNull();
+  const result = await adapter.change(
+    {
+      catalogueId,
+      expectedRevision: structureRevisionId,
+      change,
+      idempotencyKey: '019a8c75-4e19-8d2f-8a36-94dd410dd880',
+    },
+    signal,
+  );
+  expect(result.ok).toBe(true);
+  expect(revisions).toHaveLength(1);
+  expect(revisions[0]!.expectedRevisionId).toBe(structureRevisionId);
+  expect(revisions[0]!.placements.map((entry) => [entry.occurrenceId, entry.parentId, entry.position])).toEqual([
+    [destination, null, 0],
+    [partId, destination, 0],
+    [firstChapterId, partId, 0],
+    [secondChapterId, partId, 1],
+    [anchor, destination, 1],
+  ]);
+  for (const chapter of structure.placements.slice(1))
+    expect(revisions[0]!.placements.find((entry) => entry.occurrenceId === chapter.occurrenceId)).toEqual(chapter);
 });

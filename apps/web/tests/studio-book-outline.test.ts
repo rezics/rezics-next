@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { bookTocIndex, moveBookOccurrence } from '../src/studio/book-toc';
+import {
+  bookMoveDestinations,
+  bookMovePositions,
+  bookTocIndex,
+  moveBookOccurrence,
+  moveBookOccurrenceTo,
+} from '../src/studio/book-toc';
 import type { BookPlacement, BookStructure } from '../src/studio/contract';
 
 const part = (occurrenceId: string, parentOccurrenceId: string | null = null): BookPlacement => ({
@@ -83,4 +89,48 @@ test('indexing retains the admitted nesting and placement bounds, including the 
   const deep = deepOutline();
   expect(() => bookTocIndex({ ...deep, limits: { ...deep.limits, maxDepth: 15 } })).toThrow('nesting limit');
   expect(() => bookTocIndex({ ...deep, limits: { ...deep.limits, maxPlacements: 1 } })).toThrow('bounds');
+});
+
+test('direct moves offer exact effective destinations and insertion points for the entire subtree', () => {
+  const outline = bookTocIndex(
+    structure(
+      [
+        part('source'),
+        part('nested', 'source'),
+        chapter('leaf', 'nested'),
+        part('distant'),
+        chapter('first', 'distant'),
+        chapter('last', 'distant'),
+        part('deep-parent', 'distant'),
+        part('empty'),
+      ],
+      4,
+    ),
+  );
+  const move = (parent: string | null, before: string | null, id = 'source', index = outline) =>
+    moveBookOccurrenceTo(id, parent, before, index);
+  expect(bookMoveDestinations('source', outline)).toEqual([null, 'distant', 'empty']);
+  expect(bookMovePositions('source', null, outline)).toEqual(['empty', null]);
+  expect(bookMovePositions('source', 'distant', outline)).toEqual(['first', 'last', 'deep-parent', null]);
+  expect(bookMovePositions('source', 'empty', outline)).toEqual([null]);
+  expect(move('distant', 'last')).toEqual({
+    kind: 'move',
+    occurrenceId: 'source',
+    parentOccurrenceId: 'distant',
+    beforeOccurrenceId: 'last',
+  });
+  for (const parent of ['source', 'nested', 'leaf', 'deep-parent', 'missing']) expect(move(parent, null)).toBeNull();
+  for (const before of ['source', 'nested', 'first', 'missing', 'distant']) expect(move(null, before)).toBeNull();
+  expect(move(null, null, 'empty')).toBeNull();
+  expect(bookMoveDestinations('missing', outline)).toEqual([]);
+  expect(bookMoveDestinations('only', bookTocIndex(structure([part('only')])))).toEqual([]);
+  const refreshed = bookTocIndex(structure([part('source'), part('distant'), part('last', 'source')]));
+  expect(move('distant', 'last', 'source', refreshed)).toBeNull();
+  expect(move(null, 'distant', 'leaf')).toEqual({
+    kind: 'move',
+    occurrenceId: 'leaf',
+    parentOccurrenceId: null,
+    beforeOccurrenceId: 'distant',
+  });
+  expect(outline.byId.get('leaf')!.placement.target).toEqual({ kind: 'chapter', document: exact });
 });

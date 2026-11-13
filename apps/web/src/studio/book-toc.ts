@@ -135,3 +135,55 @@ export function selectedChapter(structure: BookStructure, occurrenceId: string):
   const placement = structure.placements.find((entry) => entry.occurrenceId === occurrenceId);
   return placement?.target.kind === 'chapter' ? placement.target.document : null;
 }
+
+/** Resolve a destination against this revision, including the full moved subtree's depth. */
+export function moveBookOccurrenceTo(
+  occurrenceId: string,
+  parentOccurrenceId: string | null,
+  beforeOccurrenceId: string | null,
+  outline: BookTocIndex,
+): Extract<BookStructureChange, { kind: 'move' }> | null {
+  const source = outline.byId.get(occurrenceId);
+  if (!source) return null;
+  const parent = parentOccurrenceId === null ? null : outline.byId.get(parentOccurrenceId);
+  if (
+    parentOccurrenceId !== null &&
+    (!parent ||
+      parent.placement.target.kind !== 'part' ||
+      parentOccurrenceId === occurrenceId ||
+      parent.ancestors.includes(occurrenceId))
+  )
+    return null;
+  const depth = parent ? parent.depth + 1 : 0;
+  if (outline.maxDescendantDepth.get(occurrenceId)! - source.depth + depth >= outline.maxDepth) return null;
+  if (beforeOccurrenceId !== null) {
+    const before = outline.byId.get(beforeOccurrenceId);
+    if (!before || beforeOccurrenceId === occurrenceId || before.placement.parentOccurrenceId !== parentOccurrenceId)
+      return null;
+  }
+  // The next sibling (or end for the last sibling) is the source's existing insertion point.
+  if (
+    source.placement.parentOccurrenceId === parentOccurrenceId &&
+    (source.siblings[source.index + 1]?.occurrenceId ?? null) === beforeOccurrenceId
+  )
+    return null;
+  return { kind: 'move', occurrenceId, parentOccurrenceId, beforeOccurrenceId };
+}
+
+/** Stable sibling anchors, followed by an explicit end option when it changes the order. */
+export function bookMovePositions(
+  occurrenceId: string,
+  parentOccurrenceId: string | null,
+  outline: BookTocIndex,
+): readonly (string | null)[] {
+  const anchors = (outline.children.get(parentOccurrenceId) ?? []).map((row) => row.placement.occurrenceId);
+  return [...anchors, null].filter((before) => moveBookOccurrenceTo(occurrenceId, parentOccurrenceId, before, outline));
+}
+
+/** Enumerate only destinations with at least one effective move; child lists are already indexed. */
+export function bookMoveDestinations(occurrenceId: string, outline: BookTocIndex): readonly (string | null)[] {
+  const parts = outline.rows
+    .filter((row) => row.placement.target.kind === 'part')
+    .map((row) => row.placement.occurrenceId);
+  return [null, ...parts].filter((parent) => bookMovePositions(occurrenceId, parent, outline).length > 0);
+}
