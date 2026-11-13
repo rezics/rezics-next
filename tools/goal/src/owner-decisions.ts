@@ -13,6 +13,7 @@ const DELIVERY_EVENT = 'owner-contract-decision-delivery';
 export const MAX_WORKER_PROMPT_CHARACTERS = defaultPolicy.workerPrompt.characters;
 
 type DocumentReference = { path: string; change?: string };
+export type AcceptedSuccessor = { taskId: string; commit: string };
 type OwnerDecision = {
   id: string;
   originatingAttempt: number;
@@ -23,6 +24,7 @@ type OwnerDecision = {
   sequence: number;
   summary: string;
   documentRefs: DocumentReference[];
+  acceptedSuccessor?: AcceptedSuccessor;
 };
 
 export type OwnerDecisionDelivery = {
@@ -82,6 +84,46 @@ function safeDocumentReference(value: unknown, policy: ControlPolicy): DocumentR
   };
 }
 
+function safeAcceptedSuccessor(value: unknown): AcceptedSuccessor | undefined {
+  const item = record(value);
+  if (
+    !item ||
+    Object.keys(item).some((key) => key !== 'taskId' && key !== 'commit') ||
+    typeof item.taskId !== 'string' ||
+    !item.taskId.trim() ||
+    item.taskId.length > 128 ||
+    item.taskId.includes('\0') ||
+    typeof item.commit !== 'string' ||
+    !/^[0-9a-f]{40}$/.test(item.commit)
+  )
+    return undefined;
+  return { taskId: item.taskId.trim(), commit: item.commit };
+}
+
+/** Structured acceptance is usable only while its exact commit remains in the named task's integration record. */
+function integratedSuccessorMatches(store: WorkerStore, task: Task, accepted: AcceptedSuccessor): boolean {
+  if (accepted.taskId === task.id) return false;
+  const row = store.db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get(accepted.taskId);
+  if (!row) return false;
+  let candidate: Record<string, unknown> | undefined;
+  try {
+    candidate = record(JSON.parse(row.body));
+  } catch {
+    return false;
+  }
+  const brief = candidate && record(candidate.brief);
+  const commits = candidate?.integratedCommits;
+  return Boolean(
+    candidate?.id === accepted.taskId &&
+    brief?.goal === task.brief.goal &&
+    brief?.manager === task.brief.manager &&
+    brief.kind !== 'verification' &&
+    (candidate.integratedCommit === accepted.commit ||
+      candidate.mergedCommit === accepted.commit ||
+      (Array.isArray(commits) && commits.includes(accepted.commit))),
+  );
+}
+
 /** Only this command ingress promotes caller data to a persisted owner decision. */
 export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: unknown, env: NodeJS.ProcessEnv): void {
   const policy = store.policy;
@@ -92,9 +134,10 @@ export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: 
       throw new Error('owner decisions require the authenticated owning manager session');
     if (ref.attempt < 1) throw new Error('owner decisions require a current worker attempt');
     const body = record(input);
+    const acceptedSuccessor = body?.acceptedSuccessor === undefined ? undefined : safeAcceptedSuccessor(body.acceptedSuccessor);
     if (
       !body ||
-      Object.keys(body).some((key) => !['decisionId', 'summary', 'documentRefs'].includes(key)) ||
+      Object.keys(body).some((key) => !['decisionId', 'summary', 'documentRefs', 'acceptedSuccessor'].includes(key)) ||
       typeof body.decisionId !== 'string' ||
       !body.decisionId.trim() ||
       body.decisionId.length > 128 ||
@@ -103,6 +146,10 @@ export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: 
       body.summary.trim().length > policy.inbox.managerMessageCharacters ||
       (body.documentRefs !== undefined && !Array.isArray(body.documentRefs)) ||
       (Array.isArray(body.documentRefs) && body.documentRefs.some((item) => !safeDocumentReference(item, policy))) ||
+      (body.acceptedSuccessor !== undefined &&
+        (!acceptedSuccessor ||
+          task.brief.kind === 'verification' ||
+          !integratedSuccessorMatches(store, task, acceptedSuccessor))) ||
       Buffer.byteLength(JSON.stringify(body)) > policy.brief.bytes
     )
       throw new Error('owner decision requires decisionId, summary and optional repository-relative documentRefs');
@@ -115,6 +162,7 @@ export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: 
       taskId: task.id,
       attempt: ref.attempt,
       contractSha256: briefProposalHash(task.brief.markdown),
+      ...(acceptedSuccessor ? { acceptedSuccessor } : {}),
     };
     if (Buffer.byteLength(JSON.stringify(accepted)) > policy.brief.bytes)
       throw new Error('owner decision exceeds the existing prompt input limit');
@@ -146,6 +194,8 @@ function decisionFromEvent(
   const managerId = body.managerId;
   const senderSessionId = body.senderSessionId;
   const summary = body.summary;
+  const hasAcceptedSuccessor = Object.hasOwn(body, 'acceptedSuccessor');
+  const acceptedSuccessor = hasAcceptedSuccessor ? safeAcceptedSuccessor(body.acceptedSuccessor) : undefined;
   const references = Array.isArray(body.documentRefs) ? body.documentRefs : [];
   const refs = references.map((reference) => safeDocumentReference(reference, policy));
   if (
@@ -164,6 +214,7 @@ function decisionFromEvent(
     !summary.trim() ||
     summary.trim().length > policy.inbox.managerMessageCharacters ||
     (body.documentRefs !== undefined && !Array.isArray(body.documentRefs)) ||
+    (hasAcceptedSuccessor && (!acceptedSuccessor || task.brief.kind === 'verification')) ||
     refs.some((reference) => reference === undefined)
   )
     return undefined;
@@ -178,6 +229,7 @@ function decisionFromEvent(
     sequence: event.sequence,
     summary: summary.trim(),
     documentRefs: [...new Map((refs as DocumentReference[]).map((reference) => [reference.path, reference])).values()],
+    ...(acceptedSuccessor ? { acceptedSuccessor } : {}),
   };
 }
 
@@ -200,7 +252,11 @@ function availableInWorktree(worktree: string, path: string): boolean {
 }
 
 type DecisionDeliveryState = { summaryDelivered: boolean; deliveredDocumentPaths: Set<string> };
-type OwnerDecisionProjection = { decision: OwnerDecision | undefined; delivery: DecisionDeliveryState };
+type OwnerDecisionProjection = {
+  decision: OwnerDecision | undefined;
+  decisions: OwnerDecision[];
+  delivery: DecisionDeliveryState;
+};
 
 function decisionDeliveryKey(decisionId: string, decisionSequence: number): string {
   return JSON.stringify([decisionId, decisionSequence]);
@@ -258,24 +314,19 @@ function projectOwnerDecision(
     }
   }
 
-  let decision: OwnerDecision | undefined;
   const contractHash = task.brief.markdown === undefined ? undefined : briefProposalHash(task.brief.markdown);
-  for (const candidate of earliestById.values()) {
-    if (
-      candidate.sequence <= supersededThrough ||
-      (candidate.contractSha256 !== undefined && candidate.contractSha256 !== contractHash)
+  const decisions = [...earliestById.values()]
+    .filter(
+      (candidate) =>
+        candidate.sequence > supersededThrough &&
+        (candidate.contractSha256 === undefined || candidate.contractSha256 === contractHash),
     )
-      continue;
-    if (
-      !decision ||
-      candidate.decidedAt > decision.decidedAt ||
-      (candidate.decidedAt === decision.decidedAt && candidate.sequence > decision.sequence)
-    )
-      decision = candidate;
-  }
+    .sort((left, right) => left.decidedAt - right.decidedAt || left.sequence - right.sequence);
+  const decision = decisions.at(-1);
   const delivery = decision ? deliveryByDecision.get(decisionDeliveryKey(decision.id, decision.sequence)) : undefined;
   return {
     decision,
+    decisions,
     delivery: delivery ?? { summaryDelivered: false, deliveredDocumentPaths: new Set<string>() },
   };
 }
@@ -294,6 +345,27 @@ export function preservesTerminalProof(
     decision.contractSha256 &&
     /^preserved-terminal-native-proof(?:-\d{8})?$/.test(decision.id.slice(decision.managerId.length + 1)),
   );
+}
+
+/** Exact owner-authenticated successor evidence for the current source contract and attempt. */
+export function acceptedSuccessorDisposition(
+  events: readonly WorkerEvent[],
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy,
+): AcceptedSuccessor | undefined {
+  if (
+    task.id !== ref.taskId ||
+    task.currentAttempt !== ref.attempt ||
+    task.brief.kind === 'verification'
+  )
+    return undefined;
+  return projectOwnerDecision(events, task, ref, policy).decisions.findLast(
+    (decision) =>
+      decision.originatingAttempt === ref.attempt &&
+      decision.contractSha256 !== undefined &&
+      decision.acceptedSuccessor !== undefined,
+  )?.acceptedSuccessor;
 }
 
 export function prepareOwnerDecisionPrompt(
@@ -324,7 +396,12 @@ export function prepareOwnerDecisionPrompt(
   const remainingBytes = policy.prompt.workerTotalBytes - Buffer.byteLength(prompt) - 2;
   const fits = (block: string) => block.length <= remainingCharacters && Buffer.byteLength(block) <= remainingBytes;
   const header = `Owner decision ${decision.id} from authenticated manager ${decision.managerId}: this prompt carries the decision.`;
-  const summary = `Decision: ${decision.summary}`;
+  const summary = [
+    `Decision: ${decision.summary}`,
+    ...(decision.acceptedSuccessor
+      ? [`Accepted successor: task ${decision.acceptedSuccessor.taskId}, integrated commit ${decision.acceptedSuccessor.commit}.`]
+      : []),
+  ].join('\n');
   // A summary that does not fit becomes a pointer to the decision file, so no decision refuses a launch.
   const pointer = `${DECISION_FILE_DIRECTORY}/${decision.sequence}.md`;
   let lines: string[];
@@ -386,6 +463,9 @@ function decisionFileContent(decision: OwnerDecision): string {
     `Owner decision ${decision.id} from authenticated manager ${decision.managerId}.`,
     '',
     decision.summary,
+    ...(decision.acceptedSuccessor
+      ? ['', `Accepted successor: task ${decision.acceptedSuccessor.taskId}, integrated commit ${decision.acceptedSuccessor.commit}.`]
+      : []),
     ...(references.length ? ['', 'Document references:', ...references] : []),
     '',
   ].join('\n');

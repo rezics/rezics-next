@@ -51,6 +51,7 @@ export const WORKER_CHECK_HOST_TYPECHECK_REFUSAL =
 export const WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT = 75;
 export const WORKER_CHECK_TESTS_AFTER_LANDING = 'Tests run after landing in the dev verifier.';
 const STAMP_NAME = /^[1-9]\d*$/;
+const CHECK_RESULT_MAX_BYTES = 1_048_576;
 const TYPECHECK_COMMAND = /(?:^|[\s;|&])(?:[^\s;|&]*\/)?typecheck(?:\.ts|:root)?(?=$|[\s;|&])/;
 const TYPECHECK_FAILURE =
   /error TS\d+|error: script "typecheck" exited|error:\s*"typecheck" exited|error: Failed to run .*typecheck/;
@@ -1210,22 +1211,42 @@ export function workerCheckHostAttemptCheckCustody(
   taskId: string,
   attempt: number,
   checkIds: readonly string[],
+  /** When set, inspect only these result IDs and their corresponding custody records. */
+  exactIdsOnly = false,
 ): 'terminal' | 'unknown' {
   const root = join(worktree, '.temp', 'goal', 'checks');
   const recordDirectory = join(root, 'results');
+  if (exactIdsOnly && (!checkIds.length || checkIds.some((id) => !isCheckId(id)))) return 'unknown';
   let files: string[];
-  try {
-    files = readdirSync(recordDirectory).filter((file) => file.endsWith('.json'));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return checkIds.length === 0 ? 'terminal' : 'unknown';
-    throw error;
+  if (exactIdsOnly) {
+    files = [...new Set(checkIds)].map((id) => `${id}.json`);
+  } else {
+    try {
+      files = readdirSync(recordDirectory).filter((file) => file.endsWith('.json'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return checkIds.length === 0 ? 'terminal' : 'unknown';
+      throw error;
+    }
   }
   const found = new Set<string>();
   for (const file of files) {
     const resultPath = join(recordDirectory, file);
+    if (exactIdsOnly) {
+      let stat: ReturnType<typeof lstatSync>;
+      try {
+        stat = lstatSync(resultPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'unknown';
+        throw error;
+      }
+      if (!stat.isFile() || stat.size > CHECK_RESULT_MAX_BYTES) return 'unknown';
+    }
     const record = readCheckEvidence(resultPath);
     if (!record) return 'unknown';
-    if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) continue;
+    if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) {
+      if (exactIdsOnly) return 'unknown';
+      continue;
+    }
     if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return 'unknown';
     found.add(record.id);
     const cancelled = existsSync(join(root, 'custody', 'cancelled', `${record.id}.json`));
@@ -1307,7 +1328,9 @@ export function workerCheckHostTypingCheckIds(directory: string, checkIds: reado
 export type WorkerCheckHostConsumedTypingRecovery = {
   checkId: string;
   physicalRunId: string;
+  exact: boolean;
   custody: 'terminal' | 'unknown';
+  resultState: 'absent' | 'running' | 'finished' | 'invalid';
   resultlessCleanup: boolean;
   replacement: boolean;
 };
@@ -1340,31 +1363,31 @@ function sameRunnerIdentity(left: RunnerIdentity, right: RunnerIdentity): boolea
 }
 
 function authorizedTypingRecoveryEvent(db: Database, grant: TypingRecoveryGrant): boolean {
-  const rows = db
+  const row = db
     .query(
-      "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized' ORDER BY sequence DESC",
+      `SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'
+       AND CASE WHEN json_valid(body) THEN json_extract(body, '$.token')=? ELSE 0 END LIMIT 1`,
     )
-    .all(grant.taskId, grant.attempt) as { body: string }[];
-  return rows.some(({ body: raw }) => {
-    let body: CheckEvidence;
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
-      body = parsed as CheckEvidence;
-    } catch {
-      return false;
-    }
-    const actor = body.actor as { id?: unknown; sessionId?: unknown } | null | undefined;
-    return (
-      body.token === grant.token &&
-      body.identity === grant.identity &&
-      body.checkId === grant.checkId &&
-      JSON.stringify(body.command) === JSON.stringify(grant.command) &&
-      (body.recoveryKind === undefined ? grant.recoveryKind === undefined : body.recoveryKind === grant.recoveryKind) &&
-      actor?.id === grant.actor.id &&
-      actor?.sessionId === grant.actor.sessionId
-    );
-  });
+    .get(grant.taskId, grant.attempt, grant.token) as { body: string } | null;
+  if (!row) return false;
+  let body: CheckEvidence;
+  try {
+    const parsed: unknown = JSON.parse(row.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    body = parsed as CheckEvidence;
+  } catch {
+    return false;
+  }
+  const actor = body.actor as { id?: unknown; sessionId?: unknown } | null | undefined;
+  return (
+    body.token === grant.token &&
+    body.identity === grant.identity &&
+    body.checkId === grant.checkId &&
+    JSON.stringify(body.command) === JSON.stringify(grant.command) &&
+    (body.recoveryKind === undefined ? grant.recoveryKind === undefined : body.recoveryKind === grant.recoveryKind) &&
+    actor?.id === grant.actor.id &&
+    actor?.sessionId === grant.actor.sessionId
+  );
 }
 
 /**
@@ -1376,6 +1399,8 @@ export function workerCheckHostActiveTypingRecovery(input: {
   stateDirectory: string;
   taskId: string;
   worktree: string;
+  /** When supplied, inspect only the current authenticated grant's stamp. */
+  token?: string;
 }): WorkerCheckHostActiveTypingRecovery | undefined {
   const taskRow = input.db.query('SELECT current_attempt, body FROM worker_tasks WHERE id=?').get(input.taskId) as {
     current_attempt: number;
@@ -1420,11 +1445,20 @@ export function workerCheckHostActiveTypingRecovery(input: {
 
   const directory = workerCheckBudgetDirectory(input.stateDirectory, input.taskId, taskRow.current_attempt);
   let names: string[];
-  try {
-    names = stampNames(directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
+  if (input.token !== undefined) {
+    if (!/^[0-9a-f-]{36}$/.test(input.token)) return;
+    const grant = readCheckEvidence(recoveryPath(directory, input.token)) as
+      | (CheckEvidence & TypingRecoveryGrant)
+      | undefined;
+    if (!grant?.stamp || !STAMP_NAME.test(grant.stamp)) return;
+    names = [grant.stamp];
+  } else {
+    try {
+      names = stampNames(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
   }
   const root = join(input.worktree, '.temp', 'goal', 'checks');
   for (const name of names.reverse()) {
@@ -1437,6 +1471,7 @@ export function workerCheckHostActiveTypingRecovery(input: {
       typeof stamp.content !== 'string' ||
       !/^[0-9a-f]{40}$/.test(stamp.content) ||
       !/^[0-9a-f-]{36}$/.test(recovery.token) ||
+      (input.token !== undefined && recovery.token !== input.token) ||
       !isCheckId(recovery.checkId) ||
       !isPhysicalRunId(recovery.physicalRunId)
     )
@@ -1529,29 +1564,43 @@ export function workerCheckHostActiveTypingRecovery(input: {
 
 /** Read only the current-input recovery whose grant is bound to a consumed budget stamp. */
 export function workerCheckHostConsumedTypingRecovery(input: {
+  db?: Database;
   directory: string;
   worktree: string;
   taskId: string;
   attempt: number;
   checkIds: readonly string[];
   command: readonly string[];
+  /** When supplied, inspect only the stamp and grant named by the current authenticated event. */
+  token?: string;
 }): WorkerCheckHostConsumedTypingRecovery | undefined {
   if (!isKnownTypingCompiler(input.worktree, input.command)) return;
   const identity = recoveryIdentity(input.worktree, input.command);
   let names: string[];
-  try {
-    names = stampNames(input.directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
+  if (input.token !== undefined) {
+    if (!/^[0-9a-f-]{36}$/.test(input.token)) return;
+    const grant = readCheckEvidence(recoveryPath(input.directory, input.token)) as
+      | (CheckEvidence & TypingRecoveryGrant)
+      | undefined;
+    if (!grant?.stamp || !STAMP_NAME.test(grant.stamp)) return;
+    names = [grant.stamp];
+  } else {
+    try {
+      names = stampNames(input.directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    names.reverse();
   }
 
-  for (const name of names.reverse()) {
+  for (const name of names) {
     const stamp = readWorkerCheckHostStamp(input.directory, name);
     const recovery = stamp.typingRecovery;
     if (
       !recovery ||
       !/^[0-9a-f-]{36}$/.test(recovery.token) ||
+      (input.token !== undefined && recovery.token !== input.token) ||
       !isCheckId(recovery.checkId) ||
       !isPhysicalRunId(recovery.physicalRunId)
     )
@@ -1567,7 +1616,8 @@ export function workerCheckHostConsumedTypingRecovery(input: {
       grant.attempt !== input.attempt ||
       grant.worktree !== input.worktree ||
       grant.identity !== identity ||
-      JSON.stringify(grant.command) !== JSON.stringify(input.command)
+      JSON.stringify(grant.command) !== JSON.stringify(input.command) ||
+      (input.db !== undefined && !authorizedTypingRecoveryEvent(input.db, grant))
     )
       continue;
 
@@ -1581,13 +1631,22 @@ export function workerCheckHostConsumedTypingRecovery(input: {
       (request.physicalRunId === grant.physicalRunId &&
         JSON.stringify(request.command) === JSON.stringify(grant.command));
     const exactRecovery = exactStamp && exactRequest;
-    const checkIds = [...new Set([...input.checkIds, grant.checkId])];
+    const checkIds =
+      input.token === undefined ? [...new Set([...input.checkIds, grant.checkId])] : [grant.checkId];
     return {
       checkId: grant.checkId,
       physicalRunId: grant.physicalRunId,
+      exact: exactRecovery,
       custody: exactRecovery
-        ? workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, checkIds)
+        ? workerCheckHostAttemptCheckCustody(
+            input.worktree,
+            input.taskId,
+            input.attempt,
+            checkIds,
+            input.token !== undefined,
+          )
         : 'unknown',
+      resultState: consumedTypingRecoveryResultState(input.worktree, grant.checkId),
       resultlessCleanup:
         exactRecovery &&
         workerCheckHostAttemptHasResultlessCleanup(
@@ -1601,6 +1660,35 @@ export function workerCheckHostConsumedTypingRecovery(input: {
     };
   }
   return undefined;
+}
+
+function consumedTypingRecoveryResultState(
+  worktree: string,
+  checkId: string,
+): WorkerCheckHostConsumedTypingRecovery['resultState'] {
+  const path = join(worktree, '.temp', 'goal', 'checks', 'results', `${checkId}.json`);
+  let stat: ReturnType<typeof lstatSync>;
+  try {
+    stat = lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'absent';
+    if (['EACCES', 'EPERM', 'EISDIR', 'ENOTDIR', 'ELOOP'].includes((error as NodeJS.ErrnoException).code ?? ''))
+      return 'invalid';
+    throw error;
+  }
+  if (!stat.isFile() || stat.size > CHECK_RESULT_MAX_BYTES) return 'invalid';
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value) || (value as CheckEvidence).id !== checkId)
+      return 'invalid';
+    const result = value as CheckEvidence;
+    if (result.status === 'running' && result.exitCode === undefined) return 'running';
+    if (result.status === 'finished') return 'finished';
+    return 'invalid';
+  } catch (error) {
+    if (error instanceof SyntaxError) return 'invalid';
+    throw error;
+  }
 }
 
 export function workerCheckHostTypingReceiptMatches(directory: string, command: readonly string[]): boolean {

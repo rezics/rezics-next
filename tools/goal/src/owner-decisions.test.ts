@@ -106,6 +106,21 @@ test('document availability is refreshed between prompts after a prior delivery'
   }
 });
 
+test('accepted successor task and commit travel as structured owner decision context', () => {
+  const body = {
+    ...decision('accepted-successor-task-b', 'Retain this source through the accepted successor.', '2026-11-03T09:00:00.000Z'),
+    acceptedSuccessor: { taskId: 'task-b', commit: 'b'.repeat(40) },
+  };
+  const result = prepareOwnerDecisionPrompt(
+    { ownerDecisionEvents: () => [event(1, body, '2026-11-03T09:00:00.000Z')] },
+    task(),
+    { taskId: 'task-a', attempt: 2 },
+    'Continue.',
+  );
+  expect(result.prompt).toContain('Retain this source through the accepted successor.');
+  expect(result.prompt).toContain(`Accepted successor: task task-b, integrated commit ${'b'.repeat(40)}.`);
+});
+
 test('a missing referenced document remains named and pending', () => {
   const worktree = '/missing/worktree';
   const body = {
