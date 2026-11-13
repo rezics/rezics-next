@@ -250,12 +250,7 @@ export class HostedReleasePreparationVisit {
   };
 
   private async openSelection() {
-    if (
-      !this.collecting() ||
-      this.state.kind !== 'active' ||
-      this.selectionWindow ||
-      !this.options.selectionNative
-    )
+    if (!this.collecting() || this.state.kind !== 'active' || this.selectionWindow || !this.options.selectionNative)
       return;
     const state = this.state;
     const stage = state.progress!.stage;
