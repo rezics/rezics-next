@@ -3,13 +3,17 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { choosePoolWithFallback } from './allowance.ts';
+import { burnHorizonMs } from './allowance.ts';
 import {
   alertUnspentAllowances,
+  nearCeilingSweepAdmissions,
   pace,
   parseCodexStatus,
   publishCodexSchedule,
   readCodexSchedule,
+  readRetainedPoolReadings,
   refreshCodexSchedule,
+  retainPoolReadings,
 } from './pacing.ts';
 import type { Pool, PoolReading, Profile } from './types.ts';
 
@@ -231,6 +235,48 @@ test('Malformed or future-dated caches cannot prevent eventual refresh; simultan
     expect(readCodexSchedule(state)).toEqual(second);
     expect(readFileSync(sharedTmp, 'utf8')).toBe('{incomplete');
     expect(refreshCodexSchedule(state, now + hour, () => undefined)).toEqual(second);
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
+});
+
+test('retention keeps one sample per pool per minute across the 6 h coarse horizon and stays version 1', () => {
+  const state = mkdtempSync(join(tmpdir(), 'pool-readings-'));
+  const span = 90 * 60 * 1000;
+  const sample = (pool: Pool, minutesAgo: number, usedPercent: number): PoolReading => {
+    const observedAt = new Date(now - minutesAgo * 60_000).toISOString();
+    return {
+      ...reading(pool, usedPercent, 100),
+      observedAt,
+      at: observedAt,
+    };
+  };
+  try {
+    const first = retainPoolReadings(
+      state,
+      [sample(codex, 5 * 60, 12), sample(claude, 5 * 60, 40), sample(codex, 5 * 60, 13)],
+      now,
+      span,
+    );
+    expect(first.filter((item) => item.pool === 'codex')).toHaveLength(1);
+    expect(
+      first.find((item) => item.pool === 'codex')?.windows.find((window) => window.minutes === 10080)?.usedPercent,
+    ).toBe(13);
+    const stored = JSON.parse(readFileSync(join(state, 'pool-readings.json'), 'utf8')) as {
+      version: number;
+      readings: PoolReading[];
+    };
+    expect(stored.version).toBe(1);
+    retainPoolReadings(state, [sample(codex, 6 * 60 + 1, 10), sample(codex, 1, 14)], now, span);
+    const kept = readRetainedPoolReadings(state);
+    const weekly = (item: PoolReading) => item.windows.find((window) => window.minutes === 10080)?.usedPercent;
+    expect(kept.some((item) => item.pool === 'codex' && weekly(item) === 13)).toBe(true);
+    expect(kept.some((item) => item.pool === 'codex' && weekly(item) === 14)).toBe(true);
+    expect(kept.some((item) => item.pool === 'codex' && weekly(item) === 10)).toBe(false);
+    expect(burnHorizonMs(span)).toBe(6 * hour);
+    expect(nearCeilingSweepAdmissions(0, 0.74)).toBeUndefined();
+    expect(nearCeilingSweepAdmissions(0.667, 0.74)).toBe(2);
+    expect(nearCeilingSweepAdmissions(0.833, 0.74)).toBe(0);
   } finally {
     rmSync(state, { recursive: true, force: true });
   }

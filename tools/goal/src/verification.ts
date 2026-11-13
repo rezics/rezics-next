@@ -263,6 +263,8 @@ export type ProofAuthorization = {
   sourceTree: string;
   integrationBranch: string;
   originals: { taskId: string; commit: string; argv: string[] }[];
+  /** The first explicit native command declared for integrated originals with no acceptance argv. */
+  sourceOnlyCommand?: { sourceCommit: string; argv: string[]; files: string[] };
   /** Durable identity of an unchanged queued proposal admitted against a later captured head. */
   backlogProposal?: { proposalSha256: string; sourceCommit: string; sourceTasks: string[] };
 };
@@ -441,13 +443,19 @@ export function authorizeProof(
         throw new Error(`proof source commit does not contain ${id}`);
       return { taskId: id, commit, argv: [...task.brief.acceptance.command] };
     });
-    if (
+    const sourceOnly = originals.every((original) => original.argv.length === 0);
+    const declared = sourceOnly ? fileCommand(brief.acceptance.command) : undefined;
+    if (sourceOnly) {
+      if (!declared)
+        throw new Error('source-only proof must declare one explicit-file command with a test or spec file');
+    } else if (
       !originalCommandMatches(
         brief.acceptance.command,
         originals.map((original) => original.argv),
       )
-    )
+    ) {
       throw new Error('proof command must retain every whole original argv or its exact deduplicated file union');
+    }
     const missing = preflightProof(root, brief, policy);
     if (missing.length)
       throw new ProofUnavailableError(`proof command inputs are missing at the captured source: ${missing.join(', ')}`);
@@ -460,6 +468,15 @@ export function authorizeProof(
       sessionId: actor.sessionId,
       sourceTree: proofGit(root, ['rev-parse', `${proof.sourceCommit}^{tree}`], policy),
       originals,
+      ...(declared
+        ? {
+            sourceOnlyCommand: {
+              sourceCommit: proof.sourceCommit,
+              argv: [...brief.acceptance.command],
+              files: [...declared.files],
+            },
+          }
+        : {}),
       ...(registration?.backlogProposal
         ? {
             backlogProposal: {

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
+  burnEvidence,
+  burnHorizonMs,
   burnPerHour,
   choosePool,
   choosePoolWithFallback,
@@ -51,7 +53,7 @@ function observed(pool: Pool, usedPercent: number, at: number, resetsAt = now + 
   return result;
 }
 
-test('A pool whose window used percent rose 2 points over the last 90 minutes, with maxBurnPerHour 0.8, admits no new task, and a task routed to it goes to its next allowed fallback profile or waits', () => {
+test('A Codex integer rise of 2 points over 90 minutes is one point of uncertainty, so a 0.8 ceiling still admits; 4 points refuse and fall back', () => {
   const base = fixturePool();
   const codex = { ...base, policy: { ...base.policy, maxBurnPerHour: 0.8, allowUnknown: false } };
   const cursor = {
@@ -64,23 +66,38 @@ test('A pool whose window used percent rose 2 points over the last 90 minutes, w
     policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 60_000 },
   };
   const history = [observed(codex, 10, now - span)];
-  const current = observed(codex, 12, now);
+  const twoPoints = observed(codex, 12, now);
+  const fourPoints = observed(codex, 14, now);
   const cursorReading = observed(cursor, 5, now);
-  expect(burnPerHour(current, history, { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
-  expect(() => choosePool(profile, [codex], [current], { now, history, spanMs: span })).toThrow('no allowed pool');
-  expect(poolAllowed(codex, [current], { now, history, spanMs: span })).toBe(false);
-  const chosen = choosePoolWithFallback(profile, [cursorProfile], [codex, cursor], [current, cursorReading], {
+  const options = { now, spanMs: span, cli: 'codex' as const };
+  expect(burnPerHour(twoPoints, history, options)).toBeCloseTo(1 / 1.5, 5);
+  expect(burnEvidence(twoPoints, history, options)).toMatchObject({
+    evidence: 'rate',
+    observedRate: 2 / 1.5,
+  });
+  expect(choosePool(profile, [codex], [twoPoints], { now, history, spanMs: span }).name).toBe(codex.name);
+  expect(poolAllowed(codex, [twoPoints], { now, history, spanMs: span })).toBe(true);
+  expect(burnPerHour(fourPoints, history, options)).toBeCloseTo(3 / 1.5, 5);
+  expect(() => choosePool(profile, [codex], [fourPoints], { now, history, spanMs: span })).toThrow('no allowed pool');
+  expect(poolAllowed(codex, [fourPoints], { now, history, spanMs: span })).toBe(false);
+  const chosen = choosePoolWithFallback(profile, [cursorProfile], [codex, cursor], [fourPoints, cursorReading], {
     now,
     history,
     spanMs: span,
   });
   expect(chosen.profile).toBe(cursorProfile);
   expect(chosen.pool.name).toBe('cursor');
-  expect(() => choosePoolWithFallback(profile, [], [codex], [current], { now, history, spanMs: span })).toThrow(
+  expect(() => choosePoolWithFallback(profile, [], [codex], [fourPoints], { now, history, spanMs: span })).toThrow(
     'no allowed pool',
   );
-  expect(poolBurnStatus([codex, cursor], [...history, current, cursorReading], now, span)).toEqual([
-    { name: 'fixture', allowanceKey: 'fixture', burnPerHour: 2 / 1.5, maxBurnPerHour: 0.8 },
+  expect(poolBurnStatus([codex, cursor], [...history, twoPoints, cursorReading], now, span)).toEqual([
+    {
+      name: 'fixture',
+      allowanceKey: 'fixture',
+      burnPerHour: 1 / 1.5,
+      observedBurnPerHour: 2 / 1.5,
+      maxBurnPerHour: 0.8,
+    },
     { name: 'cursor', allowanceKey: 'cursor', burnPerHour: 0 },
   ]);
 });
@@ -113,8 +130,11 @@ test('Integer percent readings taken every few minutes, where most consecutive r
   const used = [10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12];
   const history = used.map((percent, index) => observed(pool, percent, now - span + index * 5 * 60_000));
   const current = history.at(-1)!;
-  expect(burnPerHour(current, history.slice(-2, -1), { now, spanMs: span })).toBe(0);
-  expect(burnPerHour(current, history.slice(0, -1), { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
+  const options = { now, spanMs: span, cli: 'codex' as const };
+  expect(burnPerHour(current, history.slice(-2, -1), options)).toBe(0);
+  expect(burnEvidence(current, history.slice(-2, -1), options).evidence).toBe('unresolved');
+  expect(burnPerHour(current, history.slice(0, -1), options)).toBeCloseTo(1 / 1.5, 5);
+  expect(burnEvidence(current, history.slice(0, -1), options).observedRate).toBeCloseTo(2 / 1.5, 5);
 });
 
 test('A pool with policy.maxConcurrent 8 and 8 running attempts admits no new task. A task routed to it takes its next allowed fallback or waits.', () => {
@@ -261,4 +281,73 @@ test('missing or stale reset evidence falls back to weighted allowance, and caps
   expect(choosePool(profile, [capped, weighted], fresh, { now, running: { 'codex-1': 1 } }).name).toBe('codex');
   fresh[0]!.exhausted = true;
   expect(choosePool(profile, [capped, weighted], fresh, { now }).name).toBe('codex');
+});
+
+test('Codex integer 12 to 13 in about an hour at 0.74 is unresolved, then a plateau still admits', () => {
+  const pool = { ...fixturePool(), policy: { ...fixturePool().policy, maxBurnPerHour: 0.74, allowUnknown: false } };
+  const elapsed = Math.round(hour / 0.991);
+  const baseline = observed(pool, 12, now - elapsed);
+  const step = observed(pool, 13, now);
+  const options = { now, spanMs: span, cli: 'codex' as const };
+  expect(burnEvidence(step, [baseline], options)).toMatchObject({ rate: 0, evidence: 'unresolved' });
+  expect(burnEvidence(step, [baseline], options).observedRate).toBeCloseTo(0.991, 3);
+  expect(poolAllowed(pool, [step], { now, history: [baseline], spanMs: span })).toBe(true);
+  const status = poolBurnStatus([pool], [baseline, step], now, span)[0]!;
+  expect(status.burnPerHour).toBe(0);
+  expect(status.observedBurnPerHour).toBeCloseTo(0.991, 3);
+  expect(status.maxBurnPerHour).toBe(0.74);
+  const plateau = observed(pool, 13, now + hour);
+  expect(burnEvidence(plateau, [baseline, step], { now: now + hour, spanMs: span, cli: 'codex' }).evidence).toBe(
+    'unresolved',
+  );
+  expect(poolAllowed(pool, [plateau], { now: now + hour, history: [baseline, step], spanMs: span })).toBe(true);
+});
+
+test('Coarse Codex burn uses the 6 h horizon, isolates accounts, and keeps fractional, reset, missing and exhaustion policy', () => {
+  const pool = { ...fixturePool(), policy: { ...fixturePool().policy, maxBurnPerHour: 0.74, allowUnknown: false } };
+  const other = { ...pool, name: 'codex-1', allowanceKey: 'codex-1' };
+  const horizon = burnHorizonMs(span);
+  expect(horizon).toBe(6 * hour);
+  const paced = Array.from({ length: 7 }, (_, index) => observed(pool, 12 + index, now - horizon + index * hour));
+  const current = paced.at(-1)!;
+  const options = { now, spanMs: span, cli: 'codex' as const };
+  expect(burnPerHour(current, paced.slice(0, -1), options)).toBeCloseTo(5 / 6, 5);
+  expect(poolAllowed(pool, [current], { now, history: paced.slice(0, -1), spanMs: span })).toBe(false);
+
+  const burst = [observed(pool, 12, now - 20 * 60_000), observed(pool, 14, now - 8 * 60_000)];
+  expect(burnPerHour(observed(pool, 16, now), burst, options)).toBeGreaterThan(0.74);
+  expect(poolAllowed(pool, [observed(pool, 16, now)], { now, history: burst, spanMs: span })).toBe(false);
+
+  const fractionalHistory = [observed(pool, 12.2, now - hour)];
+  expect(burnPerHour(observed(pool, 13.31, now), fractionalHistory, options)).toBeCloseTo(1.11, 5);
+  expect(poolAllowed(pool, [observed(pool, 13.31, now)], { now, history: fractionalHistory, spanMs: span })).toBe(
+    false,
+  );
+  expect(burnPerHour(observed(pool, 12.6, now), fractionalHistory, options)).toBeCloseTo(0.4, 5);
+  expect(poolAllowed(pool, [observed(pool, 12.6, now)], { now, history: fractionalHistory, spanMs: span })).toBe(true);
+
+  const flat = observed(pool, 12, now);
+  expect(burnEvidence(flat, [observed(pool, 12, now - hour)], options)).toMatchObject({
+    rate: 0,
+    observedRate: 0,
+    evidence: 'unresolved',
+  });
+  expect(burnEvidence(flat, [], options).evidence).toBe('none');
+  const unordered = [observed(pool, 18, now - 10 * 60_000), observed(pool, 12, now - horizon)];
+  expect(burnPerHour(observed(pool, 18, now), unordered, options)).toBeCloseTo(5 / 6, 5);
+
+  const beforeReset = observed(pool, 90, now - span, now - span + 1000);
+  expect(burnPerHour(observed(pool, 18, now), [beforeReset], options)).toBe(0);
+  const unknownPast = observed(pool, 12, now - horizon);
+  unknownPast.windows[0]!.resetsAt = null;
+  const unknownNow = observed(pool, 18, now);
+  unknownNow.windows[0]!.resetsAt = null;
+  expect(burnPerHour(unknownNow, [unknownPast], options)).toBe(0);
+
+  const otherBurn = [observed(other, 12, now - hour), observed(other, 80, now)];
+  expect(poolAllowed(pool, [observed(pool, 13, now)], { now, history: otherBurn, spanMs: span })).toBe(true);
+  expect(poolAllowed(other, [otherBurn[1]!], { now, history: otherBurn, spanMs: span })).toBe(false);
+  const exhausted = observed(pool, 13, now);
+  exhausted.exhausted = true;
+  expect(poolAllowed(pool, [exhausted], { now, history: [observed(pool, 12, now - hour)], spanMs: span })).toBe(false);
 });

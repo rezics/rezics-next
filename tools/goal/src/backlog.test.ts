@@ -28,7 +28,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { runIntegration } from './integration-cli.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { WorkerStore } from './store.ts';
-import { assertBriefDispatchable, MAX_BRIEF_BYTES, readRiskOwnership } from './briefs.ts';
+import { assertBriefDispatchable, MAX_BRIEF_BYTES, parseBrief, readRiskOwnership } from './briefs.ts';
 import { defaultPolicy } from './policy.ts';
 import { brief as fixtureBrief, fixturePool, harness, markdown, temporaryDirectory } from './test-support.ts';
 import { countAllowanceWaiting } from './allowance.ts';
@@ -826,11 +826,18 @@ test('goal backlog status prints ready, dispatched and failed counts per Goal', 
   expect((await run('dispatch')).code).not.toBe(0);
 });
 
-test('backlog dispatch returns undersized or oversized product briefs to their manager with merge candidates', async () => {
-  const f = fixture();
+test('backlog dispatch admits a 350-line product brief, returns oversized bodies, and still refuses malformed briefs', async () => {
+  const f = fixture({ perSweep: 8 });
+  const originalDispatch = f.runtime.dispatch;
+  f.runtime.dispatch = async (file, ...rest) => {
+    parseBrief(readFileSync(file, 'utf8'), { version: 1, areas: {} });
+    return originalDispatch(file, ...rest);
+  };
   const small = markdown
     .replace('goal: fixture', 'goal: web\nmanager: web')
-    .replace('paths: [result.txt]', 'paths: [tools/goal/src/backlog.ts]');
+    .replace('lines: 100', 'lines: 350')
+    .replace('paths: [result.txt]', 'paths: [tools/goal/src/backlog.ts]')
+    .replace('waiting: []', 'waiting: []\nafter: [blocker-1]');
   const sibling = complete
     .replace('goal: fixture', 'goal: web\nmanager: web')
     .replace('paths: [result.txt]', 'paths: [tools/goal/src/briefs.ts]');
@@ -852,39 +859,47 @@ test('backlog dispatch returns undersized or oversized product briefs to their m
     'search',
     'research.md',
     90_000,
-    '---\ngoal: search\nmanager: search\nkind: research\npaths: [docs/research/topic.md]\n---\nResearch brief',
+    '---\ngoal: search\nmanager: search\nkind: research\npaths: [docs/research/topic.md]\nriskAreas: []\ncriticalPath: false\nwaiting: []\n---\nResearch brief',
   );
-  brief(f.state, 'imports', 'slice.md', 90_000, markdown.replace('goal: fixture', 'goal: imports\nmanager: imports'));
+  brief(
+    f.state,
+    'imports',
+    'slice.md',
+    90_000,
+    markdown.replace('goal: fixture', 'goal: imports\nmanager: imports').replace('lines: 100', 'lines: many'),
+  );
 
   const sweep = await sweepBacklog(f.runtime);
 
-  expect(sweep.returned.map((entry) => `${entry.goal}/${entry.brief}`).sort()).toEqual([
-    'imports/slice.md',
-    'web/long.md',
-    'web/small.md',
-  ]);
+  expect(sweep.returned.map((entry) => `${entry.goal}/${entry.brief}`).sort()).toEqual(['web/long.md']);
   expect(sweep.dispatched.map((entry) => `${entry.goal}/${entry.brief}`).sort()).toEqual([
     'search/research.md',
     'web/sibling.md',
+    'web/small.md',
     'web/urgent.md',
   ]);
-  expect(f.dispatched.map((entry) => entry.file).some((file) => file.endsWith('small.md'))).toBe(false);
+  expect(sweep.refused.map((entry) => `${entry.goal}/${entry.brief}`)).toEqual(['imports/slice.md']);
+  expect(sweep.refused[0]!.reason).toContain('estimate.lines must be a positive integer');
+  const admitted = f.dispatched.find((entry) => entry.file.endsWith('small.md'))!.text;
+  expect(admitted).toContain('lines: 350');
+  expect(admitted).toContain('after: [blocker-1]');
   const returned = join(f.state, 'backlog', 'web', 'returned');
-  expect(readdirSync(returned).sort()).toEqual(['long.md', 'long.reason', 'small.md', 'small.reason']);
-  expect(readFileSync(join(returned, 'small.reason'), 'utf8')).toContain('brief.minimumEstimateLines is 1200');
+  expect(readdirSync(returned).sort()).toEqual(['long.md', 'long.reason']);
   expect(readFileSync(join(returned, 'long.reason'), 'utf8')).toContain('brief.maximumBodyCharacters is 4000');
+  expect(readFileSync(join(returned, 'long.reason'), 'utf8')).not.toContain('minimumEstimateLines');
   const web = f.inbox.pending('web');
   expect(web).toHaveLength(1);
-  expect(web[0]!.event.summary).toContain('Backlog dispatch returned 2 product brief(s)');
-  expect(web[0]!.event.summary).toContain('small.md');
+  expect(web[0]!.event.summary).toContain('Backlog dispatch returned 1 product brief(s)');
+  expect(web[0]!.event.summary).toContain('long.md');
   expect(web[0]!.event.summary).toContain('merge with');
   expect(web[0]!.event.summary).toContain(returned);
   expect(f.inbox.pending('imports')).toHaveLength(1);
+  expect(f.inbox.pending('imports')[0]!.event.summary).toContain('Backlog dispatch refused 1 brief(s)');
   expect(f.inbox.pending('search')).toHaveLength(0);
   expect(backlogStatus(f.state)).toEqual([
-    { goal: 'imports', ready: 0, dispatched: 0, failed: 0, returned: 1 },
+    { goal: 'imports', ready: 0, dispatched: 0, failed: 1, returned: 0 },
     { goal: 'search', ready: 0, dispatched: 1, failed: 0, returned: 0 },
-    { goal: 'web', ready: 0, dispatched: 2, failed: 0, returned: 2 },
+    { goal: 'web', ready: 0, dispatched: 3, failed: 0, returned: 1 },
   ]);
   expect(
     (
@@ -892,7 +907,13 @@ test('backlog dispatch returns undersized or oversized product briefs to their m
         n: number;
       }
     ).n,
-  ).toBe(3);
+  ).toBe(1);
+  const observed = f.db
+    .query("SELECT task_id AS taskId, detail FROM flow_events WHERE stage='dispatch' AND action='observed'")
+    .all() as { taskId: string; detail: string }[];
+  expect(observed).toHaveLength(1);
+  expect(observed[0]!.detail).toContain('estimate.lines is 350');
+  expect(observed[0]!.detail).toContain('brief.minimumEstimateLines is 1200 (advisory)');
 }, 10_000);
 
 test('stopped tasks are cancelled at most twenty per Goal per run, oldest first, with one event per owner', async () => {
@@ -1157,7 +1178,7 @@ function attachRouting(
     policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 60_000 },
   };
   const history = [observed(codex, options.usedFrom ?? 10, now - SPAN_MS)];
-  const current = observed(codex, options.usedTo ?? 12, now);
+  const current = observed(codex, options.usedTo ?? 14, now);
   const cursorReading = observed(cursor, 5, now);
   const readings = [...history, current, cursorReading];
   f.runtime.routing = {
@@ -1215,7 +1236,7 @@ test('Ready tasks waiting only on allowance count toward the cap only beyond a b
 
 test('A paced pool admits at most two new starts per sweep while its measured rate is within 25% of its ceiling.', async () => {
   const f = fixture({ workerCap: 5, perSweep: 5 });
-  attachRouting(f, { ceiling: 2, usedFrom: 10, usedTo: 13, fallbacks: [] });
+  attachRouting(f, { ceiling: 2, usedFrom: 10, usedTo: 14, fallbacks: [] });
   for (let index = 0; index < 5; index++) brief(f.state, 'web', `work-${index}.md`, 120_000 - index * 1_000);
   expect((await sweepBacklog(f.runtime)).dispatched).toHaveLength(2);
   expect(readdirSync(join(f.state, 'backlog', 'web')).filter((name) => name.endsWith('.md'))).toHaveLength(3);

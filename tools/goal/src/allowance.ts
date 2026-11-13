@@ -1,5 +1,5 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import type { Pool, PoolReading, Profile } from './types.ts';
+import type { Cli, Pool, PoolReading, Profile } from './types.ts';
 
 export type PoolSelectionOptions = {
   preferred?: string;
@@ -18,11 +18,40 @@ export type PoolBurnStatus = {
   name: string;
   allowanceKey: string;
   burnPerHour: number;
+  /** Raw same-window slope when it differs from the evidenced rate used for admission. */
+  observedBurnPerHour?: number;
   maxBurnPerHour?: number;
   live?: number;
   waiting?: number;
   maxConcurrent?: number;
 };
+
+/** Why a burn comparison can or cannot support a numeric rate. */
+export type BurnEvidenceKind = 'rate' | 'unresolved' | 'none';
+
+/** Conservative evidenced burn plus the raw observed slope for diagnostics. */
+export type BurnEvidence = {
+  rate: number;
+  observedRate: number;
+  evidence: BurnEvidenceKind;
+};
+
+export type BurnOptions = {
+  now?: number;
+  spanMs?: number;
+  /** Longer Codex coarse horizon; defaults to four times `spanMs` (6 h at the default 90-minute span). */
+  horizonMs?: number;
+  cli?: Cli;
+  /** Hourly bridge: compare only the short span so a raw short slope cannot alarm on its own. */
+  shortOnly?: boolean;
+};
+
+/** Codex coarse readings keep this many short spans so a 90-minute step stays under-resolved while sustained burn is visible. */
+export const COARSE_BURN_HORIZON_FACTOR = 4;
+
+export function burnHorizonMs(spanMs = defaultPolicy.pacing.burnSpanMs): number {
+  return spanMs * COARSE_BURN_HORIZON_FACTOR;
+}
 
 const liveStates = new Set(['pending', 'running']);
 
@@ -63,40 +92,114 @@ function sameWindow(past: ReadingWindow, window: ReadingWindow): boolean {
   return Math.abs(past.resetsAt - window.resetsAt) <= sameResetToleranceMs;
 }
 
+const none: BurnEvidence = { rate: 0, observedRate: 0, evidence: 'none' };
+const evidenceRank: Record<BurnEvidenceKind, number> = { none: 0, unresolved: 1, rate: 2 };
+
+function strongerBurn(left: BurnEvidence, right: BurnEvidence): BurnEvidence {
+  if (right.rate > left.rate) return right;
+  if (left.rate > right.rate) return left;
+  return evidenceRank[right.evidence] > evidenceRank[left.evidence] ? right : left;
+}
+
+function coarseCodexPair(cli: Cli | undefined, currentUsed: number, pastUsed: number): boolean {
+  return cli === 'codex' && (Number.isInteger(currentUsed) || Number.isInteger(pastUsed));
+}
+
+function earliestMatching(
+  window: ReadingWindow,
+  current: PoolReading,
+  history: readonly PoolReading[],
+  currentAt: number,
+  start: number,
+  requireKnownReset: boolean,
+): { at: number; used: number } | undefined {
+  let earliestAt: number | undefined;
+  let earliestUsed: number | undefined;
+  for (const past of history) {
+    if (past.allowanceKey !== current.allowanceKey || !past.observedAt) continue;
+    const at = Date.parse(past.observedAt);
+    if (!Number.isFinite(at) || at < start || at >= currentAt) continue;
+    const old = past.windows.find((candidate) => sameWindow(candidate, window));
+    if (!old) continue;
+    if (requireKnownReset && (old.resetsAt === null || window.resetsAt === null)) continue;
+    if (earliestAt === undefined || at < earliestAt) {
+      earliestAt = at;
+      earliestUsed = old.usedPercent;
+    }
+  }
+  return earliestAt === undefined || earliestUsed === undefined ? undefined : { at: earliestAt, used: earliestUsed };
+}
+
+function rateFromPair(currentUsed: number, pastUsed: number, elapsed: number, cli: Cli | undefined): BurnEvidence {
+  if (elapsed <= 0) return none;
+  const delta = Math.max(0, currentUsed - pastUsed);
+  const observedRate = (delta * 3_600_000) / elapsed;
+  const coarse = coarseCodexPair(cli, currentUsed, pastUsed);
+  const evidencedDelta = coarse ? Math.max(0, delta - 1) : delta;
+  const rate = (evidencedDelta * 3_600_000) / elapsed;
+  if (coarse && evidencedDelta === 0) return { rate: 0, observedRate, evidence: 'unresolved' };
+  return { rate, observedRate, evidence: 'rate' };
+}
+
+function windowBurn(
+  window: ReadingWindow,
+  current: PoolReading,
+  history: readonly PoolReading[],
+  currentAt: number,
+  now: number,
+  spanMs: number,
+  horizonMs: number,
+  cli: Cli | undefined,
+  shortOnly: boolean,
+): BurnEvidence {
+  const short = earliestMatching(window, current, history, currentAt, now - spanMs, false);
+  const shortEvidence = short ? rateFromPair(window.usedPercent, short.used, currentAt - short.at, cli) : none;
+  if (shortOnly || cli !== 'codex') return shortEvidence;
+  const long = earliestMatching(window, current, history, currentAt, now - horizonMs, true);
+  if (!long) return shortEvidence;
+  const shortCoarse = short ? coarseCodexPair(cli, window.usedPercent, short.used) : false;
+  const longCoarse = coarseCodexPair(cli, window.usedPercent, long.used);
+  if (!shortCoarse && !longCoarse) return shortEvidence;
+  return strongerBurn(shortEvidence, rateFromPair(window.usedPercent, long.used, currentAt - long.at, cli));
+}
+
 // Milliseconds per hour, minutes per day and percentages below are unit conversions, not admission policy.
-/** Same-window consumption over the measurement span, excluding resets. All reserve and pacing thresholds are local policy. */
+/**
+ * Same-window consumption used for hard pacing, near-ceiling and the hourly alarm. Codex pairs that include an integer
+ * sample treat one observed point as endpoint uncertainty: evidenced burn is max(0, delta - 1 pp) over actual elapsed
+ * time. Those coarse series also compare a bounded longer horizon (four short spans, 6 h by default) so several points
+ * can still prove sustained excess. Fractional Codex pairs and other providers keep the raw short-span slope. Resets
+ * are never burn; a long-span pair needs a known matching reset.
+ */
+export function burnEvidence(
+  current: PoolReading,
+  history: readonly PoolReading[] = [],
+  options: BurnOptions = {},
+): BurnEvidence {
+  if (!current.observedAt) return none;
+  const currentAt = Date.parse(current.observedAt);
+  if (!Number.isFinite(currentAt)) return none;
+  const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
+  const horizonMs = options.horizonMs ?? burnHorizonMs(spanMs);
+  const now = options.now ?? currentAt;
+  const shortOnly = options.shortOnly === true;
+  return current.windows.reduce(
+    (best, window) =>
+      strongerBurn(
+        best,
+        windowBurn(window, current, history, currentAt, now, spanMs, horizonMs, options.cli, shortOnly),
+      ),
+    none,
+  );
+}
+
+/** Evidenced percent-per-hour for admission. Unresolved coarse precision is 0 so a single integer step does not refuse. */
 export function burnPerHour(
   current: PoolReading,
   history: readonly PoolReading[] = [],
-  options: { now?: number; spanMs?: number } = {},
+  options: BurnOptions = {},
 ): number {
-  if (!current.observedAt) return 0;
-  const currentAt = Date.parse(current.observedAt);
-  if (!Number.isFinite(currentAt)) return 0;
-  const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
-  const now = options.now ?? currentAt;
-  const start = now - spanMs;
-  return Math.max(
-    0,
-    ...current.windows.map((window) => {
-      let earliestAt: number | undefined;
-      let earliestUsed: number | undefined;
-      for (const past of history) {
-        if (past.allowanceKey !== current.allowanceKey || !past.observedAt) continue;
-        const at = Date.parse(past.observedAt);
-        if (!Number.isFinite(at) || at < start || at >= currentAt) continue;
-        const old = past.windows.find((candidate) => sameWindow(candidate, window));
-        if (!old) continue;
-        if (earliestAt === undefined || at < earliestAt) {
-          earliestAt = at;
-          earliestUsed = old.usedPercent;
-        }
-      }
-      if (earliestAt === undefined || earliestUsed === undefined) return 0;
-      const elapsed = currentAt - earliestAt;
-      return elapsed > 0 ? (Math.max(0, window.usedPercent - earliestUsed) * 3_600_000) / elapsed : 0;
-    }),
-  );
+  return burnEvidence(current, history, options).rate;
 }
 
 export function poolBurnStatus(
@@ -113,10 +216,12 @@ export function poolBurnStatus(
       if (!chosen?.observedAt) return reading;
       return Date.parse(reading.observedAt!) >= Date.parse(chosen.observedAt) ? reading : chosen;
     }, undefined);
+    const evidence = latest ? burnEvidence(latest, series, { now, spanMs, cli: pool.cli }) : none;
     return {
       name: pool.name,
       allowanceKey: pool.allowanceKey,
-      burnPerHour: latest ? burnPerHour(latest, series, { now, spanMs }) : 0,
+      burnPerHour: evidence.rate,
+      ...(evidence.observedRate !== evidence.rate ? { observedBurnPerHour: evidence.observedRate } : {}),
       ...(pool.policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: pool.policy.maxBurnPerHour }),
       ...(pool.policy.maxConcurrent === undefined
         ? {}
@@ -221,7 +326,7 @@ function assessPool(
   )
     return null;
   if (!fresh.length && !pool.policy.allowUnknown) return null;
-  const rates = fresh.map(({ reading, history }) => burnPerHour(reading, history, { now, spanMs }));
+  const rates = fresh.map(({ reading, history }) => burnPerHour(reading, history, { now, spanMs, cli: pool.cli }));
   if (
     !ignoreBurnCeiling &&
     pool.policy.maxBurnPerHour !== undefined &&

@@ -37,6 +37,12 @@ export type TypingInputReceipt = {
 };
 export const typingInputsReceiptPath = (physical: string): string => `.temp/goal/checks/typing-inputs/${physical}.json`;
 const GENERATED_CLIENT = 'packages/client/src/kernel/';
+const KERNEL_CLIENT_EMITTER = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-client'];
+const KERNEL_CLIENT_PIPELINE = [
+  'sh',
+  '-c',
+  'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck',
+];
 const REMOTE_PREPARATION_MARKERS = new Set([
   '.preparation-started',
   '.remote-check-supervisor',
@@ -98,16 +104,38 @@ function input(root: string, file: string): TypingInput {
   }
 }
 
+/** Identify a named Kernel client output, including unsupported combinations that must never become root checks. */
+export function hasKernelClientOutputIntent(argv: readonly string[]): boolean {
+  return (
+    (argv[0] === 'bun' || argv[0]?.endsWith('/bun') === true) &&
+    argv[1] === 'run' &&
+    argv[2] === '--cwd' &&
+    argv[3] === 'services/kernel' &&
+    argv[4] === 'typecheck' &&
+    argv.slice(5).includes('--emit-client')
+  );
+}
+
+/** The only direct Kernel client emitter that recovery may promote to the validated consumer pipeline. */
+export function isKernelClientEmitterIntent(argv: readonly string[]): boolean {
+  return argv.length === KERNEL_CLIENT_EMITTER.length && hasKernelClientOutputIntent(argv);
+}
+
+/** The structural pipeline is safe to select only as a complete command; manifest validation follows below. */
+export function isKernelClientTypingPipelineIntent(argv: readonly string[]): boolean {
+  if (argv.length !== 3 || !['sh', 'bash'].includes(argv[0]!) || argv[1] !== '-c' || typeof argv[2] !== 'string')
+    return false;
+  const steps = argv[2]!.trim().split(/\s*&&\s*/);
+  return (
+    steps.length === 2 &&
+    steps[0]!.trim().replace(/\s+/g, ' ') === 'bun run --cwd services/kernel typecheck --emit-client' &&
+    steps[1]!.trim().replace(/\s+/g, ' ') === 'bun run --cwd packages/client typecheck'
+  );
+}
+
 /** The installed producer/consumer owners, in fail-fast order; arbitrary shell/custom compilers stay conservative. */
 export function kernelClientTypingPipeline(root: string, argv: readonly string[]): boolean {
-  if (argv.length !== 3 || !['sh', 'bash'].includes(argv[0]!) || argv[1] !== '-c') return false;
-  const steps = argv[2]!.trim().split(/\s*&&\s*/);
-  if (
-    steps.length !== 2 ||
-    steps[0]!.trim().replace(/\s+/g, ' ') !== 'bun run --cwd services/kernel typecheck --emit-client' ||
-    steps[1]!.trim().replace(/\s+/g, ' ') !== 'bun run --cwd packages/client typecheck'
-  )
-    return false;
+  if (!isKernelClientTypingPipelineIntent(argv)) return false;
   try {
     const manifest = (path: string) => JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8'));
     return (
@@ -287,6 +315,7 @@ export function isRetainedKernelTypingCompiler(root: string, command: readonly s
   return (
     isDirectKernelTypingCompiler(root, command) ||
     installedWorkspaceTypecheck(root, command, 'services/kernel', '@rezics/kernel') ||
+    kernelClientTypingPipeline(root, command) ||
     (installedKernelSchemaEmissionCommand(root, command) && isKnownTypingCompiler(root, command))
   );
 }
@@ -303,6 +332,12 @@ function misorderedWorkspaceTypecheckIntent(command: readonly string[]): boolean
 
 /** Resolve a recognized workspace intent to its installed script form during typing-only recovery. */
 export function resolveTypingCompilerCommand(root: string, command: readonly string[]): string[] | undefined {
+  if (isKernelClientEmitterIntent(command)) {
+    const recovery = [...KERNEL_CLIENT_PIPELINE];
+    return isKnownTypingCompiler(root, recovery) ? recovery : undefined;
+  }
+  if (isKernelClientTypingPipelineIntent(command))
+    return isKnownTypingCompiler(root, command) ? [...command] : undefined;
   const canonical = misorderedWorkspaceTypecheckIntent(command)
     ? [command[0]!, 'run', '--cwd', command[2]!, 'typecheck']
     : [...command];
@@ -630,6 +665,11 @@ export function readTypingInputReceipt(
   if (!info.isFile() || info.isSymbolicLink() || info.size > 16 * 1024 * 1024)
     throw new Error('typing inputs: receipt must be a bounded regular file');
   const value = JSON.parse(readFileSync(file, 'utf8')) as TypingInputReceipt;
+  const validCompilerCommand =
+    Array.isArray(value.compilerCommand) && value.compilerCommand.every((argument) => typeof argument === 'string');
+  const clientPipeline = validCompilerCommand && kernelClientTypingPipeline(root, value.compilerCommand);
+  const validOutputs =
+    value.outputs === undefined ? !clientPipeline : same(value.outputs, ['kernel-client-v1']) && clientPipeline;
   const validSnapshot = (snapshot: TypingInputs): boolean =>
     Boolean(
       snapshot &&
@@ -659,14 +699,12 @@ export function readTypingInputReceipt(
     value.version !== 1 ||
     value.physicalRunId !== physical ||
     !same(value.command, command) ||
-    !Array.isArray(value.compilerCommand) ||
-    value.compilerCommand.some((arg) => typeof arg !== 'string') ||
+    !validCompilerCommand ||
     !Number.isInteger(value.exitCode) ||
     typeof value.sourceStable !== 'boolean' ||
     !validSnapshot(value.started) ||
     !validSnapshot(value.completed) ||
-    (value.outputs !== undefined &&
-      (!same(value.outputs, ['kernel-client-v1']) || !kernelClientTypingPipeline(root, value.compilerCommand))) ||
+    !validOutputs ||
     value.sourceStable !== stableSource(value.started, value.completed, value.outputs)
   )
     throw new Error('typing inputs: receipt binding or inventory is invalid');
@@ -876,6 +914,11 @@ export function qualifyTypingInputs(
   // Bun prints usage for `bun --cwd <workspace> run <script>`; the installed owner requires `bun run --cwd`.
   if (misorderedWorkspaceTypecheckIntent(receipt.compilerCommand)) return 'evidence-unavailable';
   const pipeline = kernelClientTypingPipeline(root, receipt.compilerCommand);
+  if (
+    (receipt.outputs !== undefined && !same(receipt.outputs, ['kernel-client-v1'])) ||
+    pipeline !== (receipt.outputs !== undefined)
+  )
+    return 'evidence-unavailable';
   const schemaOutput = !receipt.sourceStable ? changedKernelSchemaOutput(root, receipt) : undefined;
   if (!receipt.sourceStable) {
     // Earlier capture knew the exact pipeline but did not declare generation. Never reinterpret it as a pass.
