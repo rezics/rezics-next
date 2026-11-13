@@ -2982,6 +2982,8 @@ the marker digests so the receipt retains its full-trio proof.
 
 Decision: authenticated `typing-recover` may replace one consumed compiler grant only when unchanged source's exact resultless check, SIGTERM, Root authorization, local/remote terminal proof and verified cleanup receipt bind the same task, attempt, physical run and command. A missing predecessor authorizes no new run. Preserve cancellation and receipt; fence checks with compiler results, live or unknown custody, manual cancellation and later attempts. Keep the exact no-command-start recovery proof. Never retry source or infer compiler success.
 
+Decision: a consumed exact Web compiler grant with unresolved physical evidence returns its check and run identity with terminal or unknown custody, and repeated queries do not re-advertise it. Permit the existing single compiler-only replacement only for that same Web run after verified resultless cleanup, unchanged installed Web inputs and existing authenticated owner or operations authority; terminal compiler receipts still settle normally.
+
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
 known stop, terminal custody for every same-attempt check and one exact installed Web compiler grant. Permit one
