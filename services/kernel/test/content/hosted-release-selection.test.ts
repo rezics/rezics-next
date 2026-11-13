@@ -51,9 +51,9 @@ test('sparse release reads only explicit source rows and preserves stored order 
   expect(f.examined).toHaveLength(3);
   expect(f.examined.map((row) => row.occurrence_id)).toEqual(ids);
   expect(release.map((row) => [row.occurrenceId, row.parentId, row.position, row.ordinal])).toEqual([
-    [ids[2], null, 0, 0],
-    [ids[1], ids[2], 0, 1],
-    [ids[0], null, 1, 2],
+    [ids[2]!, null, 0, 0],
+    [ids[1]!, ids[2]!, 0, 1],
+    [ids[0]!, null, 1, 2],
   ]);
   expect(f.rows[7]!.position).toBe(7);
   expect(f.rows[3]!.position).toBe(1);
