@@ -96,6 +96,8 @@ const paging = {
   limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
 };
 export const HostedSelectionSchema = t.Object(selection, closed);
+/** Outline has no parent or navigation origin and reuses the bounded page wire. */
+export const HostedOutlineQuerySchema = t.Object(paging, closed);
 export const HostedChildrenQuerySchema = t.Object({ ...paging, parentId: t.Optional(HostedIdSchema) }, closed);
 export const HostedNavigationQuerySchema = t.Object(
   { ...paging, direction: t.Union([t.Literal('previous'), t.Literal('next')]) },

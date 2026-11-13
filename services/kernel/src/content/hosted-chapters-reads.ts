@@ -1,4 +1,5 @@
 import { accessCheck } from './access-port.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
 import { routeOf } from '../route/route.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 import {
@@ -49,6 +50,7 @@ async function selectCatalogue(
   catalogueId: string,
   selection: HostedReadSelection,
   context: ReadContext,
+  requireRevise = false,
 ) {
   const route = identity(catalogueId, selection.revisionId);
   if (selection.kind !== undefined && selection.kind !== 'structure' && selection.kind !== 'publication')
@@ -70,7 +72,7 @@ async function selectCatalogue(
   if (!selected.value || selected.anchor.epoch !== initial.anchor.epoch) throw new ContentNotFoundError();
   if (selection.kind !== undefined && selected.value.kind !== selection.kind) throw new ContentNotFoundError();
   const revise =
-    selected.value.kind === 'structure'
+    requireRevise || selected.value.kind === 'structure'
       ? await accessCheck(
           deps.access,
           context.actor,
@@ -224,6 +226,23 @@ export function listHostedChildren(
     occurrenceId: null,
   });
 }
+
+/** Author outline pages every placement in immutable preorder, including empty
+ * parts. Keep sibling positions intact so a consumer can reconstruct the tree. */
+export function listHostedAuthorOutline(
+  deps: HostedDependencies,
+  catalogueId: string,
+  input: Omit<HostedChildrenInput, 'parentId'>,
+  context: ReadContext,
+) {
+  if (context.actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  return page(deps, catalogueId, input, context, {
+    mode: 'outline',
+    parentId: null,
+    occurrenceId: null,
+  });
+}
+
 export function navigateHostedChapters(
   deps: HostedDependencies,
   catalogueId: string,
@@ -243,7 +262,7 @@ async function page(
   catalogueId: string,
   input: HostedChildrenInput | HostedNavigationInput,
   context: ReadContext,
-  query: { mode: 'children' | 'previous' | 'next'; parentId: string | null; occurrenceId: string | null },
+  query: { mode: 'children' | 'previous' | 'next' | 'outline'; parentId: string | null; occurrenceId: string | null },
 ) {
   const route = identity(catalogueId, input.revisionId);
   if (
@@ -262,6 +281,7 @@ async function page(
     catalogueId,
     cursor ? { ...input, revisionId: cursor.revisionId } : input,
     context,
+    query.mode === 'outline',
   );
   if (cursor && cursor.epoch !== selected.epoch) throw new InvalidHostedCursorError();
   let origin = -1;
@@ -293,6 +313,10 @@ async function page(
         condition += 'p.parent_id=$6';
         values.push(query.parentId);
       }
+    } else if (query.mode === 'outline') {
+      // The unique route/catalogue/revision/ordinal index covers parts and
+      // chapters in one seek; target disclosure cannot refill denied slots.
+      condition = ' AND p.ordinal>$4';
     } else {
       condition = ` AND p.target_revision_id IS NOT NULL AND p.ordinal${query.mode === 'previous' ? '<' : '>'}$4`;
     }

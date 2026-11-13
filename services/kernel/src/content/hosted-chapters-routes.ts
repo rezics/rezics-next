@@ -31,6 +31,7 @@ import {
 import {
   readHostedCatalogue,
   listHostedChildren,
+  listHostedAuthorOutline,
   navigateHostedChapters,
   resolveHostedOccurrence,
   resolveHostedOccurrenceMetadata,
@@ -56,6 +57,7 @@ import {
   HostedOccurrenceMetadataSchema,
   HostedSelectionSchema,
   HostedChildrenQuerySchema,
+  HostedOutlineQuerySchema,
   HostedNavigationQuerySchema,
   HostedOwnerInventoryQuerySchema,
   HostedOwnerInventorySchema,
@@ -320,6 +322,39 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
           session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
         set.headers['cache-control'] = 'private, no-store';
         return { ...result.value, items: [...result.value.items] };
+      },
+    )
+    .get(
+      '/v1/hostedCatalogues/:id/outline',
+      {
+        params: params(),
+        query: strictContentSchema(HostedOutlineQuerySchema),
+        response: { 200: withHeaders(strictContentSchema(HostedPageSchema), responseHeaders), ...failures() },
+        detail: {
+          'x-exposure': 'public',
+          'x-resource-types': ['content.post'],
+          'x-action': 'post:revise',
+          security: [{ bearerAuth: [] }],
+          operationId: 'hosted_catalogue.outline',
+        },
+      },
+      async ({ actor, params: { id }, query, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const { limit, ...paging } = query;
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            listHostedAuthorOutline(
+              deps,
+              id,
+              { ...paging, ...(limit === undefined ? {} : { limit: Number(limit) }) },
+              { actor, deadline: job.deadline },
+            ),
+          ),
+        );
+        for (const anchor of result.anchors)
+          session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
       },
     )
     .get(

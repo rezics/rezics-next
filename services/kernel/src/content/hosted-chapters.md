@@ -186,6 +186,38 @@ client, delegation, authentication epoch and scope ceiling. They retain the orig
 origin and 15-minute lifetime. A later release or draft edit does not move a continuing page to another revision.
 Changed query bindings, invalid tokens and replaced partition epochs return 400.
 
+## Author outline
+
+Decision: `hosted_catalogue.outline` is an additive author operation at
+`GET /v1/hostedCatalogues/{id}/outline`. It pages all placements, including nested
+and empty parts, in one indexed immutable preorder stream. It requires an acting
+account and current `post:revise` for both structure and publication selections,
+including continuations and the final retained native Post/container check.
+Public release disclosure alone does not admit this operation.
+
+The closed query accepts the existing optional `revisionId`, `kind`, `limit` and
+`cursor`, with the same default release selector and default/maximum limit 20.
+The response reuses the existing revision, occurrence and page wire types. Parent
+IDs and sibling positions retain their tree meaning; preorder does not renumber
+siblings. Available parts retain titles and null targets. Withheld chapters keep
+only their occurrence, parent, position, kind and unavailable status.
+
+One route/catalogue/revision/ordinal index seek selects at most `limit+1` raw
+rows. The last consumed ordinal advances the cursor even when target metadata
+is withheld; there is no per-parent traversal, refill, total count or manuscript
+body selection. Retained native metadata disclosure, exact catalogue/revision
+and partition epoch, private/no-store and session anchors follow ordinary hosted
+reads. Tokens bind the acting account/session, original selector and distinct
+outline mode, preserving the first page's revision, epoch and lifetime. The
+512-placement and depth-16 limits remain unchanged.
+
+The focused `hosted-author-outline.test.ts` source fixture covers nested/empty
+parts, ordered bounded pages, immutable continuation, admission and final retained
+revise loss, zero body reads and mounted cache/session behavior. Route registration
+is recorded in `test/kernel.test.ts`. These tests run after landing in the dev
+verifier; mounted, browser, growth and broad verification remain deferred. Client,
+Studio and generated publication stay with their existing owners.
+
 ## Author history
 
 Decision: `hosted_catalogue.history` is a separate owner-only

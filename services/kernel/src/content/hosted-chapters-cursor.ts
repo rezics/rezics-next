@@ -20,7 +20,7 @@ export function hostedCursorBinding(
   selection: HostedReadSelection,
   context: ReadContext,
   query: Readonly<{
-    mode: 'children' | 'previous' | 'next';
+    mode: 'children' | 'previous' | 'next' | 'outline';
     parentId: string | null;
     occurrenceId: string | null;
     limit: number;
