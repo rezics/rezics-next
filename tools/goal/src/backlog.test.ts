@@ -1178,7 +1178,7 @@ function attachRouting(
     policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 60_000 },
   };
   const history = [observed(codex, options.usedFrom ?? 10, now - SPAN_MS)];
-  const current = observed(codex, options.usedTo ?? 12, now);
+  const current = observed(codex, options.usedTo ?? 14, now);
   const cursorReading = observed(cursor, 5, now);
   const readings = [...history, current, cursorReading];
   f.runtime.routing = {
@@ -1236,7 +1236,7 @@ test('Ready tasks waiting only on allowance count toward the cap only beyond a b
 
 test('A paced pool admits at most two new starts per sweep while its measured rate is within 25% of its ceiling.', async () => {
   const f = fixture({ workerCap: 5, perSweep: 5 });
-  attachRouting(f, { ceiling: 2, usedFrom: 10, usedTo: 13, fallbacks: [] });
+  attachRouting(f, { ceiling: 2, usedFrom: 10, usedTo: 14, fallbacks: [] });
   for (let index = 0; index < 5; index++) brief(f.state, 'web', `work-${index}.md`, 120_000 - index * 1_000);
   expect((await sweepBacklog(f.runtime)).dispatched).toHaveLength(2);
   expect(readdirSync(join(f.state, 'backlog', 'web')).filter((name) => name.endsWith('.md'))).toHaveLength(3);

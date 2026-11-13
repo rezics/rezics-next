@@ -614,6 +614,18 @@ minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks
 few milliseconds or seconds apart from reading to reading. A real reset moves the stamp by a window length, starts a new
 series and is not burn. `status` lists each pool's rate and the ready tasks waiting on it.
 
+Decision: Codex pairs that include an integer `usedPercent` treat one observed point as endpoint uncertainty. Admission,
+near-ceiling and the hourly bridge share `burnEvidence`: the conservative rate is max(0, delta - 1 pp) over actual
+elapsed time. Coarse Codex series also compare four short spans (6 h at the default 90-minute span) so several points
+can still prove sustained excess; that long pair needs a known matching reset. Retention keeps that horizon on disk in
+the existing version-1 `pool-readings.json` shape. Fractional Codex pairs and other providers keep the raw short-span
+slope. The hourly `.rate` is that evidenced short-window value or `null` when there is no baseline or integer precision
+is unresolved, so a 12→13 step is not an alarm and a flat integer sample is not claimed as zero; `observedRate` and
+`evidence` are diagnostics. Token counts are not quota.
+
+Decision: the fewest tests that pin Codex burn evidence are the 12→13 hourly replay with plateau, one 6 h / burst /
+fractional / reset / isolation case, and shared retention with the hourly consumer.
+
 Decision: `policy.maxConcurrent` is an optional positive integer per pool name, not per shared allowance. Selection
 counts that pool's live sessions (pending start and running) and skips a full pool like an exhausted one, for new tasks
 and retries alike. Attempts in state waiting, parked on checks, do not occupy the cap. `status` lists live and waiting
@@ -933,6 +945,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.pacing.alertUnusedPercent`                    | `20`                                                                       | Unused allowance percentage triggering a near-reset pacing alert.                                                                                                                           |
 | `policy.pacing.alertResetHours`                       | `24`                                                                       | Remaining reset hours qualifying for an unused-allowance alert.                                                                                                                             |
 | `policy.pacing.alertEveryMs`                          | `10800000`                                                                 | Minimum interval between pacing alerts for the same allowance (ms).                                                                                                                         |
+| `policy.pacing.burnSpanMs`                            | `5400000`                                                                  | Short same-window burn comparison (ms). Coarse Codex retention and the long comparison use four times this span.                                                                            |
 | `policy.pacing.nearCeilingPercent`                    | `25`                                                                       | Burn-rate proximity to a pool ceiling that starts gradual admission (%).                                                                                                                    |
 | `policy.pacing.nearCeilingStarts`                     | `2`                                                                        | Maximum new starts per sweep on a pool in the near-ceiling band.                                                                                                                            |
 | `policy.manager.sleepAlarmPerHour`                    | `10`                                                                       | Sleep calls allowed per manager per UTC hour before one alarm.                                                                                                                              |

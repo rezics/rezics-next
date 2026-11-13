@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { burnPerHour } from '../src/allowance.ts';
+import { burnEvidence, type BurnEvidenceKind } from '../src/allowance.ts';
 import { loadSettings } from '../src/settings.ts';
 import type { Pool, PoolReading } from '../src/types.ts';
 import { readPool } from '../src/usage.ts';
@@ -9,12 +9,26 @@ const minute = 60_000;
 const hour = 60 * minute;
 const weekMinutes = 7 * 24 * 60;
 
-export function hourlyAllowance(pool: Pool, current: PoolReading, history: readonly PoolReading[], now: number) {
+export type HourlyAllowance = {
+  used: number | null;
+  /** Evidenced short-window rate that drives the alarm; null when there is no baseline or integer precision is unresolved. */
+  rate: number | null;
+  observedRate: number | null;
+  evidence: BurnEvidenceKind;
+};
+
+const missing: HourlyAllowance = { used: null, rate: null, observedRate: null, evidence: 'none' };
+
+export function hourlyAllowance(
+  pool: Pool,
+  current: PoolReading,
+  history: readonly PoolReading[],
+  now: number,
+): HourlyAllowance {
   const observed = current.observedAt ? Date.parse(current.observedAt) : NaN;
   const window = current.windows.find((sample) => sample.minutes === weekMinutes);
-  if (!window || !Number.isFinite(observed) || observed > now + minute || now - observed > 15 * minute)
-    return { used: null, rate: null };
-  if (window.resetsAt === null) return { used: window.usedPercent, rate: null };
+  if (!window || !Number.isFinite(observed) || observed > now + minute || now - observed > 15 * minute) return missing;
+  if (window.resetsAt === null) return { used: window.usedPercent, rate: null, observedRate: null, evidence: 'none' };
   const currentWeek = { ...current, windows: [window] };
   const previous = history
     .filter((reading) => {
@@ -36,9 +50,18 @@ export function hourlyAllowance(pool: Pool, current: PoolReading, history: reado
       (a, b) =>
         Math.abs(observed - Date.parse(a.observedAt!) - hour) - Math.abs(observed - Date.parse(b.observedAt!) - hour),
     )[0];
+  if (!previous) return { used: window.usedPercent, rate: null, observedRate: null, evidence: 'none' };
+  const measured = burnEvidence(currentWeek, [previous], {
+    now: observed,
+    spanMs: 75 * minute,
+    cli: pool.cli,
+    shortOnly: true,
+  });
   return {
     used: window.usedPercent,
-    rate: previous ? burnPerHour(currentWeek, [previous], { now: observed, spanMs: 75 * minute }) : null,
+    rate: measured.evidence === 'rate' ? measured.rate : null,
+    observedRate: measured.observedRate,
+    evidence: measured.evidence,
   };
 }
 
