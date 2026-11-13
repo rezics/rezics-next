@@ -223,6 +223,9 @@ export class TermspacesWindows implements ManagerWindows {
   constructor(
     private readonly settings: WindowSettings,
     private readonly execute: WindowRunner = (executable, argv) => run(executable, argv, settings.policy),
+    private readonly deferViewerProbe = (delayMs: number, probe: () => void) => {
+      setTimeout(probe, delayMs).unref();
+    },
   ) {}
   private tmux(argv: string[]): Promise<string> {
     return Promise.resolve(
@@ -369,25 +372,44 @@ export class TermspacesWindows implements ManagerWindows {
       if (!/^%\d+$/.test(replacement)) return false;
     }
     for (const paneId of stale) {
-      // Keep the original terminal process and its unsent draft without occupying the manager's layout.
+      const screen = await this.observe(() => this.tmux(['capture-pane', '-p', '-t', paneId]));
+      // Only the plain default prompt positively establishes that there is no visible draft.
+      if (screen && /^›[ \t]+Ask Codex to do anything[ \t]*$/m.test(screen) && !pausedGoalMenuSelection(screen)) {
+        const tail = screen.split('\n').slice(-12);
+        const prompts = tail.filter((line) => /^›/.test(line.trimStart()));
+        if (prompts.length === 1 && prompts[0]!.trim() === '› Ask Codex to do anything') {
+          await this.tmux(['kill-pane', '-t', paneId]);
+          continue;
+        }
+      }
+      // Keep the original terminal process and any draft without occupying the manager's layout.
       await this.tmux(['break-pane', '-d', '-s', paneId, '-n', `goal-draft-${manager}-${paneId.slice(1)}`]);
     }
-    if (spawned) await this.dismissStartupGoalMenu(replacement, argv, cwd);
+    if (spawned) this.dismissStartupGoalMenu(id, replacement, argv, cwd);
     await this.tmux(['select-pane', '-t', replacement]);
     return true;
   }
-  private async dismissStartupGoalMenu(paneId: string, argv: string[], cwd: string): Promise<void> {
-    // The startup resume dialog can arrive after the pane is created. Bound this to the exact new viewer.
-    for (let attempt = 0; attempt < 5; attempt++) {
-      if (attempt) await Bun.sleep(200);
-      const pane = await this.pane(paneId);
-      if (!pane || pane.dead !== '0' || !this.sameViewer(pane, argv, cwd)) return;
-      const capture = await this.observe(() => this.tmux(['capture-pane', '-p', '-t', paneId]));
-      const selected = pausedGoalMenuSelection(capture ?? '');
-      if (!selected) continue;
-      await this.tmux(['send-keys', '-t', paneId, ...(selected === 'resume' ? ['Down'] : []), 'Enter']);
-      return;
-    }
+  private dismissStartupGoalMenu(windowId: string, paneId: string, argv: string[], cwd: string): void {
+    // Codex opens its menu only after the history and provider state arrive. Never wait inside manager recovery.
+    let remaining = 30;
+    const probe = async () => {
+      try {
+        const pane = await this.pane(paneId);
+        if (!pane || pane.dead !== '0' || !this.sameViewer(pane, argv, cwd)) return;
+        if (!(await this.paneIds(windowId))?.includes(paneId)) return;
+        const capture = await this.observe(() => this.tmux(['capture-pane', '-p', '-t', paneId]));
+        const selected = pausedGoalMenuSelection(capture ?? '');
+        if (selected) {
+          await this.tmux(['send-keys', '-t', paneId, ...(selected === 'resume' ? ['Down'] : []), 'Enter']);
+          return;
+        }
+        if (--remaining) this.deferViewerProbe(500, () => void probe());
+      } catch (error) {
+        // This is optional viewer presentation, not part of restoring the provider session.
+        console.warn('Unable to dismiss the Codex viewer startup menu:', errorMessage(error));
+      }
+    };
+    this.deferViewerProbe(500, () => void probe());
   }
   async prompt(manager: string, text: string): Promise<void> {
     const id = await this.find(await this.session(), manager);
