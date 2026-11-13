@@ -3147,8 +3147,10 @@ Each manager host starts a loopback WebSocket app-server for its Codex pool and 
 app-server leads its own process group, so its helpers and thread writers share that group. The host stops the group on
 shutdown; a replacement host reclaims every surviving recorded group and waits until it is empty before resuming
 persisted threads, so resume never meets a writer left by the previous host. A record written before this change names a
-shared group, so only its process is stopped. Recovery reopens each Codex viewer on the current endpoint with
-`codex resume <thread> --remote <endpoint>`.
+shared group, so only its process is stopped. Recovery and actionable inbox wakes rebind an already-open, live,
+manager-owned Codex viewer only when its tmux launch command proves the same `codex resume <thread>` and only the
+`--remote` endpoint differs. They leave a healthy or missing viewer alone. Recovery keeps an inbox-parked thread
+paused without resuming it; a later wake reuses that thread. Explicit manager stop still closes its owned window.
 The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
 uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
 configured `CLAUDE_CONFIG_DIR`. Managed manager recovery follows the normal host code-version handoff: after Goal code
@@ -3711,6 +3713,7 @@ host loop. Git, tmux and worker launch run through `runHostProcess`; start, retr
 once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
+Decision: Rebind a Codex viewer only when its live owned pane proves the same thread and an endpoint-only change; recovery and inbox wakes keep parked Goal state intact and never recreate a missing viewer.
 Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 

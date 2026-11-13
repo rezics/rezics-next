@@ -227,19 +227,30 @@ export class ManagerSessionTransport {
     threadId: string,
     client: AppServer,
   ): Promise<void> {
+    await this.services.windows.register(spec.id, this.codexViewerArgv(spec, threadId, client), spec.cwd);
+  }
+  async rebindCodexViewer(
+    spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>,
+    threadId: string,
+    client: AppServer,
+  ): Promise<boolean> {
+    if (!client.endpoint || !this.services.windows.rebindIfStale) return false;
+    return this.services.windows.rebindIfStale(spec.id, this.codexViewerArgv(spec, threadId, client), spec.cwd);
+  }
+  private codexViewerArgv(
+    spec: Pick<ManagerSpec, 'id' | 'pool'>,
+    threadId: string,
+    client: AppServer,
+  ): string[] {
     const viewer = [spec.pool.executable ?? 'codex', 'resume', threadId];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
-    await this.services.windows.register(
-      spec.id,
-      [
-        'env',
-        ...this.providerBoundaryUnsets(),
-        `CODEX_HOME=${spec.pool.codexHome}`,
-        `GOAL_MANAGER=${spec.id}`,
-        ...viewer,
-      ],
-      spec.cwd,
-    );
+    return [
+      'env',
+      ...this.providerBoundaryUnsets(),
+      `CODEX_HOME=${spec.pool.codexHome}`,
+      `GOAL_MANAGER=${spec.id}`,
+      ...viewer,
+    ];
   }
   async registerClaudeSession(spec: ManagerSpec, sessionId: string, prompt: string): Promise<void> {
     await this.services.windows.register(

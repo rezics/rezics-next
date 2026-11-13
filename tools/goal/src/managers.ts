@@ -1327,6 +1327,7 @@ export class ManagerSessions {
     if ((idleWake || state.activeTurnId === null) && this.services.canStartTurn && !this.services.canStartTurn(state))
       return;
     const client = await this.transport.client(state.pool);
+    await this.transport.rebindCodexViewer(state, state.threadId!, client);
     state.goalState = await this.transport.getGoal(client, state.threadId!);
     if (idleWake) {
       if (state.goalState?.status === 'paused')
@@ -1580,7 +1581,9 @@ export class ManagerSessions {
             reportProgress();
             return;
           }
+          let client: AppServer | undefined;
           if (current.engine === 'codex' && current.threadId) {
+            client = await this.transport.client(current.pool);
             const parkedIdle =
               current.status === 'running' &&
               (current.waitingForInbox ||
@@ -1599,7 +1602,6 @@ export class ManagerSessions {
               current.goalState?.status !== 'usageLimited' &&
               current.goalState?.status !== 'complete'
             ) {
-              const client = await this.transport.client(current.pool);
               const resumed = await this.transport.resumeThread(client, current, current.threadId);
               reportProgress();
               // Reconcile only the recorded current identity; historical terminal turns cannot diagnose this session.
@@ -1631,13 +1633,9 @@ export class ManagerSessions {
             current.engine === 'codex' &&
             current.threadId &&
             current.status === 'running' &&
-            current.goalState?.status === 'active' &&
-            !current.waitingForInbox &&
-            !unexpectedManagerTurn(current)
+            client
           ) {
-            const client = await this.transport.client(current.pool);
-            await this.services.windows.unregister(current.id);
-            await this.transport.registerCodexViewer(current, current.threadId, client);
+            await this.transport.rebindCodexViewer(current, current.threadId, client);
           }
           if (await this.handleGoalUpdate(current)) return;
           if (!(await this.checkLimits(current))) {

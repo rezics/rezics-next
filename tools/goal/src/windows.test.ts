@@ -84,3 +84,47 @@ test('Preserve a manager session when its window status is unavailable', async (
   await dead.respawn('manager', ['claude'], '/cwd');
   expect(respawns.some((argv) => argv.includes('respawn-pane') && argv.includes('-k'))).toBe(true);
 });
+
+test('rebinds only a live owned Codex pane whose same-thread command differs only by endpoint', async () => {
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  const command = (argv: string[]) => argv.map(quote).join(' ');
+  const oldArgv = [
+    'env',
+    'CODEX_HOME=/codex',
+    'GOAL_MANAGER=manager',
+    'codex',
+    'resume',
+    'thread-1',
+    '--remote',
+    'ws://127.0.0.1:10001',
+  ];
+  const currentArgv = [...oldArgv];
+  currentArgv[currentArgv.length - 1] = 'ws://127.0.0.1:10002';
+  const calls: string[][] = [];
+  let owned = true;
+  let dead = '0';
+  let paneCommand = command(oldArgv);
+  const windows = new TermspacesWindows({ socket: '/socket', session: 'stable' }, (_executable, argv) => {
+    calls.push(argv);
+    if (argv.includes('list-sessions')) return '$1\tstable\tstable';
+    if (argv.includes('list-windows')) return owned ? '@3\tmanager' : '@2\tother';
+    if (argv.includes('display-message')) return argv.at(-1) === '#{pane_dead}' ? dead : paneCommand;
+    if (argv.includes('respawn-pane')) paneCommand = argv.at(-1)!;
+    return '';
+  });
+
+  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd')).toBe(true);
+  expect(paneCommand).toBe(command(currentArgv));
+  expect(calls.filter((argv) => argv.includes('respawn-pane'))).toHaveLength(1);
+  expect(calls.some((argv) => argv.includes('new-window') || argv.includes('apply'))).toBe(false);
+
+  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd')).toBe(false);
+  const beforeUnrelated = calls.filter((argv) => argv.includes('respawn-pane')).length;
+  expect(await windows.rebindIfStale('manager', ['vim'], '/cwd')).toBe(false);
+  dead = '1';
+  expect(await windows.rebindIfStale('manager', oldArgv, '/cwd')).toBe(false);
+  owned = false;
+  expect(await windows.rebindIfStale('manager', oldArgv, '/cwd')).toBe(false);
+  expect(calls.filter((argv) => argv.includes('respawn-pane'))).toHaveLength(beforeUnrelated);
+  expect(calls.some((argv) => argv.includes('new-window') || argv.includes('apply'))).toBe(false);
+});
