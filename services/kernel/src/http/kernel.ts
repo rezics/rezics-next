@@ -36,8 +36,7 @@ import {
   readReceiptKeyRing,
 } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
-import { zoneRoutes, requireZoneResourceRuntime } from '../zones/index.ts';
-import { pickZoneName } from '@rezics/composition';
+import { pickZoneName, zoneRoutes, requireZoneResourceRuntime } from '../zones/index.ts';
 import { createZoneFollowTargetAdapter } from '../library/domain.ts';
 import { zoneViewerActionResource } from '../zones/viewer-actions.ts';
 import type { Elysia } from 'elysia';

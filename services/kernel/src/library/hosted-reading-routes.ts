@@ -1,19 +1,17 @@
 import { memoizedValue } from '../memoized.ts';
-import { t } from 'elysia';
+import { t, type Elysia } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
-import { customMethod } from '../http/custom-method.ts';
+import { customMethod, defineRateLimit } from '../http/route-metadata.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { problemSchema } from '../http/problem-schema.ts';
-import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   HOSTED_READING_LIST_LIMIT,
   HOSTED_READING_POSITION_BLOCK_MAX,
@@ -227,8 +225,8 @@ export type HostedReadingRouteDependencies = {
   content?: HostedReadingPort;
 };
 
-export function hostedReadingRoutes(
-  app: ReturnType<typeof definitionRoutes>,
+export function hostedReadingRoutes<App extends Elysia>(
+  app: App,
   dependencies: HostedReadingRouteDependencies,
 ) {
   const content = () => dependencies.content ?? requireHostedReadingPort();

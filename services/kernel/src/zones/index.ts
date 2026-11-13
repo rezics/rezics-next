@@ -1,5 +1,12 @@
 /** Public Zone resource application, Access port and HTTP install. */
 
+import { pickZoneName as pickCompositionZoneName } from '@rezics/composition';
+
+/** Kernel Platform uses the Zone-owned public entry for localized name selection. */
+export function pickZoneName(...args: Parameters<typeof pickCompositionZoneName>) {
+  return pickCompositionZoneName(...args);
+}
+
 export {
   bindZoneResourceAccess,
   tryZoneResourceAccess,

@@ -12,7 +12,6 @@ import {
 import pageSql from './hosted-catalogue-subject-page.sql';
 import { hostedSubjectCursorBinding } from './hosted-catalogue-subject-cursor.ts';
 import {
-  HOSTED_PAGE_LIMIT,
   hostedSubjectPageLimit,
   isCurrentPublicCatalogueCandidate,
   type HostedSubjectCatalogueItem,
@@ -176,4 +175,4 @@ export async function listHostedCataloguesForSubject(
   };
 }
 
-export const HOSTED_SUBJECT_PAGE_LIMIT = HOSTED_PAGE_LIMIT;
+export { HOSTED_PAGE_LIMIT as HOSTED_SUBJECT_PAGE_LIMIT } from './hosted-chapters-limits.ts';
