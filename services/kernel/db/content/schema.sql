@@ -2192,6 +2192,29 @@ CREATE TABLE content.hosted_version_builder_sibling_root (
 
 
 --
+-- Name: hosted_version_revision; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_revision (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    revision_kind text NOT NULL,
+    generation_id uuid NOT NULL,
+    generation_kind text NOT NULL,
+    sequence bigint NOT NULL,
+    CONSTRAINT hosted_version_revision_check CHECK ((((revision_kind = 'structure'::text) AND (generation_kind = 'draft'::text)) OR ((revision_kind = 'publication'::text) AND (generation_kind = 'candidate'::text)))),
+    CONSTRAINT hosted_version_revision_check1 CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_version_revision_check2 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT hosted_version_revision_check3 CHECK ((route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11)))),
+    CONSTRAINT hosted_version_revision_generation_kind_check CHECK ((generation_kind = ANY (ARRAY['draft'::text, 'candidate'::text]))),
+    CONSTRAINT hosted_version_revision_revision_kind_check CHECK ((revision_kind = ANY (ARRAY['structure'::text, 'publication'::text]))),
+    CONSTRAINT hosted_version_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT hosted_version_revision_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
 -- Name: imported_field; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -4214,6 +4237,14 @@ ALTER TABLE ONLY content.hosted_publication_staging_target
 
 
 --
+-- Name: hosted_structure_revision hosted_structure_revision_identity_kind_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_structure_revision
+    ADD CONSTRAINT hosted_structure_revision_identity_kind_key UNIQUE (route, catalogue_id, revision_id, kind);
+
+
+--
 -- Name: hosted_structure_revision hosted_structure_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -4267,6 +4298,22 @@ ALTER TABLE ONLY content.hosted_version_builder_sequence_node
 
 ALTER TABLE ONLY content.hosted_version_builder_sibling_root
     ADD CONSTRAINT hosted_version_builder_siblin_route_catalogue_id_input_id_p_key UNIQUE NULLS NOT DISTINCT (route, catalogue_id, input_id, parent_id);
+
+
+--
+-- Name: hosted_version_revision hosted_version_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_revision
+    ADD CONSTRAINT hosted_version_revision_pkey PRIMARY KEY (route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_revision hosted_version_revision_route_catalogue_id_generation_id_se_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_revision
+    ADD CONSTRAINT hosted_version_revision_route_catalogue_id_generation_id_se_key UNIQUE (route, catalogue_id, generation_id, sequence);
 
 
 --
@@ -5856,6 +5903,13 @@ CREATE TRIGGER hosted_structure_immutable BEFORE DELETE OR UPDATE ON content.hos
 
 
 --
+-- Name: hosted_version_revision hosted_version_revision_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_version_revision_immutable BEFORE DELETE OR UPDATE ON content.hosted_version_revision FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_snapshot();
+
+
+--
 -- Name: imported_field imported_field_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -6526,6 +6580,14 @@ ALTER TABLE ONLY content.hosted_version_builder_sibling_root
 
 ALTER TABLE ONLY content.hosted_version_builder_sibling_root
     ADD CONSTRAINT hosted_version_builder_sibling_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_revision hosted_version_revision_route_catalogue_id_revision_id_rev_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_revision
+    ADD CONSTRAINT hosted_version_revision_route_catalogue_id_revision_id_rev_fkey FOREIGN KEY (route, catalogue_id, revision_id, revision_kind) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id, kind);
 
 
 --
