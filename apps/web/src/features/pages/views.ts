@@ -399,7 +399,7 @@ export function subjectTabs(page: {
     ...(page.context ? { context: page.context } : {}),
     ...(page.continuation ? { continuation: page.continuation } : {}),
   });
-  const book =
+  const readingOverview =
     !page.account &&
     Object.entries(plan.reads).some(([key, planned]) => {
       const response = page.reads[key];
@@ -410,7 +410,18 @@ export function subjectTabs(page: {
         isRecord(response.body) &&
         isRecord(response.body.subject) &&
         response.body.subject.id === page.subject &&
-        response.body.subject.type === 'schema:Book'
+        [
+          'schema:Book',
+          'schema:BookSeries',
+          'bf:Instance',
+          'schema:VideoGame',
+          'wd:Q689445',
+          'schema:Movie',
+          'schema:TVSeries',
+          'schema:TVSeason',
+          'schema:Episode',
+          'rezics:AnimeRelease',
+        ].includes(String(response.body.subject.type))
       );
     });
   const profile = accountProfile(page);
@@ -476,12 +487,12 @@ export function subjectTabs(page: {
       const count = sum ? navigationCount(sum.lists.values()) : undefined;
       return [{ view, ...(sum && sum.items > 0 && count ? { count } : {}) }];
     }
-    // Book Overview omits relation previews even when they fit. Keep the canonical route reachable.
-    if (book && view === 'relations') return [{ view }];
+    // Reading Overviews omit relation previews even when they fit. Keep the canonical route reachable.
+    if (readingOverview && view === 'relations') return [{ view }];
     if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
     if (!sum || (sum.items === 0 && !sum.more && !sum.unavailable)) return [];
-    if (!book && !ALWAYS.has(view) && sum.fits) return [];
+    if (!readingOverview && !ALWAYS.has(view) && sum.fits) return [];
     const count = navigationCount(sum.lists.values());
     return [{ view, ...(count ? { count } : {}) }];
   });

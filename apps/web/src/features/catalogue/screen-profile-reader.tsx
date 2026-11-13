@@ -257,6 +257,7 @@ function ScreenCurrentEvidence({
 
 export function ScreenProfileReader({
   locale,
+  compact = false,
   release,
   public: publicRead,
   bounds,
@@ -280,6 +281,7 @@ export function ScreenProfileReader({
   returnNotice = false,
 }: {
   locale: string;
+  compact?: boolean;
   release?: Release;
   public?: SubjectRead | null;
   bounds?: readonly ProfileBound[];
@@ -327,7 +329,7 @@ export function ScreenProfileReader({
             <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
           </ContentItemHeading>
         ) : null}
-        {visit.description ? (
+        {!compact && visit.description ? (
           <p className="text-muted-foreground" lang={visit.description.lang ?? undefined}>
             {visit.description.text}
           </p>
@@ -337,28 +339,12 @@ export function ScreenProfileReader({
             {m.screen_visit_return({}, o)}
           </a>
         ) : null}
-        {visit.type === 'schema:Movie' ? (
+        {!compact && visit.type === 'schema:Movie' ? (
           <p className="text-sm text-muted-foreground">{m.screen_reader_episodes_unpublished({}, o)}</p>
         ) : null}
-        <ProfileLibraryNote library={visit.library} locale={locale} kind="screen" />
+        {!compact && <ProfileLibraryNote library={visit.library} locale={locale} kind="screen" />}
       </header>
       {returnNotice ? <p role="status">{m.screen_visit_occurrence_missing({}, o)}</p> : null}
-      {publicRead &&
-      (visit.type === 'schema:TVSeries' || visit.type === 'schema:TVSeason') &&
-      !visit.unpublished.episodes ? (
-        <ScreenEpisodeList
-          locale={locale}
-          {...(release ? { release } : {})}
-          {...(episodeRead ? { read: episodeRead } : {})}
-          loading={episodeLoading}
-          {...(onEpisodeRetry ? { retry: onEpisodeRetry } : {})}
-          {...(episodeVisit ? { visit: episodeVisit } : {})}
-          origin={episodeOrigin ?? { pathname: '', searchStr: '' }}
-          readerSpoilerLevel={readerSpoilerLevel}
-          {...(episodeVisitKey ? { visitKey: episodeVisitKey } : {})}
-          link={link}
-        />
-      ) : null}
       {(visit.type === 'schema:TVSeason' || visit.type === 'schema:Episode') &&
       episodeVisit?.returnHref &&
       episodeVisit.returnMembershipId ? (
@@ -387,37 +373,61 @@ export function ScreenProfileReader({
       ) : null}
       {publicRead && release && visit.state === 'ready' ? (
         <>
-          {visit.groups.map((group) => (
-            <section key={group.id} data-slot={`profile-group-${group.id}`} className="min-w-0 space-y-3">
-              <ContentItemHeading level={2} className="text-xl font-semibold">
-                {titles(group.id, locale)}
-              </ContentItemHeading>
-              {group.fields.map((field) => (
-                <div key={field.property} className="min-w-0 space-y-3">
-                  {field.values.map((value) => {
-                    const occurrence = { holder: publicRead.subject.id, property: field.property, statement: value.id };
-                    const statement = statementOf(publicRead, occurrence);
-                    return statement ? (
-                      <ScreenOccurrence
-                        key={statement.id}
-                        statement={statement}
-                        property={field.property}
-                        read={publicRead}
-                        release={release}
-                        locale={locale}
-                        readerSpoilerLevel={readerSpoilerLevel}
-                        {...(currentVisit ? { visit: currentVisit } : {})}
-                        {...(inspection?.statement === statement.id
-                          ? { targetId: screenCurrentInspectionId(statement.id) }
-                          : {})}
-                        identity={visitIdentity}
-                      />
-                    ) : null;
-                  })}
-                </div>
-              ))}
-            </section>
-          ))}
+          {visit.groups.map((group) => {
+            const content = (
+              <section key={group.id} data-slot={`profile-group-${group.id}`} className="min-w-0 space-y-3">
+                <ContentItemHeading level={2} className="text-xl font-semibold">
+                  {titles(group.id, locale)}
+                </ContentItemHeading>
+                {group.fields.map((field) => (
+                  <div key={field.property} className="min-w-0 space-y-3">
+                    {field.values.map((value) => {
+                      const occurrence = {
+                        holder: publicRead.subject.id,
+                        property: field.property,
+                        statement: value.id,
+                      };
+                      const statement = statementOf(publicRead, occurrence);
+                      return statement ? (
+                        <ScreenOccurrence
+                          key={statement.id}
+                          statement={statement}
+                          property={field.property}
+                          read={publicRead}
+                          release={release}
+                          locale={locale}
+                          readerSpoilerLevel={readerSpoilerLevel}
+                          {...(currentVisit ? { visit: currentVisit } : {})}
+                          {...(inspection?.statement === statement.id
+                            ? { targetId: screenCurrentInspectionId(statement.id) }
+                            : {})}
+                          identity={visitIdentity}
+                        />
+                      ) : null;
+                    })}
+                  </div>
+                ))}
+              </section>
+            );
+            return compact && (group.id === 'credits' || group.id === 'parts' || group.id === 'authored') ? (
+              <details
+                key={group.id}
+                className="min-w-0 border-t border-border pt-3"
+                open={
+                  (!!inspection &&
+                    group.fields.some((field) => field.values.some((value) => value.id === inspection.statement))) ||
+                  undefined
+                }
+              >
+                <summary className={`${actionClass} cursor-pointer font-medium text-primary`}>
+                  {titles(group.id, locale)}
+                </summary>
+                <div className="pt-3">{content}</div>
+              </details>
+            ) : (
+              content
+            );
+          })}
           {inspection ? (
             <ScreenCurrentEvidence
               publicRead={publicRead}
@@ -431,8 +441,30 @@ export function ScreenProfileReader({
           ) : null}
         </>
       ) : null}
-      <ProfileBoundNotes bounds={visit.bounds} locale={locale} />
-      <ProfileSourceList sources={visit.sources} locale={locale} />
+      {publicRead &&
+      (visit.type === 'schema:TVSeries' || visit.type === 'schema:TVSeason') &&
+      !visit.unpublished.episodes ? (
+        <ScreenEpisodeList
+          locale={locale}
+          {...(release ? { release } : {})}
+          {...(episodeRead ? { read: episodeRead } : {})}
+          loading={episodeLoading}
+          {...(onEpisodeRetry ? { retry: onEpisodeRetry } : {})}
+          {...(episodeVisit ? { visit: episodeVisit } : {})}
+          origin={episodeOrigin ?? { pathname: '', searchStr: '' }}
+          readerSpoilerLevel={readerSpoilerLevel}
+          {...(episodeVisitKey ? { visitKey: episodeVisitKey } : {})}
+          link={link}
+        />
+      ) : null}
+      <details data-slot="screen-reading-details" className="min-w-0 border-t border-border pt-3">
+        <summary className={`${actionClass} cursor-pointer text-primary`}>{m.subject_sources({}, o)}</summary>
+        <div className="space-y-4 pt-3">
+          {compact && <ProfileLibraryNote library={visit.library} locale={locale} kind="screen" />}
+          <ProfileBoundNotes bounds={visit.bounds} locale={locale} />
+          <ProfileSourceList sources={visit.sources} locale={locale} />
+        </div>
+      </details>
       {unsupportedCorrection ? (
         <section className="min-w-0 space-y-3" data-slot="screen-correction-unsupported">
           <p role="status">{m.screen_visit_unsupported({}, o)}</p>
@@ -462,6 +494,7 @@ export function ScreenProfileReader({
 /** Ordinary Movie/TVSeries overview: composed public facts with the released screen grouping. */
 export function ScreenProfileOverview({
   locale,
+  compact = false,
   public: publicRead,
   bounds,
   link = PlainLink,
@@ -471,6 +504,7 @@ export function ScreenProfileOverview({
   readerSpoilerLevel = 0,
 }: {
   locale: string;
+  compact?: boolean;
   public: SubjectRead;
   bounds?: readonly ProfileBound[];
   link?: PageLink;
@@ -704,6 +738,7 @@ export function ScreenProfileOverview({
   });
   return (
     <ScreenProfileReader
+      compact={compact}
       locale={locale}
       public={currentPublic ?? (profile?.ok ? publicRead : null)}
       {...(release ? { release } : {})}

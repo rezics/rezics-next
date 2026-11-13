@@ -18,11 +18,14 @@ export function BookShelfLink({
 }) {
   if (!libraryShelfType(type)) return null;
   const options = { locale: locale as never };
-  const title = label || type;
   return (
     <a className={bookLinkClass} href={shelfHref(locale, { type })} target="_blank" rel="noopener">
-      <span lang={language ?? undefined}>{title}</span>
-      <span aria-hidden="true"> — </span>
+      {label && (
+        <>
+          <span lang={language ?? undefined}>{label}</span>
+          <span aria-hidden="true"> — </span>
+        </>
+      )}
       {m.books_catalogue_shelf({}, options)}
       <span className="sr-only"> — {m.books_catalogue_new_tab({}, options)}</span>
     </a>

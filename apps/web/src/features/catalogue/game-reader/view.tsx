@@ -32,6 +32,7 @@ import type { GameClassificationReturn } from '../game-current-visit-descriptor'
 
 type Props = GameReaderAddress & {
   locale: string;
+  compact?: boolean;
   realm?: string | undefined;
   source: object | string;
   reader: string | null;
@@ -184,6 +185,7 @@ function GameWindow({
   spoiler = 0,
   returnSelection,
   transport,
+  compact = false,
   initial,
   current,
   focusHeading,
@@ -300,38 +302,6 @@ function GameWindow({
     ) : null;
   return (
     <div className="min-w-0 space-y-5" aria-busy={busy}>
-      <p className="text-sm text-muted-foreground">{m.game_reader_scope({}, o)}</p>
-      <p className="text-sm text-muted-foreground">{m.game_reader_return({}, o)}</p>
-      <div className="rounded-lg border border-border p-3 space-y-2" data-slot="game-window-address">
-        <p>
-          {busy
-            ? m.game_reader_requested({}, o)
-            : failure
-              ? m.game_reader_failed_address({}, o)
-              : m.game_reader_current_address({}, o)}
-        </p>
-        <p className="text-sm">
-          <code>{window.requested.cursor ?? m.game_reader_first_window({}, o)}</code>
-        </p>
-        <nav className="flex flex-wrap gap-3" aria-label={m.subject_editions({}, o)}>
-          <button
-            type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-            disabled={busy || !window.previous}
-            onClick={request(window.back)}
-          >
-            {m.game_reader_previous({}, o)}
-          </button>
-          <button
-            type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-            disabled={busy}
-            onClick={request(window.start)}
-          >
-            {m.game_reader_start({}, o)}
-          </button>
-        </nav>
-      </div>
       {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
       {missingReturnTarget ? (
         <p role="status">{m.game_visit_selection_changed({}, o)}</p>
@@ -342,11 +312,13 @@ function GameWindow({
       {!page ? failureNotice : null}
       {page ? (
         <div key={window.revision} className="space-y-5">
-          <p>
-            <span lang={page.grain.lang ?? undefined}>{page.grain.text}</span> ·{' '}
-            <span lang={label?.lang ?? undefined}>{label?.text}</span>
-          </p>
-          {pickText(page.public.subject.descriptions, locale).text ? (
+          {!compact && (
+            <p>
+              <span lang={page.grain.lang ?? undefined}>{page.grain.text}</span> ·{' '}
+              <span lang={label?.lang ?? undefined}>{label?.text}</span>
+            </p>
+          )}
+          {!compact && pickText(page.public.subject.descriptions, locale).text ? (
             <p lang={pickText(page.public.subject.descriptions, locale).lang ?? undefined}>
               {pickText(page.public.subject.descriptions, locale).text}
             </p>
@@ -364,210 +336,286 @@ function GameWindow({
                 </p>
               ) : null}
               {!page.groups.length ? <p>{m.game_reader_empty({}, o)}</p> : null}
-              {page.groups.map((group) => (
-                <section key={group.id} className="space-y-3">
-                  <h3 className="font-semibold">{groups[group.id]}</h3>
-                  <dl className="space-y-4">
-                    {group.fields.map((field) => (
-                      <div key={field.property}>
-                        <dt className="font-medium" lang={field.label.lang ?? undefined}>
-                          {field.label.text || field.property}
-                        </dt>
-                        <dd className="space-y-3">
-                          {!field.statements.length ? <p>{m.release_fidelity_date_absent({}, o)}</p> : null}
-                          {field.statements.map((statement) => (
-                            <div key={statement.id}>
-                              {gate(
-                                statement,
-                                <div
-                                  tabIndex={-1}
-                                  data-game-current-assertion={statement.id}
-                                  data-current-return-selection={
-                                    returnState?.kind === 'current' && returnState.statement.id === statement.id
-                                      ? ''
-                                      : undefined
-                                  }
-                                  className={
-                                    returnState?.kind === 'current' && returnState.statement.id === statement.id
-                                      ? 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-                                      : undefined
-                                  }
-                                >
-                                  <GameFact
-                                    statement={statement}
-                                    page={page}
-                                    related={page.public.related}
-                                    locale={locale}
-                                    date={field.date}
-                                    link={Link}
-                                  />
-                                </div>,
-                              )}
-                            </div>
-                          ))}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </section>
-              ))}
-              <section className="space-y-3" data-slot="game-editions">
-                <h3 className="font-semibold">{m.subject_editions({}, o)}</h3>
-                <p>{m.game_reader_editions_scope({}, o)}</p>
-                {busy ? (
-                  <p role="status">{m.candidate_loading({}, o)}</p>
-                ) : failure ? (
-                  failureNotice
-                ) : !page.editionsAdmitted ? (
-                  <p role="status">{m.game_reader_editions_unsupported({}, o)}</p>
+              {page.groups.map((group) => {
+                const content = (
+                  <section key={group.id} className="space-y-3">
+                    <h3 className="font-semibold">{groups[group.id]}</h3>
+                    <dl className="space-y-4">
+                      {group.fields.map((field) => (
+                        <div key={field.property}>
+                          <dt className="font-medium" lang={field.label.lang ?? undefined}>
+                            {field.label.text || m.subject_value_unlabelled({}, o)}
+                          </dt>
+                          <dd className="space-y-3">
+                            {!field.statements.length ? <p>{m.release_fidelity_date_absent({}, o)}</p> : null}
+                            {field.statements.map((statement) => (
+                              <div key={statement.id}>
+                                {gate(
+                                  statement,
+                                  <div
+                                    tabIndex={-1}
+                                    data-game-current-assertion={statement.id}
+                                    data-current-return-selection={
+                                      returnState?.kind === 'current' && returnState.statement.id === statement.id
+                                        ? ''
+                                        : undefined
+                                    }
+                                    className={
+                                      returnState?.kind === 'current' && returnState.statement.id === statement.id
+                                        ? 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                                        : undefined
+                                    }
+                                  >
+                                    <GameFact
+                                      statement={statement}
+                                      page={page}
+                                      related={page.public.related}
+                                      locale={locale}
+                                      date={field.date}
+                                      link={Link}
+                                    />
+                                  </div>,
+                                )}
+                              </div>
+                            ))}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                );
+                return compact && (group.id === 'credits' || group.id === 'relations') ? (
+                  <details
+                    key={group.id}
+                    open={
+                      (returnState?.kind === 'current' &&
+                        group.fields.some((field) =>
+                          field.statements.some((statement) => statement.id === returnState.statement.id),
+                        )) ||
+                      undefined
+                    }
+                    className="min-w-0 border-t border-border pt-3"
+                  >
+                    <summary className={`${action} cursor-pointer font-medium text-primary`}>
+                      {groups[group.id]}
+                    </summary>
+                    <div className="pt-3">{content}</div>
+                  </details>
                 ) : (
-                  <>
-                    {page.workReleaseCards?.state !== 'available' ? (
-                      <div role="status">
-                        <p>{m.game_reader_compare_unavailable({}, o)}</p>
+                  content
+                );
+              })}
+              <details
+                open={!compact || undefined}
+                data-slot="game-release-destination"
+                className="min-w-0 border-t border-border pt-3"
+              >
+                <summary className={`${action} cursor-pointer font-medium text-primary`}>
+                  {m.subject_editions({}, o)}
+                </summary>
+                <section className="space-y-3" data-slot="game-editions">
+                  <h3 className="font-semibold">{m.subject_editions({}, o)}</h3>
+                  <p>{m.game_reader_editions_scope({}, o)}</p>
+                  {busy ? (
+                    <p role="status">{m.candidate_loading({}, o)}</p>
+                  ) : failure ? (
+                    failureNotice
+                  ) : !page.editionsAdmitted ? (
+                    <p role="status">{m.game_reader_editions_unsupported({}, o)}</p>
+                  ) : (
+                    <>
+                      {page.workReleaseCards?.state !== 'available' ? (
+                        <div role="status">
+                          <p>{m.game_reader_compare_unavailable({}, o)}</p>
+                          <button
+                            type="button"
+                            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                            disabled={busy}
+                            onClick={request(window.retry)}
+                          >
+                            {m.album_tracks_retry({}, o)}
+                          </button>
+                        </div>
+                      ) : null}
+                      {!page.editions.length ? <p>{m.game_reader_editions_empty({}, o)}</p> : null}
+                      <ul className="space-y-4">
+                        {page.editions.map((row) => {
+                          const summary = row.summary;
+                          const title = summary?.label;
+                          const statement = row.assertion;
+                          const card =
+                            page.workReleaseCards?.state === 'available'
+                              ? page.workReleaseCards.cards.find(
+                                  (candidate) =>
+                                    candidate.subject === row.subject && candidate.membership.id === row.statement,
+                                )
+                              : undefined;
+                          const related = Object.fromEntries(
+                            Object.entries(row.related ?? {}).map(([key, item]) => [
+                              key,
+                              {
+                                type: item.type,
+                                labels: item.label ? { [item.label.language]: item.label.value } : {},
+                              },
+                            ]),
+                          );
+                          const body = (
+                            <>
+                              {summary && title?.value && statement && page.editionTypes.includes(summary.type) ? (
+                                <>
+                                  <p lang={title.language}>{title.value}</p>
+                                  <div className="flex flex-wrap gap-x-4">
+                                    <Link href={subjectHref({ id: summary.id, label: title.value }, locale).href}>
+                                      {m.game_reader_open({}, o)}
+                                    </Link>
+                                    <Link
+                                      href={subjectUrlForView(
+                                        subjectHref({ id: summary.id, label: title.value }, locale),
+                                        'release',
+                                      )}
+                                    >
+                                      {m.game_reader_release_detail({}, o)}
+                                    </Link>
+                                  </div>
+                                </>
+                              ) : (
+                                <p>{m.work_parts_unresolved({}, o)}</p>
+                              )}
+                              <button
+                                type="button"
+                                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                                onClick={(event) => {
+                                  if (current())
+                                    setSelected({
+                                      page,
+                                      row,
+                                      opener: event.currentTarget,
+                                      keyboard: event.detail === 0,
+                                    });
+                                }}
+                              >
+                                {m.game_reader_inspect({}, o)}
+                              </button>
+                              {statement ? (
+                                <GameEvidence
+                                  statement={statement}
+                                  page={page}
+                                  related={related}
+                                  locale={locale}
+                                  link={Link}
+                                />
+                              ) : (
+                                <p>{m.game_reader_assertion_unavailable({}, o)}</p>
+                              )}
+                              {selected && selected.page === page && selected.row === row ? (
+                                <EditionInspection
+                                  selection={selected}
+                                  page={page}
+                                  locale={locale}
+                                  current={current}
+                                  link={Link}
+                                  close={() => setSelected(undefined)}
+                                />
+                              ) : null}
+                              {card ? (
+                                <WorkReleaseComparison card={card} page={page} locale={locale} link={Link} />
+                              ) : null}
+                            </>
+                          );
+                          return (
+                            <li
+                              key={`${row.subject}:${row.statement}`}
+                              className="min-w-0 rounded-lg border border-border p-3"
+                            >
+                              {statement ? gate(statement, body) : body}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <p className="text-sm text-muted-foreground">{m.game_reader_total_unknown({}, o)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {page.next
+                          ? m.game_reader_more_available({}, o)
+                          : page.caughtUp
+                            ? m.game_reader_window_complete({}, o)
+                            : m.work_parts_pending({}, o)}
+                      </p>
+                      {!page.caughtUp && page.next ? <p role="status">{m.work_parts_pending({}, o)}</p> : null}
+                      {page.next ? (
                         <button
                           type="button"
                           className={`${buttonVariants({ variant: 'outline' })} ${action}`}
                           disabled={busy}
-                          onClick={request(window.retry)}
+                          onClick={request(() => window.next(page.next!))}
                         >
-                          {m.album_tracks_retry({}, o)}
+                          {m.work_parts_more({}, o)}
                         </button>
-                      </div>
-                    ) : null}
-                    {!page.editions.length ? <p>{m.game_reader_editions_empty({}, o)}</p> : null}
-                    <ul className="space-y-4">
-                      {page.editions.map((row) => {
-                        const summary = row.summary;
-                        const title = summary?.label;
-                        const statement = row.assertion;
-                        const card =
-                          page.workReleaseCards?.state === 'available'
-                            ? page.workReleaseCards.cards.find(
-                                (candidate) =>
-                                  candidate.subject === row.subject && candidate.membership.id === row.statement,
-                              )
-                            : undefined;
-                        const related = Object.fromEntries(
-                          Object.entries(row.related ?? {}).map(([key, item]) => [
-                            key,
-                            {
-                              type: item.type,
-                              labels: item.label ? { [item.label.language]: item.label.value } : {},
-                            },
-                          ]),
-                        );
-                        const body = (
-                          <>
-                            {summary && title?.value && statement && page.editionTypes.includes(summary.type) ? (
-                              <>
-                                <p lang={title.language}>{title.value}</p>
-                                <div className="flex flex-wrap gap-x-4">
-                                  <Link href={subjectHref({ id: summary.id, label: title.value }, locale).href}>
-                                    {m.game_reader_open({}, o)}
-                                  </Link>
-                                  <Link
-                                    href={subjectUrlForView(
-                                      subjectHref({ id: summary.id, label: title.value }, locale),
-                                      'release',
-                                    )}
-                                  >
-                                    {m.game_reader_release_detail({}, o)}
-                                  </Link>
-                                </div>
-                              </>
-                            ) : (
-                              <p>{m.work_parts_unresolved({}, o)}</p>
-                            )}
-                            <button
-                              type="button"
-                              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-                              onClick={(event) => {
-                                if (current())
-                                  setSelected({ page, row, opener: event.currentTarget, keyboard: event.detail === 0 });
-                              }}
-                            >
-                              {m.game_reader_inspect({}, o)}
-                            </button>
-                            {statement ? (
-                              <GameEvidence
-                                statement={statement}
-                                page={page}
-                                related={related}
-                                locale={locale}
-                                link={Link}
-                              />
-                            ) : (
-                              <p>{m.game_reader_assertion_unavailable({}, o)}</p>
-                            )}
-                            {selected && selected.page === page && selected.row === row ? (
-                              <EditionInspection
-                                selection={selected}
-                                page={page}
-                                locale={locale}
-                                current={current}
-                                link={Link}
-                                close={() => setSelected(undefined)}
-                              />
-                            ) : null}
-                            {card ? (
-                              <WorkReleaseComparison card={card} page={page} locale={locale} link={Link} />
-                            ) : null}
-                          </>
-                        );
-                        return (
-                          <li
-                            key={`${row.subject}:${row.statement}`}
-                            className="min-w-0 rounded-lg border border-border p-3"
-                          >
-                            {statement ? gate(statement, body) : body}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <p className="text-sm text-muted-foreground">{m.game_reader_total_unknown({}, o)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {page.next
-                        ? m.game_reader_more_available({}, o)
-                        : page.caughtUp
-                          ? m.game_reader_window_complete({}, o)
-                          : m.work_parts_pending({}, o)}
-                    </p>
-                    {!page.caughtUp && page.next ? <p role="status">{m.work_parts_pending({}, o)}</p> : null}
-                    {page.next ? (
-                      <button
-                        type="button"
-                        className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-                        disabled={busy}
-                        onClick={request(() => window.next(page.next!))}
-                      >
-                        {m.work_parts_more({}, o)}
-                      </button>
-                    ) : null}
-                  </>
-                )}
-              </section>
+                      ) : null}
+                    </>
+                  )}
+                </section>
+              </details>
             </>
           )}
-          <section className="space-y-2">
-            <h3 className="font-semibold">{m.music_reader_source_evidence({}, o)}</h3>
-            <p>{m.music_reader_source_editorial({}, o)}</p>
-            <ul>
-              {profileSourceRecords(page.public.subject).map((source, index) => (
-                <li key={index}>
-                  {/^https?:\/\//.test(source.url) ? <Link href={source.url}>{source.name}</Link> : source.name}
-                  {source.attribution ? <p>{source.attribution}</p> : null}
-                  {source.licence ? <p>{source.licence.id}</p> : null}
-                </li>
-              ))}
-            </ul>
-          </section>
+          <details className="min-w-0 border-t border-border pt-3">
+            <summary className={`${action} cursor-pointer text-primary`}>{m.subject_sources({}, o)}</summary>
+            <section className="space-y-2">
+              <h3 className="font-semibold">{m.music_reader_source_evidence({}, o)}</h3>
+              <p>{m.music_reader_source_editorial({}, o)}</p>
+              <ul>
+                {profileSourceRecords(page.public.subject).map((source, index) => (
+                  <li key={index}>
+                    {/^https?:\/\//.test(source.url) ? <Link href={source.url}>{source.name}</Link> : source.name}
+                    {source.attribution ? <p>{source.attribution}</p> : null}
+                    {source.licence ? <p>{source.licence.id}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </details>
           <nav className="flex flex-wrap gap-x-4" aria-label={m.game_reader_fallback({}, o)}>
             <Link href={subjectUrlForView(base, 'details')}>{m.game_reader_fallback({}, o)}</Link>
             <Link href={subjectUrlForView(base, 'edit')}>{m.facts_title({}, o)}</Link>
             {page.admitted ? <Link href={subjectUrlForView(base, 'game')}>{m.game_reader_correct({}, o)}</Link> : null}
             <Link href={subjectUrlForView(base, 'relations')}>{m.subject_relations({}, o)}</Link>
           </nav>
+          <details data-slot="game-reading-details" className="min-w-0 border-t border-border pt-3">
+            <summary className={`${action} cursor-pointer text-primary`}>
+              {m.literary_reader_about_reading({}, o)}
+            </summary>
+            <p className="text-sm text-muted-foreground">{m.game_reader_scope({}, o)}</p>
+            <p className="text-sm text-muted-foreground">{m.game_reader_return({}, o)}</p>
+            <div className="rounded-lg border border-border p-3 space-y-2" data-slot="game-window-address">
+              <p>
+                {busy
+                  ? m.game_reader_requested({}, o)
+                  : failure
+                    ? m.game_reader_failed_address({}, o)
+                    : m.game_reader_current_address({}, o)}
+              </p>
+              <p className="text-sm">
+                <code>{window.requested.cursor ?? m.game_reader_first_window({}, o)}</code>
+              </p>
+              <nav className="flex flex-wrap gap-3" aria-label={m.subject_editions({}, o)}>
+                <button
+                  type="button"
+                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  disabled={busy || !window.previous}
+                  onClick={request(window.back)}
+                >
+                  {m.game_reader_previous({}, o)}
+                </button>
+                <button
+                  type="button"
+                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  disabled={busy}
+                  onClick={request(window.start)}
+                >
+                  {m.game_reader_start({}, o)}
+                </button>
+              </nav>
+            </div>
+          </details>
           <button
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${action}`}

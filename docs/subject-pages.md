@@ -18,6 +18,27 @@ through the page-owned contract in `features/pages/semantic-render-port.ts` and 
 composition root; the page application owns the installed operation and its disclosure, continuation, receipt and
 work-budget semantics.
 
+## Reading-first Overview
+
+Decision: admitted Book, literary Series/Edition, Game and Screen readers share one presentation projection:
+recognizable identity and primary Library/reading actions; synopsis and important domain facts; the supplied native
+rating and up to three admitted reviews; then domain exploration. Long text expands in place. Keep Book bibliography,
+editions and series in their existing destinations, Game platforms and release browsing, and Screen seasons,
+episodes and personal progress with their native owners. Detailed relations retain canonical tabs even when their
+former preview fitted on Overview. No new preference, authority, aggregate or subject fact is inferred.
+
+The page projection uses already planned composition slots and never changes native reads, ids, order within a
+stream, counts, Context, historical evidence or bounded return addresses. Game and Screen extensions disclose
+secondary credits, relations and exact window/provenance information in place. Tags, names, editorial controls,
+Sources and Context tools remain mounted in an accessible Details disclosure after primary reading. Currentness,
+permission and unknown-command-outcome warnings stay beside their affected actions; attribution remains available
+with its media or evidence. Loading, absent, denied and retry states keep their existing section owners.
+
+Supplied display labels and language tags are preserved. A missing shelf Type label uses localized shelf guidance,
+never a compact Type identifier or an invented name; the exact Type stays in its existing destination address and
+inspectable evidence. This adds no label read or per-row hydration. Complete-page examples use contract-shaped
+synthetic responses and do not establish provider, native or published acceptance.
+
 ## Reader Type display
 
 Reader labels, cover proportions and explicit Schema.org hints come from the shared Web Type-directory

@@ -380,36 +380,22 @@ Community's application host consumes the public `communityPublicationVisitHref`
 public shelf return. Community does not import Search's private Subject application. The handoff supplies no
 membership, publication or access authority; the destination performs its ordinary read admission.
 
-## Book Overview
+## Reading-first Overview
 
-Decision: Book Overview reuses the ordinary admitted Subject readers in an open identity, synopsis and review flow;
-ratings sit beside identity, up to three admitted reviews follow the synopsis, and Relations is a canonical tab
-without an inline preview or duplicate link. Short synopsis text stays complete; long text retains the native
-expand/collapse, language, spoiler and exact-return behavior. Detailed populations remain in the full review
-journey. Other Subject kinds and non-Overview views retain their existing contracts.
+The [Subject page owner](../../../../../docs/subject-pages.md#reading-first-overview) defines the shared policy.
+`reading-overview.tsx` owns the presentation-only projection, review partition, open section rhythm and secondary
+Details disclosure for Book, Game and Screen. `book-overview.tsx` retains the existing literary consumer exports.
+`SubjectPage` selects the domain from its admitted readers and binds compact Game/Screen extensions without extra
+reads. Identity keeps native cover/media, creator, Library actions and source-local rating failure/retry. The public
+figure retains its own count; imported scores and personal votes never substitute for an aggregate.
 
-`SubjectPage` applies `bookOverviewDocument` only to an admitted `schema:Book` Overview. It omits relation, edition,
-credit, collection and discussion previews from rendering and does not mount the literary or franchise overview.
-The original page document still owns planning, admission and navigation counts. Native `pages.read` supplies a
-bundled composition; Web starts no extra preview request to remove. Relation reads cannot be dropped from that
-installed producer by this presentation projection. The canonical Relations, editions and other defined list views
-remain reachable even when their original preview would have fitted entirely on Overview. Tab customization is a
-future seam only; no preferences model or interface is introduced.
+The original document still owns planning, admission and counts. Projected detailed populations remain reachable in
+canonical views. Reviews retain native order, authors, thread destinations, admission, lifetime and provenance;
+full reviews own reactions, reporting and continuation. Synopsis retains language, spoilers and exact return.
+Context, names, tags, editorial tools and Sources render once in Details after primary reading. Attribution and
+action-specific warnings remain with their owning component. No preference model is introduced.
 
-The Book identity retains real cover/media, title and author, native Library actions and source-local rating
-failure/retry states. The compact rating uses the published public figure and its own count, never an imported score
-or personal vote as an aggregate. The review bound is applied after ordinary community admission and lifetime
-checks; it preserves native order, authors, thread destinations and historical citation provenance, and adds no
-nested continuation. Full reviews own reaction/watch/report controls and pagination. Empty and unavailable regions
-retain their own states; neither is turned into a fabricated count or review.
-
-Use the [placement heuristics](../../../../../docs/development/feature-design.md#information-placement) when
-changing the composition. Reference direction: [Goodreads Glorious Exploits](https://goodreads.com/book/show/127278133)
-(its live page may refuse automated access), Impeccable's [Read guidance](https://impeccable.style/designing/) and
-[distill](https://impeccable.style/docs/distill/): prioritize the reading job, remove repetition and keep occasional
-choices reachable. Apply the craft floor through existing theme tokens, readable line lengths, responsive flow,
-visible keyboard focus and real content. Do not copy reference assets or text.
-
-Focused Web regressions pin Book-only omission and canonical tabs, the admitted review bound and unchanged full
-views, identity rating availability, and existing short/long synopsis disclosure. These run in the dev verifier;
-no extra Storybook or browser states are required for this composition change.
+Focused actual-consumer regressions pin shared hierarchy, nested projection, missing shelf labels and distinct
+domain capabilities. Complete-page rich, sparse and section-failure stories are synthetic contract examples;
+retained literary mounted suites and browser/visual review run in the dev verifier. Canonical literary story ids
+remain unchanged. The Book showcase owns its comprehensive fixture family independently.
