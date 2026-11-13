@@ -7,6 +7,7 @@ import readPurge from './read-post-purge.sql';
 import finishPurge from './finish-post-purge.sql';
 import nullRevisions from './null-erased-revisions.sql';
 import eraseMedia from './page-erasure-media.sql';
+import { disposeHostedTitles, hostedLifecycleAnchor } from './account-erasure-authored-hosted.ts';
 import type { ErasureJob } from './erasure-job.ts';
 
 export type PostPurgeStep = <T>(name: string, action: () => Promise<T>) => Promise<T>;
@@ -30,7 +31,7 @@ export async function clearErasedPostRevisions(
   const route = routeOf(input.postId);
   if (route === null) throw new TypeError('Invalid post identity');
   const until = () => (typeof deadline === 'function' ? deadline() : deadline);
-  const eligible = await step(`post:${input.postId}:start`, async () => {
+  const purge = await step(`post:${input.postId}:start`, async () => {
     const at = clock().toISOString();
     const end = until();
     return within(end, () =>
@@ -43,11 +44,21 @@ export async function clearErasedPostRevisions(
           account_erasure: input.accountErasure ?? false,
         });
         const row = await readPurge.run(client, { route, post_id: input.postId });
-        return !!row && row.purge_started_at !== null && !row.purge_completed;
+        return {
+          started: !!row && row.purge_started_at !== null,
+          eligible: !!row && row.purge_started_at !== null && !row.purge_completed,
+        };
       }),
     );
   });
-  if (!eligible) return { pageSizes: [], clearedRevisions: 0 };
+  // A retained purge marker proves eligibility even if an earlier worker has
+  // already set Post-only completion. This resumes the separate hosted pages.
+  if (purge.started) {
+    const anchor = await hostedLifecycleAnchor(pool, input.postId, until);
+    if (anchor)
+      await disposeHostedTitles(pool, anchor, until, (name, action) => step(`post:${input.postId}:${name}`, action));
+  }
+  if (!purge.eligible) return { pageSizes: [], clearedRevisions: 0 };
   const pageSizes: number[] = [];
   let clearedRevisions = 0;
   let after = { at: '-infinity', id: input.postId };

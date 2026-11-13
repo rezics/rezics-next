@@ -55,7 +55,8 @@ WITH input AS NOT MATERIALIZED (
     AND (l.availability = 'erased' OR e.post_id IS NOT NULL) AND t.title IS NOT NULL
   RETURNING t.thread_id
 )
-SELECT l.thread_id::text, COALESCE(e.post_id, x.post_id)::text AS erased_post_id,
+SELECT l.thread_id::text, l.post_id::text,
+       COALESCE(e.post_id, x.post_id)::text AS erased_post_id,
        COALESCE(e.security_revision, x.security_revision) AS security_revision,
        (SELECT count(*)::integer FROM page) AS revisions,
        (SELECT count(*)::integer FROM cleared) AS cleared,

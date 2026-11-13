@@ -7,11 +7,13 @@ import markAuthorErased from './account-erasure-authored-mark.sql';
 import disposeItem from './account-erasure-authored-item.sql';
 import deleteItems from './account-erasure-authored-delete.sql';
 import { noteAccountErasureFound } from './account-erasure-progress.ts';
+import { disposeHostedAccountItem } from './account-erasure-authored-hosted.ts';
 
 export type AuthoredErasureCursor = Readonly<{ itemKind: string; itemId: string; revisionAfter?: string }>;
 type Item = { item_kind: 'thread' | 'post'; item_id: string; thread_id: string };
 type Disposition = {
   thread_id: string;
+  post_id: string;
   erased_post_id: string | null;
   security_revision: string | null;
   revisions: number;
@@ -156,6 +158,7 @@ export async function eraseAccountAuthoredPage(
       };
       break;
     }
+    if (value?.post_id) await disposeHostedAccountItem(deps.pool, value.post_id, accountId, () => Date.now() + 120_000);
     completed.push(item);
     next = { itemKind: item.item_kind, itemId: item.item_id };
     if (remaining === 0) break;
@@ -213,6 +216,7 @@ export async function eraseAccountAuthoredItem(
   const itemRoute = route(itemId);
   let afterAt = '-infinity';
   let afterRevision = START_ID;
+  let hostedCatalogueId: string | null = itemKind === 'post' ? itemId : null;
   for (;;) {
     const key = createHash('sha256')
       .update(JSON.stringify([accountId, itemKind, itemId, afterAt, afterRevision]))
@@ -270,9 +274,13 @@ export async function eraseAccountAuthoredItem(
       },
     );
     const row = result.value;
+    if (row?.post_id) hostedCatalogueId = row.post_id;
     if (!row?.after_at || !row.after_revision) break;
     afterAt = row.after_at;
     afterRevision = row.after_revision;
+  }
+  if (hostedCatalogueId) {
+    await disposeHostedAccountItem(deps.pool, hostedCatalogueId, accountId, () => Date.now() + 120_000);
   }
   await runCommand(
     deps.pool,

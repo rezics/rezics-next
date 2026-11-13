@@ -1,4 +1,5 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
+import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import { hostedAppendDescriptor } from '../../src/content/hosted-chapters-append.ts';
 import { hostedReadPlacement } from '../../src/content/hosted-chapters-store.ts';
@@ -11,7 +12,6 @@ import {
 import revisionPage from '../../src/content/hosted-append-lifecycle-revisions.sql';
 import placementPage from '../../src/content/hosted-append-lifecycle-placements.sql';
 import streamPage from '../../src/content/hosted-append-lifecycle-stream.sql';
-import startPurge from '../../src/content/start-post-purge.sql';
 import markAuthorErased from '../../src/content/account-erasure-authored-mark.sql';
 import disposeItem from '../../src/content/account-erasure-authored-item.sql';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -128,8 +128,9 @@ async function book(prefixLength = 2) {
   }
 }
 
-test('terminal native eligibility alone redacts private labels and retains shared bases, exact manifests and identities', async () => {
-  const f = await book();
+test('eligible Post purge resumes bounded private-title pages and retains shared bases, releases and identities', async () => {
+  const f = await book(101);
+  const observer = observeSql(f.native.pool);
   try {
     const pool = f.native.pool;
     const first = f.drafts[0]!,
@@ -182,22 +183,12 @@ test('terminal native eligibility alone redacts private labels and retains share
       }),
     );
     expect(deleted.status).toBe(204);
-    await startPurge.run(pool, {
-      route: f.route,
-      post_id: f.catalogueId,
-      at: new Date().toISOString(),
-      account_erasure: false,
-    });
+    expect(
+      await clearErasedPostRevisions(pool, { postId: f.catalogueId }, Date.now() + 120_000, () => new Date()),
+    ).toEqual({ pageSizes: [], clearedRevisions: 0 });
     await expect(refuse()).rejects.toThrow('terminal native authority');
     await expect(redactBase()).rejects.toThrow('terminal native authority');
     expect(await f.manifest()).toEqual(release);
-    // The native eligibility operation, with its existing clock, matures this soft tombstone.
-    await startPurge.run(pool, {
-      route: f.route,
-      post_id: f.catalogueId,
-      at: new Date(Date.now() + 31 * 86400000).toISOString(),
-      account_erasure: false,
-    });
     await expect(
       pageHostedLifecycleRevisions(
         pool,
@@ -212,24 +203,79 @@ test('terminal native eligibility alone redacts private labels and retains share
         [f.route, f.catalogueId, f.release],
       ),
     ).rejects.toThrow('one-way title redaction');
-    const inventory = await pageHostedLifecycleRevisions(pool, f.anchor, { afterRevision: null }, context());
-    expect(inventory.value.items.find((r) => r.revisionId === f.base)).toMatchObject({ streamHighWater: '1' });
-    expect(inventory.value.items.find((r) => r.revisionId === pinned)).toMatchObject({ streamHighWater: null });
-    for (const r of inventory.value.items) {
-      const page = await redactHostedLifecyclePlacements(
-        pool,
-        f.anchor,
-        { revisionId: r.revisionId, afterOccurrence: null },
-        context(),
-      );
-      expect(page.value.items.length).toBe(r.revisionId === f.base ? 2 : 0);
-    }
-    const cursor = { streamId: f.base, highWater: '1', afterOffset: '-1' };
-    const page = await redactHostedLifecycleStream(pool, f.anchor, cursor, context());
-    expect(page.value.items).toEqual(
-      f.appended.map((occurrenceId, i) => ({ occurrenceId, offset: String(i), changed: true })),
+
+    const unrelated = await f.native.thread();
+    const unrelatedOccurrence = f.newOccurrenceId();
+    const unrelatedCatalogue = await f.native.command('/v1/hostedCatalogues', {
+      postId: unrelated.firstPost.id,
+      threadId: unrelated.id,
+      placements: [
+        {
+          occurrenceId: unrelatedOccurrence,
+          parentId: null,
+          position: 0,
+          title: 'Unrelated private title',
+          kind: 'chapter',
+          target: f.target,
+        },
+      ],
+    });
+    const due = () => new Date(Date.now() + 31 * 86400000);
+    let crashed = false;
+    const crashAfterFirstStreamPage = async <T>(name: string, action: () => Promise<T>): Promise<T> => {
+      const value = await action();
+      const page = value as { value?: { items?: readonly unknown[] } };
+      if (!crashed && name.includes(':stream:') && page.value?.items?.length === 100) {
+        crashed = true;
+        throw new Error('simulated crash after committed hosted stream page');
+      }
+      return value;
+    };
+    await expect(
+      clearErasedPostRevisions(pool, { postId: f.catalogueId }, Date.now() + 120_000, due, crashAfterFirstStreamPage),
+    ).rejects.toThrow('simulated crash after committed hosted stream page');
+    expect(crashed).toBe(true);
+    expect(
+      (
+        await pool.query(
+          'SELECT count(*)::int AS count FROM content.hosted_append WHERE route=$1 AND catalogue_id=$2 AND title_redacted',
+          [f.route, f.catalogueId],
+        )
+      ).rows[0]?.count,
+    ).toBe(100);
+
+    await clearErasedPostRevisions(pool, { postId: f.catalogueId }, Date.now() + 120_000, due);
+    await clearErasedPostRevisions(pool, { postId: f.catalogueId }, Date.now() + 120_000, due);
+    expect(
+      (
+        await pool.query(
+          'SELECT count(*)::int AS count FROM content.hosted_append WHERE route=$1 AND catalogue_id=$2 AND title_redacted',
+          [f.route, f.catalogueId],
+        )
+      ).rows[0]?.count,
+    ).toBe(101);
+    const rangeStatements = new Set<string>([revisionPage.sql, placementPage.sql, streamPage.sql]);
+    const ranges = observer.records.filter((r) => rangeStatements.has(r.statement));
+    const streamRanges = ranges.filter((r) => r.statement === streamPage.sql);
+    expect(streamRanges).toHaveLength(2);
+    expect(streamRanges.map((r) => r.parameters[streamPage.params.indexOf('after_offset')])).toEqual(['-1', '99']);
+    expect(streamRanges.map((r) => r.parameters[streamPage.params.indexOf('high_water')])).toEqual(['100', '100']);
+
+    const nonHosted = await f.native.thread();
+    const nonHostedDelete = await f.native.system.kernel.handle(
+      new Request(`https://content.test/v1/posts/${nonHosted.firstPost.id}`, {
+        method: 'DELETE',
+        headers: {
+          authorization: `Bearer ${f.native.author.bearer}`,
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+      }),
     );
-    expect(page.value.next).toBeNull();
+    expect(nonHostedDelete.status).toBe(204);
+    const beforeNonHosted = ranges.length;
+    await clearErasedPostRevisions(pool, { postId: nonHosted.firstPost.id }, Date.now() + 120_000, due);
+    expect(observer.records.filter((r) => rangeStatements.has(r.statement))).toHaveLength(beforeNonHosted);
+
     expect(
       await Promise.all(
         ['hosted_catalogue', 'hosted_structure_revision', 'hosted_occurrence', 'hosted_append_descriptor'].map(f.rows),
@@ -238,9 +284,22 @@ test('terminal native eligibility alone redacts private labels and retains share
     expect(await f.manifest()).toEqual(release);
     expect(skeleton(await f.rows('hosted_placement'))).toEqual(originalPlacements);
     expect(skeleton(await f.rows('hosted_append'))).toEqual(originalAppends);
-    expect((await f.rows('hosted_placement')).filter((r) => r.revision_id === f.base)).toEqual(
-      expect.arrayContaining([expect.objectContaining({ title: null, title_redacted: true })]),
+    const structureRevisions = new Set(
+      (await f.rows('hosted_structure_revision')).filter((r) => r.kind === 'structure').map((r) => r.revision_id),
     );
+    expect(
+      (await f.rows('hosted_placement')).filter((r) => structureRevisions.has(r.revision_id) && r.title !== null),
+    ).toHaveLength(0);
+    expect((await f.rows('hosted_append')).every((r) => r.title === null && r.title_redacted)).toBe(true);
+    expect(
+      (
+        await pool.query(
+          'SELECT title,title_redacted FROM content.hosted_placement WHERE route=$1 AND catalogue_id=$2 AND occurrence_id=$3',
+          [routeOf(unrelated.firstPost.id), unrelated.firstPost.id, unrelatedOccurrence],
+        )
+      ).rows,
+    ).toEqual([{ title: 'Unrelated private title', title_redacted: false }]);
+    expect(unrelatedCatalogue.revisionId).toBeTruthy();
     await expect(hostedReadPlacement(pool, f.catalogueId, pinned, f.appended[0]!, descriptor)).rejects.toThrow(
       'Redacted hosted placement',
     );
@@ -273,6 +332,7 @@ test('terminal native eligibility alone redacts private labels and retains share
       }),
     ).rejects.toThrow();
   } finally {
+    await observer.close();
     await f.close();
   }
 });
