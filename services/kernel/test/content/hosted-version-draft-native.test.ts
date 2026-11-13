@@ -234,9 +234,20 @@ test('persists a 12,001-occurrence cross-parent move on one snapshot overlay wit
   const generationId = newOccurrenceId();
   const empty = await createHostedVersionGeneration(native.pool, catalogueId, generationId, 'draft');
   const write = createHostedVersionWrite<StoredValue>(native.pool, empty);
-  const siblingIndex = hostedVersionSequence(write, 'sibling');
-  const preorderIndex = hostedVersionSequence(write, 'preorder');
-  const chapterIndex = hostedVersionSequence(write, 'chapter');
+  // The fixture builds planner indexes from occurrence IDs. The store write
+  // carries object-valued occurrence payloads on the same generic overlay.
+  const siblingIndex = hostedVersionSequence(
+    write,
+    'sibling',
+  ) as unknown as VersionedOutlineSequenceReadWriteSet<string>;
+  const preorderIndex = hostedVersionSequence(
+    write,
+    'preorder',
+  ) as unknown as VersionedOutlineSequenceReadWriteSet<string>;
+  const chapterIndex = hostedVersionSequence(
+    write,
+    'chapter',
+  ) as unknown as VersionedOutlineSequenceReadWriteSet<string>;
   const siblingRoots = new Map<string | null, string | null>([
     [null, buildBalancedSequence(siblingIndex, [parentA, parentB, outsideTail], chapterIds)],
     [parentA, buildBalancedSequence(siblingIndex, [beforeA, source, afterA], chapterIds)],
