@@ -80,6 +80,16 @@ export type HostedReadingNoneView = Readonly<{ state: 'none'; subjectId: string 
 
 export type HostedReadingView = HostedReadingSavedView | HostedReadingNoneView;
 
+export type HostedReadingSavedMetadataView = Readonly<{
+  state: 'saved';
+  subjectId: string;
+  revision: string;
+  address: HostedReadingAddress;
+  metadata: HostedReadingMetadata;
+}>;
+
+export type HostedReadingMetadataView = HostedReadingSavedMetadataView | HostedReadingNoneView;
+
 export type HostedReadingListQuery = Readonly<{
   limit?: number;
   cursor?: string;

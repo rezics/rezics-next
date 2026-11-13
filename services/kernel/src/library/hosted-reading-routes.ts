@@ -123,6 +123,24 @@ function getResponse() {
   );
 }
 
+function metadataResponse() {
+  return memoizedValue(metadataResponse, () =>
+    t.Union([
+      t.Object({ state: t.Literal('none'), subjectId: id }, closed),
+      t.Object(
+        {
+          state: t.Literal('saved'),
+          subjectId: id,
+          revision,
+          address: t.Object(address, closed),
+          metadata,
+        },
+        closed,
+      ),
+    ]),
+  );
+}
+
 function listResponse() {
   return memoizedValue(listResponse, () =>
     t.Object(
@@ -305,6 +323,32 @@ export function hostedReadingRoutes(app: DefinitionRoutes, dependencies: HostedR
       async ({ actor, admission, job, query, request }) => {
         const owner = requireAccount(actor);
         return admission.run('normal', job, () => reads().get(owner, query.subjectId, job.deadline, request.signal));
+      },
+    )
+    .get(
+      '/v1/libraryHostedReading/metadata',
+      {
+        query: t.Object({ subjectId: id }, closed),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          const query = new URL(request.url).searchParams;
+          if ([...query.keys()].some((key) => key !== 'subjectId') || query.getAll('subjectId').length !== 1)
+            throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: metadataResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          503: unavailable(),
+        },
+        detail: detail('hosted_reading.metadata', 'progress_session:list'),
+      },
+      async ({ actor, admission, job, query, request }) => {
+        const owner = requireAccount(actor);
+        return admission.run('normal', job, () =>
+          reads().getMetadata(owner, query.subjectId, job.deadline, request.signal),
+        );
       },
     )
     .put(

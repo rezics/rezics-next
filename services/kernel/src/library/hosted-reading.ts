@@ -21,6 +21,7 @@ import {
   type HostedReadingClearInput,
   type HostedReadingClearResult,
   type HostedReadingPort,
+  type HostedReadingMetadataView,
   type HostedReadingSaveInput,
   type HostedReadingSaveResult,
   type HostedReadingView,
@@ -101,6 +102,74 @@ function listBinding(owner: AccountActor, route: number, limit: number): CursorB
     operation: 'library.hosted_reading.list',
     parameters: { accountId: owner.accountId, route, caller: listCaller(owner), limit },
   };
+}
+
+function hostedReadingRequestAlive(deadline: number, signal?: AbortSignal): void {
+  if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+}
+
+async function readHostedReadingCheckpoint(
+  dependencies: HostedReadingDependencies,
+  owner: AccountActor,
+  subjectId: string,
+  deadline: number,
+  signal?: AbortSignal,
+): Promise<HostedReadingRow | null> {
+  const route = routeOf(owner.accountId)!;
+  hostedReadingRequestAlive(deadline, signal);
+  return within(deadline, () =>
+    withConnection(dependencies.pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      let committed = false;
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+          route,
+          owner.accountId,
+        ]);
+        await authorizeOwner(client, route, owner);
+        hostedReadingRequestAlive(deadline, signal);
+        const row = await readCheckpoint.run(client, {
+          route,
+          account_id: owner.accountId,
+          subject_id: subjectId,
+        });
+        await authorizeOwner(client, route, owner);
+        await client.query('COMMIT');
+        committed = true;
+        const found = Array.isArray(row) ? row[0] : row;
+        return found ? (found as HostedReadingRow) : null;
+      } catch (error) {
+        if (!committed) await connection.query('ROLLBACK');
+        throw error;
+      }
+    }),
+  );
+}
+
+async function confirmHostedReadingOwnerCurrent(
+  dependencies: HostedReadingDependencies,
+  owner: AccountActor,
+  deadline: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const route = routeOf(owner.accountId)!;
+  hostedReadingRequestAlive(deadline, signal);
+  await within(deadline, () =>
+    withConnection(dependencies.pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      let committed = false;
+      try {
+        await client.query('BEGIN');
+        await authorizeOwner(client, route, owner);
+        await client.query('COMMIT');
+        committed = true;
+      } catch (error) {
+        if (!committed) await connection.query('ROLLBACK');
+        throw error;
+      }
+    }),
+  );
 }
 
 export function createHostedReadingReads(dependencies: HostedReadingDependencies) {
@@ -236,64 +305,40 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
     async get(actor: Actor, subjectId: string, deadline: number, signal?: AbortSignal): Promise<HostedReadingView> {
       if (!hostedReadingUuid(subjectId)) throw new ProblemError('invalid_request');
       requireOwner(actor, 'progress_session:list');
-      const route = routeOf(actor.accountId)!;
-      const alive = () => {
-        if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
-      };
-      alive();
-      const stored = await within(deadline, () =>
-        withConnection(dependencies.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          let committed = false;
-          try {
-            await client.query('BEGIN');
-            await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-              route,
-              actor.accountId,
-            ]);
-            await authorizeOwner(client, route, actor);
-            alive();
-            const row = await readCheckpoint.run(client, {
-              route,
-              account_id: actor.accountId,
-              subject_id: subjectId,
-            });
-            await authorizeOwner(client, route, actor);
-            await client.query('COMMIT');
-            committed = true;
-            const found = Array.isArray(row) ? row[0] : row;
-            return found ? (found as HostedReadingRow) : null;
-          } catch (error) {
-            if (!committed) await connection.query('ROLLBACK');
-            throw error;
-          }
-        }),
-      );
+      const owner = actor as AccountActor;
+      const stored = await readHostedReadingCheckpoint(dependencies, owner, subjectId, deadline, signal);
       if (!stored) return { state: 'none' as const, subjectId };
       const address = storedAddress(stored);
-      const resume = await dependencies.content.resolveExact(actor, address, deadline);
-      alive();
-      await within(deadline, () =>
-        withConnection(dependencies.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          let committed = false;
-          try {
-            await client.query('BEGIN');
-            await authorizeOwner(client, route, actor);
-            await client.query('COMMIT');
-            committed = true;
-          } catch (error) {
-            if (!committed) await connection.query('ROLLBACK');
-            throw error;
-          }
-        }),
-      );
+      const resume = await dependencies.content.resolveExact(owner, address, deadline);
+      await confirmHostedReadingOwnerCurrent(dependencies, owner, deadline, signal);
       return {
         state: 'saved' as const,
         subjectId,
         revision: stored.revision,
         address,
         resume,
+      };
+    },
+    async getMetadata(
+      actor: Actor,
+      subjectId: string,
+      deadline: number,
+      signal?: AbortSignal,
+    ): Promise<HostedReadingMetadataView> {
+      if (!hostedReadingUuid(subjectId)) throw new ProblemError('invalid_request');
+      requireOwner(actor, 'progress_session:list');
+      const owner = actor as AccountActor;
+      const stored = await readHostedReadingCheckpoint(dependencies, owner, subjectId, deadline, signal);
+      if (!stored) return { state: 'none', subjectId };
+      const address = storedAddress(stored);
+      const metadata = await dependencies.content.readMetadata(owner, address, deadline);
+      await confirmHostedReadingOwnerCurrent(dependencies, owner, deadline, signal);
+      return {
+        state: 'saved',
+        subjectId,
+        revision: stored.revision,
+        address,
+        metadata,
       };
     },
   };

@@ -4,6 +4,8 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Pool, PoolClient } from 'pg';
 import { hostedChaptersFixture } from '../content/support/hosted-chapters-fixture.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { peekHostedReadingPort } from '../../src/library/hosted-reading-bind.ts';
+import type { HostedReadingPort } from '../../src/library/contract/hosted-reading.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
@@ -40,6 +42,40 @@ function watchChapterBodyReads(pool: Pool) {
     },
     restore() {
       mutablePool.connect = originalConnect;
+    },
+  };
+}
+
+function watchHostedReadingPort() {
+  const port = peekHostedReadingPort();
+  if (!port) throw new Error('Hosted reading Content port is not composed');
+  const mutablePort = port as unknown as {
+    readMetadata: HostedReadingPort['readMetadata'];
+    resolveExact: HostedReadingPort['resolveExact'];
+  };
+  const originalMetadata = port.readMetadata;
+  const originalExact = port.resolveExact;
+  let metadataCalls = 0;
+  let exactCalls = 0;
+  mutablePort.readMetadata = (...args) => {
+    metadataCalls += 1;
+    return Reflect.apply(originalMetadata, port, args) as ReturnType<typeof originalMetadata>;
+  };
+  mutablePort.resolveExact = (...args) => {
+    exactCalls += 1;
+    return Reflect.apply(originalExact, port, args) as ReturnType<typeof originalExact>;
+  };
+  return {
+    reset() {
+      metadataCalls = 0;
+      exactCalls = 0;
+    },
+    counts() {
+      return { metadata: metadataCalls, exact: exactCalls };
+    },
+    restore() {
+      mutablePort.readMetadata = originalMetadata;
+      mutablePort.resolveExact = originalExact;
     },
   };
 }
@@ -126,6 +162,59 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   });
   expect(savedOne.status).toBe(200);
   expect(savedTwo.status).toBe(200);
+
+  const readingPort = watchHostedReadingPort();
+  const metadataBodyReads = watchChapterBodyReads(f.native.pool);
+  try {
+    const metadataPath = `/v1/libraryHostedReading/metadata?subjectId=${subjectOne}`;
+    metadataBodyReads.reset();
+    readingPort.reset();
+    const noneSubject = newId(ownerRoute);
+    const none = await f.native.call('GET', `/v1/libraryHostedReading/metadata?subjectId=${noneSubject}`, undefined, {
+      other: true,
+    });
+    expect(none.status).toBe(200);
+    expect(none.value).toEqual({ state: 'none', subjectId: noneSubject });
+    expect(readingPort.counts()).toEqual({ metadata: 0, exact: 0 });
+
+    const anonymous = await f.native.call('GET', metadataPath, undefined, { anonymous: true });
+    expect(anonymous.status).toBe(401);
+    const privateRead = await f.native.call('GET', metadataPath);
+    expect(privateRead.status).toBe(200);
+    expect(privateRead.value).toEqual({ state: 'none', subjectId: subjectOne });
+    expect(readingPort.counts()).toEqual({ metadata: 0, exact: 0 });
+
+    const metadataRead = await f.native.call('GET', metadataPath, undefined, { other: true });
+    expect(metadataRead.status).toBe(200);
+    expect(metadataRead.value).toMatchObject({
+      state: 'saved',
+      subjectId: subjectOne,
+      revision: savedOne.value.revision,
+      address: savedOne.value.address,
+      metadata: {
+        availability: 'available',
+        occurrenceId: firstOccurrence,
+        title: 'First chapter',
+        target: firstTarget,
+      },
+    });
+    expect(metadataRead.value).not.toHaveProperty('resume');
+    expect(readingPort.counts()).toEqual({ metadata: 1, exact: 0 });
+    expect(metadataBodyReads.count()).toBe(0);
+    expect(
+      (
+        await f.native.call(
+          'GET',
+          `/v1/libraryHostedReading/metadata?subjectId=${subjectOne}&subjectId=${subjectTwo}`,
+          undefined,
+          { other: true },
+        )
+      ).status,
+    ).toBe(400);
+  } finally {
+    metadataBodyReads.restore();
+    readingPort.restore();
+  }
 
   const bodyReads = watchChapterBodyReads(f.native.pool);
   try {
@@ -292,6 +381,31 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
 
   const protectedTarget = await f.native.revise(firstThread.firstPost, { visibility: 'protected' });
   expect(protectedTarget.status).toBe(200);
+  const unavailablePort = watchHostedReadingPort();
+  const unavailableBodyReads = watchChapterBodyReads(f.native.pool);
+  try {
+    unavailablePort.reset();
+    unavailableBodyReads.reset();
+    const unavailable = await f.native.call(
+      'GET',
+      `/v1/libraryHostedReading/metadata?subjectId=${subjectOne}`,
+      undefined,
+      { other: true },
+    );
+    expect(unavailable.status).toBe(200);
+    expect(unavailable.value).toMatchObject({
+      state: 'saved',
+      subjectId: subjectOne,
+      revision: savedOne.value.revision,
+      address: savedOne.value.address,
+      metadata: { availability: 'unavailable', occurrenceId: firstOccurrence, kind: 'chapter' },
+    });
+    expect(unavailablePort.counts()).toEqual({ metadata: 1, exact: 0 });
+    expect(unavailableBodyReads.count()).toBe(0);
+  } finally {
+    unavailableBodyReads.restore();
+    unavailablePort.restore();
+  }
   const concealedPage = await f.native.call('GET', '/v1/libraryHostedReading/checkpoints', undefined, { other: true });
   const concealed = concealedPage.value.items[0];
   expect(concealed.address).toMatchObject({

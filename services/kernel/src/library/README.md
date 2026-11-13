@@ -106,6 +106,8 @@ dev verifier.
 
 Decision: `hosted_reading.list` orders checkpoints by a per-mutation activity sequence descending and Subject ID ascending, uses a sealed keyset cursor bound to the current account credentials and partition epoch, and asks Content for exact-publication metadata without chapter bodies; current Access controls metadata while the saved address remains unchanged.
 
+Decision: `GET /v1/libraryHostedReading/metadata?subjectId={id}` reads one owner-private checkpoint and returns either `{state: 'none', subjectId}` or `{state: 'saved', subjectId, revision, address, metadata}`. It reuses the exact point read and Content metadata port, preserves the saved address when current authority withholds metadata, and never resolves chapter bytes. The original `GET /v1/libraryHostedReading` remains the exact byte-bearing resume operation; Web consumes this additive response in its receiving brief.
+
 Library contract owns Continue session and page vocabulary. `adapters/continue-page.ts` owns the closed Continue
 HTTP schema and the native Continue adapter Content binds at composition. The page schema stays a TypeBox object
 so Feed can compose `.properties`; the Continue list operation pins that object to the disclosed page. Progress session schemas remain on `transport-contract.ts`. Wire/security metadata comes from the declarations composed by createKernel; native
