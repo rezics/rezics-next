@@ -91,6 +91,11 @@ Decision: a cross-parent move cuts the stable occurrence subtree's contiguous pr
 splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
 ancestor summaries, without visiting descendants.
 
+Decision: keep the hosted move planner unmounted until the native version adapter provides expected-snapshot
+selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and expected-head CAS. The
+planner has no command or persistence authority; mounting the move requires one transaction to commit its sequence
+roots, occurrence parent, ancestor summaries, receipt/event and head change together.
+
 ### Evidence and migration
 
 Sources checked before this decision: this document; Knowledge's
