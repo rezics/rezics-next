@@ -115,6 +115,12 @@ Decision: focused command and HTTP tests pin insert/remove admission, receipt re
 412, reused occurrence identity, nested insert, subtree removal that preserves historical snapshots, and GET
 children after a point write; planner unit tests and native/browser/root suites stay with their owners.
 
+Decision: Content binds each ordered Book revision to one immutable `(catalogue, generation, sequence)` snapshot.
+Exact reads distinguish ordered, compatibility and missing revisions; structure revisions bind draft generations,
+publication revisions bind candidate generations and retain the expected draft as source. The shared transaction
+seam inserts the native revision and descriptor before CAS-advancing only the caller's draft or publication pointer.
+The temporal store owner adds the snapshot and generation-kind foreign keys with its producer migration.
+
 ### Evidence and migration
 
 Sources checked before this decision: this document; Knowledge's
