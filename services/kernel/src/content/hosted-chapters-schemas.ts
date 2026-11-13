@@ -55,7 +55,7 @@ const revision = {
   kind: t.Union([t.Literal('structure'), t.Literal('publication')]),
   sourceRevisionId: nullableId,
 };
-export const HostedRevisionSchema = t.Object(revision, closed);
+export const HostedRevisionSchema = t.Object({ ...revision, title: t.Optional(t.String({ maxLength: 512 })) }, closed);
 const occurrence = t.Union([
   t.Object(
     { ...address, kind: t.Union([t.Literal('part'), t.Literal('chapter')]), availability: t.Literal('unavailable') },
@@ -106,6 +106,8 @@ const paging = {
   limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
 };
 export const HostedSelectionSchema = t.Object(selection, closed);
+/** The point GET alone may opt into the current published opening label. */
+export const HostedCatalogueQuerySchema = t.Object({ ...selection, includeTitle: t.Optional(t.Literal('1')) }, closed);
 /** Outline has no parent or navigation origin and reuses the bounded page wire. */
 export const HostedOutlineQuerySchema = t.Object(paging, closed);
 export const HostedChildrenQuerySchema = t.Object({ ...paging, parentId: t.Optional(HostedIdSchema) }, closed);

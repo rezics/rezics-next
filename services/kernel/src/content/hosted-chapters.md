@@ -290,7 +290,7 @@ acceptance are deferred for this source sprint; the controller publishes the gen
 
 | Operation ID                        | Method and path                                                       | Query                                             |
 | ----------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- |
-| `hosted_catalogue.get`              | `GET /v1/hostedCatalogues/{id}`                                       | selection                                         |
+| `hosted_catalogue.get`              | `GET /v1/hostedCatalogues/{id}`                                       | selection, optional `includeTitle=1`              |
 | `hosted_catalogue.children`         | `GET /v1/hostedCatalogues/{id}/children`                              | selection, optional `parentId`, `limit`, `cursor` |
 | `hosted_catalogue.resolve`          | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
 | `hosted_catalogue.resolve_metadata` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/metadata`   | selection                                         |
@@ -302,6 +302,16 @@ current release. `kind=structure` chooses the current draft head, including a ca
 An exact revision remains addressable after moves, removals, later releases or withdrawal; an accompanying kind
 must match it. Private structures require current `post:revise` as well as ordinary catalogue Post disclosure.
 Metadata contains `catalogueId`, selected `revisionId`, `kind` and nullable `sourceRevisionId`.
+
+Decision: `hosted_catalogue.get` accepts the exact opt-in `includeTitle=1` and may add optional `title` to that
+`HostedRevision` response only when the selected revision is a publication and the final retained native observation
+confirms a currently published opening Post. For an exact historical publication, `title` describes that current
+opening, not a frozen historical label. Draft structures, private or withheld Posts and reply titles supply no title;
+the default response and every other reader schema keep their existing shape. The generated query property is
+`includeTitle` with value `'1'`, and the response property is `title`. The later Web receiver is
+[`apps/web/src/books/reader/native-api.ts`](../../../../apps/web/src/books/reader/native-api.ts): its generated
+`hostedCatalogues({ id }).get` query and strict `HostedRevision` decoder must opt in and accept `title` before the
+mounted reader uses it. This projection adds no native read and selects no chapter body.
 
 `hosted_catalogue.for_subject` lists current public publications associated with an
 existing Subject. Candidates come from indexed `subject_thread` rows and same-route

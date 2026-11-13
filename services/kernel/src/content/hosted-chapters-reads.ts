@@ -46,6 +46,8 @@ function identity(catalogueId: string, revisionId?: string): number {
   return route;
 }
 
+type HostedCatalogueReadSelection = HostedReadSelection & Readonly<{ includeTitle?: '1' }>;
+
 async function selectCatalogue(
   deps: HostedDependencies,
   catalogueId: string,
@@ -96,7 +98,7 @@ async function selectCatalogue(
       if (!row || row.thread_id !== catalogue.thread_id) throw new ContentNotFoundError();
     });
     if (!result.value || result.anchor.epoch !== initial.anchor.epoch) throw new ContentNotFoundError();
-    return result.anchor;
+    return { anchor: result.anchor, post: result.value };
   };
   // A private structure cannot expose placement existence before edit authority is checked.
   await finish();
@@ -135,11 +137,22 @@ function unavailable(placement: OrderedHostedPlacement): HostedOccurrenceView {
 export async function readHostedCatalogue(
   deps: HostedDependencies,
   catalogueId: string,
-  selection: HostedReadSelection,
+  selection: HostedCatalogueReadSelection,
   context: ReadContext,
 ) {
   const selected = await selectCatalogue(deps, catalogueId, selection, context);
-  return { value: selected.view, anchors: [await selected.finish()] };
+  const final = await selected.finish();
+  const title =
+    selection.includeTitle === '1' &&
+    selected.view.kind === 'publication' &&
+    final.post.visibility === 'published' &&
+    final.post.documentKind === 'opening'
+      ? final.post.title
+      : null;
+  return {
+    value: { ...selected.view, ...(title === null ? {} : { title }) },
+    anchors: [final.anchor],
+  };
 }
 
 async function placementAt(
@@ -192,7 +205,7 @@ export async function resolveHostedOccurrence(
       };
     }
   }
-  anchors.push(await selected.finish());
+  anchors.push((await selected.finish()).anchor);
   const value: HostedResolutionView = { ...selected.view, occurrence, document };
   return { value, anchors };
 }
@@ -224,7 +237,7 @@ export async function resolveHostedOccurrenceMetadata(
     if (!disclosed) occurrence = unavailable(placement);
     else anchors.push(disclosed.anchor);
   }
-  anchors.push(await selected.finish());
+  anchors.push((await selected.finish()).anchor);
   return { value: { ...selected.view, occurrence }, anchors };
 }
 
@@ -365,7 +378,7 @@ async function page(
           epoch: selected.epoch,
         })
       : null;
-  anchors.push(await selected.finish());
+  anchors.push((await selected.finish()).anchor);
   const value: HostedPageView = { ...selected.view, items, nextCursor };
   return { value, anchors };
 }

@@ -57,6 +57,7 @@ import {
   HostedPageSchema,
   HostedResolutionSchema,
   HostedOccurrenceMetadataSchema,
+  HostedCatalogueQuerySchema,
   HostedSelectionSchema,
   HostedChildrenQuerySchema,
   HostedOutlineQuerySchema,
@@ -300,7 +301,7 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
       '/v1/hostedCatalogues/:id',
       {
         params: params(),
-        query: strictContentSchema(HostedSelectionSchema),
+        query: strictContentSchema(HostedCatalogueQuerySchema),
         response: { 200: withHeaders(strictContentSchema(HostedRevisionSchema), responseHeaders), ...failures() },
         detail: { ...readDetail, operationId: 'hosted_catalogue.get' },
       },
