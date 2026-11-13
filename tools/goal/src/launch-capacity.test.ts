@@ -770,9 +770,9 @@ test('terminal scope retirement survives a later check without exempting its new
       [fixture.terminalScope, workerScopeIncarnation(fixture.sliceRoot, fixture.terminalScope)!],
     ]);
     expect(
-      workerHeadroomMiB(0, fixture.sliceRoot, new Map(), new Map()) -
-        workerHeadroomMiB(0, fixture.sliceRoot, wronglyRetiredOldScope, new Map()),
-    ).toBeCloseTo(3_840, 1);
+      workerHeadroomMiB(0, fixture.sliceRoot, wronglyRetiredOldScope, new Map()) -
+        workerHeadroomMiB(0, fixture.sliceRoot, new Map(), new Map()),
+    ).toBeCloseTo(HEAVY_WORKER_MIB - 0.04 * 1024, 1);
     expect(unknownHeadroom).toBeCloseTo(workerHeadroomMiB(0, fixture.sliceRoot, new Map(), new Map()), 1);
     release();
     release = undefined;
