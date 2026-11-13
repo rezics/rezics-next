@@ -1,3 +1,4 @@
+-- migrate:up
 -- Global due-order discovery for hosted Book preparation uses one bounded keyset.
 CREATE INDEX hosted_publication_staging_retention_expiry
   ON content.hosted_publication_staging(expires_at,route,catalogue_id,stage_id);
