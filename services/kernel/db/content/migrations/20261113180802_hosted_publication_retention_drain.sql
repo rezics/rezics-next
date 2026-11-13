@@ -1,3 +1,4 @@
+-- migrate:up
 -- Keep completed Book cleanup stages out of the due index while adopting old rows in bounded keyset pages.
 ALTER TABLE content.hosted_publication_retention_cursor
   RENAME COLUMN after_expires_at TO after_available_at;
