@@ -34,6 +34,7 @@ export type TypingInputReceipt = {
   sourceStable: boolean;
   exitCode: number;
   outputs?: ['kernel-client-v1'];
+  outputBinding?: { host: string; run: string };
 };
 export const typingInputsReceiptPath = (physical: string): string => `.temp/goal/checks/typing-inputs/${physical}.json`;
 const GENERATED_CLIENT = 'packages/client/src/kernel/';
@@ -628,9 +629,9 @@ export function beginTypingInputReceipt(
   const command: unknown = JSON.parse(Buffer.from(request, 'base64').toString('utf8'));
   if (!Array.isArray(command) || command.some((argument) => typeof argument !== 'string'))
     throw new Error('typing inputs: malformed invocation');
-  const outputs: ['kernel-client-v1'] | undefined = kernelClientTypingPipeline(root, compilerCommand)
-    ? ['kernel-client-v1']
-    : undefined;
+  const clientPipeline = kernelClientTypingPipeline(root, compilerCommand);
+  const outputs: ['kernel-client-v1'] | undefined = clientPipeline ? ['kernel-client-v1'] : undefined;
+  const outputBinding = clientPipeline ? kernelClientOutputBinding(env) : undefined;
   const started = captureTypingInputs(root, compilerCommand);
   return (exitCode) => {
     const completed = captureTypingInputs(root, compilerCommand);
@@ -643,6 +644,7 @@ export function beginTypingInputReceipt(
       completed,
       sourceStable: stableSource(started, completed, outputs),
       ...(outputs ? { outputs } : {}),
+      ...(outputBinding ? { outputBinding } : {}),
       exitCode,
     };
     const file = join(root, typingInputsReceiptPath(physical));
@@ -670,6 +672,9 @@ export function readTypingInputReceipt(
   const clientPipeline = validCompilerCommand && kernelClientTypingPipeline(root, value.compilerCommand);
   const validOutputs =
     value.outputs === undefined ? !clientPipeline : same(value.outputs, ['kernel-client-v1']) && clientPipeline;
+  const validOutputBinding =
+    value.outputBinding === undefined ||
+    (clientPipeline && isKernelClientOutputBinding(value.outputBinding));
   const validSnapshot = (snapshot: TypingInputs): boolean =>
     Boolean(
       snapshot &&
@@ -705,6 +710,7 @@ export function readTypingInputReceipt(
     !validSnapshot(value.started) ||
     !validSnapshot(value.completed) ||
     !validOutputs ||
+    !validOutputBinding ||
     value.sourceStable !== stableSource(value.started, value.completed, value.outputs)
   )
     throw new Error('typing inputs: receipt binding or inventory is invalid');
@@ -712,6 +718,108 @@ export function readTypingInputReceipt(
 }
 
 export type TypingInputQualification = 'matched' | 'source-changed' | 'prepared-changed' | 'evidence-unavailable';
+
+type KernelClientOutputBinding = { host: string; run: string };
+const CHECK_HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+const CHECK_HOST_RUN = /^[a-z0-9-]{1,64}$/;
+
+function isKernelClientOutputBinding(value: unknown): value is KernelClientOutputBinding {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const binding = value as Record<string, unknown>;
+  return (
+    Object.keys(binding).sort().join(',') === 'host,run' &&
+    typeof binding.host === 'string' &&
+    CHECK_HOST_NAME.test(binding.host) &&
+    typeof binding.run === 'string' &&
+    CHECK_HOST_RUN.test(binding.run)
+  );
+}
+
+function kernelClientOutputBinding(env: NodeJS.ProcessEnv): KernelClientOutputBinding | undefined {
+  const binding = { host: env.REMOTE_CHECK_HOST, run: env.REZICS_CHECK_RUN };
+  return isKernelClientOutputBinding(binding) ? binding : undefined;
+}
+
+function verifiedPublishedKernelClientOutput(root: string, receipt: TypingInputReceipt): boolean {
+  try {
+    const outputBinding = receipt.outputBinding;
+    if (!outputBinding) return false;
+    const require = createRequire(import.meta.url);
+    const owner = require('../../../scripts/check-output-tree.ts') as typeof import('../../../scripts/check-output-tree.ts');
+    const transport = owner.readOutputTreeFile(root, owner.KERNEL_CLIENT_OUTPUT.transport);
+    const publicationPath = join(dirname(owner.KERNEL_CLIENT_OUTPUT.root), '.kernel-output-tree/receipt.json');
+    const publication = JSON.parse(owner.readOutputTreeFile(root, publicationPath, 4096).toString('utf8')) as {
+      authority?: { run?: unknown };
+    };
+    if (publication.authority?.host !== outputBinding.host || publication.authority?.run !== outputBinding.run) return false;
+    owner.verifyPublishedOutputTree(root, transport);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A nonzero compiler receipt names an actionable source failure only while its current source closure still matches.
+ * The installed Kernel client producer may replace its declared generated declarations during that same physical
+ * invocation; that alternate prepared view is usable only when the published output tree belongs to the receipt's
+ * physical run and matches the receipt's completed generated inventory.
+ */
+export function typingFailureInputsMatch(
+  root: string,
+  receipt: TypingInputReceipt,
+  localPrepared: readonly TypingInput[] = [],
+): boolean {
+  if (!receipt.sourceStable || receipt.exitCode === 0 || !same(receipt.command, receipt.compilerCommand)) return false;
+  const pipeline = kernelClientTypingPipeline(root, receipt.compilerCommand);
+  if ((receipt.outputs !== undefined) !== pipeline || (pipeline && !same(receipt.outputs, ['kernel-client-v1'])))
+    return false;
+  if (
+    (pipeline && (!receipt.outputBinding || !isKernelClientOutputBinding(receipt.outputBinding))) ||
+    (!pipeline && receipt.outputBinding !== undefined)
+  )
+    return false;
+
+  const current = captureTypingInputs(root, receipt.compilerCommand);
+  if (
+    current.profile !== receipt.completed.profile ||
+    current.runtime !== receipt.completed.runtime ||
+    !same(current.excludedDocuments, receipt.completed.excludedDocuments) ||
+    !same(current.source, receipt.completed.source)
+  )
+    return false;
+
+  const generated = (entries: readonly TypingInput[]) =>
+    entries.filter((entry) => entry.path.startsWith(GENERATED_CLIENT));
+  const currentGenerated = generated(current.prepared);
+  const baselineGenerated = generated(localPrepared);
+  const startedGenerated = generated(receipt.started.prepared);
+  const completedGenerated = generated(receipt.completed.prepared);
+  let verifiedOutput = false;
+  if (pipeline) {
+    const unchangedGeneratedInputs =
+      same(currentGenerated, baselineGenerated) &&
+      same(baselineGenerated, startedGenerated) &&
+      same(startedGenerated, completedGenerated);
+    verifiedOutput =
+      same(currentGenerated, completedGenerated) && verifiedPublishedKernelClientOutput(root, receipt);
+    if (!unchangedGeneratedInputs && !verifiedOutput) return false;
+  }
+
+  const baseline = new Map(localPrepared.map((entry) => [entry.path, entry.digest]));
+  const compiled = new Map(receipt.completed.prepared.map((entry) => [entry.path, entry.digest]));
+  for (const entry of current.prepared) {
+    if (pipeline && entry.path.startsWith(GENERATED_CLIENT)) continue;
+    if (compiled.get(entry.path) === entry.digest || baseline.get(entry.path) === entry.digest) continue;
+    return false;
+  }
+  for (const entry of localPrepared) {
+    if (pipeline && verifiedOutput && entry.path.startsWith(GENERATED_CLIENT)) continue;
+    if (!current.prepared.some((currentEntry) => currentEntry.path === entry.path) && entry.digest !== 'missing')
+      return false;
+  }
+  return true;
+}
 
 function stableRemotePreparationMarkers(receipt: TypingInputReceipt): boolean {
   const started = new Map(receipt.started.source.map((entry) => [entry.path, entry.digest]));

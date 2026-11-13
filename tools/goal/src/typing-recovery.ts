@@ -8,6 +8,7 @@ import {
   resolveTypingCompilerCommand,
 } from './worker-check-typing-inputs.ts';
 import type { AttemptRef, LandingQueue } from './contracts.ts';
+import { branchHead } from './attempt-progress.ts';
 import { capacityWaiters } from './launch-capacity.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { sameProcess } from './process.ts';
@@ -42,12 +43,11 @@ import {
 const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
 
 /**
- * Reconcile a same-generation ready retry only when a completed stop was explicitly followed by a retry and the
- * retained compiler failure plus all same-attempt check custody are authoritative. A successful result releases the
- * retry intent to the normal retry transaction, which supersedes the fenced stopped attempt; uncertain states remain
- * untouched.
+ * Release a queued source repair through the normal retry transaction only when the retained compiler failure is
+ * current and every check has terminal custody. A stopped attempt needs its completed stop receipt; an ordinary
+ * exited attempt additionally needs a matching accepted brief change and the captured branch head.
  */
-export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
+export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
   const { store, settings } = tasks;
   const lease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', ref.taskId), settings.policy?.leases);
   try {
@@ -59,7 +59,7 @@ export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: Atte
     const pendingEvidence =
       attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result);
     if (
-      attempt.state !== 'stopped' ||
+      !['stopped', 'exited'].includes(attempt.state) ||
       !pendingEvidence ||
       !retry ||
       (retry.status !== 'pending' && retry.status !== 'started') ||
@@ -67,37 +67,82 @@ export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: Atte
     )
       return false;
 
-    const stop = attempt.terminationIntent;
-    if (
-      !stop ||
-      stop.operation !== 'stop' ||
-      stop.state !== 'complete' ||
-      stop.processIdentity !== 'known' ||
-      !stop.settledAt ||
-      !attempt.endedAt ||
-      !stop.process ||
-      !attempt.process ||
-      JSON.stringify(stop.process) !== JSON.stringify(attempt.process) ||
-      JSON.stringify(stop.auxiliaryProcesses) !== JSON.stringify(attempt.auxiliaryProcesses ?? [])
-    )
-      return false;
-
-    const endedAt = Date.parse(attempt.endedAt);
-    const stopRequestedAt = Date.parse(stop.requestedAt);
-    const stopSettledAt = Date.parse(stop.settledAt);
     const retryQueuedAt = Date.parse(retry.queuedAt ?? '');
-    if (
-      ![endedAt, stopRequestedAt, stopSettledAt, retryQueuedAt].every(Number.isFinite) ||
-      stopRequestedAt <= endedAt ||
-      stopSettledAt < stopRequestedAt ||
-      retryQueuedAt <= stopSettledAt ||
-      sameProcess(stop.process) ||
-      (attempt.driver !== null && sameProcess(attempt.driver)) ||
-      [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses].some((identity) => sameProcess(identity))
-    )
-      return false;
-
     const events = store.events(task.id);
+    const attemptEvents = store.events(task.id, ref.attempt);
+    let validStoppedRetry = false;
+    let validExitedAmendment = false;
+    if (attempt.state === 'stopped') {
+      const stop = attempt.terminationIntent;
+      const endedAt = Date.parse(attempt.endedAt ?? '');
+      const stopRequestedAt = Date.parse(stop?.requestedAt ?? '');
+      const stopSettledAt = Date.parse(stop?.settledAt ?? '');
+      validStoppedRetry = Boolean(
+        stop &&
+          stop.operation === 'stop' &&
+          stop.state === 'complete' &&
+          stop.processIdentity === 'known' &&
+          stop.settledAt &&
+          attempt.endedAt &&
+          stop.process &&
+          attempt.process &&
+          JSON.stringify(stop.process) === JSON.stringify(attempt.process) &&
+          JSON.stringify(stop.auxiliaryProcesses) === JSON.stringify(attempt.auxiliaryProcesses ?? []) &&
+          [endedAt, stopRequestedAt, stopSettledAt, retryQueuedAt].every(Number.isFinite) &&
+          stopRequestedAt > endedAt &&
+          stopSettledAt >= stopRequestedAt &&
+          retryQueuedAt > stopSettledAt &&
+          !sameProcess(stop.process) &&
+          (attempt.driver === null || !sameProcess(attempt.driver)) &&
+          [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses].every((identity) => !sameProcess(identity)),
+      );
+    } else if (attempt.state === 'exited') {
+      const endedAt = Date.parse(attempt.endedAt ?? '');
+      const amendment = task.pendingBriefChange;
+      const acceptedAmendment = store.newestPendingBriefProposal(task.id);
+      const acceptedAt = Date.parse(acceptedAmendment?.createdAt ?? '');
+      const progressEvent = attemptEvents.findLast((event) => event.kind === 'attempt-progress');
+      let capturedHead: unknown;
+      try {
+        const progress: unknown = progressEvent ? JSON.parse(progressEvent.body) : undefined;
+        capturedHead = progress && typeof progress === 'object' ? (progress as { endHead?: unknown }).endHead : undefined;
+      } catch {
+        capturedHead = undefined;
+      }
+      const currentHead = branchHead(task);
+      validExitedAmendment = Boolean(
+        attempt.failureKind === null &&
+          attempt.exitCode === 0 &&
+          !attempt.terminationIntent &&
+          attempt.endedAt &&
+          Number.isFinite(endedAt) &&
+          Number.isFinite(retryQueuedAt) &&
+          retryQueuedAt > endedAt &&
+          Number.isFinite(acceptedAt) &&
+          acceptedAt > endedAt &&
+          acceptedAt <= retryQueuedAt &&
+          Array.isArray(attempt.typingEvidencePending?.command) &&
+          attempt.typingEvidencePending.command.length > 0 &&
+          amendment &&
+          acceptedAmendment &&
+          acceptedAmendment.writtenForAttempt === ref.attempt &&
+          briefHash(acceptedAmendment.markdown) === acceptedAmendment.newBriefHash &&
+          acceptedAmendment.previousBriefHash === amendment.previousBriefHash &&
+          acceptedAmendment.newBriefHash === amendment.newBriefHash &&
+          /^[a-f0-9]{64}$/.test(amendment.previousBriefHash) &&
+          /^[a-f0-9]{64}$/.test(amendment.newBriefHash) &&
+          amendment.previousBriefHash !== amendment.newBriefHash &&
+          amendment.newBriefHash === briefHash(task.brief.markdown) &&
+          typeof capturedHead === 'string' &&
+          /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(capturedHead) &&
+          currentHead === capturedHead &&
+          ![attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
+            (identity) => identity !== null && sameProcess(identity),
+          ),
+      );
+    }
+    if (!validStoppedRetry && !validExitedAmendment) return false;
+
     if (
       events.some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested') ||
       events.some((event) => {
@@ -134,6 +179,36 @@ export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: Atte
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function briefHash(markdown: string): string {
+  return sha256(markdown.replace(/\r\n?/g, '\n').trimEnd());
+}
+
+/** An accepted source amendment keeps its retry queued while compiler or custody evidence remains unresolved. */
+export function hasQueuedTypingSourceRepair(tasks: WorkerTasks, ref: AttemptRef): boolean {
+  const { store } = tasks;
+  const task = store.task(ref.taskId);
+  const attempt = store.attempt(ref);
+  const amendment = task.pendingBriefChange;
+  const proposal = store.newestPendingBriefProposal(task.id);
+  return Boolean(
+    task.currentAttempt === ref.attempt &&
+      task.state === 'ready' &&
+      task.brief.kind !== 'verification' &&
+      attempt.state === 'exited' &&
+      (attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result)) &&
+      amendment &&
+      proposal &&
+      proposal.writtenForAttempt === ref.attempt &&
+      proposal.previousBriefHash === amendment.previousBriefHash &&
+      proposal.newBriefHash === amendment.newBriefHash &&
+      /^[a-f0-9]{64}$/.test(amendment.previousBriefHash) &&
+      /^[a-f0-9]{64}$/.test(amendment.newBriefHash) &&
+      amendment.newBriefHash !== amendment.previousBriefHash &&
+      briefHash(proposal.markdown) === proposal.newBriefHash &&
+      proposal.newBriefHash === briefHash(task.brief.markdown),
+  );
 }
 
 function refusalNamesSourceCommit(report: string, sourceCommit: unknown): sourceCommit is string {
