@@ -65,27 +65,13 @@ test('five worker scopes retain actual usage and active reserves while proven pa
 
     const identity = (name: string) => workerScopeIncarnation(directory.path, name)!;
     const active = new Map([['rezics-worker-active.scope', identity('rezics-worker-active.scope')]]);
-    const parkedScopes = [
-      'rezics-worker-check-a.scope',
-      'rezics-worker-check-b.scope',
-      'rezics-worker-check-c.scope',
-    ];
+    const parkedScopes = ['rezics-worker-check-a.scope', 'rezics-worker-check-b.scope', 'rezics-worker-check-c.scope'];
     const parkedEvidence = new Map(parkedScopes.map((name) => [name, identity(name)]));
     const baseline = workerHeadroomMiB(1, directory.path, new Map(), active);
-    const parked = workerHeadroomMiB(
-      1,
-      directory.path,
-      parkedEvidence,
-      active,
-    );
+    const parked = workerHeadroomMiB(1, directory.path, parkedEvidence, active);
     const contradictoryActive = new Map(active);
     contradictoryActive.set(parkedScopes[0]!, identity(parkedScopes[0]!));
-    const contradictory = workerHeadroomMiB(
-      1,
-      directory.path,
-      parkedEvidence,
-      contradictoryActive,
-    );
+    const contradictory = workerHeadroomMiB(1, directory.path, parkedEvidence, contradictoryActive);
 
     expect(baseline).toBeCloseTo(0.06 * 1024, 1);
     expect(baseline).toBeLessThan(workerReservationMiB('imports'));

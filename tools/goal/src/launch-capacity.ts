@@ -229,11 +229,7 @@ function readRetiredScopeLedger(stateDirectory: string): { scopes: RetiredWorker
       return { scopes: [], malformed: true };
     const attempt = Number(record.attempt);
     const prefix = workerScopePrefix(record.taskId, attempt);
-    if (
-      !prefix ||
-      !record.name.startsWith(prefix) ||
-      !/^[a-z0-9]+\.scope$/.test(record.name.slice(prefix.length))
-    )
+    if (!prefix || !record.name.startsWith(prefix) || !/^[a-z0-9]+\.scope$/.test(record.name.slice(prefix.length)))
       return { scopes: [], malformed: true };
     const checks: RetiredCheckProof[] = [];
     for (const check of record.checks) {

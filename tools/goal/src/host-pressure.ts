@@ -58,10 +58,10 @@ function matchingScope(
   const expected = evidence.get(name);
   return Boolean(
     expected &&
-      incarnation &&
-      expected.device === incarnation.device &&
-      expected.inode === incarnation.inode &&
-      expected.ctimeNs === incarnation.ctimeNs,
+    incarnation &&
+    expected.device === incarnation.device &&
+    expected.inode === incarnation.inode &&
+    expected.ctimeNs === incarnation.ctimeNs,
   );
 }
 /** Initial working-set reservation; hard safety limits are deliberately not expected working sets. */

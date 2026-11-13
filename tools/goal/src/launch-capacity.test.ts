@@ -97,7 +97,10 @@ function terminalRemoteCheckFixture(directory: string) {
   writeFileSync(join(procRoot, 'sys/kernel/random/boot_id'), identity.boot);
   const liveStat = readFileSync(`/proc/${identity.pid}/stat`, 'utf8');
   const statEnd = liveStat.lastIndexOf(')');
-  const statFields = liveStat.slice(statEnd + 2).trim().split(/\s+/);
+  const statFields = liveStat
+    .slice(statEnd + 2)
+    .trim()
+    .split(/\s+/);
   statFields[2] = String(identity.group);
   writeFileSync(
     join(procRoot, String(identity.pid), 'stat'),
@@ -681,7 +684,12 @@ test('terminal scope retirement survives a later check without exempting its new
   let parked = new Map<string, WorkerScopeIncarnation>();
   let active = new Map<string, WorkerScopeIncarnation>();
   let bypassMemory = false;
-  const headroom: typeof workerHeadroomMiB = (running, root = fixture.sliceRoot, scopes = new Map(), writers = new Map()) => {
+  const headroom: typeof workerHeadroomMiB = (
+    running,
+    root = fixture.sliceRoot,
+    scopes = new Map(),
+    writers = new Map(),
+  ) => {
     parked = scopeIdentityMap(scopes);
     active = scopeIdentityMap(writers);
     const measured = workerHeadroomMiB(running, root, scopes, writers);
@@ -741,9 +749,10 @@ test('terminal scope retirement survives a later check without exempting its new
     const activeHeadroom = workerHeadroomMiB(1, fixture.sliceRoot, parked, active);
     const wronglyParkedWriter = new Map(parked);
     wronglyParkedWriter.set(nextScope, active.get(nextScope)!);
-    expect(
-      activeHeadroom - workerHeadroomMiB(0, fixture.sliceRoot, wronglyParkedWriter, new Map()),
-    ).toBeCloseTo(-3_840, 1);
+    expect(activeHeadroom - workerHeadroomMiB(0, fixture.sliceRoot, wronglyParkedWriter, new Map())).toBeCloseTo(
+      -3_840,
+      1,
+    );
     release();
     release = undefined;
 
