@@ -24,6 +24,9 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.prepare_release_progress`         | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:progress`             | empty object                                                                                         |
 | `hosted_catalogue.prepare_release_cancel`           | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:cancel`               | empty object                                                                                         |
 | `hosted_catalogue.prepare_release_seal`             | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:seal`                 | empty object                                                                                         |
+| `hosted_catalogue.prepare_release_start_activation` | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:startActivation`      | empty object                                                                                         |
+| `hosted_catalogue.prepare_release_advance_activation` | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:advanceActivation`  | empty object                                                                                         |
+| `hosted_catalogue.prepare_release_activate`         | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:activate`              | empty object                                                                                         |
 
 Every command requires an Idempotency-Key and returns `catalogueId`. Create returns 201; revise, root append, draft
 point writes, conversion steps and publish return 200. Conversion returns private phase/count progress and adds the
@@ -35,6 +38,20 @@ Preparation start returns 202 and the remaining preparation commands return 200.
 `stageId`; expected draft/publication IDs are only stale-intent preconditions. Selection batches are independently
 limited to 512 IDs with no aggregate cap. Preparation responses are private and no-store, expose only retained
 progress and candidate counts, and never select the publication pointer.
+
+Activation start, authority advance and activate return 200 with the exact native progress fields, including the
+literal state and a nullable `publicationId`. They use empty bodies, routed catalogue/stage IDs, native
+`post:revise` admission before receipt replay, the original deadline/request/idempotency context, session anchors
+and `private, no-store`. Missing locators return 404, ineligible or conflicting currentness returns 412, and author
+denial returns 403. Native restart retains the sealed candidate and the old public release.
+
+Decision: preparation and activation route registration returns its chained Elysia type through chapter composition,
+so the generated Kernel client exposes the mounted commands and callers use the inferred operands.
+
+Decision: pin mounted activation with one HTTP test for exact selection/readback, receipt replay, stale-authority
+retention of the old release and candidate, and authorization/boundary input, plus installed Client callable checks.
+Native currentness, two-pool growth, browser, parity and Main stay with their owners. First-edit timing for Prepared
+Book publication is the 2026-11-13 owner specification; this activation HTTP mount uses that evidence.
 
 Each placement supplies `occurrenceId`, nullable `parentId`, zero-based sibling `position`, `title` and `kind`.
 Parts have no target. Chapters supply a target containing `threadId`, `postId`, `revisionId` and lowercase SHA-256
@@ -473,14 +490,17 @@ reader denial as separate obligations.
 ### Release-candidate disposition and implementation handoff
 
 The additive generation-based candidate and native activation proof are implemented as independent owner paths.
-Activation remains unmounted until the native two-pool acceptance fixture proves lock ordering, invalidator coverage,
-restart/replay, reader denial and zero final target reads. Root append, the point HTTP path and legacy baseline stay
-independent. Existing exact-selection, retention, current-use and reclamation rules remain in force. The other
-unrelated scalable-outline and Studio work remains governed by its own acceptance. The initial persistence adapter
+The in-tree currentness fixture records lock ordering, invalidator coverage, restart/replay, reader denial and zero
+final target reads; the author activation commands are mounted on the preparation resource and keep the native
+algorithm in `hosted-publication-activation.ts`. Root append, the point HTTP path, legacy baseline, preparation
+staging and SQL repair stay independent. Existing exact-selection, retention, current-use and reclamation rules
+remain in force. Web owns the parallel Studio consumer. The initial persistence adapter
 is the row-per-node PostgreSQL temporal port in the shared outline contract; a fixed-page alternative needs native
 evidence and does not reopen predecessor-versus-radix comparison. Existing frozen point, tree, mounted and growth
 assertions remain unchanged; the authority-currentness acceptance is in
-[`hosted-publication-activation-currentness.test.ts`](../../test/content/hosted-publication-activation-currentness.test.ts).
+[`hosted-publication-activation-currentness.test.ts`](../../test/content/hosted-publication-activation-currentness.test.ts)
+and the mounted author API is in
+[`hosted-publication-activation-http.test.ts`](../../test/content/hosted-publication-activation-http.test.ts).
 
 1. **First source slice — exact point public snapshots:** in `hosted-chapters-{model,store,commands,reads}.ts` and a
    new owner `hosted-publication-point.ts`, bind the snapshot/sequence storage port; implement changed-target
@@ -501,12 +521,14 @@ assertions remain unchanged; the authority-currentness acceptance is in
 3. **Complete Book publication:** `hosted-publication-staging.ts` and the candidate generation retain pinned
    whole/selection input, frontiers and seal; the activation path retains bounded authority pages and atomically
    selects the candidate generation. Keep installed release-selection/admission/append-release assertions; their
-   512 bounds describe those compatibility requests. The currentness fixture must pass before activation is mounted.
-4. **Declared native API and mounted consumers:** mount owner point/batch commands, generate the client, then add
-   Studio source/destination/selection review and progress. One confirmation issues one bounded command with stable
-   IDs and one expected version; conflict retains choices but requires fresh review. Keep Knowledge's current versus
-   historical distinction and [Book exact-reader](../../../../apps/web/src/books/reader/README.md) compatibility.
-   No full-outline drain, private preparation projection or production exposure change belongs in these slices.
+   512 bounds describe those compatibility requests. The currentness fixture remains the native proof; the mounted
+   author commands call those native functions.
+4. **Declared native API and mounted consumers:** mount owner point/batch/activation commands, generate the client,
+   then add Studio source/destination/selection review and progress. One confirmation issues one bounded command with
+   stable IDs and one expected version; conflict retains choices but requires fresh review. Keep Knowledge's current
+   versus historical distinction and [Book exact-reader](../../../../apps/web/src/books/reader/README.md)
+   compatibility. No full-outline drain, private preparation projection or production exposure change belongs in these
+   slices. Web owns the Studio activation consumer.
 
 Freeze these missing acceptance cases with those implementations; no executable product assertions change in this
 specification-only patch. They are release gates, not claims that future tests passed:
