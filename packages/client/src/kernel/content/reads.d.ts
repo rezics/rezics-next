@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext } from '../request/access.ts';
 import type { ContentEditionSource } from './edition-model.ts';
+import type { RevisionDisclosureReaderGate, RevisionDisclosureTarget } from './revision-disclosure-model.ts';
 import type { DurableOperationAnchor, InitiatorRestorer } from '../access/content-adapter.ts';
 import { type Partition } from '../partition/partition.ts';
 import type { Access, AccessClient, Actor, ReadDecisions, Resource } from '../request/access.ts';
@@ -173,7 +174,7 @@ type BoardDisclosureHint = Readonly<{
 export declare function withBoardDisclosure<T>(boardId: BoardId, board: BoardView, work: () => Promise<T>, decisions?: ReadDecisions, options?: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'>): Promise<T>;
 export declare function prepareBoardPageDecisions(dependencies: ContentReadDependencies, context: ReadContext): Promise<ReadDecisions>;
 /** @internal Shared post-read resources: every domain operand uses the evaluator's principal. */
-export declare function readResource(row: Row, evidence: object, tombstone?: boolean, placeholder?: boolean, withheldReference?: boolean): Resource;
+export declare function readResource(row: Row, evidence: object, tombstone?: boolean, placeholder?: boolean, withheldReference?: boolean, bookGate?: RevisionDisclosureReaderGate): Resource;
 export declare function readBoard(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext): Promise<Anchored<import('./model.ts').BoardView | null>>;
 export declare function readBoardPageCandidateSnapshot<T>(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext, decisions: ReadDecisions, candidatePage: (client: AccessClient, partition: Partition) => Promise<T>): Promise<Readonly<{
     board: BoardView;
@@ -286,6 +287,12 @@ export declare function prepareRealmSubjectThreadDisclosure(dependencies: Pick<C
 /** Send-time disclosure uses the ordinary read resources and current account standing,
  * without constructing a bearer principal. Release every observation before Access checks. */
 export declare function postReadableByAccount(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, accountId: string, threadId: string, postId: string, context: Pick<ReadContext, 'deadline'>): Promise<boolean>;
+/** Native body disclosure for one internally selected Book occurrence. The
+ * Book supplies its typed membership and Content rechecks issued consent,
+ * source incarnation, container Access, Board and Realm on the exact read. */
+export declare function readBookScopedPost(dependencies: ContentReadDependencies, catalogueId: string, target: RevisionDisclosureTarget, gate: RevisionDisclosureReaderGate, context: ReadContext): Promise<Anchored<PostEntry | null>>;
+/** Metadata-only variant of the same Book-scoped source authority. */
+export declare function readBookScopedPostMetadata(dependencies: ContentReadDependencies, catalogueId: string, target: RevisionDisclosureTarget, gate: RevisionDisclosureReaderGate, context: ReadContext): Promise<Anchored<NativePostMetadata | null>>;
 export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId, retain?: RetainContentRead<PostEntry>): Promise<Anchored<PostEntry | null>>;
 /** Private inventory projection of ordinary source disclosure. This path never
  * requests revision bytes; account ownership does not replace container Access.

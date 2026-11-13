@@ -37,12 +37,14 @@ export declare function removeHostedDraftPoint(deps: HostedCommandDependencies, 
  * the returned preparation is consumed by its transaction writer. */
 export declare function prepareHostedPublicationPointCommand(deps: HostedCommandDependencies, actor: Actor, catalogueId: string, operation: HostedPublicationPointInput, reads: HostedPointSelectionReads, context: HostedCommandContext): Promise<{
     catalogueId: string;
+    threadId: string;
     partition: number;
     receipt: {
         kind: string;
         key: string;
         digest: Uint8Array<ArrayBufferLike>;
     };
+    receiptAuthorization: CommandAuthorization;
     authorization: CommandAuthorization;
     prepared(time: AuthoritativeTime): Readonly<{
         selection: import("./hosted-publication-point-selection.ts").HostedPointSelection;
@@ -50,3 +52,10 @@ export declare function prepareHostedPublicationPointCommand(deps: HostedCommand
         final(client: import("../request/access.ts").AccessClient): Promise<void>;
     }>;
 }>;
+/** Publish one selected draft point after current admission and receipt preflight.
+ * The exact selection is read only after a missing receipt, then all index and
+ * pointer changes commit on the ordinary Content command transaction. */
+export declare function publishHostedPublicationPoint(deps: HostedCommandDependencies, actor: Actor, catalogueId: string, operation: HostedPublicationPointInput, reads: HostedPointSelectionReads, context: HostedCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
+    catalogueId: string;
+    revisionId: string;
+}>>>;

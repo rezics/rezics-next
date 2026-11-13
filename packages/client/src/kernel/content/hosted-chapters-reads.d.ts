@@ -1,4 +1,5 @@
 import type { ReadContext } from './model.ts';
+import type { HostedPointSelectionReads } from './hosted-publication-point-selection.ts';
 import { type HostedDependencies, type HostedReadSelection, type HostedChildrenInput, type HostedNavigationInput, type HostedOccurrenceView, type HostedPageView, type HostedResolutionView } from './hosted-chapters-model.ts';
 type HostedCatalogueReadSelection = HostedReadSelection & Readonly<{
     includeTitle?: '1';
@@ -17,6 +18,10 @@ export declare function readHostedCatalogue(deps: HostedDependencies, catalogueI
         position: bigint;
     }>[];
 }>;
+/** Snapshot-bound readers for one publication point command. Each lookup names
+ * only its expected immutable version and requested occurrence; compatibility
+ * manifests are deliberately not expanded into an ordered candidate here. */
+export declare function hostedPublicationPointSelectionReads(deps: HostedDependencies, catalogueId: string, context: ReadContext): HostedPointSelectionReads;
 export declare function resolveHostedOccurrence(deps: HostedDependencies, catalogueId: string, occurrenceId: string, selection: HostedReadSelection, context: ReadContext): Promise<{
     value: HostedResolutionView;
     anchors: Readonly<{
