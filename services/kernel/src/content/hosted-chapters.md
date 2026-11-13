@@ -11,10 +11,12 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.create`              | `POST /v1/hostedCatalogues`                        | `postId`, `threadId`, `placements`                                      |
 | `hosted_catalogue.revise`              | `POST /v1/hostedCatalogues/{id}:revise`            | `expectedRevisionId`, `placements`                                      |
 | `hosted_catalogue.append_root_chapter` | `POST /v1/hostedCatalogues/{id}:appendRootChapter` | `expectedRevisionId`, `occurrenceId`, `title`, `target`                 |
+| `hosted_catalogue.insert_draft_point`  | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`  | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
+| `hosted_catalogue.remove_draft_point`  | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`  | `expectedRevisionId`, `occurrenceId`                                    |
 | `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds` |
 
 Every command requires an Idempotency-Key and returns `catalogueId` and the newly selected `revisionId`. Create
-returns 201; revise, root append and publish return 200. A fresh command with a stale head or release returns 412.
+returns 201; revise, root append, draft point writes and publish return 200. A fresh command with a stale head or release returns 412.
 Native authorization precedes receipt lookup, while concurrency comparisons follow it: an authorized exact retry
 can return its original immutable revision after later changes. An altered request under the same key conflicts.
 
@@ -100,10 +102,18 @@ command or persistence authority.
 
 Decision: point insertion and subtree removal resolve one expected snapshot and update the existing sibling,
 preorder and chapter indexes; removal cuts ranges by stored aggregates without visiting descendants, preserving
-historical roots and permanent occurrence identity. Keep these writes unmounted until the store owner lands the
-native `createHostedVersionWrite` transaction producer. Bind the planner through admitted `runCommand` handling only
-against that producer's actual contract, so roots, occurrence identity, ancestor summaries, receipt and the
-identity-only revise event commit with the expected-head CAS; do not add a parallel SQL adapter or partial route.
+historical roots and permanent occurrence identity. Admitted authors bind insert and subtree removal through
+`hostedPostAuthorization` and `runCommand` against the native `createHostedVersionWrite` producer: one expected
+snapshot per attempt, changed chapter attachments validated before the transaction, exact receipt replay before
+expected-head CAS, and an atomic commit of sibling/preorder/chapter roots, permanent occurrence identity, changed
+ancestor summaries, receipt and the identity-only revise event. Empty catalogues activate one draft generation on
+the first point write; nonempty unmapped legacy drafts stay on replacement until the ordered-generation builder
+activates them. Mapped structure revisions fork GET children, outline, navigation and resolve onto the versioned
+indexes so advancing the catalogue head never serves an empty legacy page. Do not add a parallel SQL adapter.
+
+Decision: focused command and HTTP tests pin insert/remove admission, receipt replay before head CAS, stale-head
+412, reused occurrence identity, nested insert, subtree removal that preserves historical snapshots, and GET
+children after a point write; planner unit tests and native/browser/root suites stay with their owners.
 
 ### Evidence and migration
 

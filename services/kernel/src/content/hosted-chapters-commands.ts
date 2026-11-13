@@ -32,11 +32,14 @@ import {
   type HostedCommandValue,
   type HostedCreateInput,
   type HostedDependencies,
+  type HostedDraftPointInsertInput,
+  type HostedDraftPointRemoveInput,
   type HostedReviseInput,
   type HostedPublishInput,
   type HostedRootAppendInput,
   type OrderedHostedPlacement,
 } from './hosted-chapters-model.ts';
+import { commitHostedDraftPointWrite, type HostedDraftPointMutation } from './hosted-version-draft-write.ts';
 
 export type HostedCommandDependencies = HostedDependencies & ContentCommandDependencies;
 type Mutation =
@@ -82,6 +85,28 @@ export function appendHostedRootChapter(
   context: HostedCommandContext,
 ) {
   return mutate(deps, actor, catalogueId, { kind: 'append', input }, context);
+}
+
+/** Insert one occurrence at a parent/before anchor on the expected versioned draft. */
+export function insertHostedDraftPoint(
+  deps: HostedCommandDependencies,
+  actor: Actor,
+  catalogueId: string,
+  input: HostedDraftPointInsertInput,
+  context: HostedCommandContext,
+) {
+  return mutatePoint(deps, actor, catalogueId, { operation: 'insert', ...input }, context);
+}
+
+/** Remove one occurrence and its stored subtree from the expected versioned draft. */
+export function removeHostedDraftPoint(
+  deps: HostedCommandDependencies,
+  actor: Actor,
+  catalogueId: string,
+  input: HostedDraftPointRemoveInput,
+  context: HostedCommandContext,
+) {
+  return mutatePoint(deps, actor, catalogueId, { operation: 'remove', ...input }, context);
 }
 
 /** Build the native admission and receipt binding for a point operation. The
@@ -286,6 +311,104 @@ async function mutate(
         events: [
           {
             type: `com.rezics.content.hosted-catalogue.${mutation.kind === 'append' ? 'revise' : mutation.kind}.v1`,
+            subject: catalogueId,
+            data: value,
+          },
+        ],
+      };
+    },
+  );
+}
+
+function pointAttachments(input: HostedDraftPointMutation): OrderedHostedPlacement[] {
+  if (input.operation !== 'insert' || input.placement.kind !== 'chapter') return [];
+  return [
+    {
+      occurrenceId: input.occurrenceId,
+      parentId: input.parentId,
+      position: 0,
+      ordinal: 0,
+      title: input.title,
+      kind: 'chapter',
+      target: input.placement.target,
+    },
+  ];
+}
+
+function assertPointRoutes(route: number, input: HostedDraftPointMutation) {
+  if (routeOf(input.expectedRevisionId) !== route)
+    throw new InvalidHostedStructureError('Invalid expected structure revision');
+  if (routeOf(input.occurrenceId) !== route) throw new InvalidHostedStructureError('Invalid hosted draft point anchor');
+  if (input.operation === 'insert') {
+    if (input.parentId !== null && routeOf(input.parentId) !== route)
+      throw new InvalidHostedStructureError('Invalid hosted draft point anchor');
+    if (input.beforeOccurrenceId !== null && routeOf(input.beforeOccurrenceId) !== route)
+      throw new InvalidHostedStructureError('Invalid hosted draft point anchor');
+  }
+}
+
+async function mutatePoint(
+  deps: HostedCommandDependencies,
+  actor: Actor,
+  catalogueId: string,
+  input: HostedDraftPointMutation,
+  context: HostedCommandContext,
+) {
+  input = structuredClone(input);
+  const route = routeOf(catalogueId);
+  if (route === null || actor.kind !== 'account') throw new ContentNotFoundError();
+  assertPointRoutes(route, input);
+  const initial = (await snapshot(deps, catalogueId, context, (client) => hostedCatalogue(client, catalogueId))).value;
+  const threadId = initial?.thread_id;
+  if (!threadId || routeOf(threadId) !== route) throw new ContentNotFoundError();
+  const kind = `content.hosted-catalogue.${input.operation === 'insert' ? 'insert-draft-point' : 'remove-draft-point'}`;
+  const receipt = {
+    kind,
+    key: context.idempotencyKey,
+    digest: requestDigest(kind, actor, { catalogueId, input }),
+  };
+  const base = hostedPostAuthorization(deps, actor, threadId, catalogueId, context, receipt);
+  const authorization: CommandAuthorization = {
+    ...base,
+    async prepare(attempt) {
+      const evidence = await base.prepare!(attempt);
+      await validateHostedChapterAttachments(deps, pointAttachments(input), { actor, deadline: context.deadline });
+      return evidence;
+    },
+  };
+  const revisionId = newId(route);
+  return runCommand<HostedCommandValue>(
+    deps.pool,
+    {
+      ...principalCommandIdentity(actor),
+      partition: partitionOf(route),
+      deadline: context.deadline,
+      clock: deps.clock,
+      receipt,
+      authorization,
+    },
+    async (tx, { transactionId, time }) => {
+      const current = await hostedCatalogue(tx, catalogueId, true);
+      if (!current || current.thread_id !== threadId) throw new ContentNotFoundError();
+      if (current.head_revision_id !== input.expectedRevisionId) throw new RevisionPreconditionError();
+      await tx.query(
+        `INSERT INTO content.hosted_structure_revision
+       (route,catalogue_id,revision_id,kind,source_revision_id,recorded_transaction_id,created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [route, catalogueId, revisionId, 'structure', null, transactionId, authoritativeTimeValue(time)],
+      );
+      await commitHostedDraftPointWrite(tx, catalogueId, revisionId, input);
+      await tx.query(`UPDATE content.hosted_catalogue SET head_revision_id=$3 WHERE route=$1 AND catalogue_id=$2`, [
+        route,
+        catalogueId,
+        revisionId,
+      ]);
+      const value = { catalogueId, revisionId };
+      return {
+        value,
+        events: [
+          {
+            type: 'com.rezics.content.hosted-catalogue.revise.v1',
             subject: catalogueId,
             data: value,
           },
