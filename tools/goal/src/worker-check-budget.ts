@@ -1360,9 +1360,7 @@ function authorizedTypingRecoveryEvent(db: Database, grant: TypingRecoveryGrant)
       body.identity === grant.identity &&
       body.checkId === grant.checkId &&
       JSON.stringify(body.command) === JSON.stringify(grant.command) &&
-      (body.recoveryKind === undefined
-        ? grant.recoveryKind === undefined
-        : body.recoveryKind === grant.recoveryKind) &&
+      (body.recoveryKind === undefined ? grant.recoveryKind === undefined : body.recoveryKind === grant.recoveryKind) &&
       actor?.id === grant.actor.id &&
       actor?.sessionId === grant.actor.sessionId
     );
@@ -1379,9 +1377,10 @@ export function workerCheckHostActiveTypingRecovery(input: {
   taskId: string;
   worktree: string;
 }): WorkerCheckHostActiveTypingRecovery | undefined {
-  const taskRow = input.db
-    .query('SELECT current_attempt, body FROM worker_tasks WHERE id=?')
-    .get(input.taskId) as { current_attempt: number; body: string } | null;
+  const taskRow = input.db.query('SELECT current_attempt, body FROM worker_tasks WHERE id=?').get(input.taskId) as {
+    current_attempt: number;
+    body: string;
+  } | null;
   if (!taskRow || !Number.isSafeInteger(taskRow.current_attempt) || taskRow.current_attempt < 1) return;
   let task: Record<string, unknown>;
   try {

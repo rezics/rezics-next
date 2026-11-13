@@ -211,10 +211,7 @@ test('active typing recovery requires its consumed grant and exact running physi
     const stampPath = join(budget, '1');
     const stamp = JSON.parse(readFileSync(stampPath, 'utf8')) as Record<string, unknown>;
     const consumed = stamp.typingRecovery as Record<string, unknown>;
-    writeFileSync(
-      stampPath,
-      JSON.stringify({ ...stamp, typingRecovery: { ...consumed, token: randomUUID() } }),
-    );
+    writeFileSync(stampPath, JSON.stringify({ ...stamp, typingRecovery: { ...consumed, token: randomUUID() } }));
     expect(
       workerCheckHostActiveTypingRecovery({
         db: h.store.db,
