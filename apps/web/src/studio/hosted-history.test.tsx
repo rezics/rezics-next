@@ -389,15 +389,18 @@ test('exact pages preserve orphan preorder, withheld addresses and sparse contin
   };
   const native = createHostedBookNative(
     createKernelClient('https://kernel.test', {
-      fetch: async (input) => {
-        const url = new URL(input instanceof Request ? input.url : String(input));
-        calls.push(url);
-        if (url.pathname.endsWith('/history')) return Response.json(page());
-        const cursor = url.searchParams.get('cursor');
-        if (cursor === null) return Response.json(first);
-        if (cursor === 'opaque+/=' && ++continuationAttempts === 1) return Response.json({}, { status: 503 });
-        return Response.json({ ...outline(release), items: [], nextCursor: cursor === 'opaque+/=' ? 'last' : null });
-      },
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0]) => {
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          calls.push(url);
+          if (url.pathname.endsWith('/history')) return Response.json(page());
+          const cursor = url.searchParams.get('cursor');
+          if (cursor === null) return Response.json(first);
+          if (cursor === 'opaque+/=' && ++continuationAttempts === 1) return Response.json({}, { status: 503 });
+          return Response.json({ ...outline(release), items: [], nextCursor: cursor === 'opaque+/=' ? 'last' : null });
+        },
+        { preconnect: () => {} },
+      ),
     }),
   );
   const screen = mounted(native);
