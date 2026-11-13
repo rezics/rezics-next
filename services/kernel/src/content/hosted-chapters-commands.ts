@@ -97,11 +97,7 @@ export async function prepareHostedPublicationPointCommand(
 ) {
   const route = routeOf(catalogueId);
   if (route === null || actor.kind !== 'account') throw new ContentNotFoundError();
-  const initial = (
-    await snapshot(deps, catalogueId, { actor, deadline: context.deadline }, (client) =>
-      hostedCatalogue(client, catalogueId),
-    )
-  ).value;
+  const initial = (await snapshot(deps, catalogueId, context, (client) => hostedCatalogue(client, catalogueId))).value;
   if (!initial) throw new ContentNotFoundError();
 
   const kind = `content.hosted-catalogue.${operation.kind}`;
