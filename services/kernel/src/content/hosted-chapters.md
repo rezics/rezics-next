@@ -227,8 +227,8 @@ before expensive storage adoption; no evidence here selects a physical schema. D
 1. **First source slice — exact point public snapshots:** in `hosted-chapters-{model,store,commands,reads}.ts` and a
    new owner `hosted-publication-point.ts`, define the snapshot/sequence storage port; implement changed-target
    admission, public-target eligibility, selected-ancestor closure, receipt/CAS orchestration and exact reader dispatch.
-   In parallel extract `versioned-outline-order.ts` from `knowledge-order.ts` with node/value/summary ports, preserving
-   the keyed Knowledge adapter. Freeze `hosted-publication-point.test.ts`: private refusal, native Post publication
+   `versioned-outline-order.ts` holds the keyed copy-on-write AVL primitive with node/value/summary ports, preserving
+   the Knowledge adapter. Freeze `hosted-publication-point.test.ts`: private refusal, native Post publication
    then explicit retry, one selected revision replacement, unchanged private/public siblings, old links and replay.
    This work starts without choosing directory storage; a fake port is not launch evidence. Coordinate any new native
    public-eligibility port with Access rather than reproducing its policy.

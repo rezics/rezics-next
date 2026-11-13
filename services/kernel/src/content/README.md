@@ -4822,8 +4822,9 @@ constructed during route installation; report repeated-query keys are derived fr
 
 ### Notebook reorganization and revision recovery
 
-Decision: preserve current adjacency reads and record each revision with a copy-on-write AVL sibling root; keep bounded
-order-key rebalancing local and body/publication history independent from structural moves.
+Decision: preserve current adjacency reads and record each revision with a copy-on-write AVL sibling root in
+`versioned-outline-order.ts`; Knowledge keeps its native adapter. Keep bounded order-key rebalancing local and
+body/publication history independent from structural moves.
 
 `POST /v1/knowledge/notebooks/{id}/placements/{placementId}:move` moves or reorders one stable placement with a
 structure-revision precondition and optional sibling anchor. Each successful structural write records an immutable

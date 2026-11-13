@@ -1,5 +1,13 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { newId } from '../route/route.ts';
+import {
+  insertVersionedOutlineEntry,
+  readVersionedOutlinePage,
+  removeVersionedOutlineEntry,
+  type VersionedOutlineNode,
+  type VersionedOutlinePorts,
+  type VersionedOutlineSummary,
+} from './versioned-outline-order.ts';
 
 export type KnowledgeOrderEntry = Readonly<{
   placementId: string;
@@ -11,12 +19,12 @@ export type KnowledgeOrderEntry = Readonly<{
 export type KnowledgeOrderPageNode = KnowledgeOrderEntry &
   Readonly<{ pageId: string; treeHeight: number; leftPageId: string | null; rightPageId: string | null }>;
 
-type PageValue = KnowledgeOrderEntry;
+export type KnowledgeOrderKey = Readonly<{ position: bigint; placementId: string }>;
 
-function compare(
-  left: Readonly<{ position: bigint; placementId: string }>,
-  right: Readonly<{ position: bigint; placementId: string }>,
-) {
+type PageValue = KnowledgeOrderEntry;
+type KnowledgeOrderSummary = VersionedOutlineSummary;
+
+function compareKnowledgeOrder(left: KnowledgeOrderKey, right: KnowledgeOrderKey) {
   if (left.position < right.position) return -1;
   if (left.position > right.position) return 1;
   return left.placementId.localeCompare(right.placementId);
@@ -28,6 +36,26 @@ function pageValue(node: KnowledgeOrderPageNode): PageValue {
     documentId: node.documentId,
     parentId: node.parentId,
     position: node.position,
+  };
+}
+
+function outlineNode(node: KnowledgeOrderPageNode): VersionedOutlineNode<PageValue, KnowledgeOrderSummary> {
+  return {
+    id: node.pageId,
+    leftId: node.leftPageId,
+    rightId: node.rightPageId,
+    value: pageValue(node),
+    summary: { height: node.treeHeight },
+  };
+}
+
+function pageNode(node: VersionedOutlineNode<PageValue, KnowledgeOrderSummary>): KnowledgeOrderPageNode {
+  return {
+    ...node.value,
+    pageId: node.id,
+    treeHeight: node.summary.height,
+    leftPageId: node.leftId,
+    rightPageId: node.rightId,
   };
 }
 
@@ -74,15 +102,9 @@ async function writePageNode(
   value: PageValue,
   leftPageId: string | null,
   rightPageId: string | null,
+  summary: KnowledgeOrderSummary,
 ): Promise<KnowledgeOrderPageNode> {
-  const [left, right] = await Promise.all([
-    leftPageId === null ? null : readPageNode(tx, route, notebookId, leftPageId),
-    rightPageId === null ? null : readPageNode(tx, route, notebookId, rightPageId),
-  ]);
-  if ((leftPageId !== null && !left) || (rightPageId !== null && !right))
-    throw new Error('Knowledge order page references a missing child');
   const pageId = newId(route);
-  const treeHeight = Math.max(left?.treeHeight ?? 0, right?.treeHeight ?? 0) + 1;
   await tx.query(
     `INSERT INTO content.knowledge_structure_page
       (route,notebook_id,page_id,placement_id,document_id,parent_id,position,tree_height,left_page_id,right_page_id)
@@ -95,132 +117,29 @@ async function writePageNode(
       value.documentId,
       value.parentId,
       value.position.toString(),
-      treeHeight,
+      summary.height,
       leftPageId,
       rightPageId,
     ],
   );
-  return { ...value, pageId, treeHeight, leftPageId, rightPageId };
+  return { ...value, pageId, treeHeight: summary.height, leftPageId, rightPageId };
 }
 
-async function rebalancePageNode(
+function knowledgeOrderPorts(
   tx: CommandTransaction,
   route: number,
   notebookId: string,
-  value: PageValue,
-  leftPageId: string | null,
-  rightPageId: string | null,
-): Promise<string> {
-  const left = leftPageId === null ? null : await readPageNode(tx, route, notebookId, leftPageId);
-  const right = rightPageId === null ? null : await readPageNode(tx, route, notebookId, rightPageId);
-  if ((leftPageId !== null && !left) || (rightPageId !== null && !right))
-    throw new Error('Knowledge order page references a missing child');
-  const balance = (left?.treeHeight ?? 0) - (right?.treeHeight ?? 0);
-  if (balance > 1) {
-    const pivot = left!;
-    const pivotLeft = pivot.leftPageId === null ? null : await readPageNode(tx, route, notebookId, pivot.leftPageId);
-    const pivotRight = pivot.rightPageId === null ? null : await readPageNode(tx, route, notebookId, pivot.rightPageId);
-    if ((pivotLeft?.treeHeight ?? 0) >= (pivotRight?.treeHeight ?? 0)) {
-      const nextRight = await writePageNode(tx, route, notebookId, value, pivot.rightPageId, rightPageId);
-      return (await writePageNode(tx, route, notebookId, pageValue(pivot), pivot.leftPageId, nextRight.pageId)).pageId;
-    }
-    const middle = pivotRight!;
-    const nextLeft = await writePageNode(tx, route, notebookId, pageValue(pivot), pivot.leftPageId, middle.leftPageId);
-    const nextRight = await writePageNode(tx, route, notebookId, value, middle.rightPageId, rightPageId);
-    return (await writePageNode(tx, route, notebookId, pageValue(middle), nextLeft.pageId, nextRight.pageId)).pageId;
-  }
-  if (balance < -1) {
-    const pivot = right!;
-    const pivotLeft = pivot.leftPageId === null ? null : await readPageNode(tx, route, notebookId, pivot.leftPageId);
-    const pivotRight = pivot.rightPageId === null ? null : await readPageNode(tx, route, notebookId, pivot.rightPageId);
-    if ((pivotRight?.treeHeight ?? 0) >= (pivotLeft?.treeHeight ?? 0)) {
-      const nextLeft = await writePageNode(tx, route, notebookId, value, leftPageId, pivot.leftPageId);
-      return (await writePageNode(tx, route, notebookId, pageValue(pivot), nextLeft.pageId, pivot.rightPageId)).pageId;
-    }
-    const middle = pivotLeft!;
-    const nextLeft = await writePageNode(tx, route, notebookId, value, leftPageId, middle.leftPageId);
-    const nextRight = await writePageNode(
-      tx,
-      route,
-      notebookId,
-      pageValue(pivot),
-      middle.rightPageId,
-      pivot.rightPageId,
-    );
-    return (await writePageNode(tx, route, notebookId, pageValue(middle), nextLeft.pageId, nextRight.pageId)).pageId;
-  }
-  return (await writePageNode(tx, route, notebookId, value, leftPageId, rightPageId)).pageId;
-}
-
-async function insertPageNode(
-  tx: CommandTransaction,
-  route: number,
-  notebookId: string,
-  rootPageId: string | null,
-  value: PageValue,
-): Promise<string> {
-  if (rootPageId === null) return (await writePageNode(tx, route, notebookId, value, null, null)).pageId;
-  const root = await readPageNode(tx, route, notebookId, rootPageId);
-  if (!root) throw new Error('Knowledge order root references a missing page');
-  const order = compare(value, root);
-  if (order === 0) throw new Error('Knowledge order contains a duplicate key');
-  const leftPageId = order < 0 ? await insertPageNode(tx, route, notebookId, root.leftPageId, value) : root.leftPageId;
-  const rightPageId =
-    order > 0 ? await insertPageNode(tx, route, notebookId, root.rightPageId, value) : root.rightPageId;
-  return rebalancePageNode(tx, route, notebookId, pageValue(root), leftPageId, rightPageId);
-}
-
-async function removeMinimum(
-  tx: CommandTransaction,
-  route: number,
-  notebookId: string,
-  root: KnowledgeOrderPageNode,
-): Promise<Readonly<{ value: PageValue; rootPageId: string | null }>> {
-  if (root.leftPageId === null) return { value: pageValue(root), rootPageId: root.rightPageId };
-  const left = await readPageNode(tx, route, notebookId, root.leftPageId);
-  if (!left) throw new Error('Knowledge order left child is missing');
-  const removed = await removeMinimum(tx, route, notebookId, left);
+): VersionedOutlinePorts<KnowledgeOrderKey, PageValue, KnowledgeOrderSummary> {
   return {
-    value: removed.value,
-    rootPageId: await rebalancePageNode(tx, route, notebookId, pageValue(root), removed.rootPageId, root.rightPageId),
-  };
-}
-
-async function removePageNode(
-  tx: CommandTransaction,
-  route: number,
-  notebookId: string,
-  rootPageId: string | null,
-  key: Readonly<{ position: bigint; placementId: string }>,
-): Promise<Readonly<{ rootPageId: string | null; removed: KnowledgeOrderPageNode | null }>> {
-  if (rootPageId === null) return { rootPageId: null, removed: null };
-  const root = await readPageNode(tx, route, notebookId, rootPageId);
-  if (!root) throw new Error('Knowledge order root references a missing page');
-  const order = compare(key, root);
-  if (order === 0) {
-    if (root.placementId !== key.placementId) throw new Error('Knowledge order key does not identify its placement');
-    if (root.leftPageId === null) return { rootPageId: root.rightPageId, removed: root };
-    if (root.rightPageId === null) return { rootPageId: root.leftPageId, removed: root };
-    const right = await readPageNode(tx, route, notebookId, root.rightPageId);
-    if (!right) throw new Error('Knowledge order right child is missing');
-    const minimum = await removeMinimum(tx, route, notebookId, right);
-    return {
-      rootPageId: await rebalancePageNode(tx, route, notebookId, minimum.value, root.leftPageId, minimum.rootPageId),
-      removed: root,
-    };
-  }
-  const result = await removePageNode(tx, route, notebookId, order < 0 ? root.leftPageId : root.rightPageId, key);
-  if (!result.removed) return { rootPageId, removed: null };
-  return {
-    rootPageId: await rebalancePageNode(
-      tx,
-      route,
-      notebookId,
-      pageValue(root),
-      order < 0 ? result.rootPageId : root.leftPageId,
-      order > 0 ? result.rootPageId : root.rightPageId,
-    ),
-    removed: result.removed,
+    compare: compareKnowledgeOrder,
+    keyOf: (value) => ({ position: value.position, placementId: value.placementId }),
+    read: async (id) => {
+      const node = await readPageNode(tx, route, notebookId, id);
+      return node ? outlineNode(node) : null;
+    },
+    write: async (value, leftId, rightId, summary) =>
+      outlineNode(await writePageNode(tx, route, notebookId, value, leftId, rightId, summary)),
+    summarize: (_value, left, right) => ({ height: Math.max(left?.height ?? 0, right?.height ?? 0) + 1 }),
   };
 }
 
@@ -231,17 +150,18 @@ export function insertKnowledgeOrderEntry(
   rootPageId: string | null,
   entry: KnowledgeOrderEntry,
 ): Promise<string> {
-  return insertPageNode(tx, route, notebookId, rootPageId, entry);
+  return insertVersionedOutlineEntry(knowledgeOrderPorts(tx, route, notebookId), rootPageId, entry);
 }
 
-export function removeKnowledgeOrderEntry(
+export async function removeKnowledgeOrderEntry(
   tx: CommandTransaction,
   route: number,
   notebookId: string,
   rootPageId: string | null,
   entry: Pick<KnowledgeOrderEntry, 'placementId' | 'position'>,
 ): Promise<Readonly<{ rootPageId: string | null; removed: KnowledgeOrderPageNode | null }>> {
-  return removePageNode(tx, route, notebookId, rootPageId, entry);
+  const result = await removeVersionedOutlineEntry(knowledgeOrderPorts(tx, route, notebookId), rootPageId, entry);
+  return { rootPageId: result.rootId, removed: result.removed ? pageNode(result.removed) : null };
 }
 
 /** The immutable AVL index gives a historical keyset page in O(log N + page size) node reads. */
@@ -253,31 +173,6 @@ export async function readKnowledgeOrderPage(
   after: Readonly<{ position: bigint; placementId: string }> | null,
   limit: number,
 ): Promise<readonly KnowledgeOrderPageNode[]> {
-  if (rootPageId === null) return [];
-  const stack: KnowledgeOrderPageNode[] = [];
-  let nodeId: string | null = rootPageId;
-  while (nodeId !== null) {
-    const node = await readPageNode(tx, route, notebookId, nodeId);
-    if (!node) throw new Error('Knowledge order root references a missing page');
-    if (after === null || compare(node, after) > 0) {
-      stack.push(node);
-      nodeId = node.leftPageId;
-    } else {
-      nodeId = node.rightPageId;
-    }
-  }
-
-  const page: KnowledgeOrderPageNode[] = [];
-  while (stack.length > 0 && page.length < limit) {
-    const node = stack.pop()!;
-    page.push(node);
-    nodeId = node.rightPageId;
-    while (nodeId !== null) {
-      const child = await readPageNode(tx, route, notebookId, nodeId);
-      if (!child) throw new Error('Knowledge order page references a missing child');
-      stack.push(child);
-      nodeId = child.leftPageId;
-    }
-  }
-  return page;
+  const page = await readVersionedOutlinePage(knowledgeOrderPorts(tx, route, notebookId), rootPageId, after, limit);
+  return page.map(pageNode);
 }

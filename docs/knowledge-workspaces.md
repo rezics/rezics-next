@@ -457,9 +457,9 @@ empty parts; parts remain origins and unavailable chapters consume slots. Stack 
 legacy ordinal views without materializing a whole outline. Keep Book page 20/no refill and Knowledge's own page/
 scan bounds. Metadata paths read zero bodies; exact opening remains each owner's native byte/digest reader.
 
-[`knowledge-order.ts`](../services/kernel/src/content/knowledge-order.ts) supplies immutable AVL insert/remove and
-forward seek, but embeds SQL, document values and numeric keys. Extract node read/write, balancing and summary ports;
-retain that keyed adapter, add reverse/rank/handle traversal for the sequence adapter.
+[`versioned-outline-order.ts`](../services/kernel/src/content/versioned-outline-order.ts) supplies copy-on-write AVL
+insert/remove and bounded seek behind node/value/summary ports; [`knowledge-order.ts`](../services/kernel/src/content/knowledge-order.ts)
+keeps the keyed native adapter. Add reverse/rank/handle traversal for the sequence adapter.
 [`knowledge-commands.ts`](../services/kernel/src/content/knowledge-commands.ts) supplies head locking, stable anchors,
 ancestor/cycle checks and exact heights. Its parent-root predecessor rows and
 [`knowledge-reads.ts`](../services/kernel/src/content/knowledge-reads.ts) prove historical children, not historical
