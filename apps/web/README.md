@@ -502,6 +502,8 @@ The UI README's external shelf references do not apply to this document surface;
 
 Decision: a complete local media origin/token pair selects the native loopback store even if a `MEDIA` binding is also supplied; production uses the configured `MEDIA`/R2 binding when the local pair is absent.
 
+Decision: local media transport uses Worker-compatible manual redirects; 3xx responses retain the existing non-success error path and never forward the transport credential to another destination.
+
 Media bytes use the `MEDIA` R2 binding for the `rezics-media` bucket. Development simulates this bucket locally.
 `POST /media` reserves a website upload; `GET /media/<id>` reads its state; `PUT /media/<id>` transports the bytes; `GET` and `HEAD /media/<id>/<variant>` ask content for permission on every request.
 To upload, reserve with `POST /media`, sending an `application/json` object of at most 4 KiB with exactly

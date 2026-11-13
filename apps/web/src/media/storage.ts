@@ -24,7 +24,7 @@ export function localMediaStorage(bindings: LocalMediaBindings): MediaStorage {
       ...options,
       method,
       headers,
-      redirect: 'error',
+      redirect: 'manual',
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`Local media ${method} failed (${response.status})`);
