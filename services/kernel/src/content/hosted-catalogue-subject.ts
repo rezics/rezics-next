@@ -2,7 +2,13 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
-import { ContentNotFoundError, readPost, snapshot, type PostEntry, type RetainContentRead } from './reads.ts';
+import {
+  ContentNotFoundError,
+  readPostMetadata,
+  snapshot,
+  type NativePostMetadata,
+  type RetainContentRead,
+} from './reads.ts';
 import { hostedCatalogue, hostedRevision } from './hosted-chapters-store.ts';
 import {
   InvalidHostedCursorError,
@@ -71,9 +77,9 @@ async function discloseCatalogue(
   epoch: number,
 ): Promise<{ item: HostedSubjectCatalogueItem; anchor: AnchoredPosition } | null> {
   if (!isCurrentPublicCatalogueCandidate(row) || routeOf(row.catalogue_id) !== row.route) return null;
-  const observation: { current?: Parameters<RetainContentRead<PostEntry>>[0] } = {};
+  const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
   try {
-    const initial = await readPost(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
+    const initial = await readPostMetadata(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
       observation.current = current;
     });
     if (
