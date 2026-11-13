@@ -123,14 +123,29 @@ test('keeps exact temporal state and private generations separate from the legac
   const stagedChild = (await siblingSet.readNode(firstPart))!;
   siblingSet.writeNode({ ...stagedChild, value: { label: 'first', count: 9_007_199_254_740_995n } });
   const preorderSet = sequence(firstWrite, 'preorder');
-  let preorderRoot = await insertVersionedOutlineSequenceNode(preorderSet, null, 0n, secondPart, {
-    label: 'preorder second',
-    count: 1n,
-  });
+  let preorderRoot = await insertVersionedOutlineSequenceNode(
+    preorderSet,
+    null,
+    0n,
+    secondPart,
+    {
+      label: 'preorder second',
+      count: 1n,
+    },
+    1n,
+  );
   preorderRoot = await insertVersionedOutlineSequenceNode(preorderSet, preorderRoot, 1n, firstPart, {
     label: 'preorder first',
     count: 1n,
   });
+  const chapterRoot = await insertVersionedOutlineSequenceNode(
+    sequence(firstWrite, 'chapter'),
+    null,
+    0n,
+    secondPart,
+    { label: 'chapter-only index', count: 7n },
+    1n,
+  );
   stageHostedVersionOccurrence(firstWrite, firstPart, {
     parentOccurrenceId: secondPart,
     subtreeSize: 1n,
@@ -140,9 +155,9 @@ test('keeps exact temporal state and private generations separate from the legac
   stageHostedVersionSiblingRoot(firstWrite, secondPart, childRoot);
   stageHostedVersionSnapshotRoots(firstWrite, {
     preorderRootId: preorderRoot,
-    chapterRootId: null,
+    chapterRootId: chapterRoot,
     placementCount: 2n,
-    chapterCount: 0n,
+    chapterCount: 1n,
   });
   draft = await commitHostedVersionWrite(native.pool, firstWrite);
   expect(draft.sequence).toBe(1n);
@@ -152,6 +167,10 @@ test('keeps exact temporal state and private generations separate from the legac
   const firstNode = await nodeAt(snapshotOne!, firstPart, 'sibling');
   expect(firstNode).toMatchObject({ id: firstPart, treeParentId: null });
   expect(firstNode?.value).toEqual({ label: 'first', count: 9_007_199_254_740_995n });
+  expect((await nodeAt(snapshotOne!, secondPart, 'chapter'))?.value).toEqual({
+    label: 'chapter-only index',
+    count: 7n,
+  });
   expect((await occurrenceAt(snapshotOne!, firstPart))?.parentOccurrenceId).toBe(secondPart);
   expect((await siblingRootAt(snapshotOne!, secondPart))?.rootNodeId).toBe(firstPart);
 
