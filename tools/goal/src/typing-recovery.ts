@@ -407,8 +407,8 @@ export async function recoverWorkerTyping(
     const pendingCommand = !typing.ok ? (typing.command ?? attempt.typingEvidencePending?.command) : undefined;
     const resultlessCleanupRecovery = Boolean(
       directKernelRun &&
-        pendingCommand &&
-        workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand),
+      pendingCommand &&
+      workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand),
     );
     if (resultlessCleanupRecovery && !authority)
       return {

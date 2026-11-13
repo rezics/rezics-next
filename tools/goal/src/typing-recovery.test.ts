@@ -41,7 +41,9 @@ test('settled cleanup accepts only exact ownership and terminal local and remote
     const custody = () => workerCheckHostAttemptCheckCustody(worktree.path, taskId, 1, [checkId]);
     expect(custody()).toBe('terminal');
     expect(workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], compiler)).toBe(true);
-    expect(workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], ['bun', 'test'])).toBe(false);
+    expect(workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], ['bun', 'test'])).toBe(
+      false,
+    );
 
     const resultPath = join(worktree.path, '.temp/goal/checks/results', `${checkId}.json`);
     const result = JSON.parse(readFileSync(resultPath, 'utf8'));
@@ -198,10 +200,18 @@ test('authenticated typing-recover issues one replayable compiler-only grant aft
       current.state = 'stopped';
     });
     h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY,state TEXT NOT NULL)');
-    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
-      actor.id,
-      JSON.stringify({ id: actor.id, kind: 'managed', engine: 'claude', status: 'running', threadId: actor.sessionId }),
-    );
+    h.store.db
+      .query('INSERT INTO manager_sessions VALUES (?,?)')
+      .run(
+        actor.id,
+        JSON.stringify({
+          id: actor.id,
+          kind: 'managed',
+          engine: 'claude',
+          status: 'running',
+          threadId: actor.sessionId,
+        }),
+      );
 
     const landing = { enqueue: (_value: unknown) => {} };
     const unauthenticated = await recoverWorkerTyping(h.tasks, landing, ref);
@@ -228,9 +238,16 @@ test('authenticated typing-recover issues one replayable compiler-only grant aft
       .filter((file) => file.endsWith('.json'))
       .map((file) => JSON.parse(readFileSync(join(budget, 'typing-recovery', file), 'utf8')));
     expect(grants).toHaveLength(2);
-    expect(grants.find((grant) => grant.replacementOf)).toMatchObject({ replacementOf: original.token, command: compiler });
+    expect(grants.find((grant) => grant.replacementOf)).toMatchObject({
+      replacementOf: original.token,
+      command: compiler,
+    });
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: ref.attempt, state: 'stopped' });
-    expect(h.store.attempt(ref)).toMatchObject({ result, checks: [original.checkId], typingEvidencePending: { command: compiler } });
+    expect(h.store.attempt(ref)).toMatchObject({
+      result,
+      checks: [original.checkId],
+      typingEvidencePending: { command: compiler },
+    });
 
     const replayed = await recoverWorkerTyping(h.tasks, landing, ref, actor);
     if (!('proof' in replayed)) throw new Error('replayed authenticated recovery lost its compiler proof');

@@ -1176,7 +1176,7 @@ function terminalCleanedCancelledPhysicalCheck(
           item.physicalCleanup === undefined &&
           item.native === undefined &&
           item.settlement === undefined),
-    )
+    ),
   );
 }
 
@@ -1270,13 +1270,7 @@ export function workerCheckHostAttemptHasResultlessCleanup(
     return (
       cancellation.state === 'present' &&
       cancellation.signal === 15 &&
-      terminalCleanedCancelledPhysicalCheck(
-        worktree,
-        taskId,
-        attempt,
-        join(resultDirectory, `${checkId}.json`),
-        record,
-      )
+      terminalCleanedCancelledPhysicalCheck(worktree, taskId, attempt, join(resultDirectory, `${checkId}.json`), record)
     );
   });
 }
@@ -1404,7 +1398,9 @@ function provenResultlessCleanupRecoveryCancellation(grant: TypingRecoveryGrant,
     )
   )
     return false;
-  return workerCheckHostAttemptCheckCustody(grant.worktree, grant.taskId, grant.attempt, [grant.checkId]) === 'terminal';
+  return (
+    workerCheckHostAttemptCheckCustody(grant.worktree, grant.taskId, grant.attempt, [grant.checkId]) === 'terminal'
+  );
 }
 
 /** Called only after typing-recover authenticates the owner/operations manager under the current task lease. */
@@ -1439,19 +1435,17 @@ export function grantWorkerTypingRecovery(
       )
         matching.push(prior);
     }
-    const cleanedPredecessor = sameAttempt.find(
-      (prior) =>
-        workerCheckHostAttemptHasResultlessCleanup(
-          prior.worktree,
-          input.taskId,
-          input.attempt,
-          [prior.checkId],
-          prior.command,
-        ),
+    const cleanedPredecessor = sameAttempt.find((prior) =>
+      workerCheckHostAttemptHasResultlessCleanup(
+        prior.worktree,
+        input.taskId,
+        input.attempt,
+        [prior.checkId],
+        prior.command,
+      ),
     );
     const cleanupReplacementExists =
-      cleanedPredecessor !== undefined &&
-      sameAttempt.some((prior) => prior.replacementOf === cleanedPredecessor.token);
+      cleanedPredecessor !== undefined && sameAttempt.some((prior) => prior.replacementOf === cleanedPredecessor.token);
     if (options.requireResultlessCleanupReplacement && !cleanedPredecessor)
       throw new Error('Verified resultless cleanup has no consumed compiler grant to replace');
     if (
