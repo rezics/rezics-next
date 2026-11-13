@@ -250,6 +250,10 @@ Decision: private staging uses a source-ordered candidate generation, 20-row rep
 at most 512; exact target observations stay separate from current authority proof, source titles remain source-owned
 for terminal redaction, and this slice exposes no activation.
 
+Decision: cleanup enters only cancelled, expired or failed unsealed stages under the exact owner epoch and stage lock;
+it uses one 100-row budget across indexed candidate, input and target keysets while retaining terminal progress,
+existing staging receipts and all source/lifecycle records.
+
 Staging is Book-owned, independent of Collection custody. Collection's
 [seal reader](../library/collection-publication-staging.ts) and
 [fixture](../../test/library/collection-publication-staging.test.ts) exemplify native source identity, complete
