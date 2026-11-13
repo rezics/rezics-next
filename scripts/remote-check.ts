@@ -411,10 +411,37 @@ export type RemoteCheckSettlement = {
   host: string;
   run: string;
   native: RemotePhysicalRunReceipt | null;
+  /** Separate terminal proof for a preparation abort that never started the requested command. */
+  preparationAbort?: RemotePreparationAbortEvidence;
+  /** Bounded explanation when retained host evidence cannot prove a pre-command abort. */
+  preparationAbortUnavailable?: string;
   preparedInputs: RemotePreparedInputsEvidence | null;
   returns: RemoteReturnManifest;
   cleanup: RemoteCleanupReceipt;
   transportChildReaped: boolean;
+};
+
+export type RemotePreparationAbortEvidence = {
+  schema: 1;
+  host: string;
+  run: string;
+  status: 'infrastructure-failure';
+  phase: 'abort';
+  preparationReceiptSha256: string;
+  resourcesReceiptSha256: string;
+  resources: {
+    schema: 1;
+    host: string;
+    run: string;
+    boot: string;
+    supervisor: { pid: number; start: string; group: number };
+    startedMonoMs: number;
+    commandStartedMonoMs: null;
+    terminalMonoMs: number;
+    terminalSampleMonoMs: number;
+    sampleCount: number;
+    commandSampleCount: 0;
+  };
 };
 
 export const REMOTE_CHECK_PHASE_NAMES = ['queue', 'preparation', 'execution', 'settlement'] as const;
@@ -710,6 +737,168 @@ export function parseRemotePhysicalRunReceipt(value: unknown): RemotePhysicalRun
     }
   }
   return v;
+}
+
+/** Validate the compact host census before it can become no-command settlement authority. */
+export function parseRemotePreparationAbortEvidence(
+  value: unknown,
+  expected: { host: string; run: string },
+): RemotePreparationAbortEvidence | null {
+  const exactKeys = (candidate: unknown, keys: readonly string[]): candidate is Record<string, unknown> =>
+    Boolean(
+      candidate &&
+      typeof candidate === 'object' &&
+      !Array.isArray(candidate) &&
+      Object.keys(candidate).sort().join(',') === [...keys].sort().join(','),
+    );
+  if (
+    !exactKeys(value, [
+      'schema',
+      'host',
+      'run',
+      'status',
+      'phase',
+      'preparationReceiptSha256',
+      'resourcesReceiptSha256',
+      'resources',
+    ])
+  )
+    return null;
+  const item = value;
+  if (
+    item.schema !== 1 ||
+    item.host !== expected.host ||
+    item.run !== expected.run ||
+    item.status !== 'infrastructure-failure' ||
+    item.phase !== 'abort' ||
+    typeof item.preparationReceiptSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(item.preparationReceiptSha256) ||
+    typeof item.resourcesReceiptSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(item.resourcesReceiptSha256) ||
+    !exactKeys(item.resources, [
+      'schema',
+      'host',
+      'run',
+      'boot',
+      'supervisor',
+      'startedMonoMs',
+      'commandStartedMonoMs',
+      'terminalMonoMs',
+      'terminalSampleMonoMs',
+      'sampleCount',
+      'commandSampleCount',
+    ])
+  )
+    return null;
+  const resources = item.resources;
+  const supervisor = resources.supervisor;
+  const finite = (number: unknown): number is number => typeof number === 'number' && Number.isFinite(number);
+  if (
+    resources.schema !== 1 ||
+    resources.host !== expected.host ||
+    resources.run !== expected.run ||
+    typeof resources.boot !== 'string' ||
+    resources.boot.length === 0 ||
+    resources.boot.length > 256 ||
+    !exactKeys(supervisor, ['pid', 'start', 'group']) ||
+    !Number.isSafeInteger(supervisor.pid) ||
+    Number(supervisor.pid) < 1 ||
+    typeof supervisor.start !== 'string' ||
+    supervisor.start.length === 0 ||
+    supervisor.start.length > 128 ||
+    !Number.isSafeInteger(supervisor.group) ||
+    Number(supervisor.group) < 1 ||
+    !finite(resources.startedMonoMs) ||
+    resources.startedMonoMs < 0 ||
+    resources.commandStartedMonoMs !== null ||
+    !finite(resources.terminalMonoMs) ||
+    resources.terminalMonoMs < resources.startedMonoMs ||
+    !finite(resources.terminalSampleMonoMs) ||
+    resources.terminalSampleMonoMs < resources.startedMonoMs ||
+    resources.terminalSampleMonoMs > resources.terminalMonoMs ||
+    !Number.isSafeInteger(resources.sampleCount) ||
+    Number(resources.sampleCount) < 1 ||
+    Number(resources.sampleCount) > 1444 ||
+    resources.commandSampleCount !== 0
+  )
+    return null;
+  return value as RemotePreparationAbortEvidence;
+}
+
+/** No-command evidence is authoritative only after both the wrapper and host transport are terminal. */
+export function remotePreparationAbortSettlementReady(
+  value: unknown,
+  expected: { host: string; run: string },
+): value is RemoteCheckSettlement & { preparationAbort: RemotePreparationAbortEvidence } {
+  const exactKeys = (candidate: unknown, keys: readonly string[]): candidate is Record<string, unknown> =>
+    Boolean(
+      candidate &&
+      typeof candidate === 'object' &&
+      !Array.isArray(candidate) &&
+      Object.keys(candidate).sort().join(',') === [...keys].sort().join(','),
+    );
+  if (
+    !exactKeys(value, [
+      'cleanup',
+      'host',
+      'native',
+      'preparationAbort',
+      'preparedInputs',
+      'returns',
+      'run',
+      'schema',
+      'transportChildReaped',
+    ])
+  )
+    return false;
+  const settlement = value;
+  const returns = settlement.returns;
+  const cleanup = settlement.cleanup;
+  if (
+    !exactKeys(returns, ['entries', 'failures', 'missing', 'schema', 'status']) ||
+    !exactKeys(cleanup, [
+      'commandGroupTerminal',
+      'containersRemoved',
+      'failures',
+      'host',
+      'run',
+      'runDirectoryRemoved',
+      'schema',
+      'status',
+      'supervisorStopped',
+    ])
+  )
+    return false;
+  const entries = returns.entries;
+  const missing = returns.missing;
+  const returnFailures = returns.failures;
+  const cleanupFailures = cleanup.failures;
+  return Boolean(
+    settlement.schema === 1 &&
+    settlement.host === expected.host &&
+    settlement.run === expected.run &&
+    settlement.native === null &&
+    settlement.transportChildReaped === true &&
+    parseRemotePreparationAbortEvidence(settlement.preparationAbort, expected) &&
+    returns.schema === 1 &&
+    returns.status === 'empty' &&
+    Array.isArray(entries) &&
+    entries.length === 0 &&
+    Array.isArray(missing) &&
+    missing.length === 0 &&
+    Array.isArray(returnFailures) &&
+    returnFailures.length === 0 &&
+    cleanup.schema === 1 &&
+    cleanup.host === expected.host &&
+    cleanup.run === expected.run &&
+    cleanup.status === 'verified' &&
+    cleanup.supervisorStopped === true &&
+    cleanup.commandGroupTerminal === true &&
+    cleanup.containersRemoved === true &&
+    cleanup.runDirectoryRemoved === true &&
+    Array.isArray(cleanupFailures) &&
+    cleanupFailures.length === 0,
+  );
 }
 
 export const ROOT = '/srv/rezics-check';
@@ -8071,14 +8260,57 @@ async function reconcileRemoteRunOwned(
       transportChildReaped: true,
     };
   }
-  const reader = String.raw`import json
+  const reader = String.raw`import hashlib,json
 from pathlib import Path
 root=Path(${JSON.stringify(`${ROOT}/receipts/${runId}`)})
-def read(name):
+def read_bytes(name,limit):
     path=root/name
-    if not path.is_file() or path.stat().st_size>8192: return None
-    return json.loads(path.read_text())
-print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':read('prepared-inputs.json'),'lifetimeFailure':read('run-lifetime-status.json')},separators=(',',':')))`;
+    if path.is_symlink() or not path.is_file() or path.stat().st_size>limit: return None
+    raw=path.read_bytes()
+    return raw if len(raw)<=limit else None
+def read_json(name,limit=8192):
+    raw=read_bytes(name,limit)
+    if raw is None: return None
+    try: return json.loads(raw)
+    except (UnicodeDecodeError,ValueError): return None
+def preparation_abort():
+    preparation_raw=read_bytes('preparation-status.json',8192)
+    if preparation_raw is None: return None,'matching preparation abort receipt is unavailable'
+    resources_raw=read_bytes('physical-resources.json',500000)
+    if resources_raw is None: return None,'terminal physical resource receipt is unavailable'
+    try:
+        preparation=json.loads(preparation_raw)
+        resources=json.loads(resources_raw)
+        if (not isinstance(preparation,dict) or preparation.get('host')!=${JSON.stringify(hostName)} or
+                preparation.get('run')!=${JSON.stringify(runId)} or preparation.get('phase')!='abort' or
+                preparation.get('status')!='infrastructure-failure'):
+            return None,'matching infrastructure abort receipt is unavailable'
+        samples=resources.get('samples') if isinstance(resources,dict) else None
+        supervisor=resources.get('supervisor') if isinstance(resources,dict) else None
+        if (resources.get('schema')!=1 or resources.get('host')!=${JSON.stringify(hostName)} or
+                resources.get('run')!=${JSON.stringify(runId)} or resources.get('commandStartedMonoMs') is not None or
+                not isinstance(samples,list) or not 1<=len(samples)<=1444 or
+                not isinstance(supervisor,dict) or not isinstance(samples[-1],dict) or
+                samples[-1].get('phase')!='terminal' or
+                any(not isinstance(sample,dict) or sample.get('phase')=='command' for sample in samples)):
+            return None,'terminal resource receipt does not prove that the command never started'
+        terminal_sample=samples[-1]
+        return ({'schema':1,'host':${JSON.stringify(hostName)},'run':${JSON.stringify(runId)},
+                 'status':'infrastructure-failure','phase':'abort',
+                 'preparationReceiptSha256':hashlib.sha256(preparation_raw).hexdigest(),
+                 'resourcesReceiptSha256':hashlib.sha256(resources_raw).hexdigest(),
+                 'resources':{'schema':1,'host':${JSON.stringify(hostName)},'run':${JSON.stringify(runId)},
+                              'boot':resources.get('boot'),'supervisor':supervisor,
+                              'startedMonoMs':resources.get('startedMonoMs'),'commandStartedMonoMs':None,
+                              'terminalMonoMs':resources.get('terminalMonoMs'),
+                              'terminalSampleMonoMs':terminal_sample.get('monoMs'),
+                              'sampleCount':len(samples),'commandSampleCount':0}},None)
+    except (AttributeError,KeyError,TypeError,ValueError):
+        return None,'terminal preparation evidence is malformed'
+abort,abort_issue=preparation_abort()
+print(json.dumps({'native':read_json('physical-run-status.json'),'preparedInputs':read_json('prepared-inputs.json'),
+                  'lifetimeFailure':read_json('run-lifetime-status.json'),'preparationAbort':abort,
+                  'preparationAbortUnavailable':abort_issue},separators=(',',':')))`;
   const observed = await boundedSsh(
     host,
     prepared.connectionId,
@@ -8095,13 +8327,25 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
     );
   let native: RemotePhysicalRunReceipt | null = null;
   let preparedInputs: RemotePreparedInputsEvidence | null = null;
+  let preparationAbort: RemotePreparationAbortEvidence | undefined;
+  let preparationAbortUnavailable: string | undefined;
   const evidenceFailures: string[] = [];
+  let root: Record<string, unknown>;
   try {
     const value: unknown = JSON.parse(observed.output);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid reconciliation response');
-    const root = value as Record<string, unknown>;
-    if (Object.keys(root).sort().join(',') !== 'lifetimeFailure,native,preparedInputs')
+    root = value as Record<string, unknown>;
+    if (
+      Object.keys(root).sort().join(',') !==
+      'lifetimeFailure,native,preparationAbort,preparationAbortUnavailable,preparedInputs'
+    )
       throw new Error('invalid reconciliation response fields');
+  } catch (error) {
+    evidenceFailures.push(error instanceof Error ? error.message.slice(0, 512) : 'invalid reconciliation response');
+    root = {};
+  }
+  try {
+    if (Object.keys(root).length === 0) throw new Error('invalid reconciliation response');
     if (root.native !== null) {
       const item = root.native as Record<string, unknown>;
       if (
@@ -8126,6 +8370,11 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
       });
       if (!native) throw new Error('stored native terminal result is invalid');
     }
+  } catch (error) {
+    evidenceFailures.push(error instanceof Error ? error.message.slice(0, 512) : 'stored native evidence is invalid');
+    native = null;
+  }
+  try {
     if (root.preparedInputs !== null) {
       const item = root.preparedInputs as Record<string, unknown>;
       if (
@@ -8153,9 +8402,60 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
       };
     }
   } catch (error) {
-    evidenceFailures.push(error instanceof Error ? error.message.slice(0, 512) : 'stored evidence is invalid');
-    native = null;
-    preparedInputs = null;
+    evidenceFailures.push(
+      error instanceof Error ? error.message.slice(0, 512) : 'stored prepared input evidence is invalid',
+    );
+  }
+  try {
+    if (root.preparationAbort !== null) {
+      preparationAbort =
+        parseRemotePreparationAbortEvidence(root.preparationAbort, { host: hostName, run: runId }) ?? undefined;
+      if (!preparationAbort) throw new Error('pre-command abort evidence does not match the original terminal run');
+    }
+  } catch (error) {
+    evidenceFailures.push(
+      error instanceof Error ? error.message.slice(0, 512) : 'pre-command abort evidence is invalid',
+    );
+  }
+  if (typeof root.preparationAbortUnavailable === 'string' && root.preparationAbortUnavailable.length <= 512) {
+    preparationAbortUnavailable = root.preparationAbortUnavailable;
+  } else if (root.preparationAbortUnavailable !== null) {
+    preparationAbortUnavailable = 'host did not provide a bounded preparation evidence status';
+    evidenceFailures.push(preparationAbortUnavailable);
+  }
+  if (!native && preparationAbort) {
+    let cleanup: RemoteCleanupReceipt;
+    try {
+      cleanup = await cleanupPreparedRun(prepared);
+    } catch (error) {
+      cleanup = {
+        schema: 1,
+        host: hostName,
+        run: runId,
+        status: 'unknown',
+        supervisorStopped: false,
+        commandGroupTerminal: false,
+        containersRemoved: false,
+        runDirectoryRemoved: false,
+        failures: [error instanceof Error ? error.message.slice(0, 512) : 'preparation abort cleanup is unverified'],
+      };
+    }
+    const settlement: RemoteCheckSettlement = {
+      schema: 1,
+      host: hostName,
+      run: runId,
+      native: null,
+      preparationAbort,
+      preparedInputs,
+      returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
+      cleanup,
+      transportChildReaped: true,
+    };
+    if (remotePreparationAbortSettlementReady(settlement, { host: hostName, run: runId })) return settlement;
+    return {
+      ...settlement,
+      preparationAbortUnavailable: 'verified remote cleanup is unavailable; the preparation abort remains held',
+    };
   }
   if (!native) {
     return {
@@ -8183,6 +8483,8 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
         failures: ['original remote run remains pending; no stop or cleanup was requested'],
       },
       transportChildReaped: true,
+      preparationAbortUnavailable:
+        preparationAbortUnavailable ?? 'matching terminal preparation and resource evidence is unavailable',
     };
   }
   let returns: RemoteReturnManifest = {
@@ -9303,6 +9605,10 @@ export function remoteCheckCustodyCallbacks(
           JSON.stringify(previousNative) !== JSON.stringify(native)
         )
           throw new Error('remote-check: settlement replaced the native receipt');
+        const preparationAbortReady =
+          native === null &&
+          previousNative === undefined &&
+          remotePreparationAbortSettlementReady(settlement, { host: settlement.host, run: settlement.run });
         const nativeEvidence = native ?? previousNative;
         const nativeReference =
           nativeEvidence === undefined
@@ -9313,7 +9619,7 @@ export function remoteCheckCustodyCallbacks(
         const { native: _previousNative, settlement: _previousSettlement, ...retained } = previous;
         attempts[index] = {
           ...retained,
-          status: native ? 'terminal' : 'uncertain',
+          status: native || preparationAbortReady ? 'terminal' : 'uncertain',
           ...(nativeReference ? { nativeReference } : {}),
           settlementReference,
           cleanup: settlement.cleanup,

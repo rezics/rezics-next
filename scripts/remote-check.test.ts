@@ -44,6 +44,8 @@ import {
   rsyncCompressionArguments,
   parseRunLifetimeFailure,
   parseRemotePhysicalRunReceipt,
+  parseRemotePreparationAbortEvidence,
+  remotePreparationAbortSettlementReady,
   requestExecutionCancellation,
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_RUN_MEMORY_GIB,
@@ -995,6 +997,10 @@ if (script.includes('/proc/loadavg')) {
 } else if (script.includes("printf 'STOPPED")) {
   log({ kind: 'stop', slotHeld: slotHeld(), script });
   console.log('STOPPED');
+} else if (script.includes('REMOTE_CHECK_RECONCILE_STATUS')) {
+  log({ kind: 'reconciliation-status' });
+  if (config.reconciliationStatus === undefined) process.exit(4);
+  console.log(JSON.stringify(config.reconciliationStatus));
 } else if (script.includes('REMOTE_CHECK_STATUS')) {
   // Recorded exit is hostKey.status; this counter must not share that file.
   const attempt = count('status-probe') + 1;
@@ -1301,6 +1307,7 @@ ${javascript}
 
 type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
+  reconciliationStatus?: Record<string, unknown>;
   stallHeartbeats?: boolean;
   gitFetchExit?: number;
   available?: number;
@@ -2143,6 +2150,92 @@ test('cleanup-only reconciliation removes one exact run without a native receipt
     expect(events.some((event) => event.kind === 'cleanup')).toBe(true);
     expect(events.some((event) => event.kind === 'status')).toBe(false);
     expect(events.some((event) => event.kind === 'returns')).toBe(false);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('reconciliation binds a no-command abort census before verified remote cleanup', async () => {
+  const run = randomUUID();
+  const abort = {
+    schema: 1,
+    host: 'a',
+    run,
+    status: 'infrastructure-failure',
+    phase: 'abort',
+    preparationReceiptSha256: 'a'.repeat(64),
+    resourcesReceiptSha256: 'b'.repeat(64),
+    resources: {
+      schema: 1,
+      host: 'a',
+      run,
+      boot: 'fixture-boot',
+      supervisor: { pid: 42, start: '900', group: 42 },
+      startedMonoMs: 100,
+      commandStartedMonoMs: null,
+      terminalMonoMs: 300,
+      terminalSampleMonoMs: 299,
+      sampleCount: 4,
+      commandSampleCount: 0,
+    },
+  };
+  const fixture = scenario({
+    a: {
+      available: 8e9,
+      reconciliationStatus: {
+        native: null,
+        preparedInputs: null,
+        lifetimeFailure: null,
+        preparationAbort: abort,
+        preparationAbortUnavailable: null,
+      },
+    },
+  });
+  const previous = {
+    PATH: process.env.PATH,
+    FAKE_DIR: process.env.FAKE_DIR,
+    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+    KERNEL_CHECK_REMOTE: process.env.KERNEL_CHECK_REMOTE,
+  };
+  Object.assign(process.env, {
+    PATH: fixture.env.PATH,
+    FAKE_DIR: fixture.env.FAKE_DIR,
+    XDG_RUNTIME_DIR: fixture.env.XDG_RUNTIME_DIR,
+    KERNEL_CHECK_REMOTE: fixture.env.KERNEL_CHECK_REMOTE,
+  });
+  try {
+    const settlement = await reconcileRemoteRun({
+      hosts: readHosts(fixture.env.KERNEL_CHECK_REMOTE!),
+      physical: { host: 'a', run },
+      workspace: root,
+      returns: [],
+      allowedHosts: ['a'],
+    });
+    expect(remotePreparationAbortSettlementReady(settlement, { host: 'a', run })).toBe(true);
+    expect(settlement).toMatchObject({
+      native: null,
+      preparationAbort: abort,
+      returns: { status: 'empty', entries: [], missing: [], failures: [] },
+      cleanup: { status: 'verified', supervisorStopped: true, commandGroupTerminal: true },
+      transportChildReaped: true,
+    });
+    const events = fixture.events();
+    expect(events.map((event) => event.kind).indexOf('cleanup')).toBeGreaterThan(
+      events.map((event) => event.kind).indexOf('reconciliation-status'),
+    );
+    expect(parseRemotePreparationAbortEvidence({ ...abort, host: 'other' }, { host: 'a', run })).toBeNull();
+    expect(
+      parseRemotePreparationAbortEvidence(
+        {
+          ...abort,
+          resources: { ...abort.resources, commandStartedMonoMs: 200, commandSampleCount: 1 },
+        },
+        { host: 'a', run },
+      ),
+    ).toBeNull();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];

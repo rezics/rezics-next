@@ -929,6 +929,55 @@ function retainedAttempt(host: string, run: string) {
   };
 }
 
+function retainedPreparationAbortSettlement(
+  host: string,
+  run: string,
+  cleanup: RemoteCheckSettlement['cleanup'] = {
+    schema: 1,
+    host,
+    run,
+    status: 'verified',
+    supervisorStopped: true,
+    commandGroupTerminal: true,
+    containersRemoved: true,
+    runDirectoryRemoved: true,
+    failures: [],
+  },
+): RemoteCheckSettlement {
+  return {
+    schema: 1,
+    host,
+    run,
+    native: null,
+    preparationAbort: {
+      schema: 1,
+      host,
+      run,
+      status: 'infrastructure-failure',
+      phase: 'abort',
+      preparationReceiptSha256: 'a'.repeat(64),
+      resourcesReceiptSha256: 'b'.repeat(64),
+      resources: {
+        schema: 1,
+        host,
+        run,
+        boot: 'fixture-boot',
+        supervisor: { pid: 42, start: '900', group: 42 },
+        startedMonoMs: 100,
+        commandStartedMonoMs: null,
+        terminalMonoMs: 300,
+        terminalSampleMonoMs: 299,
+        sampleCount: 4,
+        commandSampleCount: 0,
+      },
+    },
+    preparedInputs: null,
+    returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
+    cleanup,
+    transportChildReaped: true,
+  };
+}
+
 async function withIsolatedTask(root: string, run: () => Promise<void>): Promise<void> {
   const old = { ...process.env };
   const registry = join(root, 'registry');
@@ -1092,6 +1141,178 @@ test('a referenced native exit 1 survives recovery and duplicate wake without an
   expect(record.physicalRunReference).toMatchObject({ checkId: id, physicalRunId, kind: 'native' });
   expect(await waitWorkerCheck(id, root, 0, { write: () => {} })).toBe(1);
   expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
+});
+
+test('a matching terminal preparation abort settles once without a native receipt or command exit', async () => {
+  const fixture = workerFixture();
+  const lost = await writeLostRemoteCheck(fixture.root, 'pending');
+  const hostsFile = writeHosts(fixture);
+  const custodyFile = remoteRunCustodyPath(fixture.root, lost.physicalRunId);
+  const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    binding: Record<string, unknown>;
+  };
+  writeAtomicJson(custodyFile, {
+    ...custody,
+    binding: { ...custody.binding, hostsFile, returns: [] },
+  });
+
+  let reconciliations = 0;
+  const output: string[] = [];
+  const remoteReconcile = async ({ physical }: { physical: { host: string; run: string } }) => {
+    reconciliations += 1;
+    return retainedPreparationAbortSettlement(physical.host, physical.run);
+  };
+  expect(
+    await waitWorkerCheck(lost.id, fixture.root, 500, {
+      pollMs: 1,
+      write: (line) => output.push(line),
+      remoteReconcile,
+    }),
+  ).toBe(1);
+
+  const record = readWorkerCheckRecord(lost.id, fixture.root);
+  expect(record).toMatchObject({ status: 'finished', infrastructureFailureFinal: true });
+  expect(record.infrastructureFailure).toContain('before the command started');
+  expect(record.exitCode).toBeUndefined();
+  expect(record.physicalRun).toBeUndefined();
+  expect(record.physicalRunReference).toBeUndefined();
+  expect(output.join('')).toContain('check: no native command result');
+  expect(output.join('')).not.toContain('check: exit status 1');
+  expect(readWorkerCheckHistory(lost.id, lost.physicalRunId, fixture.root)?.terminalProof).toMatchObject({
+    local: true,
+    remote: true,
+    resultKnown: false,
+  });
+  const settled = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    status: string;
+    attempts: Array<Record<string, unknown>>;
+  };
+  expect(settled).toMatchObject({
+    status: 'terminal',
+    attempts: [{ status: 'terminal', settlementReference: { kind: 'settlement' }, cleanup: { status: 'verified' } }],
+  });
+  expect(settled.attempts[0]?.nativeReference).toBeUndefined();
+  expect(await waitWorkerCheck(lost.id, fixture.root, 0, { write: () => {}, remoteReconcile })).toBe(1);
+  expect(reconciliations).toBe(1);
+  expect(existsSync(join(fixture.root, 'rerun-marker'))).toBe(false);
+});
+
+test.each([
+  [
+    'mismatched settlement identity',
+    (host: string, run: string) => ({ ...retainedPreparationAbortSettlement(host, run), host: 'check-b' }),
+  ],
+  [
+    'unknown cleanup',
+    (host: string, run: string) =>
+      retainedPreparationAbortSettlement(host, run, {
+        ...retainedPreparationAbortSettlement(host, run).cleanup,
+        status: 'unknown',
+        supervisorStopped: false,
+      }),
+  ],
+  [
+    'live remote supervisor',
+    (host: string, run: string) =>
+      retainedPreparationAbortSettlement(host, run, {
+        ...retainedPreparationAbortSettlement(host, run).cleanup,
+        supervisorStopped: false,
+      }),
+  ],
+  [
+    'command-start evidence',
+    (host: string, run: string) => {
+      const settlement = retainedPreparationAbortSettlement(host, run);
+      return {
+        ...settlement,
+        preparationAbort: {
+          ...settlement.preparationAbort!,
+          resources: { ...settlement.preparationAbort!.resources, commandStartedMonoMs: 200, commandSampleCount: 1 },
+        },
+      } as unknown as RemoteCheckSettlement;
+    },
+  ],
+] as const)('a remote preparation abort stays held with %s', async (_reason, makeSettlement) => {
+  const fixture = workerFixture();
+  const lost = await writeLostRemoteCheck(fixture.root, 'pending');
+  const hostsFile = writeHosts(fixture);
+  const custodyFile = remoteRunCustodyPath(fixture.root, lost.physicalRunId);
+  const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    binding: Record<string, unknown>;
+  };
+  writeAtomicJson(custodyFile, {
+    ...custody,
+    binding: { ...custody.binding, hostsFile, returns: [] },
+  });
+  let reconciliations = 0;
+  const output: string[] = [];
+  const remoteReconcile = async ({ physical }: { physical: { host: string; run: string } }) => {
+    reconciliations += 1;
+    return makeSettlement(physical.host, physical.run);
+  };
+  expect(
+    await waitWorkerCheck(lost.id, fixture.root, 60, {
+      pollMs: 1,
+      write: (line) => output.push(line),
+      remoteReconcile,
+    }),
+  ).toBe(75);
+  expect(reconciliations).toBe(1);
+  expect(output.join('')).toContain('remote result remains held');
+  expect(readWorkerCheckRecord(lost.id, fixture.root)).toMatchObject({ status: 'running' });
+  expect(readWorkerCheckRecord(lost.id, fixture.root).exitCode).toBeUndefined();
+  const retained = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    status: string;
+    attempts: Array<Record<string, unknown>>;
+  };
+  expect(retained.status).toBe('running');
+  expect(retained.attempts[0]?.settlementReference).toBeUndefined();
+  expect(existsSync(join(fixture.root, 'rerun-marker'))).toBe(false);
+});
+
+test('an unbound or superseded remote run cannot accept a preparation abort', async () => {
+  for (const state of ['unbound', 'superseded'] as const) {
+    const fixture = workerFixture();
+    const lost = await writeLostRemoteCheck(fixture.root, 'pending');
+    const custodyFile = remoteRunCustodyPath(fixture.root, lost.physicalRunId);
+    const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+      binding: Record<string, unknown>;
+    };
+    writeAtomicJson(custodyFile, {
+      ...custody,
+      ...(state === 'unbound'
+        ? { binding: { ...custody.binding, checkId: randomUUID() } }
+        : { physicalRunId: randomUUID() }),
+    });
+    let reconciliations = 0;
+    const remoteReconcile = async ({ physical }: { physical: { host: string; run: string } }) => {
+      reconciliations += 1;
+      return retainedPreparationAbortSettlement(physical.host, physical.run);
+    };
+    expect(await waitWorkerCheck(lost.id, fixture.root, 60, { pollMs: 1, remoteReconcile, write: () => {} })).toBe(75);
+    expect(reconciliations).toBe(0);
+    expect(readWorkerCheckRecord(lost.id, fixture.root).status).toBe('running');
+  }
+});
+
+test('a locally live or identity-unknown runner is not finalized by a remote abort', async () => {
+  const fixture = workerFixture();
+  const lost = await writeLostRemoteCheck(fixture.root, 'pending');
+  const currentIdentity = processIdentity(process.pid)!;
+  const resultFile = join(fixture.root, '.temp/goal/checks/results', `${lost.id}.json`);
+  const result = JSON.parse(readFileSync(resultFile, 'utf8')) as Record<string, unknown>;
+  writeAtomicJson(resultFile, { ...result, runnerIdentity: currentIdentity, runnerPid: currentIdentity.pid });
+  const historyFile = physicalHistoryPath(fixture.root, lost.id, lost.physicalRunId);
+  const history = JSON.parse(readFileSync(historyFile, 'utf8')) as Record<string, unknown>;
+  writeAtomicJson(historyFile, { ...history, runnerIdentity: currentIdentity });
+  let reconciliations = 0;
+  const remoteReconcile = async ({ physical }: { physical: { host: string; run: string } }) => {
+    reconciliations += 1;
+    return retainedPreparationAbortSettlement(physical.host, physical.run);
+  };
+  expect(await waitWorkerCheck(lost.id, fixture.root, 30, { pollMs: 1, remoteReconcile, write: () => {} })).toBe(75);
+  expect(reconciliations).toBe(0);
+  expect(readWorkerCheckRecord(lost.id, fixture.root).status).toBe('running');
 });
 
 test('missing, empty or mismatched physical identity keeps a lost remote check unknown', async () => {
