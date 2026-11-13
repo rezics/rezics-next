@@ -6,17 +6,18 @@ configuration. Add backend capability only when the existing abstractions cannot
 Choose the simplest design that meets the requirement. Prefer mature engines, extensions, libraries and standards.
 A custom mechanism needs evidence of the gap it fills and a comparison with the existing alternatives.
 
-Every operation addresses a bounded neighbourhood. State its anchors, examined keys, expansion limits and indexed
-cost. Bound reads, writes, authorization, validation, projections and cleanup. A response limit does not bound a scan,
-sort, join, history walk or dependency fanout.
+Every synchronous operation or resumable step addresses a bounded neighbourhood. State its anchors, examined keys,
+expansion limits and indexed cost. Bound reads, writes, authorization, validation, projections and cleanup. A response
+limit does not bound a scan, sort, join, history walk or dependency fanout.
 
 The bound applies to the rows a design reads through its own keys, fanout and expansion limits. Physical work the
 database engine does for multiversion visibility, such as skipping versions from concurrent uncommitted transactions or
 versions not yet vacuumed, belongs to the engine and its maintenance. Do not build product-level budgets or custom
 primitives to meter it; use ordinary indexed SQL and keep the engine's maintenance healthy.
 
-A composed operation's ceiling is the derived sum of its parts' finite bounds. Owners set and record the numbers; a
-number that does not fit is raised, not a blocker. Only a design whose work grows with data is escalated.
+A composed step's ceiling is the derived sum of its parts' finite bounds. Owners set and record the numbers. When an
+ordinary journey needs more input than one bounded request, provide an indexed point operation or a resumable staged
+path. Raising the constant or routing a full scan to the client does not supply that path.
 
 Derive bounds on paper, enforce them with structural limits (full-key seeks, `LIMIT`, page and fan-out caps) and prove
 them with growth checks. Do not build runtime price protocols between owners: no pre-I/O quotes, prepaid funding,
@@ -24,15 +25,22 @@ no-refill ledgers or per-profile dispatch allowances. When a contract needs a pr
 documented static bound as a constant.
 
 Large jobs make bounded, resumable progress. Bound each step's examined work, expanded representation and output
-bytes independently of the total logical set. A page limit must not become a lifetime ceiling or require rewriting
-the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact contract.
+bytes independently of the total logical set. A page, batch, input envelope or synchronous work budget bounds a step,
+not the lifetime size of a logically unbounded collection, ordered structure or complete release. A step must not
+require rewriting the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact
+contract.
+
+Indexed local edits must not grow linearly with unrelated siblings or descendants. Work that consumes all n items
+must take O(n) or O(n log n) total work in bounded steps, without repeated full-prefix scans. Exceptions require an
+explicit product reason and measured proof.
 
 Share coverage, progress and byte-limit contracts across owners. Each domain keeps authority over its state,
 transaction, completion and effects. Reuse execution machinery only when those invariants and lifecycle agree.
 
-Decision: use the [pinned universal scalability audit](research/universal-scalability-audit.md) as an owner-review
-queue and evidence index; promote stable requirements into their architecture, product or verification owner, with
-the report linked as evidence.
+Decision: adopt the distinction between step bounds and supported data size above from the
+[pinned universal scalability audit](research/universal-scalability-audit.md) and its
+[follow-up](research/universal-scalability-follow-up.md). Use them as an owner-review queue and evidence index;
+adoption does not establish implementation.
 
 A capability must hold wherever its abstraction appears. Inclusion in public scope means the complete architectural
 capability across its surfaces, rather than one working example.
