@@ -15,7 +15,9 @@ export type HostedReadingAddress = Readonly<{
   documentPosition: HostedReadingDocumentPosition | null;
 }>;
 
-export type HostedReadingSelection = HostedReadingAddress;
+/** Save selection binds the exact Subject that the owner selected the catalogue for.
+ * Subject identity is admission context and is not part of the stored address. */
+export type HostedReadingSelection = HostedReadingAddress & Readonly<{ subjectId: string }>;
 
 export type HostedReadingChapterTarget = Readonly<{
   threadId: string;
@@ -108,11 +110,7 @@ export type HostedReadingListView = Readonly<{
   nextCursor: string | null;
 }>;
 
-export type HostedReadingSaveInput = HostedReadingSelection &
-  Readonly<{
-    subjectId: string;
-    expectedRevision: string | null;
-  }>;
+export type HostedReadingSaveInput = HostedReadingSelection & Readonly<{ expectedRevision: string | null }>;
 
 export type HostedReadingClearInput = Readonly<{
   subjectId: string;

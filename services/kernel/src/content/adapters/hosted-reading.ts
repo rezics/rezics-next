@@ -3,6 +3,7 @@ import { ContentNotFoundError } from '../reads.ts';
 import { InvalidHostedStructureError } from '../hosted-chapters-model.ts';
 import { resolveHostedOccurrence, resolveHostedOccurrenceMetadata } from '../hosted-chapters-reads.ts';
 import type { HostedDependencies } from '../hosted-chapters-model.ts';
+import { hasHostedReadingSubjectAssociation } from '../hosted-reading-association.ts';
 import type {
   HostedReadingAddress,
   HostedReadingMetadata,
@@ -69,6 +70,16 @@ export function createNativeHostedReadingPort(deps: HostedDependencies): HostedR
   return {
     async validateSelection(actor, selection, deadline): Promise<HostedReadingValidation> {
       if (!hostedReadingSelectionShape(selection)) return { ok: false, reason: 'invalid_selection' };
+      if (
+        !(await hasHostedReadingSubjectAssociation(
+          deps,
+          actor as Actor,
+          selection.subjectId,
+          selection.catalogueId,
+          deadline,
+        ))
+      )
+        return { ok: false, reason: 'unavailable' };
       const resume = await resolve(deps, actor as Actor, selection, deadline);
       if (resume.availability !== 'available')
         return { ok: false, reason: resume.kind === 'unknown' ? 'not_found' : 'unavailable' };

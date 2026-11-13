@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Pool, PoolClient } from 'pg';
 import { hostedChaptersFixture } from '../content/support/hosted-chapters-fixture.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { peekHostedReadingPort } from '../../src/library/hosted-reading-bind.ts';
 import type { HostedReadingPort } from '../../src/library/contract/hosted-reading.ts';
 
@@ -18,6 +18,22 @@ afterAll(async () => {
 });
 
 let restorePositionProjection: (() => void) | undefined;
+
+async function subjectOnRoute(route: number): Promise<string> {
+  let key = crypto.randomUUID();
+  while (anchorRoute(f.native.system.routeKey, `${f.native.author.actor.accountId}\nsubject.create\n${key}`) !== route)
+    key = crypto.randomUUID();
+  const created = await f.native.call(
+    'POST',
+    '/v1/subjects',
+    { type: 'skos:ConceptScheme', labels: { en: `Hosted reading ${crypto.randomUUID()}` } },
+    { key },
+  );
+  expect(created.status, JSON.stringify(created.value)).toBe(201);
+  const subjectId = created.value.subject.id as string;
+  expect(routeOf(subjectId)).toBe(route);
+  return subjectId;
+}
 
 function watchChapterBodyReads(pool: Pool) {
   let reads = 0;
@@ -162,8 +178,19 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
 
   const ownerId = f.native.system.actors.other.actor.accountId;
   const ownerRoute = routeOf(ownerId)!;
-  const subjectOne = newId(ownerRoute);
-  const subjectTwo = newId(ownerRoute);
+  const catalogueRoute = routeOf(f.catalogueId)!;
+  const subjectOne = await subjectOnRoute(catalogueRoute);
+  const subjectTwo = await f.subjectOutsidePartition(partitionOf(catalogueRoute));
+  const catalogueState = await f.native.state(f.catalogueId);
+  const associationRevision = await f.native.revise(
+    {
+      id: f.catalogueId,
+      revisionId: String(catalogueState.head_revision_id),
+      visibility: 'published',
+    },
+    { subjectIds: [subjectOne, subjectTwo] },
+  );
+  expect(associationRevision.status, JSON.stringify(associationRevision.value)).toBe(200);
   const saveOne = {
     subjectId: subjectOne,
     catalogueId: f.catalogueId,
@@ -186,12 +213,25 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     other: true,
     key: 'hosted-reading-save-one',
   });
+  expect(savedOne.status, JSON.stringify(savedOne.value)).toBe(200);
+  const directAssociationProjection = await f.native.pool.query(
+    `SELECT 1 FROM content.subject_thread
+     WHERE route=$1 AND subject_id=$2 AND thread_route=$3 AND thread_id=$4`,
+    [catalogueRoute, subjectOne, catalogueRoute, f.threadId],
+  );
+  expect(directAssociationProjection.rows).toHaveLength(0);
+  await f.projectSubjectThread(f.threadId);
+  const projectedCrossHomeAssociation = await f.native.pool.query(
+    `SELECT 1 FROM content.subject_thread
+     WHERE route=$1 AND subject_id=$2 AND thread_route=$3 AND thread_id=$4`,
+    [routeOf(subjectTwo), subjectTwo, catalogueRoute, f.threadId],
+  );
+  expect(projectedCrossHomeAssociation.rows).toHaveLength(1);
   const savedTwo = await f.native.call('PUT', '/v1/libraryHostedReading', saveTwo, {
     other: true,
     key: 'hosted-reading-save-two',
   });
-  expect(savedOne.status).toBe(200);
-  expect(savedTwo.status).toBe(200);
+  expect(savedTwo.status, JSON.stringify(savedTwo.value)).toBe(200);
   restorePositionProjection = projectHostedReadingPosition(firstOccurrence, 512);
 
   const readingPort = watchHostedReadingPort();
@@ -332,6 +372,46 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     bodyReads.restore();
   }
 
+  const beforeRetirement = await f.native.state(f.catalogueId);
+  const retiredAssociation = await f.native.revise(
+    {
+      id: f.catalogueId,
+      revisionId: String(beforeRetirement.head_revision_id),
+      visibility: 'published',
+    },
+    { subjectIds: [subjectOne] },
+  );
+  expect(retiredAssociation.status, JSON.stringify(retiredAssociation.value)).toBe(200);
+  await f.projectSubjectThread(f.threadId);
+  const retiredProjection = await f.native.pool.query(
+    `SELECT 1 FROM content.subject_thread
+     WHERE route=$1 AND subject_id=$2 AND thread_route=$3 AND thread_id=$4`,
+    [routeOf(subjectTwo), subjectTwo, catalogueRoute, f.threadId],
+  );
+  expect(retiredProjection.rows).toHaveLength(0);
+  const beforeRejectedSave = await f.native.pool.query(
+    `SELECT revision::text,activity_sequence::text,changed_at::text,publication_revision_id,occurrence_id
+     FROM library.hosted_reading WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+    [ownerRoute, ownerId, subjectTwo],
+  );
+  const retiredSave = await f.native.call(
+    'PUT',
+    '/v1/libraryHostedReading',
+    {
+      ...saveTwo,
+      documentPosition: { blockId: 'retired-association', offset: 4 },
+      expectedRevision: savedTwo.value.revision,
+    },
+    { other: true, key: crypto.randomUUID() },
+  );
+  expect(retiredSave.status).toBe(404);
+  const afterRejectedSave = await f.native.pool.query(
+    `SELECT revision::text,activity_sequence::text,changed_at::text,publication_revision_id,occurrence_id
+     FROM library.hosted_reading WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+    [ownerRoute, ownerId, subjectTwo],
+  );
+  expect(afterRejectedSave.rows).toEqual(beforeRejectedSave.rows);
+
   const moved = await f.native.call(
     'POST',
     `${cataloguePath}:revise`,
@@ -370,6 +450,14 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     { key: crypto.randomUUID() },
   );
   expect(laterPublication.status).toBe(200);
+  const historicalSave = await f.native.call(
+    'PUT',
+    '/v1/libraryHostedReading',
+    { ...saveOne, expectedRevision: savedOne.value.revision },
+    { other: true, key: crypto.randomUUID() },
+  );
+  expect(historicalSave.status, JSON.stringify(historicalSave.value)).toBe(200);
+  expect(historicalSave.value.address.publicationRevisionId).toBe(publication.value.revisionId);
   const withdrawn = await f.native.call(
     'POST',
     `${cataloguePath}:publish`,
@@ -390,6 +478,10 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     expect(historical).toMatchObject({
       address: { publicationRevisionId: publication.value.revisionId, occurrenceId: firstOccurrence },
       metadata: { availability: 'available', position: 512, title: 'First chapter', target: firstTarget },
+    });
+    expect(current.value.items.find((item: { subjectId: string }) => item.subjectId === subjectTwo)).toMatchObject({
+      subjectId: subjectTwo,
+      address: { occurrenceId: secondOccurrence, targetRevisionId: secondTarget.revisionId },
     });
     expect(historicalBodyReads.count()).toBe(0);
     const opened = await f.native.call('GET', `/v1/libraryHostedReading?subjectId=${subjectOne}`, undefined, {
@@ -443,7 +535,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     expect(unavailable.value).toMatchObject({
       state: 'saved',
       subjectId: subjectOne,
-      revision: savedOne.value.revision,
+      revision: historicalSave.value.revision,
       address: savedOne.value.address,
       metadata: { availability: 'unavailable', occurrenceId: firstOccurrence, kind: 'chapter' },
     });

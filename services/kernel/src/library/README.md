@@ -108,6 +108,8 @@ Decision: `hosted_reading.list` orders checkpoints by a per-mutation activity se
 
 Decision: `GET /v1/libraryHostedReading/metadata?subjectId={id}` reads one owner-private checkpoint and returns either `{state: 'none', subjectId}` or `{state: 'saved', subjectId, revision, address, metadata}`. It reuses the exact point read and Content metadata port, preserves the saved address when current authority withholds metadata, and never resolves chapter bytes. The original `GET /v1/libraryHostedReading` remains the exact byte-bearing resume operation; Web consumes this additive response in its receiving brief.
 
+Decision: Hosted Book checkpoint save binds the selected Subject and requires its current native association with the catalogue: an indexed `subject_thread` row or the eligible same-home published opening Post's current Subject reference, with a nonempty current public release. Content still validates the exact supplied historical publication and target without requiring that publication to equal the current release pointer.
+
 Decision: available hosted-reading occurrence positions use Content's nonnegative safe-integer read contract in point resume, point metadata and checkpoint-list responses; Library preserves the returned position exactly. Document block offsets retain their separate existing bound, and Content remains the owner of publication and full-replacement limits. The focused Library witness projects position 512 through the existing Content port over an admitted exact chapter selection because published manifests currently assign dense positions to at most 512 selected occurrences.
 
 Library contract owns Continue session and page vocabulary. `adapters/continue-page.ts` owns the closed Continue

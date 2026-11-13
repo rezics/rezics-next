@@ -1,4 +1,4 @@
-import type { HostedReadingResume, HostedReadingSelection } from '../library/contract/hosted-reading.ts';
+import type { HostedReadingAddress, HostedReadingResume } from '../library/contract/hosted-reading.ts';
 import {
   HOSTED_READING_POSITION_BLOCK_MAX,
   HOSTED_READING_POSITION_OFFSET_MAX,
@@ -15,7 +15,7 @@ export function hostedReadingUnavailable(
   return { availability: 'unavailable', occurrenceId, kind };
 }
 
-export function hostedReadingPositionIsBounded(position: HostedReadingSelection['documentPosition']): boolean {
+export function hostedReadingPositionIsBounded(position: HostedReadingAddress['documentPosition']): boolean {
   if (position === null) return true;
   return (
     typeof position.blockId === 'string' &&
@@ -29,7 +29,7 @@ export function hostedReadingPositionIsBounded(position: HostedReadingSelection[
   );
 }
 
-export function hostedReadingSelectionShape(selection: HostedReadingSelection): boolean {
+export function hostedReadingSelectionShape(selection: HostedReadingAddress): boolean {
   return (
     typeof selection.catalogueId === 'string' &&
     typeof selection.publicationRevisionId === 'string' &&
