@@ -1,7 +1,50 @@
 import { expect, test } from 'bun:test';
 import type { RecoveryObservation, RecoveryObserver } from '../src/library/application';
 import { HostedCheckpointWindow } from '../src/library/hosted-checkpoint-window';
-import type { HostedCheckpointRequest, HostedCheckpointResult } from '../src/library/hosted-checkpoint-source';
+import {
+  presentHostedCheckpoints,
+  type HostedCheckpointRequest,
+  type HostedCheckpointResult,
+} from '../src/library/hosted-checkpoint-source';
+
+test('checkpoint list decoding accepts safe positions and preserves exact target and document bounds', () => {
+  const id = '00000000-0000-7000-8000-000000000001';
+  const sha256 = 'a'.repeat(64);
+  const address = {
+    catalogueId: id,
+    publicationRevisionId: id,
+    occurrenceId: id,
+    targetRevisionId: id,
+    targetSha256: sha256,
+    documentPosition: { blockId: 'saved-block', offset: 2097152 },
+  };
+  const metadata = {
+    availability: 'available',
+    occurrenceId: id,
+    parentId: null,
+    position: 0,
+    kind: 'chapter',
+    title: 'Saved chapter',
+    target: { threadId: id, postId: id, revisionId: id, sha256 },
+  };
+  const row = { subjectId: id, revision: '1', address, activityAt: '2026-11-13T00:00:00Z', metadata };
+  const page = (item: unknown) => ({ items: [item], nextCursor: 'opaque+/next==' });
+  const accepted = presentHostedCheckpoints(page(row));
+  expect(accepted.state).toBe('loaded');
+  // These are external response fixtures, not native server acceptance.
+  for (const position of [511, 512, Number.MAX_SAFE_INTEGER])
+    expect(presentHostedCheckpoints(page({ ...row, metadata: { ...metadata, position } }))).toEqual(accepted);
+  for (const position of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, '512', null, {}, NaN, Infinity])
+    expect(presentHostedCheckpoints(page({ ...row, metadata: { ...metadata, position } }))).toEqual({
+      state: 'unavailable',
+    });
+  for (const defect of [
+    { ...row, metadata: { ...metadata, position: 512, target: { ...metadata.target, sha256: 'b'.repeat(64) } } },
+    { ...row, address: { ...address, documentPosition: { blockId: 'saved-block', offset: 2097153 } } },
+    { ...row, metadata: { ...metadata, document: null } },
+  ])
+    expect(presentHostedCheckpoints(page(defect))).toEqual({ state: 'unavailable' });
+});
 
 const loaded = (title: string, nextCursor: string | null = null): HostedCheckpointResult => ({
   state: 'loaded',

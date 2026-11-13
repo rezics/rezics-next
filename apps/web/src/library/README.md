@@ -61,6 +61,11 @@ types derive from that operation; `hosted-checkpoint-source.ts` owns strict exte
 transport seam. Focused generated-fetch, link and retirement regressions run in the dev verifier; native, browser and
 Storybook acceptance remain deferred.
 
+Checkpoint metadata positions follow Content's nonnegative safe-integer read convention, including 512 and
+`Number.MAX_SAFE_INTEGER`; exact address/target checks and document-offset bounds stay unchanged. Library's server
+response schema still caps these positions at 511; widening that schema belongs to the Library owner. Web decoder
+fixtures do not establish native acceptance beyond that server bound.
+
 ## My uploaded media
 
 `/library/media` reads one native `GET /v1/media` page for the admitted account and its opaque cursor. Sparse empty

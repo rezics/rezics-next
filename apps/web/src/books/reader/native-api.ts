@@ -13,7 +13,7 @@ const target = v.strictObject({ threadId: hostedId, postId: hostedId, revisionId
 const slot = {
   occurrenceId: hostedId,
   parentId: v.nullable(hostedId),
-  position: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(511)),
+  position: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 };
 const occurrence = v.union([
   v.strictObject({ ...slot, kind: v.picklist(['part', 'chapter']), availability: v.literal('unavailable') }),

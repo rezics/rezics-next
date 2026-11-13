@@ -27,7 +27,7 @@ const metadata = v.variant('availability', [
     availability: v.literal('available'),
     occurrenceId: hostedId,
     parentId: v.nullable(hostedId),
-    position: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(511)),
+    position: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
     kind: v.literal('chapter'),
     title: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
     target: v.strictObject({ threadId: hostedId, postId: hostedId, revisionId: hostedId, sha256: digest }),

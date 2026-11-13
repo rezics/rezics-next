@@ -508,16 +508,56 @@ test.each(['nested', 'moved'] as const)(
   },
 );
 
-test('metadata strictly rejects body-bearing responses and malformed chapter targets', async () => {
+test('Book read decoders accept safe positions and strictly reject malformed wire responses', async () => {
   const { api } = await createIllustrativeHostedBook().ready;
   const result = await api.metadata(ids.catalogue, ids.first, { kind: 'publication' });
   if (result.state !== 'ready') throw new Error('Expected metadata');
+  let response: unknown;
+  const client = createKernelClient('https://kernel.test', { fetch: async () => Response.json(response) });
+  const native = createHostedCatalogueApi(client, null, new AbortController().signal);
+  const query = { kind: 'publication', revisionId: ids.release } as const;
+  // External decoder fixtures, not evidence of native large-Book acceptance.
+  for (const position of [
+    0,
+    511,
+    512,
+    Number.MAX_SAFE_INTEGER,
+    -1,
+    0.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    '512',
+    null,
+    {},
+  ]) {
+    const state = [0, 511, 512, Number.MAX_SAFE_INTEGER].includes(position as number) ? 'ready' : 'unavailable';
+    const { occurrence: original, ...revision } = result.value;
+    for (const occurrence of [
+      { ...original, position },
+      { ...original, position, kind: 'part', target: null },
+      {
+        occurrenceId: original.occurrenceId,
+        parentId: original.parentId,
+        position,
+        kind: 'chapter',
+        availability: 'unavailable',
+      },
+    ]) {
+      response = { ...revision, occurrence };
+      const metadata = await native.metadata(ids.catalogue, ids.first, query);
+      expect(metadata.state).toBe(state);
+      if (metadata.state === 'ready') expect(metadata.value.occurrence.position).toBe(position);
+      response = { ...revision, occurrence, document: null };
+      expect((await native.resolve(ids.catalogue, ids.first, query)).state).toBe(state);
+      response = { ...revision, items: [occurrence], nextCursor: null };
+      expect((await native.children(ids.catalogue, query)).state).toBe(state);
+      expect((await native.navigate(ids.catalogue, ids.first, { ...query, direction: 'next' })).state).toBe(state);
+    }
+  }
   for (const payload of [
     { ...result.value, document: null },
     { ...result.value, occurrence: { ...result.value.occurrence, target: null } },
   ]) {
-    const client = createKernelClient('https://kernel.test', { fetch: async () => Response.json(payload) });
-    const native = createHostedCatalogueApi(client, null, new AbortController().signal);
+    response = payload;
     expect(await native.metadata(ids.catalogue, ids.first, { kind: 'publication' })).toEqual({ state: 'unavailable' });
   }
 });
@@ -943,6 +983,15 @@ test('native checkpoints use body-free metadata for observation and CAS readback
   };
   expect(await readHostedCheckpoint(native, 'Bearer member', ids.post, signal)).toEqual({ state: 'unavailable' });
   expectMetadataReads(7);
+  // Receiver compatibility only: the Library server schema is separately owned.
+  for (const position of [511, 512, Number.MAX_SAFE_INTEGER]) {
+    response = { ...saved, metadata: { ...saved.metadata, position } };
+    expect(await readHostedCheckpoint(native, 'Bearer member', ids.post, signal)).toEqual(available);
+  }
+  for (const position of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, '512', null, {}]) {
+    response = { ...saved, metadata: { ...saved.metadata, position } };
+    expect(await readHostedCheckpoint(native, 'Bearer member', ids.post, signal)).toEqual({ state: 'unavailable' });
+  }
 });
 
 test('checkpoint controls retry an uncertain command unchanged and retire late private results', async () => {

@@ -78,6 +78,13 @@ bytes are decoded, digest-checked and passed to the existing Document validator.
 owns release immutability, unavailable slots, cursor binding, target admission and native limits. Each private BFF
 read prepares the real session and checks that it still matches the admitted anonymous/session subject.
 
+Decision: occurrence, contents/navigation and checkpoint metadata receivers accept exact nonnegative safe-integer
+positions through `Number.MAX_SAFE_INTEGER`, including 512. Each owner uses Valibot's `safeInteger` without a new
+cross-owner codec. Studio's 0–511 full-replacement input bound and the reader's page, title, body, exact-selector,
+viewer/target, retirement and document-offset bounds stay unchanged. Focused decoder fixtures establish Web
+compatibility only; native acceptance runs in the dev verifier. Library's server metadata schema still caps positions
+at 511 and requires a separate Library-owned change.
+
 The route supplies a fresh `NativeHostedBookAdmissionSource` for every loader observation; synchronous replacement
 retires the former reader. Other hosts must likewise replace their snapshot and notify on publication, current
 structure/target or prepared-viewer replacement, including equal-value and A/B/A replacements. Source, session,
