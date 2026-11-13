@@ -7271,6 +7271,120 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
 } & {
     v1: {
         libraryHostedReading: {
+            metadata: {
+                get: {
+                    body: unknown;
+                    params: {};
+                    query: {
+                        subjectId: string;
+                    };
+                    headers: unknown;
+                    response: {
+                        200: {
+                            state: "none";
+                            subjectId: string;
+                        } | {
+                            state: "saved";
+                            subjectId: string;
+                            revision: string;
+                            address: {
+                                catalogueId: string;
+                                publicationRevisionId: string;
+                                occurrenceId: string;
+                                targetRevisionId: string;
+                                targetSha256: string;
+                                documentPosition: {
+                                    blockId: string;
+                                    offset: number;
+                                } | null;
+                            };
+                            metadata: {
+                                availability: "available";
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter";
+                                title: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            } | {
+                                availability: "unavailable";
+                                occurrenceId: string;
+                                kind: "chapter" | "part" | "unknown";
+                            };
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryHostedReading: {
             put: {
                 body: {
                     subjectId: string;

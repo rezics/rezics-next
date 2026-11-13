@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { type HostedReadingAddress, type HostedReadingListQuery, type HostedReadingListView, type HostedReadingClearInput, type HostedReadingPort, type HostedReadingSaveInput, type HostedReadingView } from './contract/hosted-reading.ts';
+import { type HostedReadingAddress, type HostedReadingListQuery, type HostedReadingListView, type HostedReadingClearInput, type HostedReadingPort, type HostedReadingMetadataView, type HostedReadingSaveInput, type HostedReadingView } from './contract/hosted-reading.ts';
 export { addressFromRow, hostedReadingPositionFromRow, parseHostedReadingPosition, validateHostedReadingClear, validateHostedReadingSave, type HostedReadingRow, } from './hosted-reading-validate.ts';
 export type HostedReadingDependencies = {
     pool: Pool;
@@ -14,6 +14,7 @@ export type HostedReadingDependencies = {
 export declare function createHostedReadingReads(dependencies: HostedReadingDependencies): {
     list(actor: Actor, query: HostedReadingListQuery, deadline: number, signal?: AbortSignal): Promise<HostedReadingListView>;
     get(actor: Actor, subjectId: string, deadline: number, signal?: AbortSignal): Promise<HostedReadingView>;
+    getMetadata(actor: Actor, subjectId: string, deadline: number, signal?: AbortSignal): Promise<HostedReadingMetadataView>;
 };
 export declare function createHostedReadingCommands(dependencies: HostedReadingDependencies): {
     save(actor: Actor, input: HostedReadingSaveInput, requestKey: string, deadline: number): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
