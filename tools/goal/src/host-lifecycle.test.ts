@@ -1050,7 +1050,9 @@ test('the native terminal sweep retains both exact groups and reaps unmatched an
 
     const ref = { taskId: task.id, attempt: 1 };
     h.store.db
-      .query("UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1, '$.state', 'stopped') WHERE id=?")
+      .query(
+        "UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1, '$.state', 'stopped') WHERE id=?",
+      )
       .run(task.id);
     h.store.db
       .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
@@ -1091,7 +1093,12 @@ test('the native terminal sweep retains both exact groups and reaps unmatched an
           content,
           includedTypecheck: true,
           exitCode: 0,
-          typingRequest: { physicalRunId: grant.physicalRunId, command, localPrepared: [], capture: 'physical-command' },
+          typingRequest: {
+            physicalRunId: grant.physicalRunId,
+            command,
+            localPrepared: [],
+            capture: 'physical-command',
+          },
           typingRecovery: {
             token: grant.token,
             checkId: grant.checkId,
@@ -1100,21 +1107,19 @@ test('the native terminal sweep retains both exact groups and reaps unmatched an
         }),
       );
       writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp }));
-      h.store.db
-        .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-        .run(
-          task.id,
-          ref.attempt,
-          'typing-recovery-authorized',
-          new Date().toISOString(),
-          JSON.stringify({
-            actor: grant.actor,
-            token: grant.token,
-            identity: grant.identity,
-            command,
-            checkId: grant.checkId,
-          }),
-        );
+      h.store.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)').run(
+        task.id,
+        ref.attempt,
+        'typing-recovery-authorized',
+        new Date().toISOString(),
+        JSON.stringify({
+          actor: grant.actor,
+          token: grant.token,
+          identity: grant.identity,
+          command,
+          checkId: grant.checkId,
+        }),
+      );
       const record = {
         version: 1,
         id: grant.checkId,
@@ -1173,9 +1178,7 @@ test('the native terminal sweep retains both exact groups and reaps unmatched an
     const owners = [{ id: task.id, worktree: task.worktree }];
     const first = await sweep.stop(await sweep.inventory(owners), lookup);
     expect(first.map(({ identity }) => identity.pid).sort((a, b) => a - b)).toEqual(
-      [foreignRunner, unrelatedRunner]
-        .map(({ identity }) => identity.pid)
-        .sort((a, b) => a - b),
+      [foreignRunner, unrelatedRunner].map(({ identity }) => identity.pid).sort((a, b) => a - b),
     );
     expect(sameProcess(kernelRunner.identity)).toBe(true);
     expect(sameProcess(webRunner.identity)).toBe(true);
@@ -1194,7 +1197,9 @@ test('the native terminal sweep retains both exact groups and reaps unmatched an
     expect(sameProcess(webRunner.identity)).toBe(false);
 
     h.store.db
-      .query("UPDATE worker_attempts SET body=json_set(body, '$.terminationIntent', json(?)) WHERE task_id=? AND attempt=1")
+      .query(
+        "UPDATE worker_attempts SET body=json_set(body, '$.terminationIntent', json(?)) WHERE task_id=? AND attempt=1",
+      )
       .run(JSON.stringify({ operation: 'cancel' }), task.id);
     expect(lookup(task.id, task.worktree, kernelRunner.identity)).toBe(true);
     h.store.db
@@ -1205,7 +1210,9 @@ test('the native terminal sweep retains both exact groups and reaps unmatched an
       .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 2, ?)')
       .run(task.id, JSON.stringify({ taskId: task.id, attempt: 2, state: 'exited' }));
     h.store.db
-      .query("UPDATE worker_tasks SET current_attempt=2, body=json_set(body, '$.currentAttempt', 2, '$.state', 'stopped') WHERE id=?")
+      .query(
+        "UPDATE worker_tasks SET current_attempt=2, body=json_set(body, '$.currentAttempt', 2, '$.state', 'stopped') WHERE id=?",
+      )
       .run(task.id);
     const third = await sweep.stop(await sweep.inventory(owners), lookup);
     expect(third.map(({ identity }) => identity.pid)).toEqual([kernelRunner.identity.pid]);

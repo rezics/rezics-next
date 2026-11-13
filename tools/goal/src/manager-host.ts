@@ -82,10 +82,7 @@ export function stoppedTaskSweepRetainsOrdinaryProof(
   );
 }
 
-function typingRecoveryOwnsProcess(
-  recovery: WorkerCheckHostActiveTypingRecovery,
-  identity: ProcessIdentity,
-): boolean {
+function typingRecoveryOwnsProcess(recovery: WorkerCheckHostActiveTypingRecovery, identity: ProcessIdentity): boolean {
   return (
     recovery.runnerIdentity.group === identity.group &&
     recovery.runnerIdentity.boot === identity.boot &&
@@ -129,21 +126,14 @@ export function stoppedTaskSweepRetainsTypingRecovery(
       worktree,
       token: recovery.token,
     });
-    if (
-      current &&
-      sameTypingRecovery(current, recovery) &&
-      typingRecoveryOwnsProcess(current, processIdentity)
-    )
+    if (current && sameTypingRecovery(current, recovery) && typingRecoveryOwnsProcess(current, processIdentity))
       return true;
   }
   return false;
 }
 
 /** Cache one bounded current-attempt stamp scan, then revalidate each matching grant before the sweep signals. */
-export function createManagerTerminalOwnerLookup(
-  db: Database,
-  stateDirectory: string,
-): CurrentTerminalOwnerLookup {
+export function createManagerTerminalOwnerLookup(db: Database, stateDirectory: string): CurrentTerminalOwnerLookup {
   const activeRecoveries = new Map<string, WorkerCheckHostActiveTypingRecovery[]>();
   return (owner, worktree, processIdentity) => {
     const task = db
