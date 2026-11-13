@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
-import { DraftsRoute } from '../threads/drafts-route';
+import { DraftsRoute } from '../threads';
 import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 import { requireSignedIn } from '../session/guard';

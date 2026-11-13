@@ -20,6 +20,7 @@ export type {
 } from './contract/contribution-actions';
 
 /** Server-saved drafts page composition supplied to the Web route. */
+export { DraftsRoute } from './drafts-route';
 export { ownDraftBrowserWritingReader } from './own-drafts/browser-writing';
 export { OwnDraftsPage } from './own-drafts/page';
 export { ownDraftNativeReader } from './own-drafts/native-reader';

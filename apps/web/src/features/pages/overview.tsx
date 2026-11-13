@@ -6,7 +6,7 @@ import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { OverviewContext } from './overview-context';
 import { ScreenReadingBinding } from './screen-reading-binding';
 import type { ScreenReadingPort } from '../catalogue/screen-reading-port';
-import { RatingsSection } from './subject-ratings-view';
+import { BookOverviewRating, RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
 import { composedCommunityRegion } from './subject-community';
 import { pickLanguage, type PageRead } from '@rezics/composition';
@@ -169,7 +169,7 @@ export type OverviewValue = {
   memberHref?: (subject: { id: string; label: string }) => string;
 };
 
-export { OverviewContext };
+export { BookOverviewRating, OverviewContext };
 
 /** Page composition installs Screen reading capabilities beside the ordinary overview value. */
 export function OverviewRoot({

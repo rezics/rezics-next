@@ -1,5 +1,4 @@
 import { BookOverviewContext } from './book-overview';
-import { BookOverviewRating } from './subject-ratings-view';
 import { Members } from './member-list';
 import { ReactionSummary } from './reaction-summary';
 import type { MemberPageTarget } from './member-list-query';
@@ -263,7 +262,7 @@ function foldName(text: string): string {
 }
 
 function BookIdentityRating({ subject, locale }: { subject: string; locale: string }) {
-  return useContext(BookOverviewContext) ? <BookOverviewRating subject={subject} locale={locale} /> : null;
+  return useContext(BookOverviewContext) ? <overview.BookOverviewRating subject={subject} locale={locale} /> : null;
 }
 
 function subjectHeader(read: SubjectRead, creators: Creator[], date: string | null, options: Options) {

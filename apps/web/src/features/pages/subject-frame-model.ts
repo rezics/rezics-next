@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
 import { originalLanguage, originalTitle } from '../../subject/language';
 import { timePresentation } from '../../subject/reader';
-import type { Subject } from '../../subject/types';
+import type { Subject } from '../../subject/read-contract';
 import type { SubjectSummary } from '../../media/summary';
 import { assertSamePageContext } from './context-subject';
 import { pageContext, type SubjectPageData } from './page-model';

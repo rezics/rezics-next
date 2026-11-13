@@ -2,6 +2,8 @@
 
 Decision: Web visit navigation stays a Search public entry backed by an application-installed port; Content receives Semantic identity mappings through composition; cross-module callers use narrow declared entries.
 
+Decision: Web composition imports Search frame and summary, Semantic page binding, and Library checkpoint view through declared public entries; draft and shell composition use Threads, Inbox, and Settings entries, and ratings flow through Overview.
+
 Decision: Library value-imports of Access go through Library `access-port.ts` or Access contract leaves (`contract/errors.ts`, `contract/erasure.ts`, `contract/bounds.ts`, `contract/collection-policy.ts`, `contract/contribution-attribution.ts`). Access `adapters/library.ts` is the native producer bound at `composition/library.ts`. SQL descriptors remain on their defining Access leaves. Typing is the acceptance for this import migration.
 
 Decision: Rating owns its foreign runtime capabilities in `rating/dependencies.ts`. The shared native runtime
