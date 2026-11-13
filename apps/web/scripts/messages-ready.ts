@@ -9,6 +9,10 @@ const LOCK_OWNER = 'pid';
 const LOCK_OWNER_GRACE_MS = 2_000;
 const LOCK_POLL_MS = 50;
 const PER_MESSAGE_IMPORT = /(?:from|import)\s+['"](\.\/messages\/[^'"]+)['"]/g;
+const MESSAGE_INDEX_EXPORT = /export\s+\*\s+from\s+['"]\.\/([^'"]+)['"]/g;
+const MESSAGE_EXPORT_ALIAS = /^\s*export\s*\{\s*[\w$]+\s+as\s+("(?:\\.|[^"\\])*")\s*\}/gm;
+const MESSAGE_EXPORT_BINDING = /^\s*export\s+(?:const|function|class)\s+([\w$]+)/gm;
+const MESSAGE_INDEX = './messages/_index.js';
 /** Vite failed after a partial compile with this exact module missing. */
 export const REQUIRED_PER_MESSAGE_MODULE = 'access_account.js';
 
@@ -30,6 +34,31 @@ export function generatedMessageModules(source: string): string[] {
     modules.add(specifier.endsWith('.js') ? specifier : `${specifier}.js`);
   }
   return [...modules];
+}
+
+/** Filenames exported by Paraglide's generated messages/_index.js barrel. */
+function generatedMessageFiles(source: string): string[] {
+  const files = new Set<string>();
+  MESSAGE_INDEX_EXPORT.lastIndex = 0;
+  for (const match of source.matchAll(MESSAGE_INDEX_EXPORT)) {
+    const specifier = match[1]!;
+    files.add(specifier.endsWith('.js') ? specifier : `${specifier}.js`);
+  }
+  return [...files];
+}
+
+/** Raw catalogue IDs exposed by a generated message module's ESM exports. */
+function generatedMessageIds(source: string): string[] {
+  const ids = new Set<string>();
+  MESSAGE_EXPORT_ALIAS.lastIndex = 0;
+  for (const match of source.matchAll(MESSAGE_EXPORT_ALIAS)) {
+    const id: unknown = JSON.parse(match[1]!);
+    if (typeof id !== 'string') throw new Error('Paraglide message export alias is not a string');
+    ids.add(id);
+  }
+  MESSAGE_EXPORT_BINDING.lastIndex = 0;
+  for (const match of source.matchAll(MESSAGE_EXPORT_BINDING)) ids.add(match[1]!);
+  return [...ids];
 }
 
 function catalogueMessageIds(messagesDirectory: string): string[] {
@@ -87,39 +116,64 @@ function outputState(appDirectory: string): MessageOutputState {
   let barrelSource = '';
   if (barrelStat?.isFile()) barrelSource = readFileSync(barrel, 'utf8');
 
-  const required = new Set([
-    'messages.js',
-    'runtime.js',
-    ...generatedMessageModules(barrelSource),
-    ...catalogueMessageIds(join(appDirectory, 'messages')).map((id) => `./messages/${id}.js`),
+  const rootMessageModules = generatedMessageModules(barrelSource);
+  const barrelModules = new Set([MESSAGE_INDEX, ...rootMessageModules]);
+  const messageIndex = join(outputDirectory, MESSAGE_INDEX.slice(2));
+  const messageIndexStat = statOrMissing(messageIndex);
+  const messageIndexSource = messageIndexStat?.isFile() ? readFileSync(messageIndex, 'utf8') : '';
+  const messageFiles = generatedMessageFiles(messageIndexSource);
+  const catalogueModules = new Set([
     `./messages/${REQUIRED_PER_MESSAGE_MODULE}`,
+    ...[...barrelModules].filter((relative) => relative !== MESSAGE_INDEX),
+    ...messageFiles.map((filename) => `./messages/${filename}`),
   ]);
+  const required = new Set(['messages.js', 'runtime.js', ...barrelModules, ...catalogueModules]);
+  const messageIds = catalogueMessageIds(join(appDirectory, 'messages'));
   const missing: string[] = [];
   const stale: string[] = [];
-  const signature: string[] = [];
+  const outputStats = new Map<string, ReturnType<typeof statSync> | undefined>();
+  if (!rootMessageModules.includes(MESSAGE_INDEX)) missing.push(`structure:messages.js->${MESSAGE_INDEX}`);
+  if (!messageFiles.includes(REQUIRED_PER_MESSAGE_MODULE))
+    missing.push(`structure:${MESSAGE_INDEX}->./messages/${REQUIRED_PER_MESSAGE_MODULE}`);
   for (const relative of required) {
     const path = join(outputDirectory, relative);
     const stat =
       relative === 'messages.js' ? barrelStat : relative === 'runtime.js' ? runtimeStat : statOrMissing(path);
+    outputStats.set(relative, stat);
     if (!stat?.isFile()) {
       missing.push(relative);
-      signature.push(`${relative}:missing`);
       continue;
     }
-    signature.push(`${relative}:${stat.mtimeMs}:${stat.size}`);
     if (stat.mtimeMs < newestMessageTime) stale.push(relative);
   }
+  const exportedMessageIds = new Set<string>();
+  for (const relative of catalogueModules) {
+    if (relative === MESSAGE_INDEX) continue;
+    if (!outputStats.get(relative)?.isFile()) continue;
+    const source = readFileSync(join(outputDirectory, relative), 'utf8');
+    for (const id of generatedMessageIds(source)) exportedMessageIds.add(id);
+  }
+  for (const id of messageIds) {
+    if (!exportedMessageIds.has(id)) missing.push(`catalogue:${id}`);
+  }
+  const signature = [
+    ...missing.map((relative) => `missing:${relative}`),
+    ...stale.map((relative) => `stale:${relative}`),
+  ]
+    .sort()
+    .join('\n');
   return {
     current: missing.length === 0 && stale.length === 0,
     missing,
     stale,
-    signature: signature.sort().join('\n'),
+    signature,
   };
 }
 
 /**
- * Generated Paraglide output is current only when the barrel, runtime, every imported module and every catalogue
- * leaf are at least as new as every catalogue. A barrel without `messages/access_account.js` is incomplete.
+ * Generated Paraglide output is current only when the root barrel, runtime, generated message index and every
+ * referenced leaf are fresh, and each catalogue key appears in the leaf exports. The fixed access module catches
+ * the partial-compile failure that prevented Vite from starting.
  */
 export function messagesCurrent(appDirectory: string): boolean {
   return outputState(appDirectory).current;
