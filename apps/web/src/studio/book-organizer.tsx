@@ -3,7 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
-import { bookTocRows, moveBookOccurrence, type BookTocRow } from './book-toc';
+import { bookTocIndex, moveBookOccurrence, type BookTocIndex, type BookTocRow } from './book-toc';
 import { sameExact, type BookStructure, type BookStructureChange } from './contract';
 import { HostedHistoryDisclosure } from './hosted-history-view';
 import type { HostedHistoryBinding } from './hosted-history';
@@ -22,31 +22,31 @@ export function BookOrganizer({
 }) {
   const structure = state.structure;
   const adapter = useMemo(() => {
-    if (!structure) return { rows: [], error: null };
+    if (!structure) return { outline: null, error: null };
     try {
-      return { rows: bookTocRows(structure), error: null };
+      return { outline: bookTocIndex(structure), error: null };
     } catch (error) {
-      return { rows: [], error: error instanceof Error ? error.message : 'The table of contents is unavailable.' };
+      return { outline: null, error: error instanceof Error ? error.message : 'The table of contents is unavailable.' };
     }
   }, [structure]);
   if (!structure) return null;
   if (adapter.error) return <p role="alert">{adapter.error}</p>;
+  const outline = adapter.outline!;
   const editable = controller.canOrganize() && !state.busy && !controller.hasUnresolvedCommand();
   return (
     <section aria-label="Book table of contents" className="studio-toc">
       <div className="studio-section-heading">
         <h2>Table of contents</h2>
         <span>
-          {adapter.rows.length} / {structure.limits.maxPlacements}
+          {outline.rows.length} / {structure.limits.maxPlacements}
         </span>
       </div>
       <p className="studio-help">Select chapters for the next release. Each placement keeps its own exact version.</p>
       {!controller.canOrganize() ? <p className="studio-help">Organization is unavailable for this visit.</p> : null}
-      {adapter.rows.length ? (
+      {outline.rows.length ? (
         <TocBranch
           parent={null}
-          rows={adapter.rows}
-          structure={structure}
+          outline={outline}
           state={state}
           controller={controller}
           editable={editable}
@@ -59,9 +59,9 @@ export function BookOrganizer({
         <PlacementForm
           key={structure.revision}
           structure={structure}
-          rows={adapter.rows}
+          rows={outline.rows}
           state={state}
-          disabled={!editable || adapter.rows.length >= structure.limits.maxPlacements}
+          disabled={!editable || outline.rows.length >= structure.limits.maxPlacements}
           onChange={controller.organize}
         />
       ) : null}
@@ -80,25 +80,24 @@ export function BookOrganizer({
 }
 function TocBranch({
   parent,
-  rows,
+  outline,
   ...props
 }: {
   parent: string | null;
-  rows: readonly BookTocRow[];
-  structure: BookStructure;
+  outline: BookTocIndex;
   state: StudioState;
   controller: StudioController;
   editable: boolean;
   onOpen: (postId: string) => void;
 }) {
-  const siblings = rows.filter((row) => row.placement.parentOccurrenceId === parent);
+  const siblings = outline.children.get(parent) ?? [];
   return (
     <ol className="studio-toc-branch">
       {siblings.map((row) => (
         <li key={row.placement.occurrenceId}>
-          <TocEntry row={row} rows={rows} {...props} />
+          <TocEntry row={row} outline={outline} {...props} />
           {row.placement.target.kind === 'part' ? (
-            <TocBranch parent={row.placement.occurrenceId} rows={rows} {...props} />
+            <TocBranch parent={row.placement.occurrenceId} outline={outline} {...props} />
           ) : null}
         </li>
       ))}
@@ -107,16 +106,14 @@ function TocBranch({
 }
 function TocEntry({
   row,
-  rows,
-  structure,
+  outline,
   state,
   controller,
   editable,
   onOpen,
 }: {
   row: BookTocRow;
-  rows: readonly BookTocRow[];
-  structure: BookStructure;
+  outline: BookTocIndex;
   state: StudioState;
   controller: StudioController;
   editable: boolean;
@@ -138,12 +135,7 @@ function TocEntry({
     !sameExact(current.source.revision.exact, target.document)
       ? current.source.revision.exact
       : null;
-  const descendants = rows.filter((candidate) => candidate.ancestors.includes(placement.occurrenceId));
-  const deepest = Math.max(row.depth, ...descendants.map((candidate) => candidate.depth));
-  const move = (direction: 'up' | 'down' | 'in' | 'out') => {
-    if (direction === 'in' && deepest + 1 >= structure.limits.maxDepth) return null;
-    return moveBookOccurrence(row, direction, rows);
-  };
+  const hasDescendants = outline.maxDescendantDepth.get(placement.occurrenceId)! > row.depth;
   return (
     <div className="studio-toc-entry">
       <div className="studio-toc-title">
@@ -182,7 +174,7 @@ function TocEntry({
         </summary>
         <div className="studio-action-row">
           {(['up', 'down', 'in', 'out'] as const).map((direction) => {
-            const change = move(direction);
+            const change = moveBookOccurrence(row, direction, outline);
             return (
               <Button
                 key={direction}
@@ -238,7 +230,7 @@ function TocEntry({
         {removing ? (
           <div className="studio-stack" role="group" aria-label={`Remove ${placement.title}`}>
             <p>
-              Remove this placement{descendants.length ? ' and its nested placements' : ''}? The documents and previous
+              Remove this placement{hasDescendants ? ' and its nested placements' : ''}? The documents and previous
               publications remain.
             </p>
             <div className="studio-action-row">

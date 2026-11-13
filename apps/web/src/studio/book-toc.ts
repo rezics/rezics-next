@@ -49,6 +49,41 @@ export function bookTocRows(structure: BookStructure): readonly BookTocRow[] {
   return rows;
 }
 
+export type BookTocIndex = Readonly<{
+  rows: readonly BookTocRow[];
+  byId: ReadonlyMap<string, BookTocRow>;
+  children: ReadonlyMap<string | null, readonly BookTocRow[]>;
+  /** Absolute deepest row depth in each subtree, including the row itself. */
+  maxDescendantDepth: ReadonlyMap<string, number>;
+  maxDepth: number;
+}>;
+
+/** Index the admitted preorder projection in linear time without changing occurrence identity or order. */
+export function bookTocIndex(structure: BookStructure): BookTocIndex {
+  const rows = bookTocRows(structure);
+  const byId = new Map<string, BookTocRow>();
+  const children = new Map<string | null, BookTocRow[]>([[null, []]]);
+  const maxDescendantDepth = new Map<string, number>();
+  for (const row of rows) {
+    const { occurrenceId, parentOccurrenceId } = row.placement;
+    byId.set(occurrenceId, row);
+    const siblings = children.get(parentOccurrenceId) ?? [];
+    siblings.push(row);
+    children.set(parentOccurrenceId, siblings);
+    maxDescendantDepth.set(occurrenceId, row.depth);
+  }
+  // Children precede their parents in reverse preorder, so each completed subtree updates its parent once.
+  for (let index = rows.length - 1; index >= 0; index--) {
+    const { occurrenceId, parentOccurrenceId } = rows[index]!.placement;
+    if (parentOccurrenceId !== null)
+      maxDescendantDepth.set(
+        parentOccurrenceId,
+        Math.max(maxDescendantDepth.get(parentOccurrenceId)!, maxDescendantDepth.get(occurrenceId)!),
+      );
+  }
+  return { rows, byId, children, maxDescendantDepth, maxDepth: structure.limits.maxDepth };
+}
+
 export function bookPublicationTarget(
   structure: BookStructure,
   selected: ReadonlySet<string>,
@@ -66,7 +101,7 @@ export function bookPublicationTarget(
 export function moveBookOccurrence(
   row: BookTocRow,
   direction: 'up' | 'down' | 'in' | 'out',
-  rows: readonly BookTocRow[],
+  outline: BookTocIndex,
 ): BookStructureChange | null {
   const { placement, siblings, index } = row;
   let parentOccurrenceId = placement.parentOccurrenceId;
@@ -80,11 +115,15 @@ export function moveBookOccurrence(
     beforeOccurrenceId = siblings[index + 2]?.occurrenceId ?? null;
   } else if (direction === 'in') {
     const previous = siblings[index - 1];
-    if (previous?.target.kind !== 'part') return null;
+    if (
+      previous?.target.kind !== 'part' ||
+      outline.maxDescendantDepth.get(placement.occurrenceId)! + 1 >= outline.maxDepth
+    )
+      return null;
     parentOccurrenceId = previous.occurrenceId;
     beforeOccurrenceId = null;
   } else {
-    const parent = rows.find((candidate) => candidate.placement.occurrenceId === placement.parentOccurrenceId);
+    const parent = placement.parentOccurrenceId === null ? undefined : outline.byId.get(placement.parentOccurrenceId);
     if (!parent) return null;
     parentOccurrenceId = parent.placement.parentOccurrenceId;
     beforeOccurrenceId = parent.siblings[parent.index + 1]?.occurrenceId ?? null;

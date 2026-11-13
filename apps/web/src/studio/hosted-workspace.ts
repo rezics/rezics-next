@@ -10,7 +10,7 @@ import type { StudioWorkspaceProps } from './workspace';
 import type { HostedBook, HostedBookNative, HostedOwnedBook, HostedTargetResolver } from './hosted-contract';
 import { HostedBookAdapter } from './hosted-adapter';
 import { hostedFailure } from './hosted-native';
-import { bookTocRows } from './book-toc';
+import { bookTocIndex } from './book-toc';
 import { hostedBookStructure } from './hosted-structure';
 
 /** These are the shared draft/document lifecycle operations, not a second authoring store. */
@@ -61,11 +61,12 @@ function reviewFor(
     target.chapters.length === 0
   )
     return null;
-  const rows = bookTocRows(structure);
+  const outline = bookTocIndex(structure);
+  const { rows } = outline;
   const selected = new Set<string>();
   const included = new Set<string>();
   for (const chapter of target.chapters) {
-    const row = rows.find((entry) => entry.placement.occurrenceId === chapter.occurrenceId);
+    const row = outline.byId.get(chapter.occurrenceId);
     if (
       !row ||
       row.placement.target.kind !== 'chapter' ||

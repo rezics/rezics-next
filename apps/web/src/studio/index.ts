@@ -27,7 +27,15 @@ export type {
   BookPlacement,
   BookStructureChange,
 } from './contract';
-export { bookTocRows, bookPublicationTarget, moveBookOccurrence, selectedChapter, type BookTocRow } from './book-toc';
+export {
+  bookTocRows,
+  bookTocIndex,
+  bookPublicationTarget,
+  moveBookOccurrence,
+  selectedChapter,
+  type BookTocRow,
+  type BookTocIndex,
+} from './book-toc';
 export { HostedBookAdapter, type HostedBookPublicationInput } from './hosted-adapter';
 export { hostedBookStructure } from './hosted-structure';
 export { createHostedBookNative } from './hosted-native';

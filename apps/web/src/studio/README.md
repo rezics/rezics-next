@@ -32,6 +32,25 @@ implementation stays in Content and Studio remains the receiving owner.
 Decision: The shared book/article Studio puts the active document first, collapses outline and drafts into a compact
 phone disclosure, and separates its wide navigation without an outer frame.
 
+## Book outline index
+
+Decision: Book organization memoizes one index for the loaded structure revision, derived from the existing admitted
+`bookTocRows` projection. Two linear passes retain preorder rows, occurrence lookup, ordered child rows and maximum
+subtree depth. Rendering, stable sibling/parent moves and nested-removal confirmation use those lookups; release
+review builds the same index once to resolve selected exact chapters and retains preorder when freezing the outline.
+There are no per-row whole-outline scans. Admission, draft identities, exact revisions, depth/placement limits and
+the shared placement fields retain their contracts.
+
+Sources read before design: this owner document, `book-toc.ts`, `book-organizer.tsx`, `hosted-workspace.ts` `reviewFor`,
+their exported contracts/callers, and the existing placement and hosted publication tests.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-book-outline.test.ts
+ tests/studio-book-placement.test.tsx tests/studio-hosted-publication.test.ts src/studio/publication-withdrawal.test.tsx`.
+The focused outline fixture covers deep subtree limits, stable move operands, sibling order, empty outlines and
+exact chapter versions; existing placement, focus and release assertions remain unchanged. Source verification is
+changed-file formatting and one Web typecheck; ordinary acceptance, native, browser, Storybook and broader suites
+are deferred.
+
 ## Book placement fields
 
 Decision: Book placement composes shared `Field`, `FieldLabel` and shadcn `Select` primitives, following Book catalogue
