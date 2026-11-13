@@ -510,9 +510,7 @@ export async function awaitHostCapacity(
         const reservedMemoryMiB = admittedMemoryMiBFromTickets(tickets, scopes.writers);
         const requiredMemoryMiB = reservedMemoryMiB + memoryReservation;
         const sliceAvailable = sliceHeadroom >= requiredMemoryMiB;
-        const ahead = hostCapacity
-          ? ticketWaitersAhead(tickets, mine, now, policy.criticalHeadStartMs)
-          : 0;
+        const ahead = hostCapacity ? ticketWaitersAhead(tickets, mine, now, policy.criticalHeadStartMs) : 0;
         const limit = urgent ? capacity.urgentSlots : capacity.maxWorkers;
         const memory = hostCapacity ? (options.availableMiB ?? availableMiB)() : Number.POSITIVE_INFINITY;
         const goalInFlight = goalCap === undefined ? 0 : inFlightForGoal(store, options.goal!, options.excludeTaskId);
@@ -992,11 +990,7 @@ function hostWaitReasons(snapshot: {
     if (snapshot.running + snapshot.admitted + snapshot.ahead >= snapshot.limit)
       reasons.add(snapshot.urgent ? 'urgent-slots' : 'worker-limit');
     if (
-      snapshot.running +
-        snapshot.otherRunning +
-        snapshot.admitted +
-        snapshot.otherAdmitted +
-        snapshot.ahead >=
+      snapshot.running + snapshot.otherRunning + snapshot.admitted + snapshot.otherAdmitted + snapshot.ahead >=
       snapshot.maxWorkers
     )
       reasons.add('shared-worker-limit');

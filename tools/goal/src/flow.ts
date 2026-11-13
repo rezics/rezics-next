@@ -119,7 +119,9 @@ export function recordFlow(db: Database, event: FlowEvent): void {
 
 /** Stable identity for one set of checks awaited by a particular worker attempt. */
 export function checkResumeOperationId(taskId: string, attempt: number, checkIds: readonly string[]): string {
-  return createHash('sha256').update(JSON.stringify([taskId, attempt, [...checkIds].sort()])).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([taskId, attempt, [...checkIds].sort()]))
+    .digest('hex');
 }
 
 /** Record one readiness observation even when the host re-observes the same terminal check result. */
@@ -135,15 +137,7 @@ export function recordCheckResumeReady(db: Database, event: FlowEvent): boolean 
     .query(
       'INSERT OR IGNORE INTO flow_events(task_id,attempt,stage,action,at,detail,operation_id) VALUES (?,?,?,?,?,?,?)',
     )
-    .run(
-      event.taskId,
-      event.attempt,
-      event.stage,
-      event.action,
-      event.at,
-      event.detail ?? null,
-      event.operationId,
-    );
+    .run(event.taskId, event.attempt, event.stage, event.action, event.at, event.detail ?? null, event.operationId);
   return result.changes > 0;
 }
 
@@ -446,7 +440,9 @@ export function summarizeCheckResumeHandoffs(events: readonly FlowEvent[]): Chec
 
   for (const group of groups.values()) {
     const ordered = [...group].sort((a, b) => a.at.localeCompare(b.at));
-    const ready = ordered.find((event) => event.action === 'resume-ready' || event.action === 'resume-ready-unavailable');
+    const ready = ordered.find(
+      (event) => event.action === 'resume-ready' || event.action === 'resume-ready-unavailable',
+    );
     const resumed = ordered.find((event) => event.action === 'resume-started');
     const detail = (event: FlowEvent | undefined): Record<string, unknown> =>
       event?.detail ? (JSON.parse(event.detail) as Record<string, unknown>) : {};

@@ -711,12 +711,7 @@ export class WorkerJob implements GateOutcomeSink {
     const observed = observeWorkerChecks(task, attempt.checks ?? [], this.policy.worker);
     return observed.status === 'pending' ? null : observed.resumeText;
   }
-  private async resumeWaiting(
-    attempt: Attempt,
-    task: Task,
-    message: string,
-    checkOperationId?: string,
-  ): Promise<void> {
+  private async resumeWaiting(attempt: Attempt, task: Task, message: string, checkOperationId?: string): Promise<void> {
     if (!this.startsAllowed()) return;
     const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
     const recordResume = (action: string, detail: Record<string, unknown> = {}): void => {

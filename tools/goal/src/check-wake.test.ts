@@ -322,10 +322,7 @@ test('a waiting session uses the registered local command on wake even when its 
 test('an adopted waiting attempt without a resumable session gets the current local protocol', async () => {
   const h = harness(adoptedWaitingCli);
   try {
-    writeFileSync(
-      h.briefFile,
-      localAcceptance(markdown, ['bun', 'test', 'apps/web/tests/shell-menus.test.ts']),
-    );
+    writeFileSync(h.briefFile, localAcceptance(markdown, ['bun', 'test', 'apps/web/tests/shell-menus.test.ts']));
     const { task, ref } = await startWaitingAttempt(h);
     h.store.updateAttempt(ref, (attempt) => {
       attempt.session = null;
@@ -379,10 +376,7 @@ test('a same-session wake preserves the focused Web command argv under the manag
       '-t',
       selector,
     ];
-    writeFileSync(
-      h.briefFile,
-      localAcceptance(markdown, command),
-    );
+    writeFileSync(h.briefFile, localAcceptance(markdown, command));
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
     writeFileSync(join(task.worktree, 'scripts/worker-check.ts'), '');
