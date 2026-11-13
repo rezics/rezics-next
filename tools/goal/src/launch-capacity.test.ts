@@ -19,7 +19,7 @@ import {
 import * as launchCapacity from './launch-capacity.ts';
 import { admittedMemoryMiB } from './launch-capacity.ts';
 import type { CapacityLifecycle, HostCapacityStore } from './launch-capacity.ts';
-import { workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
+import { HEAVY_WORKER_MIB, workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -69,7 +69,7 @@ function terminalRemoteCheckFixture(directory: string) {
     writeFileSync(join(sliceRoot, name, 'memory.current'), String(Math.round(currentGiB * 1024 ** 3)));
     writeFileSync(join(sliceRoot, name, 'memory.peak'), String(Math.round(peakGiB * 1024 ** 3)));
   };
-  writeFileSync(join(sliceRoot, 'memory.max'), String(28 * 1024 ** 3));
+  writeFileSync(join(sliceRoot, 'memory.max'), String(26 * 1024 ** 3));
   writeFileSync(join(sliceRoot, 'memory.current'), String(10 * 1024 ** 3));
   scope(terminalScope, 0.04, 3.7);
   scope(unknownScope, 0.1, 4.5);
@@ -143,6 +143,23 @@ test('launch.ts re-exports the host-capacity implementation', () => {
   expect(hasCapacity).toBe(launchCapacity.hasCapacity);
   expect(startsFirst).toBe(launchCapacity.startsFirst);
   expect(waitersAhead).toBe(launchCapacity.waitersAhead);
+});
+
+test('legacy unkeyed tickets remain ahead in the FIFO queue', () => {
+  const directory = temporaryDirectory();
+  const queue = join(directory.path, 'capacity-queue');
+  mkdirSync(queue, { recursive: true });
+  const now = Date.now();
+  const older = `${String(now - 60_000).padStart(15, '0')}-${process.pid}-older`;
+  const mine = `${String(now).padStart(15, '0')}.00000001-${process.pid}-mine`;
+  try {
+    writeFileSync(join(queue, older), '');
+    writeFileSync(join(queue, mine), '');
+    expect(waitersAhead(queue, mine)).toBe(1);
+    expect(waitersAhead(queue, older)).toBe(0);
+  } finally {
+    directory.close();
+  }
 });
 
 test('concurrent starts respect the cap and a queued start proceeds after release', async () => {
@@ -392,6 +409,8 @@ test('terminal local check proof releases only its waiting generation reserve an
   const directory = temporaryDirectory();
   const fixture = terminalRemoteCheckFixture(directory.path);
   let release: (() => void) | undefined;
+  let pendingReplacement: Promise<() => void> | undefined;
+  let replacementStarted = false;
   let parked = new Set<string>();
   const capacity = { maxWorkers: 8, minAvailableMiB: 0 };
   const headroom: typeof workerHeadroomMiB = (
@@ -410,6 +429,7 @@ test('terminal local check proof releases only its waiting generation reserve an
     workerSliceRoot: fixture.sliceRoot,
     memoryCurrentMiB: () => workerMemoryCurrentMiB(fixture.sliceRoot),
     workerHeadroomMiB: headroom,
+    resume: true,
   };
   try {
     writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify(capacity));
@@ -428,10 +448,22 @@ test('terminal local check proof releases only its waiting generation reserve an
     release = undefined;
 
     fixture.updateAttempt('running');
-    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    pendingReplacement = awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options).then(
+      (dispose) => {
+        replacementStarted = true;
+        return dispose;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(replacementStarted).toBe(false);
     expect(parked).not.toContain(fixture.terminalScope);
-    expect(workerHeadroomMiB(1, fixture.sliceRoot, parked, new Set())).toBeLessThan(after);
+    expect(workerHeadroomMiB(1, fixture.sliceRoot, parked, new Set())).toBeLessThan(HEAVY_WORKER_MIB);
+    rmSync(join(directory.path, 'capacity.json'), { force: true });
+    release = await pendingReplacement;
+    pendingReplacement = undefined;
   } finally {
+    rmSync(join(directory.path, 'capacity.json'), { force: true });
+    if (pendingReplacement) release = await pendingReplacement;
     release?.();
     directory.close();
   }

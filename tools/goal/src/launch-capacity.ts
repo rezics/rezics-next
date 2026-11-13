@@ -863,7 +863,13 @@ function admittedTicketCount(tickets: readonly CapacityTicket[], lane?: Capacity
 function ticketWaitersAhead(tickets: readonly CapacityTicket[], mine: CapacityTicket): number {
   const ahead = new Set<string>();
   for (const ticket of tickets) {
-    if (ticket.lane !== mine.lane || ticket.admitted || ticket.order >= mine.order || ticket.key === mine.key) continue;
+    if (
+      ticket.lane !== mine.lane ||
+      ticket.admitted ||
+      ticket.order >= mine.order ||
+      (mine.key !== undefined && ticket.key === mine.key)
+    )
+      continue;
     ahead.add(ticket.key ?? `${ticket.lane}/${ticket.name}`);
   }
   return ahead.size;
