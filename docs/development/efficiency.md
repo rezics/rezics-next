@@ -53,7 +53,11 @@ check even though dev is the unstable branch; those checks moved to post-merge v
 
 Decision: check-result planning batch-reads committed workspace manifests into one cached tree projection for closure, package tree IDs and global inputs; the default reuse policy stays unchanged.
 
-Trust agents. In the delivery workflow, efficiency outranks defensive safety: REZICS is a community product, and a
+Trust managers’ decisions and workers’ evidence by default. Reuse the owner’s result; do not repeat their investigation
+or validation unless a concrete failure, conflicting evidence, or missing required proof changes a decision. Give the owner
+the exact discrepancy and check only the missing evidence.
+
+In the delivery workflow, efficiency outranks defensive safety: REZICS is a community product, and a
 mistake on dev is caught and returned after integration. A guard that distrusts agent work is defensive programming
 against the agents, and it must earn its cost. Such guards refuse, reject, fail an attempt, forbid a check or
 re-verify trusted work. A guard is kept only when its measured catches of real defects outweigh the attempts, hours
