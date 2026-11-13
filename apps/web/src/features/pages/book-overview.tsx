@@ -1,6 +1,6 @@
 import { createContext, type ReactNode } from 'react';
 import { platformRegistry } from '@rezics/composition';
-import { literaryDetailedNodes } from '../catalogue/literary-reader/presentation';
+import { literaryDetailedNodes } from '../catalogue/page-data-binding';
 import type { PageDocument } from './render';
 
 /** Presentation only: admission and all source reads remain with the ordinary Subject page. */
@@ -16,10 +16,13 @@ export function isBookOverview(type: string | undefined, view: string, account: 
  * Distill the installed template for Book presentation without changing its planned reads, node identities,
  * navigation counts or reader authority. A native pages.read owns the bundled relation reads; Web starts none.
  */
-export function bookOverviewDocument(document: PageDocument): PageDocument {
+function projectDocument(
+  document: PageDocument,
+  omit: (node: PageDocument['content'][number]) => boolean,
+): PageDocument {
   const distill = (content: PageDocument['content']): PageDocument['content'] =>
     content.flatMap((node) => {
-      if (literaryDetailedNodes.has(node.type)) return [];
+      if (omit(node)) return [];
       const props = { ...node.props };
       // The installed layout components own these composition slots.
       const slots = platformRegistry.components.find(({ type }) => type === node.type)?.slots ?? [];
@@ -39,6 +42,15 @@ export function bookOverviewDocument(document: PageDocument): PageDocument {
     ...document,
     content: distill(document.content),
   };
+}
+
+export function bookOverviewDocument(document: PageDocument): PageDocument {
+  return projectDocument(document, (node) => literaryDetailedNodes.has(node.type));
+}
+
+/** The mounted reader owns these exact native nodes; unrelated composition stays in its original order. */
+export function literaryDetailDocument(document: PageDocument, ownedNodes: ReadonlySet<string>): PageDocument {
+  return projectDocument(document, (node) => typeof node.props.id === 'string' && ownedNodes.has(node.props.id));
 }
 
 /** Open sections use the existing foreground/background tokens in both themes and the ordinary page shell. */

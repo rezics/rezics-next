@@ -13,7 +13,11 @@ const context = { id: realmContext, population: { kind: 'realm' as const, id: re
 function grainExample(type?: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance') {
   const population: { kind: 'global' } = { kind: 'global' };
   const example = literaryGrainExample(type);
-  return { ...example, context: { ...example.context, population } };
+  return {
+    ...example,
+    view: type === 'schema:Book' ? 'editions' : type === 'bf:Instance' ? 'overview' : 'contents',
+    context: { ...example.context, population },
+  };
 }
 
 function Addressed({ args, search = '' }: { args: ComponentProps<typeof LiteraryReaderEntry>; search?: string }) {
@@ -41,7 +45,7 @@ function Addressed({ args, search = '' }: { args: ComponentProps<typeof Literary
 }
 
 const meta = {
-  title: 'Subjects/Literary grain visit',
+  title: 'Catalogue/Literary reader/Visit',
   id: 'pages-subjects-literary-grain-visit',
   component: LiteraryReaderEntry,
   args: grainExample(),
@@ -220,6 +224,7 @@ const memberWindow = {
 export const IndependentStreamRetry: Story = {
   args: {
     ...independent,
+    view: 'contents',
     windows: [{ ...memberWindow, status: 503 }, independent.windows[0]!],
   },
 };

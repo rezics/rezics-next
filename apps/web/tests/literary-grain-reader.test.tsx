@@ -11,7 +11,7 @@ import {
 } from '../src/features/catalogue/literary-reader/examples';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 
-test('all admitted membership and Edition streams stay discoverable while one exact page per family is retained', async () => {
+test('Contents and Editions retain only their own exact native page, order, returns and recovery', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -124,7 +124,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     await render();
     expect(
       [...host.querySelectorAll<HTMLElement>('[data-stream-node]')].map((node) => node.dataset.streamNode),
-    ).toEqual(['members-first', 'members-second', 'edition-inverse', 'edition-forward']);
+    ).toEqual(['members-first', 'members-second']);
     expect(
       [...host.querySelectorAll<HTMLElement>('[data-stream-node]')].map((node) => {
         const url = new URL(node.querySelector('a')!.href);
@@ -137,23 +137,36 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     ).toEqual([
       ['members-first', 'wdt:P179', 'inverse'],
       ['members-second', 'wdt:P179', 'inverse'],
-      ['edition-inverse', 'schema:exampleOfWork', 'inverse'],
-      ['edition-forward', 'schema:exampleOfWork', 'forward'],
     ]);
-    expect(host.querySelectorAll('[data-slot="literary-window"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="literary-window"]')).toHaveLength(1);
     const memberRows = host.querySelectorAll<HTMLElement>(
       '[data-slot="literary-window"][data-node="members-first"] > ul > li[data-statement-id]',
     );
     expect([...memberRows].map((row) => row.textContent)).toEqual([expect.stringContaining('上巻・02a')]);
-    expect(host.querySelector('[data-stream-node="edition-forward"] [data-state="ready"]')).not.toBeNull();
-    const animeCounterpart = host.querySelector<HTMLAnchorElement>('[data-property="rezics:crossMediaCounterpart"] a')!;
-    expect(animeCounterpart.textContent).toBe('First viewpoint');
-    const animeUrl = new URL(animeCounterpart.href);
-    expect(animeUrl.pathname).toContain(literaryIds.anime);
-    const animeReturnUrl = new URL(animeUrl.searchParams.get('via')!, 'https://site.test');
-    expect(animeReturnUrl.pathname).toContain('/contents');
-    expect(animeReturnUrl.searchParams.get('focus')).toBe(
-      'direct:rezics:crossMediaCounterpart:literary-series-anime-counterpart',
+    expect(host.querySelector('[data-stream-node="edition-forward"]')).toBeNull();
+    expect(host.querySelector('[data-property="rezics:crossMediaCounterpart"]')).toBeNull();
+    input = { ...base, source: {}, view: 'editions' };
+    await render();
+    expect(
+      [...host.querySelectorAll<HTMLElement>('[data-stream-node]')].map((node) => node.dataset.streamNode),
+    ).toEqual(['edition-inverse', 'edition-forward']);
+    expect(
+      [...host.querySelectorAll<HTMLElement>('[data-slot="literary-window"]')].map((node) => node.dataset.node),
+    ).toEqual(['edition-inverse']);
+    input = { ...base, source: {}, view: 'overview' };
+    await render();
+    expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();
+    expect(host.querySelector('[data-stream-node]')).toBeNull();
+    const overviewDestinations = [
+      ...host.querySelectorAll<HTMLAnchorElement>('[data-slot="literary-overview-destinations"] a'),
+    ].map((link) => new URL(link.href));
+    expect(overviewDestinations.map((url) => url.pathname.split('/').at(-1))).toEqual([
+      'contents',
+      'editions',
+      'relations',
+    ]);
+    expect(overviewDestinations.every((url) => !url.searchParams.has('node') && !url.searchParams.has('cursor'))).toBe(
+      true,
     );
 
     input = {
@@ -169,7 +182,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     await render();
     expect(
       [...host.querySelectorAll<HTMLElement>('[data-slot="literary-window"]')].map((node) => node.dataset.node),
-    ).toEqual(['members-second', 'edition-inverse']);
+    ).toEqual(['members-second']);
     const selectedRows = host.querySelectorAll<HTMLElement>(
       '[data-slot="literary-window"][data-node="members-second"] > ul > li[data-statement-id]',
     );
@@ -183,22 +196,8 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     expect(chosenUrl.searchParams.get('streamProperty')).toBe('wdt:P179');
     expect(chosenUrl.searchParams.get('streamDirection')).toBe('inverse');
     expect(chosenUrl.searchParams.get('cursor')).toBe('current-member-cursor');
-    const otherStream = new URL(
-      host.querySelector<HTMLAnchorElement>('[data-stream-node="edition-inverse"] > a')!.href,
-    );
+    const otherStream = new URL(host.querySelector<HTMLAnchorElement>('[data-stream-node="members-first"] > a')!.href);
     expect(otherStream.searchParams.has('cursor')).toBe(false);
-    const selectedAnimeLink = host.querySelector<HTMLAnchorElement>(
-      '[data-property="rezics:crossMediaCounterpart"] a',
-    )!;
-    const selectedAnimeReturn = new URL(new URL(selectedAnimeLink.href).searchParams.get('via')!, 'https://site.test');
-    expect(selectedAnimeReturn.searchParams.get('realm')).toBe(literaryIds.author);
-    expect(selectedAnimeReturn.searchParams.get('node')).toBe('members-second');
-    expect(selectedAnimeReturn.searchParams.get('streamProperty')).toBe('wdt:P179');
-    expect(selectedAnimeReturn.searchParams.get('streamDirection')).toBe('inverse');
-    expect(selectedAnimeReturn.searchParams.get('cursor')).toBe('current-member-cursor');
-    expect(selectedAnimeReturn.searchParams.get('focus')).toBe(
-      'direct:rezics:crossMediaCounterpart:literary-series-anime-counterpart',
-    );
 
     const next = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => {
       const url = new URL(link.href);
@@ -247,7 +246,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
       ),
     ).toBe(true);
 
-    host.querySelector<HTMLAnchorElement>('[data-stream-node="members-second"] > a')!.focus();
+    failed.querySelector<HTMLAnchorElement>('a')!.focus();
     input = { ...input, source: {}, windows: [membersFirst, editionInverse] };
     await render();
     expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();

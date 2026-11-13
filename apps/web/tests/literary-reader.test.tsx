@@ -76,3 +76,52 @@ test('authority and locale changes retire the same reader source; a replacement 
   expect(literaryReaderRetired(captured, { ...captured, context: 'realm-a' })).toBe(true);
   expect(literaryReaderRetired(captured, { ...captured, source: {} })).toBe(false);
 });
+
+test('literary overview composition keeps identity and reading while detailed lists render exactly once', async () => {
+  const { bookOverviewDocument, isBookOverview, literaryDetailDocument } =
+    await import('../src/features/pages/book-overview');
+  const document = {
+    root: { props: {} },
+    content: [
+      { type: 'SubjectHeader', props: { id: 'header' } },
+      { type: 'Summary', props: { id: 'summary' } },
+      { type: 'Statements', props: { id: 'facts' } },
+      { type: 'SubjectList', props: { id: 'members', property: 'wdt:P179' } },
+      { type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork' } },
+      { type: 'ReviewList', props: { id: 'reviews' } },
+    ],
+  };
+  for (const type of ['schema:Book', 'schema:BookSeries', 'bf:Instance']) {
+    expect(isBookOverview(type, 'overview', false, true)).toBe(true);
+    expect(isBookOverview(type, 'editions', false, true)).toBe(false);
+    expect(isBookOverview(type, 'overview', true, true)).toBe(false);
+  }
+  expect(bookOverviewDocument(document).content.map(({ props }) => props.id)).toEqual([
+    'header',
+    'summary',
+    'facts',
+    'reviews',
+  ]);
+  expect(
+    literaryDetailDocument(document, new Set(['members', 'editions'])).content.map(({ props }) => props.id),
+  ).toEqual(['header', 'summary', 'facts', 'reviews']);
+  expect(document.content).toHaveLength(6);
+});
+
+test('long descriptions and alternate names expand without hiding the current identity or discarding text', () => {
+  const work = literaryFixture().publicRead().subject;
+  const longDescription = 'A harbour town changes through the eyes of its readers. '.repeat(12);
+  work.labels = { en: 'The harbour', ja: '港' };
+  work.aliases = { en: ['Harbour stories'] };
+  work.descriptions = { en: longDescription, ja: '港の物語。' };
+  const markup = renderToStaticMarkup(
+    createElement(LiteraryReader, { identity: literaryWorkIdentity(work, 'en'), locale: 'en' }),
+  );
+  expect(markup).toContain('Read more');
+  expect(markup).toContain('Show less');
+  expect(markup).toContain(longDescription.trim());
+  expect(markup).toContain('港の物語。');
+  expect(markup).toContain('Harbour stories');
+  expect(markup).not.toContain('<select');
+  expect(markup).not.toContain('rounded-lg border');
+});

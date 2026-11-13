@@ -68,3 +68,5 @@ export const pageRenderBinding: SemanticRenderPort = {
     consumeGameClassificationReturn,
   },
 };
+
+export { LiteraryOverviewDestinations, LiteraryOverviewGaps } from './literary-reader/overview';

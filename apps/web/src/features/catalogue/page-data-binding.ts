@@ -19,3 +19,6 @@ export const pageDataBinding: SemanticDataPort = {
     readTermsPageAuthority,
   },
 };
+
+export { literaryDetailedNodes } from './literary-reader/presentation';
+export { literaryWindows } from './literary-reader/model';

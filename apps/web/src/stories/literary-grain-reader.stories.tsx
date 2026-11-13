@@ -13,7 +13,7 @@ function grainExample(type?: 'schema:Book' | 'schema:BookSeries' | 'bf:Instance'
 }
 
 const meta = {
-  title: 'Subjects/Literary grain',
+  title: 'Catalogue/Literary reader/Details',
   id: 'pages-subjects-literary-grain',
   component: LiteraryReaderEntry,
   args: grainExample(),
@@ -30,9 +30,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Series: Story = {};
-export const SeriesWithAnimeCounterpart: Story = { args: grainExample() };
-export const Member: Story = { args: grainExample('schema:Book') };
-export const Edition: Story = { args: grainExample('bf:Instance') };
+export const Editions: Story = { args: { ...grainExample('schema:Book'), view: 'editions' } };
+
 const windowState = (status: number): Story => {
   const input = grainExample();
   return { args: { ...input, windows: [{ ...input.windows[0]!, status }] } };
@@ -50,6 +49,7 @@ export const Loading: Story = { args: { windows: [loading] } };
 export const LongJapanese: Story = {
   args: {
     ...grainExample('schema:Book'),
+    view: 'editions',
     locale: 'ja',
     work: {
       ...literaryGrainExample('schema:Book').work,
@@ -60,6 +60,7 @@ export const LongJapanese: Story = {
 export const TraditionalChinese: Story = {
   args: {
     ...grainExample('schema:Book'),
+    view: 'editions',
     locale: 'zh-Hant',
     work: {
       ...literaryGrainExample('schema:Book').work,

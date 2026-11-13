@@ -40,8 +40,8 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
         </QueryClientProvider>,
       ),
     );
-  const fresh = async (type: Parameters<typeof literaryGrainExample>[0]) => {
-    input = literaryGrainExample(type);
+  const fresh = async (type: Parameters<typeof literaryGrainExample>[0], view = 'overview') => {
+    input = { ...literaryGrainExample(type), view };
     await render();
   };
   try {
@@ -49,7 +49,7 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
     expect(host.querySelector('[data-type="schema:BookSeries"]')?.textContent).toBe('book series');
     expect(host.querySelectorAll('[data-slot="literary-window"] li[data-statement-id]')).toHaveLength(1);
     expect(host.textContent).toContain('上巻・02a');
-    expect(host.textContent).toContain('999');
+    expect(host.textContent).not.toContain('999');
     const member = host.querySelector<HTMLAnchorElement>('[data-slot="literary-window"] a[target="_blank"]')!;
     expect(member.href).toContain(literaryIds.member);
     expect(new URL(member.href).searchParams.get('via')).toContain('#literary-reader');
@@ -70,10 +70,13 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
     expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();
     await fresh('schema:Book');
     expect(host.textContent).toContain('Supplied author');
-    expect(host.textContent).toContain('Harbour series');
-    expect(host.textContent).toContain('上巻・02a');
+    expect(host.textContent).not.toContain('Harbour series');
+    expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();
     expect(host.querySelector('[data-type="schema:Book"]')?.textContent).toBe('book');
-    expect(host.querySelector('[data-slot="literary-window"] a')?.textContent).toBe('Harbour, 2nd edition');
+    const editionsLink = host.querySelector<HTMLAnchorElement>('[data-slot="literary-overview-destinations"] a')!;
+    expect(new URL(editionsLink.href).pathname).toContain('/editions');
+    expect(new URL(editionsLink.href).searchParams.has('node')).toBe(false);
+    expect(new URL(editionsLink.href).searchParams.has('cursor')).toBe(false);
     expect(host.querySelector('[data-property="schema:wordCount"] dd')?.textContent).toBe(m.subject_value_unknown());
     const quantity = (property: string, amount: string) => [
       {
@@ -98,6 +101,13 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
     };
     await render();
     expect(host.querySelector('[data-property="schema:wordCount"] dd')?.textContent).toBe('+1200001');
+    await fresh('schema:Book', 'contents');
+    expect(host.textContent).toContain('Harbour series');
+    expect(host.textContent).toContain('上巻・02a');
+    expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();
+    await fresh('schema:Book', 'editions');
+    expect(host.querySelector('[data-slot="literary-window"] a')?.textContent).toBe('Harbour, 2nd edition');
+    expect(host.textContent).not.toContain('Supplied author');
     await fresh('bf:Instance');
     input = {
       ...input,
@@ -132,6 +142,20 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
         status === 202 ? 'preparing' : status === 403 ? 'withheld' : 'unavailable',
       );
     }
+    // An old Overview row address remains explicit after the row moves to its detail destination.
+    window.history.replaceState(null, '', '/en/subjects/series/title?focus=members%3Aremoved-row');
+    await fresh('schema:BookSeries');
+    expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();
+    expect(host.textContent).toContain(m.literary_visit_currentness());
+    const outside = window.document.createElement('button');
+    outside.textContent = 'Elsewhere';
+    window.document.body.append(outside);
+    outside.focus();
+    input = { ...input, source: {} };
+    await render();
+    expect(window.document.activeElement).toBe(outside);
+    outside.remove();
+    window.history.replaceState(null, '', '/en/subjects/series/title/contents');
     const original = literaryGrainExample();
     input = original;
     await render();

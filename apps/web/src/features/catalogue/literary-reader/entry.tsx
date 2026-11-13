@@ -15,7 +15,6 @@ import { appendLiteraryPrevious, literaryFocusId } from '../literary-visit/navig
 import { useLiteraryVisitLocation } from '../literary-visit/location';
 import {
   literaryGrain,
-  literarySelected,
   literaryWindow,
   literaryWindowKind,
   literaryWindowState,
@@ -24,29 +23,11 @@ import {
   type LiteraryDefinitions,
 } from './model';
 import { LiteraryReader } from './view';
-import { LiteraryAssertionView, LiteraryNativeWindow, LiteraryStatus } from './sections';
-
-const fields = [
-  'schema:contributor',
-  'schema:author',
-  'schema:illustrator',
-  'schema:translator',
-  'schema:publisher',
-  'schema:inLanguage',
-  'schema:datePublished',
-  'schema:startDate',
-  'schema:endDate',
-  'wdt:P7937',
-  'schema:keywords',
-  'schema:wordCount',
-  'wdt:P2635',
-  'schema:isbn',
-  'schema:numberOfPages',
-  'wdt:P179',
-  'schema:isPartOf',
-  'schema:exampleOfWork',
-  'rezics:crossMediaCounterpart',
-];
+import { LiteraryNativeWindow, LiteraryStatus } from './sections';
+import { LiteraryFacts } from './facts';
+import { LiteraryStreams } from './streams';
+import { LiteraryOverviewDestinations } from './overview';
+import { literaryView, literaryVisibleFamily } from './presentation';
 
 /** No read is started here. Metadata, assertions and windows all belong to the ordinary native page. */
 export function LiteraryReaderEntry({
@@ -246,6 +227,8 @@ export function LiteraryReaderEntry({
       return direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const);
     return literaryWindowState(native, work.id, locale, reader);
   };
+  const presentationView = literaryView(view);
+  const visibleFamily = literaryVisibleFamily(presentationView);
   const o = { locale: locale as never };
   const grain = literaryGrain(work.type, definitions);
   const type = pageText(definitions?.types[work.type]?.labels, locale);
@@ -300,6 +283,8 @@ export function LiteraryReaderEntry({
       key={captured.current.generation}
       identity={literaryWorkIdentity(work, locale)}
       locale={locale}
+      view={presentationView}
+      composed={matching === true}
       editionHref={editionHref ?? undefined}
       factsHref={factsHref ?? undefined}
       retired={readingRetired}
@@ -319,79 +304,32 @@ export function LiteraryReaderEntry({
         <LiteraryStatus state={descriptorState === 'unsupported' ? 'unsupported' : 'unavailable'} locale={locale} />
       ) : (
         <>
-          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-            {fields.flatMap((property) => {
-              if (!definitions.types[work.type]?.properties.includes(property)) return [];
-              const statements = literarySelected(work, property, reader);
-              const label = pageText(definitions.properties[property]?.labels, locale);
-              const membership = property === 'wdt:P179' || property === 'schema:isPartOf';
-              const canonical = property === 'schema:exampleOfWork';
-              // Work length is unknown without its own assertion; edition pages never supply it.
-              const wordCount = property === 'schema:wordCount';
-              if (!statements.length && !canonical && !wordCount) return [];
-              const relation = definitions.properties[property]?.relation;
-              const admitted = directions?.find(
-                (direction) => direction.property === property && direction.direction === 'forward',
-              );
-              const relationUnavailable = relation && (admitted?.state !== 'admitted' || admitted.release !== digest);
-              const withheld = !statements.length && (work.relationCounts?.[property] ?? 0) > 0;
-              return [
-                <div key={property} className="min-w-0 space-y-1" data-property={property}>
-                  <dt lang={label.lang} className="text-sm font-medium">
-                    {label.text || m.subject_value_unlabelled({}, o)}
-                  </dt>
-                  <dd className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
-                    {relationUnavailable ? (
-                      <LiteraryStatus
-                        state={admitted?.state === 'unsupported' ? 'unsupported' : 'unavailable'}
-                        locale={locale}
-                      />
-                    ) : (
-                      statements.map((statement) =>
-                        (() => {
-                          const target =
-                            statement.value.type === 'value' && typeof statement.value.content === 'string'
-                              ? related[statement.value.content]
-                              : undefined;
-                          const candidateText = target ? pageText(target.labels, locale) : undefined;
-                          const focus = `direct:${property}:${statement.id}`;
-                          const assertionReturn = returnAddressFor(focus);
-                          return (
-                            <LiteraryAssertionView
-                              key={statement.id}
-                              assertion={{ statement, related }}
-                              definitions={definitions}
-                              locale={locale}
-                              link={linkFor(assertionReturn)}
-                              membership={membership}
-                              focusId={focus}
-                              {...(membership || canonical
-                                ? {
-                                    inspection: {
-                                      holder: literaryWorkIdentity(work, locale).title.text,
-                                      candidate: candidateText?.text || m.literary_grain_withheld({}, o),
-                                    },
-                                  }
-                                : {})}
-                            />
-                          );
-                        })(),
-                      )
-                    )}
-                    {!relationUnavailable &&
-                      !statements.length &&
-                      (withheld ? (
-                        <LiteraryStatus state="withheld" locale={locale} />
-                      ) : (
-                        <p role="status">
-                          {wordCount ? m.subject_value_unknown({}, o) : m.literary_grain_mapping_missing({}, o)}
-                        </p>
-                      ))}
-                  </dd>
-                </div>,
-              ];
-            })}
-          </dl>
+          <LiteraryFacts
+            work={work}
+            related={related}
+            definitions={definitions}
+            directions={directions}
+            digest={digest}
+            reader={reader}
+            locale={locale}
+            view={presentationView}
+            returnToFor={returnAddressFor}
+            linkFor={linkFor}
+            currentFocus={currentFocus}
+          />
+          {presentationView === 'overview' && (
+            <LiteraryOverviewDestinations
+              subject={work.id}
+              locale={locale}
+              context={context}
+              realm={realm}
+              views={[
+                ...(activeMembers ? ['contents'] : []),
+                ...(activeEditions || editionHref ? ['editions'] : []),
+                ...(work.statements['rezics:crossMediaCounterpart']?.length ? ['relations'] : []),
+              ]}
+            />
+          )}
           {focusMissing && (
             <p role="status" className="text-sm text-muted-foreground">
               {m.literary_visit_currentness({}, o)}
@@ -409,7 +347,7 @@ export function LiteraryReaderEntry({
             </div>
           ) : (
             <div className="space-y-6">
-              {(['members', 'editions'] as const).map((kind) => {
+              {(visibleFamily ? [visibleFamily] : []).map((kind) => {
                 const candidates = supplied.filter(
                   (native) => definitions && literaryWindowKind(native, definitions) === kind,
                 );
@@ -437,29 +375,17 @@ export function LiteraryReaderEntry({
                     active?.node === native.node &&
                     active.property === native.property &&
                     active.direction === native.direction;
-                  const currentAddressStream =
-                    view === 'overview'
-                      ? native
-                      : (requestedStream ??
-                        (view === 'contents' ? activeMembers : view === 'editions' ? activeEditions : undefined));
                   const currentPage: import('../literary-visit/navigation').LiteraryPreviousAddress = {
-                    view: view === 'overview' ? 'overview' : view === 'editions' ? 'editions' : 'contents',
-                    ...(currentAddressStream
-                      ? {
-                          node: currentAddressStream.node,
-                          streamProperty: currentAddressStream.property,
-                          streamDirection: currentAddressStream.direction,
-                          ...(view !== 'overview' && continuation?.node === currentAddressStream.node
-                            ? { cursor: continuation.cursor }
-                            : {}),
-                        }
-                      : {}),
+                    view: streamView,
+                    node: native.node,
+                    streamProperty: native.property,
+                    streamDirection: native.direction,
+                    ...(continuation?.node === native.node ? { cursor: continuation.cursor } : {}),
                     ...(currentFocus ? { focus: currentFocus } : {}),
                   };
                   const nextHistory = appendLiteraryPrevious(currentPrevious, currentPage);
                   const rowContinuation = continuation?.node === native.node ? continuation : undefined;
-                  const returnView = view === 'overview' ? 'overview' : streamView;
-                  const rowReturnTo = (focus: string) => returnAddressFor(focus, returnView, rowContinuation, native);
+                  const rowReturnTo = (focus: string) => returnAddressFor(focus, streamView, rowContinuation, native);
                   const previous = currentPrevious.at(-1);
                   const previousHref =
                     current && previous
@@ -490,27 +416,17 @@ export function LiteraryReaderEntry({
                       : undefined;
                   const returnHref = addressFor(native, routeFor(native), current, current ? currentFocus : undefined);
                   const nextHref = native.next
-                    ? view === 'overview'
-                      ? literaryAddress({
-                          id: work.id,
-                          label: '',
-                          locale,
-                          view: streamView,
-                          realm,
-                          context,
-                          stream,
-                        })
-                      : literaryAddress({
-                          id: work.id,
-                          label: '',
-                          locale,
-                          view: streamView,
-                          realm,
-                          context,
-                          stream,
-                          continuation: { node: native.node, cursor: native.next },
-                          previous: nextHistory,
-                        })
+                    ? literaryAddress({
+                        id: work.id,
+                        label: '',
+                        locale,
+                        view: streamView,
+                        realm,
+                        context,
+                        stream,
+                        continuation: { node: native.node, cursor: native.next },
+                        previous: nextHistory,
+                      })
                     : undefined;
                   return (
                     <LiteraryNativeWindow
@@ -539,72 +455,20 @@ export function LiteraryReaderEntry({
                   );
                 };
                 return (
-                  <div key={kind} className="space-y-3">
-                    <h3 className="font-medium">{heading}</h3>
-                    {candidates.length ? (
-                      <nav aria-label={heading}>
-                        <ul className="grid min-w-0 gap-2 sm:grid-cols-2">
-                          {candidates.map((native) => {
-                            const property = definitions.properties[native.property];
-                            const label = pageText(
-                              native.direction === 'inverse' ? property?.relation?.inverseLabels : property?.labels,
-                              locale,
-                            );
-                            const directionLabel =
-                              native.direction === 'inverse'
-                                ? m.literary_grain_direction_inverse({}, o)
-                                : m.literary_grain_direction_forward({}, o);
-                            const current =
-                              active?.node === native.node &&
-                              active.property === native.property &&
-                              active.direction === native.direction;
-                            const href = addressFor(
-                              native,
-                              routeFor(native),
-                              current,
-                              current ? currentFocus : undefined,
-                            );
-                            const state = windowState(native);
-                            return (
-                              <li
-                                key={`${native.node}:${native.property}:${native.direction}`}
-                                data-stream-node={native.node}
-                                data-stream-property={native.property}
-                                data-stream-direction={native.direction}
-                                className="min-w-0 rounded-md border border-border p-2"
-                              >
-                                <a
-                                  href={href}
-                                  aria-current={current ? 'page' : undefined}
-                                  aria-label={`${m.literary_grain_stream_read({}, o)}: ${label.text}, ${directionLabel}`}
-                                  className="flex min-h-11 min-w-11 max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                >
-                                  <span lang={label.lang} className="font-medium">
-                                    {label.text || m.subject_relations({}, o)}
-                                  </span>
-                                  <span className="text-sm">{directionLabel}</span>
-                                  <span className="text-sm text-muted-foreground">
-                                    {current
-                                      ? m.literary_grain_stream_selected({}, o)
-                                      : m.literary_grain_stream_not_selected({}, o)}
-                                  </span>
-                                  <span className="sr-only">{m.literary_grain_stream_read({}, o)}</span>
-                                </a>
-                                <div data-state={state} className="pt-1">
-                                  <LiteraryStatus state={state} locale={locale} />
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </nav>
-                    ) : (
-                      <p role="status" className="text-sm text-muted-foreground">
-                        {m.literary_grain_mapping_missing({}, o)}
-                      </p>
-                    )}
+                  <LiteraryStreams
+                    key={kind}
+                    candidates={candidates}
+                    active={active}
+                    definitions={definitions}
+                    locale={locale}
+                    heading={heading}
+                    stateFor={windowState}
+                    hrefFor={(native, current) =>
+                      addressFor(native, routeFor(native), current, current ? currentFocus : undefined)
+                    }
+                  >
                     {active ? renderNative(active) : null}
-                  </div>
+                  </LiteraryStreams>
                 );
               })}
             </div>

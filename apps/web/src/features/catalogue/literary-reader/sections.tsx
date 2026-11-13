@@ -11,9 +11,9 @@ import { literaryDestination } from './navigation';
 import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { LiteraryAssertionInspection } from '../literary-visit/inspection';
 import { literaryFocusId } from '../literary-visit/navigation';
+import { literaryStyle } from './style';
 
-const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const action = literaryStyle.link;
 
 export function LiteraryStatus({ state, locale }: { state: LiteraryState; locale: string }) {
   const o = { locale: locale as never };
@@ -90,7 +90,7 @@ export function LiteraryAssertionView({
       id={focusId ? literaryFocusId(focusId) : undefined}
       tabIndex={focusId ? -1 : undefined}
       data-statement-id={statement.id}
-      className="min-w-0 space-y-2"
+      className="min-w-0 space-y-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
     >
       {showValue && <DisclosedValue snak={statement} related={related} locale={locale} link={link} />}
       {statement.qualifiers.length > 0 && (
@@ -102,7 +102,7 @@ export function LiteraryAssertionView({
         )}
       {statement.references.length > 0 && (
         <details className="text-sm">
-          <summary className="min-h-11 cursor-pointer py-2">{m.subject_sources({}, o)}</summary>
+          <summary className={literaryStyle.disclosure}>{m.subject_sources({}, o)}</summary>
           <ol className="space-y-3">
             {statement.references.map((reference, index) => (
               <li key={index}>
@@ -167,7 +167,7 @@ export function LiteraryNativeWindow({
       <h3 lang={title.lang} className="font-medium [overflow-wrap:anywhere]">
         {title.text || m.subject_relations({}, o)}
       </h3>
-      <LiteraryStatus state={state} locale={locale} />
+      {state !== 'ready' && <LiteraryStatus state={state} locale={locale} />}
       {continued && (
         <p role="status" className="text-sm text-muted-foreground">
           {m.literary_grain_stream_continued({}, o)}
@@ -190,7 +190,7 @@ export function LiteraryNativeWindow({
             const holder = native.direction === 'inverse' ? row.label.text : rootLabel;
             const candidate = native.direction === 'inverse' ? rootLabel : row.label.text;
             return (
-              <li key={row.key} data-statement-id={row.statement.id} className="min-w-0 space-y-1 py-3">
+              <li key={row.key} data-statement-id={row.statement.id} className="min-w-0 space-y-2 py-5 first:pt-1">
                 <a
                   id={literaryFocusId(rowFocus)}
                   href={literaryDestination(row.id, row.label.text, locale, rowReturn, realm, context)}
@@ -222,7 +222,10 @@ export function LiteraryNativeWindow({
         </ul>
       )}
       {state === 'ready' && window.withheld && <LiteraryStatus state="withheld" locale={locale} />}
-      <nav className="flex flex-wrap gap-x-4">
+      <nav
+        aria-label={title.text || m.subject_relations({}, o)}
+        className="flex flex-wrap gap-x-6 border-t border-border pt-3"
+      >
         {previousHref && (
           <a href={previousHref} className={action}>
             {m.literary_visit_previous({}, o)}

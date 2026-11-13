@@ -105,11 +105,14 @@ import { isMangaReaderType } from '../catalogue/manga-reader/model';
 import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
 import type { WorkFranchiseReadingProps, WorkFranchiseSelection } from './showcase-work';
 import { WorkFranchiseOverview } from './showcase-work/overview';
+import { LiteraryOverviewDestinations, LiteraryOverviewGaps } from '../catalogue/page-render-binding';
+import { literaryWindows } from '../catalogue/page-data-binding';
 import {
   BookOverviewContext,
   BookOverviewRoot,
   BookOverviewSections,
   bookOverviewDocument,
+  literaryDetailDocument,
   isBookOverview,
 } from './book-overview';
 import { showcaseWorkKind } from './showcase-work/model';
@@ -1061,10 +1064,14 @@ export function SubjectPage({
     ) : null;
   const header = placesSlot(page.document.content, 'header');
   const selectedDocument = selectedStreamDocument(page.document, page.streams);
-  const renderedDocument = useMemo(
-    () => (bookOverview ? bookOverviewDocument(selectedDocument) : selectedDocument),
-    [bookOverview, selectedDocument],
-  );
+  const renderedDocument = useMemo(() => {
+    if (bookOverview) return bookOverviewDocument(selectedDocument);
+    if (literarySubject && (view === 'contents' || view === 'editions') && page.catalogue?.definitions) {
+      const owned = literaryWindows(profileRelationWindows(page, { includeAliases: true }), page.catalogue.definitions);
+      return literaryDetailDocument(selectedDocument, new Set(owned.map(({ node }) => node)));
+    }
+    return selectedDocument;
+  }, [bookOverview, selectedDocument, literarySubject, view, page]);
   const CompositionRoot = bookOverview ? BookOverviewRoot : PageRoot;
   const composition = overview && !framed ? splitHeaderDocument(renderedDocument) : { remaining: renderedDocument };
   const afterHeader = overview ? (
@@ -1507,6 +1514,32 @@ export function SubjectPage({
                             components={pageComponents(framed)}
                             root={CompositionRoot}
                           />
+                          {literarySubject && page.catalogue?.state === 'released' && page.catalogue.definitions && (
+                            <LiteraryOverviewGaps
+                              work={literarySubject}
+                              related={read!.related}
+                              definitions={page.catalogue.definitions}
+                              directions={page.catalogue.directions}
+                              digest={page.catalogue.digest}
+                              reader={reader ?? defaultReader}
+                              locale={locale}
+                            />
+                          )}
+                          {literarySubject && (
+                            <LiteraryOverviewDestinations
+                              anchor
+                              readingType={
+                                literarySubject.type !== 'schema:Book' && page.catalogue?.state === 'released'
+                                  ? literarySubject.type
+                                  : undefined
+                              }
+                              subject={literarySubject.id}
+                              locale={locale}
+                              context={page.context}
+                              realm={realm}
+                              views={(tabs ?? []).map(({ view }) => view)}
+                            />
+                          )}
                         </BookOverviewSections>
                       ) : (
                         <CompositionRender

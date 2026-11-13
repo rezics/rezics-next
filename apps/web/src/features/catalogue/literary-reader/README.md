@@ -12,7 +12,12 @@ for its actual Subject type. The separate-tab destination preserves the reader's
 uses the native Library's sign-in, preferences and private action lifetimes. Retired or unreleased readings offer
 no shelf handoff; no work mapping replaces the selected Edition or Series identity.
 
-Every supplied membership and Edition window stays discoverable in native order. A selected node, released property
+Overview keeps the composition-owned cover, title, synopsis, available rating/review entry and essential facts.
+Its concise destination links start existing full views without a preview node or cursor. Open neutral sections,
+separators and whitespace carry the hierarchy in both themes; names and long descriptions expand in place.
+The Subject header appears once. Native tabs stay with the page shell.
+
+Every supplied membership and Edition window stays discoverable in native order in its own destination. A selected node, released property
 and direction stay paired with its view, Realm and opaque cursor; changing streams starts that node without another
 stream's cursor. An unavailable or unsupported descriptor remains explicit. Canonical work mapping is a current
 native assertion, never a guessed lookup. Missing mapping differs from withholding and currentness failure. Public
@@ -23,8 +28,8 @@ facts and shared value/source rendering are independent of correction admission.
 There are zero additional native calls, target hydrations or network decodes. The ordinary composition can supply at
 most 16 relation-window choices (`MAX_PAGE_READS`); `profileRelationWindows` carries each exact planned row limit.
 `SubjectList` admits at most 24 rows (12 for paged previews), and other relation nodes keep their installed native
-limit. The reader retains rows from at most one active membership window and one active Edition window, so the
-retained row bound is the sum of those two `PageRead.limit` values. Stream choices do not retain extra projections.
+limit. Overview retains no projected stream rows; Contents or Editions retains one active window, bounded by its
+`PageRead.limit` value. Stream choices do not retain extra projections.
 Native page-node continuation and opaque cursors replace pages; changing streams starts its exact node without a
 cursor from another stream. It retains no history, full-series index or speculative pages. The Subject, descriptor,
 current directed windows and source references are shared with the ordinary page. `literaryCompositionCost` records
@@ -43,7 +48,7 @@ draft or uncertain-command ownership.
 Each Previous, Next or target return performs one current Subject-page read through its existing route. The reader
 retains no prior authorized payload. Address length is capped at 32,768 characters; oversized history evicts the
 oldest address, and each retained entry contains only a view, node, released property/direction, optional opaque cursor
-of at most 8,192 characters and optional focus key. At most eight entries survive. Two relation windows are selected;
-each keeps its native row limit, source order, summaries and exact qualifiers/references. The existing 65,536-byte
+of at most 8,192 characters and optional focus key. At most eight entries survive. One relation window is selected;
+it keeps its native row limit, source order, summaries and exact qualifiers/references. The existing 65,536-byte
 composition bound covers their supplied labels, statements and source parts. The reader adds no document read or
 per-row target hydration.

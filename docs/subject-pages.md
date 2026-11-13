@@ -136,7 +136,7 @@ Decision: Literary facts include the released work form, tag (`schema:keywords`)
 
 Decision: Generic Recipe and software-release templates have no Statements node; the overview projects those released facts from the current anonymous page so visible copy, sharing metadata and JSON-LD stay the same. Anonymous Game work overviews SSR admitted work facts from that same page; edition destinations stay the existing inverse window. SoftwareApplication pages overlay `schema:sameAs` and `schema:url`; Person and Organization keep their existing overviews. Route pages use that same current catalogue release so home TypeList selectors stay admitted.
 
-Decision: Book, Series and Edition Overview share the composition-owned cover, title, synopsis, available rating/review entry and essential facts. Use light/dark neutral surfaces, separators and purposeful whitespace; long prose expands in place. Long memberships, editions and related works belong in existing detailed destinations, with concise Overview links. Never repeat framed cards, action bars or identity headers, and never introduce a native select. Preserve the existing mounted route choices and supplied rating populations; absent results stay absent. TODO: customize the shared tabs later.
+Decision: Book, Series and Edition Overview share the composition-owned cover, title, synopsis, available rating/review entry and essential facts. Use light/dark neutral surfaces, separators and purposeful whitespace; long prose expands in place. Long memberships, editions and related works belong in existing detailed destinations, with concise Overview links. Never repeat framed cards, action bars or identity headers, and never introduce a native select. Preserve the existing mounted route choices and supplied rating populations; absent results stay absent. Tab customization remains the existing Subject-shell TODO.
 
 Every supplied membership and Edition window is discoverable in native order within its detailed destination,
 labelled by its released property and direction. Contents retains one membership page; Editions retains one Edition
@@ -175,12 +175,12 @@ the existing Subject Sources page; the reader does not create correction actions
 The adapter starts zero requests and decodes zero additional network bytes. It shares the already decoded Subject,
 related summaries and native descriptor. Choices retain at most the 16 relation windows allowed by
 `MAX_PAGE_READS`; each supplied window carries its exact native `PageRead.limit` and freshness. The reader retains rows
-from at most two active windows, so its row bound is the sum of those two planned limits. `SubjectList` in
+from one active detail window, bounded by that planned limit; Overview retains no projected rows. `SubjectList` in
 `platformRegistry` admits at most 24 rows (12 for paged previews), while other relation nodes keep their own installed
 planned limit. Each explicit Previous, Next or target return performs one current page read through the existing
 Subject route. The browser retains at most eight prior view/node/cursor/focus addresses (each existing cursor remains
 capped at 8,192 characters), with no prior native payload; the serialized literary address is capped at 32,768
-characters and evicts the oldest history entry as needed. The two selected windows retain only their native planned
+characters and evicts the oldest history entry as needed. The selected window retains only its native planned
 rows, related summaries, qualifiers and references within the existing composition payload; no document reads are
 added by this reader. The shared plan retains `MAX_PAGE_READS = 16`, `MAX_PAGE_COST = 128`, `MAX_COMPOSITION_NODES = 256` and
 `MAX_COMPOSITION_BYTES = 65,536`. The descriptor uses the existing bounded definition-release vocabulary; extending

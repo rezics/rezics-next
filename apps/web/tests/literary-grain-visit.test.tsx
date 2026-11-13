@@ -92,6 +92,15 @@ test('mounted literary visit re-reads bounded addresses and returns focus only t
     window.history.replaceState({}, '', `${volumeAddress.pathname}${volumeAddress.search}`);
     input = { ...volumeInput, context, realm, view: 'overview' };
     await render();
+    expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();
+    const editions = host.querySelector<HTMLAnchorElement>('[data-slot="literary-overview-destinations"] a')!;
+    const editionsAddress = new URL(editions.href);
+    expect(editionsAddress.searchParams.get('context')).toBe(context.id);
+    expect(editionsAddress.searchParams.has('node')).toBe(false);
+    expect(editionsAddress.searchParams.has('cursor')).toBe(false);
+    window.history.replaceState({}, '', `${editionsAddress.pathname}${editionsAddress.search}`);
+    input = { ...input, source: {}, view: 'editions' };
+    await render();
     const edition = [
       ...host.querySelectorAll<HTMLAnchorElement>('[data-slot="literary-window"] a[target="_blank"]'),
     ].find((link) => link.textContent === 'Harbour, 2nd edition')!;
