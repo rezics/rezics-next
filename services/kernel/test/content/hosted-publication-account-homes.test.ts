@@ -31,7 +31,7 @@ test('authorized author prepares and activates a Book across account homes with 
   const f = await hostedChaptersFixture();
   try {
     const accountHome = partitionOf(routeOf(f.native.author.actor.accountId)!);
-    const catalogue = await f.native.threadOutsidePartition(accountHome);
+    const catalogue = await f.threadOutsidePartition(accountHome);
     const catalogueId = catalogue.firstPost.id;
     const path = `/v1/hostedCatalogues/${catalogueId}`;
     expect(partitionOf(routeOf(catalogueId)!)).not.toBe(accountHome);
