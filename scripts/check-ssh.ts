@@ -44,19 +44,24 @@ export type SshControlHost = {
   readonly identity: string;
 };
 
-export type OwnedSshTransport = {
-  readonly child: ReturnType<typeof Bun.spawn>;
+export type OwnedSshTransport<
+  In extends Bun.SpawnOptions.Writable = Bun.SpawnOptions.Writable,
+  Out extends Bun.SpawnOptions.Readable = Bun.SpawnOptions.Readable,
+  Err extends Bun.SpawnOptions.Readable = Bun.SpawnOptions.Readable,
+> = {
+  readonly child: Bun.Subprocess<In, Out, Err>;
   readonly identity: RunnerIdentity | null;
 };
 
 export type OwnedSshTransportCleanup = { terminal: true } | { terminal: false; reason: string };
 
 /** Start one SSH operation in a process group that cannot include its caller or a peer transport. */
-export function spawnOwnedSshTransport(
-  argv: string[],
-  options: Parameters<typeof Bun.spawn>[1] = {},
-): OwnedSshTransport {
-  const child = Bun.spawn(argv, { ...options, detached: true });
+export function spawnOwnedSshTransport<
+  const In extends Bun.SpawnOptions.Writable = 'ignore',
+  const Out extends Bun.SpawnOptions.Readable = 'pipe',
+  const Err extends Bun.SpawnOptions.Readable = 'inherit',
+>(argv: string[], options: Bun.SpawnOptions.SpawnOptions<In, Out, Err> = {}): OwnedSshTransport<In, Out, Err> {
+  const child = Bun.spawn<In, Out, Err>(argv, { ...options, detached: true });
   const identity = processIdentity(child.pid);
   const caller = processIdentity();
   return {

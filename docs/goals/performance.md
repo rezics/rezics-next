@@ -174,6 +174,8 @@ reply, not a TCP accept that EOFs; empty-directory manifests hash `directory\0`;
 substantive error after Task `$ ` echoes. After output-tree restore, candidate fingerprints ignore the published
 kernel-client root. Inherited Library `@rezics/bounds` imports and the two ClassDeclaration `extends` reads stay with
 kernel-library and kernel zones.
+Decision: `spawnOwnedSshTransport` preserves Bun's inferred stdin/stdout/stderr types from each caller's options, so
+piped output remains readable and inherited remote-check output retains its actual child type.
 Decision: Management walk setup idle-in-transaction and Access-deadline termination is received through that same
 throwaway/isolated-stack database lifetime. Content keeps the launcher, stack and cleanup. Original walks remain
 open. Driver main versus canonical publication is a control-plane owner item.
