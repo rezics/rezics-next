@@ -94,18 +94,16 @@ function prepareConsumedWebRecovery(h: ReturnType<typeof harness>) {
   });
   const actor = { id: task.brief.manager, sessionId: 'web-manager-session' };
   h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
-  h.store.db
-    .query('INSERT INTO manager_sessions VALUES (?,?)')
-    .run(
-      actor.id,
-      JSON.stringify({
-        id: actor.id,
-        kind: 'managed',
-        engine: 'claude',
-        status: 'running',
-        threadId: actor.sessionId,
-      }),
-    );
+  h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+    actor.id,
+    JSON.stringify({
+      id: actor.id,
+      kind: 'managed',
+      engine: 'claude',
+      status: 'running',
+      threadId: actor.sessionId,
+    }),
+  );
 
   const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, ref.attempt);
   const original = grantWorkerTypingRecovery({
@@ -137,10 +135,7 @@ function prepareConsumedWebRecovery(h: ReturnType<typeof harness>) {
       },
     }),
   );
-  writeFileSync(
-    join(budget, 'typing-recovery', `${original.token}.json`),
-    JSON.stringify({ ...original, stamp: '1' }),
-  );
+  writeFileSync(join(budget, 'typing-recovery', `${original.token}.json`), JSON.stringify({ ...original, stamp: '1' }));
   h.store.updateAttempt(ref, (current) => {
     current.checks = [original.checkId];
   });
@@ -242,7 +237,8 @@ test('an unresolved consumed Web grant reports its check and foreign custody sta
     const landing = { enqueue: (_value: unknown) => {} };
     const first = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
     const second = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
-    if (!('result' in first) || !('result' in second)) throw new Error('unresolved Web recovery lost its pending reason');
+    if (!('result' in first) || !('result' in second))
+      throw new Error('unresolved Web recovery lost its pending reason');
 
     expect(first).toMatchObject({ status: 'pending' });
     expect('proof' in first).toBe(false);
@@ -403,18 +399,16 @@ test('authenticated typing-recover issues one replayable compiler-only grant aft
       current.state = 'stopped';
     });
     h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY,state TEXT NOT NULL)');
-    h.store.db
-      .query('INSERT INTO manager_sessions VALUES (?,?)')
-      .run(
-        actor.id,
-        JSON.stringify({
-          id: actor.id,
-          kind: 'managed',
-          engine: 'claude',
-          status: 'running',
-          threadId: actor.sessionId,
-        }),
-      );
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+      actor.id,
+      JSON.stringify({
+        id: actor.id,
+        kind: 'managed',
+        engine: 'claude',
+        status: 'running',
+        threadId: actor.sessionId,
+      }),
+    );
 
     const landing = { enqueue: (_value: unknown) => {} };
     const unauthenticated = await recoverWorkerTyping(h.tasks, landing, ref);

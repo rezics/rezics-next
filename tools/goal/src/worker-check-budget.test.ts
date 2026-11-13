@@ -808,13 +808,13 @@ test('a resultless Web cleanup is tied to its exact check owner and compiler com
     expect(workerCheckHostAttemptCheckCustody(worktree.path, taskId, 1, [checkId])).toBe('terminal');
     expect(workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], command)).toBe(true);
     expect(
-      workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], [
-        'bun',
-        'run',
-        '--cwd',
-        'apps/web',
-        'typecheck:root',
-      ]),
+      workerCheckHostAttemptHasResultlessCleanup(
+        worktree.path,
+        taskId,
+        1,
+        [checkId],
+        ['bun', 'run', '--cwd', 'apps/web', 'typecheck:root'],
+      ),
     ).toBe(false);
 
     writeVerifiedResultlessCleanupEvidence({ ...evidence, taskId: randomUUID() });

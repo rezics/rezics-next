@@ -1363,7 +1363,8 @@ export function workerCheckHostConsumedTypingRecovery(input: {
       (grant.stamp === undefined || grant.stamp === name);
     const exactRequest =
       !request ||
-      (request.physicalRunId === grant.physicalRunId && JSON.stringify(request.command) === JSON.stringify(grant.command));
+      (request.physicalRunId === grant.physicalRunId &&
+        JSON.stringify(request.command) === JSON.stringify(grant.command));
     const exactRecovery = exactStamp && exactRequest;
     const checkIds = [...new Set([...input.checkIds, grant.checkId])];
     return {

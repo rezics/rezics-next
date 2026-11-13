@@ -412,9 +412,10 @@ export async function recoverWorkerTyping(
           })
         : undefined;
     const retainedKernelRun = workerCheckHostHasRetainedKernelTypingRun(directory, task.worktree);
-    const checkCustody = retainedKernelRun || consumedWebRecovery
-      ? workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds)
-      : 'terminal';
+    const checkCustody =
+      retainedKernelRun || consumedWebRecovery
+        ? workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds)
+        : 'terminal';
     if (retainedKernelRun && checkCustody !== 'terminal')
       return {
         ...ref,
@@ -423,9 +424,7 @@ export async function recoverWorkerTyping(
           'Retained Kernel compiler evidence is waiting for terminal custody of every same-attempt check. Existing check ownership stays fenced; no additional compiler run was authorized.',
       };
     const verifiedWebCleanup = Boolean(
-      consumedWebRecovery &&
-      checkCustody === 'terminal' &&
-      consumedWebRecovery.resultlessCleanup,
+      consumedWebRecovery && checkCustody === 'terminal' && consumedWebRecovery.resultlessCleanup,
     );
     if (consumedWebRecovery && (!verifiedWebCleanup || consumedWebRecovery.replacement)) {
       const reason = consumedWebRecovery.replacement
@@ -451,9 +450,9 @@ export async function recoverWorkerTyping(
       };
     const resultlessCleanupRecovery = Boolean(
       verifiedWebCleanup ||
-        (retainedKernelRun &&
-          pendingCommand &&
-          workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand)),
+      (retainedKernelRun &&
+        pendingCommand &&
+        workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand)),
     );
     if (resultlessCleanupRecovery && !authority)
       return {
