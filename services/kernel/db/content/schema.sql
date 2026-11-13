@@ -2741,6 +2741,89 @@ CREATE TABLE content.hosted_version_public_baseline_subtree (
 
 
 --
+-- Name: hosted_version_release_candidate; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_release_candidate (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    initiator_account_id uuid NOT NULL,
+    owner_epoch bigint NOT NULL,
+    source_revision_id uuid NOT NULL,
+    expected_head_revision_id uuid CONSTRAINT hosted_version_release_candi_expected_head_revision_id_not_null NOT NULL,
+    expected_publication_id uuid,
+    mode text NOT NULL,
+    input_version bigint NOT NULL,
+    source_candidate_count bigint CONSTRAINT hosted_version_release_candidat_source_candidate_count_not_null NOT NULL,
+    source_sealed_at timestamp with time zone NOT NULL,
+    after_source_order bigint DEFAULT '-1'::integer NOT NULL,
+    placement_count bigint DEFAULT 0 NOT NULL,
+    chapter_count bigint DEFAULT 0 NOT NULL,
+    root_next_position bigint DEFAULT 0 NOT NULL,
+    root_sibling_root_id uuid,
+    preorder_root_id uuid,
+    chapter_root_id uuid,
+    active_path jsonb DEFAULT '[]'::jsonb NOT NULL,
+    generation_sequence bigint DEFAULT 0 NOT NULL,
+    coverage_complete boolean DEFAULT false NOT NULL,
+    status text DEFAULT 'building'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    sealed_at timestamp with time zone,
+    CONSTRAINT hosted_version_release_candidate_active_path_check CHECK (((jsonb_typeof(active_path) = 'array'::text) AND (jsonb_array_length(active_path) <= 16))),
+    CONSTRAINT hosted_version_release_candidate_after_source_order_check CHECK (((after_source_order >= '-1'::integer) AND (after_source_order <= '9007199254740990'::bigint))),
+    CONSTRAINT hosted_version_release_candidate_check CHECK (((chapter_count >= 0) AND (chapter_count <= placement_count))),
+    CONSTRAINT hosted_version_release_candidate_check1 CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11))) AND (route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11))) AND (route = ((get_byte(uuid_send(initiator_account_id), 10) * 256) + get_byte(uuid_send(initiator_account_id), 11))) AND (route = ((get_byte(uuid_send(source_revision_id), 10) * 256) + get_byte(uuid_send(source_revision_id), 11))) AND (route = ((get_byte(uuid_send(expected_head_revision_id), 10) * 256) + get_byte(uuid_send(expected_head_revision_id), 11))) AND ((expected_publication_id IS NULL) OR (route = ((get_byte(uuid_send(expected_publication_id), 10) * 256) + get_byte(uuid_send(expected_publication_id), 11)))))),
+    CONSTRAINT hosted_version_release_candidate_check2 CHECK ((expected_head_revision_id = source_revision_id)),
+    CONSTRAINT hosted_version_release_candidate_check3 CHECK ((((status = 'building'::text) AND (sealed_at IS NULL)) OR ((status = 'sealed'::text) AND (sealed_at IS NOT NULL) AND coverage_complete))),
+    CONSTRAINT hosted_version_release_candidate_check4 CHECK (((NOT coverage_complete) OR (placement_count = source_candidate_count))),
+    CONSTRAINT hosted_version_release_candidate_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_release_candidate_generation_sequence_check CHECK ((generation_sequence >= 0)),
+    CONSTRAINT hosted_version_release_candidate_input_version_check CHECK ((input_version >= 0)),
+    CONSTRAINT hosted_version_release_candidate_mode_check CHECK ((mode = ANY (ARRAY['whole'::text, 'selection'::text]))),
+    CONSTRAINT hosted_version_release_candidate_owner_epoch_check CHECK ((owner_epoch >= 0)),
+    CONSTRAINT hosted_version_release_candidate_placement_count_check CHECK (((placement_count >= 0) AND (placement_count <= '9007199254740991'::bigint))),
+    CONSTRAINT hosted_version_release_candidate_root_next_position_check CHECK (((root_next_position >= 0) AND (root_next_position <= '9007199254740991'::bigint))),
+    CONSTRAINT hosted_version_release_candidate_sealed_at_check CHECK (((sealed_at IS NULL) OR isfinite(sealed_at))),
+    CONSTRAINT hosted_version_release_candidate_source_candidate_count_check CHECK (((source_candidate_count >= 0) AND (source_candidate_count <= '9007199254740991'::bigint))),
+    CONSTRAINT hosted_version_release_candidate_source_sealed_at_check CHECK (isfinite(source_sealed_at)),
+    CONSTRAINT hosted_version_release_candidate_status_check CHECK ((status = ANY (ARRAY['building'::text, 'sealed'::text]))),
+    CONSTRAINT hosted_version_release_candidate_updated_at_check CHECK (isfinite(updated_at))
+);
+
+
+--
+-- Name: hosted_version_release_candidate_page; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_release_candidate_page (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    from_source_order bigint CONSTRAINT hosted_version_release_candidate_pag_from_source_order_not_null NOT NULL,
+    to_source_order bigint NOT NULL,
+    processed integer NOT NULL,
+    to_generation_sequence bigint CONSTRAINT hosted_version_release_candidat_to_generation_sequence_not_null NOT NULL,
+    to_placement_count bigint CONSTRAINT hosted_version_release_candidate_pa_to_placement_count_not_null NOT NULL,
+    to_root_count bigint NOT NULL,
+    to_chapter_count bigint NOT NULL,
+    coverage_complete boolean CONSTRAINT hosted_version_release_candidate_pag_coverage_complete_not_null NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT hosted_version_release_candidate_p_to_generation_sequence_check CHECK ((to_generation_sequence >= 0)),
+    CONSTRAINT hosted_version_release_candidate_page_check CHECK (((to_chapter_count >= 0) AND (to_chapter_count <= to_placement_count))),
+    CONSTRAINT hosted_version_release_candidate_page_check1 CHECK ((((processed = 0) AND (to_source_order = from_source_order)) OR ((processed > 0) AND (to_source_order > from_source_order)))),
+    CONSTRAINT hosted_version_release_candidate_page_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_release_candidate_page_from_source_order_check CHECK (((from_source_order >= '-1'::integer) AND (from_source_order <= '9007199254740990'::bigint))),
+    CONSTRAINT hosted_version_release_candidate_page_processed_check CHECK (((processed >= 0) AND (processed <= 20))),
+    CONSTRAINT hosted_version_release_candidate_page_to_placement_count_check CHECK (((to_placement_count >= 0) AND (to_placement_count <= '9007199254740991'::bigint))),
+    CONSTRAINT hosted_version_release_candidate_page_to_root_count_check CHECK (((to_root_count >= 0) AND (to_root_count <= '9007199254740991'::bigint))),
+    CONSTRAINT hosted_version_release_candidate_page_to_source_order_check CHECK (((to_source_order >= '-1'::integer) AND (to_source_order <= '9007199254740990'::bigint)))
+);
+
+
+--
 -- Name: hosted_version_revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -5002,6 +5085,30 @@ ALTER TABLE ONLY content.hosted_version_public_baseline_subtree
 
 
 --
+-- Name: hosted_version_release_candidate hosted_version_release_candid_route_catalogue_id_generation_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate
+    ADD CONSTRAINT hosted_version_release_candid_route_catalogue_id_generation_key UNIQUE (route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_version_release_candidate_page hosted_version_release_candidate_page_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate_page
+    ADD CONSTRAINT hosted_version_release_candidate_page_pkey PRIMARY KEY (route, catalogue_id, stage_id, from_source_order);
+
+
+--
+-- Name: hosted_version_release_candidate hosted_version_release_candidate_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate
+    ADD CONSTRAINT hosted_version_release_candidate_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
 -- Name: hosted_version_revision hosted_version_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -6089,6 +6196,13 @@ CREATE INDEX hosted_version_draft_activation_status_idx ON content.hosted_versio
 --
 
 CREATE INDEX hosted_version_public_baseline_status_idx ON content.hosted_version_public_baseline USING btree (route, catalogue_id, status, build_id);
+
+
+--
+-- Name: hosted_version_release_candidate_state_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_version_release_candidate_state_idx ON content.hosted_version_release_candidate USING btree (route, catalogue_id, status, stage_id);
 
 
 --
@@ -7612,6 +7726,54 @@ ALTER TABLE ONLY content.hosted_version_public_baseline
 
 ALTER TABLE ONLY content.hosted_version_public_baseline
     ADD CONSTRAINT hosted_version_public_baseline_route_catalogue_id_build_id_fkey FOREIGN KEY (route, catalogue_id, build_id) REFERENCES content.hosted_version_builder_source(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_release_candidate hosted_version_release_candi_route_catalogue_id_expected__fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate
+    ADD CONSTRAINT hosted_version_release_candi_route_catalogue_id_expected__fkey1 FOREIGN KEY (route, catalogue_id, expected_publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_release_candidate hosted_version_release_candid_route_catalogue_id_expected__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate
+    ADD CONSTRAINT hosted_version_release_candid_route_catalogue_id_expected__fkey FOREIGN KEY (route, catalogue_id, expected_head_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_release_candidate hosted_version_release_candid_route_catalogue_id_generatio_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate
+    ADD CONSTRAINT hosted_version_release_candid_route_catalogue_id_generatio_fkey FOREIGN KEY (route, catalogue_id, generation_id) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_version_release_candidate hosted_version_release_candid_route_catalogue_id_source_re_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate
+    ADD CONSTRAINT hosted_version_release_candid_route_catalogue_id_source_re_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_release_candidate_page hosted_version_release_candid_route_catalogue_id_stage_id_fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate_page
+    ADD CONSTRAINT hosted_version_release_candid_route_catalogue_id_stage_id_fkey1 FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_version_release_candidate(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_version_release_candidate hosted_version_release_candida_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_release_candidate
+    ADD CONSTRAINT hosted_version_release_candida_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging_seal(route, catalogue_id, stage_id);
 
 
 --
