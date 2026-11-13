@@ -1369,6 +1369,22 @@ check-wake attempts do not count. The existing 15-second waiting interval, oldes
 half-hour head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately,
 without waiting for the periodic worker/memory poll.
 
+#### Post-integration delay observations
+
+Decision: measure a wait only from an exact persisted per-ticket waiting-start timestamp to its first matching
+admission or launch timestamp; if either boundary is missing, the duration is unavailable. Aggregate check-slot wait
+totals and incident observation times do not substitute for ticket boundaries.
+
+For the completed Book discovery and Studio localization checks, the first resumed-worker launch is present in
+`worker_events`; the capacity tickets had already been removed, and the persisted attempt check-wait files contain
+only aggregate check-slot milliseconds. No exact wait-start timestamp remains in the controller records, so both
+elapsed durations are unavailable.
+
+| Completed check | Waiting start (source)                              | First launch (source)                                                                       | Elapsed |
+| --------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------- |
+| Book discovery, exit 2 | unavailable (ticket start not retained)       | 2026-11-13T05:13:40.722Z (`worker_events.worker-run-started`, `resuming=true`)                | unavailable |
+| Studio localization, exit 0 | unavailable (ticket start not retained)   | 2026-11-13T05:13:21.265Z (`worker_events.worker-run-started`, `resuming=true`)                | unavailable |
+
 #### Cost: running-attempt count
 
 - **Touches:** One SQLite statement and the current live-state index entries; no attempt bodies are returned.
