@@ -3,13 +3,16 @@ import { Pool, type PoolClient } from 'pg';
 import type { AccessClient } from '../../src/request/access.ts';
 import * as reads from '../../src/content/reads.ts';
 import readChain from '../../src/content/read-chain.sql';
+import { createAppeal, resolveAppeal } from '../../src/content/appeals.ts';
 import {
   activateHostedPublicationCandidate,
   advanceHostedPublicationActivationAuthority,
   startHostedPublicationActivation,
   type HostedPublicationActivationDependencies,
 } from '../../src/content/hosted-publication-activation.ts';
+import { observeHostedPublicationActivationTarget } from '../../src/content/hosted-publication-point-eligibility.ts';
 import { RevisionPreconditionError } from '../../src/content/commands.ts';
+import { restrictPostRevision } from '../../src/content/moderation.ts';
 import {
   capturePublicationAuthorityVector,
   lockAndComparePublicationAuthorityHomes,
@@ -17,6 +20,7 @@ import {
 import { issueRevisionDisclosure, revokeRevisionDisclosure } from '../../src/content/revision-disclosure.ts';
 import type { HostedChapterTarget, HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
 
@@ -130,6 +134,70 @@ async function expectAuthorityBump(home: number, mutate: (client: PoolClient) =>
     await client.query('ROLLBACK').catch(() => undefined);
     client.release();
   }
+}
+
+async function publicationAuthorityEpoch(home: number): Promise<bigint> {
+  const result = await secondPool.query<{ epoch: string }>(
+    `SELECT epoch::text FROM core.publication_authority_epoch WHERE home_no=$1`,
+    [home],
+  );
+  const epoch = result.rows[0]?.epoch;
+  if (epoch === undefined) throw new Error(`Publication authority home ${home} is missing`);
+  return BigInt(epoch);
+}
+
+async function postSecurityRevision(target: HostedChapterTarget): Promise<bigint> {
+  const result = await secondPool.query<{ security_revision: string }>(
+    `SELECT security_revision::text FROM content.post WHERE route=$1 AND post_id=$2`,
+    [routeOf(target.postId), target.postId],
+  );
+  const revision = result.rows[0]?.security_revision;
+  if (revision === undefined) throw new Error(`Post ${target.postId} is missing`);
+  return BigInt(revision);
+}
+
+async function activeRevisionRestrictionCount(target: HostedChapterTarget): Promise<number> {
+  const result = await secondPool.query<{ count: number }>(
+    `SELECT count(*)::integer AS count FROM content.post_revision_restriction
+     WHERE route=$1 AND revision_id=$2 AND lifted_at IS NULL`,
+    [routeOf(target.postId), target.revisionId],
+  );
+  return result.rows[0]!.count;
+}
+
+async function restrictRevision(target: HostedChapterTarget, mode: 'public' | 'hard', context = commandContext()) {
+  return restrictPostRevision(
+    dependencies(f.native.pool),
+    f.native.system.actors.moderator.actor,
+    { postId: target.postId, revisionId: target.revisionId, mode, reason: `Hosted activation ${mode} restriction` },
+    context,
+  );
+}
+
+async function reverseLatestRevisionRestriction(target: HostedChapterTarget) {
+  const decision = (
+    await secondPool.query<{ decision_id: string }>(
+      `SELECT decision_id FROM content.moderation_decision
+       WHERE route=$1 AND target_kind='post' AND target_id=$2 AND revision_id=$3
+       ORDER BY security_revision DESC LIMIT 1`,
+      [routeOf(target.postId), target.postId, target.revisionId],
+    )
+  ).rows[0];
+  if (!decision) throw new Error(`Post ${target.postId} has no exact restriction decision`);
+  const appeal = await createAppeal(
+    dependencies(f.native.pool),
+    f.native.system.actors.author.actor,
+    decision.decision_id,
+    'Please restore this exact revision',
+    commandContext(),
+  );
+  return resolveAppeal(
+    dependencies(f.native.pool),
+    f.native.system.actors.other.actor,
+    appeal.value.id,
+    { outcome: 'reverse', statement: 'The exact revision is restored after review' },
+    commandContext(),
+  );
 }
 
 test('21-target authority restarts after cross-home consent revoke and activates the preserved candidate', async () => {
@@ -433,6 +501,228 @@ test('21-target authority restarts after cross-home consent revoke and activates
   expect(afterTakedown.status).toBe(200);
   expect(afterTakedown.value.occurrence.availability).toBe('unavailable');
   expect(afterTakedown.value.document).toBeNull();
+});
+
+test('native revision restriction rollback, hard denial, and appealed lift preserve the sealed candidate', async () => {
+  const catalogue = await f.native.thread('published');
+  const catalogueId = catalogue.firstPost.id;
+  const path = `/v1/hostedCatalogues/${catalogueId}`;
+  const publicSource = await f.native.thread('published');
+  const publicTarget = f.target(publicSource);
+  const occurrenceId = f.newOccurrenceIdFor(catalogueId);
+  const initial = await f.native.command('/v1/hostedCatalogues', {
+    postId: catalogueId,
+    threadId: catalogue.id,
+    placements: [
+      {
+        occurrenceId,
+        parentId: null,
+        position: 0,
+        title: 'A remains selected',
+        kind: 'chapter',
+        target: publicTarget,
+      },
+    ] satisfies HostedPlacement[],
+  });
+  const releaseA = await f.native.command(
+    `${path}:publish`,
+    { expectedRevisionId: initial.revisionId, expectedPublicationId: null, occurrenceIds: [occurrenceId] },
+    200,
+  );
+
+  const privateSource = await f.native.thread('draft');
+  const privateTarget = f.target(privateSource);
+  const revised = await f.native.command(
+    `${path}:revise`,
+    {
+      expectedRevisionId: initial.revisionId,
+      placements: [
+        {
+          occurrenceId,
+          parentId: null,
+          position: 0,
+          title: 'B waits for current authority',
+          kind: 'chapter',
+          target: privateTarget,
+        },
+      ] satisfies HostedPlacement[],
+    },
+    200,
+  );
+  const activationDeps = dependencies(f.native.pool);
+  const consent = await issueRevisionDisclosure(
+    activationDeps,
+    f.native.author.actor,
+    { catalogueId, target: privateTarget },
+    commandContext(),
+  );
+  const candidate = await preparedCandidate(catalogueId, path, revised.revisionId, releaseA.revisionId);
+
+  const moderator = f.native.system.actors.moderator.actor;
+  const reviewer = f.native.system.actors.other.actor;
+  for (const target of [publicTarget, privateTarget]) {
+    for (const actor of [moderator, reviewer])
+      await seedGovernanceAuthority(secondPool, routeOf(target.postId)!, target.postId, actor.accountId, [
+        'moderation:takedown',
+      ]);
+  }
+
+  const publicHome = partitionOf(routeOf(publicTarget.postId)!);
+  const publicEpoch = await publicationAuthorityEpoch(publicHome);
+  const publicSecurityRevision = await postSecurityRevision(publicTarget);
+  const rollbackContext = commandContext();
+  const suffix = crypto.randomUUID().replaceAll('-', '');
+  const functionName = `hrrf_${suffix}`;
+  const triggerName = `hrrt_${suffix}`;
+  try {
+    await secondPool.query(`CREATE FUNCTION public.${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.type='com.rezics.content.moderation.revision-restricted.v1' THEN
+          RAISE EXCEPTION 'hosted restriction rollback fault';
+        END IF;
+        RETURN NEW;
+      END $$`);
+    await secondPool.query(
+      `CREATE TRIGGER ${triggerName} BEFORE INSERT ON core.outbox
+       FOR EACH ROW EXECUTE FUNCTION public.${functionName}()`,
+    );
+    await expect(restrictRevision(publicTarget, 'public', rollbackContext)).rejects.toThrow(
+      'hosted restriction rollback fault',
+    );
+  } finally {
+    await secondPool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON core.outbox`);
+    await secondPool.query(`DROP FUNCTION IF EXISTS public.${functionName}()`);
+  }
+  expect(await publicationAuthorityEpoch(publicHome)).toBe(publicEpoch);
+  expect(await postSecurityRevision(publicTarget)).toBe(publicSecurityRevision);
+  expect(await activeRevisionRestrictionCount(publicTarget)).toBe(0);
+
+  await restrictRevision(publicTarget, 'public', rollbackContext);
+  const publicRestrictedEpoch = await publicationAuthorityEpoch(publicHome);
+  expect(publicRestrictedEpoch).toBeGreaterThan(publicEpoch);
+  const publicReadContext = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 120_000 };
+  const authorReadContext = { actor: f.native.author.actor, deadline: Date.now() + 120_000 };
+  expect(
+    (
+      await reads.readPost(
+        activationDeps,
+        publicTarget.threadId,
+        publicTarget.postId,
+        publicReadContext,
+        publicTarget.revisionId,
+      )
+    ).value,
+  ).toBeNull();
+  expect(
+    (
+      await reads.readPost(
+        activationDeps,
+        publicTarget.threadId,
+        publicTarget.postId,
+        authorReadContext,
+        publicTarget.revisionId,
+      )
+    ).value,
+  ).not.toBeNull();
+  await reverseLatestRevisionRestriction(publicTarget);
+  expect(await publicationAuthorityEpoch(publicHome)).toBeGreaterThan(publicRestrictedEpoch);
+  expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
+
+  const started = await startHostedPublicationActivation(
+    activationDeps,
+    f.native.author.actor,
+    catalogueId,
+    candidate.stageId,
+    commandContext(),
+  );
+  const candidateGenerationId = started.value.candidateGenerationId;
+  const checked = await advanceHostedPublicationActivationAuthority(
+    activationDeps,
+    f.native.author.actor,
+    catalogueId,
+    candidate.stageId,
+    commandContext(),
+  );
+  expect(checked.value).toMatchObject({ state: 'ready', checkedTargetCount: '2', totalTargetCount: '2' });
+
+  const privateHome = partitionOf(routeOf(privateTarget.postId)!);
+  const beforeHardRestriction = await publicationAuthorityEpoch(privateHome);
+  await restrictRevision(privateTarget, 'hard');
+  const hardRestrictedEpoch = await publicationAuthorityEpoch(privateHome);
+  expect(hardRestrictedEpoch).toBeGreaterThan(beforeHardRestriction);
+  expect(
+    (
+      await reads.readPost(
+        activationDeps,
+        privateTarget.threadId,
+        privateTarget.postId,
+        authorReadContext,
+        privateTarget.revisionId,
+      )
+    ).value,
+  ).toBeNull();
+
+  const storedActivation = await secondPool.query<{ activation_revision_id: string }>(
+    `SELECT activation_revision_id FROM content.hosted_publication_activation
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+    [routeOf(catalogueId), catalogueId, candidate.stageId],
+  );
+  const activationRevisionId = storedActivation.rows[0]?.activation_revision_id;
+  if (!activationRevisionId) throw new Error('The native activation revision was not retained');
+  const hardConsentObservation = await observeHostedPublicationActivationTarget(
+    activationDeps,
+    { catalogueId, activationRevisionId, target: privateTarget, occurrenceId },
+    { actor: { kind: 'anonymous' }, deadline: Date.now() + 120_000 },
+  );
+  expect(hardConsentObservation).toBeNull();
+
+  const stale = await activateHostedPublicationCandidate(
+    activationDeps,
+    f.native.author.actor,
+    catalogueId,
+    candidate.stageId,
+    commandContext(),
+  );
+  expect(stale.value).toMatchObject({ state: 'restart', restartRequired: true });
+  expect(stale.value.candidateGenerationId).toBe(candidateGenerationId);
+  expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
+
+  const beforeReversal = await publicationAuthorityEpoch(privateHome);
+  await reverseLatestRevisionRestriction(privateTarget);
+  const reversedEpoch = await publicationAuthorityEpoch(privateHome);
+  expect(reversedEpoch).toBeGreaterThan(beforeReversal);
+  const resumed = await advanceHostedPublicationActivationAuthority(
+    activationDeps,
+    f.native.author.actor,
+    catalogueId,
+    candidate.stageId,
+    commandContext(),
+  );
+  expect(resumed.value).toMatchObject({ state: 'ready', checkedTargetCount: '2', totalTargetCount: '2' });
+  expect(resumed.value.candidateGenerationId).toBe(candidateGenerationId);
+
+  const activated = await activateHostedPublicationCandidate(
+    activationDeps,
+    f.native.author.actor,
+    catalogueId,
+    candidate.stageId,
+    commandContext(),
+  );
+  expect(activated.value).toMatchObject({ state: 'activated', restartRequired: false });
+  if (!activated.value.publicationId) throw new Error('The activated Book has no publication ID');
+  expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
+  const readerPath = `${path}/occurrences/${occurrenceId}?kind=publication&revisionId=${activated.value.publicationId}`;
+  const available = await f.native.call('GET', readerPath, undefined, { anonymous: true });
+  expect(available.status).toBe(200);
+  expect(available.value.occurrence.availability).toBe('available');
+  expect(available.value.document).not.toBeNull();
+
+  await restrictRevision(privateTarget, 'hard');
+  const withheld = await f.native.call('GET', readerPath, undefined, { anonymous: true });
+  expect(withheld.status).toBe(200);
+  expect(withheld.value.occurrence.availability).toBe('unavailable');
+  expect(withheld.value.document).toBeNull();
+  expect(consent.value.state).toBe('issued');
 });
 
 test('dependency locking sorts reversed homes, releases on rollback, and permits an unrelated home writer', async () => {

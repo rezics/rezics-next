@@ -461,6 +461,12 @@ Decision: the Post restriction owner’s sparse exact-revision state is another 
 native transition must advance the existing authority epoch so a prepared eligible observation cannot select
 blocked bytes; activation adds no per-edit consent, entitlement or pointer behavior for restrictions.
 
+Decision: `restrictPostRevision` runs `mutateContentPostRevisionRestriction` and
+`post-revision-restriction.sql`, which increments the owning Post `security_revision` in the restriction transaction.
+Appeal reversal reaches `liftTakedown` and `lift-takedown.sql`'s `exact_post_change`, incrementing that same field.
+The existing `post_publication_authority` watcher carries both transitions into the source-home authority epoch;
+activation adds no parallel invalidator.
+
 Durable Book-scoped consent and a later withheld reader slot are **not** that activation proof. Consent may keep an
 already issued exact-revision intent after the issuer later loses ordinary edit role, while explicit revoke, erasure
 and container-read loss still deny bytes immediately. Source consent commits in the source home; the Book pointer
