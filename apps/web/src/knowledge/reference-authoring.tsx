@@ -59,7 +59,7 @@ export function KnowledgeReferenceAuthoring({
   locale: string;
   disabled: boolean;
   onChange: (draft: ReferenceDraft) => void;
-  inspect?: ReferenceInspector;
+  inspect?: ReferenceInspector | undefined;
   onEditingChange: (editing: boolean) => void;
 }) {
   const copy = referenceCopy(locale);

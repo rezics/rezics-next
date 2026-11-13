@@ -89,9 +89,9 @@ export function KnowledgeReferenceList({
   inspectable = true,
 }: {
   body: DocumentSnapshot;
-  references?: readonly KnowledgeReference[];
+  references?: readonly KnowledgeReference[] | undefined;
   locale: string;
-  inspect?: ReferenceInspector;
+  inspect?: ReferenceInspector | undefined;
   privateTargets?: boolean;
   inspectable?: boolean;
 }) {
@@ -253,7 +253,7 @@ export function KnowledgeReferenceBody({
   ...props
 }: {
   document: DocumentSnapshot;
-  references?: readonly KnowledgeReference[];
+  references?: readonly KnowledgeReference[] | undefined;
   locale: string;
   inspectable?: boolean;
 }) {

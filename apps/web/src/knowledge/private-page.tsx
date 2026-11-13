@@ -1749,7 +1749,7 @@ function DocumentDraftFields({
   draft: DocumentDraft;
   disabled: boolean;
   onChange: (draft: DocumentDraft) => void;
-  inspect?: ReferenceInspector;
+  inspect?: ReferenceInspector | undefined;
   onPendingChange: (pending: boolean) => void;
   subjectIds: readonly string[];
 }) {
