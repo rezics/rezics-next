@@ -32,8 +32,6 @@ export function validateMigrationVersions(migrationFiles: string[], now: Date): 
 
 /** Run the shared check against only the selected checkout's Kernel migration tree. */
 export function validateKernelMigrationVersions(kernelDirectory: string, now: Date): void {
-  const migrationFiles = Array.from(
-    new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: kernelDirectory }),
-  );
+  const migrationFiles = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: kernelDirectory }));
   validateMigrationVersions(migrationFiles, now);
 }

@@ -39,10 +39,7 @@ import {
   requestWorkerCheckCancellation,
   workerCheckCancellation,
 } from './worker-check.ts';
-import {
-  TYPING_RECOVERY_ENV,
-  WORKER_CHECK_TESTS_AFTER_LANDING,
-} from '../tools/goal/src/worker-check-budget.ts';
+import { TYPING_RECOVERY_ENV, WORKER_CHECK_TESTS_AFTER_LANDING } from '../tools/goal/src/worker-check-budget.ts';
 import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 import {
   controllerProofReservationPath,

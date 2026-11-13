@@ -2535,11 +2535,7 @@ function kernelMigrationCheckCommand(argv: readonly string[], cwd: string): bool
   if (!parsed || parsed.command.length === 0) return false;
   const command = parsed.command;
   const executable = command[0]!;
-  if (
-    executable !== 'bun' &&
-    executable !== process.execPath &&
-    executable.split(/[\\/]/).at(-1) !== 'bun'
-  )
+  if (executable !== 'bun' && executable !== process.execPath && executable.split(/[\\/]/).at(-1) !== 'bun')
     return false;
 
   const root = resolve(cwd);
