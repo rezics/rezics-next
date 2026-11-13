@@ -1304,6 +1304,89 @@ export function workerCheckHostTypingCheckIds(directory: string, checkIds: reado
   return [...ids];
 }
 
+export type WorkerCheckHostConsumedTypingRecovery = {
+  checkId: string;
+  physicalRunId: string;
+  custody: 'terminal' | 'unknown';
+  resultlessCleanup: boolean;
+  replacement: boolean;
+};
+
+/** Read only the current-input recovery whose grant is bound to a consumed budget stamp. */
+export function workerCheckHostConsumedTypingRecovery(input: {
+  directory: string;
+  worktree: string;
+  taskId: string;
+  attempt: number;
+  checkIds: readonly string[];
+  command: readonly string[];
+}): WorkerCheckHostConsumedTypingRecovery | undefined {
+  if (!isKnownTypingCompiler(input.worktree, input.command)) return;
+  const identity = recoveryIdentity(input.worktree, input.command);
+  let names: string[];
+  try {
+    names = stampNames(input.directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+
+  for (const name of names.reverse()) {
+    const stamp = readWorkerCheckHostStamp(input.directory, name);
+    const recovery = stamp.typingRecovery;
+    if (
+      !recovery ||
+      !/^[0-9a-f-]{36}$/.test(recovery.token) ||
+      !isCheckId(recovery.checkId) ||
+      !isPhysicalRunId(recovery.physicalRunId)
+    )
+      continue;
+    const grant = readCheckEvidence(recoveryPath(input.directory, recovery.token)) as
+      | (CheckEvidence & TypingRecoveryGrant)
+      | undefined;
+    if (
+      !grant ||
+      grant.version !== 1 ||
+      grant.token !== recovery.token ||
+      grant.taskId !== input.taskId ||
+      grant.attempt !== input.attempt ||
+      grant.worktree !== input.worktree ||
+      grant.identity !== identity ||
+      JSON.stringify(grant.command) !== JSON.stringify(input.command)
+    )
+      continue;
+
+    const request = stamp.typingRequest;
+    const exactStamp =
+      grant.checkId === recovery.checkId &&
+      grant.physicalRunId === recovery.physicalRunId &&
+      (grant.stamp === undefined || grant.stamp === name);
+    const exactRequest =
+      !request ||
+      (request.physicalRunId === grant.physicalRunId && JSON.stringify(request.command) === JSON.stringify(grant.command));
+    const exactRecovery = exactStamp && exactRequest;
+    const checkIds = [...new Set([...input.checkIds, grant.checkId])];
+    return {
+      checkId: grant.checkId,
+      physicalRunId: grant.physicalRunId,
+      custody: exactRecovery
+        ? workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, checkIds)
+        : 'unknown',
+      resultlessCleanup:
+        exactRecovery &&
+        workerCheckHostAttemptHasResultlessCleanup(
+          input.worktree,
+          input.taskId,
+          input.attempt,
+          [grant.checkId],
+          grant.command,
+        ),
+      replacement: grant.replacementOf !== undefined,
+    };
+  }
+  return undefined;
+}
+
 export function workerCheckHostTypingReceiptMatches(directory: string, command: readonly string[]): boolean {
   const source = stampNames(directory)
     .map((name) => readWorkerCheckHostStamp(directory, name))

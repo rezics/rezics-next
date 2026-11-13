@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanupReceiptPath, physicalHistoryPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
 import { recoverWorkerTyping } from './typing-recovery.ts';
@@ -21,6 +22,130 @@ import {
 } from './test-support.ts';
 
 const compiler = ['bun', 'services/kernel/scripts/typecheck.ts'];
+const webCompiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+
+function recoveryProof(result: Awaited<ReturnType<typeof recoverWorkerTyping>>) {
+  if (!('proof' in result)) throw new Error('Expected typing recovery to issue a compiler proof');
+  return result.proof;
+}
+
+function prepareWebCompiler(worktree: string): void {
+  mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
+  mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
+  writeFileSync(
+    join(worktree, 'apps/web/package.json'),
+    JSON.stringify({ name: '@rezics/web', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+  );
+  writeFileSync(join(worktree, 'apps/web/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+  writeFileSync(join(worktree, 'apps/web/scripts/typecheck.ts'), 'export {}\n');
+  writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const reader = true\n');
+  const add = spawnSync('git', ['add', 'apps/web'], { cwd: worktree, encoding: 'utf8' });
+  if (add.status !== 0) throw new Error(add.stderr || 'git add Web compiler fixture failed');
+  const commit = spawnSync('git', ['commit', '-m', 'Prepare Web compiler recovery fixture'], {
+    cwd: worktree,
+    encoding: 'utf8',
+  });
+  if (commit.status !== 0) throw new Error(commit.stderr || 'git commit Web compiler fixture failed');
+}
+
+function prepareConsumedWebRecovery(h: ReturnType<typeof harness>) {
+  const task = h.tasks.dispatch(h.briefFile);
+  prepareWebCompiler(task.worktree);
+  const startedAt = new Date().toISOString();
+  const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number): Attempt => ({
+    taskId: task.id,
+    attempt: number,
+    state: 'pending',
+    profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt,
+    endedAt: null,
+    process: null,
+    driver: null,
+    logPath: join(h.settings.stateDirectory, 'runs', task.id, `${number}.jsonl`),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(number)),
+    auxiliaryProcesses: [],
+    session: null,
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  }));
+  const ref = { taskId: task.id, attempt: attempt.attempt };
+  const result = 'Compiler input closure is unavailable for the last check-host typecheck. Source is retained.';
+  h.store.updateAttempt(ref, (current) => {
+    current.state = 'exited';
+    current.endedAt = new Date(Date.parse(startedAt) + 1_000).toISOString();
+    current.exitCode = 0;
+    current.result = result;
+    current.typingEvidencePending = { result, command: webCompiler };
+  });
+  h.store.updateTask(ref, (current) => {
+    current.state = 'stopped';
+  });
+  const actor = { id: task.brief.manager, sessionId: 'web-manager-session' };
+  h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  h.store.db
+    .query('INSERT INTO manager_sessions VALUES (?,?)')
+    .run(
+      actor.id,
+      JSON.stringify({
+        id: actor.id,
+        kind: 'managed',
+        engine: 'claude',
+        status: 'running',
+        threadId: actor.sessionId,
+      }),
+    );
+
+  const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, ref.attempt);
+  const original = grantWorkerTypingRecovery({
+    stateDirectory: h.settings.stateDirectory,
+    database: h.store.db.filename,
+    taskId: task.id,
+    attempt: ref.attempt,
+    worktree: task.worktree,
+    command: webCompiler,
+    actor,
+  });
+  mkdirSync(budget, { recursive: true });
+  writeFileSync(
+    join(budget, '1'),
+    JSON.stringify({
+      content: workerCheckHostContentTree(task.worktree),
+      includedTypecheck: true,
+      exitCode: 0,
+      typingRequest: {
+        physicalRunId: original.physicalRunId,
+        command: webCompiler,
+        localPrepared: [],
+        capture: 'physical-command',
+      },
+      typingRecovery: {
+        token: original.token,
+        checkId: original.checkId,
+        physicalRunId: original.physicalRunId,
+      },
+    }),
+  );
+  writeFileSync(
+    join(budget, 'typing-recovery', `${original.token}.json`),
+    JSON.stringify({ ...original, stamp: '1' }),
+  );
+  h.store.updateAttempt(ref, (current) => {
+    current.checks = [original.checkId];
+  });
+  return { task, ref, actor, budget, original };
+}
 
 test('settled cleanup accepts only exact ownership and terminal local and remote custody', () => {
   const worktree = temporaryDirectory();
@@ -98,6 +223,83 @@ test('settled cleanup accepts only exact ownership and terminal local and remote
   } finally {
     worktree.close();
     authorization.close();
+  }
+});
+
+test('an unresolved consumed Web grant reports its check and foreign custody stably without another proof', async () => {
+  const h = harness();
+  try {
+    const retained = prepareConsumedWebRecovery(h);
+    writeVerifiedResultlessCleanupEvidence({
+      worktree: retained.task.worktree,
+      stateDirectory: h.settings.stateDirectory,
+      taskId: randomUUID(),
+      attempt: retained.ref.attempt,
+      checkId: retained.original.checkId,
+      physicalRunId: retained.original.physicalRunId,
+      command: webCompiler,
+    });
+    const landing = { enqueue: (_value: unknown) => {} };
+    const first = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
+    const second = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
+
+    expect(first).toMatchObject({ status: 'pending' });
+    expect('proof' in first).toBe(false);
+    expect(second).toMatchObject({ status: 'pending', result: first.result });
+    expect(first.result).toContain(`check ${retained.original.checkId}`);
+    expect(first.result).toContain(`physical run ${retained.original.physicalRunId}`);
+    expect(first.result).toContain('custody of the same-attempt checks is unknown');
+    expect(readdirSync(join(retained.budget, 'typing-recovery')).filter((file) => file.endsWith('.json'))).toHaveLength(
+      1,
+    );
+    expect(h.store.attempt(retained.ref)).toMatchObject({
+      result: expect.stringContaining('Compiler input closure is unavailable'),
+      typingEvidencePending: { command: webCompiler },
+      checks: [retained.original.checkId],
+    });
+    expect(h.store.task(retained.task.id)).toMatchObject({ currentAttempt: retained.ref.attempt, state: 'stopped' });
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
+test('verified cleanup for one consumed Web run authorizes only its existing single replacement', async () => {
+  const h = harness();
+  try {
+    const retained = prepareConsumedWebRecovery(h);
+    writeVerifiedResultlessCleanupEvidence({
+      worktree: retained.task.worktree,
+      stateDirectory: h.settings.stateDirectory,
+      taskId: retained.task.id,
+      attempt: retained.ref.attempt,
+      checkId: retained.original.checkId,
+      physicalRunId: retained.original.physicalRunId,
+      command: webCompiler,
+    });
+    const landing = { enqueue: (_value: unknown) => {} };
+    const first = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
+    const firstProof = recoveryProof(first);
+    const replay = await recoverWorkerTyping(h.tasks, landing, retained.ref, retained.actor);
+    const replayProof = recoveryProof(replay);
+    const grants = readdirSync(join(retained.budget, 'typing-recovery'))
+      .filter((file) => file.endsWith('.json'))
+      .map((file) => JSON.parse(readFileSync(join(retained.budget, 'typing-recovery', file), 'utf8')));
+
+    expect(firstProof.commands[0]?.slice(-webCompiler.length)).toEqual(webCompiler);
+    expect(firstProof.env[TYPING_RECOVERY_ENV]).not.toBe(retained.original.token);
+    expect(replayProof.env[TYPING_RECOVERY_ENV]).toBe(firstProof.env[TYPING_RECOVERY_ENV]);
+    expect(grants).toHaveLength(2);
+    expect(grants.find((grant) => grant.replacementOf)).toMatchObject({
+      replacementOf: retained.original.token,
+      command: webCompiler,
+    });
+    expect(h.store.task(retained.task.id)).toMatchObject({ currentAttempt: retained.ref.attempt, state: 'stopped' });
+    expect(h.store.attempt(retained.ref)).toMatchObject({
+      typingEvidencePending: { command: webCompiler },
+      checks: [retained.original.checkId],
+    });
+  } finally {
+    await h.disposeAsync();
   }
 });
 
