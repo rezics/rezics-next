@@ -16,7 +16,12 @@ import {
 import { snapshot } from './reads.ts';
 import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
 import { orderHostedPlacements, selectHostedRelease } from './hosted-chapters-tree.ts';
-import { hostedCatalogue, hostedRevision, hostedPlacements, insertHostedPlacements } from './hosted-chapters-store.ts';
+import {
+  hostedCatalogue,
+  hostedRevision,
+  hostedReleasePlacements,
+  insertHostedPlacements,
+} from './hosted-chapters-store.ts';
 import {
   InvalidHostedStructureError,
   type HostedCommandContext,
@@ -90,7 +95,7 @@ async function mutate(
         const revision = await hostedRevision(client, catalogueId, selected.expectedRevisionId);
         if (revision?.kind !== 'structure') throw new ContentNotFoundError();
         return selectHostedRelease(
-          await hostedPlacements(client, catalogueId, revision.revision_id),
+          await hostedReleasePlacements(client, catalogueId, revision.revision_id, selected.occurrenceIds),
           selected.occurrenceIds,
         );
       })

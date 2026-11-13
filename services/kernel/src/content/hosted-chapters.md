@@ -46,6 +46,18 @@ ordinary Post publication and target disclosure remain necessary. Published byte
 and digest, never replaced with the current head. Later draft edits do not change a release. The three registered
 events contain only catalogue/revision identities; no private target selections enter the outbox.
 
+Decision: publication reads only the bounded explicit occurrence selection from the exact expected structure
+revision, using the existing route/catalogue/revision/occurrence primary key and stored ordinal order. Empty
+withdrawal verifies that source revision is a structure but issues no placement query. The shared release validator
+still rejects duplicate and unknown IDs and missing ancestors, then assigns dense sibling positions and preorder.
+Current authority, expected-head/publication comparisons, native exact target admission and receipt replay retain
+their existing order. This reduces per-command work; the 512-occurrence request and logical catalogue limits remain.
+
+The focused `hosted-release-selection.test.ts` fixture distinguishes source rows selected at the store boundary
+from the final manifest, covers sparse ordering, withdrawal and selection rejection, and retains existing native
+replay acceptance in `hosted-chapters.test.ts`. Run these cases after landing in the dev verifier. Mounted native
+and growth proof remain deferred; this source pass runs changed-file formatting and the affected Kernel typecheck.
+
 ## Author inventory
 
 `own_hosted_catalogues.list` (`GET /v1/accounts/{accountId}/hostedCatalogues`) accepts `scope=same-home`
@@ -238,7 +250,7 @@ the controller.
 Mutations validate at most 512 placements and read each distinct exact selected target through the existing native
 metadata reader, including a final retained check, with zero revision body loads. They write one snapshot and bounded
 placement/identity inserts under the catalogue home transaction.
-Publication reads the bounded source structure and processes only its selected attachments. Reads perform exact
+Publication reads only explicitly selected source placements and processes their attachments. Reads perform exact
 catalogue and revision probes, at most one parent/origin probe and one indexed page query of at most 21 rows.
 Subject discovery seeks at most 21 indexed `subject_thread` and same-route catalogue-post candidates, then
 discloses at most 20 current publications. Each selected target has an initial and final native disclosure;

@@ -2,6 +2,7 @@ import type { AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import {
   HOSTED_PAGE_LIMIT,
+  HOSTED_PLACEMENT_LIMIT,
   InvalidHostedStructureError,
   type OrderedHostedPlacement,
 } from './hosted-chapters-model.ts';
@@ -134,15 +135,26 @@ export function hostedPlacement(row: HostedPlacementRow): OrderedHostedPlacement
     },
   };
 }
-export async function hostedPlacements(client: AccessClient, id: string, revisionId: string) {
+/** Read only explicit release candidates from the immutable source revision.
+ * The placement primary key includes all four selectors. Never load the draft
+ * siblings to fill gaps or sort by the caller's selection order. */
+export async function hostedReleasePlacements(
+  client: AccessClient,
+  id: string,
+  revisionId: string,
+  occurrenceIds: readonly string[],
+) {
+  // Bound outside input before SQL, including direct command callers. The
+  // shared release validator still owns duplicates, unknown IDs and ancestors.
+  if (!Array.isArray(occurrenceIds) || occurrenceIds.length > HOSTED_PLACEMENT_LIMIT)
+    throw new InvalidHostedStructureError();
+  if (!occurrenceIds.length) return [];
   const rows = (
-    await client.query<HostedPlacementRow>(`${HOSTED_PLACEMENT_SELECT} ORDER BY p.ordinal LIMIT 513`, [
-      routeOf(id),
-      id,
-      revisionId,
-    ])
+    await client.query<HostedPlacementRow>(
+      `${HOSTED_PLACEMENT_SELECT} AND p.occurrence_id = ANY($4::uuid[]) ORDER BY p.ordinal`,
+      [routeOf(id), id, revisionId, occurrenceIds],
+    )
   ).rows;
-  if (rows.length > 512) throw new Error('Hosted structure exceeds its storage bound');
   return rows.map(hostedPlacement);
 }
 
