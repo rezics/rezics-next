@@ -30,6 +30,7 @@ import {
   observeExecutionCancellation,
   ownedLocalCommand,
   type ExecutionCancellation,
+  type RemoteCheckPhaseEvent,
   readHosts,
   remoteCheck,
   RemoteTransportError,
@@ -69,6 +70,8 @@ export type StackRun = {
   started?: (host: string) => void;
   /** Physical custodian settlement, separate from compiler stdout and wrapper status. */
   settled?: RemoteCheck['settled'];
+  /** Optional caller-bound phase events from the remote command-start marker and terminal receipt. */
+  phaseEvent?: (event: RemoteCheckPhaseEvent) => void;
   /** The run writes files the caller keeps; remote placement requires declared return paths. */
   keepsFiles?: boolean;
   /**
@@ -318,6 +321,7 @@ export async function runOnCheckHost(
             ? {}
             : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
           ...(run.settled === undefined ? {} : { settled: run.settled }),
+          ...(run.phaseEvent === undefined ? {} : { phaseEvent: run.phaseEvent }),
           started: (host) => {
             run.started?.(host);
             console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);

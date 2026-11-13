@@ -72,6 +72,8 @@ import {
   gitWorkspaceOverlay,
   withCheckGitTransfer,
   parseCommandPhases,
+  remoteCheckPhaseReceipt,
+  remoteCheckPhaseReporter,
 } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
@@ -137,6 +139,95 @@ test('ledger command phases pair monotonic markers and report malformed or unpai
     durations: { migrations: 2.5 },
     problems: ['line 3: malformed', 'unmatched start for compile'],
   });
+});
+
+test('remote phase receipts keep host boundaries, caller slot wait and missing live-start authority distinct', () => {
+  const resources = {
+    schema: 1 as const,
+    host: 'check-a',
+    run: 'run-7',
+    boot: 'boot-7',
+    supervisor: { pid: 7, start: '1234', group: 7 },
+    cgroup: null,
+    cadenceMs: 5000 as const,
+    startedMonoMs: 100,
+    commandStartedMonoMs: 250,
+    terminalMonoMs: 410,
+    samples: [],
+    sampledMaxCores: null,
+  };
+  const completed = remoteCheckPhaseReceipt({
+    host: 'check-a',
+    run: 'run-7',
+    resources,
+    slotWait: { clockId: 'remote-check-client:7', startedMs: 2, completedMs: 9 },
+    settlement: { clockId: 'remote-check-client:7', startedMs: 411, completedMs: 430 },
+    liveExecutionStartObserved: true,
+  });
+  expect(completed).toMatchObject({
+    runner: { kind: 'check-host', id: 'run-7', host: 'check-a' },
+    phases: {
+      queue: { status: 'measured', clockId: 'remote-check-client:7', startedMs: 2, completedMs: 9 },
+      preparation: { status: 'measured', clockId: 'check-host:check-a:boot-7', startedMs: 100, completedMs: 250 },
+      execution: { status: 'measured', clockId: 'check-host:check-a:boot-7', startedMs: 250, completedMs: 410 },
+      settlement: { status: 'measured', clockId: 'remote-check-client:7', startedMs: 411, completedMs: 430 },
+    },
+    liveExecutionStart: { status: 'observed', authority: 'remote-command-started-marker' },
+  });
+
+  const unreached = remoteCheckPhaseReceipt({
+    host: 'check-a',
+    run: 'run-7',
+    resources: { ...resources, commandStartedMonoMs: null, terminalMonoMs: 340 },
+    liveExecutionStartObserved: false,
+    executionNotStartedConfirmed: true,
+  });
+  expect(unreached.phases).toMatchObject({
+    preparation: { status: 'measured', startedMs: 100, completedMs: 340 },
+    execution: { status: 'unreached' },
+    settlement: { status: 'unknown' },
+  });
+  expect(unreached.liveExecutionStart).toMatchObject({ status: 'unavailable' });
+
+  const unavailable = remoteCheckPhaseReceipt({
+    host: 'check-a',
+    run: 'run-7',
+    resources: null,
+    liveExecutionStartObserved: false,
+  });
+  expect(unavailable.phases.preparation.status).toBe('unknown');
+  expect(unavailable.phases.execution.status).toBe('unknown');
+  const wrongRun = remoteCheckPhaseReceipt({
+    host: 'check-a',
+    run: 'run-7',
+    resources: { ...resources, run: 'foreign-run' },
+    liveExecutionStartObserved: false,
+  });
+  expect(wrongRun.phases.preparation).toMatchObject({
+    status: 'unknown',
+    reason: expect.stringContaining('another host/run'),
+  });
+  expect(wrongRun.phases.execution.status).toBe('unknown');
+});
+
+test('phase event transport is opt-in and bound to the caller nonce', () => {
+  const lines: Record<string, unknown>[] = [];
+  const event = {
+    schema: 1 as const,
+    kind: 'execution-started' as const,
+    runner: { kind: 'check-host' as const, id: 'run-7', host: 'check-a' },
+    authority: 'remote-command-started-marker' as const,
+  };
+  expect(remoteCheckPhaseReporter({})).toBeUndefined();
+  const report = remoteCheckPhaseReporter(
+    { REMOTE_CHECK_RECEIPT_FD: '3', REMOTE_CHECK_RECEIPT_NONCE: 'execution-7' },
+    (line) => lines.push(JSON.parse(line) as Record<string, unknown>),
+  );
+  report?.(event);
+  expect(lines).toEqual([{ nonce: 'execution-7', phaseEvent: event }]);
+  expect(() =>
+    remoteCheckPhaseReporter({ REMOTE_CHECK_RECEIPT_FD: '4', REMOTE_CHECK_RECEIPT_NONCE: 'execution-7' }),
+  ).toThrow('Invalid remote-check receipt channel');
 });
 
 function generatedHostRun(): string {

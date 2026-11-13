@@ -28,6 +28,7 @@ import {
   ROOT,
   requestExecutionCancellation,
   type RemoteCheckSettlement,
+  type RemoteCheckPhaseEvent,
 } from './remote-check.ts';
 import { runWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
@@ -1436,4 +1437,72 @@ test("a walk worker's own checks still place on a check host, as any other worke
     expect(code, JSON.stringify(extra)).toBe(0);
     expect(placed, JSON.stringify(extra)).toEqual([['a']]);
   }
+});
+
+test('stack-run forwards opt-in phase events without treating slot grant as command start', async () => {
+  const fixture = walkFixture();
+  const hosts = join(fixture.dir, 'phase-hosts.json');
+  writeFileSync(
+    hosts,
+    JSON.stringify({
+      hosts: [
+        {
+          name: 'a',
+          performance: true,
+          address: 'ops@a.test',
+          identity: '/keys/a',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 800,
+          slots: 2,
+        },
+      ],
+    }),
+  );
+  const directory = workspace();
+  const observed: RemoteCheckPhaseEvent[] = [];
+  let slotGrant: string | undefined;
+  const events: RemoteCheckPhaseEvent[] = [
+    {
+      schema: 1,
+      kind: 'execution-started',
+      runner: { kind: 'check-host', id: 'run-7', host: 'a' },
+      authority: 'remote-command-started-marker',
+    },
+    {
+      schema: 1,
+      kind: 'phase-receipt',
+      receipt: {
+        schema: 1,
+        runner: { kind: 'check-host', id: 'run-7', host: 'a' },
+        phases: {
+          queue: { status: 'unknown', reason: 'Outer queue belongs to the caller.' },
+          preparation: { status: 'measured', clockId: 'check-host:a:boot-1', startedMs: 1, completedMs: 2 },
+          execution: { status: 'measured', clockId: 'check-host:a:boot-1', startedMs: 2, completedMs: 3 },
+          settlement: { status: 'unknown', reason: 'Settlement is incomplete.' },
+        },
+        liveExecutionStart: { status: 'observed', authority: 'remote-command-started-marker' },
+      },
+    },
+  ];
+  const result = await runOnCheckHost(
+    {
+      label: 'phase check',
+      root: directory,
+      cwd: directory,
+      command: ['bun', 'scripts/check.ts'],
+      phaseEvent: (event) => observed.push(event),
+      started: (host) => {
+        slotGrant = host;
+      },
+    },
+    { ...fixture.env, KERNEL_CHECK_REMOTE: hosts },
+    async (options) => {
+      options.started?.('a');
+      for (const event of events) options.phaseEvent?.(event);
+      return 23;
+    },
+  );
+  expect(result).toBe(23);
+  expect(slotGrant).toBe('a');
+  expect(observed).toEqual(events);
 });

@@ -31,6 +31,7 @@ import {
 } from '../../../scripts/test-lanes.ts';
 import { readLatest, timingsDirectory } from './check-timings.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
+import { remoteCheckPhaseReporter } from '../../../scripts/remote-check.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
 import { withCommandPhase } from './command-phases.ts';
@@ -1210,6 +1211,7 @@ export async function placeKernelCheck(
     if (skipCleanup) forwardedEnv.push('env');
     forwardedEnv.push(`KERNEL_CHECK_CONCURRENCY=${env.KERNEL_CHECK_CONCURRENCY}`);
   }
+  const phaseEvent = remoteCheckPhaseReporter(env);
   return runOnCheckHost(
     {
       label: 'kernel check',
@@ -1222,6 +1224,7 @@ export async function placeKernelCheck(
         'scripts/check.ts',
         ...(plan.files ?? []),
       ],
+      ...(phaseEvent === undefined ? {} : { phaseEvent }),
       ...(estimateMs === undefined ? {} : { estimateMs }),
     },
     env,

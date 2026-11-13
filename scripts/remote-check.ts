@@ -313,6 +313,8 @@ export type RemoteCheck = {
   ) => ReturnType<typeof Bun.spawn> | Promise<ReturnType<typeof Bun.spawn>>;
   /** Final remote evidence is emitted only after remote cleanup and transport-child reaping. */
   settled?: (settlement: RemoteCheckSettlement) => void | Promise<void>;
+  /** Opt-in phase events; the live start event is emitted only after the remote command-start marker is observed. */
+  phaseEvent?: (event: RemoteCheckPhaseEvent) => void;
   /** A reservation that failed before runLeased may be retired without implying command success. */
   notStarted?: (
     physical: { host: string; run: string },
@@ -411,6 +413,108 @@ export type RemoteCheckSettlement = {
   cleanup: RemoteCleanupReceipt;
   transportChildReaped: boolean;
 };
+
+export const REMOTE_CHECK_PHASE_NAMES = ['queue', 'preparation', 'execution', 'settlement'] as const;
+export type RemoteCheckPhaseName = (typeof REMOTE_CHECK_PHASE_NAMES)[number];
+
+export type RemoteCheckPhaseObservation =
+  | { status: 'unknown'; reason: string }
+  | { status: 'unreached'; reason: string }
+  | { status: 'measured'; clockId: string; startedMs: number; completedMs: number };
+
+/** Unbound producer evidence; the caller binds it to its logical command and execution ID. */
+export type RemoteCheckPhaseReceipt = {
+  schema: 1;
+  runner: { kind: 'check-host'; id: string; host: string };
+  /** `queue` is the check-host slot wait; the caller still owns its outer verifier queue. */
+  phases: Record<RemoteCheckPhaseName, RemoteCheckPhaseObservation>;
+  liveExecutionStart:
+    | { status: 'observed'; authority: 'remote-command-started-marker' }
+    | { status: 'unavailable'; reason: string };
+};
+
+export type RemoteCheckPhaseEvent =
+  | {
+      schema: 1;
+      kind: 'execution-started';
+      runner: RemoteCheckPhaseReceipt['runner'];
+      authority: 'remote-command-started-marker';
+    }
+  | { schema: 1; kind: 'phase-receipt'; receipt: RemoteCheckPhaseReceipt };
+
+/** Bind phase events to the caller's inherited receipt channel. No channel means no watcher and no output. */
+export function remoteCheckPhaseReporter(
+  env: Record<string, string | undefined> = process.env,
+  write: (line: string) => void = (line) => writeSync(3, line),
+): ((event: RemoteCheckPhaseEvent) => void) | undefined {
+  const fd = env.REMOTE_CHECK_RECEIPT_FD;
+  const nonce = env.REMOTE_CHECK_RECEIPT_NONCE;
+  if (fd === undefined && nonce === undefined) return undefined;
+  if (fd !== '3' || !nonce) throw new Error('Invalid remote-check receipt channel');
+  return (event) => write(`${JSON.stringify({ nonce, phaseEvent: event })}\n`);
+}
+
+export function remoteCheckPhaseReceipt(input: {
+  host: string;
+  run: string;
+  resources: PhysicalResourceReceipt | null;
+  slotWait?: { clockId: string; startedMs: number; completedMs: number };
+  settlement?: { clockId: string; startedMs: number; completedMs: number };
+  liveExecutionStartObserved: boolean;
+  liveExecutionStartUnavailableReason?: string;
+  executionNotStartedConfirmed?: boolean;
+  settlementUnavailableReason?: string;
+}): RemoteCheckPhaseReceipt {
+  const unknown = (reason: string): RemoteCheckPhaseObservation => ({ status: 'unknown', reason });
+  const measured = (clockId: string, startedMs: number, completedMs: number): RemoteCheckPhaseObservation => ({
+    status: 'measured',
+    clockId,
+    startedMs,
+    completedMs,
+  });
+  const resourceIdentityMatches =
+    input.resources === null || (input.resources.host === input.host && input.resources.run === input.run);
+  const resources = resourceIdentityMatches ? input.resources : null;
+  const resourceUnavailableReason = resourceIdentityMatches
+    ? 'The remote physical receipt has no host-monotonic preparation boundary.'
+    : 'The remote resource receipt belongs to another host/run; its phase boundaries are unavailable.';
+  const clockId = resources ? `check-host:${resources.host}:${resources.boot}` : undefined;
+  const commandStarted = resources?.commandStartedMonoMs ?? null;
+  const phases: Record<RemoteCheckPhaseName, RemoteCheckPhaseObservation> = {
+    queue: input.slotWait
+      ? measured(input.slotWait.clockId, input.slotWait.startedMs, input.slotWait.completedMs)
+      : unknown('Remote host slot wait was not observed.'),
+    preparation: resources
+      ? measured(clockId!, resources.startedMonoMs, commandStarted ?? resources.terminalMonoMs)
+      : unknown(resourceUnavailableReason),
+    execution:
+      resources && commandStarted !== null
+        ? measured(clockId!, commandStarted, resources.terminalMonoMs)
+        : input.executionNotStartedConfirmed || resources
+          ? { status: 'unreached', reason: 'The remote command-start marker was not recorded.' }
+          : unknown(
+              input.resources !== null && !resourceIdentityMatches
+                ? resourceUnavailableReason
+                : 'The remote command start or terminal boundary is unavailable.',
+            ),
+    settlement: input.settlement
+      ? measured(input.settlement.clockId, input.settlement.startedMs, input.settlement.completedMs)
+      : unknown(input.settlementUnavailableReason ?? 'Remote settlement did not produce a complete boundary.'),
+  };
+  return {
+    schema: 1,
+    runner: { kind: 'check-host', id: input.run, host: input.host },
+    phases,
+    liveExecutionStart: input.liveExecutionStartObserved
+      ? { status: 'observed', authority: 'remote-command-started-marker' }
+      : {
+          status: 'unavailable',
+          reason:
+            input.liveExecutionStartUnavailableReason ??
+            'The command-start marker was not observed live; retain the existing deadline.',
+        },
+  };
+}
 
 /** What a try-once run reports: no host had a free slot, or the command ran there and exited with this code. */
 export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; code: number };
@@ -837,6 +941,7 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
   return null;
 }
 const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
+const DEFAULT_PHASE_EVENT_POLL_MS = 500;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
 // Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
@@ -8145,6 +8250,7 @@ async function runLeased(
   prepared: PreparedRun,
   options: RemoteCheck,
   slotWaitStarted: number,
+  slotWaitCompleted: number,
   signal: AbortSignal,
 ): Promise<number> {
   const { host, id, directory, connectionId } = prepared;
@@ -8175,7 +8281,30 @@ async function runLeased(
   };
   let code = REMOTE_TRANSPORT_FAILURE;
   let primaryFailure: unknown;
+  let settlementStarted: number | undefined;
+  let settlementCompleted: number | undefined;
+  let executionNotStartedConfirmed = false;
+  let phaseStartMarkerObserved = false;
+  let liveExecutionStartReported = false;
+  let liveExecutionStartUnavailableReason: string | undefined;
+  let phaseChannelWarningPrinted = false;
   const cleanupFailures: string[] = [];
+  const phaseClockId = `remote-check-client:${process.pid}`;
+  const publishPhaseEvent = (event: RemoteCheckPhaseEvent): boolean => {
+    if (!options.phaseEvent) return false;
+    try {
+      options.phaseEvent(event);
+      return true;
+    } catch {
+      liveExecutionStartUnavailableReason =
+        'The caller phase channel did not accept the event; retain the existing deadline.';
+      if (!phaseChannelWarningPrinted) {
+        console.error('remote-check: phase evidence transport unavailable');
+        phaseChannelWarningPrinted = true;
+      }
+      return false;
+    }
+  };
   const releaseLease = async () => {
     if (leaseReleased) return;
     leaseReleased = true;
@@ -8227,6 +8356,56 @@ async function runLeased(
     const deadlineAt = Date.now() + maxMs + 1_000;
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
     const heartbeatChildren = new Set<ReturnType<typeof Bun.spawn>>();
+    let phasePoll: ReturnType<typeof setInterval> | undefined;
+    const observeCommandStart = async () => {
+      if (!options.phaseEvent || phaseStartMarkerObserved || heartbeatChildren.size !== 0 || signal.aborted) return;
+      let child: ReturnType<typeof Bun.spawn> | undefined;
+      let probeTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        child = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, statusScript(directory)], {
+          stdin: 'ignore',
+          stdout: 'pipe',
+          stderr: 'ignore',
+        });
+        heartbeatChildren.add(child);
+        const outputStream = child.stdout;
+        if (outputStream === undefined || typeof outputStream === 'number')
+          throw new Error('remote command status did not expose a readable stream');
+        const completion = Promise.all([child.exited, new Response(outputStream).text()]);
+        const timedOut = new Promise<null>((resolve) => {
+          probeTimer = setTimeout(() => resolve(null), DEFAULT_CONTROL_PROBE_TIMEOUT_MS);
+        });
+        const observed = await Promise.race([completion, timedOut]);
+        if (observed === null) {
+          liveExecutionStartUnavailableReason =
+            'The remote command-start marker could not be observed live; retain the existing deadline.';
+          await stopAndReap(child);
+          return;
+        }
+        const [statusCode, stdout] = observed;
+        if (statusCode !== 0) {
+          liveExecutionStartUnavailableReason =
+            'The remote command-start marker could not be observed live; retain the existing deadline.';
+          return;
+        }
+        const status = parseRemoteCommandStatus(host, { code: statusCode, output: stdout, stdout });
+        if (status.kind !== 'started') return;
+        phaseStartMarkerObserved = true;
+        if (phasePoll) clearInterval(phasePoll);
+        liveExecutionStartReported = publishPhaseEvent({
+          schema: 1,
+          kind: 'execution-started',
+          runner: { kind: 'check-host', id, host: host.name },
+          authority: 'remote-command-started-marker',
+        });
+      } catch {
+        liveExecutionStartUnavailableReason =
+          'The remote command-start marker could not be observed live; retain the existing deadline.';
+      } finally {
+        if (probeTimer) clearTimeout(probeTimer);
+        if (child) heartbeatChildren.delete(child);
+      }
+    };
     const heartbeat = setInterval(() => {
       // A slow SSH channel must not accumulate another child every interval.
       if (heartbeatChildren.size !== 0) return;
@@ -8241,6 +8420,10 @@ async function runLeased(
         primaryFailure ??= error;
       }
     }, heartbeatMs);
+    phasePoll = options.phaseEvent
+      ? setInterval(() => void observeCommandStart(), Math.min(heartbeatMs, DEFAULT_PHASE_EVENT_POLL_MS))
+      : undefined;
+    if (phasePoll) void observeCommandStart();
     const commandResult = finished(run, signal);
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     const deadlineResult = new Promise<null>((resolve) => {
@@ -8269,6 +8452,7 @@ async function runLeased(
       }
     } finally {
       clearInterval(heartbeat);
+      if (phasePoll) clearInterval(phasePoll);
       if (deadlineTimer) clearTimeout(deadlineTimer);
       // No heartbeat channel may touch the run after its result is collected or its directory is removed.
       await Promise.all([...heartbeatChildren].map(stopAndReap));
@@ -8283,6 +8467,8 @@ async function runLeased(
       }
       if (status.kind === 'not-started') {
         commandTerminal = true;
+        executionNotStartedConfirmed = true;
+        settlementStarted = performance.now();
         throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
       }
       if (status.kind === 'cleaning') {
@@ -8313,6 +8499,7 @@ async function runLeased(
         commandTerminal = true;
       }
     }
+    if (commandTerminal) settlementStarted ??= performance.now();
     try {
       await releaseLease();
     } catch (error) {
@@ -8449,6 +8636,29 @@ async function runLeased(
     await options.settled?.(settlement);
   } catch (error) {
     primaryFailure ??= error;
+  }
+  settlementCompleted = performance.now();
+  if (options.phaseEvent) {
+    if (!liveExecutionStartReported && !liveExecutionStartUnavailableReason) {
+      liveExecutionStartUnavailableReason =
+        'The remote command-start marker was not observed live; retain the existing deadline.';
+    }
+    const phaseReceipt = remoteCheckPhaseReceipt({
+      host: host.name,
+      run: id,
+      resources: native?.resources ?? null,
+      slotWait: { clockId: phaseClockId, startedMs: slotWaitStarted, completedMs: slotWaitCompleted },
+      ...(settlementStarted === undefined || cleanup.status !== 'verified' || !transportChildReaped
+        ? {}
+        : { settlement: { clockId: phaseClockId, startedMs: settlementStarted, completedMs: settlementCompleted } }),
+      liveExecutionStartObserved: liveExecutionStartReported,
+      ...(liveExecutionStartUnavailableReason === undefined ? {} : { liveExecutionStartUnavailableReason }),
+      executionNotStartedConfirmed,
+      ...(cleanup.status === 'verified' && transportChildReaped
+        ? {}
+        : { settlementUnavailableReason: 'Remote cleanup or transport-child settlement is unverified.' }),
+    });
+    publishPhaseEvent({ schema: 1, kind: 'phase-receipt', receipt: phaseReceipt });
   }
   if (primaryFailure) throw primaryFailure;
   if (cleanup.status !== 'verified')
@@ -8616,7 +8826,7 @@ async function runWithTransportRetries(
       }
       prepared.host = lease.host;
       managedByRun = true;
-      return await runLeased(lease, prepared, options, slotWaitStarted, signal);
+      return await runLeased(lease, prepared, options, slotWaitStarted, performance.now(), signal);
     } catch (error) {
       if (!managedByRun && allocationPublished) {
         let cleanup: RemoteCleanupReceipt | null = null;
@@ -8742,6 +8952,7 @@ async function tryRemoteCheckOwned(
       await cleanupPreparedRun(prepared);
       return { status: 'no-slot' };
     }
+    const slotWaitStarted = performance.now();
     const lease = await acquireOnce(
       [current],
       slots,
@@ -8760,10 +8971,11 @@ async function tryRemoteCheckOwned(
       return { status: 'no-slot' };
     }
     prepared.host = lease.host;
+    const slotWaitCompleted = performance.now();
     return {
       status: 'ran',
       host: lease.host.name,
-      code: await runLeased(lease, prepared, options, performance.now(), signal),
+      code: await runLeased(lease, prepared, options, slotWaitStarted, slotWaitCompleted, signal),
     };
   } catch (error) {
     if (uploaded) await cleanupPreparedRun(prepared);
@@ -8871,6 +9083,7 @@ function parse(argv: string[]): RemoteCheck {
   if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
     throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
   const cancellation = executionCancellationFromEnvironment();
+  const phaseEvent = remoteCheckPhaseReporter();
   const custody = remoteCheckCustodyCallbacks(rest, returns ?? [], hostsFile);
   const { completed: persistCompleted, ...custodyCallbacks } = custody;
   return {
@@ -8882,6 +9095,7 @@ function parse(argv: string[]): RemoteCheck {
       await persistCompleted?.(receipt);
       cliPhysicalReceipt(receipt);
     },
+    ...(phaseEvent === undefined ? {} : { phaseEvent }),
     ...custodyCallbacks,
     workspace,
     command: rest,

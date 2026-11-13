@@ -64,6 +64,8 @@ Decision: remote run custody admission and updates use the reader's 64 KiB seria
 
 Decision: per-physical remote checks publish native receipts and settlement details once as immutable evidence artifacts keyed by logical check, physical generation, host/run and SHA-256; bounded custody and result records retain byte-counted references and verify identity and content before accepting a verdict. Settlement references omit the native receipt and terminal cleanup remains separately recorded. Version-1 inline records remain readable.
 
+Decision: placed Kernel boot checks may emit an opt-in schema-1 `runner`/`phases` receipt over the caller's nonce-bound fd 3 channel. Remote queue is host slot wait; preparation and execution use one host boot-monotonic clock, and settlement uses the caller's monotonic clock through verified cleanup. Goal binds the receipt to its execution ID and command hash and owns its outer queue. Only an observed `command-started` marker can report live execution; absent live authority keeps the existing deadline and is reported as unavailable.
+
 Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
 fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
 controller-owned native/browser run after integration; the worker's minimal check covers changed-workspace typing

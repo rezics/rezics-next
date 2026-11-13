@@ -979,6 +979,21 @@ and native test command do not inherit that descriptor or nonce. Worker-check va
 `physicalRun` in its original result record. Printed markers, malformed/nested receipts and a test's own 124 cannot
 set `infrastructureFailure` or authorize transport fallback. A failed returns copy retains an already recovered lifetime cause.
 
+`RemoteCheck.phaseEvent` and `StackRun.phaseEvent` provide the opt-in producer seam for a caller that needs verifier
+phase evidence. The Kernel check wrapper and the remote-check CLI enable it only when their launcher supplies both
+`REMOTE_CHECK_RECEIPT_FD=3` and `REMOTE_CHECK_RECEIPT_NONCE`; each newline-delimited envelope carries that nonce and a
+`phaseEvent`. The live `execution-started` event is sent only after an SSH status read observes this run's
+`command-started` marker. Slot grant and SSH spawn are not execution start. The start watcher runs only with this
+channel, stops after an observed start, and does not change the existing command deadline. Without a live marker
+event, the receipt says the live start is unavailable and the caller keeps its existing deadline.
+
+The terminal phase receipt has the `runner` and `phases` shape accepted by the Goal verifier after it adds its own
+`executionId` and command hash. `queue` is the remote host slot wait measured on the caller's monotonic clock; the
+Goal runner still owns its outer queue. `preparation` and `execution` use `PhysicalResourceReceipt` boundaries on the
+same host boot clock. `settlement` uses the caller's monotonic clock from observed command terminality through
+verified cleanup and transport-child reaping. Missing phase boundaries are `unknown`; a physical receipt that proves
+the command-start marker was never recorded makes execution `unreached`. No phase is inferred from stdout.
+
 `PhysicalResourceReceipt` schema 1 records the configured host/run, observed host boot, owning supervisor
 PID/start/group and observed per-run slice cgroup path/device/inode and actual scope systemd invocation. The owner samples only that cgroup's
 `cpu.stat:usage_usec` and `memory.peak`, on a fixed 5-second cadence plus preparation, command and terminal edges
