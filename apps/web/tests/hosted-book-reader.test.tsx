@@ -606,11 +606,9 @@ test('native host uses the admitted current title with frozen exact targets and 
   let title: string | undefined = 'The currently public opening';
   const catalogue = mock(async (...args: Parameters<typeof api.catalogue>) => {
     const result = await api.catalogue(...args);
+    const label = args[1].revisionId ? 'Ignore a historical response label' : title;
     return result.state === 'ready'
-      ? {
-          ...result,
-          value: { ...result.value, title: args[1].revisionId ? 'Ignore a historical response label' : title },
-        }
+      ? { ...result, value: { ...result.value, ...(label === undefined ? {} : { title: label }) } }
       : result;
   });
   const resolve = mock(api.resolve);

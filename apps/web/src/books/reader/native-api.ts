@@ -28,7 +28,7 @@ const revision = {
 };
 const revisionSchema = v.strictObject({
   ...revision,
-  title: v.optional(v.pipe(v.string(), v.maxLength(512))),
+  title: v.exactOptional(v.pipe(v.string(), v.maxLength(512))),
 });
 const pageSchema = v.strictObject({
   ...revision,
