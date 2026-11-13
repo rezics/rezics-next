@@ -93,7 +93,6 @@ export async function observeWaitingWorkerCheckTerminalProof(task: Task, attempt
   )
     return;
 
-  const { observeWorkerCheckTerminal, readWorkerCheckHistory } = await import('../../../scripts/worker-check.ts');
   for (const id of attempt.checks) {
     if (!CHECK_UUID.test(id)) continue;
     const record = readTerminalCheckRecord(task.worktree, id);
@@ -111,6 +110,7 @@ export async function observeWaitingWorkerCheckTerminalProof(task: Task, attempt
     )
       continue;
 
+    const { observeWorkerCheckTerminal, readWorkerCheckHistory } = await import('../../../scripts/worker-check.ts');
     const physical = readWorkerCheckHistory(id, record.physicalRunId, task.worktree) as
       | (Record<string, unknown> & { runnerIdentity?: unknown })
       | undefined;
