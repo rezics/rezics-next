@@ -393,106 +393,122 @@ reconnect, schema migration and erasure proof. Published snapshots stay exact.
 
 ### Shared versioned outline primitive
 
-Decision: Books and Knowledge share a **versioned ordered forest** using Knowledge's path-copy AVL sibling algorithm
-behind owner-specific storage/value adapters. Share stable placement, parent/order operations and exact structural
-reads; keep tables, product types, permissions, publication and lifecycle with each owner. Book owns
-[prepared publication](../services/kernel/src/content/hosted-chapters.md#prepared-book-publication).
-This is an implementation contract; installed behavior and limits remain unchanged.
+Decision: share an owner-neutral **versioned ordered forest**: stable placements, containment, balanced sibling
+sequences, exact version roots and bounded traversal. Reuse Knowledge's AVL balancing/path-copy machinery through
+owner storage/value adapters; keep product types, tables, permissions, publication and lifecycle separate. Book owns
+[point and staged publication](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).
+No total placement, sibling, chapter or publication-selection count defines supported structure. The installed
+512-row request bounds remain compatibility bounds; this decision changes no code, schema or settings.
 
-A head identifies an immutable revision; each selected parent root names its order generation. Placement facts contain membership
-(or removal), parent, opaque persisted order key, owner value reference and exact subtree height/size. Stable
-identity bindings survive removal; rebinding requires a new placement. Revision-selected parent roots order siblings.
-Keep current adjacency as an accelerator. Commit facts, roots, head CAS, receipt and identity-only event in one
-owner transaction. Historical lookups seek indexed facts, never replay history. Versions do not freeze permission.
+A head selects immutable placement facts and parent sequence roots. Facts contain membership/removal, parent,
+owner value reference and exact subtree height/size. Identity bindings survive removal. Keep current adjacency as
+an accelerator. Commit changed facts/roots, head CAS, receipt and identity-only event in one owner transaction.
+Historical lookup seeks selected facts, never replays an unbounded chain. Versions freeze structure, not permission.
 
-The shared port is `point(version,id)`, `children(version,parent,after,limit,direction)`,
+The structural port is `point(version,id)`, `children(version,parent,cursor,limit,direction)`,
 `insert(expectedHead,freshId,parent,before)`, `move(expectedHead,id,parent,before)` and `remove(expectedHead,id)`.
-`before` is a stable sibling ID; null means end. Resolve source/destination/anchor against the same expected head;
-exclude source when finding neighbors. Reject self-anchor, wrong-parent, missing and foreign anchors; never convert
-a stale rank or deleted anchor into end. Same-position movement is a no-effect. Cross-forest transfer is separate.
+`before` is a stable sibling ID; null means end. Resolve source, destination and anchor against the same head,
+excluding source from neighbors. Reject self, missing, foreign and wrong-parent anchors. Never reinterpret a stale
+rank/deleted anchor as end. Same-position movement is a no-effect; cross-forest transfer is a separate operation.
 
-Choose persisted opaque comparable keys, not dense ranks as mutation addresses. Book dense position/preorder are
-revision-relative projections; Knowledge decimal positions stay opaque. Augment sibling nodes with exact structural
-subtree counts for rank/select, and Book chapter counts for navigation past empty parts. Counts ignore permission
-and remain internal. Never persist a new ordinal/depth on every descendant.
+Choose **sequence topology, not persisted numeric ranks**, for the scalable adapter. Each sibling entry has a stable
+logical handle, selected left/right/parent handles, AVL height and subtree count. Rank is computed from counts;
+`before` resolves the handle and ancestor path. Insert/remove/reorder change O(log S) nodes and a constant number
+of links per rotation, without relabeling unaffected siblings. A cross-parent move removes/inserts one entry and
+changes its containment parent; descendants keep their identity, order and values. Book chapter-count summaries
+skip empty parts. Dense Book position/preorder and Knowledge decimal position are compatibility projections, never
+mutation addresses or a requirement to persist every changed ordinal/depth.
 
-Keep Knowledge's bounded local repair (64 neighbors per side, at most 129 changed placements including source).
-Numeric(38,0) and its `step < 1` rejection do not guarantee completion: 130 consecutive integer keys around a middle
-gap can exhaust the selected window. Then retain the intent, rebuild spaced keys into a new generation in bounded
-keyset steps, seal complete coverage and activate under original head CAS. Old generation stays authoritative;
-racing writes make activation stale. Retain old roots/keys for pinned reads. This pays O(sibling count) total
-maintenance, never a synchronous full-list rewrite. A rank-addressed paged sequence needs a different index plus
-identity-to-location lookup; the delivered key-addressed AVL cannot simply accept ranks instead.
+Knowledge's current `(numeric(38,0) position, placementId)` comparator and 64-neighbor/side repair remain usable
+through the keyed compatibility adapter, but cannot provide this guarantee: 130 consecutive integer keys around a
+middle gap can exhaust its repair window. Repeated whole-generation spacing after exhaustion can become quadratic;
+reject that as the scalable solution, even in background batches. Arbitrary-length fractional keys also need a key
+length/cost proof. The sequence adapter instead reuses AVL rotations, balancing, path copying and aggregate laws,
+with rank/handle descent replacing key comparison. Removal transplants sequence handles, never rebinds placement
+identity; sequence-parent links are distinct from containment-parent links. It needs versioned handle-to-node and
+parent-root directories.
+Do not copy Knowledge's notebook/document columns into a shared schema or claim the delivered keyed index already
+implements this adapter.
 
-Serialize every structural writer, lifecycle fence and generation activation on one forest head. Under its lock
-check complete source/destination ancestors, eligibility and owner parent-kind rules; reject self-parent/cycles and
-check destination depth plus exact moved height. Update height, size and chapter summaries only on the two ancestor
-paths, using indexed child maxima and sibling aggregates. Book depth remains 16; Knowledge permits 31 ancestors/
-32 placements. References may cycle. Opposite moves against one head have at most one winner. Current admission
-precedes receipt replay; authorized replay precedes head CAS and returns its original immutable result.
+Serialize structural writers and lifecycle fences on one forest head. Under that lock check owner admission,
+complete source/destination ancestor paths, self-parent/cycles and destination depth plus exact moved height.
+Update exact height/size/chapter summaries only along those paths, using indexed child maxima/sequence aggregates.
+Keep Book depth 16 and Knowledge's 31 ancestors/32 placements as per-operation resource bounds, not total counts.
+References may cycle. Opposite moves against one head have at most one winner. Current admission precedes receipt
+replay; authorized replay precedes head CAS and returns the original immutable result.
 
 ### Historical reads and implementation boundary
 
-Historical point needs version-selected placement facts and a complete member-ancestor chain; a removed root hides
-its descendants in that version. Current adjacency/searching all parents is insufficient. Children select that
-parent's root at the version and seek immutable keys.
-Cursors bind owner/forest, version, generation, parent/traversal mode, direction, raw frontier, viewer/session and
-partition epoch with owner expiry. Concealed candidates advance the frontier. Keep Knowledge current-outline
-`409 stale_cursor`; its historical outline freezes membership/order but uses currently eligible working titles.
-Book preserves selected titles/target revision/digest and current target disclosure, never current-head bytes.
+Historical point selects placement facts plus its member-ancestor chain: detaching a root hides its descendants
+in that version without touching each descendant. Children seek the selected parent's sequence root. Cursors bind
+owner/forest, version, representation/generation, parent/mode/direction, traversal frontier, viewer/session and
+partition epoch with owner expiry. Concealed raw candidates advance the frontier. Keep Knowledge current-outline
+`409 stale_cursor`; historical membership/order is exact but titles use currently eligible working values.
+Book freezes selected titles/target revision/digest and uses current disclosure, never current-head bytes.
 
-Preorder walks revision-selected children with a depth-bounded stack, stops at the raw page bound and retains its
-frontier. Book previous/next uses historical point/ancestor lookup and chapter summaries to seek the nearest chapter
-in either direction without scanning empty parts; parts remain origins and unavailable chapters consume slots.
-Rank/select derives legacy dense positions/ordinals. Keep Book page 20/no refill and Knowledge's own scan/page bounds.
-Metadata loads zero bodies; exact opening remains each owner's byte/digest reader.
+A preorder cursor retains the per-level AVL traversal stacks, bounded by H times tree height; it does not reseek
+from the root for every emitted row. Chapter summaries select previous/next without scanning
+empty parts; parts remain origins and unavailable chapters consume slots. Stack traversal and rank/select derive
+legacy ordinal views without materializing a whole outline. Keep Book page 20/no refill and Knowledge's own page/
+scan bounds. Metadata paths read zero bodies; exact opening remains each owner's native byte/digest reader.
 
-[`knowledge-order.ts`](../services/kernel/src/content/knowledge-order.ts) has immutable insert/remove/forward seek,
-but embeds notebook/document values and SQL. Extract comparison, rotations, path-copy and seek behind node read/write
-and value ports; retain Knowledge's storage adapter. Add reverse seek and summary recomputation there, without copying
-its schema/product types. [`knowledge-commands.ts`](../services/kernel/src/content/knowledge-commands.ts) already has
-head locking, anchor moves, exact heights, local repair and parent-root predecessor rows.
-[`knowledge-reads.ts`](../services/kernel/src/content/knowledge-reads.ts) proves historical children, not historical
-placement-ID or Book preorder/chapter indexing. Those are required adapter/index additions before arbitrary Book
-moves are exposed. Knowledge still publishes one independently selected document.
+[`knowledge-order.ts`](../services/kernel/src/content/knowledge-order.ts) supplies immutable AVL insert/remove and
+forward seek, but embeds SQL, document values and numeric keys. Extract node read/write, balancing and summary ports;
+retain that keyed adapter, add reverse/rank/handle traversal for the sequence adapter.
+[`knowledge-commands.ts`](../services/kernel/src/content/knowledge-commands.ts) supplies head locking, stable anchors,
+ancestor/cycle checks and exact heights. Its parent-root predecessor rows and
+[`knowledge-reads.ts`](../services/kernel/src/content/knowledge-reads.ts) prove historical children, not historical
+placement-ID lookup, sequence handle lookup or Book preorder/chapter navigation. Those are new access paths.
+Knowledge still publishes individual documents; Book release membership never becomes Knowledge policy.
 
 ### Cost, storage choice and retention
 
-Let H be owner depth, S maximum sibling width, V retained history, P raw page size and K changed keys (normally 1,
-at most 129 for local repair). With revision-predecessor point/root indexes, move work is
-O(H log V + (H+K) log S) reads and O((H+K) log S) new AVL nodes plus O(H+K) fact/root/change writes; height maxima
-add O(H log S). A fact seek is O(log V); admitted point adds H ancestor seeks. Children index work is
-O(log V+log S+P), plus parent membership/disclosure; stack preorder O((P+H)(log V+log S)); chapter navigation
-O((P+1)H(log V+log S)). Dense ranks add aggregate/ancestor seeks. These count node I/O, not SQL round trips (rotations
-reread children); native admission, receipt, final disclosure, bytes and physical B-tree descent remain charged.
+Let N be placements, S sibling width, H bounded owner depth, P raw page size, T retained edits and W native ID width
+([128 UUID bits](../services/kernel/src/route/route.ts)). With bounded directory access, point membership costs
+O(H), children O(log S + P), preorder O(H log N + P), and chapter navigation O(H log N + P) index visits. Thus at fixed
+owner depth pages target O(log N + P); native disclosure adds per-raw-candidate checks, never body loads. A move
+changes O(H log N) sequence/summary nodes and O(H) containment facts/root entries. H is bounded independently of N.
+A million-descendant move has the leaf move's bound at equal ancestor paths and sibling widths: no descendant rewrite.
 
-A million-descendant move has the leaf move's structural bound at equal H/S/K: no descendant rows change. A hot gap
-pays K path copies per repair. Generation rebuilding pays O(S) facts and O(S log S) nodes with delivered insertion,
-in bounded steps. T ordinary revisions retain O(T(H+K) log S) nodes plus initial N and retained rebuilds, instead of
-N copied every revision. Measure actual buffers, WAL, round trips, contention and cleanup before throughput claims.
+A hot gap costs the same O(log S) path/rotation changes on every insertion; there is no spacing generation to scan.
+T edits retain O(N + T H log N) logical nodes/directory updates, rather than N rows per edit; radix storage adds
+the bounded W factor, O(W(N + T H log N)). Whole input/release
+build costs O(N log N) with incremental insertion (or O(N) with an ordered builder), in bounded resumable steps.
+Never rescan the committed prefix on resume or rebuild the full selection on every batch. Structural withdrawal
+changes one pointer; reclamation costs O(retained storage) total in bounded steps. Finite address/counter widths,
+bytes, deadlines, depth and page/batch limits are architectural resources, not a business count cap.
 
-The independent [Knowledge model](research/knowledge-workspaces-model-astra.md#physical-model-and-operation-costs)
-supports independent identities, adjacency, serialized moves and bounded ordering. The
-[scalability audit](research/universal-scalability-audit.md) identifies whole-tree Book replacement; its
-[follow-up](research/universal-scalability-follow-up.md#adopted-boundaries) separates coverage from paging. Neither
-compares **B-tree predecessor histories per parent/placement** with **persistent per-head ID-to-root/fact maps**.
-Use the former as the first adapter design because it reuses delivered machinery; defer irreversible shared storage
-migration until a native comparison. The smallest distinguishing check holds sibling width fixed while growing
-history, then history fixed while growing width: compare exact point, historical children and a depth-bound move
-on both mechanisms, including one hot gap and a large-subtree move. Record EXPLAIN buffers, node reads, writes/WAL,
-retained bytes and head-lock time. A persistent map must justify extra path copies/reclamation by removing history
-seek cost. Port extraction, owner commands and Book preparation can start before that result.
+The independent [model](research/knowledge-workspaces-model-astra.md#physical-model-and-operation-costs) supports
+stable identities, serialized moves and bounded sequence maintenance; the [audit](research/universal-scalability-audit.md)
+and [follow-up](research/universal-scalability-follow-up.md#adopted-boundaries) identify whole-snapshot costs and
+separate total coverage from paging. They do not decide the expensive **directory** choice:
 
-Structural removal tombstones membership/detaches one root; it neither erases targets nor removes old exact membership.
-Current lifecycle is separate: Book draft removal/withdrawal does not invalidate historical releases; Knowledge trash
-fences current ancestry and restore never republishes. Erasure/moderation still govern old reads under owner policy.
-Reclamation must account for heads, retained exact revisions/receipts, releases, preparations/migrations, generations,
-unexpired cursors and legal holds. Register/release holds transactionally; a new head proves no old shared root dead.
-Use bounded durable mark/sweep with a collection fence against newly held roots; include abandoned and intermediate
-rotation nodes. Retire reader holds before sweeping. Nodes carry opaque value references, so owners can redact private
-payloads independently; retain only permitted public selections. Book's
-[sealed-prefix lifecycle](../services/kernel/src/content/hosted-append-lifecycle.md) continues to protect shared
-bases/prefixes; Knowledge's [lifecycle](#access-and-lifecycle) owns its trash/restore/erasure disposition.
+- **Indexed predecessor rows:** `(forest, logicalHandle, revision DESC)` selects facts, AVL links and parent roots;
+  each visited node adds O(log V) history seek at V retained versions. It reuses Knowledge storage but history growth
+  can exceed the physical-page target; current-only adjacency does not repair historical lookup.
+- **Persistent fixed-width radix directories:** each exact head names maps from native IDs to selected facts/nodes
+  and parent roots. A lookup/update traverses at most W bits; one sequence edit copies O(W H log N) directory nodes,
+  with bounded local compression/splits. It avoids history search and parent-path relabeling but adds write/storage
+  amplification and shared-root reclamation. No unbounded hash-collision bucket is an acceptable substitute.
+
+Freeze the sequence/owner ports now; do not commit an irreversible shared storage migration from this evidence.
+The smallest distinguishing native check implements both directories under the same sequence adapter: at
+1k/10k/100k placements vary history separately from width, repeat insertion into one hot gap, and move an unchanged
+large subtree. Compare exact historical point/children/preorder/navigation, physical buffers/EXPLAIN, node reads,
+writes/WAL, retained bytes and head-lock time. At fixed W/H the radix design has the required asymptotic bound;
+measure its constants against predecessor histories before selecting storage. Include complete Book publish and
+withdrawal, interrupted/resumed batches and reclamation, not only a twenty-row read. Record observed values;
+logarithmic height estimates (roughly 10/14/17 binary levels before AVL constants) are not benchmark evidence.
+Algorithm extraction, point-publication orchestration, durable preparation and mounted review contracts can start
+before that comparison; scalable activation waits for the owner proofs named in the Book contract.
+
+Removal tombstones membership/detaches one root; targets and old exact membership survive under current lifecycle.
+Book withdrawal does not erase retained releases; Knowledge restore never republishes. Erasure/moderation governs
+old disclosure. Transactional holds cover heads, exact revisions/receipts/releases, preparation/migration roots,
+unexpired cursors and legal holds. Bounded durable mark/sweep fences new holds and includes abandoned/rotation nodes;
+retire reader holds before sweep. Opaque value references let owners redact private payloads separately from shared
+structural nodes. Book's [sealed-prefix lifecycle](../services/kernel/src/content/hosted-append-lifecycle.md) still
+protects old bases/prefixes; Knowledge's [lifecycle](#access-and-lifecycle) owns trash/restore/erasure.
 
 ### Owned notebook organization consumer
 

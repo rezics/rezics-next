@@ -66,8 +66,9 @@ with Book-owned placement values, identity bindings, authorization and release m
 reorder/reparent and removal against an expected draft with stable `parentId`/`beforeOccurrenceId` anchors. Parts may
 parent children; chapters cannot. Occurrence kind and target Post remain permanent; a title or exact target revision
 change creates a new value under the same occurrence. Do not introduce a universal graph table or use Knowledge's
-notebook/document schema. Installed routes, schemas, production settings and release limits stay unchanged.
-Root append establishes no arbitrary-outline or release readiness.
+notebook/document schema. This decision changes no installed route, schema or production setting. The current
+512 limits bound compatibility requests, never the supported total structure or release. Root append establishes
+no arbitrary-outline, serial-publication or release readiness.
 
 ### Evidence and migration
 
@@ -78,7 +79,9 @@ Sources checked before this decision: this document; Knowledge's
 [`knowledge-reads.ts`](knowledge-reads.ts), [`knowledge-model.ts`](knowledge-model.ts);
 [`hosted-chapters-tree.ts`](hosted-chapters-tree.ts), [`hosted-chapters-model.ts`](hosted-chapters-model.ts),
 [`hosted-chapters-store.ts`](hosted-chapters-store.ts), [`hosted-chapters-append.ts`](hosted-chapters-append.ts),
-[`hosted-chapters-commands.ts`](hosted-chapters-commands.ts), [`hosted-append-lifecycle.ts`](hosted-append-lifecycle.ts),
+[`hosted-chapters-commands.ts`](hosted-chapters-commands.ts),
+[`hosted-chapters-attachments.ts`](hosted-chapters-attachments.ts), [`hosted-chapters-reads.ts`](hosted-chapters-reads.ts),
+[`hosted-append-lifecycle.ts`](hosted-append-lifecycle.ts),
 [`db/content/schema.sql`](../../db/content/schema.sql);
 the independent [Knowledge model](../../../../docs/research/knowledge-workspaces-model-astra.md) and
 [product investigation](../../../../docs/research/knowledge-workspaces-product-astra.md),
@@ -88,6 +91,9 @@ Collection's [`collection-publication-staging.ts`](../library/collection-publica
 [`collection-publication-staging-state.ts`](../library/collection-publication-staging-state.ts) and
 [native staging fixture](../../test/library/collection-publication-staging.test.ts).
 The main checkout's read-only `.reference/INDEX.md` supplies provenance, not an outline storage benchmark.
+No separately retained external serial-publication prompt was found in the linked reports/reference index; the
+maintainer's serial-publication acceptance governs this decision, without inventing an external citation.
+
 The audit's whole-snapshot finding still applies to replacement; sealed-prefix
 append and selected publication now avoid that scan only for their own operations. Knowledge's delivered AVL
 supersedes the premise that only a mutable outline exists; its current keys and lookup limits remain relevant.
@@ -101,110 +107,168 @@ seal only after complete source coverage and activate under source-head CAS. Unt
 all old readers/writers remain authoritative. A racing append/replacement makes activation stale; it cannot become
 a mixed baseline. Preparation restart/expiry releases its holds and reclaims its abandoned nodes in bounded work.
 
-Reuse the 512-row snapshot writer and bounded selection publisher unchanged. A new replacement may still intentionally
-shrink a larger draft. Existing exact snapshots, descriptors, publications, receipts, checkpoints and cursors retain
+Retain the 512-row snapshot writer and explicit-selection publisher as compatibility operations. A replacement
+may intentionally shrink a larger draft; the client must identify it as whole replacement, never a saved page. Existing exact snapshots, descriptors, publications, receipts, checkpoints and cursors retain
 their addresses and current Access behavior. Never rewrite old versions into the current forest or infer that an
 unused current base is reclaimable. Knowledge needs no wholesale migration: adapt existing sibling roots, add the
 historical point/summary access paths with a pinned resumable baseline, and retain `history_complete` behavior;
-do not fabricate unavailable pre-baseline history.
+do not fabricate unavailable pre-baseline history. For the first point publication over a legacy public manifest,
+build a separate pinned public baseline from that manifest, never from the private draft. Hold it privately until
+the point commit CASes the original publication; racing publication invalidates it. Old public IDs stay readable.
+
+## Book publication contract
+
+Choose one exact public snapshot model with two launch paths: **point publish** for serial work, and
+**prepare → seal → activate** for complete input. A public version contains independent selected membership/value
+and sibling roots, point lookup and chapter summaries; it may share immutable index paths, never select the private
+draft root. Each selected value pins occurrence, kind, parent, title and exact target revision/digest. The catalogue
+holds one atomic publication pointer. No full manifest copy or unbounded delta chain is a publication version.
+Old release IDs, occurrence links, cursors and checkpoints keep their exact selections under current native access.
+Both paths use the shared structural primitive; neither changes Knowledge's individual-document publication.
+
+### Point publication for serial Books
+
+Define owner operations `publishChapter` and `replacePublishedChapter` (contract names, not installed routes).
+Each carries expected draft/publication IDs, exact source occurrence/target selection and an idempotency key.
+`publishChapter` adds one chapter at a stable public `parentId`/`beforeOccurrenceId` (null means end). Resolve these
+against the expected public snapshot, not the draft; an anchor present only in the draft is invalid.
+Any not-yet-public ancestor must be explicitly reviewed/selected in the same depth-bounded operand; never silently
+publish private ancestor titles. `replacePublishedChapter` changes exactly one already-selected occurrence's chosen
+body revision/digest, retaining its public parent, order and other values unless explicitly selected in that bounded
+operand. Kind/target Post identity stays permanent. It does not copy newer draft choices into other public chapters.
+
+Under current catalogue Post author/container/`post:revise` admission, read that exact source occurrence and its
+ancestor chain, then validate only the changed exact targets through native metadata and retained original Access/
+ancestry observations. Native public eligibility of the catalogue Post and changed target Posts is a separate precondition for
+reporting a newly public chapter. Recheck these observations at commit with existing deadlines/finalization; zero body reads. Do not
+revalidate every unchanged public target: their membership is already selected and their disclosure is always current.
+Authorized receipt replay precedes draft/publication CAS. A stale fresh command fails without index or pointer changes.
+
+Copy only changed public index/directory paths and at most H explicitly selected ancestors; create one small version
+root/count summary and atomically CAS the publication pointer with receipt/identity-only event. Normal append or
+single revision replacement is O(H log N) index changes, independent of total public/private chapters. Other draft
+and public selections remain unchanged. Withdrawing the complete TOC changes its pointer/discovery state in bounded
+work; cleanup paginates held storage. A point operation never needs a complete manifest write or validation pass.
+
+### Private-to-public boundary
+
+[`validateHostedChapterAttachments`](hosted-chapters-attachments.ts) proves attachment identity/read admission,
+not public Post eligibility. [`resolveHostedOccurrenceMetadata`](hosted-chapters-reads.ts) and exact body opening
+separately run current target disclosure. Selecting a manifest neither publishes a Post nor changes its grants.
+For the new point path, a private/unpublished catalogue or target leaves A selected and returns a private
+author-visible refusal; ordinary native publication of each required Post must occur explicitly before retry. Use a new key after deliberate re-review.
+Keep the installed compatibility publisher's existing reference-selection behavior unchanged: an inaccessible
+selected target remains neutral unavailable to that reader, with no private title, target metadata or body.
+
+Later target draft edits do not change selected bytes. A newly published target revision does not substitute for the
+Book's selected revision. Revocation/withdrawal/erasure after a successful Book pointer change can make even an old
+exact Book link unavailable; Book never overrides current target access. Author-readable and public-eligible are
+separate native observations. Do not infer the latter from an author metadata read, cache it as permission, or
+implement it by loading the body. Public/anonymous projections never receive private progress or selection details.
 
 ## Prepared Book publication
 
-Choose Book-owned **prepare → seal → activate**, separate from structural indexing. It can start against the delivered
-snapshot/prefix reader before forest storage is decided. It publishes a manifest of exact target selections, not
-Post bodies or Knowledge documents. Collection staging is an invariant example: its
-[seal reader](../library/collection-publication-staging.ts) checks native source identity, frontier exhaustion,
-evidence/member fences and current native inputs; the fixture keeps complete A selected while B is interrupted.
-Reuse that reasoning, not Collection's custody, query population, Search proof or tables.
+Staging is Book-owned, independent of Collection custody. Collection's
+[seal reader](../library/collection-publication-staging.ts) and
+[fixture](../../test/library/collection-publication-staging.test.ts) exemplify native source identity, complete
+frontiers, member/evidence fences and keeping complete A selected while B is interrupted. Reuse those invariants,
+not its tables, Search evaluator, query population or proof types.
 
-Prepare captures catalogue, initiator, partition epoch, expected draft and publication IDs, selector mode, exact
-source descriptor and expiry under ordinary current Post author/revise admission. Modes are `whole` (every placement
-of that exact draft) and `selection` (the exact explicit occurrence IDs). A fresh later draft is never substituted.
-The current maximum is 512 manifest placements **including parts/ancestors** for either mode. A larger whole draft
-is rejected once the bounded source proves a 513th member; it is never silently truncated. Selection input retains
-its 512 cap, duplicate/unknown rejection and requirement that every ancestor is explicitly selected. Do not add
-unselected private ancestors automatically. Empty selection uses existing atomic withdrawal; it is not an unfinished
-or accidentally empty preparation. No API for this protocol is claimed mounted by this decision.
+Capture initiator, catalogue/epoch, exact immutable draft descriptor, expected draft/publication IDs, mode and expiry
+under current native admission. `whole` selects every placement of that pinned draft. `selection` imports explicit
+IDs in bounded batches into an indexed selection set; settle duplicate/unknown IDs and require explicit ancestor
+closure before seal. Neither mode has a total 512 ceiling. The current `:publish` remains a <=512 compatibility
+request; larger input uses retained batches, never one giant request or growing JSON array. A fresh later draft
+is not substituted. Empty explicit selection is deliberate atomic withdrawal, never incomplete preparation.
 
-Persist one small control row, indexed selected/staged rows and a durable raw frontier; no growing JSON array or
-process-local completion flag. One retained step consumes at most the existing Book page bound of 20 source rows
-(with one lookahead), bounds metadata/target checks and writes at most that page plus fixed control/effect records.
-Selection uses bounded exact membership probes, ordered by the pinned source, not a full outline scan. Whole uses
-raw traversal exhaustion, not the number of visible/disclosed rows. Parts and duplicate Post occurrences remain
-distinct. Store deterministic immutable title/kind/parent/target revision/digest values, with a private rolling
-commitment over canonical ordered rows and committed counts/frontier. Keep ordinals/dense sibling positions as
-manifest projections. Across steps, commit output and frontier atomically; exact retries cannot skip or duplicate a
-row. A crash after a step but before response returns the same native receipt.
+Persist a small control row, indexed input/output, selected snapshot roots and a durable raw traversal frontier.
+Use existing Book page 20 plus lookahead for one processing step (512 is at most an ingestion batch). Each step
+bounds metadata checks, memory and writes, including O(H log N) path changes per admitted row; it commits output,
+commitment/counts and frontier atomically. Whole traverses pinned source to raw exhaustion, not visible exhaustion.
+Selection probes exact requested IDs and ancestors through indexes; it must not scan all N for every batch or
+repeatedly sort/renumber the growing prefix. Derive each input's preorder rank from the pinned source summaries
+and index staging by that immutable source rank; process it once to build selected sequences. Dense public ordinals
+remain read projections. Freeze the imported input version before coverage/closure sealing; later additions require
+a new version and invalidate the seal. Duplicate target Posts under distinct occurrences remain distinct membership.
 
-Seal proves source identity/epoch, complete traversal or settlement of every requested ID, uniqueness, explicit
-ancestor closure and exact ordered manifest coverage. It checks persisted staged rows, never caller-supplied counts,
-digests or a `complete` boolean. Sparse/unavailable input is not empty success. Bind the seal to preparation version,
-source descriptor, selection digest, staged-row commitment, counts and lifecycle fences; expiry/cancel/erasure makes
-it unusable. With the unchanged 512 cap, final closure/order and seal verification may read at most 512 small rows.
-No larger release is authorized by moving that work into a job.
+Preparation validates each distinct selected target's exact thread/Post/revision/stored digest/author/licence under
+native attachment admission, with zero bodies. Persist immutable source observations, not serialized authorization
+callbacks. Seal proves every requested ID settled, complete coverage, uniqueness, explicit closure, order, immutable
+output root/count commitment and lifecycle holds from native state. Accumulate these proofs per step; no final
+O(N) synchronous reread. Seal binds source/epoch, selection/input version, output roots and expiry. Partial/sparse/
+unavailable input and caller-supplied `complete` booleans never produce a seal. Total build may cost O(N log N),
+with O(N) temporary rows and bounded memory per step; retries resume their frontier without revisiting the prefix.
 
-Activation runs ordinary current native author/container/`post:revise` admission **before receipt replay**, reads the
-native seal by locator, and prepares/rechecks every distinct exact target through existing attachment metadata and
-retained original Access/ancestry observations. Check thread/Post/revision/stored digest/author/licence with zero
-bodies. Preparation-time permission results are not reusable authority. Current target revocation, erasure or changed
-observation rejects activation; dependency errors remain errors. Use the existing command proof/finalization machinery
-and its deadlines, not a copied permission formula or a fresh source read that blesses an old observation.
+Activation re-admits the current initiator/container/`post:revise` authority **before receipt replay** and consumes a
+native seal by locator. After replay, CAS the pinned draft and expected publication, enforce lifecycle/expiry and
+native current-target authority proof, and atomically select the completed output root with receipt/event. Complete
+A stays selected through partial B, failed seal/activation, crash, cancel, expiry or stale CAS. Lost successful
+activation replays B exactly after later changes only for a currently admitted author. No partial output is public;
+private progress, targets and commitments stay author-only and follow Book erasure/hold policy.
 
-After authorized receipt replay, CAS the draft against the pinned source and the publication against its expected
-ID; a draft edit during preparation therefore requires a new preparation. Final retained checks close the admitted
-observations, and the Book-home transaction exposes the complete immutable manifest and advances its publication
-pointer with an identity-only event/receipt. It exposes no partial rows. Complete A remains selected through partial
-B, a failed seal/activation, crash or stale CAS; a lost successful activation response replays B exactly even after
-later changes, provided current authorization still admits replay. Cancel/expiry discards B without withdrawing A.
-Cross-home metadata checks retain their existing native consistency contract, not a new distributed transaction.
+**Activation-currentness gate:** the installed per-invocation attachment checks are not a durable aggregate authority
+proof for an arbitrarily large release. Rechecking all N targets in one final transaction is forbidden; permission
+checks made in earlier batches are insufficient. Before enabling staged activation, Content/Access must deliver a
+native retained validity proof binding every newly selected target/source observation to current eligibility and
+invalidation, whose final validation is bounded independently of N. It must cover cross-home revocation between the
+last step and activation, not only draft CAS, a TTL or a caller epoch. A source fence that can change without
+invalidating that proof fails the contract. No such capability is claimed installed by this decision. Build the
+control/step/seal path now; keep activation disabled until that proof and its revoked-after-last-step test exist.
+Current reader disclosure remains mandatory even after a valid activation; no distributed permission transaction is
+invented here. Point publication can launch independently because its changed-target set is depth-bounded.
 
-Only an admitted author sees preparation progress/selection. Public routes, history projections, discovery,
-notifications, outbox and URLs receive no preparation locator, private title, unselected occurrence, target or body.
-A release still requires ordinary Post publication and current target disclosure; preparing a release publishes
-nothing. Private rows and commitments follow Book erasure and hold/reclamation policy. A seal cannot preserve
-private selections after their lifecycle fence closes. Current limits bound activation to at most 512 rows/targets;
-any future larger release needs a separately adopted activation-currentness mechanism, not another numeric increase.
+### Release-candidate disposition and implementation handoff
 
-### Implementation handoff and acceptance
+The specification is decided; **Book release-candidate readiness remains blocked** by missing scalable sequence/
+directory source, point public-snapshot publication and private-target proof, and large-batch activation-currentness.
+Root append, a design document, or raising a request cap closes none of these gates. Native comparison is required
+before expensive storage adoption; no evidence here selects a physical schema. Deliver these source slices:
 
-Deliver these independently reviewable slices; none changes release exposure before native proof:
+1. **First source slice — exact point public snapshots:** in `hosted-chapters-{model,store,commands,reads}.ts` and a
+   new owner `hosted-publication-point.ts`, define the snapshot/sequence storage port; implement changed-target
+   admission, public-target eligibility, selected-ancestor closure, receipt/CAS orchestration and exact reader dispatch.
+   In parallel extract `versioned-outline-order.ts` from `knowledge-order.ts` with node/value/summary ports, preserving
+   the keyed Knowledge adapter. Freeze `hosted-publication-point.test.ts`: private refusal, native Post publication
+   then explicit retry, one selected revision replacement, unchanged private/public siblings, old links and replay.
+   This work starts without choosing directory storage; a fake port is not launch evidence. Coordinate any new native
+   public-eligibility port with Access rather than reproducing its policy.
+2. **Scalable adapter and migration:** compare predecessor histories versus fixed-width radix directories with the
+   shared sequence adapter, then implement owner storage/index migrations, historical point/reverse/rank/chapter
+   summaries and resumable snapshot/sealed-prefix conversion. Extend
+   [`knowledge-history.test.ts`](../../test/content/knowledge-history.test.ts) and add
+   `versioned-outline-order.test.ts`; retain existing cursor/title/body/publication assertions. No per-edit rebuild.
+3. **Complete Book publication:** add `hosted-publication-staging.ts` and `hosted-publication-staging.test.ts` for
+   pinned whole/selection, durable input/frontiers, seal and atomic activation/withdrawal. Preparation can start with
+   snapshot/prefix sources now; final activation depends on the native validity-proof gate above. Keep installed
+   release-selection/admission/append-release assertions; their 512 bounds describe those compatibility requests.
+4. **Declared native API and mounted consumers:** mount owner point/batch commands, generate the client, then add
+   Studio source/destination/selection review and progress. One confirmation issues one bounded command with stable
+   IDs and one expected version; conflict retains choices but requires fresh review. Keep Knowledge's current versus
+   historical distinction and [Book exact-reader](../../../../apps/web/src/books/reader/README.md) compatibility.
+   No full-outline drain, private preparation projection or production exposure change belongs in these slices.
 
-1. **Forest port and Knowledge adapter:** extract the delivered path-copy algorithm without product types/SQL;
-   add reverse seeks/summary laws and historical placement facts. Keep current cursor/title/publication semantics.
-   Extend [`knowledge-history.test.ts`](../../test/content/knowledge-history.test.ts) for exact historical point and
-   children after reorder, reparent/removal and local rebalance. Preserve existing replay/cycle/body assertions.
-2. **Directory storage check, then Book adapter:** compare the two directory mechanisms and growth dimensions
-   [named by the shared contract](../../../../docs/knowledge-workspaces.md#cost-storage-choice-and-retention).
-   Add retained key-generation completion, Book rank/chapter summaries and descriptor migration. Preserve
-   [`hosted-append-read.test.ts`](../../test/content/hosted-append-read.test.ts),
-   [`hosted-root-append.test.ts`](../../test/content/hosted-root-append.test.ts) and
-   [`hosted-append-lifecycle.test.ts`](../../test/content/hosted-append-lifecycle.test.ts).
-3. **Book publication preparation:** implement owned control/rows, pinned capture, bounded steps, native seal and
-   activation. This can start now against snapshot/prefix selection; forest support is another source adapter.
-   Keep [`hosted-release-selection.test.ts`](../../test/content/hosted-release-selection.test.ts),
-   [`hosted-release-selection-admission.test.ts`](../../test/content/hosted-release-selection-admission.test.ts) and
-   [`hosted-append-release.test.ts`](../../test/content/hosted-append-release.test.ts) assertions unchanged.
-4. **Native/API and mounted receiving:** only after owner commands/readers exist, mount declared operations and
-   generate the client. Studio source/destination review uses stable observed IDs and one expected revision;
-   one confirmation issues one bounded command. Knowledge organization retains its current stale/reselect behavior.
-   Existing [Book reader](../../../../apps/web/src/books/reader/README.md) exact links/checkpoints remain compatible.
+Freeze these missing acceptance cases with those implementations; no executable product assertions change in this
+specification-only patch. They are release gates, not claims that future tests passed:
 
-The missing executable acceptance belongs with those implementations, rather than green tests of this document:
+| Case                          | Required native/API and mounted evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `outline.anchor-history`      | Insert/reorder/reparent by observed ID, no-effect, wrong/deleted/self/foreign anchors, cycle/depth boundary, opposite moves, stale 412 and exact authorized replay. Historical point/children/preorder/previous-next retain old order/targets after edits and removal; current Knowledge cursor still returns 409 and titles remain current.                                                                                                                                                                                                                                                           |
+| `outline.scale`               | At >512 and 1k/10k/100k placements compare both directories with the same fixtures. Repeat hot-gap edits beyond numeric-window exhaustion and move a large unchanged subtree; count touched paths, descendant rows (zero), reads/WAL/retained bytes. Denied/private siblings neither become visible nor trigger whole-list refill. Grow width/history/subtree independently; record values against the derived bounds.                                                                                                                                                                                 |
+| `book.serial-point`           | On thousands of chapters append one public chapter and replace exactly one selected revision without manifest rewrite, full revalidation or other draft/public changes. Private catalogue/target refuses before pointer advance; explicitly publish the catalogue alone and prove the target stays private, then publish the target and retry successfully. Revoke between observation and commit, and after success: fail or neutral unavailable under native rules, never draft/title/body leakage or newer-byte substitution. Preserve exact old cursor/link/checkpoint, stale and replay outcomes. |
+| `book.complete-batch`         | Whole and explicit ancestor-closed selection exceed 512 at 1k/10k/100k; complete publish and withdrawal, not just initial pages. Interrupt before/after committed steps and activation response; A persists until complete B. Duplicate/unknown/missing ancestor, source/publication race, expiry, forged/partial seal and authority revoked after last step fail safely. Bound each step and final activation; verify zero bodies and no rescanned prefix.                                                                                                                                            |
+| `outline.migration-retention` | Legacy and sealed-prefix pinned baselines equal independent traversal; later appends are excluded and stale activation fails. Resume crash/expiry/erasure. Old releases, receipts/cursors/checkpoints and shared prefixes survive held-root cleanup; abandoned roots reclaim in bounded steps. Withdrawal is bounded; total cleanup is measured separately.                                                                                                                                                                                                                                            |
+| `outline.mounted-review`      | Native HTTP repeats admission on page/confirmation/replay; Studio and Knowledge preserve choices after 412/409 and require review. Point publication distinguishes private-target refusal from success; batch progress displays A until B activates. Anonymous/other-account responses expose no private siblings/progress. Session changes retire stale results.                                                                                                                                                                                                                                      |
 
-| Case                          | Required user-visible/native assertion                                                                                                                                                                                                                                                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `outline.anchor-move`         | Insert before/end, reorder/no-op and reparent preserve IDs; stale, wrong-parent, deleted and self anchors never silently choose another destination. Opposite moves cannot commit a cycle; exact depth boundaries and parent-kind rules hold.                                                                                                                              |
-| `outline.hot-gap-subtree`     | Repeated insertion at one gap reaches local exhaustion and retained generation completion; interrupted/stale rebuild leaves old readers intact. Moving a large subtree changes no descendant rows; exact historical point/children/preorder and both chapter directions stay correct, including empty parts and concealed slots.                                           |
-| `outline.migration-retention` | Pinned legacy and sealed-prefix baselines match independent traversal; a later append is excluded and stale activation fails. Resume after crash, expiry and erasure; old receipts/checkpoints/releases and shared-prefix roots survive reclamation.                                                                                                                       |
-| `book.prepare-activate`       | Whole and explicit selection pin exact versions, retain explicit closure and the 512 cap (whole 513 rejects). Interrupted B leaves A; duplicate step/commit-loss retry is exact; forged/partial/expired seals, draft/publication races and revoked author/target fail without exposing private selection or bytes. Successful B retains pinned digests after later drafts. |
-| `outline.mounted-review`      | Mounted native HTTP repeats current admission on page/confirmation/replay; Studio and Knowledge keep choices after 412/409 but require fresh review, issue one move per confirmation and retire session-stale results. Book preparation displays A until B activates; anonymous/public projections reveal no private progress.                                             |
-
-Run the native cases through the owning Kernel `check` runner with explicit implementation test files; mounted
-consumer cases through their owning Web runner. Add only stories for review, preparing-with-old-release, conflict
-and unavailable states once those controls exist. Growth proof varies sibling width, history, hot-gap repetition,
-subtree size and depth separately, accounting for native authorization, body bytes (zero on metadata paths), SQL
-buffers/WAL, retained storage and cleanup. These are implementation acceptance requirements, not passed checks or
-release-readiness evidence from this specification.
+Run native cases with explicit files through the owning Kernel `check` runner and mounted cases through the owning
+Web runner after implementation. Add stories only for review, preparing-with-old-release, conflict and unavailable
+states backed by native DTOs. Keep existing
+[`hosted-root-append`](../../test/content/hosted-root-append.test.ts),
+[`hosted-append-read`](../../test/content/hosted-append-read.test.ts),
+[`hosted-append-lifecycle`](../../test/content/hosted-append-lifecycle.test.ts),
+[`hosted-release-selection`](../../test/content/hosted-release-selection.test.ts),
+[`hosted-release-selection-admission`](../../test/content/hosted-release-selection-admission.test.ts) and
+[`hosted-append-release`](../../test/content/hosted-append-release.test.ts) assertions. Growth/currentness/mounted proof
+is required before release and remains unverified here; ordinary acceptance runs after landing in the dev verifier.
 
 ## Bounded root append
 
