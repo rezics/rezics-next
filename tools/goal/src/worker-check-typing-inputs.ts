@@ -700,6 +700,55 @@ function configuredRemotePreparationCompiler(root: string, command: readonly str
   );
 }
 
+/** Derive the only schema output path from the exact installed Kernel command and its selected module. */
+function kernelSchemaOutputPath(root: string, command: readonly string[]): string | undefined {
+  if (!installedKernelSchemaEmissionCommand(root, command) || !isKnownTypingCompiler(root, command)) return undefined;
+  const schema = command[5]!.slice('--emit-schema='.length);
+  return schema === 'core' ? 'services/kernel/db/schema.sql' : `services/kernel/db/${schema}/schema.sql`;
+}
+
+function uniqueInputs(entries: readonly TypingInput[]): Map<string, string> | undefined {
+  const result = new Map<string, string>();
+  for (const entry of entries) {
+    if (result.has(entry.path)) return undefined;
+    result.set(entry.path, entry.digest);
+  }
+  return result;
+}
+
+/**
+ * A physical schema emitter may rewrite its own checked-in dump after compilation. Admit that one delta only when
+ * the exact invocation, its before/after inventories and prepared inputs identify the selected output.
+ */
+function changedKernelSchemaOutput(root: string, receipt: TypingInputReceipt): string | undefined {
+  const path = kernelSchemaOutputPath(root, receipt.compilerCommand);
+  if (
+    !path ||
+    receipt.exitCode !== 0 ||
+    receipt.sourceStable ||
+    receipt.outputs !== undefined ||
+    !same(receipt.command, receipt.compilerCommand) ||
+    receipt.started.profile !== 'configured-typescript' ||
+    receipt.completed.profile !== 'configured-typescript' ||
+    receipt.started.runtime !== receipt.completed.runtime ||
+    !same(receipt.started.excludedDocuments, receipt.completed.excludedDocuments) ||
+    !same(receipt.started.prepared, receipt.completed.prepared) ||
+    receipt.sourceStable !== stableSource(receipt.started, receipt.completed)
+  )
+    return undefined;
+  const started = uniqueInputs(receipt.started.source);
+  const completed = uniqueInputs(receipt.completed.source);
+  if (!started || !completed || started.size !== completed.size) return undefined;
+  const before = started.get(path);
+  const after = completed.get(path);
+  if (!before || !after || before === 'missing' || after === 'missing' || before === after) return undefined;
+  for (const [file, digest] of started) {
+    const completedDigest = completed.get(file);
+    if (completedDigest === undefined || (file !== path && completedDigest !== digest)) return undefined;
+  }
+  return path;
+}
+
 /**
  * Reuse an exact configured Kernel or Web pass after remote-check cleanup only when the full marker trio is the
  * complete source difference. The markers remain in the receipt so their stable physical-run evidence is preserved.
@@ -708,12 +757,15 @@ function retainedConfiguredRemotePreparationSourceMatches(
   root: string,
   receipt: TypingInputReceipt,
   current: TypingInputs,
+  schemaOutput?: string,
 ): boolean {
   if (
     receipt.started.profile !== 'configured-typescript' ||
     receipt.completed.profile !== 'configured-typescript' ||
     current.profile !== 'configured-typescript' ||
-    !configuredRemotePreparationCompiler(root, receipt.compilerCommand) ||
+    (schemaOutput === undefined
+      ? !configuredRemotePreparationCompiler(root, receipt.compilerCommand)
+      : kernelSchemaOutputPath(root, receipt.compilerCommand) !== schemaOutput) ||
     !stableRemotePreparationMarkers(receipt)
   )
     return false;
@@ -745,10 +797,23 @@ function retainedConfiguredRemotePreparationSourceMatches(
   )
     return false;
 
-  return same(
-    current.source,
-    receipt.completed.source.filter((entry) => !REMOTE_PREPARATION_MARKERS.has(entry.path)),
-  );
+  const projected = receipt.completed.source.filter((entry) => !REMOTE_PREPARATION_MARKERS.has(entry.path));
+  if (schemaOutput === undefined) return same(current.source, projected);
+
+  const currentInputs = uniqueInputs(current.source);
+  const startedInputs = uniqueInputs(receipt.started.source);
+  const completedInputs = uniqueInputs(receipt.completed.source);
+  if (!currentInputs || !startedInputs || !completedInputs || currentInputs.size !== projected.length) return false;
+  const inputDigest = startedInputs.get(schemaOutput);
+  const outputDigest = completedInputs.get(schemaOutput);
+  if (!inputDigest || !outputDigest || inputDigest === 'missing' || outputDigest === 'missing') return false;
+  return projected.every((entry) => {
+    const digest = currentInputs.get(entry.path);
+    if (digest === undefined) return false;
+    return entry.path === schemaOutput
+      ? digest === inputDigest || digest === outputDigest
+      : digest === entry.digest;
+  });
 }
 
 /**
@@ -813,11 +878,12 @@ export function qualifyTypingInputs(
   // Bun prints usage for `bun --cwd <workspace> run <script>`; the installed owner requires `bun run --cwd`.
   if (misorderedWorkspaceTypecheckIntent(receipt.compilerCommand)) return 'evidence-unavailable';
   const pipeline = kernelClientTypingPipeline(root, receipt.compilerCommand);
+  const schemaOutput = !receipt.sourceStable ? changedKernelSchemaOutput(root, receipt) : undefined;
   if (!receipt.sourceStable) {
     // Earlier capture knew the exact pipeline but did not declare generation. Never reinterpret it as a pass.
-    if (pipeline && stableSource(receipt.started, receipt.completed, ['kernel-client-v1']))
+    if (!schemaOutput && pipeline && stableSource(receipt.started, receipt.completed, ['kernel-client-v1']))
       return 'evidence-unavailable';
-    return 'source-changed';
+    if (!schemaOutput) return 'source-changed';
   }
   if (receipt.exitCode !== 0) return 'source-changed';
   const current = captureTypingInputs(root, receipt.compilerCommand);
@@ -828,10 +894,11 @@ export function qualifyTypingInputs(
     isRetainedKernelTypingCompiler(root, receipt.compilerCommand) &&
     retainedKernelSourceMatches(root, receipt, current);
   const retainedConfiguredRemotePreparationReceipt =
-    !sameSource && retainedConfiguredRemotePreparationSourceMatches(root, receipt, current);
+    !sameSource && retainedConfiguredRemotePreparationSourceMatches(root, receipt, current, schemaOutput);
   if (!sameSource && !retainedKernelReceipt && !retainedConfiguredRemotePreparationReceipt) return 'source-changed';
   // This legacy pass is reused only when every installed dependency and generated input remains identical.
   if (retainedKernelReceipt && !same(current.prepared, receipt.completed.prepared)) return 'prepared-changed';
+  if (schemaOutput && !same(current.prepared, receipt.completed.prepared)) return 'prepared-changed';
   if (receipt.outputs?.includes('kernel-client-v1')) {
     try {
       const require = createRequire(import.meta.url);

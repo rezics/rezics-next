@@ -636,11 +636,13 @@ test('a retained conservative receipt qualifies for the installed direct Kernel 
   expect(qualifyTypingInputs(root, receipt)).toBe('source-changed');
 });
 
-test('the exact Kernel schema emitter captures local files and projects only stable absent remote controls', () => {
+test('the exact Kernel schema emitter settles only its selected output with stable physical inputs', () => {
   const root = fixture();
   const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-schema=content'];
   const markers = ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'];
   const host = 'check-host-a';
+  const originalSchema = 'CREATE TABLE fixture (id text);';
+  const emittedSchema = 'CREATE TABLE fixture (id text);\n-- emitted by schema command\n';
   write(
     root,
     'services/kernel/package.json',
@@ -655,7 +657,9 @@ test('the exact Kernel schema emitter captures local files and projects only sta
   write(root, 'services/kernel/src/index.ts', 'export const ready = true;');
   write(root, 'services/kernel/node_modules/fixture/package.json', '{"version":"1"}');
   write(root, 'services/kernel/db/content/migrations/001_fixture.sql', 'SELECT 1;');
-  write(root, 'services/kernel/db/content/schema.sql', 'CREATE TABLE fixture (id text);');
+  write(root, 'services/kernel/db/content/schema.sql', originalSchema);
+  write(root, 'services/kernel/db/auth/migrations/001_fixture.sql', 'SELECT 1;');
+  write(root, 'services/kernel/db/auth/schema.sql', 'CREATE TABLE auth_fixture (id text);');
   write(root, '.gitignore', `${readFileSync(join(root, '.gitignore'), 'utf8')}node_modules/\n${markers.join('\n')}\n`);
   const owned = { schema: 1, host, run: physical };
   const controls: Record<string, object> = {
@@ -694,18 +698,76 @@ test('the exact Kernel schema emitter captures local files and projects only sta
   );
   expect(qualifyTypingInputs(root, forward)).toBe('matched');
 
-  const legacy = captureTypingInputs(root, ['bun', 'unknown-compiler.ts']);
-  legacy.prepared = forward.completed.prepared;
-  const retained: TypingInputReceipt = {
-    version: 1,
-    physicalRunId: physical,
-    command,
-    compilerCommand: command,
-    started: legacy,
-    completed: legacy,
-    sourceStable: true,
-    exitCode: 0,
+  const schemaPhysical = 'c3c3c3c3-3333-4333-8333-333333333333';
+  const schemaOwned = { schema: 1, host, run: schemaPhysical };
+  const schemaControls: Record<string, object> = {
+    '.preparation-started': { ...schemaOwned, deadline: 1000, limitMs: 60_000 },
+    '.remote-check-supervisor': { ...schemaOwned, pid: 42, started: '1', group: 42, uid: 1000 },
+    'preparation-install.json': {
+      ...schemaOwned,
+      cache: 'hit',
+      nativeCache: null,
+      key: 'a'.repeat(64),
+      packages: [],
+      nativeChecks: [],
+    },
   };
+  for (const [path, value] of Object.entries(schemaControls)) write(root, path, JSON.stringify(value));
+  const schemaEnv = {
+    ...environment,
+    REZICS_TYPING_INPUTS_PHYSICAL: schemaPhysical,
+    REMOTE_CHECK_HOST: host,
+    REZICS_CHECK_RUN: schemaPhysical,
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
+  };
+  const schemaComplete = beginTypingInputReceipt(root, schemaEnv, command)!;
+  write(root, 'services/kernel/db/content/schema.sql', emittedSchema);
+  schemaComplete(0);
+  const schemaReceipt = readTypingInputReceipt(root, schemaPhysical, command)!;
+  expect(schemaReceipt.sourceStable).toBe(false);
+  expect(schemaReceipt.started.source.find(({ path }) => path === 'services/kernel/db/content/schema.sql')?.digest).not.toBe(
+    schemaReceipt.completed.source.find(({ path }) => path === 'services/kernel/db/content/schema.sql')?.digest,
+  );
+
+  // The owner transport did not copy the emitted dump back; the checkout still has the compiler's input digest.
+  write(root, 'services/kernel/db/content/schema.sql', originalSchema);
+  for (const marker of markers) rmSync(join(root, marker));
+  expect(qualifyTypingInputs(root, schemaReceipt)).toBe('matched');
+  // A separately returned copy is also bound to the exact physical output digest.
+  write(root, 'services/kernel/db/content/schema.sql', emittedSchema);
+  expect(qualifyTypingInputs(root, schemaReceipt)).toBe('matched');
+  write(root, 'services/kernel/db/content/schema.sql', originalSchema);
+
+  write(root, 'services/kernel/db/content/migrations/001_fixture.sql', 'SELECT 2;');
+  expect(qualifyTypingInputs(root, schemaReceipt)).toBe('source-changed');
+  write(root, 'services/kernel/db/content/migrations/001_fixture.sql', 'SELECT 1;');
+
+  const authCommand = [...command.slice(0, 5), '--emit-schema=auth'];
+  expect(
+    qualifyTypingInputs(root, { ...schemaReceipt, command: authCommand, compilerCommand: authCommand }),
+  ).toBe('source-changed');
+  const selectedSchemaPath = 'services/kernel/db/content/schema.sql';
+  const missingInputDigest: TypingInputReceipt = {
+    ...schemaReceipt,
+    started: {
+      ...schemaReceipt.started,
+      source: schemaReceipt.started.source.map((entry) =>
+        entry.path === selectedSchemaPath ? { ...entry, digest: 'missing' } : entry,
+      ),
+    },
+  };
+  expect(qualifyTypingInputs(root, missingInputDigest)).toBe('source-changed');
+  const changedMarkerReceipt: TypingInputReceipt = {
+    ...schemaReceipt,
+    started: {
+      ...schemaReceipt.started,
+      source: schemaReceipt.started.source.map((entry) =>
+        entry.path === markers[0] ? { ...entry, digest: 'b'.repeat(64) } : entry,
+      ),
+    },
+  };
+  expect(qualifyTypingInputs(root, changedMarkerReceipt)).toBe('source-changed');
+
   const controller = mkdtempSync(join(dirname(root), 'typing-controller-'));
   roots.push(controller);
   const budget = workerCheckBudgetDirectory(controller, 'schema-emission', 1);
@@ -716,8 +778,8 @@ test('the exact Kernel schema emitter captures local files and projects only sta
     JSON.stringify({
       includedTypecheck: true,
       exitCode: 0,
-      typingRequest: { physicalRunId: physical, command, localPrepared: [], capture: 'physical-command' },
-      typingInputs: retained,
+      typingRequest: { physicalRunId: schemaPhysical, command, localPrepared: [], capture: 'physical-command' },
+      typingInputs: schemaReceipt,
     }),
   );
   write(
@@ -734,7 +796,6 @@ test('the exact Kernel schema emitter captures local files and projects only sta
       },
     }),
   );
-  for (const marker of markers) rmSync(join(root, marker));
   expect(workerCheckHostTypingSettlement({ directory: budget, worktree: root, limit: 2 })).toEqual({ ok: true });
   for (const [path, value] of Object.entries(controls)) write(root, path, JSON.stringify(value));
 
@@ -758,6 +819,21 @@ test('the exact Kernel schema emitter captures local files and projects only sta
   execFileSync('git', ['add', '-f', '.remote-check-supervisor'], { cwd: root });
   rmSync(join(root, '.remote-check-supervisor'));
   expect(qualifyTypingInputs(root, forward)).toBe('source-changed');
+
+  const plainCommand = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+  const plainPhysical = 'd4d4d4d4-4444-4444-8444-444444444444';
+  const plainEnv = {
+    ...environment,
+    REZICS_TYPING_INPUTS_PHYSICAL: plainPhysical,
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(plainCommand)).toString('base64'),
+  };
+  const plainComplete = beginTypingInputReceipt(root, plainEnv, plainCommand)!;
+  write(root, 'services/kernel/db/content/schema.sql', emittedSchema);
+  plainComplete(0);
+  const plainReceipt = readTypingInputReceipt(root, plainPhysical, plainCommand)!;
+  write(root, 'services/kernel/db/content/schema.sql', originalSchema);
+  expect(plainReceipt.sourceStable).toBe(false);
+  expect(qualifyTypingInputs(root, plainReceipt)).toBe('source-changed');
 });
 
 test('exact configured Kernel and Web workspace receipts project only the complete stable remote marker trio', () => {
