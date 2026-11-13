@@ -6,6 +6,12 @@ import { runBoundedInstallProcess } from './install-process.ts';
 import type { GateRunner } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
 import { classifyRun, infraFailure } from './dev-verifier-classification.ts';
+import {
+  consumeVerifierPhaseReceipt,
+  unreachedVerifierPhaseEvidence,
+  type DevVerifierPhaseBinding,
+  type DevVerifierPhaseEvidence,
+} from './dev-verifier-phase.ts';
 import type { DevVerifierCheck } from './dev-verifier-plan.ts';
 import {
   beginCommandRun,
@@ -25,7 +31,8 @@ export type DevVerifierExecution = {
   roundId?: string;
 };
 export type CheckExecution = Pick<DevVerifierCheck, 'command' | 'cwd'>;
-export type GateOutcome = { passed: boolean; output: string; timedOut: boolean };
+export type GateOutcome = { passed: boolean; output: string; timedOut: boolean; phaseReceipt?: unknown };
+type PhaseAwareGateRunner = (...args: Parameters<GateRunner>) => Promise<GateOutcome>;
 
 function installDependencies(
   tree: string,
@@ -284,7 +291,7 @@ export function createEvidence(
 
 export async function executeCheck(
   execution: DevVerifierExecution,
-  run: GateRunner,
+  run: PhaseAwareGateRunner,
   check: CheckExecution,
   commit: string,
   tree: string,
@@ -292,6 +299,7 @@ export async function executeCheck(
   input?: string,
   signal?: AbortSignal,
   roundId: string = randomUUID(),
+  phaseAccounting = false,
 ): Promise<DevVerifierEvidence> {
   const policy = execution.settings.policy ?? defaultPolicy;
   const firstRun = commandRunById(execution.store, commandExecutionId(roundId, key, 0));
@@ -370,7 +378,38 @@ export async function executeCheck(
       };
     }
     const completedAt = new Date().toISOString();
-    const evidence = createEvidence(commit, check, final, finalLog, execution.settings.policy?.verifier);
+    const phaseBinding: DevVerifierPhaseBinding = {
+      executionId: id,
+      command: check.command,
+      executionBudgetMs: policy.verifier.bootSmokeTimeoutMs,
+      ...(check.cwd ? { cwd: check.cwd } : {}),
+    };
+    const phaseEvidence: DevVerifierPhaseEvidence | undefined = phaseAccounting
+      ? consumeVerifierPhaseReceipt(final.phaseReceipt, phaseBinding)
+      : undefined;
+    const unexecutedSuccess = final.passed && phaseEvidence?.phases.execution.status === 'unreached';
+    const measuredExecution = phaseEvidence?.phases.execution;
+    const executionBudgetExceeded =
+      phaseAccounting &&
+      final.passed &&
+      measuredExecution?.status === 'measured' &&
+      measuredExecution.durationMs >= (phaseEvidence?.executionBudgetMs ?? policy.verifier.bootSmokeTimeoutMs);
+    const terminalResult = unexecutedSuccess
+      ? {
+          ...final,
+          passed: false,
+          output: `${final.output}${final.output ? '\n' : ''}Verifier phase receipt says the boot command was unreached; the wrapper result is not a boot pass.`,
+        }
+      : executionBudgetExceeded
+        ? {
+            ...final,
+            passed: false,
+            timedOut: true,
+            output: `${final.output}${final.output ? '\n' : ''}Verifier boot execution phase exceeded its ${phaseEvidence?.executionBudgetMs ?? policy.verifier.bootSmokeTimeoutMs} ms budget.`,
+          }
+        : final;
+    const baseEvidence = createEvidence(commit, check, terminalResult, finalLog, execution.settings.policy?.verifier);
+    const evidence = unexecutedSuccess ? { ...baseEvidence, result: 'unknown' as const } : baseEvidence;
     const completed: DevVerifierRun = {
       ...startRun,
       evidence,
@@ -380,6 +419,7 @@ export async function executeCheck(
         outcome: evidence.result ?? 'unknown',
         completedAt,
         durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)),
+        ...(phaseEvidence ? { phaseEvidence } : {}),
       },
     };
     latest = completeCommandRun(execution.store, completed, execution.settings.policy?.verifier);
@@ -427,6 +467,7 @@ export function recordSkippedCommand(
   check: CheckExecution,
   cacheKey: string,
   reason: string,
+  phaseAccounting = false,
 ): string {
   const id = commandExecutionId(roundId, cacheKey, -1);
   const completedAt = new Date().toISOString();
@@ -451,6 +492,19 @@ export function recordSkippedCommand(
       outcome: 'skipped',
       completedAt,
       durationMs: null,
+      ...(phaseAccounting
+        ? {
+            phaseEvidence: unreachedVerifierPhaseEvidence(
+              {
+                executionId: id,
+                command: check.command,
+                executionBudgetMs: (execution.settings.policy ?? defaultPolicy).verifier.bootSmokeTimeoutMs,
+                ...(check.cwd ? { cwd: check.cwd } : {}),
+              },
+              reason,
+            ),
+          }
+        : {}),
     },
   };
   return completeCommandRun(execution.store, run, execution.settings.policy?.verifier).key;

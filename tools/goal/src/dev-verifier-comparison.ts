@@ -191,9 +191,20 @@ export async function runChecksAtHead(
   const results: CheckRun[] = [];
   const attempted = new Set<number>();
 
-  const runOne = async (check: IndexedCheck, gate: typeof runner) => {
+  const runOne = async (check: IndexedCheck, gate: typeof runner, phaseAccounting = false) => {
     const key = runCacheKey(settings, head, check, selection);
-    const evidence = await executeCheck(execution, gate, check, head, tree, key, undefined, signal, roundId);
+    const evidence = await executeCheck(
+      execution,
+      gate,
+      check,
+      head,
+      tree,
+      key,
+      undefined,
+      signal,
+      roundId,
+      phaseAccounting,
+    );
     attempted.add(check.index);
     results.push({ check, evidence });
   };
@@ -201,7 +212,7 @@ export async function runChecksAtHead(
   const bootCount = Math.min(bootSmokeCount, indexed.length);
   for (let index = 0; index < bootCount; index++) {
     if (signal.aborted || Date.now() >= deadline) break;
-    await runOne(indexed[index]!, bootRunner);
+    await runOne(indexed[index]!, bootRunner, true);
   }
 
   let next = bootCount;

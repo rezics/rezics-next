@@ -1,9 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { afterEach } from 'bun:test';
 import { ownedTemporaryDirectory, removeTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
+import { cleanupReceiptPath, physicalHistoryPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
 import { git as repositoryGit } from './merge.ts';
 
 import { loadSettings } from './config.ts';
@@ -404,6 +406,150 @@ export function temporaryDirectory(): { path: string; close(): void } {
   fixtureDisposals.set(temporary.path, close);
   return { path: temporary.path, close };
 }
+
+export function writeVerifiedResultlessCleanupEvidence(input: {
+  worktree: string;
+  stateDirectory: string;
+  taskId: string;
+  attempt: number;
+  checkId: string;
+  physicalRunId: string;
+  command: readonly string[];
+}): void {
+  const { worktree, stateDirectory, taskId, attempt, checkId, physicalRunId, command } = input;
+  const root = join(worktree, '.temp/goal/checks');
+  const ownership = { taskId, attempt };
+  const runnerIdentity = {
+    pid: 2_000_000_001,
+    start: '100',
+    boot: '22222222-2222-4222-8222-222222222222',
+    group: 2_000_000_001,
+  };
+  const runnerHost = hostname();
+  const remoteRun = { host: 'check-b', id: 'remote-run-1' };
+  const physicalCleanup = {
+    schema: 1,
+    host: remoteRun.host,
+    run: remoteRun.id,
+    status: 'verified',
+    supervisorStopped: true,
+    commandGroupTerminal: true,
+    containersRemoved: true,
+    runDirectoryRemoved: true,
+    failures: [],
+  };
+  const resultRecord = {
+    id: checkId,
+    cwd: worktree,
+    argv: [...command],
+    ownership,
+    status: 'running',
+    physicalRunId,
+    runnerPid: runnerIdentity.pid,
+    runnerHost,
+    runnerIdentity,
+  };
+  const resultBytes = JSON.stringify(resultRecord);
+  mkdirSync(join(root, 'results'), { recursive: true });
+  mkdirSync(join(root, 'custody/cancelled'), { recursive: true });
+  mkdirSync(join(root, 'custody/history'), { recursive: true });
+  mkdirSync(join(root, 'custody/remote'), { recursive: true });
+  mkdirSync(join(root, 'custody/receipts'), { recursive: true });
+  mkdirSync(join(root, 'cancellations'), { recursive: true });
+  mkdirSync(stateDirectory, { recursive: true });
+  writeFileSync(join(root, 'results', `${checkId}.json`), resultBytes);
+  const authorizationPath = join(stateDirectory, `${checkId}.authorization.json`);
+  const authorizationBytes = JSON.stringify({ records: [{ id: checkId, task: taskId, attempt, argv: [...command] }] });
+  writeFileSync(authorizationPath, authorizationBytes);
+  writeFileSync(
+    join(root, 'custody/cancelled', `${checkId}.json`),
+    JSON.stringify({
+      version: 1,
+      checkId,
+      ownership,
+      disposition: 'logically-cancelled-physical-cleanup-unknown',
+      physicalRunId,
+      recordSha256: createHash('sha256').update(resultBytes).digest('hex'),
+      receiptReference: authorizationPath,
+      receiptSha256: createHash('sha256').update(authorizationBytes).digest('hex'),
+      createdAt: new Date().toISOString(),
+    }),
+  );
+  writeFileSync(join(root, 'cancellations', `${checkId}.json`), JSON.stringify({ schema: 1, id: checkId, signal: 15 }));
+  writeFileSync(
+    physicalHistoryPath(worktree, checkId, physicalRunId),
+    JSON.stringify({
+      version: 1,
+      id: checkId,
+      cwd: worktree,
+      argv: [...command],
+      remoteArgv: [...command],
+      ownership,
+      physicalRunId,
+      runnerHost,
+      runnerIdentity,
+      status: 'unknown',
+      remoteExpected: true,
+      terminalProof: { local: true, remote: true, resultKnown: false, observedAt: new Date().toISOString() },
+    }),
+  );
+  writeFileSync(
+    remoteRunCustodyPath(worktree, physicalRunId),
+    JSON.stringify({
+      version: 1,
+      physicalRunId,
+      binding: { checkId, ownership, argv: [...command], remoteArgv: [...command] },
+      status: 'terminal',
+      attempts: [
+        {
+          host: remoteRun.host,
+          id: remoteRun.id,
+          status: 'terminal',
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+          physicalCleanup,
+        },
+      ],
+    }),
+  );
+  writeFileSync(
+    cleanupReceiptPath(worktree, checkId, physicalRunId),
+    JSON.stringify({
+      version: 1,
+      receiptId: randomUUID(),
+      checkId,
+      physicalRunId,
+      ownership,
+      runnerHost,
+      runnerIdentity,
+      disposition: 'uncertain',
+      localTerminal: true,
+      remoteTerminal: true,
+      resultTerminal: false,
+      remoteRun,
+      physicalCleanup,
+      reason: 'remote cleanup is verified; the original compiler result is unavailable',
+      completedAt: new Date().toISOString(),
+    }),
+  );
+}
+
+export function prepareKernelCompilerFixture(worktree: string, commit = false): void {
+  mkdirSync(join(worktree, 'services/kernel/scripts'), { recursive: true });
+  mkdirSync(join(worktree, 'services/kernel/src'), { recursive: true });
+  writeFileSync(
+    join(worktree, 'services/kernel/package.json'),
+    JSON.stringify({ name: '@rezics/kernel', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+  );
+  writeFileSync(join(worktree, 'services/kernel/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+  writeFileSync(join(worktree, 'services/kernel/scripts/typecheck.ts'), 'export {};\n');
+  writeFileSync(join(worktree, 'services/kernel/src/index.ts'), 'export const ready = true;\n');
+  if (commit) {
+    repositoryGit(worktree, 'add', 'services/kernel');
+    repositoryGit(worktree, 'commit', '-m', 'Prepare retained Kernel compiler');
+  }
+}
+
 export function repository() {
   const temporary = temporaryDirectory();
   const main = join(temporary.path, 'main');

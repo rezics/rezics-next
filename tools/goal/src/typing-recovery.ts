@@ -19,6 +19,7 @@ import {
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
   workerCheckHostAttemptCheckCustody,
+  workerCheckHostAttemptHasResultlessCleanup,
   workerCheckHostHasDirectKernelTypingRun,
   workerCheckHostTypingCheckIds,
   workerCheckHostHasTypecheckRun,
@@ -391,20 +392,30 @@ export async function recoverWorkerTyping(
       worktree: task.worktree,
       limit: workerCheckHostBudgetLimit(task, ref.attempt),
     });
-    if (
-      workerCheckHostHasDirectKernelTypingRun(directory, task.worktree) &&
-      workerCheckHostAttemptCheckCustody(
-        task.worktree,
-        task.id,
-        ref.attempt,
-        workerCheckHostTypingCheckIds(directory, attempt.checks ?? []),
-      ) !== 'terminal'
-    )
+    const checkIds = workerCheckHostTypingCheckIds(directory, attempt.checks ?? []);
+    const directKernelRun = workerCheckHostHasDirectKernelTypingRun(directory, task.worktree);
+    const checkCustody = directKernelRun
+      ? workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds)
+      : 'terminal';
+    if (directKernelRun && checkCustody !== 'terminal')
       return {
         ...ref,
         status: 'pending' as const,
         result:
           'Retained Kernel compiler evidence is waiting for terminal custody of every same-attempt check. Existing check ownership stays fenced; no additional compiler run was authorized.',
+      };
+    const pendingCommand = !typing.ok ? (typing.command ?? attempt.typingEvidencePending?.command) : undefined;
+    const resultlessCleanupRecovery = Boolean(
+      directKernelRun &&
+      pendingCommand &&
+      workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand),
+    );
+    if (resultlessCleanupRecovery && !authority)
+      return {
+        ...ref,
+        status: 'pending' as const,
+        result:
+          'Verified resultless SIGTERM cleanup is settled. An authenticated owning or operations manager must run typing-recover before one compiler-only replacement can be authorized; no source retry or compiler run was started.',
       };
     if (store.retryIntent(ref)?.status === 'pending')
       store.updateRetryIntent(ref, (intent) => {
@@ -490,16 +501,19 @@ export async function recoverWorkerTyping(
       if (!commands.length && !workspaceScoped) commands.push(['bun', 'scripts/typecheck.ts']);
       const grants = authority
         ? commands.map((command) =>
-            grantWorkerTypingRecovery({
-              stateDirectory: settings.stateDirectory,
-              database: store.db.filename,
-              taskId: task.id,
-              attempt: ref.attempt,
-              worktree: task.worktree,
-              command,
-              actor: authority!,
-              ...(withdrawnRetry ? { recoveryKind: 'withdrawn-budget-stop' as const } : {}),
-            }),
+            grantWorkerTypingRecovery(
+              {
+                stateDirectory: settings.stateDirectory,
+                database: store.db.filename,
+                taskId: task.id,
+                attempt: ref.attempt,
+                worktree: task.worktree,
+                command,
+                actor: authority!,
+                ...(withdrawnRetry ? { recoveryKind: 'withdrawn-budget-stop' as const } : {}),
+              },
+              { requireResultlessCleanupReplacement: resultlessCleanupRecovery },
+            ),
           )
         : [];
       if (withdrawnRetry && grants.length === 1) {
