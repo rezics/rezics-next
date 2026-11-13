@@ -74,18 +74,19 @@ async function discloseCatalogue(
   deps: HostedDependencies,
   row: HostedSubjectCatalogueRow,
   context: ReadContext,
-  epoch: number,
 ): Promise<{ item: HostedSubjectCatalogueItem; anchor: AnchoredPosition } | null> {
   if (!isCurrentPublicCatalogueCandidate(row) || routeOf(row.catalogue_id) !== row.route) return null;
+  const cataloguePartition = partitionOf(row.route);
   const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
+  let initial: Awaited<ReturnType<typeof readPostMetadata>>;
   try {
-    const initial = await readPostMetadata(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
+    initial = await readPostMetadata(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
       observation.current = current;
     });
     if (
       !initial.value ||
       initial.value.visibility !== 'published' ||
-      initial.anchor.epoch !== epoch ||
+      initial.anchor.partition.partitionNo !== cataloguePartition ||
       !observation.current
     )
       return null;
@@ -98,14 +99,28 @@ async function discloseCatalogue(
   const selected = await snapshot(deps, row.catalogue_id, context, (client) =>
     hostedRevision(client, row.catalogue_id, row.publication_id),
   );
-  if (!selected.value || selected.value.kind !== 'publication' || selected.anchor.epoch !== epoch) return null;
+  if (
+    !selected.value ||
+    selected.value.kind !== 'publication' ||
+    selected.anchor.partition.partitionNo !== cataloguePartition ||
+    selected.anchor.partition.partitionNo !== initial.anchor.partition.partitionNo ||
+    selected.anchor.epoch !== initial.anchor.epoch
+  )
+    return null;
   try {
     const final = await retained(async (client) => {
       const catalogue = await hostedCatalogue(client, row.catalogue_id);
       if (!catalogue || catalogue.thread_id !== row.thread_id || catalogue.publication_id !== row.publication_id)
         throw new ContentNotFoundError();
     });
-    if (!final.value || final.value.visibility !== 'published' || final.anchor.epoch !== epoch) return null;
+    if (
+      !final.value ||
+      final.value.visibility !== 'published' ||
+      final.anchor.partition.partitionNo !== cataloguePartition ||
+      final.anchor.partition.partitionNo !== initial.anchor.partition.partitionNo ||
+      final.anchor.epoch !== initial.anchor.epoch
+    )
+      return null;
     return {
       item: {
         catalogueId: row.catalogue_id,
@@ -156,7 +171,7 @@ export async function listHostedCataloguesForSubject(
   const raw = selected.value.rows.slice(0, limit);
   const items: HostedSubjectCatalogueItem[] = [];
   for (const row of raw) {
-    const disclosed = await discloseCatalogue(deps, row, context, selected.value.epoch);
+    const disclosed = await discloseCatalogue(deps, row, context);
     if (!disclosed) continue;
     items.push(disclosed.item);
     anchors.push(disclosed.anchor);

@@ -455,6 +455,7 @@ catalogue and revision probes, at most one parent/origin probe and one indexed p
 Subject discovery seeks at most 21 indexed `subject_thread` and same-route catalogue-post candidates, then
 discloses at most 20 current publications. Each selected target has an initial and final native disclosure;
 catalogue disclosure also repeats at completion.
+Decision: Subject continuations remain bound to the Subject partition epoch; each catalogue derives its home from its routed identity and is disclosed only while its initial retained metadata admission, exact publication selection and final retained authority share that catalogue home's epoch. A changed catalogue is suppressed while raw cursor progress continues, and unrelated Subject or catalogue epochs do not hide an admitted Book.
 Decision: Contents, previous/next and metadata-only occurrence reads share retained native metadata disclosure,
 keyed by the complete thread/Post/revision/digest identity. Initial and final checks load zero chapter bodies and
 compare exact identity plus unchanged author/licence. Denied slots still advance the raw frontier without titles
