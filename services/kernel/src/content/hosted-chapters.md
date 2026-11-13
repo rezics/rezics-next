@@ -203,6 +203,15 @@ stores sibling/preorder/chapter roots explicitly, and collapses each transaction
 History seeks use the full equality prefix followed by sequence descending; tombstones are tested after selecting the
 latest row. The generation row is the only head fence. This representation stays unmounted and does not alter legacy
 snapshots or sealed prefixes.
+Decision: keep the hosted move planner pure and unmounted until the native version adapter provides
+expected-snapshot selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and
+expected-head CAS. The existing immutable placement snapshot is not a substitute for that adapter; do not add a
+parallel move store or mount a command that commits only part of the move.
+
+Once all four adapter capabilities are available, bind through the admitted-author `runCommand`: resolve source,
+destination, optional same-parent anchor and both ancestor paths from one pinned draft, stage all three sequence
+workspaces in that transaction, then commit sequence roots, occurrence parent, changed ancestor summaries,
+receipt/event and expected-head CAS atomically. The planner remains pure and owns no command or persistence authority.
 
 ### Evidence and migration
 
