@@ -289,6 +289,43 @@ $$;
 
 
 --
+-- Name: guard_hosted_publication_staging_binding(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_publication_staging_binding() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (to_jsonb(NEW) - 'status' - 'input_version' - 'input_count' - 'input_frozen_version'
+        - 'input_frontier' - 'settled_input_count' - 'candidate_count' - 'duplicate_input_count'
+        - 'unknown_input_count' - 'target_observation_count' - 'source_frontier' - 'source_exhausted'
+        - 'closure_frontier' - 'closure_checked_count' - 'closure_missing_count' - 'failure' - 'sealed_at')
+     IS DISTINCT FROM
+     (to_jsonb(OLD) - 'status' - 'input_version' - 'input_count' - 'input_frozen_version'
+        - 'input_frontier' - 'settled_input_count' - 'candidate_count' - 'duplicate_input_count'
+        - 'unknown_input_count' - 'target_observation_count' - 'source_frontier' - 'source_exhausted'
+        - 'closure_frontier' - 'closure_checked_count' - 'closure_missing_count' - 'failure' - 'sealed_at') THEN
+    RAISE EXCEPTION 'Hosted publication staging binding is immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_hosted_publication_staging_fact(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_publication_staging_fact() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Hosted publication staging facts are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: guard_hosted_snapshot(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1647,6 +1684,206 @@ CREATE TABLE content.hosted_placement (
     CONSTRAINT hosted_placement_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 511))),
     CONSTRAINT hosted_placement_position_check CHECK ((("position" >= 0) AND ("position" <= 511))),
     CONSTRAINT hosted_placement_title_check CHECK (((title_redacted AND (title IS NULL)) OR ((NOT title_redacted) AND (title IS NOT NULL) AND ((char_length(title) >= 1) AND (char_length(title) <= 256)))))
+);
+
+
+--
+-- Name: hosted_publication_staging; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_staging (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    initiator_account_id uuid NOT NULL,
+    owner_epoch bigint NOT NULL,
+    source_revision_id uuid NOT NULL,
+    expected_head_revision_id uuid NOT NULL,
+    expected_publication_id uuid,
+    mode text NOT NULL,
+    source_has_descriptor boolean NOT NULL,
+    source_descriptor_revision_id uuid,
+    source_base_revision_id uuid NOT NULL,
+    source_base_placement_count bigint,
+    source_base_root_count bigint,
+    source_high_water bigint NOT NULL,
+    status text NOT NULL,
+    input_version bigint DEFAULT 0 NOT NULL,
+    input_count bigint DEFAULT 0 NOT NULL,
+    input_frozen_version bigint,
+    input_frontier bigint DEFAULT '-1'::integer NOT NULL,
+    settled_input_count bigint DEFAULT 0 NOT NULL,
+    candidate_count bigint DEFAULT 0 NOT NULL,
+    duplicate_input_count bigint DEFAULT 0 NOT NULL,
+    unknown_input_count bigint DEFAULT 0 NOT NULL,
+    target_observation_count bigint DEFAULT 0 NOT NULL,
+    source_frontier bigint DEFAULT '-1'::integer NOT NULL,
+    source_exhausted boolean DEFAULT false NOT NULL,
+    closure_frontier bigint DEFAULT '-1'::integer NOT NULL,
+    closure_checked_count bigint DEFAULT 0 NOT NULL,
+    closure_missing_count bigint DEFAULT 0 NOT NULL,
+    failure text,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    sealed_at timestamp with time zone,
+    CONSTRAINT hosted_publication_staging_candidate_count_check CHECK ((candidate_count >= 0)),
+    CONSTRAINT hosted_publication_staging_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_publication_staging_check1 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11)))),
+    CONSTRAINT hosted_publication_staging_check2 CHECK ((expected_head_revision_id = source_revision_id)),
+    CONSTRAINT hosted_publication_staging_check3 CHECK (((expected_publication_id IS NULL) OR (route = ((get_byte(uuid_send(expected_publication_id), 10) * 256) + get_byte(uuid_send(expected_publication_id), 11))))),
+    CONSTRAINT hosted_publication_staging_check4 CHECK (((source_has_descriptor AND (source_descriptor_revision_id = source_revision_id) AND ((source_base_placement_count >= 0) AND (source_base_placement_count <= '9007199254740991'::bigint)) AND ((source_base_root_count >= 0) AND (source_base_root_count <= source_base_placement_count)) AND ((source_high_water >= '-1'::integer) AND (source_high_water <= '9007199254740990'::bigint))) OR ((NOT source_has_descriptor) AND (source_descriptor_revision_id IS NULL) AND (source_base_revision_id = source_revision_id) AND (source_base_placement_count IS NULL) AND (source_base_root_count IS NULL) AND (source_high_water = '-1'::integer)))),
+    CONSTRAINT hosted_publication_staging_check5 CHECK (((input_frozen_version IS NULL) OR (input_frozen_version <= input_version))),
+    CONSTRAINT hosted_publication_staging_check6 CHECK ((settled_input_count <= input_count)),
+    CONSTRAINT hosted_publication_staging_check7 CHECK (((duplicate_input_count + unknown_input_count) <= settled_input_count)),
+    CONSTRAINT hosted_publication_staging_check8 CHECK ((((mode = 'whole'::text) AND (input_count = 0) AND (input_version = 0) AND (input_frozen_version IS NULL)) OR (mode = 'selection'::text))),
+    CONSTRAINT hosted_publication_staging_closure_checked_count_check CHECK ((closure_checked_count >= 0)),
+    CONSTRAINT hosted_publication_staging_closure_frontier_check CHECK ((closure_frontier >= '-1'::integer)),
+    CONSTRAINT hosted_publication_staging_closure_missing_count_check CHECK ((closure_missing_count >= 0)),
+    CONSTRAINT hosted_publication_staging_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_publication_staging_duplicate_input_count_check CHECK ((duplicate_input_count >= 0)),
+    CONSTRAINT hosted_publication_staging_expires_at_check CHECK (isfinite(expires_at)),
+    CONSTRAINT hosted_publication_staging_input_count_check CHECK ((input_count >= 0)),
+    CONSTRAINT hosted_publication_staging_input_frontier_check CHECK ((input_frontier >= '-1'::integer)),
+    CONSTRAINT hosted_publication_staging_input_version_check CHECK ((input_version >= 0)),
+    CONSTRAINT hosted_publication_staging_mode_check CHECK ((mode = ANY (ARRAY['whole'::text, 'selection'::text]))),
+    CONSTRAINT hosted_publication_staging_owner_epoch_check CHECK ((owner_epoch >= 0)),
+    CONSTRAINT hosted_publication_staging_sealed_at_check CHECK (((sealed_at IS NULL) OR isfinite(sealed_at))),
+    CONSTRAINT hosted_publication_staging_settled_input_count_check CHECK ((settled_input_count >= 0)),
+    CONSTRAINT hosted_publication_staging_source_frontier_check CHECK ((source_frontier >= '-1'::integer)),
+    CONSTRAINT hosted_publication_staging_status_check CHECK ((status = ANY (ARRAY['collecting'::text, 'building'::text, 'closing'::text, 'ready'::text, 'sealed'::text, 'cancelled'::text, 'expired'::text, 'failed'::text]))),
+    CONSTRAINT hosted_publication_staging_target_observation_count_check CHECK ((target_observation_count >= 0)),
+    CONSTRAINT hosted_publication_staging_unknown_input_count_check CHECK ((unknown_input_count >= 0))
+);
+
+
+--
+-- Name: hosted_publication_staging_batch; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_staging_batch (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    batch_id uuid NOT NULL,
+    input_version bigint NOT NULL,
+    first_input_position bigint NOT NULL,
+    item_count integer NOT NULL,
+    payload_sha256 bytea NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT hosted_publication_staging_batch_check CHECK ((route = ((get_byte(uuid_send(batch_id), 10) * 256) + get_byte(uuid_send(batch_id), 11)))),
+    CONSTRAINT hosted_publication_staging_batch_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_publication_staging_batch_first_input_position_check CHECK ((first_input_position >= 0)),
+    CONSTRAINT hosted_publication_staging_batch_input_version_check CHECK ((input_version > 0)),
+    CONSTRAINT hosted_publication_staging_batch_item_count_check CHECK (((item_count >= 1) AND (item_count <= 512))),
+    CONSTRAINT hosted_publication_staging_batch_payload_sha256_check CHECK ((octet_length(payload_sha256) = 32))
+);
+
+
+--
+-- Name: hosted_publication_staging_candidate; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_staging_candidate (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    source_order bigint NOT NULL,
+    occurrence_id uuid NOT NULL,
+    parent_id uuid,
+    "position" bigint NOT NULL,
+    source_segment text NOT NULL,
+    kind text NOT NULL,
+    thread_id uuid,
+    post_id uuid,
+    target_revision_id uuid,
+    body_sha256 bytea,
+    CONSTRAINT hosted_publication_staging_candidate_check CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
+    CONSTRAINT hosted_publication_staging_candidate_check1 CHECK (((parent_id IS NULL) OR (route = ((get_byte(uuid_send(parent_id), 10) * 256) + get_byte(uuid_send(parent_id), 11))))),
+    CONSTRAINT hosted_publication_staging_candidate_check2 CHECK ((((kind = 'part'::text) AND (thread_id IS NULL) AND (post_id IS NULL) AND (target_revision_id IS NULL) AND (body_sha256 IS NULL)) OR ((kind = 'chapter'::text) AND (thread_id IS NOT NULL) AND (post_id IS NOT NULL) AND (target_revision_id IS NOT NULL) AND (body_sha256 IS NOT NULL) AND (octet_length(body_sha256) = 32)))),
+    CONSTRAINT hosted_publication_staging_candidate_kind_check CHECK ((kind = ANY (ARRAY['part'::text, 'chapter'::text]))),
+    CONSTRAINT hosted_publication_staging_candidate_position_check CHECK (("position" >= 0)),
+    CONSTRAINT hosted_publication_staging_candidate_source_order_check CHECK ((source_order >= 0)),
+    CONSTRAINT hosted_publication_staging_candidate_source_segment_check CHECK ((source_segment = ANY (ARRAY['snapshot'::text, 'base'::text, 'append'::text])))
+);
+
+
+--
+-- Name: hosted_publication_staging_input; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_staging_input (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    input_position bigint NOT NULL,
+    occurrence_id uuid NOT NULL,
+    settlement text DEFAULT 'pending'::text NOT NULL,
+    source_order bigint,
+    CONSTRAINT hosted_publication_staging_input_check CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
+    CONSTRAINT hosted_publication_staging_input_check1 CHECK (((settlement = 'selected'::text) = (source_order IS NOT NULL))),
+    CONSTRAINT hosted_publication_staging_input_input_position_check CHECK ((input_position >= 0)),
+    CONSTRAINT hosted_publication_staging_input_settlement_check CHECK ((settlement = ANY (ARRAY['pending'::text, 'selected'::text, 'duplicate'::text, 'unknown'::text])))
+);
+
+
+--
+-- Name: hosted_publication_staging_seal; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_staging_seal (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    input_version bigint NOT NULL,
+    candidate_count bigint NOT NULL,
+    sealed_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_publication_staging_seal_candidate_count_check CHECK ((candidate_count >= 0)),
+    CONSTRAINT hosted_publication_staging_seal_input_version_check CHECK ((input_version >= 0)),
+    CONSTRAINT hosted_publication_staging_seal_sealed_at_check CHECK (isfinite(sealed_at))
+);
+
+
+--
+-- Name: hosted_publication_staging_step; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_staging_step (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    step_id uuid NOT NULL,
+    phase text NOT NULL,
+    from_frontier bigint NOT NULL,
+    to_frontier bigint NOT NULL,
+    processed integer NOT NULL,
+    result_state text NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT hosted_publication_staging_step_check CHECK ((route = ((get_byte(uuid_send(step_id), 10) * 256) + get_byte(uuid_send(step_id), 11)))),
+    CONSTRAINT hosted_publication_staging_step_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_publication_staging_step_phase_check CHECK ((phase = ANY (ARRAY['whole'::text, 'selection'::text, 'closure'::text]))),
+    CONSTRAINT hosted_publication_staging_step_processed_check CHECK (((processed >= 0) AND (processed <= 20))),
+    CONSTRAINT hosted_publication_staging_step_result_state_check CHECK ((result_state = ANY (ARRAY['more'::text, 'ready'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: hosted_publication_staging_target; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_staging_target (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    post_id uuid NOT NULL,
+    target_revision_id uuid NOT NULL,
+    body_sha256 bytea NOT NULL,
+    author_account_id uuid NOT NULL,
+    licence text NOT NULL,
+    observed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT hosted_publication_staging_target_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
+    CONSTRAINT hosted_publication_staging_target_check CHECK (((thread_id IS NOT NULL) AND (post_id IS NOT NULL) AND (target_revision_id IS NOT NULL))),
+    CONSTRAINT hosted_publication_staging_target_observed_at_check CHECK (isfinite(observed_at))
 );
 
 
@@ -3523,6 +3760,78 @@ ALTER TABLE ONLY content.hosted_placement
 
 
 --
+-- Name: hosted_publication_staging_batch hosted_publication_staging_ba_route_catalogue_id_stage_id_i_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_batch
+    ADD CONSTRAINT hosted_publication_staging_ba_route_catalogue_id_stage_id_i_key UNIQUE (route, catalogue_id, stage_id, input_version);
+
+
+--
+-- Name: hosted_publication_staging_batch hosted_publication_staging_batch_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_batch
+    ADD CONSTRAINT hosted_publication_staging_batch_pkey PRIMARY KEY (route, catalogue_id, stage_id, batch_id);
+
+
+--
+-- Name: hosted_publication_staging_candidate hosted_publication_staging_ca_route_catalogue_id_stage_id_o_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_candidate
+    ADD CONSTRAINT hosted_publication_staging_ca_route_catalogue_id_stage_id_o_key UNIQUE (route, catalogue_id, stage_id, occurrence_id);
+
+
+--
+-- Name: hosted_publication_staging_candidate hosted_publication_staging_candidate_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_candidate
+    ADD CONSTRAINT hosted_publication_staging_candidate_pkey PRIMARY KEY (route, catalogue_id, stage_id, source_order);
+
+
+--
+-- Name: hosted_publication_staging_input hosted_publication_staging_input_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_input
+    ADD CONSTRAINT hosted_publication_staging_input_pkey PRIMARY KEY (route, catalogue_id, stage_id, input_position);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging_seal hosted_publication_staging_seal_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_seal
+    ADD CONSTRAINT hosted_publication_staging_seal_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging_step hosted_publication_staging_step_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_step
+    ADD CONSTRAINT hosted_publication_staging_step_pkey PRIMARY KEY (route, catalogue_id, stage_id, step_id);
+
+
+--
+-- Name: hosted_publication_staging_target hosted_publication_staging_target_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_target
+    ADD CONSTRAINT hosted_publication_staging_target_pkey PRIMARY KEY (route, catalogue_id, stage_id, thread_id, post_id, target_revision_id, body_sha256);
+
+
+--
 -- Name: hosted_structure_revision hosted_structure_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -4491,6 +4800,34 @@ CREATE INDEX hosted_placement_navigation_idx ON content.hosted_placement USING b
 
 
 --
+-- Name: hosted_publication_staging_candidate_parent; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_staging_candidate_parent ON content.hosted_publication_staging_candidate USING btree (route, catalogue_id, stage_id, parent_id);
+
+
+--
+-- Name: hosted_publication_staging_expiry; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_staging_expiry ON content.hosted_publication_staging USING btree (route, expires_at, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging_input_identity; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_staging_input_identity ON content.hosted_publication_staging_input USING btree (route, catalogue_id, stage_id, occurrence_id, input_position);
+
+
+--
+-- Name: hosted_publication_staging_input_pending; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_staging_input_pending ON content.hosted_publication_staging_input USING btree (route, catalogue_id, stage_id, input_position) WHERE (settlement = 'pending'::text);
+
+
+--
 -- Name: hosted_structure_revision_history_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -4954,6 +5291,48 @@ CREATE TRIGGER hosted_placement_immutable BEFORE INSERT OR DELETE OR UPDATE ON c
 
 
 --
+-- Name: hosted_publication_staging_batch hosted_publication_staging_batch_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_publication_staging_batch_immutable BEFORE DELETE OR UPDATE ON content.hosted_publication_staging_batch FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_publication_staging_fact();
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_binding_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_publication_staging_binding_immutable BEFORE UPDATE ON content.hosted_publication_staging FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_publication_staging_binding();
+
+
+--
+-- Name: hosted_publication_staging_candidate hosted_publication_staging_candidate_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_publication_staging_candidate_immutable BEFORE DELETE OR UPDATE ON content.hosted_publication_staging_candidate FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_publication_staging_fact();
+
+
+--
+-- Name: hosted_publication_staging_seal hosted_publication_staging_seal_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_publication_staging_seal_immutable BEFORE DELETE OR UPDATE ON content.hosted_publication_staging_seal FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_publication_staging_fact();
+
+
+--
+-- Name: hosted_publication_staging_step hosted_publication_staging_step_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_publication_staging_step_immutable BEFORE DELETE OR UPDATE ON content.hosted_publication_staging_step FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_publication_staging_fact();
+
+
+--
+-- Name: hosted_publication_staging_target hosted_publication_staging_target_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_publication_staging_target_immutable BEFORE DELETE OR UPDATE ON content.hosted_publication_staging_target FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_publication_staging_fact();
+
+
+--
 -- Name: hosted_structure_revision hosted_structure_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -5328,6 +5707,118 @@ ALTER TABLE ONLY content.hosted_placement
 
 ALTER TABLE ONLY content.hosted_placement
     ADD CONSTRAINT hosted_placement_route_catalogue_id_revision_id_parent_id_fkey FOREIGN KEY (route, catalogue_id, revision_id, parent_id) REFERENCES content.hosted_placement(route, catalogue_id, revision_id, occurrence_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_publication_staging_batch hosted_publication_staging_bat_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_batch
+    ADD CONSTRAINT hosted_publication_staging_bat_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging_candidate hosted_publication_staging_ca_route_catalogue_id_occurrenc_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_candidate
+    ADD CONSTRAINT hosted_publication_staging_ca_route_catalogue_id_occurrenc_fkey FOREIGN KEY (route, catalogue_id, occurrence_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_publication_staging_candidate hosted_publication_staging_ca_route_catalogue_id_stage_id__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_candidate
+    ADD CONSTRAINT hosted_publication_staging_ca_route_catalogue_id_stage_id__fkey FOREIGN KEY (route, catalogue_id, stage_id, thread_id, post_id, target_revision_id, body_sha256) REFERENCES content.hosted_publication_staging_target(route, catalogue_id, stage_id, thread_id, post_id, target_revision_id, body_sha256);
+
+
+--
+-- Name: hosted_publication_staging_candidate hosted_publication_staging_can_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_candidate
+    ADD CONSTRAINT hosted_publication_staging_can_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging_input hosted_publication_staging_inp_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_input
+    ADD CONSTRAINT hosted_publication_staging_inp_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_route_catalogue_id_expected_hea_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_route_catalogue_id_expected_hea_fkey FOREIGN KEY (route, catalogue_id, expected_head_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_route_catalogue_id_expected_pub_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_route_catalogue_id_expected_pub_fkey FOREIGN KEY (route, catalogue_id, expected_publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_route_catalogue_id_fkey FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_route_catalogue_id_source_base__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_route_catalogue_id_source_base__fkey FOREIGN KEY (route, catalogue_id, source_base_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_route_catalogue_id_source_descr_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_route_catalogue_id_source_descr_fkey FOREIGN KEY (route, catalogue_id, source_descriptor_revision_id) REFERENCES content.hosted_append_descriptor(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_route_catalogue_id_source_revis_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_route_catalogue_id_source_revis_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_staging_seal hosted_publication_staging_sea_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_seal
+    ADD CONSTRAINT hosted_publication_staging_sea_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging_step hosted_publication_staging_ste_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_step
+    ADD CONSTRAINT hosted_publication_staging_ste_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging_target hosted_publication_staging_tar_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging_target
+    ADD CONSTRAINT hosted_publication_staging_tar_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
 
 
 --
