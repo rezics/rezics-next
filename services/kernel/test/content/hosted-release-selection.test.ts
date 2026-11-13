@@ -3,6 +3,7 @@ import type { AccessClient } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
 import { hostedReleasePlacements, type HostedPlacementRow } from '../../src/content/hosted-chapters-store.ts';
 import { selectHostedRelease } from '../../src/content/hosted-chapters-tree.ts';
+import { HOSTED_APPEND_DESCRIPTOR_SELECT } from '../../src/content/hosted-chapters-append.ts';
 
 function fixture() {
   const route = 7;
@@ -27,8 +28,9 @@ function fixture() {
   let queries = 0;
   const client: AccessClient = {
     query: (async (sql: string, values: unknown[]) => {
-      queries++;
       expect(values.slice(0, 3)).toEqual([route, catalogueId, revisionId]);
+      if (sql === HOSTED_APPEND_DESCRIPTOR_SELECT) return { rows: [] };
+      queries++;
       expect(sql).toContain('p.route=$1 AND p.catalogue_id=$2 AND p.revision_id=$3');
       expect(sql).toContain('p.occurrence_id = ANY($4::uuid[]) ORDER BY p.ordinal');
       // Model the indexed source boundary, separately from manifest output. A

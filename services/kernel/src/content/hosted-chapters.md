@@ -46,10 +46,12 @@ ordinary Post publication and target disclosure remain necessary. Published byte
 and digest, never replaced with the current head. Later draft edits do not change a release. The three registered
 events contain only catalogue/revision identities; no private target selections enter the outbox.
 
-Decision: publication reads only the bounded explicit occurrence selection from the exact expected structure
-revision, using the existing route/catalogue/revision/occurrence primary key and stored ordinal order. Empty
-withdrawal verifies that source revision is a structure but issues no placement query. The shared release validator
-still rejects duplicate and unknown IDs and missing ancestors, then assigns dense sibling positions and preorder.
+Decision: nonempty publication resolves the expected structure's immutable append descriptor and reads only the
+bounded explicit IDs, once per sealed-base/prefix segment. Legacy snapshots use their original revision key;
+stream hits use the base stream identity and inclusive pinned high-water. Base ordinal order followed by append
+offset order preserves native preorder and exact targets. Empty withdrawal verifies that the source is a structure
+but reads no descriptor or placement rows. The shared release validator still rejects duplicate and unknown IDs
+and missing ancestors, then assigns dense sibling positions and preorder; the selection cap remains 512.
 
 Decision: publication selection runs in command preparation after `hostedPostAuthorization.prepare`, before
 attachment validation. Only the initial catalogue locator runs earlier to locate the Post authority. Native
@@ -100,6 +102,12 @@ Sources read before mixed-reader implementation: this owner contract and the nam
 `hosted-chapters-append.ts`, append migration and root-append fixtures; `hosted-chapters-{reads,store,cursor,schemas,
 model,disclosure}.ts`; and the existing author-outline/navigation metadata fixtures. The dependency is received
 by cherry-pick. The read slice changes no writer or migration.
+
+Sources read before selected mixed-release implementation: this owner contract; `hostedReleasePlacements` and
+the exact membership/page helpers in `hosted-chapters-store.ts`; the pinned descriptor in `hosted-chapters-append.ts`
+and `hosted-chapters-model.ts`; `hosted-append-read-exact.sql`; release preparation and immutable writing in
+`hosted-chapters-commands.ts`; `selectHostedRelease`; and the existing release-selection/admission and append-read
+fixtures. The combined writer/read dependency is present in the base.
 
 ### Immutable representation and internal write
 
@@ -176,8 +184,11 @@ still gets 412. Existing snapshots, publications, exact identities, links and re
 Before exposure, the following must receive the representation:
 
 - Release selection must probe only explicit IDs across the pinned base/prefix, verify membership/ancestors and
-  build the existing separate dense manifest. Empty withdrawal remains valid. The existing writer still selects
-  legacy placements; this reader does not change release preparation.
+  build the existing separate dense manifest. This is implemented in `hostedReleasePlacements`, with native
+  authority, target admission, receipts and CAS unchanged. `hosted-append-release.test.ts` pins mixed ordering,
+  exact targets/replay and links, later-prefix withholding, withdrawal and zero unselected/body reads. Its native
+  acceptance runs after landing in the dev verifier; this source pass uses changed-file formatting and Kernel
+  typecheck only. Lifecycle and exposure remain outstanding below.
 - Lifecycle erasure/cleanup must seek bounded catalogue/stream keysets and retain shared rows while any draft
   references them. Index affordances do not constitute lifecycle integration or authorize an unbounded cascade.
 - The additive HTTP operation, installed Client and Web must receive large-address responses. Old Web must refuse

@@ -10,6 +10,8 @@ import {
 import appendExact from './hosted-append-read-exact.sql';
 import appendNext from './hosted-append-read-next.sql';
 import appendPrevious from './hosted-append-read-previous.sql';
+import appendRelease from './hosted-append-release-selected.sql';
+import { hostedAppendDescriptor } from './hosted-chapters-append.ts';
 
 export type HostedCatalogueRow = {
   route: number;
@@ -261,8 +263,9 @@ export async function hostedReadPlacementPage(
 }
 
 /** Read only explicit release candidates from the immutable source revision.
- * The placement primary key includes all four selectors. Never load the draft
- * siblings to fill gaps or sort by the caller's selection order. */
+ * A mixed draft has exactly two segments: the sealed base precedes its pinned
+ * append prefix. Each uses one bounded exact-ID lookup in native ordinal order;
+ * neither probes siblings, follows history nor fills missing selections. */
 export async function hostedReleasePlacements(
   client: AccessClient,
   id: string,
@@ -274,13 +277,23 @@ export async function hostedReleasePlacements(
   if (!Array.isArray(occurrenceIds) || occurrenceIds.length > HOSTED_PLACEMENT_LIMIT)
     throw new InvalidHostedStructureError();
   if (!occurrenceIds.length) return [];
+  const descriptor = await hostedAppendDescriptor(client, id, revisionId);
   const rows = (
     await client.query<HostedPlacementRow>(
       `${HOSTED_PLACEMENT_SELECT} AND p.occurrence_id = ANY($4::uuid[]) ORDER BY p.ordinal`,
-      [routeOf(id), id, revisionId, occurrenceIds],
+      [routeOf(id), id, descriptor?.baseRevisionId ?? revisionId, occurrenceIds],
     )
   ).rows;
-  return rows.map(hostedPlacement);
+  const base = rows.map(hostedPlacement);
+  if (!descriptor || descriptor.highWater < 0n) return base;
+  const appended = await appendRelease.run(client, {
+    route: routeOf(id)!,
+    catalogue_id: id,
+    stream_id: descriptor.baseRevisionId,
+    occurrence_ids: [...occurrenceIds],
+    high_water: descriptor.highWater.toString(),
+  });
+  return [...base, ...appended.map((row) => appendedPlacement(row, descriptor))];
 }
 
 /** One bounded insert per relation; immutable identities are checked before adding revision rows. */
