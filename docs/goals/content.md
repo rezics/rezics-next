@@ -55,6 +55,18 @@ authority, preferences and lifecycle ports. Semantic owns Book/Series/Edition bi
 identity. Commerce owns personal Library, follows, Collections, financial and rights authority. Search owns public
 discovery sources, results, continuations and their query and default-worker assembly.
 
+Decision: Content owns large-serial Book release-candidate acceptance; Web links to it for the mounted journey.
+Chapter count, outline count and a complete release have no 512 business ceiling. Request envelopes, pages and
+preparation steps may be capped under [architecture's bounds](../architecture.md), without limiting total book size.
+An author can publish one new chapter or one selected exact chapter revision with bounded local index and ancestor
+work and an atomic public pointer change, without copying or revalidating every existing chapter. Large initial and
+whole-book publication consume exact selections in bounded resumable steps; the prior release remains visible until
+the complete new selection is atomically published. Before a first release completes, preparation stays private.
+
+[Knowledge](../knowledge-workspaces.md) supplies reusable ordered structure capabilities. Book publication selection,
+release lifecycle and current authority remain product-owned by Content; reuse does not import Knowledge's rollout
+scope or make an outline an authorization source. These requirements leave physical storage to implementation.
+
 ## Ownership
 
 Content owns `services/kernel/{src,db,test}/content/**`, `community/**` and `rating/**`.
@@ -150,6 +162,35 @@ history/comparison and explicit atomic publication of exact TOC/body revisions. 
 after further draft edits and moves; exact chapter links retain their selection, and unauthorized readers cannot read
 private drafts. Record the legacy parity comparison and demonstrable improvement required above. This gate does
 not replace [Web's mounted discovery, Library, Studio and reader journeys](web.md#acceptance).
+
+Large-serial Book release-candidate acceptance additionally requires these native cases and their mounted journey
+on the same candidate:
+
+- **Incremental release.** Starting from a published large book, publish one new chapter, then update one chapter to
+  a selected exact revision while a newer private revision and unpublished siblings exist. Anonymous readers see
+  only the selected release; admitted members retain their ordinary access. Later draft edits and moves do not alter
+  prior versions or their exact chapter links. Current native read authority still applies to those versions.
+- **Complete release.** Prepare a large first release and a whole-book update from exact occurrence/revision
+  selections across multiple bounded steps. Resume after interruption without restarting completed work or changing
+  selections. Readers see the prior complete release throughout preparation, then the complete new release after
+  one atomic pointer change; no partial TOC, private sibling or unselected body becomes public. A first release is
+  unavailable publicly until complete.
+- **Current admission and recovery.** Exercise changed draft/outline selections and revoked author or reader access
+  during preparation and before activation. Preparation never substitutes for current native publication admission
+  or read authorization. A stale selection cannot silently publish newer revisions; require a fresh explicit
+  selection. Replay preserves the original command result without duplicate release effects or reactivation of an
+  older release. Incomplete, cancelled or superseded preparation cannot advance the public pointer; resume an
+  eligible interrupted preparation explicitly, and reclaim abandoned preparation in bounded steps.
+- **Counted growth.** Cover 511, 512 and 513 chapters and outline occurrences, then representative books with 1,000
+  and 10,000 chapters, including nested parts and unpublished siblings. Grow unrelated siblings and descendants
+  while counting examined index keys/rows, ancestor work, reads/writes, authorization, validation, expanded/output
+  bytes, history, events and cleanup. Single-chapter publication stays within its declared local bounds rather than
+  growing linearly with the book. Initial and whole-book preparation have bounded steps and O(n) or O(n log n) total
+  work, without accumulated-result copies or repeated full-prefix scans. Response limits alone are not evidence.
+- **User journey.** On that same release candidate, an author uses Studio to select and publish, an anonymous reader
+  opens the frozen TOC and exact chapter links, and a member discovers the book, adds it to personal Library, saves
+  progress and continues reading. Include preparation, interruption/resume and stale review recovery through the real
+  APIs and mounted pages. [Web](web.md#acceptance) owns the interface evidence; native results alone do not pass it.
 
 Use [capability acceptance](content.capabilities.md) for frozen scenarios and stage distinctions,
 [thread outcomes](../../specs/content-thread-outcomes.test.ts),

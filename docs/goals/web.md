@@ -104,6 +104,8 @@ Includes `apps/web` and `apps/auth`, shared UI/document components, BFF/media tr
 pages and SEO. Web owns the shared book/column Studio and book reader; Content owns hosted structures and Post
 revisions, Semantic owns Book/Series/Edition bibliography, and Commerce owns personal Library. Follow
 [public scope](../scope.md), [subject pages](../subject-pages.md) and [SEO](../seo.md).
+Studio and the reader consume [Content's large-serial Book contract](content.md#scope); Content remains the authority
+for publication and scale requirements, including reuse of Knowledge structure.
 The adopted mixed Home journey below is in scope; personalized recommendations remain deferred. This Goal adopts
 the complete second-scope features opened in [public scope](../scope.md): saved dynamic queries, advanced facets,
 scopes, Realm rating order, board pins, slow mode, watch, Collection/review/Space discovery and the moderator
@@ -1083,6 +1085,12 @@ comparing revisions, previewing and explicitly publishing. A public reader opens
 follows stable exact links after moves, saves progress and continues reading; later private draft edits remain private
 and do not change that published selection. Record the legacy parity comparison and improvement required above.
 Neither [Content's native API gate](content.md#acceptance) nor a flat first slice substitutes for these mounted journeys.
+
+The [large-serial Book release-candidate cases](content.md#acceptance) are also required here. Use the same candidate
+for the author → anonymous reader and member journey, including Library/progress/continue reading. Show exact
+selection review, bounded preparation progress, interruption/resume and stale review recovery while readers retain
+the previous complete release until activation. This interface evidence consumes Content's contract rather than
+defining another publication or authority rule.
 
 Run focused interface and integration suites through the owning app/package check runners. Connect native
 [page outcomes](../../specs/pages-outcomes.test.ts), [search outcomes](../../specs/search-outcomes.test.ts),
