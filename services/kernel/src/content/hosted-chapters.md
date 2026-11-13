@@ -426,6 +426,11 @@ A stays selected through partial B, failed seal/activation, crash, cancel, expir
 activation replays B exactly after later changes only for a currently admitted author. No partial output is public;
 private progress, targets and commitments stay author-only and follow Book erasure/hold policy.
 
+Decision: the initiating account ID and authentication epoch are native actor identity, independent of the Book
+storage route. Catalogue, stage, candidate generation, source revision, expected head and expected publication IDs
+still follow their actual catalogue route; current actor admission and exact receipt replay remain unchanged across
+account homes.
+
 **Adopted activation currentness:** capture the installed 4,096-home generation/epoch vector before fresh source
 observations. A replayable pass checks the catalogue opening and at most 20 distinct staged targets per page through
 current public eligibility or exact Book-scoped consent, including current Board/Realm/Space ancestry, source
