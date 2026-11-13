@@ -354,7 +354,7 @@ async function registerWork(
     },
     { name: 'content.collect.step', ...retry },
   );
-  const hostedPublicationRetentionCutoff = DBOS.registerStep(async () => now().toISOString(), {
+  const hostedPublicationRetentionCutoff = DBOS.registerStep(async () => new Date(now()).toISOString(), {
     name: 'content.hosted-publication-retention.cutoff',
     ...retry,
   });
