@@ -648,10 +648,11 @@ The command and stage report are documented in the native test
 [README](../../tests/native/README.md#hosted-book-author-to-reader-journey). The candidate controller runs the mounted
 witness once after integration; it is deferred during the worker source pass.
 
-## Private whole-Book release preparation
+## Private Book release preparation
 
 Decision: Book Studio freezes the admitted catalogue, exact draft and known release (including proven absence) at
-explicit review, prepares the whole draft in bounded interruptible steps, and seals only native candidate readiness.
+explicit review, prepares the whole draft or an explicit selection in bounded interruptible steps, and seals only
+native candidate readiness.
 The existing release stays current. Pause stops before another request; an ambiguous command retains its exact body,
 step and key for replay. Remount reads native progress under current admission using only the catalogue/stage locator
 in the private Studio URL. No placements, credentials or command bodies enter storage or URLs. Session or catalogue
@@ -693,3 +694,17 @@ pins explicit issue/revoke without publication, exact retry operands and key, de
 and response identity/state checks. Illustrative stories show same-author desktop review, issue and explicit
 revoke, plus narrow denial and lost-reply replay. Source verification formats changed files and runs the Web
 workspace typecheck after commit. Native, browser, ordinary acceptance, root and Storybook checks stay deferred.
+Decision: selected release preparation uses the same lifecycle with one exact draft outline window and one pending
+page batch. Each batch keeps its routed ID, idempotency key and exact operands until acknowledged; an unknown append
+must resolve before navigation, new choices or freeze. Only native counts describe retained input, including duplicate
+settlement. Input must be nonempty and explicitly frozen before building; withdrawal remains the separate action.
+Ancestors must be selected explicitly, and native incomplete, missing-ancestor and stale-source results require fresh
+review and a new stage. Account, source, draft and visit replacement retire the window and discard late replies.
+A locator-only collecting resume can freeze retained input; adding pages requires a new reviewed stage because the
+progress wire does not expose the pinned draft ID. No current draft is guessed and no selected-ID listing is invented.
+
+Selection sources read before design: the [Prepared Book publication contract](../../../../services/kernel/src/content/hosted-chapters.md#prepared-book-publication),
+`hosted-publication-preparation-routes.ts` and schemas, the existing preparation visit and transport,
+`HostedOutlineWindow`, and the owner outline transport. Focused deferred acceptance adds
+`tests/studio-hosted-release-selection.test.tsx`; the named stories cover two-page desktop input and narrow lost-batch
+recovery with the existing published release unchanged.

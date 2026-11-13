@@ -7,6 +7,7 @@ import {
   type ReleaseProgress,
   type ReleaseRequest,
   type ReleaseStartBody,
+  type ReleaseSelectionBatch,
 } from './hosted-release-preparation-contract';
 
 type Result = { status: number; data?: unknown; error?: unknown };
@@ -19,6 +20,8 @@ type Method<Body> = { post(body: Body, options: Options): Promise<Result> };
 type PreparationClient = ReturnType<KernelClient['hostedCatalogues']> & {
   $prepareRelease: Method<ReleaseStartBody>;
   publicationPreparations(locator: { stageId: string }): {
+    $appendSelectionBatch: Method<ReleaseSelectionBatch>;
+    $freezeSelection: Method<Record<string, never>>;
     $advance: Method<{ stepId: string }>;
     $progress: Method<Record<string, never>>;
     $seal: Method<Record<string, never>>;
@@ -46,6 +49,12 @@ export function createReleaseCommand(client: KernelClient): ReleaseCommand {
       else {
         const stage = book.publicationPreparations({ stageId: input.stageId });
         switch (input.kind) {
+          case 'append':
+            response = await stage.$appendSelectionBatch.post(input.body, options);
+            break;
+          case 'freeze':
+            response = await stage.$freezeSelection.post(input.body, options);
+            break;
           case 'advance':
             response = await stage.$advance.post(input.body, options);
             break;
@@ -72,7 +81,7 @@ export function createReleaseCommand(client: KernelClient): ReleaseCommand {
         'unavailable',
         'This private preparation is unavailable under the current author admission.',
       );
-    if ([400, 413, 422].includes(response.status))
+    if ([400, 409, 413, 422].includes(response.status))
       return hostedFailure('invalid', 'The preparation command was rejected.');
     if (response.status !== (input.kind === 'start' ? 202 : 200) || response.error) return releaseUnknown();
     const parsed = v.safeParse(releaseProgress, response.data);
@@ -86,11 +95,19 @@ export function createReleaseCommand(client: KernelClient): ReleaseCommand {
       (input.kind === 'start' && input.body.stageId !== input.stageId)
     )
       return releaseUnknown();
-    if (parsed.output.stage.mode !== 'whole')
-      return hostedFailure(
-        'invalid',
-        'This stage uses a custom selection. Review the Book to prepare its whole draft.',
-      );
+    const expectedMode =
+      input.kind === 'start'
+        ? input.body.mode
+        : input.kind === 'append' || input.kind === 'freeze'
+          ? 'selection'
+          : input.expectedMode;
+    // A wrong-mode response or missing batch acknowledgement cannot resolve an append.
+    if (
+      (expectedMode && parsed.output.stage.mode !== expectedMode) ||
+      (input.kind === 'append' &&
+        (!parsed.output.batch || parsed.output.batch.itemCount !== input.body.occurrenceIds.length))
+    )
+      return releaseUnknown();
     return { ok: true, value: parsed.output };
   };
 }

@@ -7,11 +7,22 @@ export const releaseStartBody = v.strictObject({
   stageId: hostedId,
   expectedRevisionId: hostedId,
   expectedPublicationId: v.nullable(hostedId),
-  mode: v.literal('whole'),
+  mode: v.picklist(['whole', 'selection']),
 });
-const envelope = { ...locator, expectedViewer: hostedOwnerViewer, idempotencyKey: hostedKey };
+export const releaseSelectionBatch = v.strictObject({
+  batchId: hostedId,
+  occurrenceIds: v.pipe(v.array(hostedId), v.minLength(1), v.maxLength(512)),
+});
+const envelope = {
+  ...locator,
+  expectedViewer: hostedOwnerViewer,
+  idempotencyKey: hostedKey,
+  expectedMode: v.optional(v.picklist(['whole', 'selection'])),
+};
 export const releaseRequest = v.variant('kind', [
   v.strictObject({ ...envelope, kind: v.literal('start'), body: releaseStartBody }),
+  v.strictObject({ ...envelope, kind: v.literal('append'), body: releaseSelectionBatch }),
+  v.strictObject({ ...envelope, kind: v.literal('freeze'), body: v.strictObject({}) }),
   v.strictObject({ ...envelope, kind: v.literal('advance'), body: v.strictObject({ stepId: hostedId }) }),
   v.strictObject({ ...envelope, kind: v.literal('progress'), body: v.strictObject({}) }),
   v.strictObject({ ...envelope, kind: v.literal('seal'), body: v.strictObject({}) }),
@@ -68,3 +79,6 @@ export function releaseReadiness(progress: ReleaseProgress): 'prepared' | 'ready
   if (progress.stage.state === 'sealed' && progress.candidate?.coverageComplete) return 'ready';
   return 'advance';
 }
+
+export type ReleaseMode = ReleaseStartBody['mode'];
+export type ReleaseSelectionBatch = v.InferOutput<typeof releaseSelectionBatch>;

@@ -1,10 +1,16 @@
 import type { Locale } from '../paraglide/runtime.js';
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
-import type { HostedBookNative, HostedOwnedBook } from './hosted-contract';
+import type { HostedBookNative, HostedOutlineWindowNative, HostedOwnedBook } from './hosted-contract';
 import type { StudioFailure } from './contract';
 import { hostedOccurrenceId } from './hosted-structure';
-import { releaseReadiness, type ReleaseProgress, type ReleaseRequest } from './hosted-release-preparation-contract';
+import {
+  releaseReadiness,
+  type ReleaseMode,
+  type ReleaseProgress,
+  type ReleaseRequest,
+} from './hosted-release-preparation-contract';
 import type { ReleaseCommand } from './hosted-release-preparation-native';
+import { HostedReleaseSelectionWindow, type ReleaseSelectionState } from './hosted-release-selection';
 
 export type ReleaseTransport = Pick<HostedBookNative, 'readOwn'> & { command: ReleaseCommand };
 export type ReleaseReview = Readonly<{
@@ -16,8 +22,10 @@ export type ReleaseReview = Readonly<{
 export type ReleasePhase =
   | 'review'
   | 'reviewed'
+  | 'selecting'
   | 'paused'
   | 'unknown'
+  | 'invalid'
   | 'ready'
   | 'prepared'
   | 'stale'
@@ -33,8 +41,10 @@ export type ReleaseState =
       owner: HostedOwnedBook;
       review: ReleaseReview | null;
       stageId: string | null;
+      mode: ReleaseMode | null;
       progress: ReleaseProgress | null;
       pending: ReleaseRequest | null;
+      selection: ReleaseSelectionState | null;
       busy: boolean;
       running: boolean;
       error: StudioFailure | null;
@@ -45,17 +55,19 @@ type Options = {
   csrfToken: string;
   locale: Locale;
   native: ReleaseTransport;
+  selectionNative?: HostedOutlineWindowNative;
   stageId?: string | null;
   locate?: (stageId: string | null) => void;
 };
 
-/** Visit-local work only. The native locator resumes persisted state; neither credentials nor placements persist here. */
+/** Native input is authoritative. This visit retains one outline window and one exact pending command. */
 export class HostedReleasePreparationVisit {
   private state: ReleaseState;
   private readonly origin;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
   private request: AbortController | null = null;
+  private selectionWindow: HostedReleaseSelectionWindow | null = null;
   private retired = false;
   private running = false;
 
@@ -67,8 +79,10 @@ export class HostedReleasePreparationVisit {
       owner: options.owner,
       review: null,
       stageId: options.stageId ?? null,
+      mode: null,
       progress: null,
       pending: null,
+      selection: null,
       busy: false,
       running: false,
       error: null,
@@ -105,12 +119,17 @@ export class HostedReleasePreparationVisit {
     this.state = state;
     for (const listener of this.listeners) listener();
   }
+  private closeSelection() {
+    this.selectionWindow?.dispose();
+    this.selectionWindow = null;
+  }
   private retire(reason: 'session' | 'denied' = 'session') {
     if (this.retired) return;
     this.retired = true;
     this.running = false;
     this.request?.abort();
     this.request = null;
+    this.closeSelection();
     this.unsubscribe?.();
     this.update({ kind: 'ended', reason });
     this.listeners.clear();
@@ -122,6 +141,15 @@ export class HostedReleasePreparationVisit {
   }
   private idle() {
     return this.current() && !this.request && this.state.kind === 'active' && !this.state.busy;
+  }
+  private collecting() {
+    return (
+      this.idle() &&
+      this.state.kind === 'active' &&
+      this.state.phase === 'selecting' &&
+      this.state.progress?.stage.mode === 'selection' &&
+      this.state.progress.stage.state === 'collecting'
+    );
   }
 
   /** This explicit action is the only place where current owner pointers become release operands. */
@@ -140,8 +168,10 @@ export class HostedReleasePreparationVisit {
       error: null,
     });
   };
-  start = async () => {
-    if (this.state.kind === 'active' && this.state.phase === 'reviewed') await this.perform('start');
+  start = async (mode: ReleaseMode = 'whole') => {
+    if (!this.idle() || this.state.kind !== 'active' || this.state.phase !== 'reviewed') return;
+    this.update({ ...this.state, mode });
+    await this.perform('start');
   };
   retry = async () => {
     if (this.state.kind === 'active' && this.state.phase === 'unknown') await this.perform('retry');
@@ -149,6 +179,33 @@ export class HostedReleasePreparationVisit {
   readProgress = async () => {
     if (this.state.kind === 'active' && this.state.stageId && this.state.phase !== 'unknown' && !this.running)
       await this.perform('progress');
+  };
+  choosePlacement = (occurrenceId: string) => {
+    if (this.collecting()) this.selectionWindow?.toggle(occurrenceId);
+  };
+  loadSelectionPage = async (direction: 'next' | 'first' | 'retry') => {
+    if (!this.collecting() || this.state.kind !== 'active' || this.state.selection?.occurrenceIds.length) return;
+    if (direction === 'next') await this.selectionWindow?.next();
+    else if (direction === 'first') await this.selectionWindow?.first();
+    else await this.selectionWindow?.load();
+  };
+  appendSelection = async () => {
+    if (
+      this.collecting() &&
+      this.state.kind === 'active' &&
+      this.state.selection?.outline.kind === 'ready' &&
+      this.state.selection.occurrenceIds.length
+    )
+      await this.perform('append');
+  };
+  freezeSelection = async () => {
+    if (
+      this.collecting() &&
+      this.state.kind === 'active' &&
+      this.state.progress!.stage.inputCount !== '0' &&
+      !this.state.selection?.occurrenceIds.length
+    )
+      await this.perform('freeze');
   };
   seal = async () => {
     if (this.state.kind === 'active' && this.state.phase === 'ready' && !this.running) await this.perform('seal');
@@ -192,6 +249,31 @@ export class HostedReleasePreparationVisit {
     }
   };
 
+  private async openSelection() {
+    if (!this.collecting() || this.state.kind !== 'active' || !this.state.review || this.selectionWindow) return;
+    // A locator-only resume cannot recover the pinned revision from the counts response.
+    // It can freeze stored input, but new pages need a newly reviewed stage, never an assumed current draft.
+    const { review, owner } = this.state;
+    const window = new HostedReleaseSelectionWindow(
+      this.options.selectionNative!,
+      this.options.source,
+      owner.viewer.accountId,
+      {
+        catalogueId: review.catalogueId,
+        revisionId: review.expectedRevisionId,
+        kind: 'structure',
+        sourceRevisionId: null,
+      },
+      () => this.isCurrent() && this.selectionWindow === window,
+      (selection) => {
+        if (this.state.kind === 'active') this.update({ ...this.state, selection });
+      },
+    );
+    this.selectionWindow = window;
+    this.update({ ...this.state, selection: window.snapshot() });
+    await window.load();
+  }
+
   private async perform(kind: ReleaseRequest['kind'] | 'retry') {
     if (!this.idle() || this.state.kind !== 'active') return;
     const state = this.state;
@@ -202,13 +284,14 @@ export class HostedReleasePreparationVisit {
       let command = state.pending;
       if (kind !== 'retry') {
         const key = crypto.randomUUID();
-        const catalogueId = this.options.owner.item.catalogueId;
+        const catalogueId = state.owner.item.catalogueId;
         const stageId = kind === 'start' ? await hostedOccurrenceId(catalogueId, key) : state.stageId!;
         const envelope = {
           catalogueId,
           stageId,
           idempotencyKey: key,
-          expectedViewer: { ...this.options.owner.viewer },
+          expectedViewer: { ...state.owner.viewer },
+          ...(state.mode ? { expectedMode: state.mode } : {}),
         };
         switch (kind) {
           case 'start':
@@ -219,7 +302,17 @@ export class HostedReleasePreparationVisit {
                 stageId,
                 expectedRevisionId: state.review!.expectedRevisionId,
                 expectedPublicationId: state.review!.expectedPublicationId,
-                mode: 'whole',
+                mode: state.mode!,
+              },
+            };
+            break;
+          case 'append':
+            command = {
+              ...envelope,
+              kind,
+              body: {
+                batchId: await hostedOccurrenceId(catalogueId, key),
+                occurrenceIds: [...state.selection!.occurrenceIds],
               },
             };
             break;
@@ -248,14 +341,23 @@ export class HostedReleasePreparationVisit {
           this.retire('denied');
           return;
         }
+        const phase =
+          result.error.kind === 'uncertain'
+            ? 'unknown'
+            : result.error.kind === 'stale'
+              ? 'stale'
+              : result.error.kind === 'invalid'
+                ? 'invalid'
+                : 'unavailable';
+        if (phase !== 'unknown') this.closeSelection();
         this.update({
           ...active,
           busy: false,
           running: false,
           error: result.error,
-          pending: result.error.kind === 'uncertain' ? frozen : null,
-          phase:
-            result.error.kind === 'uncertain' ? 'unknown' : result.error.kind === 'stale' ? 'stale' : 'unavailable',
+          pending: phase === 'unknown' ? frozen : null,
+          selection: phase === 'unknown' ? active.selection : null,
+          phase,
         });
         return;
       }
@@ -264,14 +366,29 @@ export class HostedReleasePreparationVisit {
       const readiness = releaseReadiness(progress);
       const phase = terminal
         ? (progress.stage.state as 'expired' | 'cancelled' | 'failed')
-        : readiness === 'advance'
-          ? 'paused'
-          : readiness;
+        : progress.stage.mode === 'selection' && progress.stage.state === 'collecting'
+          ? 'selecting'
+          : readiness === 'advance'
+            ? 'paused'
+            : readiness;
       if (phase !== 'paused') this.running = false;
-      this.update({ ...active, progress, pending: null, busy: false, running: this.running, phase, error: null });
+      if (phase !== 'selecting') this.closeSelection();
+      this.update({
+        ...active,
+        progress,
+        mode: progress.stage.mode,
+        pending: null,
+        selection: phase === 'selecting' ? active.selection : null,
+        busy: false,
+        running: this.running,
+        phase,
+        error: null,
+      });
+      if (frozen.kind === 'append') this.selectionWindow?.acknowledged();
     } finally {
       if (this.request === request) this.request = null;
     }
+    await this.openSelection();
   }
 
   /** Restart obtains fresh owner admission first; an unresolved command must be replayed before discarding it. */
@@ -280,13 +397,14 @@ export class HostedReleasePreparationVisit {
     const state = this.state;
     const request = new AbortController();
     this.request = request;
-    this.update({ ...state, busy: true, error: null });
+    this.closeSelection();
+    this.update({ ...state, selection: null, busy: true, error: null });
     try {
       const result = await this.options.native.readOwn(
-        this.options.owner.viewer.accountId,
-        this.options.owner.item.catalogueId,
+        state.owner.viewer.accountId,
+        state.owner.item.catalogueId,
         request.signal,
-        this.options.owner.viewer,
+        state.owner.viewer,
       );
       if (!this.current(request)) return;
       if (!result.ok) {
@@ -294,7 +412,7 @@ export class HostedReleasePreparationVisit {
           this.retire('denied');
           return;
         }
-        this.update({ ...state, busy: false, error: result.error });
+        this.update({ ...state, selection: null, busy: false, error: result.error });
         return;
       }
       this.options.locate?.(null);
@@ -303,9 +421,11 @@ export class HostedReleasePreparationVisit {
         owner: result.value,
         phase: 'review',
         stageId: null,
+        mode: null,
         review: null,
         progress: null,
         pending: null,
+        selection: null,
         busy: false,
         error: null,
       });

@@ -2,6 +2,8 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { localizeHref, type Locale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { releaseSelectionCopy } from './hosted-release-selection-copy';
+import { HostedReleaseSelectionView } from './hosted-release-selection-view';
 import { releaseCopy } from './hosted-release-preparation-copy';
 import type { HostedReleasePreparationVisit } from './hosted-release-preparation';
 
@@ -18,17 +20,20 @@ export function HostedReleasePreparationView({
   const state = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
   const feedback = useRef<HTMLHeadingElement>(null);
   const copy = releaseCopy[locale];
+  const selectionCopy = releaseSelectionCopy[locale];
   const phase = state.kind === 'active' ? state.phase : 'ended';
   useEffect(() => {
     if (visit.isCurrent() && state.kind === 'active' && !state.busy && !state.running) feedback.current?.focus();
   }, [visit, phase]);
   if (state.kind === 'ended') return <p role="alert">{state.reason === 'denied' ? copy.denied : copy.ended}</p>;
   const { progress, review, owner } = state;
-  const failure = ['unknown', 'stale', 'unavailable', 'expired', 'cancelled', 'failed'].includes(phase);
+  const failure = ['unknown', 'invalid', 'stale', 'unavailable', 'expired', 'cancelled', 'failed'].includes(phase);
   const message = {
     review: copy.review,
     reviewed: copy.reviewed,
     paused: copy.paused,
+    selecting: selectionCopy.selecting,
+    invalid: selectionCopy.invalid,
     unknown: copy.unknown,
     ready: copy.ready,
     prepared: copy.prepared,
@@ -36,7 +41,14 @@ export function HostedReleasePreparationView({
     unavailable: copy.unavailable,
     expired: copy.expired,
     cancelled: copy.cancelled,
-    failed: copy.failed,
+    failed:
+      progress?.stage.failure === 'missing_ancestor'
+        ? selectionCopy.missing
+        : progress?.stage.failure === 'stale_source'
+          ? selectionCopy.stale
+          : state.mode === 'selection'
+            ? selectionCopy.incomplete
+            : copy.failed,
   }[state.phase];
   const version =
     review ??
@@ -100,6 +112,7 @@ export function HostedReleasePreparationView({
           ) : null}
         </section>
       ) : null}
+      <HostedReleaseSelectionView visit={visit} state={state} locale={locale} />
       <section className="space-y-4" aria-busy={state.busy}>
         <h2
           ref={feedback}
@@ -128,6 +141,11 @@ export function HostedReleasePreparationView({
           {state.phase === 'reviewed' ? (
             <Button className={control} disabled={state.busy} onClick={() => void visit.start()}>
               {copy.start}
+            </Button>
+          ) : null}
+          {state.phase === 'reviewed' ? (
+            <Button className={control} disabled={state.busy} onClick={() => void visit.start('selection')}>
+              {selectionCopy.start}
             </Button>
           ) : null}
           {state.running ? (

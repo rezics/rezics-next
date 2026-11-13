@@ -3,6 +3,7 @@ import type { Locale } from '../paraglide/runtime.js';
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
 import type { HostedOwnedBook } from './hosted-contract';
 import { HostedReleasePreparationVisit } from './hosted-release-preparation';
+import { hostedOutlineWindowNative } from './hosted-actions';
 import { hostedReleaseTransport } from './hosted-release-preparation-actions';
 import { releaseCopy } from './hosted-release-preparation-copy';
 import { HostedReleasePreparationView } from './hosted-release-preparation-view';
@@ -28,6 +29,7 @@ export function HostedReleasePreparationEntry(props: Props) {
       csrfToken,
       locale,
       native: hostedReleaseTransport,
+      selectionNative: hostedOutlineWindowNative,
       stageId,
       locate: (next) => {
         const url = new URL(window.location.href);
