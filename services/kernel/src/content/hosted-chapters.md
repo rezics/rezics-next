@@ -351,6 +351,11 @@ Both commands require an Idempotency-Key, return the original receipt (`disclosu
 Post must equal `target.postId`. Native source, container, erasure, public-source and mismatch errors stay as they
 are. Direct Post visibility, other Books and unselected revisions stay unchanged.
 
+Decision: persist the existing Access client identity rule (1–1024 printable non-space ASCII bytes) with separate
+`octet_length` bounds and a `"C"`-collated printable-character exclusion. PostgreSQL limits POSIX repetition bounds
+to 255 ([documentation](https://www.postgresql.org/docs/current/functions-matching.html#POSIX-MATCHING)); rollback
+therefore refuses to restore the unusable `{1,1024}` expression or weaken the check.
+
 ## Prepared Book publication
 
 Decision: the mounted author API uses expected draft/publication IDs only as stale-intent preconditions, gives each source-pinned stage a 24-hour lifetime from native command time, and returns only retained progress and candidate counts; preparation never selects the publication pointer.

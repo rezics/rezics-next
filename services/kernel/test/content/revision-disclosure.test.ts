@@ -80,6 +80,50 @@ async function opening(visibility: 'draft' | 'published' | 'protected') {
   };
 }
 
+test('revision disclosure preserves the Access client identity rule in PostgreSQL', async () => {
+  const constraint = await f.pool.query<{ definition: string; required: boolean }>(
+    `SELECT pg_get_constraintdef(c.oid) AS definition, a.attnotnull AS required
+     FROM pg_constraint c
+     JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attname='actor_client_id'
+     WHERE c.conrelid='content.revision_disclosure'::regclass
+       AND c.conname='revision_disclosure_actor_client_id_check'`,
+  );
+  expect(constraint.rows).toHaveLength(1);
+  expect(constraint.rows[0]).toMatchObject({ required: true });
+  expect(constraint.rows[0]?.definition).toContain('octet_length(actor_client_id)');
+  expect(constraint.rows[0]?.definition).toContain('COLLATE "C"');
+  expect(constraint.rows[0]?.definition).toContain('[^!-~]');
+
+  const values = [
+    '',
+    'a',
+    'a'.repeat(255),
+    'a'.repeat(256),
+    'a'.repeat(1024),
+    'a'.repeat(1025),
+    'a b',
+    'a\tb',
+    'é',
+  ];
+  const result = await f.pool.query<{ accepted: boolean }>(
+    `SELECT octet_length(value) BETWEEN 1 AND 1024 AND value COLLATE "C" !~ '[^!-~]' AS accepted
+     FROM unnest($1::text[]) WITH ORDINALITY AS candidates(value, ordinal)
+     ORDER BY ordinal`,
+    [values],
+  );
+  expect(result.rows.map(({ accepted }) => accepted)).toEqual([
+    false,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+  ]);
+});
+
 test('private draft opening issues, reuses and revokes exact consent without granting read', async () => {
   const deps = dependencies();
   const catalogue = await f.thread('published');
