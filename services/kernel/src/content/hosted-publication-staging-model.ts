@@ -5,6 +5,7 @@ export const HOSTED_PUBLICATION_STAGING_BATCH_LIMIT = 512;
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 export type HostedPublicationStagingMode = 'whole' | 'selection';
+export type HostedPublicationStagingSourceKind = 'snapshot' | 'prefix' | 'ordered';
 export type HostedPublicationStagingState =
   | 'collecting'
   | 'building'
@@ -72,7 +73,7 @@ export type HostedPublicationStagedCandidate = Readonly<{
   occurrenceId: string;
   parentId: string | null;
   position: string;
-  sourceSegment: 'snapshot' | 'base' | 'append';
+  sourceSegment: 'snapshot' | 'base' | 'append' | 'ordered';
   kind: 'part' | 'chapter';
   title: string | null;
   target: HostedChapterTarget | null;

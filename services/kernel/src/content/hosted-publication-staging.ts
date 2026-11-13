@@ -9,6 +9,12 @@ import {
 } from './hosted-chapters-attachments.ts';
 import type { HostedChapterTarget, HostedDependencies, OrderedHostedPlacement } from './hosted-chapters-model.ts';
 import {
+  pageHostedPublicationOrderedSource,
+  readHostedPublicationOrderedSourcePoints,
+  resolveHostedPublicationOrderedSource,
+  type HostedPublicationOrderedSource,
+} from './hosted-publication-ordered-source.ts';
+import {
   HOSTED_PUBLICATION_STAGING_BATCH_LIMIT,
   HOSTED_PUBLICATION_STAGING_STEP_LIMIT,
   HostedPublicationStagingConflictError,
@@ -25,6 +31,7 @@ import {
   type HostedPublicationStagingPage,
   type HostedPublicationStagingSeal,
   type HostedPublicationStagingState,
+  type HostedPublicationStagingSourceKind,
   type HostedPublicationStagingStepResult,
   type HostedPublicationTargetObservation,
 } from './hosted-publication-staging-model.ts';
@@ -44,11 +51,14 @@ type StageRow = QueryResultRow & {
   expected_publication_id: string | null;
   mode: HostedPublicationStagingMode;
   source_has_descriptor: boolean;
+  source_kind: HostedPublicationStagingSourceKind;
   source_descriptor_revision_id: string | null;
   source_base_revision_id: string;
   source_base_placement_count: string | null;
   source_base_root_count: string | null;
   source_high_water: string;
+  source_ordered_generation_id: string | null;
+  source_ordered_sequence: string | null;
   expires_at: string;
   status: HostedPublicationStagingState;
   input_version: string;
@@ -73,7 +83,7 @@ type SourceRow = QueryResultRow & {
   occurrence_id: string;
   parent_id: string | null;
   position: string;
-  source_segment: 'snapshot' | 'base' | 'append';
+  source_segment: 'snapshot' | 'base' | 'append' | 'ordered';
   kind: 'part' | 'chapter';
   title: string | null;
   thread_id: string | null;
@@ -108,7 +118,7 @@ type StepCandidate = Readonly<{
   occurrenceId: string;
   parentId: string | null;
   position: string;
-  sourceSegment: 'snapshot' | 'base' | 'append';
+  sourceSegment: 'snapshot' | 'base' | 'append' | 'ordered';
   kind: 'part' | 'chapter';
   title: string | null;
   target: HostedChapterTarget | null;
@@ -125,8 +135,9 @@ type OutputTargetCursor = Readonly<{
 const STAGE_SELECT = `
     SELECT route,catalogue_id,stage_id,initiator_account_id,owner_epoch::text AS owner_epoch,
     source_revision_id,expected_head_revision_id,expected_publication_id,mode,
-    source_has_descriptor,source_descriptor_revision_id,source_base_revision_id,source_base_placement_count::text,
-    source_base_root_count::text,source_high_water::text,status,input_version::text,
+    source_kind,source_has_descriptor,source_descriptor_revision_id,source_base_revision_id,source_base_placement_count::text,
+    source_base_root_count::text,source_high_water::text,source_ordered_generation_id,
+    source_ordered_sequence::text,status,input_version::text,
     input_count::text,input_frozen_version::text,input_frontier::text,
     settled_input_count::text,candidate_count::text,duplicate_input_count::text,
     unknown_input_count::text,target_observation_count::text,source_frontier::text,
@@ -241,7 +252,40 @@ async function stageSnapshot(
   return row;
 }
 
-/** Pin one current structure and (when present) its immutable single-prefix descriptor.
+function orderedSource(stage: StageRow): HostedPublicationOrderedSource {
+  if (
+    stage.source_kind !== 'ordered' ||
+    stage.source_ordered_generation_id === null ||
+    stage.source_ordered_sequence === null
+  )
+    throw stagingConflict('The exact ordered source descriptor is unavailable');
+  return {
+    route: stage.route,
+    catalogueId: stage.catalogue_id,
+    revisionId: stage.source_revision_id,
+    generationId: stage.source_ordered_generation_id,
+    sequence: BigInt(stage.source_ordered_sequence),
+  };
+}
+
+function orderedSourceRow(placement: OrderedHostedPlacement): SourceRow {
+  const target = placement.kind === 'chapter' ? placement.target : null;
+  return {
+    source_order: String(placement.ordinal),
+    occurrence_id: placement.occurrenceId,
+    parent_id: placement.parentId,
+    position: String(placement.position),
+    source_segment: 'ordered',
+    kind: placement.kind,
+    title: placement.title,
+    thread_id: target?.threadId ?? null,
+    post_id: target?.postId ?? null,
+    target_revision_id: target?.revisionId ?? null,
+    sha256: target?.sha256 ?? null,
+  };
+}
+
+/** Pin one current structure and its exact ordered, prefix or legacy source descriptor.
  * Call only after current native catalogue author/container admission. */
 export async function beginHostedPublicationStaging(
   client: AccessClient,
@@ -294,17 +338,20 @@ export async function beginHostedPublicationStaging(
   if (!pinned || pinned.revision_kind !== 'structure')
     throw stagingConflict('The expected draft or publication is stale');
   const hasDescriptor = pinned.descriptor_revision_id !== null;
+  const ordered = await resolveHostedPublicationOrderedSource(client, input.catalogueId, input.expectedHeadRevisionId);
+  if (ordered && hasDescriptor) throw stagingConflict('Pinned source has conflicting ordered and prefix descriptors');
+  const sourceKind: HostedPublicationStagingSourceKind = ordered ? 'ordered' : hasDescriptor ? 'prefix' : 'snapshot';
   const sourceBaseRevisionId = hasDescriptor ? pinned.base_revision_id! : input.expectedHeadRevisionId;
   const sourceHighWater = hasDescriptor ? pinned.high_water! : '-1';
   const initialStatus = input.mode === 'whole' ? 'building' : 'collecting';
   const inserted = await client.query(
     `INSERT INTO content.hosted_publication_staging
        (route,catalogue_id,stage_id,initiator_account_id,owner_epoch,source_revision_id,
-        expected_head_revision_id,expected_publication_id,mode,source_has_descriptor,
+        expected_head_revision_id,expected_publication_id,mode,source_kind,source_has_descriptor,
         source_descriptor_revision_id,source_base_revision_id,source_base_placement_count,source_base_root_count,source_high_water,
-        status,expires_at)
-     SELECT $1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz
-     WHERE $16::timestamptz>clock_timestamp()
+        source_ordered_generation_id,source_ordered_sequence,status,expires_at)
+     SELECT $1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::timestamptz
+     WHERE $19::timestamptz>clock_timestamp()
      ON CONFLICT (route,catalogue_id,stage_id) DO NOTHING
      RETURNING stage_id`,
     [
@@ -316,12 +363,15 @@ export async function beginHostedPublicationStaging(
       input.expectedHeadRevisionId,
       input.expectedPublicationId,
       input.mode,
+      sourceKind,
       hasDescriptor,
       hasDescriptor ? input.expectedHeadRevisionId : null,
       sourceBaseRevisionId,
       hasDescriptor ? pinned.base_placement_count : null,
       hasDescriptor ? pinned.base_root_count : null,
       sourceHighWater,
+      ordered?.generationId ?? null,
+      ordered?.sequence.toString() ?? null,
       initialStatus,
       expiry,
     ],
@@ -575,6 +625,10 @@ async function advanceWhole(
 async function readWholeSourcePage(client: AccessClient, stage: StageRow): Promise<SourcePage> {
   const after = BigInt(stage.source_frontier);
   const limit = HOSTED_PUBLICATION_STAGING_STEP_LIMIT;
+  if (stage.source_kind === 'ordered') {
+    const page = await pageHostedPublicationOrderedSource(client, orderedSource(stage), stage.source_frontier, limit);
+    return { rows: page.placements.map(orderedSourceRow), exhausted: page.exhausted };
+  }
   if (!stage.source_has_descriptor) {
     const rows = (
       await client.query<SourceRow>(
@@ -811,6 +865,10 @@ async function readExactSourceRows(
   occurrenceIds: readonly string[],
 ): Promise<SourceRow[]> {
   if (!occurrenceIds.length) return [];
+  if (stage.source_kind === 'ordered') {
+    const placements = await readHostedPublicationOrderedSourcePoints(client, orderedSource(stage), occurrenceIds);
+    return placements.flatMap((placement) => (placement === null ? [] : [orderedSourceRow(placement)]));
+  }
   const baseRevision = stage.source_has_descriptor ? stage.source_base_revision_id : stage.source_revision_id;
   const base = (
     await client.query<SourceRow>(
@@ -1126,7 +1184,7 @@ export async function readHostedPublicationStagingCandidates(
   const stage = await lockStage(client, locator);
   assertActorBinding(stage, actor);
   await requireSealedStage(client, stage);
-  const rows = (
+  let rows = (
     await client.query<SourceRow>(
       `SELECT c.source_order::text,c.occurrence_id,c.parent_id,c.position::text,c.source_segment,
          c.kind,
@@ -1148,6 +1206,32 @@ export async function readHostedPublicationStagingCandidates(
       [route, locator.catalogueId, locator.stageId, after.toString(), limit + 1],
     )
   ).rows;
+  if (stage.source_kind === 'ordered' && rows.length) {
+    const placements = await readHostedPublicationOrderedSourcePoints(
+      client,
+      orderedSource(stage),
+      rows.map((row) => row.occurrence_id),
+    );
+    rows = rows.map((row, index) => {
+      const placement = placements[index];
+      if (!placement) throw stagingConflict('Staged candidate is missing from its pinned ordered source');
+      const source = orderedSourceRow(placement);
+      if (
+        row.source_segment !== source.source_segment ||
+        row.source_order !== source.source_order ||
+        row.occurrence_id !== source.occurrence_id ||
+        row.parent_id !== source.parent_id ||
+        row.position !== source.position ||
+        row.kind !== source.kind ||
+        row.thread_id !== source.thread_id ||
+        row.post_id !== source.post_id ||
+        row.target_revision_id !== source.target_revision_id ||
+        row.sha256 !== source.sha256
+      )
+        throw stagingConflict('Staged candidate no longer matches its pinned ordered source');
+      return { ...row, title: placement.title };
+    });
+  }
   const more = rows.length > limit;
   const items = rows.slice(0, limit).map((row) => {
     const candidate = toCandidate(row);

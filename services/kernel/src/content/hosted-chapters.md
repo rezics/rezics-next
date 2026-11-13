@@ -361,6 +361,10 @@ Decision: private staging uses a source-ordered candidate generation, 20-row rep
 at most 512; exact target observations stay separate from current authority proof, source titles remain source-owned
 for terminal redaction, and this slice exposes no activation.
 
+Ordered staging pins the current immutable revision, generation and sequence, pages whole sources through bounded
+preorder reads, and resolves selected points and candidate titles from that same snapshot; legacy snapshot and prefix
+sources retain their existing readers.
+
 Decision: cleanup enters only cancelled, expired or failed unsealed stages under the exact owner epoch and stage lock;
 it uses one 100-row budget across indexed candidate, input and target keysets while retaining terminal progress,
 existing staging receipts and all source/lifecycle records.
