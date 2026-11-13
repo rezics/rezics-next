@@ -3,6 +3,7 @@ import {
   commitHostedVersionRevision,
   resolveHostedVersionRevision,
   HostedVersionRevisionPointerChangedError,
+  type HostedVersionGenerationKind,
   type HostedVersionRevisionSnapshot,
 } from '../../src/content/hosted-version-revision.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -36,13 +37,13 @@ async function createCatalogue(fixture: Fixture): Promise<string> {
   return result.revisionId as string;
 }
 
-async function createGeneration(
+async function createGeneration<Kind extends HostedVersionGenerationKind>(
   tx: any,
   catalogueId: string,
   generationId: string,
-  generationKind: 'draft' | 'candidate',
+  generationKind: Kind,
   sequence: bigint,
-): Promise<HostedVersionRevisionSnapshot> {
+): Promise<HostedVersionRevisionSnapshot<Kind>> {
   const route = routeOf(catalogueId)!;
   await tx.query(
     `INSERT INTO content.hosted_tree_generation(route,catalogue_id,generation_id,generation_kind,head_sequence)
@@ -58,11 +59,11 @@ async function createGeneration(
   return { route, catalogueId, generationId, generationKind, sequence };
 }
 
-async function advanceGeneration(
+async function advanceGeneration<Kind extends HostedVersionGenerationKind>(
   tx: any,
-  snapshot: HostedVersionRevisionSnapshot,
+  snapshot: HostedVersionRevisionSnapshot<Kind>,
   nextSequence: bigint,
-): Promise<HostedVersionRevisionSnapshot> {
+): Promise<HostedVersionRevisionSnapshot<Kind>> {
   await tx.query(
     `UPDATE content.hosted_tree_generation SET head_sequence=$4
      WHERE route=$1 AND catalogue_id=$2 AND generation_id=$3`,
@@ -77,10 +78,10 @@ async function advanceGeneration(
   return { ...snapshot, sequence: nextSequence };
 }
 
-function writeBase(
+function writeBase<Kind extends HostedVersionGenerationKind>(
   fixture: Fixture,
   revisionId: string,
-  snapshot: HostedVersionRevisionSnapshot,
+  snapshot: HostedVersionRevisionSnapshot<Kind>,
   expectedDraftRevisionId: string,
 ) {
   return {
