@@ -8,21 +8,21 @@ outcomes, not a claim of existing implementation. Existing module contracts rema
 ## Product decision
 
 People organize private work around shared subjects, reuse precisely identified knowledge, and deliberately publish
-selected work back into the public knowledge network. The public subject keeps its independent identity and value
-across authors, notebooks, communities and presentations. A private notebook is one consumer of that subject.
+selected work back into the public knowledge network. The public subject keeps independent identity across
+authors, notebooks, communities and presentations; a private notebook is one consumer.
 
-The first public release must complete the writer journey: from a Character subject, create an owned notebook with
-Inspiration, Character arc and Scene notes; nest and reorder documents; refer to public material; publish a selected
-analysis; keep other notes and subsequent drafts private. An anonymous reader discovers that analysis from the
-subject and can reuse an exact citation. The author sees public material and their own work in one coherent visit.
+Launch completes the writer journey: from a Character subject, create an owned notebook with Inspiration, Character
+arc and Scene notes; nest/reorder, reference public material and publish one analysis while other notes/drafts stay
+private. An anonymous reader discovers it from the subject and reuses an exact citation; its author sees public and
+own material in one visit.
 
 The mathematical learning journey guides the reusable model: a problem refers to particular theorem statements and
 definitions, with explanations of how they are used. References let a reader open prerequisites without copying an
 entire knowledge base. A link is an authored claim of use, not machine verification of a proof. Mathematical notation
 and specialist vocabulary have a later release gate; the structural journey must already work with ordinary text.
 
-Notion-like knowledge organization is a supported direction, not a promise of complete Notion feature parity at
-launch. New domains configure shared capabilities. Add generic behavior only for a concrete missing outcome.
+Notion-like organization is a direction, not launch parity. New domains configure shared capabilities; add behavior
+only for a concrete missing outcome.
 
 ## Objects and authority
 
@@ -73,8 +73,7 @@ A retry repeats its attempted cursor; a stale or changed structure requires expl
 Editor return retains a single in-memory frontier for at most 15 minutes, then re-admits that exact
 notebook/parent/page before displaying rows; expired returns require explicit restart. Session, CSRF, exposure,
 locale, address and source replacement retire private rows and callbacks. These readings never enter SSR,
-shared query caches, persistent storage or URL payloads. The existing seeded integration lane owns native,
-browser and visual acceptance; source attempts add focused wire and mounted regressions.
+shared query caches, persistent storage or URL payloads. Native/browser/visual acceptance uses the seeded integration lane.
 
 Decision: Private document history stays inline in the retained editor. One explicit history request reads one
 replacing native page with `limit=20`, preserving order and opaque continuation; retry repeats the attempted cursor
@@ -90,8 +89,7 @@ original intent, key and sealed credential. Session, CSRF, exposure, locale, doc
 history, selections, callbacks and late work. No history/body enters public SSR, shared caches, URLs or persistence.
 Consumer work is O(P + B + R), for P ≤ 20 metadata rows, two bodies of at most 2 MiB each and at most 64 supplied
 references per body; block comparison uses a linear identity map, not edit-distance alignment. Content owns native
-query and authorization cost. Focused wire/mounted regressions and five illustrative History stories cover source
-behavior; the integrated verifier owns native two-editor/history, accessibility, visual review and promotion.
+query and authorization cost. Five History stories illustrate these states; native two-editor/history, accessibility and visual proof remain required.
 
 Every saved document revision fixes its validated canonical document bytes, SHA-256 digest, title, language,
 references, authorship and licence. A publication is an immutable record selecting one exact document revision and
@@ -126,11 +124,6 @@ installation is unavailable; changed, expired or concurrently consumed progress 
 15 minutes from initial capture, at most 256 active preparations per Subject; expiry cleanup is bounded to 100 rows
 per new retained chain. The index/preparation retain no body, account locator, private ancestry or permission result.
 
-The fewest focused tests pin fixed-cut publication ordering, sparse progress and exhaustion, stale selection
-omission, final-disclosure withdrawal, unavailable evidence and confidential viewer/query/expiry continuation.
-Native receiving/replay, Subject-access closure, paused-index withdrawal, exact navigation, SQL growth and mounted
-client/browser proof are deferred to the dev verifier. The direct native first-loop assertions remain unchanged.
-
 At account-erasure time, private notebook structure, attachments, heads, unselected revisions and owner links are
 erased. An eligible current publication retains only its selected immutable revision and permitted public fields as
 a de-identified contribution, without its notebook ancestor chain or account identity. The existing publication
@@ -138,17 +131,13 @@ record remains the source; no second publication store or writer is introduced. 
 the erasure fence has no retained public selection. Moderation and later source withdrawal continue to govern the
 retained contribution.
 
-Decision: the native first loop uses account-home notebooks, a 32-placement ancestor bound and exact current Content
-publication pointers for direct anonymous reads; Subject discovery uses Search's bounded
-candidate-preparation API, and erasure retains only eligible selected revisions in deidentified form.
-
 Decision: Knowledge create, revise, select and withdrawal commands commit registered domain events with native
 receipts; event data carries resource and revision identities only, and withdrawal without a current selection is a
 receipted no-effect command.
 
 Decision: Knowledge route metadata comes from the public Content adapter; imported schemas are memoized when routes mount.
 
-Decision: Web’s first public consumer is the localized `/knowledge/documents/$id` reader, with optional `revisionId`, over `knowledge_document.public_read`. Live and exact addresses stay distinct; null `authorId` is deidentified attribution; the primary Subject link uses the supplied id without a label lookup. The fewest focused Web tests pin live/exact rendering, native outcome states, malformed HTTP, one-read/no-store transport, retry operands, replacement fencing and copy feedback; directory, notebook, visual and browser proof stay with later Goals.
+Decision: Web’s first public consumer is the localized `/knowledge/documents/$id` reader, with optional `revisionId`, over `knowledge_document.public_read`. Live and exact addresses stay distinct; null `authorId` is deidentified attribution; the primary Subject link uses the supplied id without a label lookup. Acceptance includes live/exact states, malformed HTTP, one-read/no-store, retry, replacement and copy feedback.
 
 Decision: Web creates a private notebook only after the writer reviews and submits its title, then holds the acknowledged notebook receipt separately while creating a root document. Private bodies, drafts, command intents and receipts live only in the current page visit; exact private heads are read directly by the prepared viewer and revision writes compare against that observed head.
 
@@ -159,8 +148,7 @@ observation retires confirmation; conflict requires reread and fresh review whil
 commands permit explicit exact replay only, and a matching read never acknowledges them. Native receipts, private
 current-head readback and independently admitted public reading remain separate. Acknowledged live and exact links
 retain the selected revision through later private saves and retire on withdrawal or changed publication identity.
-The fewest wire and mounted tests cover publish A, save B privately, update B, withdrawal, conflict, immutable replay
-and visit retirement; native, browser and visual proof remain with integration's seeded lane.
+Acceptance retains publish A, save B privately, update B, withdrawal, conflict, immutable replay and visit retirement.
 
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its
@@ -187,8 +175,7 @@ existing notebook from the private creation visit: explicit inventory selection 
 Open/More/Retry reads one replacing outline page at root or a chosen parent, and at most 32 visited breadcrumbs are
 kept without reconstructing ancestry. Creation sends the observed structure revision and an explicit parent placement.
 Move and reorder use the existing Content commands through the owned notebook organization consumer below.
-The shared typed authoring/navigation readers and their React components use distinct file basenames so each
-has a unique JavaScript output during landing compilation.
+Typed readers and React components use distinct basenames for unique compiled JavaScript output.
 
 The subject API may compose both areas in one bounded viewer-aware response. This design requires no separate URL,
 service or HTTP request for private content. The response identifies the audience and independent continuation of
@@ -222,8 +209,7 @@ new generation; old citations remain unavailable until their revisions are expli
 clears selections by the same generation mechanism. This state is separate from private working revision numbers.
 
 Two authors may publish different analyses of the same character. They coexist with provenance; neither overwrites
-the catalogue's selected facts. A public contribution may separately be proposed as a Semantic statement through
-the ordinary editorial workflow. Publication does not automatically adopt it as catalogue truth.
+the catalogue's selected facts. Public contributions may enter the ordinary Semantic editorial workflow; publication adopts no catalogue truth.
 
 ## Reference and mathematical meaning
 
@@ -283,8 +269,7 @@ component fallback text. Reference review distinguishes Subject, live document a
 selected inspection uses one native public read or an explicitly addressed authorized private read, with no fallback
 between them. Public rendering uses only the native source disclosure manifest. Consumer cost is O(B + R), with
 manifest64/selected1: at most 64 source entries and one retained inspected target body, no background target reads
-or recursive expansion. Focused source tests and three illustrative Reference stories accompany this behavior;
-native save/reopen/publish/exact-read and browser/visual acceptance run after landing in the dev verifier.
+or recursive expansion. Three Reference stories illustrate this behavior; native save/reopen/publish/exact-read and browser/visual proof remain required.
 
 ## Copy and portable export
 
@@ -336,8 +321,7 @@ each explicit request replaces at most 20 rows in native order. A structure conf
 refresh, review and confirmation. An unknown result keeps the exact source, destination, key and prepared
 credential for explicit replay. A separate exact copied-revision readback precedes editor resume. Source loss,
 session/CSRF/exposure replacement, locale/address change and departure retire callbacks, selections and bytes.
-The fewest transfer wire and mounted tests pin these boundaries; illustrative Transfer stories cover the six named
-states. Native authorization, return, browser, visual/accessibility and promotion proof remain verifier work.
+Illustrative Transfer stories cover the six named states.
 
 ## Access and lifecycle
 
@@ -403,28 +387,112 @@ erasure acceptance must prove this transition before the capability opens.
 ## Structure, storage and concurrency
 
 Reuse the [Document contract](../packages/document/README.md) and Content's canonical byte/digest/licence handling.
-The first release saves bounded whole-document snapshots, not every keystroke as a new immutable revision. The
-editor keeps local changes and debounces autosave; explicit Save and navigation expose acknowledged state. A stale
-revision returns the ordinary conflict result with the draft preserved and a readable comparison. Never claim that
-CAS is simultaneous collaborative editing. A later collaboration adapter may use a mature CRDT after proving
-authority, compaction, reconnect, schema migration and erasure; published snapshots remain exact artifacts.
+Save bounded whole-document snapshots with debounced autosave, local draft retention and acknowledged Save/navigation.
+Stale revisions preserve drafts for comparison. CAS is not coediting; a later CRDT adapter needs authority, compaction,
+reconnect, schema migration and erasure proof. Published snapshots stay exact.
 
-All primary tree mutations serialize through one notebook structure revision/lock inside its native partition.
-Check ancestor identities before inserting or moving a placement; reject self-parenting and cycles. Maintain exact
-subtree height with an indexed maximum over direct children's heights. New depth is obtained from the bounded
-ancestor chain, not stored on every descendant. On reparenting, check destination depth plus subtree height, then
-update heights on the two affected ancestor paths. This avoids relabelling every descendant or enumerating every
-sibling. The lock covers both the check and mutation, so concurrent opposite moves cannot both commit.
+### Shared versioned outline primitive
 
-Use mature sibling ordering. Do not put the full sibling list in the parent's JSON. Order-key exhaustion requires a
-bounded resumable rebalance with a new order generation and atomic activation; never renumber a million siblings in
-one command. A cursor binds the notebook/parent, audience, order generation and query. A cross-notebook move is a
-later explicit copy/transfer workflow, not an atomic write across partitions.
+Decision: Books and Knowledge share a **versioned ordered forest** using Knowledge's path-copy AVL sibling algorithm
+behind owner-specific storage/value adapters. Share stable placement, parent/order operations and exact structural
+reads; keep tables, product types, permissions, publication and lifecycle with each owner. Book owns
+[prepared publication](../services/kernel/src/content/hosted-chapters.md#prepared-book-publication).
+This is an implementation contract; installed behavior and limits remain unchanged.
 
-Reference cycles are allowed; containment cycles are not. A semantic DAG flag, union of Context overlays or quotient
-by canonical identity does not prove containment validity. Formula dependency DAGs belong to the later computation
-capability and have their own cycle and evaluation contract. One logical graph does not imply one untyped edge table
-or a common ownership/transaction boundary for every kind of edge.
+A head identifies an immutable revision; each selected parent root names its order generation. Placement facts contain membership
+(or removal), parent, opaque persisted order key, owner value reference and exact subtree height/size. Stable
+identity bindings survive removal; rebinding requires a new placement. Revision-selected parent roots order siblings.
+Keep current adjacency as an accelerator. Commit facts, roots, head CAS, receipt and identity-only event in one
+owner transaction. Historical lookups seek indexed facts, never replay history. Versions do not freeze permission.
+
+The shared port is `point(version,id)`, `children(version,parent,after,limit,direction)`,
+`insert(expectedHead,freshId,parent,before)`, `move(expectedHead,id,parent,before)` and `remove(expectedHead,id)`.
+`before` is a stable sibling ID; null means end. Resolve source/destination/anchor against the same expected head;
+exclude source when finding neighbors. Reject self-anchor, wrong-parent, missing and foreign anchors; never convert
+a stale rank or deleted anchor into end. Same-position movement is a no-effect. Cross-forest transfer is separate.
+
+Choose persisted opaque comparable keys, not dense ranks as mutation addresses. Book dense position/preorder are
+revision-relative projections; Knowledge decimal positions stay opaque. Augment sibling nodes with exact structural
+subtree counts for rank/select, and Book chapter counts for navigation past empty parts. Counts ignore permission
+and remain internal. Never persist a new ordinal/depth on every descendant.
+
+Keep Knowledge's bounded local repair (64 neighbors per side, at most 129 changed placements including source).
+Numeric(38,0) and its `step < 1` rejection do not guarantee completion: 130 consecutive integer keys around a middle
+gap can exhaust the selected window. Then retain the intent, rebuild spaced keys into a new generation in bounded
+keyset steps, seal complete coverage and activate under original head CAS. Old generation stays authoritative;
+racing writes make activation stale. Retain old roots/keys for pinned reads. This pays O(sibling count) total
+maintenance, never a synchronous full-list rewrite. A rank-addressed paged sequence needs a different index plus
+identity-to-location lookup; the delivered key-addressed AVL cannot simply accept ranks instead.
+
+Serialize every structural writer, lifecycle fence and generation activation on one forest head. Under its lock
+check complete source/destination ancestors, eligibility and owner parent-kind rules; reject self-parent/cycles and
+check destination depth plus exact moved height. Update height, size and chapter summaries only on the two ancestor
+paths, using indexed child maxima and sibling aggregates. Book depth remains 16; Knowledge permits 31 ancestors/
+32 placements. References may cycle. Opposite moves against one head have at most one winner. Current admission
+precedes receipt replay; authorized replay precedes head CAS and returns its original immutable result.
+
+### Historical reads and implementation boundary
+
+Historical point needs version-selected placement facts and a complete member-ancestor chain; a removed root hides
+its descendants in that version. Current adjacency/searching all parents is insufficient. Children select that
+parent's root at the version and seek immutable keys.
+Cursors bind owner/forest, version, generation, parent/traversal mode, direction, raw frontier, viewer/session and
+partition epoch with owner expiry. Concealed candidates advance the frontier. Keep Knowledge current-outline
+`409 stale_cursor`; its historical outline freezes membership/order but uses currently eligible working titles.
+Book preserves selected titles/target revision/digest and current target disclosure, never current-head bytes.
+
+Preorder walks revision-selected children with a depth-bounded stack, stops at the raw page bound and retains its
+frontier. Book previous/next uses historical point/ancestor lookup and chapter summaries to seek the nearest chapter
+in either direction without scanning empty parts; parts remain origins and unavailable chapters consume slots.
+Rank/select derives legacy dense positions/ordinals. Keep Book page 20/no refill and Knowledge's own scan/page bounds.
+Metadata loads zero bodies; exact opening remains each owner's byte/digest reader.
+
+[`knowledge-order.ts`](../services/kernel/src/content/knowledge-order.ts) has immutable insert/remove/forward seek,
+but embeds notebook/document values and SQL. Extract comparison, rotations, path-copy and seek behind node read/write
+and value ports; retain Knowledge's storage adapter. Add reverse seek and summary recomputation there, without copying
+its schema/product types. [`knowledge-commands.ts`](../services/kernel/src/content/knowledge-commands.ts) already has
+head locking, anchor moves, exact heights, local repair and parent-root predecessor rows.
+[`knowledge-reads.ts`](../services/kernel/src/content/knowledge-reads.ts) proves historical children, not historical
+placement-ID or Book preorder/chapter indexing. Those are required adapter/index additions before arbitrary Book
+moves are exposed. Knowledge still publishes one independently selected document.
+
+### Cost, storage choice and retention
+
+Let H be owner depth, S maximum sibling width, V retained history, P raw page size and K changed keys (normally 1,
+at most 129 for local repair). With revision-predecessor point/root indexes, move work is
+O(H log V + (H+K) log S) reads and O((H+K) log S) new AVL nodes plus O(H+K) fact/root/change writes; height maxima
+add O(H log S). A fact seek is O(log V); admitted point adds H ancestor seeks. Children index work is
+O(log V+log S+P), plus parent membership/disclosure; stack preorder O((P+H)(log V+log S)); chapter navigation
+O((P+1)H(log V+log S)). Dense ranks add aggregate/ancestor seeks. These count node I/O, not SQL round trips (rotations
+reread children); native admission, receipt, final disclosure, bytes and physical B-tree descent remain charged.
+
+A million-descendant move has the leaf move's structural bound at equal H/S/K: no descendant rows change. A hot gap
+pays K path copies per repair. Generation rebuilding pays O(S) facts and O(S log S) nodes with delivered insertion,
+in bounded steps. T ordinary revisions retain O(T(H+K) log S) nodes plus initial N and retained rebuilds, instead of
+N copied every revision. Measure actual buffers, WAL, round trips, contention and cleanup before throughput claims.
+
+The independent [Knowledge model](research/knowledge-workspaces-model-astra.md#physical-model-and-operation-costs)
+supports independent identities, adjacency, serialized moves and bounded ordering. The
+[scalability audit](research/universal-scalability-audit.md) identifies whole-tree Book replacement; its
+[follow-up](research/universal-scalability-follow-up.md#adopted-boundaries) separates coverage from paging. Neither
+compares **B-tree predecessor histories per parent/placement** with **persistent per-head ID-to-root/fact maps**.
+Use the former as the first adapter design because it reuses delivered machinery; defer irreversible shared storage
+migration until a native comparison. The smallest distinguishing check holds sibling width fixed while growing
+history, then history fixed while growing width: compare exact point, historical children and a depth-bound move
+on both mechanisms, including one hot gap and a large-subtree move. Record EXPLAIN buffers, node reads, writes/WAL,
+retained bytes and head-lock time. A persistent map must justify extra path copies/reclamation by removing history
+seek cost. Port extraction, owner commands and Book preparation can start before that result.
+
+Structural removal tombstones membership/detaches one root; it neither erases targets nor removes old exact membership.
+Current lifecycle is separate: Book draft removal/withdrawal does not invalidate historical releases; Knowledge trash
+fences current ancestry and restore never republishes. Erasure/moderation still govern old reads under owner policy.
+Reclamation must account for heads, retained exact revisions/receipts, releases, preparations/migrations, generations,
+unexpired cursors and legal holds. Register/release holds transactionally; a new head proves no old shared root dead.
+Use bounded durable mark/sweep with a collection fence against newly held roots; include abandoned and intermediate
+rotation nodes. Retire reader holds before sweeping. Nodes carry opaque value references, so owners can redact private
+payloads independently; retain only permitted public selections. Book's
+[sealed-prefix lifecycle](../services/kernel/src/content/hosted-append-lifecycle.md) continues to protect shared
+bases/prefixes; Knowledge's [lifecycle](#access-and-lifecycle) owns its trash/restore/erasure disposition.
 
 ### Owned notebook organization consumer
 
@@ -468,10 +536,9 @@ the existing Web transport. **Bound** one twenty-row page, one opaque cursor and
 path; no bodies, totals or private notebook paths. **Growth** O(page) retained public rows, no prefetch, refill,
 per-row hydration or private inventory. Search owns native physical proof; these bounds do not claim it.
 
-The fewest focused default-mount/wire tests pin native order, exact links, return, one-request bounds, sparse and
-preparing continuation, identical retry, restart and late-response retirement. Illustrative Discovery stories cover
-populated, preparing, sparse, empty and unavailable. Native, browser, visual and promoted-source acceptance remain
-separate.
+Discovery wire/mounted acceptance retains native order, exact links/return, one-request bounds, sparse/preparing
+continuation, identical retry/restart and late-result retirement. Stories: populated, preparing, sparse, empty and
+unavailable. Native/browser/visual proof remains separate.
 
 ## Search, discovery and public value
 
@@ -506,9 +573,8 @@ not silently opened by releasing these direct document and subject-attachment ca
 
 ## Launch operation bounds
 
-These are initial design limits, owned here until native module contracts adopt the exact bound in implementation.
-They are acceptance inputs, not measured runtime performance. Performance may propose a justified revision in this
-owner document before dependent work; a lower arbitrary cap must not silently remove an accepted scenario.
+These design limits remain here until native owners adopt them. They require measurement; Performance may propose
+revisions here, but an arbitrary lower cap must not remove accepted scenarios.
 
 | Dimension                         | Launch bound                                                                                                                          |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -522,43 +588,30 @@ owner document before dependent work; a lower arbitrary cap must not silently re
 | Structure mutation                | One source/destination placement pair; at most two depth-32 ancestor paths                                                            |
 | Cleanup/preparation               | At most 100 local rows or 128 publication candidates per retained step, respectively                                                  |
 
-Let N be indexed population, B the selected body bytes, P a page limit, H the depth cap, R selected references and
-W a retained-step limit. Page reads seek a full route/owner/parent or subject key and cost O(log N + P) for the local
-index, plus the explicitly bounded native checks. Saving/validating a whole snapshot costs O(B + R), so the 2 MiB cap
-does not make large-document writes constant-time. Structure mutations use O(H) indexed ancestor/height operations,
-O(H log N) index work, and no subtree scan. A retained job may have O(total input) total work, with O(W) rows per step.
-Cross-home target reads require at most R full-key probes, grouped per database as architecture requires; their
-latency is not equivalent to one local join. Count bytes, validation, media claims, Access, history, events and
-cleanup as well as returned rows.
+Local pages seek full route/owner/parent or Subject keys: O(log N+P) plus native checks. Saves validate O(B+R)
+body/reference work; retained steps bound rows by W, not total job size. The shared [outline cost](#cost-storage-choice-and-retention)
+includes versioned indexes, summaries and repair; no subtree scan is permitted. Cross-home references use at most
+R full-key probes grouped per database, not one imaginary local join. Charge bytes, validation, media claims, Access,
+history, events and cleanup.
 
-Lifecycle checks contribute up to H ancestor points for each distinct document. A document read adds O(H); a
-50-document list may add 50H; the 128-candidate public listing may add 128H, or 4,096 ancestor points before
-deduplication. Resolving R document targets may add RH. These are ceilings to measure, not a low-latency guarantee.
-Do not load their bodies during metadata listing. If this cost misses the measured latency target, adopt an
-owner-maintained lifecycle access path with a proved invalidation bound or reduce foreground work with retained
-preparation. A cache of ancestor permissions or a stale subtree flag is not equivalent.
-
-Required access paths include notebook primary children `(route, notebook, parent, order, placement)`, height maximum
-`(route, notebook, parent, height DESC, placement)`, documents/revisions by full routed key, owner attachments
-`(owner route, owner, original subject, notebook, document)`, normalized-title prefix and recent-document directories,
-source-owned revision references, and subject publication associations. Index maintenance and erasure locators are
-part of each writer's bounded command/effect design. At launch the owner attachment directory is maintained in the
-same account-home transaction as the document/reference change. Its reads still validate source lifecycle. Later
-cross-home team discovery needs an explicit derived-source currentness contract; it is not another document authority.
-
-Do not claim all arbitrary formulas/relations, immediate exact global results, immediate revocation and constant
-small work simultaneously. Aggregation over m unmaterialized related records needs work following m. Eagerly updating
-f distinct dependent outputs requires work following f. Moving that work to incremental maintenance or a job changes
-where and when it is paid; it does not remove it.
+Current lifecycle adds up to H ancestor points per document: 50H for a 50-row list, 128H (4,096) for public candidates,
+and RH for references before deduplication. Metadata loads no bodies. Measure these ceilings; if too slow, adopt an
+owner-maintained lifecycle index with proved invalidation or retained preparation, never cached ancestor permission.
+Required indexes: `(route,notebook,parent,order,placement)`, child height maximum, routed document/revision keys,
+owner/original-Subject/notebook/document attachments, normalized-title prefix, recent documents, revision references
+and public associations. Maintain indexes/erasure locators with each writer. Owner attachments commit in the same
+account-home transaction and still check source lifecycle. Later cross-home discovery needs a derived-source
+currentness contract. Aggregates and dependent output updates pay for their input/fanout under
+[architecture's bounded-work rule](architecture.md); jobs relocate that cost rather than remove it.
 
 ## Release priorities
 
-| Stage                              | Required outcomes                                                                                                                                                                                                                                                                                                                                                                                | Reason for this boundary                                                                                       |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| First public release               | Private notebooks; nested/reordered documents; public Subject attachments; same-page public/private composition; exact/live references; text-based problem/definition/theorem reuse; one-document copy/export; explicit revision publication/update/withdrawal; subject public contribution discovery; history/conflict recovery; deletion/erasure/moderation; accessibility and growth evidence | Completes the distinctive shared-subject/private-authoring/public-reuse loop                                   |
-| Next version: structured knowledge | Notebook-local schema definitions and records; typed fields; table/list/board views; indexed filters and grouping; safe inline/display math; mathematical profiles; owner full-text search; reference-place navigation and richer backlink views                                                                                                                                                 | Adds Notion-style databases and fluent mathematical learning without changing existing identities or citations |
-| Following version: shared work     | Realm-backed notebook authority; explicit collaborators and role policies; incremental edits and realtime/offline collaboration; reusable synced content; multi-document publication manifests; import and bulk transfer                                                                                                                                                                         | Requires synchronization, authority-boundary and lifecycle proofs beyond single-author snapshots               |
-| Later, evidence-driven             | Restricted formulas and rollups with bounded plans; dependency-driven recomputation; learner paths; formal proof adapters; semantic/AI-assisted linking; large-scale cross-workspace search                                                                                                                                                                                                      | No correctness, completeness or constant-cost claims before execution and provenance contracts exist           |
+| Stage                              | Required outcomes                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| First public release               | Private notebooks; nested/reordered documents; public Subject attachments; same-page public/private composition; exact/live references; text-based problem/definition/theorem reuse; one-document copy/export; explicit revision publication/update/withdrawal; subject public contribution discovery; history/conflict recovery; deletion/erasure/moderation; accessibility and growth evidence |
+| Next version: structured knowledge | Notebook-local schema definitions and records; typed fields; table/list/board views; indexed filters and grouping; safe inline/display math; mathematical profiles; owner full-text search; reference-place navigation and richer backlink views                                                                                                                                                 |
+| Following version: shared work     | Realm-backed notebook authority; explicit collaborators and role policies; incremental edits and realtime/offline collaboration; reusable synced content; multi-document publication manifests; import and bulk transfer                                                                                                                                                                         |
+| Later, evidence-driven             | Restricted formulas and rollups with bounded plans; dependency-driven recomputation; learner paths; formal proof adapters; semantic/AI-assisted linking; large-scale cross-workspace search                                                                                                                                                                                                      |
 
 First release may use source text or code blocks for mathematical expressions. They must survive round-trip and
 export losslessly, and the UI must describe them as source text. Rich math rendering is not simulated by losing
@@ -576,12 +629,9 @@ fanout and disclosure behavior. A formula result cannot launder an unreadable in
 
 ## Research adoption
 
-The evidence and alternatives are recorded in the independent [model investigation](research/knowledge-workspaces-model-astra.md)
-and [product investigation](research/knowledge-workspaces-product-astra.md). This document adopts shared subject
-identity plus separately owned authored documents, explicit publication, exact references, viewer-aware composition
-and bounded navigation. It chooses the writer/public-reuse loop for launch and defers full database, collaboration
-and computational parity. The source code and native proof gaps in those reports remain implementation work.
-
-The architectural extension is an authored knowledge capability over existing owners. It does not adopt a separate
-graph database, another permissions framework, a workspace-wide CRDT, automatic recursive publication or private
-facts in public search. Cross-domain APIs are installed through existing module contracts and composition roots.
+The independent [model](research/knowledge-workspaces-model-astra.md) and
+[product](research/knowledge-workspaces-product-astra.md) investigations support separately owned authored documents,
+explicit publication, exact references, viewer-aware composition and bounded navigation. Adopt the writer/public-reuse
+loop; database, collaboration and computation parity remain deferred. Cross-domain APIs use existing module contracts
+and composition roots, without a separate graph database, permissions engine, workspace CRDT, recursive publication
+or private search inputs. Their native proof gaps remain implementation work.
