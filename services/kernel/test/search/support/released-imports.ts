@@ -7,6 +7,10 @@ import { join } from 'node:path';
 import type { Statement } from '../../../../../specs/semantic-driver.ts';
 import { IMPORTER_SCOPES } from '../../../../importer/src/credentials.ts';
 import { readDump } from '../../../../importer/src/dumps.ts';
+import type {
+  ImportSourceRecordMetadataCommand,
+  ImportSourceRecordMetadataResult,
+} from '../../../../importer/src/import-contract.ts';
 import { Importer, type ImportRunResult } from '../../../../importer/src/importer.ts';
 import type { Claim } from '../../../../importer/src/record-bindings.ts';
 import { createSourceRegistration } from '../../../../importer/src/source-registry.ts';
@@ -95,13 +99,19 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
     if (response.status !== status) throw nativeFailure(response, path);
     return response;
   }
-  async function sendImport(method: 'GET' | 'POST', path: string, body?: unknown) {
+  async function sendImport(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+    options: { successStatuses?: readonly number[]; headers?: Record<string, string> } = {},
+  ) {
     const response = await semantic.fixtures.send(account!, method, path, body, {
+      ...options.headers,
       ...(session ? { 'rezics-session-token': session } : {}),
     });
     session = response.headers.get('rezics-session-token') ?? session;
     const observation = wire(response);
-    if (response.status !== 200) {
+    if (!(options.successStatuses ?? [200]).includes(response.status)) {
       firstImportFailure ??= nativeFailure(observation, path, body);
       throw firstImportFailure;
     }
@@ -157,6 +167,19 @@ export function createReleasedBookImport(semantic: SemanticOutcomeDriver) {
         importer = new Importer({
           path,
           transport: {
+            async setSourceRecordMetadata({
+              command,
+              idempotencyKey,
+            }: {
+              command: ImportSourceRecordMetadataCommand;
+              idempotencyKey: string;
+            }) {
+              const response = await sendImport('POST', '/v1/source-records:setMetadata', command, {
+                successStatuses: [200, 201],
+                headers: { 'idempotency-key': JSON.stringify(idempotencyKey) },
+              });
+              return response.body as ImportSourceRecordMetadataResult;
+            },
             async batchWrite(body) {
               const response = await sendImport('POST', '/v1/subjects:batchWrite', body);
               const native = response.body as BatchWriteResult;
