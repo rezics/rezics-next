@@ -22,7 +22,7 @@ import { lstat, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { observeWorkerChecks } from './worker-check-observation.ts';
+import { observeWaitingWorkerCheckTerminalProof, observeWorkerChecks } from './worker-check-observation.ts';
 import type {
   DevLandingTranspileHandoff,
   GateOutcome,
@@ -114,6 +114,8 @@ import {
   transportIncidentResumeAllowed,
 } from './tool-incidents.ts';
 import { TRANSPORT_RESUME_PROMPT } from './agents/shared.ts';
+
+type HostCapacityOptions = NonNullable<Parameters<typeof awaitHostCapacity>[5]>;
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -253,6 +255,8 @@ export class WorkerJob implements GateOutcomeSink {
     private readonly startsAllowed: () => boolean = () => true,
     // The manager host sets this so git, bun install and follow run in a child, not on the host event loop.
     private readonly offloadStart?: (taskId: string, kind: HostStartKind) => Promise<void>,
+    // Disposable slice measurements let wake acceptance cover the real host-admission handoff.
+    private readonly capacityAdmissionOptions: Partial<HostCapacityOptions> = {},
   ) {}
   /** Whether the current scheduler would admit a retry using the task's live route, allowance and pool limits. */
   hasRunnableRetrySupply(task: Task, intent: RetryIntent): boolean {
@@ -641,6 +645,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (observed.status === 'running') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
+    await observeWaitingWorkerCheckTerminalProof(task, attempt);
     const events = this.tasks.store.events(attempt.taskId, attempt.attempt);
     const freshSessionRequest = events.findLast((event) => event.kind === CURSOR_FRESH_SESSION_EVENT);
     const lastRun = events.findLast((event) => event.kind === 'worker-run-started');
@@ -700,6 +705,7 @@ export class WorkerJob implements GateOutcomeSink {
         task.id,
         ref.attempt,
         {
+          ...this.capacityAdmissionOptions,
           policy: this.tasks.settings.policy?.capacity,
           leasePolicy: this.tasks.settings.policy?.leases,
           urgent: task.brief.urgent,

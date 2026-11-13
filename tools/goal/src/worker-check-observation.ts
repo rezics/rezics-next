@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import type { Attempt, Task } from './types.ts';
 
 const CHECK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** Each finished check's whole log is copied here, in the worktree, where the worker can read it. */
@@ -33,6 +34,103 @@ export type WorkerCheckObservationPolicy = {
 };
 
 export type WorkerCheckObservation = { status: 'pending' } | { status: 'terminal'; resumeText: string };
+
+type CheckRecordForTerminalProof = {
+  id?: unknown;
+  cwd?: unknown;
+  ownership?: unknown;
+  status?: unknown;
+  physicalRunId?: unknown;
+  runnerHost?: unknown;
+  runnerPid?: unknown;
+  runnerIdentity?: unknown;
+  exitCode?: unknown;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readTerminalCheckRecord(worktree: string, id: string): CheckRecordForTerminalProof | undefined {
+  try {
+    return asRecord(
+      JSON.parse(readFileSync(join(worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8')),
+    ) as CheckRecordForTerminalProof | undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+}
+
+function hasOwnership(value: unknown, taskId: string, attempt: number): boolean {
+  const ownership = asRecord(value);
+  return ownership?.taskId === taskId && ownership.attempt === attempt;
+}
+
+function runnerMatchesRecord(record: CheckRecordForTerminalProof, physical: Record<string, unknown>): boolean {
+  const runner = asRecord(physical.runnerIdentity);
+  if (!runner) return false;
+  if (record.runnerHost !== undefined && record.runnerHost !== physical.runnerHost) return false;
+  if (record.runnerPid !== undefined && record.runnerPid !== runner.pid) return false;
+  if (record.runnerIdentity !== undefined) {
+    const identity = asRecord(record.runnerIdentity);
+    if (!identity || ['pid', 'start', 'boot', 'group'].some((key) => identity[key] !== runner[key])) return false;
+  }
+  return true;
+}
+
+/** Persist local terminal evidence only for the exact checks owned by this current parked attempt. */
+export async function observeWaitingWorkerCheckTerminalProof(task: Task, attempt: Attempt): Promise<void> {
+  if (
+    task.id !== attempt.taskId ||
+    task.currentAttempt !== attempt.attempt ||
+    task.state !== 'running' ||
+    attempt.state !== 'waiting' ||
+    attempt.process !== null ||
+    !attempt.checks?.length
+  )
+    return;
+
+  const { observeWorkerCheckTerminal, readWorkerCheckHistory } = await import('../../../scripts/worker-check.ts');
+  for (const id of attempt.checks) {
+    if (!CHECK_UUID.test(id)) continue;
+    const record = readTerminalCheckRecord(task.worktree, id);
+    if (
+      !record ||
+      record.id !== id ||
+      typeof record.cwd !== 'string' ||
+      !isAbsolute(record.cwd) ||
+      resolve(record.cwd) !== resolve(task.worktree) ||
+      record.status !== 'finished' ||
+      !hasOwnership(record.ownership, task.id, attempt.attempt) ||
+      typeof record.physicalRunId !== 'string' ||
+      !CHECK_UUID.test(record.physicalRunId) ||
+      !Number.isSafeInteger(record.exitCode)
+    )
+      continue;
+
+    const physical = readWorkerCheckHistory(id, record.physicalRunId, task.worktree) as
+      | (Record<string, unknown> & { runnerIdentity?: unknown })
+      | undefined;
+    if (
+      !physical ||
+      physical.version !== 1 ||
+      physical.id !== id ||
+      physical.cwd !== task.worktree ||
+      physical.physicalRunId !== record.physicalRunId ||
+      physical.status !== 'finished' ||
+      !hasOwnership(physical.ownership, task.id, attempt.attempt) ||
+      physical.runnerHost !== hostname() ||
+      physical.exitCode !== record.exitCode ||
+      !runnerMatchesRecord(record, physical)
+    )
+      continue;
+
+    await observeWorkerCheckTerminal(id, task.worktree, record.physicalRunId);
+  }
+}
 
 function singleLine(value: unknown, limit: number): string {
   return String(value)
