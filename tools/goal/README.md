@@ -192,6 +192,7 @@ an unreachable run is left for stale-run cleanup, and `NOT_STARTED` keeps its st
 logs the host and elapsed time. Existing remote-check tests pin recorded-exit 255, reconnect through status-loss, and
 startup `NOT_STARTED` retry; no extra suite. Status probes use a separate counter from the recorded-exit file so a command's own 255 stays 255. Host cache garbage deletion keeps parent directory streams open while descending, skips empty names and a child equal to the current path, and so a sweep drains large deep trees without looping.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
+Decision: Before host admission, `WorkerJob` observes only the current waiting attempt's exact finished, task-owned check generations with `observeWorkerCheckTerminal`. Its persisted local proof can retire those generations' future-writing reserve; unavailable or foreign custody retains that reserve, while aggregate memory, active/replacement scopes and remote cleanup/verdict keep their existing accounting.
 Decision: an owner decision that does not fit the prompt can use a bounded pointer to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
@@ -1368,6 +1369,16 @@ recorded running or ends. Tickets are tied to the admitting process and are disc
 check-wake attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path
 half-hour head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately,
 without waiting for the periodic worker/memory poll.
+
+#### Post-integration delay observations
+
+Decision: measure waits only between a persisted per-ticket waiting-start timestamp and its first matching admission
+or launch timestamp. If either endpoint is missing, report the duration unavailable; aggregate check-slot wait totals
+and incident observation times are not substitutes.
+
+No post-activation witness is available. The Book discovery and Studio localization observations resolved before
+activation and are baseline only. Their post-activation wait and duration are unavailable; detailed baseline evidence
+is kept locally under `.temp`.
 
 #### Cost: running-attempt count
 
@@ -2971,6 +2982,8 @@ inventory. Prepared inputs and the existing physical/terminal budget custody rem
 the marker digests so the receipt retains its full-trio proof.
 
 Decision: authenticated `typing-recover` may replace one consumed compiler grant only when unchanged source's exact resultless check, SIGTERM, Root authorization, local/remote terminal proof and verified cleanup receipt bind the same task, attempt, physical run and command. A missing predecessor authorizes no new run. Preserve cancellation and receipt; fence checks with compiler results, live or unknown custody, manual cancellation and later attempts. Keep the exact no-command-start recovery proof. Never retry source or infer compiler success.
+
+Decision: a consumed exact Web compiler grant with unresolved physical evidence returns its check and run identity with terminal or unknown custody, and repeated queries do not re-advertise it. Permit the existing single compiler-only replacement only for that same Web run after verified resultless cleanup, unchanged installed Web inputs and existing authenticated owner or operations authority; terminal compiler receipts still settle normally.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
