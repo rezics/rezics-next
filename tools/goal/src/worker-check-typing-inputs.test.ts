@@ -15,6 +15,7 @@ import {
   isDirectKernelTypingCompiler,
   resolveTypingCompilerCommand,
   typingInputsReceiptPath,
+  typingFailureInputsMatch,
   type TypingInputReceipt,
 } from './worker-check-typing-inputs.ts';
 import {
@@ -410,6 +411,8 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
     ...environment,
     PATH: `${join(root, '.temp/bin')}:${process.env.PATH}`,
     REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(clientPipeline)).toString('base64'),
+    REMOTE_CHECK_HOST: 'c',
+    REZICS_CHECK_RUN: 'pipeline-owner-run',
   };
   const fixtureEnv: NodeJS.ProcessEnv = { ...process.env, ...env };
   delete fixtureEnv.REZICS_CHECK_ARTIFACTS_DIR;
@@ -423,6 +426,7 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
   expect(result.exitCode).toBe(0);
   const receipt = readTypingInputReceipt(root, physical, clientPipeline)!;
   expect(receipt.outputs).toEqual(['kernel-client-v1']);
+  expect(receipt.outputBinding).toEqual({ host: 'c', run: 'pipeline-owner-run' });
   expect(receipt.physicalRunId).toBe(physical);
   expect(receipt.sourceStable).toBe(true);
   expect(qualifyTypingInputs(root, receipt)).toBe('evidence-unavailable');
@@ -440,8 +444,29 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
     bundleSha256: outputTreeDigest(bytes),
   });
   expect(qualifyTypingInputs(root, receipt)).toBe('matched');
+  const failedReceipt = { ...receipt, exitCode: 1 };
+  expect(typingFailureInputsMatch(root, failedReceipt, receipt.started.prepared)).toBe(true);
+  expect(qualifyTypingInputs(root, failedReceipt)).toBe('source-changed');
+
+  const publicationPath = 'packages/client/src/.kernel-output-tree/receipt.json';
+  const publication = JSON.parse(readFileSync(join(root, publicationPath), 'utf8')) as {
+    authority: { host: string; run: string };
+  };
+  write(
+    root,
+    publicationPath,
+    JSON.stringify({
+      ...publication,
+      authority: { ...publication.authority, run: 'foreign-pipeline-run' },
+    }),
+  );
+  expect(typingFailureInputsMatch(root, failedReceipt, receipt.started.prepared)).toBe(false);
+  expect(qualifyTypingInputs(root, receipt)).toBe('evidence-unavailable');
+  write(root, publicationPath, JSON.stringify(publication));
+
   write(root, 'packages/client/node_modules/fixture/package.json', '{"version":"2"}');
   expect(qualifyTypingInputs(root, receipt)).toBe('prepared-changed');
+  expect(typingFailureInputsMatch(root, failedReceipt, receipt.started.prepared)).toBe(false);
   write(root, 'packages/client/node_modules/fixture/package.json', '{"version":"1"}');
 
   expect(
@@ -451,6 +476,7 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
     }),
   ).toBe('evidence-unavailable');
   write(root, 'packages/client/src/kernel/current.d.ts', 'export type Current = "tampered";');
+  expect(typingFailureInputsMatch(root, failedReceipt, receipt.started.prepared)).toBe(false);
   expect(qualifyTypingInputs(root, receipt)).toBe('evidence-unavailable');
 });
 
