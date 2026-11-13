@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import type { HostedDraftPicker } from './hosted-draft-picker';
+import { hostedDraftPickerMessage, type HostedDraftPicker } from './hosted-draft-picker';
 
 /** This disclosure reads nothing until the author opens it. Rows never mount document bodies. */
 export function HostedDraftPickerView({
@@ -18,11 +18,11 @@ export function HostedDraftPickerView({
   const trigger = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef(false);
   useEffect(() => {
-    if (state.kind === 'closed' && returnFocus.current) {
+    if (state.kind === 'closed' && !disabled && returnFocus.current) {
       returnFocus.current = false;
       trigger.current?.focus();
     }
-  }, [state.kind]);
+  }, [disabled, state.kind]);
   const id = useId();
   const locale = getLocale();
   const expanded = state.kind !== 'closed' && state.kind !== 'ended';
@@ -48,17 +48,7 @@ export function HostedDraftPickerView({
           <h3 id={`${id}-heading`}>{m.own_drafts_title({}, { locale })}</h3>
           <p className="studio-help">{m.studio_book_picker_help({}, { locale })}</p>
           {state.kind === 'loading' ? <p role="status">{m.own_drafts_loading({}, { locale })}</p> : null}
-          {error ? (
-            <p role="alert">
-              {error === 'denied'
-                ? m.own_drafts_denied({}, { locale })
-                : error === 'stale'
-                  ? m.own_drafts_stale_selection({}, { locale })
-                  : error === 'concealed'
-                    ? m.own_drafts_selection_unavailable({}, { locale })
-                    : m.own_drafts_unavailable({}, { locale })}
-            </p>
-          ) : null}
+          {error ? <p role="alert">{hostedDraftPickerMessage(error, locale)}</p> : null}
           {state.kind === 'page' ? (
             <>
               {state.page.preparing ? <p role="status">{m.own_drafts_preparing({}, { locale })}</p> : null}

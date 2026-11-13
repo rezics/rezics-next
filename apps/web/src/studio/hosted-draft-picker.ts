@@ -2,6 +2,7 @@ import { serializeDocument } from '@rezics/document';
 import { readSelectedOwnDraft, type OwnDraftEntry, type OwnDraftReader } from '../threads';
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
 import type { Locale } from '../paraglide/runtime.js';
+import { m } from '../paraglide/messages.js';
 import type { ExactDocument, StudioResult, StudioSelection } from './contract';
 import type { HostedOwnerViewer, HostedTarget } from './hosted-contract';
 
@@ -28,16 +29,17 @@ export type HostedDraftPickerBinding = Readonly<{
   readDocument(postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>>;
 }>;
 
-function refused(error: ReadFailure): StudioResult<never> {
+export function hostedDraftPickerMessage(error: ReadFailure, locale: Locale): string {
+  if (error === 'denied') return m.own_drafts_denied({}, { locale });
+  if (error === 'stale') return m.own_drafts_stale_selection({}, { locale });
+  if (error === 'concealed') return m.own_drafts_selection_unavailable({}, { locale });
+  return m.own_drafts_unavailable({}, { locale });
+}
+
+function refused(error: ReadFailure, locale: Locale): StudioResult<never> {
   return {
     ok: false,
-    error: {
-      kind: error === 'concealed' ? 'withdrawn' : error,
-      message:
-        error === 'stale'
-          ? 'This saved draft changed. Select its current inventory row.'
-          : 'This draft is unavailable.',
-    },
+    error: { kind: error === 'concealed' ? 'withdrawn' : error, message: hostedDraftPickerMessage(error, locale) },
   };
 }
 
@@ -121,8 +123,11 @@ export class HostedDraftPicker {
   /** Temporary read admission exists only after exact account resume succeeded. */
   admitsPost = (postId: string): boolean =>
     this.isCurrent() && (this.readingPost === postId || this.candidate?.postId === postId);
-  retainSelection = (postId: string | null) => {
-    if (this.candidate?.postId !== postId) this.candidate = null;
+  retainSelection = (selection: StudioSelection | null) => {
+    // These are the editor's already admitted selections, including an attached chapter removed while open.
+    this.candidate = selection?.native
+      ? { postId: selection.revision.exact.postId, threadId: selection.native.threadId }
+      : null;
   };
   target = (document: ExactDocument): HostedTarget | null =>
     this.isCurrent() && this.candidate?.postId === document.postId
@@ -173,12 +178,12 @@ export class HostedDraftPicker {
   openDocument = async (postId: string, signal: AbortSignal): Promise<StudioResult<StudioSelection>> => {
     if (!this.isCurrent()) {
       this.dispose();
-      return refused('denied');
+      return refused('denied', this.binding.locale);
     }
     const state = this.state;
     const entry = state.kind === 'page' ? state.page.rows.find((row) => row.id === postId) : undefined;
     if (signal.aborted || state.kind !== 'page' || state.selecting || !entry || !this.canSelect(entry))
-      return refused('concealed');
+      return refused('concealed', this.binding.locale);
     const request = new AbortController();
     const abort = () => request.abort();
     signal.addEventListener('abort', abort, { once: true });
@@ -188,7 +193,7 @@ export class HostedDraftPicker {
     const current = () => this.currentRequest(request);
     const fail = (error: ReadFailure): StudioResult<never> => {
       if (current()) this.update({ kind: 'failed', cursor: state.page.cursor, error });
-      return refused(error);
+      return refused(error, this.binding.locale);
     };
     try {
       const resumed = await readSelectedOwnDraft(
@@ -204,12 +209,12 @@ export class HostedDraftPicker {
         request.signal,
         current,
       );
-      if (!current()) return refused('denied');
+      if (!current()) return refused('denied', this.binding.locale);
       if (typeof resumed === 'string') return fail(resumed);
       if (resumed.post.parentId !== null) return fail('concealed');
       this.readingPost = postId;
       const opened = await this.binding.readDocument(postId, request.signal);
-      if (!current()) return refused('denied');
+      if (!current()) return refused('denied', this.binding.locale);
       if (!opened.ok) return fail(opened.error.kind === 'denied' ? 'denied' : 'unavailable');
       const selection = opened.value;
       const native = selection.native;

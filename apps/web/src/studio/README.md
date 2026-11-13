@@ -433,7 +433,7 @@ pages retry their exact cursor. Replacement, close, stale/denied selection, sess
 account) and departure retire former rows and abort or fence late results. Dirty, invalid, pending or uploading
 editor work and unresolved commands hold selection. The shared controller opens only after its existing clean-editor
 guard. Admission retains just the selected candidate identity, the Book opening and currently attached document
-identities; Book document summaries drop former unplaced selections and removed attachments.
+identities; picker-enabled Book document summaries drop former unplaced selections and removed attachments.
 
 Sources read before design: this owner document, Web's launch scope and acceptance in `docs/goals/web.md`, mounted
 Book and account visits in `routes/studio.tsx`, `account-port.ts`, `post-document-port.ts`, `hosted-workspace.ts`,

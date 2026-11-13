@@ -57,7 +57,7 @@ function StudioVisit({
   presentation = {},
   onDepartureRiskChange,
 }: StudioWorkspaceProps) {
-  const [controller] = useState(() => new StudioController(input, port, bookPort));
+  const [controller] = useState(() => new StudioController(input, port, bookPort, Boolean(draftPicker)));
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [starter] = useState(() =>
     bookStart
@@ -93,8 +93,8 @@ function StudioVisit({
   useEffect(() => starter?.connect(), [starter]);
   useEffect(() => draftPicker?.connect(), [draftPicker]);
   useEffect(() => {
-    if (!state.busy) draftPicker?.retainSelection(postId);
-  }, [draftPicker, postId, state.busy]);
+    if (!state.busy) draftPicker?.retainSelection(selected?.source ?? null);
+  }, [draftPicker, selected?.source, state.busy]);
   useEffect(() => {
     const wideLayout = window.matchMedia('(min-width: 64rem)');
     const syncNavigation = () => setNavigation(wideLayout.matches);

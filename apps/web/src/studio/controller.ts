@@ -221,6 +221,7 @@ export class StudioController {
     readonly input: StudioInput,
     readonly port: StudioPort,
     private readonly bookPort?: BookOrganizerPort,
+    private readonly boundedBookCandidates = false,
   ) {
     this.state = {
       documents: input.documents,
@@ -318,7 +319,7 @@ export class StudioController {
     selectedPost: string | null,
     structure = this.state.structure,
   ): readonly StudioDocument[] {
-    if (!structure) return items;
+    if (!this.boundedBookCandidates || !structure) return items;
     const retained = new Set([this.input.projectId, selectedPost]);
     for (const placement of structure.placements)
       if (placement.target.kind === 'chapter') retained.add(placement.target.document.postId);
