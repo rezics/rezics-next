@@ -32,6 +32,7 @@ function LiteraryOverviewStory({
         value: { type: 'value', content: { amount: '+17000', unit: '1' } },
         qualifiers: [],
         references: [],
+        rezics: { release: read.subject.release, revision: read.subject.revision },
       },
     ];
     if (type !== 'schema:Book') {
