@@ -417,3 +417,33 @@ Start a Book → Book Studio path, retained retry, existing Book reopen, stale v
 placement. Source fixtures do not claim native/browser proof. Existing assertions remain unchanged. Source validation
 formats changed files and runs one affected Web typecheck; ordinary acceptance, native/browser, root and growth
 suites remain deferred.
+
+## Saved account draft picker for Books
+
+Decision: an existing Book offers one explicitly opened account-draft picker, sharing the installed own-drafts
+list/resume reader and the existing exact Post port. Selection opens the saved discussion opening in the shared
+editor; only the organizer's separate chapter placement revises the outline, at Book root or an existing part.
+The picker sends the Book's prepared account/authentication epoch on every page and resume, compares the exact
+Post/thread/revision, body, media and native metadata, and relies on the Post port's existing owner and digest checks.
+It changes neither native permissions nor publication.
+
+One replacing page retains at most 20 metadata rows and one opaque continuation. No list/body is prefetched, no ID
+entry is required, and no document body is stored by the picker. Sparse/preparing pages retain continuation; failed
+pages retry their exact cursor. Replacement, close, stale/denied selection, session replacement (including the same
+account) and departure retire former rows and abort or fence late results. Dirty, invalid, pending or uploading
+editor work and unresolved commands hold selection. The shared controller opens only after its existing clean-editor
+guard. Admission retains just the selected candidate identity, the Book opening and currently attached document
+identities; Book document summaries drop former unplaced selections and removed attachments.
+
+Sources read before design: this owner document, Web's launch scope and acceptance in `docs/goals/web.md`, mounted
+Book and account visits in `routes/studio.tsx`, `account-port.ts`, `post-document-port.ts`, `hosted-workspace.ts`,
+`threads/own-drafts/model.ts`, `native-reader.ts`, `visit.ts`, and the organizer/controller contracts and existing
+placement, native-draft and hosted-publication fixtures. The installed list/resume and replacement revise contracts
+already support this journey on the base. No integration or backend/API change is required.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-draft-picker.test.tsx`.
+Focused mounted source evidence covers an independently saved own opening selected and placed exactly under a part,
+unchanged outline/publication before placement, sparse continuation and exact retry, page/selection retirement,
+foreign/stale refusal, same-account replacement, late responses and dirty editor preservation. Existing assertions
+remain unchanged. Source validation formats changed files and runs one affected Web typecheck; native, browser,
+Storybook, ordinary acceptance, root and growth checks remain deferred.

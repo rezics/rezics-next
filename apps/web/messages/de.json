@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "Diese Fortsetzung des Verlaufs ist nicht mehr gültig. Lade den Verlauf neu.",
   "studio_book_history_outline_stale": "Diese Fortsetzung der Gliederung ist nicht mehr gültig. Lade diese Gliederungsseite erneut oder öffne die exakte Version noch einmal.",
   "studio_book_history_unavailable": "Der Buchverlauf ist nicht verfügbar. Lade diese Seite erneut.",
-  "studio_book_history_outline_unavailable": "Diese exakte Gliederungsseite des Buchs konnte nicht gelesen werden. Lade diese Seite erneut."
+  "studio_book_history_outline_unavailable": "Diese exakte Gliederungsseite des Buchs konnte nicht gelesen werden. Lade diese Seite erneut.",
+  "studio_book_pick_draft": "Gespeicherten Kontoentwurf öffnen",
+  "studio_book_picker_help": "Wähle den gespeicherten Eröffnungsbeitrag einer Diskussion, um ihn hier zu bearbeiten. Das Inhaltsverzeichnis ändert sich erst, wenn du das gespeicherte Dokument als Kapitel einfügst.",
+  "studio_book_picker_working": "Speichere oder verwirf deine Änderungen und schließe den aktuellen Vorgang ab, bevor du einen anderen Entwurf auswählst.",
+  "studio_book_picker_saved": "Gespeicherter Eröffnungsbeitrag",
+  "studio_book_picker_opening": "Die genaue gespeicherte Entwurfsversion wird geöffnet…",
+  "studio_book_picker_next": "Nächste Entwürfe"
 }

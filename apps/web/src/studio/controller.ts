@@ -305,10 +305,24 @@ export class StudioController {
     const row = summary(selection, prior?.state ?? 'draft');
     return {
       ...this.state.documents,
-      items: prior
-        ? this.state.documents.items.map((entry) => (entry.postId === row.postId ? row : entry))
-        : [row, ...this.state.documents.items].slice(0, this.input.nativeDrafts ? 20 : undefined),
+      items: this.retainedBookDocuments(
+        prior
+          ? this.state.documents.items.map((entry) => (entry.postId === row.postId ? row : entry))
+          : [row, ...this.state.documents.items].slice(0, this.input.nativeDrafts ? 20 : undefined),
+        row.postId,
+      ),
     };
+  }
+  private retainedBookDocuments(
+    items: readonly StudioDocument[],
+    selectedPost: string | null,
+    structure = this.state.structure,
+  ): readonly StudioDocument[] {
+    if (!structure) return items;
+    const retained = new Set([this.input.projectId, selectedPost]);
+    for (const placement of structure.placements)
+      if (placement.target.kind === 'chapter') retained.add(placement.target.document.postId);
+    return items.filter((row) => retained.has(row.postId));
   }
   private edit(patch: Partial<WorkingDocument>) {
     if (!this.current() || !this.state.selected?.source.permissions.edit || this.publishAttempt) return;
@@ -662,6 +676,14 @@ export class StudioController {
         );
         this.patch({
           structure: next,
+          documents: {
+            ...this.state.documents,
+            items: this.retainedBookDocuments(
+              this.state.documents.items,
+              this.state.selected?.source.revision.exact.postId ?? null,
+              next,
+            ),
+          },
           review: null,
           published: null,
           selectedOccurrences: new Set([...this.state.selectedOccurrences].filter((id) => chapterIds.has(id))),

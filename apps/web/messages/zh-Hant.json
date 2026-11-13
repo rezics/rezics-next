@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "此歷史接續位置已失效。請重新載入歷史。",
   "studio_book_history_outline_stale": "此目錄接續位置已失效。請重試此目錄頁，或重新開啟指定版本。",
   "studio_book_history_unavailable": "書籍歷史無法使用。請重試此頁。",
-  "studio_book_history_outline_unavailable": "無法讀取此指定版本的目錄頁。請重試此頁。"
+  "studio_book_history_outline_unavailable": "無法讀取此指定版本的目錄頁。請重試此頁。",
+  "studio_book_pick_draft": "開啟已儲存的帳戶草稿",
+  "studio_book_picker_help": "選擇已儲存的討論首篇貼文，在此繼續編輯。只有將已儲存的文件放置為章節時，目錄才會變更。",
+  "studio_book_picker_working": "選擇其他草稿前，請儲存或捨棄變更，並完成目前的操作。",
+  "studio_book_picker_saved": "已儲存的討論首篇貼文",
+  "studio_book_picker_opening": "正在開啟已儲存草稿的確切版本…",
+  "studio_book_picker_next": "下一頁草稿"
 }

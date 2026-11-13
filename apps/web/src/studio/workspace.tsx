@@ -20,6 +20,8 @@ import {
   type HostedBookStartState,
 } from './hosted-book-start';
 import { HostedBookStartAction } from './hosted-book-start-action';
+import { HostedDraftPickerView } from './hosted-draft-picker-view';
+import type { HostedDraftPicker } from './hosted-draft-picker';
 import './studio.css';
 
 const noBookStart: HostedBookStartState = { kind: 'idle' };
@@ -31,6 +33,7 @@ export type StudioWorkspaceProps = {
   port: StudioPort;
   bookPort?: BookOrganizerPort;
   bookHistory?: HostedHistoryBinding;
+  draftPicker?: HostedDraftPicker;
   /** Only the account-draft route supplies this capability; other document workspaces cannot start Books. */
   bookStart?: HostedBookStartBinding;
   presentation?: StudioPresentation;
@@ -49,6 +52,7 @@ function StudioVisit({
   port,
   bookPort,
   bookHistory,
+  draftPicker,
   bookStart,
   presentation = {},
   onDepartureRiskChange,
@@ -87,6 +91,10 @@ function StudioVisit({
 
   useEffect(() => controller.connect(), [controller]);
   useEffect(() => starter?.connect(), [starter]);
+  useEffect(() => draftPicker?.connect(), [draftPicker]);
+  useEffect(() => {
+    if (!state.busy) draftPicker?.retainSelection(postId);
+  }, [draftPicker, postId, state.busy]);
   useEffect(() => {
     const wideLayout = window.matchMedia('(min-width: 64rem)');
     const syncNavigation = () => setNavigation(wideLayout.matches);
@@ -434,6 +442,13 @@ function StudioVisit({
                     ? 'Documents can be placed as chapters after saving.'
                     : 'Each article has its own saved revisions and publication.'}
                 </p>
+                {draftPicker ? (
+                  <HostedDraftPickerView
+                    picker={draftPicker}
+                    disabled={atRisk || Boolean(selected?.invalid)}
+                    onSelect={(post) => void controller.open(post)}
+                  />
+                ) : null}
                 <ol className="studio-draft-list">
                   {state.documents.items.map((document) => (
                     <li key={document.postId}>

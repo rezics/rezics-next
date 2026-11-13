@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "This history continuation is no longer valid. Restart history.",
   "studio_book_history_outline_stale": "This outline continuation is no longer valid. Retry this outline page or reopen the exact version.",
   "studio_book_history_unavailable": "Book history is unavailable. Retry this page.",
-  "studio_book_history_outline_unavailable": "This exact book outline page could not be read. Retry this page."
+  "studio_book_history_outline_unavailable": "This exact book outline page could not be read. Retry this page.",
+  "studio_book_pick_draft": "Open a saved account draft",
+  "studio_book_picker_help": "Choose a saved discussion opening to edit here. The table of contents changes only when you place the saved document as a chapter.",
+  "studio_book_picker_working": "Save or discard your changes and finish the current operation before choosing another draft.",
+  "studio_book_picker_saved": "Saved discussion opening",
+  "studio_book_picker_opening": "Opening the exact saved draft…",
+  "studio_book_picker_next": "Next drafts"
 }

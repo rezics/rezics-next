@@ -9,6 +9,7 @@ import {
   hostedId,
   HostedBookInventory,
   HostedInventoryVisit,
+  HostedDraftPicker,
   hostedBookNative,
   openHostedStudio,
   readOwnedHostedBook,
@@ -20,6 +21,7 @@ import {
   type StudioSelection,
   type HostedOwnedBook,
   type HostedStudioInput,
+  type HostedStudioBinding,
   type HostedTarget,
 } from '../studio';
 import {
@@ -419,7 +421,10 @@ function BookStudioVisit({
       setWorkspace(null);
       setResult(hostedFailure('denied', m.studio_books_ended({}, { locale })));
     });
-    const admittedPosts = new Map<string, string>([[book.catalogueId, book.threadId]]);
+    let binding: HostedStudioBinding | null = null;
+    let picker: HostedDraftPicker | null = null;
+    const attachedTarget = (postId: string) =>
+      binding?.book.chapterTargets().find((target) => target.postId === postId);
     const isCurrent = () => {
       const now = source.read();
       return (
@@ -438,14 +443,16 @@ function BookStudioVisit({
       source,
       csrfToken,
       isCurrent,
-      admitsPost: (postId) => admittedPosts.has(postId),
+      admitsPost: (postId) =>
+        postId === book.catalogueId || Boolean(attachedTarget(postId)) || Boolean(picker?.admitsPost(postId)),
     });
     const resolveTarget = async (document: ExactDocument, signal: AbortSignal): Promise<StudioResult<HostedTarget>> => {
       if (signal.aborted || !isCurrent()) return hostedFailure('denied', 'This Studio visit has ended.');
-      const threadId = admittedPosts.get(document.postId);
-      if (!threadId)
-        return hostedFailure('unavailable', 'Only documents already admitted to this book can be placed here.');
-      return { ok: true, value: { threadId, ...document } };
+      const threadId = document.postId === book.catalogueId ? book.threadId : attachedTarget(document.postId)?.threadId;
+      const target = threadId ? { threadId, ...document } : picker?.target(document);
+      return target
+        ? { ok: true, value: target }
+        : hostedFailure('unavailable', 'Open a saved own draft before placing it in this book.');
     };
     const run = async () => {
       let initialSelection: StudioSelection | undefined;
@@ -471,19 +478,42 @@ function BookStudioVisit({
         canCreateDraft: false,
       };
       const bound = await openHostedStudio(
-        { catalogueId: book.catalogueId, accountId, input, documents, resolveTarget, isCurrent, owner },
+        {
+          catalogueId: book.catalogueId,
+          accountId,
+          input,
+          documents: {
+            ...documents,
+            open: (request, signal) =>
+              picker?.hasEntry(request.postId)
+                ? picker.openDocument(request.postId, signal)
+                : documents.open(request, signal),
+          },
+          resolveTarget,
+          isCurrent,
+          owner,
+        },
         controller.signal,
       );
       if (!isCurrent()) return;
       setResult(bound);
       if (!bound.ok) return;
-      for (const target of bound.value.book.chapterTargets()) admittedPosts.set(target.postId, target.threadId);
-      setWorkspace(bound.value.workspace);
+      binding = bound.value;
+      picker = new HostedDraftPicker({
+        viewer: binding.viewer,
+        source,
+        reader: ownDraftNativeReader,
+        locale,
+        isCurrent,
+        readDocument: (postId, signal) => documents.open({ projectId: book.catalogueId, postId }, signal),
+      });
+      setWorkspace({ ...binding.workspace, draftPicker: picker });
     };
     void run();
     return () => {
       unsubscribe();
       controller.abort();
+      picker?.dispose();
     };
   }, [owner, book, source, accountId, csrfToken, locale]);
   if (workspace)

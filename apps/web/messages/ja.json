@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "この履歴の続きは無効になりました。履歴を最初から読み直してください。",
   "studio_book_history_outline_stale": "この目次の続きは無効になりました。この目次ページを再読み込みするか、指定バージョンを開き直してください。",
   "studio_book_history_unavailable": "本の履歴を表示できません。このページを再読み込みしてください。",
-  "studio_book_history_outline_unavailable": "指定バージョンの目次ページを読み込めませんでした。このページを再読み込みしてください。"
+  "studio_book_history_outline_unavailable": "指定バージョンの目次ページを読み込めませんでした。このページを再読み込みしてください。",
+  "studio_book_pick_draft": "保存済みのアカウント下書きを開く",
+  "studio_book_picker_help": "保存済みのディスカッションの最初の投稿を選び、ここで編集できます。目次が変わるのは、保存した文書を章として配置したときだけです。",
+  "studio_book_picker_working": "別の下書きを選ぶ前に、変更を保存または破棄し、現在の操作を完了してください。",
+  "studio_book_picker_saved": "保存済みのディスカッションの最初の投稿",
+  "studio_book_picker_opening": "保存済みの下書きの正確な版を開いています…",
+  "studio_book_picker_next": "次の下書き"
 }

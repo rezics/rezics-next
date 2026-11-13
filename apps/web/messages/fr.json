@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "Cette suite de l’historique n’est plus valide. Rechargez l’historique.",
   "studio_book_history_outline_stale": "Cette suite du sommaire n’est plus valide. Réessayez cette page ou rouvrez la version exacte.",
   "studio_book_history_unavailable": "L’historique du livre est indisponible. Réessayez cette page.",
-  "studio_book_history_outline_unavailable": "Cette page exacte du sommaire n’a pas pu être lue. Réessayez cette page."
+  "studio_book_history_outline_unavailable": "Cette page exacte du sommaire n’a pas pu être lue. Réessayez cette page.",
+  "studio_book_pick_draft": "Ouvrir un brouillon enregistré du compte",
+  "studio_book_picker_help": "Choisissez le premier message d’une discussion enregistrée pour le modifier ici. La table des matières ne change que lorsque vous placez le document enregistré comme chapitre.",
+  "studio_book_picker_working": "Enregistrez ou abandonnez vos modifications et terminez l’opération en cours avant de choisir un autre brouillon.",
+  "studio_book_picker_saved": "Premier message de discussion enregistré",
+  "studio_book_picker_opening": "Ouverture de la version exacte du brouillon enregistré…",
+  "studio_book_picker_next": "Brouillons suivants"
 }

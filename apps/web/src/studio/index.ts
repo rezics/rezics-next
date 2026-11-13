@@ -65,3 +65,5 @@ export type {
 } from './hosted-contract';
 
 export { HostedInventoryVisit } from './hosted-inventory';
+
+export { HostedDraftPicker } from './hosted-draft-picker';

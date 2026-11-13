@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "이력 이어보기 위치가 더 이상 유효하지 않습니다. 처음부터 다시 불러오세요.",
   "studio_book_history_outline_stale": "목차 이어보기 위치가 더 이상 유효하지 않습니다. 이 목차 페이지를 다시 시도하거나 지정 버전을 다시 여세요.",
   "studio_book_history_unavailable": "책 이력을 사용할 수 없습니다. 이 페이지를 다시 시도하세요.",
-  "studio_book_history_outline_unavailable": "지정 버전의 목차 페이지를 읽을 수 없습니다. 이 페이지를 다시 시도하세요."
+  "studio_book_history_outline_unavailable": "지정 버전의 목차 페이지를 읽을 수 없습니다. 이 페이지를 다시 시도하세요.",
+  "studio_book_pick_draft": "저장된 계정 초안 열기",
+  "studio_book_picker_help": "저장된 토론의 첫 게시물을 선택해 여기에서 편집하세요. 저장된 문서를 장으로 배치할 때만 목차가 변경됩니다.",
+  "studio_book_picker_working": "다른 초안을 선택하기 전에 변경 사항을 저장하거나 취소하고 현재 작업을 마치세요.",
+  "studio_book_picker_saved": "저장된 토론의 첫 게시물",
+  "studio_book_picker_opening": "저장된 초안의 정확한 버전을 여는 중…",
+  "studio_book_picker_next": "다음 초안"
 }

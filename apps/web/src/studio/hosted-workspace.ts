@@ -7,7 +7,13 @@ import type {
   PublicationTarget,
 } from './contract';
 import type { StudioWorkspaceProps } from './workspace';
-import type { HostedBook, HostedBookNative, HostedOwnedBook, HostedTargetResolver } from './hosted-contract';
+import type {
+  HostedBook,
+  HostedBookNative,
+  HostedOwnedBook,
+  HostedOwnerViewer,
+  HostedTargetResolver,
+} from './hosted-contract';
 import { HostedBookAdapter } from './hosted-adapter';
 import { hostedFailure } from './hosted-native';
 import { bookTocIndex } from './book-toc';
@@ -22,6 +28,7 @@ export type HostedStudioInput = Omit<StudioInput, 'profile' | 'canPublish' | 'pu
 export type HostedStudioBinding = Readonly<{
   workspace: Pick<StudioWorkspaceProps, 'input' | 'port' | 'bookPort' | 'bookHistory'>;
   book: HostedBookAdapter;
+  viewer: HostedOwnerViewer;
 }>;
 
 function publicationRecord(id: string, book: HostedBook): PublicationRecord {
@@ -341,6 +348,7 @@ export async function openHostedStudio(
     ok: true,
     value: {
       book,
+      viewer,
       workspace: {
         input: {
           ...input,

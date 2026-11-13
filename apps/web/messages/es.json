@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "Esta continuación del historial ya no es válida. Reinicia el historial.",
   "studio_book_history_outline_stale": "Esta continuación del índice ya no es válida. Reintenta esta página o vuelve a abrir la versión exacta.",
   "studio_book_history_unavailable": "El historial del libro no está disponible. Reintenta esta página.",
-  "studio_book_history_outline_unavailable": "No se pudo leer esta página exacta del índice del libro. Reintenta esta página."
+  "studio_book_history_outline_unavailable": "No se pudo leer esta página exacta del índice del libro. Reintenta esta página.",
+  "studio_book_pick_draft": "Abrir un borrador guardado de la cuenta",
+  "studio_book_picker_help": "Elige el mensaje inicial de una discusión guardada para editarlo aquí. El índice solo cambia cuando colocas el documento guardado como capítulo.",
+  "studio_book_picker_working": "Guarda o descarta los cambios y termina la operación actual antes de elegir otro borrador.",
+  "studio_book_picker_saved": "Mensaje inicial de discusión guardado",
+  "studio_book_picker_opening": "Abriendo la versión exacta del borrador guardado…",
+  "studio_book_picker_next": "Siguientes borradores"
 }

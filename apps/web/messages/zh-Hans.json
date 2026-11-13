@@ -12167,5 +12167,11 @@
   "studio_book_history_stale": "此历史续接位置已失效。请重新加载历史。",
   "studio_book_history_outline_stale": "此目录续接位置已失效。请重试此目录页，或重新打开指定版本。",
   "studio_book_history_unavailable": "书籍历史不可用。请重试此页。",
-  "studio_book_history_outline_unavailable": "无法读取此指定版本的目录页。请重试此页。"
+  "studio_book_history_outline_unavailable": "无法读取此指定版本的目录页。请重试此页。",
+  "studio_book_pick_draft": "打开已保存的账户草稿",
+  "studio_book_picker_help": "选择已保存的讨论首帖，在此继续编辑。只有将已保存的文档放置为章节时，目录才会更改。",
+  "studio_book_picker_working": "选择其他草稿前，请保存或放弃更改，并完成当前操作。",
+  "studio_book_picker_saved": "已保存的讨论首帖",
+  "studio_book_picker_opening": "正在打开已保存草稿的准确版本…",
+  "studio_book_picker_next": "下一页草稿"
 }
