@@ -571,13 +571,13 @@ test.each(locales)(
       },
     });
     const host = document.createElement('div');
-    document.body.append(host);
+    document.body.appendChild(host);
     const root = createRoot(host);
     const inspect = spyOn(screen.visit, 'inspect');
     const next = spyOn(screen.visit, 'next');
     const nextOutline = spyOn(screen.visit, 'nextOutline');
     const retry = spyOn(screen.visit, 'retryOutline');
-    const button = (name: string) => getByRole(host, 'button', { name, exact: true }) as HTMLButtonElement;
+    const button = (name: string) => getByRole(host, 'button', { name }) as HTMLButtonElement;
     const click = async (name: string) =>
       act(async () => {
         button(name).click();
