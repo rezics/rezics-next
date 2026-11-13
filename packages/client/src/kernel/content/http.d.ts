@@ -7,6 +7,7 @@ import { mediaRoutes } from './media-routes.ts';
 import { hostedChapterRoutes } from './hosted-chapters-routes.ts';
 import { hostedDraftConversionRoutes } from './hosted-draft-conversion-routes.ts';
 import { knowledgeRoutes } from './knowledge-routes.ts';
+import { revisionDisclosureRoutes } from './revision-disclosure-routes.ts';
 /** Explicit operands for Content's HTTP surface. The trusted kernel composition constructs each object; no
  * route reads the environment, the network, a UUID source or a clock by itself. */
 export type ContentHttpDependencies = Readonly<{
@@ -25052,6 +25053,342 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 };
             };
         };
+    } & {
+        v1: {
+            hostedCatalogues: {
+                ":id": {
+                    $convertDraft: {
+                        post: {
+                            body: {
+                                expectedRevisionId: string;
+                                step: "capture";
+                            } | {
+                                expectedRevisionId: string;
+                                inputId: string;
+                                step: "begin";
+                            } | {
+                                expectedRevisionId: string;
+                                inputId: string;
+                                step: "page";
+                                cursor: {
+                                    segment: "base";
+                                    afterOrdinal: number;
+                                } | {
+                                    segment: "prefix";
+                                    afterOffset: string;
+                                } | {
+                                    segment: "complete";
+                                };
+                            } | {
+                                expectedRevisionId: string;
+                                inputId: string;
+                                step: "seal";
+                            } | {
+                                expectedRevisionId: string;
+                                inputId: string;
+                                step: "materialize";
+                            } | {
+                                expectedRevisionId: string;
+                                inputId: string;
+                                step: "materializePage";
+                            } | {
+                                expectedRevisionId: string;
+                                inputId: string;
+                                step: "commit";
+                            };
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    catalogueId: string;
+                                    inputId: string;
+                                    phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
+                                    nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
+                                    frontier?: {
+                                        segment: "base";
+                                        afterOrdinal: number;
+                                    } | {
+                                        segment: "prefix";
+                                        afterOffset: string;
+                                    } | {
+                                        segment: "complete";
+                                    };
+                                    coverage?: {
+                                        visited: string;
+                                        expected: string;
+                                        complete: boolean;
+                                    };
+                                    revisionId?: string;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                413: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            posts: {
+                ":id": {
+                    $issueRevisionDisclosure: {
+                        post: {
+                            body: {
+                                catalogueId: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            };
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    disclosureId: string;
+                                    state: "issued" | "revoked";
+                                    catalogueId: string;
+                                    reused: boolean;
+                                    durableInitiator?: string;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                413: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
     }, import("elysia").DefaultEphemeral, {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
@@ -25073,7 +25410,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         schemas: {};
         response: {};
         error: [];
-    }, "post", "/v1/hostedCatalogues/:id/$convertDraft", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+    }, "post", "/v1/posts/:id/$revokeRevisionDisclosure", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             id: import("typebox").TString;
         }>;
@@ -25086,117 +25423,36 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 vendor: string;
                 types: {
                     input: {
-                        expectedRevisionId: string;
-                        step: "capture";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "begin";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "page";
-                        cursor: {
-                            segment: "base";
-                            afterOrdinal: number;
-                        } | {
-                            segment: "prefix";
-                            afterOffset: string;
-                        } | {
-                            segment: "complete";
+                        disclosureId: string;
+                        catalogueId: string;
+                        target: {
+                            threadId: string;
+                            postId: string;
+                            revisionId: string;
+                            sha256: string;
                         };
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "seal";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materialize";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materializePage";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "commit";
                     };
                     output: {
-                        expectedRevisionId: string;
-                        step: "capture";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "begin";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "page";
-                        cursor: {
-                            segment: "base";
-                            afterOrdinal: number;
-                        } | {
-                            segment: "prefix";
-                            afterOffset: string;
-                        } | {
-                            segment: "complete";
+                        disclosureId: string;
+                        catalogueId: string;
+                        target: {
+                            threadId: string;
+                            postId: string;
+                            revisionId: string;
+                            sha256: string;
                         };
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "seal";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materialize";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materializePage";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "commit";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        expectedRevisionId: string;
-                        step: "capture";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "begin";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "page";
-                        cursor: {
-                            segment: "base";
-                            afterOrdinal: number;
-                        } | {
-                            segment: "prefix";
-                            afterOffset: string;
-                        } | {
-                            segment: "complete";
+                        disclosureId: string;
+                        catalogueId: string;
+                        target: {
+                            threadId: string;
+                            postId: string;
+                            revisionId: string;
+                            sha256: string;
                         };
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "seal";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materialize";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materializePage";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "commit";
                     };
                     issues?: never;
                 } | {
@@ -25206,80 +25462,26 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     }[];
                 };
                 jsonSchema: {
-                    input: () => import("typebox").TUnion<[import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"capture">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"begin">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"page">;
-                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"base">;
-                            afterOrdinal: import("typebox").TInteger;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"prefix">;
-                            afterOffset: import("typebox").TString;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"complete">;
-                        }>]>;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"seal">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materialize">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materializePage">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"commit">;
-                    }>]>;
-                    output: () => import("typebox").TUnion<[import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"capture">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"begin">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"page">;
-                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"base">;
-                            afterOrdinal: import("typebox").TInteger;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"prefix">;
-                            afterOffset: import("typebox").TString;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"complete">;
-                        }>]>;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"seal">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materialize">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materializePage">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"commit">;
-                    }>]>;
+                    input: () => import("typebox").TObject<{
+                        disclosureId: import("typebox").TString;
+                        catalogueId: import("typebox").TString;
+                        target: import("typebox").TObject<{
+                            threadId: import("typebox").TString;
+                            postId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                    }>;
+                    output: () => import("typebox").TObject<{
+                        disclosureId: import("typebox").TString;
+                        catalogueId: import("typebox").TString;
+                        target: import("typebox").TObject<{
+                            threadId: import("typebox").TString;
+                            postId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                    }>;
                 };
             };
         };
@@ -25430,69 +25632,27 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     vendor: string;
                     types: {
                         input: {
+                            disclosureId: string;
+                            state: "issued" | "revoked";
                             catalogueId: string;
-                            inputId: string;
-                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                            frontier?: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
-                            };
-                            coverage?: {
-                                visited: string;
-                                expected: string;
-                                complete: boolean;
-                            };
-                            revisionId?: string;
+                            reused: boolean;
+                            durableInitiator?: string;
                         };
                         output: {
+                            disclosureId: string;
+                            state: "issued" | "revoked";
                             catalogueId: string;
-                            inputId: string;
-                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                            frontier?: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
-                            };
-                            coverage?: {
-                                visited: string;
-                                expected: string;
-                                complete: boolean;
-                            };
-                            revisionId?: string;
+                            reused: boolean;
+                            durableInitiator?: string;
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
+                            disclosureId: string;
+                            state: "issued" | "revoked";
                             catalogueId: string;
-                            inputId: string;
-                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                            frontier?: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
-                            };
-                            coverage?: {
-                                visited: string;
-                                expected: string;
-                                complete: boolean;
-                            };
-                            revisionId?: string;
+                            reused: boolean;
+                            durableInitiator?: string;
                         };
                         issues?: never;
                     } | {
@@ -25503,46 +25663,18 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
+                            disclosureId: import("typebox").TString;
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"issued">, import("typebox").TLiteral<"revoked">]>;
                             catalogueId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
-                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
-                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"base">;
-                                afterOrdinal: import("typebox").TInteger;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"prefix">;
-                                afterOffset: import("typebox").TString;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"complete">;
-                            }>]>>;
-                            coverage: import("typebox").TOptional<import("typebox").TObject<{
-                                visited: import("typebox").TString;
-                                expected: import("typebox").TString;
-                                complete: import("typebox").TBoolean;
-                            }>>;
-                            revisionId: import("typebox").TOptional<import("typebox").TString>;
+                            reused: import("typebox").TBoolean;
+                            durableInitiator: import("typebox").TOptional<import("typebox").TString>;
                         }>;
                         output: () => import("typebox").TObject<{
+                            disclosureId: import("typebox").TString;
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"issued">, import("typebox").TLiteral<"revoked">]>;
                             catalogueId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
-                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
-                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"base">;
-                                afterOrdinal: import("typebox").TInteger;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"prefix">;
-                                afterOffset: import("typebox").TString;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"complete">;
-                            }>]>>;
-                            coverage: import("typebox").TOptional<import("typebox").TObject<{
-                                visited: import("typebox").TString;
-                                expected: import("typebox").TString;
-                                complete: import("typebox").TBoolean;
-                            }>>;
-                            revisionId: import("typebox").TOptional<import("typebox").TString>;
+                            reused: import("typebox").TBoolean;
+                            durableInitiator: import("typebox").TOptional<import("typebox").TString>;
                         }>;
                     };
                 };
@@ -25558,12 +25690,12 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
             'x-resource-types': string[];
             'x-action': string;
             'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-            operationId: string;
             security: {
                 bearerAuth: never[];
             }[];
+            operationId: string;
         };
-    }, {}, "/v1/hostedCatalogues/:id/$convertDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id }, body, request, admission, job, session, set }: {
+    }, {}, "/v1/posts/:id/$revokeRevisionDisclosure">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id }, body, request, admission, job, session, set }: {
         server: import("elysia").Server | null;
         redirect: import("elysia").redirect;
         set: {
@@ -25684,25 +25816,11 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 errors: unknown;
             };
             200: {
+                disclosureId: string;
+                state: "issued" | "revoked";
                 catalogueId: string;
-                inputId: string;
-                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                frontier?: {
-                    segment: "base";
-                    afterOrdinal: number;
-                } | {
-                    segment: "prefix";
-                    afterOffset: string;
-                } | {
-                    segment: "complete";
-                };
-                coverage?: {
-                    visited: string;
-                    expected: string;
-                    complete: boolean;
-                };
-                revisionId?: string;
+                reused: boolean;
+                durableInitiator?: string;
             };
         }>;
         problem: import("elysia").SelectiveProblem<{
@@ -25817,25 +25935,11 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 errors: unknown;
             };
             200: {
+                disclosureId: string;
+                state: "issued" | "revoked";
                 catalogueId: string;
-                inputId: string;
-                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                frontier?: {
-                    segment: "base";
-                    afterOrdinal: number;
-                } | {
-                    segment: "prefix";
-                    afterOffset: string;
-                } | {
-                    segment: "complete";
-                };
-                coverage?: {
-                    visited: string;
-                    expected: string;
-                    complete: boolean;
-                };
-                revisionId?: string;
+                reused: boolean;
+                durableInitiator?: string;
             };
         }>;
         defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -25851,117 +25955,36 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     vendor: string;
                     types: {
                         input: {
-                            expectedRevisionId: string;
-                            step: "capture";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "begin";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "page";
-                            cursor: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
+                            disclosureId: string;
+                            catalogueId: string;
+                            target: {
+                                threadId: string;
+                                postId: string;
+                                revisionId: string;
+                                sha256: string;
                             };
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "seal";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "materialize";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "materializePage";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "commit";
                         };
                         output: {
-                            expectedRevisionId: string;
-                            step: "capture";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "begin";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "page";
-                            cursor: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
+                            disclosureId: string;
+                            catalogueId: string;
+                            target: {
+                                threadId: string;
+                                postId: string;
+                                revisionId: string;
+                                sha256: string;
                             };
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "seal";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "materialize";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "materializePage";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "commit";
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            expectedRevisionId: string;
-                            step: "capture";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "begin";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "page";
-                            cursor: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
+                            disclosureId: string;
+                            catalogueId: string;
+                            target: {
+                                threadId: string;
+                                postId: string;
+                                revisionId: string;
+                                sha256: string;
                             };
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "seal";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "materialize";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "materializePage";
-                        } | {
-                            expectedRevisionId: string;
-                            inputId: string;
-                            step: "commit";
                         };
                         issues?: never;
                     } | {
@@ -25971,80 +25994,26 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         }[];
                     };
                     jsonSchema: {
-                        input: () => import("typebox").TUnion<[import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"capture">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"begin">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"page">;
-                            cursor: import("typebox").TUnion<[import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"base">;
-                                afterOrdinal: import("typebox").TInteger;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"prefix">;
-                                afterOffset: import("typebox").TString;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"complete">;
-                            }>]>;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"seal">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"materialize">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"materializePage">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"commit">;
-                        }>]>;
-                        output: () => import("typebox").TUnion<[import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"capture">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"begin">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"page">;
-                            cursor: import("typebox").TUnion<[import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"base">;
-                                afterOrdinal: import("typebox").TInteger;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"prefix">;
-                                afterOffset: import("typebox").TString;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"complete">;
-                            }>]>;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"seal">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"materialize">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"materializePage">;
-                        }>, import("typebox").TObject<{
-                            expectedRevisionId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            step: import("typebox").TLiteral<"commit">;
-                        }>]>;
+                        input: () => import("typebox").TObject<{
+                            disclosureId: import("typebox").TString;
+                            catalogueId: import("typebox").TString;
+                            target: import("typebox").TObject<{
+                                threadId: import("typebox").TString;
+                                postId: import("typebox").TString;
+                                revisionId: import("typebox").TString;
+                                sha256: import("typebox").TString;
+                            }>;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            disclosureId: import("typebox").TString;
+                            catalogueId: import("typebox").TString;
+                            target: import("typebox").TObject<{
+                                threadId: import("typebox").TString;
+                                postId: import("typebox").TString;
+                                revisionId: import("typebox").TString;
+                                sha256: import("typebox").TString;
+                            }>;
+                        }>;
                     };
                 };
             };
@@ -26195,69 +26164,27 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         vendor: string;
                         types: {
                             input: {
+                                disclosureId: string;
+                                state: "issued" | "revoked";
                                 catalogueId: string;
-                                inputId: string;
-                                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                                frontier?: {
-                                    segment: "base";
-                                    afterOrdinal: number;
-                                } | {
-                                    segment: "prefix";
-                                    afterOffset: string;
-                                } | {
-                                    segment: "complete";
-                                };
-                                coverage?: {
-                                    visited: string;
-                                    expected: string;
-                                    complete: boolean;
-                                };
-                                revisionId?: string;
+                                reused: boolean;
+                                durableInitiator?: string;
                             };
                             output: {
+                                disclosureId: string;
+                                state: "issued" | "revoked";
                                 catalogueId: string;
-                                inputId: string;
-                                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                                frontier?: {
-                                    segment: "base";
-                                    afterOrdinal: number;
-                                } | {
-                                    segment: "prefix";
-                                    afterOffset: string;
-                                } | {
-                                    segment: "complete";
-                                };
-                                coverage?: {
-                                    visited: string;
-                                    expected: string;
-                                    complete: boolean;
-                                };
-                                revisionId?: string;
+                                reused: boolean;
+                                durableInitiator?: string;
                             };
                         } | undefined;
                         validate(value: unknown): {
                             value: {
+                                disclosureId: string;
+                                state: "issued" | "revoked";
                                 catalogueId: string;
-                                inputId: string;
-                                phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                                nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                                frontier?: {
-                                    segment: "base";
-                                    afterOrdinal: number;
-                                } | {
-                                    segment: "prefix";
-                                    afterOffset: string;
-                                } | {
-                                    segment: "complete";
-                                };
-                                coverage?: {
-                                    visited: string;
-                                    expected: string;
-                                    complete: boolean;
-                                };
-                                revisionId?: string;
+                                reused: boolean;
+                                durableInitiator?: string;
                             };
                             issues?: never;
                         } | {
@@ -26268,46 +26195,18 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         };
                         jsonSchema: {
                             input: () => import("typebox").TObject<{
+                                disclosureId: import("typebox").TString;
+                                state: import("typebox").TUnion<[import("typebox").TLiteral<"issued">, import("typebox").TLiteral<"revoked">]>;
                                 catalogueId: import("typebox").TString;
-                                inputId: import("typebox").TString;
-                                phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
-                                nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
-                                frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                                    segment: import("typebox").TLiteral<"base">;
-                                    afterOrdinal: import("typebox").TInteger;
-                                }>, import("typebox").TObject<{
-                                    segment: import("typebox").TLiteral<"prefix">;
-                                    afterOffset: import("typebox").TString;
-                                }>, import("typebox").TObject<{
-                                    segment: import("typebox").TLiteral<"complete">;
-                                }>]>>;
-                                coverage: import("typebox").TOptional<import("typebox").TObject<{
-                                    visited: import("typebox").TString;
-                                    expected: import("typebox").TString;
-                                    complete: import("typebox").TBoolean;
-                                }>>;
-                                revisionId: import("typebox").TOptional<import("typebox").TString>;
+                                reused: import("typebox").TBoolean;
+                                durableInitiator: import("typebox").TOptional<import("typebox").TString>;
                             }>;
                             output: () => import("typebox").TObject<{
+                                disclosureId: import("typebox").TString;
+                                state: import("typebox").TUnion<[import("typebox").TLiteral<"issued">, import("typebox").TLiteral<"revoked">]>;
                                 catalogueId: import("typebox").TString;
-                                inputId: import("typebox").TString;
-                                phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
-                                nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
-                                frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                                    segment: import("typebox").TLiteral<"base">;
-                                    afterOrdinal: import("typebox").TInteger;
-                                }>, import("typebox").TObject<{
-                                    segment: import("typebox").TLiteral<"prefix">;
-                                    afterOffset: import("typebox").TString;
-                                }>, import("typebox").TObject<{
-                                    segment: import("typebox").TLiteral<"complete">;
-                                }>]>>;
-                                coverage: import("typebox").TOptional<import("typebox").TObject<{
-                                    visited: import("typebox").TString;
-                                    expected: import("typebox").TString;
-                                    complete: import("typebox").TBoolean;
-                                }>>;
-                                revisionId: import("typebox").TOptional<import("typebox").TString>;
+                                reused: import("typebox").TBoolean;
+                                durableInitiator: import("typebox").TOptional<import("typebox").TString>;
                             }>;
                         };
                     };
@@ -26323,12 +26222,12 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 'x-resource-types': string[];
                 'x-action': string;
                 'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-                operationId: string;
                 security: {
                     bearerAuth: never[];
                 }[];
+                operationId: string;
             };
-        }, {}, "/v1/hostedCatalogues/:id/$convertDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+        }, {}, "/v1/posts/:id/$revokeRevisionDisclosure">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
             derive: {
                 readonly admission: import("../http/admission.ts").Admission;
                 readonly job: {
@@ -26352,41 +26251,14 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         request: Request;
         store: {};
         body: {
-            expectedRevisionId: string;
-            step: "capture";
-        } | {
-            expectedRevisionId: string;
-            inputId: string;
-            step: "begin";
-        } | {
-            expectedRevisionId: string;
-            inputId: string;
-            step: "page";
-            cursor: {
-                segment: "base";
-                afterOrdinal: number;
-            } | {
-                segment: "prefix";
-                afterOffset: string;
-            } | {
-                segment: "complete";
+            disclosureId: string;
+            catalogueId: string;
+            target: {
+                threadId: string;
+                postId: string;
+                revisionId: string;
+                sha256: string;
             };
-        } | {
-            expectedRevisionId: string;
-            inputId: string;
-            step: "seal";
-        } | {
-            expectedRevisionId: string;
-            inputId: string;
-            step: "materialize";
-        } | {
-            expectedRevisionId: string;
-            inputId: string;
-            step: "materializePage";
-        } | {
-            expectedRevisionId: string;
-            inputId: string;
-            step: "commit";
         };
         query: Record<string, string | undefined>;
         params: {
@@ -26411,17 +26283,11 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     }) => Promise<Readonly<{
+        disclosureId: string;
+        state: import("./revision-disclosure-model.ts").RevisionDisclosureState;
         catalogueId: string;
-        inputId: string;
-        phase: 'captured' | 'building' | 'sealed' | 'materializing' | 'ready-to-activate' | 'complete';
-        nextStep: 'begin' | 'page' | 'seal' | 'materialize' | 'materializePage' | 'commit' | 'complete';
-        frontier?: import("./hosted-migration-input-model.ts").HostedMigrationFrontier;
-        coverage?: Readonly<{
-            visited: string;
-            expected: string;
-            complete: boolean;
-        }>;
-        revisionId?: string;
+        reused: boolean;
+        durableInitiator?: string;
     }>>, {
         params: import("typebox").TObject<{
             id: import("typebox").TString;
@@ -26435,117 +26301,36 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 vendor: string;
                 types: {
                     input: {
-                        expectedRevisionId: string;
-                        step: "capture";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "begin";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "page";
-                        cursor: {
-                            segment: "base";
-                            afterOrdinal: number;
-                        } | {
-                            segment: "prefix";
-                            afterOffset: string;
-                        } | {
-                            segment: "complete";
+                        disclosureId: string;
+                        catalogueId: string;
+                        target: {
+                            threadId: string;
+                            postId: string;
+                            revisionId: string;
+                            sha256: string;
                         };
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "seal";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materialize";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materializePage";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "commit";
                     };
                     output: {
-                        expectedRevisionId: string;
-                        step: "capture";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "begin";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "page";
-                        cursor: {
-                            segment: "base";
-                            afterOrdinal: number;
-                        } | {
-                            segment: "prefix";
-                            afterOffset: string;
-                        } | {
-                            segment: "complete";
+                        disclosureId: string;
+                        catalogueId: string;
+                        target: {
+                            threadId: string;
+                            postId: string;
+                            revisionId: string;
+                            sha256: string;
                         };
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "seal";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materialize";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materializePage";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "commit";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        expectedRevisionId: string;
-                        step: "capture";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "begin";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "page";
-                        cursor: {
-                            segment: "base";
-                            afterOrdinal: number;
-                        } | {
-                            segment: "prefix";
-                            afterOffset: string;
-                        } | {
-                            segment: "complete";
+                        disclosureId: string;
+                        catalogueId: string;
+                        target: {
+                            threadId: string;
+                            postId: string;
+                            revisionId: string;
+                            sha256: string;
                         };
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "seal";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materialize";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "materializePage";
-                    } | {
-                        expectedRevisionId: string;
-                        inputId: string;
-                        step: "commit";
                     };
                     issues?: never;
                 } | {
@@ -26555,80 +26340,26 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     }[];
                 };
                 jsonSchema: {
-                    input: () => import("typebox").TUnion<[import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"capture">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"begin">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"page">;
-                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"base">;
-                            afterOrdinal: import("typebox").TInteger;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"prefix">;
-                            afterOffset: import("typebox").TString;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"complete">;
-                        }>]>;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"seal">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materialize">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materializePage">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"commit">;
-                    }>]>;
-                    output: () => import("typebox").TUnion<[import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"capture">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"begin">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"page">;
-                        cursor: import("typebox").TUnion<[import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"base">;
-                            afterOrdinal: import("typebox").TInteger;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"prefix">;
-                            afterOffset: import("typebox").TString;
-                        }>, import("typebox").TObject<{
-                            segment: import("typebox").TLiteral<"complete">;
-                        }>]>;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"seal">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materialize">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"materializePage">;
-                    }>, import("typebox").TObject<{
-                        expectedRevisionId: import("typebox").TString;
-                        inputId: import("typebox").TString;
-                        step: import("typebox").TLiteral<"commit">;
-                    }>]>;
+                    input: () => import("typebox").TObject<{
+                        disclosureId: import("typebox").TString;
+                        catalogueId: import("typebox").TString;
+                        target: import("typebox").TObject<{
+                            threadId: import("typebox").TString;
+                            postId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                    }>;
+                    output: () => import("typebox").TObject<{
+                        disclosureId: import("typebox").TString;
+                        catalogueId: import("typebox").TString;
+                        target: import("typebox").TObject<{
+                            threadId: import("typebox").TString;
+                            postId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                    }>;
                 };
             };
         };
@@ -26779,69 +26510,27 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     vendor: string;
                     types: {
                         input: {
+                            disclosureId: string;
+                            state: "issued" | "revoked";
                             catalogueId: string;
-                            inputId: string;
-                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                            frontier?: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
-                            };
-                            coverage?: {
-                                visited: string;
-                                expected: string;
-                                complete: boolean;
-                            };
-                            revisionId?: string;
+                            reused: boolean;
+                            durableInitiator?: string;
                         };
                         output: {
+                            disclosureId: string;
+                            state: "issued" | "revoked";
                             catalogueId: string;
-                            inputId: string;
-                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                            frontier?: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
-                            };
-                            coverage?: {
-                                visited: string;
-                                expected: string;
-                                complete: boolean;
-                            };
-                            revisionId?: string;
+                            reused: boolean;
+                            durableInitiator?: string;
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
+                            disclosureId: string;
+                            state: "issued" | "revoked";
                             catalogueId: string;
-                            inputId: string;
-                            phase: "building" | "captured" | "complete" | "materializing" | "ready-to-activate" | "sealed";
-                            nextStep: "begin" | "commit" | "complete" | "materialize" | "materializePage" | "page" | "seal";
-                            frontier?: {
-                                segment: "base";
-                                afterOrdinal: number;
-                            } | {
-                                segment: "prefix";
-                                afterOffset: string;
-                            } | {
-                                segment: "complete";
-                            };
-                            coverage?: {
-                                visited: string;
-                                expected: string;
-                                complete: boolean;
-                            };
-                            revisionId?: string;
+                            reused: boolean;
+                            durableInitiator?: string;
                         };
                         issues?: never;
                     } | {
@@ -26852,46 +26541,18 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
+                            disclosureId: import("typebox").TString;
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"issued">, import("typebox").TLiteral<"revoked">]>;
                             catalogueId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
-                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
-                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"base">;
-                                afterOrdinal: import("typebox").TInteger;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"prefix">;
-                                afterOffset: import("typebox").TString;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"complete">;
-                            }>]>>;
-                            coverage: import("typebox").TOptional<import("typebox").TObject<{
-                                visited: import("typebox").TString;
-                                expected: import("typebox").TString;
-                                complete: import("typebox").TBoolean;
-                            }>>;
-                            revisionId: import("typebox").TOptional<import("typebox").TString>;
+                            reused: import("typebox").TBoolean;
+                            durableInitiator: import("typebox").TOptional<import("typebox").TString>;
                         }>;
                         output: () => import("typebox").TObject<{
+                            disclosureId: import("typebox").TString;
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"issued">, import("typebox").TLiteral<"revoked">]>;
                             catalogueId: import("typebox").TString;
-                            inputId: import("typebox").TString;
-                            phase: import("typebox").TUnion<[import("typebox").TLiteral<"captured">, import("typebox").TLiteral<"building">, import("typebox").TLiteral<"sealed">, import("typebox").TLiteral<"materializing">, import("typebox").TLiteral<"ready-to-activate">, import("typebox").TLiteral<"complete">]>;
-                            nextStep: import("typebox").TUnion<[import("typebox").TLiteral<"begin">, import("typebox").TLiteral<"page">, import("typebox").TLiteral<"seal">, import("typebox").TLiteral<"materialize">, import("typebox").TLiteral<"materializePage">, import("typebox").TLiteral<"commit">, import("typebox").TLiteral<"complete">]>;
-                            frontier: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"base">;
-                                afterOrdinal: import("typebox").TInteger;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"prefix">;
-                                afterOffset: import("typebox").TString;
-                            }>, import("typebox").TObject<{
-                                segment: import("typebox").TLiteral<"complete">;
-                            }>]>>;
-                            coverage: import("typebox").TOptional<import("typebox").TObject<{
-                                visited: import("typebox").TString;
-                                expected: import("typebox").TString;
-                                complete: import("typebox").TBoolean;
-                            }>>;
-                            revisionId: import("typebox").TOptional<import("typebox").TString>;
+                            reused: import("typebox").TBoolean;
+                            durableInitiator: import("typebox").TOptional<import("typebox").TString>;
                         }>;
                     };
                 };
@@ -26907,10 +26568,10 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
             'x-resource-types': string[];
             'x-action': string;
             'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-            operationId: string;
             security: {
                 bearerAuth: never[];
             }[];
+            operationId: string;
         };
     }>;
     media: import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -35676,7 +35337,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
     }>;
 };
 /** The route surface Content contributes to the kernel's composed type. */
-export type ContentHttpRoutes = ReturnType<typeof contentRoutes> & ReturnType<typeof hostedChapterRoutes> & ReturnType<typeof hostedDraftConversionRoutes> & ReturnType<typeof knowledgeRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof mediaRoutes>;
+export type ContentHttpRoutes = ReturnType<typeof contentRoutes> & ReturnType<typeof hostedChapterRoutes> & ReturnType<typeof hostedDraftConversionRoutes> & ReturnType<typeof revisionDisclosureRoutes> & ReturnType<typeof knowledgeRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof mediaRoutes>;
 /** HTTP composition reads the same declaration as the worker: events, operations, permissions, work,
  * effects, plus the mount function this module owns. */
 export declare function contentHttpDeclaration(): Readonly<{
