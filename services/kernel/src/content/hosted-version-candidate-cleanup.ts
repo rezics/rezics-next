@@ -181,6 +181,11 @@ function assertActorBinding(stage: StageRow, actorInput: Actor): AccountActor {
   return actor;
 }
 
+const maintenanceAuthority = Symbol('hosted-version-candidate-maintenance');
+type CleanupOwner =
+  | Readonly<{ kind: 'account'; actor: Actor }>
+  | Readonly<{ kind: 'maintenance'; authority: typeof maintenanceAuthority }>;
+
 function targetProgress(
   locator: HostedPublicationStagingLocator,
   row: CleanupRow,
@@ -222,8 +227,11 @@ async function requireExpiredStage(client: AccessClient, stage: StageRow): Promi
     throw new HostedVersionCandidateCleanupConflictError('Only an expired sealed source can retire a candidate');
 }
 
-function assertExactWholeCandidate(stage: StageRow, candidate: CandidateRow, actor: AccountActor): void {
-  if (candidate.initiator_account_id !== actor.accountId || candidate.owner_epoch !== String(actor.authnEpoch)) {
+function assertExactWholeCandidate(stage: StageRow, candidate: CandidateRow): void {
+  if (
+    candidate.initiator_account_id !== stage.initiator_account_id ||
+    candidate.owner_epoch !== stage.owner_epoch
+  ) {
     throw new HostedVersionCandidateCleanupNotFoundError();
   }
   if (
@@ -289,7 +297,6 @@ async function readCleanup(
 
 async function ensureCleanupClaim(
   client: AccessClient,
-  actor: AccountActor,
   stage: StageRow,
   locator: HostedPublicationStagingLocator,
 ): Promise<CleanupRow> {
@@ -333,7 +340,7 @@ async function ensureCleanupClaim(
     await client.query<CandidateRow>(CANDIDATE_LOCK, [stage.route, stage.catalogue_id, stage.stage_id])
   ).rows[0];
   if (!candidate) throw new HostedVersionCandidateCleanupNotFoundError();
-  assertExactWholeCandidate(stage, candidate, actor);
+  assertExactWholeCandidate(stage, candidate);
 
   const generation = (
     await client.query<GenerationRow>(
@@ -546,16 +553,35 @@ export async function advanceHostedVersionCandidateCleanup(
   locator: HostedPublicationStagingLocator,
   stepId: string,
 ): Promise<HostedVersionCandidateCleanupStepResult> {
+  return advanceCleanup(client, { kind: 'account', actor: actorInput }, locator, stepId);
+}
+
+/** Content maintenance uses the locked source and candidate identity persisted by their owner. */
+export async function advanceHostedVersionCandidateCleanupFromMaintenance(
+  client: AccessClient,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+): Promise<HostedVersionCandidateCleanupStepResult> {
+  return advanceCleanup(client, { kind: 'maintenance', authority: maintenanceAuthority }, locator, stepId);
+}
+
+async function advanceCleanup(
+  client: AccessClient,
+  owner: CleanupOwner,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+): Promise<HostedVersionCandidateCleanupStepResult> {
   const route = validateLocator(locator);
   validateStepId(stepId, route);
   const stage = await lockStage(client, locator, route);
-  const actor = assertActorBinding(stage, actorInput);
+  if (owner.kind === 'account') assertActorBinding(stage, owner.actor);
+  else if (owner.authority !== maintenanceAuthority) throw new Error('Invalid hosted candidate maintenance authority');
   await requireExpiredStage(client, stage);
 
   const prior = await readReceipt(client, route, locator, stepId);
   if (prior) return { replayed: true, deletedRows: prior.deleted_rows, progress: targetProgress(locator, prior) };
 
-  let row = await ensureCleanupClaim(client, actor, stage, locator);
+  let row = await ensureCleanupClaim(client, stage, locator);
   let phase = row.phase;
   let cursor = row.cursor;
   let deletedRows = 0;

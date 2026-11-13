@@ -32,6 +32,7 @@ import { CONTENT_EVENTS } from './events.ts';
 import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
+import { advanceHostedPublicationRetention } from './hosted-publication-retention.ts';
 import { tryContentApplication } from './adapters/bind.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
 import { repairConversationActivityPage } from './conversation-activity-repair.ts';
@@ -353,6 +354,15 @@ async function registerWork(
     },
     { name: 'content.collect.step', ...retry },
   );
+  const hostedPublicationRetentionCutoff = DBOS.registerStep(async () => now().toISOString(), {
+    name: 'content.hosted-publication-retention.cutoff',
+    ...retry,
+  });
+  const hostedPublicationRetentionPage = DBOS.registerStep(
+    async (passId: string, cutoff: string) =>
+      advanceHostedPublicationRetention(context.pool, passId, new Date(cutoff)),
+    { name: 'content.hosted-publication-retention.page', ...retry },
+  );
   const purgeDeleted = DBOS.registerStep(async (_name: string, action: () => Promise<unknown>) => action(), {
     name: 'content.deletedPostPurge.step',
     ...retry,
@@ -388,6 +398,7 @@ async function registerWork(
     async (_scheduledDate: Date, _context: unknown) => {
       // The scheduled timestamp never supplies a command cutoff. The job obtains T.
       const sweep = DBOS.workflowID!;
+      await hostedPublicationRetentionPage(sweep, await hostedPublicationRetentionCutoff());
       // A maintenance slot stays occupied until all children complete. Queuing
       // children behind their parents would deadlock when two sweeps overlap.
       for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY) {

@@ -123,6 +123,11 @@ function assertActorBinding(stage: StageRow, actorInput: Actor): AccountActor {
   return actor;
 }
 
+const maintenanceAuthority = Symbol('hosted-publication-staging-maintenance');
+type CleanupOwner =
+  | Readonly<{ kind: 'account'; actor: Actor }>
+  | Readonly<{ kind: 'maintenance'; authority: typeof maintenanceAuthority }>;
+
 function isTerminal(state: HostedPublicationStagingState): state is TerminalState {
   return state === 'cancelled' || state === 'expired' || state === 'failed';
 }
@@ -357,10 +362,30 @@ export async function advanceHostedPublicationStagingCleanup(
   locator: HostedPublicationStagingLocator,
   stepId: string,
 ): Promise<HostedPublicationStagingCleanupStepResult> {
+  return advanceCleanup(client, { kind: 'account', actor: actorInput }, locator, stepId);
+}
+
+/** Content maintenance uses the stage's locked, persisted owner identity. This entry is only
+ * called by the private retention worker; the author-admitted route keeps its actor check. */
+export async function advanceHostedPublicationStagingCleanupFromMaintenance(
+  client: AccessClient,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+): Promise<HostedPublicationStagingCleanupStepResult> {
+  return advanceCleanup(client, { kind: 'maintenance', authority: maintenanceAuthority }, locator, stepId);
+}
+
+async function advanceCleanup(
+  client: AccessClient,
+  owner: CleanupOwner,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+): Promise<HostedPublicationStagingCleanupStepResult> {
   const route = validateLocator(locator);
   requireRoute(stepId, route);
   const stage = await lockStage(client, locator, route);
-  assertActorBinding(stage, actorInput);
+  if (owner.kind === 'account') assertActorBinding(stage, owner.actor);
+  else if (owner.authority !== maintenanceAuthority) throw new Error('Invalid hosted staging maintenance authority');
   const terminalStatus = await requireTerminalStage(client, stage);
   const prior = await readReceipt(client, route, locator, stepId);
   if (prior) return { replayed: true, deletedRows: prior.deleted_rows, progress: progress(locator, prior) };

@@ -377,6 +377,8 @@ existing staging receipts and all source/lifecycle records.
 
 Decision: an expired sealed whole-Book candidate is retired only after an exact-generation claim fences temporal writes and descriptor creation and finds no retained revision, current pointer, other checkpoint or active ordered receiving hold; cleanup deletes generation-local temporal rows in 100-row indexed steps and retains the source stage, consent observations and page receipts.
 
+Decision: the existing hourly Content collection sweep scans one global expiry-index keyset of at most 100 stage keys and advances at most one existing 100-row cleanup step per pass; pinned or unsupported states advance with the exact source, owner epoch, candidate and reason retained for recovery, while each cleanup owner resumes its own persisted frontier.
+
 Staging is Book-owned, independent of Collection custody. Collection's
 [seal reader](../library/collection-publication-staging.ts) and
 [fixture](../../test/library/collection-publication-staging.test.ts) exemplify native source identity, complete
