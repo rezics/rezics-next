@@ -5,7 +5,13 @@ import { createThread, revisePost } from '../../src/content/commands.ts';
 import { createAppeal, resolveAppeal } from '../../src/content/appeals.ts';
 import { restrictPostRevision } from '../../src/content/moderation.ts';
 import { listPostRevisionHeaders } from '../../src/content/post-history-metadata.ts';
-import { readPost, listPostRevisions, readPostMetadata, type PostEntry, type RetainContentRead } from '../../src/content/reads.ts';
+import {
+  readPost,
+  listPostRevisions,
+  readPostMetadata,
+  type PostEntry,
+  type RetainContentRead,
+} from '../../src/content/reads.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 
 let f: Awaited<ReturnType<typeof standingFixture>>;
@@ -114,21 +120,19 @@ test('public-only and hard restrictions are exact, revalidated across Post histo
 
   await restrict(value, second.revisionId, 'public');
   expect(
-    (await readPost(readsDeps, value.threadId, value.itemId, readContext({ kind: 'anonymous' }), second.revisionId)).value,
+    (await readPost(readsDeps, value.threadId, value.itemId, readContext({ kind: 'anonymous' }), second.revisionId))
+      .value,
   ).toBeNull();
   expect(
-    (
-      await readPost(readsDeps, value.threadId, value.itemId, readContext(author), second.revisionId)
-    ).value?.body,
+    (await readPost(readsDeps, value.threadId, value.itemId, readContext(author), second.revisionId)).value?.body,
   ).not.toBeNull();
   expect(
     (await readPost(readsDeps, value.threadId, value.itemId, readContext(buyer), second.revisionId)).value?.body,
   ).not.toBeNull();
   await reverse(value, second.revisionId);
   expect(
-    (
-      await readPost(readsDeps, value.threadId, value.itemId, readContext({ kind: 'anonymous' }), second.revisionId)
-    ).value?.body,
+    (await readPost(readsDeps, value.threadId, value.itemId, readContext({ kind: 'anonymous' }), second.revisionId))
+      .value?.body,
   ).not.toBeNull();
 
   let retained: Parameters<RetainContentRead<PostEntry>>[0] | undefined;
@@ -156,8 +160,12 @@ test('public-only and hard restrictions are exact, revalidated across Post histo
 
   const publicRead = readContext({ kind: 'anonymous' });
   for (const revisionId of [value.revisionId, third.revisionId]) {
-    expect((await readPost(readsDeps, value.threadId, value.itemId, publicRead, revisionId)).value?.body).not.toBeNull();
-    expect((await readPostMetadata(readsDeps, value.threadId, value.itemId, publicRead, revisionId)).value).not.toBeNull();
+    expect(
+      (await readPost(readsDeps, value.threadId, value.itemId, publicRead, revisionId)).value?.body,
+    ).not.toBeNull();
+    expect(
+      (await readPostMetadata(readsDeps, value.threadId, value.itemId, publicRead, revisionId)).value,
+    ).not.toBeNull();
   }
   const defaultRead = (await readPost(readsDeps, value.threadId, value.itemId, publicRead)).value;
   expect(defaultRead && 'revisionId' in defaultRead ? defaultRead.revisionId : null).toBe(third.revisionId);
@@ -166,7 +174,14 @@ test('public-only and hard restrictions are exact, revalidated across Post histo
   ).toBeNull();
 
   for (const viewer of [publicRead.actor, author, buyer]) {
-    const history = await listPostRevisions(readsDeps, value.threadId, value.itemId, readContext(viewer), undefined, 20);
+    const history = await listPostRevisions(
+      readsDeps,
+      value.threadId,
+      value.itemId,
+      readContext(viewer),
+      undefined,
+      20,
+    );
     expect(history.entries.map((revision) => revision.id)).toEqual([value.revisionId, third.revisionId]);
     const headers = await listPostRevisionHeaders(
       readsDeps,
@@ -183,9 +198,7 @@ test('public-only and hard restrictions are exact, revalidated across Post histo
 
   await reverse(value, second.revisionId);
   expect(
-    (
-      await readPost(readsDeps, value.threadId, value.itemId, readContext(buyer), second.revisionId)
-    ).value?.body,
+    (await readPost(readsDeps, value.threadId, value.itemId, readContext(buyer), second.revisionId)).value?.body,
   ).not.toBeNull();
   const restriction = await f.reader.query<{ lifted_at: Date | null }>(
     `SELECT lifted_at FROM content.post_revision_restriction
@@ -200,11 +213,10 @@ test('explicit private drafts remain private and readable to their author', asyn
   const target = resource(value.itemId);
   await f.grant(author.accountId, 'post:read', target);
   await f.grant(author.accountId, 'thread:read', resource(value.threadId));
-  expect((await readPost(reads(), value.threadId, value.itemId, readContext(author), value.revisionId)).value?.body)
-    .not.toBeNull();
   expect(
-    (
-      await readPost(reads(), value.threadId, value.itemId, readContext({ kind: 'anonymous' }), value.revisionId)
-    ).value,
+    (await readPost(reads(), value.threadId, value.itemId, readContext(author), value.revisionId)).value?.body,
+  ).not.toBeNull();
+  expect(
+    (await readPost(reads(), value.threadId, value.itemId, readContext({ kind: 'anonymous' }), value.revisionId)).value,
   ).toBeNull();
 });

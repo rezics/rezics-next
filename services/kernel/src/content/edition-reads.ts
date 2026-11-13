@@ -123,29 +123,40 @@ export async function readContentEditionRevision(deps: Dependencies, id: string,
     );
     if (!(await sale.final())) throw new ContentNotFoundError();
     if (!(await guard.final())) throw new ContentNotFoundError();
-    const delivered = await editionSnapshot(deps, id, accessContext, async (client): Promise<ContentEditionRevisionView> => {
-      if (
-        !sameEdition(await editionRow(client, id), row) ||
-        !sameSource(await editionSource(client, row.post_id, row.revision_id, row.target_subject_id), source) ||
-        !(await guard.check(client)) ||
-        !(await allowed(client, time))
-      )
-        throw new ContentNotFoundError();
-      const selected = (
-        await client.query<{ body: Buffer }>(
-          `SELECT body FROM content.revision
+    const delivered = await editionSnapshot(
+      deps,
+      id,
+      accessContext,
+      async (client): Promise<ContentEditionRevisionView> => {
+        if (
+          !sameEdition(await editionRow(client, id), row) ||
+          !sameSource(await editionSource(client, row.post_id, row.revision_id, row.target_subject_id), source) ||
+          !(await guard.check(client)) ||
+          !(await allowed(client, time))
+        )
+          throw new ContentNotFoundError();
+        const selected = (
+          await client.query<{ body: Buffer }>(
+            `SELECT body FROM content.revision
         WHERE route=$1 AND thread_id=$2 AND post_id=$3 AND revision_id=$4 AND availability='available'
           AND body IS NOT NULL AND body_sha256=decode($5,'hex') AND licence=$6`,
-          [row.route, row.thread_id, row.post_id, row.revision_id, row.sha256, row.licence],
-        )
-      ).rows[0];
-      if (!selected || createHash('sha256').update(selected.body).digest('hex') !== row.sha256)
-        throw new ContentNotFoundError();
-      const text = new TextDecoder('utf-8', { fatal: true }).decode(selected.body);
-      const body = parseDocument(JSON.parse(text));
-      if (serializeDocument(body) !== text) throw new ContentNotFoundError();
-      return { editionId: row.edition_id, revisionId: row.revision_id, sha256: row.sha256, licence: row.licence, body };
-    });
+            [row.route, row.thread_id, row.post_id, row.revision_id, row.sha256, row.licence],
+          )
+        ).rows[0];
+        if (!selected || createHash('sha256').update(selected.body).digest('hex') !== row.sha256)
+          throw new ContentNotFoundError();
+        const text = new TextDecoder('utf-8', { fatal: true }).decode(selected.body);
+        const body = parseDocument(JSON.parse(text));
+        if (serializeDocument(body) !== text) throw new ContentNotFoundError();
+        return {
+          editionId: row.edition_id,
+          revisionId: row.revision_id,
+          sha256: row.sha256,
+          licence: row.licence,
+          body,
+        };
+      },
+    );
     // The body query used the edition transaction's snapshot. Re-read the
     // original exact Post authority after releasing it so a hold committed
     // during that transaction cannot serialize previously prepared bytes.

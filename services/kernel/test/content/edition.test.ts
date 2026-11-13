@@ -269,13 +269,7 @@ test('a buyer benefit cannot disclose a hard restricted exact Post revision thro
   const f = await fixture();
   const restrictedBody = fromPlainText('Exact bytes that the buyer later cannot read');
   const revised = await value<{ post: { revisionId: string } }>(
-    wire(
-      f.token,
-      `/v1/posts/${f.post.id}/revisions`,
-      'POST',
-      { body: restrictedBody },
-      f.post.revisionId,
-    ),
+    wire(f.token, `/v1/posts/${f.post.id}/revisions`, 'POST', { body: restrictedBody }, f.post.revisionId),
     201,
   );
   const edition = await value<{ editionId: string }>(
@@ -291,9 +285,10 @@ test('a buyer benefit cannot disclose a hard restricted exact Post revision thro
   await seedGovernanceAuthority(f.native.database.pool, f.route, edition.editionId, f.buyer.actor.accountId, [
     'edition:read',
   ]);
-  expect(
-    await value<ContentEditionRevisionView>(wire(f.buyer.bearer, `${path}/revision`), 200),
-  ).toMatchObject({ revisionId: revised.post.revisionId, body: restrictedBody });
+  expect(await value<ContentEditionRevisionView>(wire(f.buyer.bearer, `${path}/revision`), 200)).toMatchObject({
+    revisionId: revised.post.revisionId,
+    body: restrictedBody,
+  });
 
   const moderator = f.native.actors.moderator;
   await seedGovernanceAuthority(f.native.database.pool, f.route, f.post.id, moderator.actor.accountId, [

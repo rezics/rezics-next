@@ -156,7 +156,12 @@ function sourceId(event: CloudEvent, data: Record<string, unknown>): string {
     return String(data.threadId);
   if (event.type === postRestored) return String(data.postId);
   if (event.type === postErased) return String(data.postId);
-  if (event.type === takedown || event.type === restored || event.type === revisionRestricted || event.type === revisionRestored)
+  if (
+    event.type === takedown ||
+    event.type === restored ||
+    event.type === revisionRestricted ||
+    event.type === revisionRestored
+  )
     return String(data.targetId);
   if (event.type === boardCreated) return String(data.boardId);
   const id = data.realmId ?? data.spaceId ?? data.id;
@@ -262,9 +267,9 @@ async function threadIdFor(
       ? data.postId
       : (event.type === takedown || event.type === restored) && data.targetKind === 'post'
         ? data.targetId
-        : (event.type === revisionRestricted || event.type === revisionRestored)
+        : event.type === revisionRestricted || event.type === revisionRestored
           ? data.targetId
-        : null;
+          : null;
   if (typeof post === 'string') return postThread(pool, post, deadline);
   return null;
 }
@@ -458,10 +463,7 @@ export function createRealmSubjectLifecycle(input: {
       data.targetId !== native.opening
     )
       return;
-    if (
-      (event.type === revisionRestricted || event.type === revisionRestored) &&
-      data.targetId !== native.opening
-    )
+    if ((event.type === revisionRestricted || event.type === revisionRestored) && data.targetId !== native.opening)
       return;
     const previous =
       event.type === revisionCreated && data.itemId === native.opening && Array.isArray(data.previousSubjectIds)
