@@ -42,6 +42,7 @@ export function verifierCommandFlowEvent(run: DevVerifierRun): FlowEvent {
       startedAt: execution.startedAt ?? null,
       completedAt: execution.completedAt,
       durationMs: execution.durationMs,
+      phaseEvidence: execution.phaseEvidence ?? null,
     }),
   };
 }

@@ -850,6 +850,7 @@ async function runRound(
       check,
       'boot-smoke-skipped:' + captured + ':' + check.command.at(-1),
       `Boot smoke file ${check.command.at(-1)} is not tracked at the captured head.`,
+      true,
     ),
   );
   let skippedCommandCount = skippedCommandRunIds.length;

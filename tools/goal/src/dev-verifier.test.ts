@@ -14,6 +14,7 @@ import {
   type DevVerifierExecution,
 } from './dev-verifier-execution.ts';
 import { completeCommandRun, verifierCommandRunKey } from './dev-verifier-storage.ts';
+import { DEV_VERIFIER_PHASES, verifierCommandSha256 } from './dev-verifier-phase.ts';
 import {
   testFailureRepairBrief,
   classifyRun,
@@ -1194,6 +1195,9 @@ test('round summaries reference their command receipts and missing boot smoke st
   expect(skipped?.execution).toMatchObject({ status: 'terminal', outcome: 'skipped', durationMs: null });
   expect(skipped?.execution?.startedAt).toBeUndefined();
   expect(skipped?.evidence.passed).toBe(false);
+  expect(DEV_VERIFIER_PHASES.every((phase) => skipped?.execution?.phaseEvidence?.phases[phase].status === 'unreached')).toBe(
+    true,
+  );
 });
 
 test('a replay preserves the first terminal result while a genuine retry gets a new command identity', async () => {
@@ -1270,6 +1274,148 @@ test('a replay preserves the first terminal result while a genuine retry gets a 
   expect(retry.commandRunIds![0]).not.toBe(firstId);
   expect(calls).toBe(2);
   expect(readFlow(store.db).map((event) => event.operationId)).toHaveLength(2);
+});
+
+test('boot phase evidence is bound to one command receipt and its replay is idempotent', async () => {
+  const root = repo();
+  const ctx = setup(root);
+  const store = verifierReceiptStore();
+  ctx.settings.policy = readControlPolicy({ verifier: { checkAttempts: 1, bootSmokeTimeoutMs: 120_000 } });
+  const execution: DevVerifierExecution = { settings: ctx.settings, store };
+  const check = { command: ['boot-smoke'], cwd: 'services/kernel' };
+  const head = git(root, 'rev-parse', 'dev');
+  let calls = 0;
+  const runner = async () => {
+    calls++;
+    const running = store.devVerifierCommandRuns().find((run) => run.execution?.status === 'running');
+    const executionId = running?.execution?.id;
+    if (!executionId) throw new Error('The command execution identity was not claimed before the runner started.');
+    return {
+      passed: true,
+      output: '',
+      timedOut: false,
+      phaseReceipt: {
+        schema: 1,
+        executionId,
+        commandSha256: verifierCommandSha256(check.command, check.cwd),
+        runner: { kind: 'check-host', id: 'physical-run-boot', host: 'kernel-check-a' },
+        phases: Object.fromEntries(
+          DEV_VERIFIER_PHASES.map((phase, index) => [
+            phase,
+            {
+              status: 'measured',
+              clockId: 'kernel-check-a:boot-1',
+              startedMs: [0, 180_000, 420_000, 420_008][index]!,
+              completedMs: [180_000, 420_000, 420_008, 420_009][index]!,
+            },
+          ]),
+        ),
+      },
+    };
+  };
+
+  const first = await executeCheck(execution, runner, check, head, root, 'boot-phase-cache-key', undefined, undefined, 'boot-phase-round', true);
+  const commandRunId = first.commandRunIds![0]!;
+  const original = store.devVerifierRun(commandRunId)!;
+  expect(original.execution?.phaseEvidence).toMatchObject({
+    executionId: original.execution?.id,
+    commandSha256: verifierCommandSha256(check.command, check.cwd),
+    executionBudgetMs: 120_000,
+    runner: { kind: 'check-host', id: 'physical-run-boot', host: 'kernel-check-a' },
+    phases: { execution: { status: 'measured', durationMs: 8 } },
+  });
+  expect(JSON.parse(readFlow(store.db)[0]!.detail!).phaseEvidence).toEqual(original.execution?.phaseEvidence);
+
+  const replay = await executeCheck(execution, runner, check, head, root, 'boot-phase-cache-key', undefined, undefined, 'boot-phase-round', true);
+  expect(replay.commandRunIds).toEqual([commandRunId]);
+  expect(store.devVerifierRun(commandRunId)?.execution?.phaseEvidence).toEqual(original.execution?.phaseEvidence);
+  expect(readFlow(store.db)).toHaveLength(1);
+  expect(calls).toBe(1);
+  expect(first).toMatchObject({ passed: true, result: 'pass' });
+});
+
+test('boot timeout budget charges the measured execution phase and excludes queue and preparation', async () => {
+  const root = repo();
+  const ctx = setup(root);
+  const store = verifierReceiptStore();
+  ctx.settings.policy = readControlPolicy({ verifier: { checkAttempts: 1, bootSmokeTimeoutMs: 120_000 } });
+  const execution: DevVerifierExecution = { settings: ctx.settings, store };
+  const check = { command: ['boot-smoke'], cwd: 'services/kernel' };
+  const head = git(root, 'rev-parse', 'dev');
+  const runner = async () => {
+    const executionId = store.devVerifierCommandRuns().find((run) => run.execution?.status === 'running')?.execution?.id;
+    if (!executionId) throw new Error('The command execution identity was not claimed before the runner started.');
+    return {
+      passed: true,
+      output: '',
+      timedOut: false,
+      phaseReceipt: {
+        schema: 1,
+        executionId,
+        commandSha256: verifierCommandSha256(check.command, check.cwd),
+        runner: { kind: 'check-host', id: 'physical-run-boot-timeout', host: 'kernel-check-a' },
+        phases: {
+          queue: { status: 'measured', clockId: 'client-clock', startedMs: 0, completedMs: 300_000 },
+          preparation: { status: 'measured', clockId: 'kernel-check-a:boot-1', startedMs: 1, completedMs: 300_001 },
+          execution: { status: 'measured', clockId: 'kernel-check-a:boot-1', startedMs: 300_001, completedMs: 420_002 },
+          settlement: { status: 'measured', clockId: 'client-clock', startedMs: 420_003, completedMs: 420_004 },
+        },
+      },
+    };
+  };
+
+  const result = await executeCheck(
+    execution,
+    runner,
+    check,
+    head,
+    root,
+    'boot-phase-timeout-cache-key',
+    undefined,
+    undefined,
+    'boot-phase-timeout-round',
+    true,
+  );
+  expect(result).toMatchObject({ passed: false, result: 'infrastructure', timedOut: true });
+});
+
+test('a successful wrapper with an authoritative unreached boot phase remains unknown', async () => {
+  const root = repo();
+  const ctx = setup(root);
+  const store = verifierReceiptStore();
+  ctx.settings.policy = readControlPolicy({ verifier: { checkAttempts: 1 } });
+  const execution: DevVerifierExecution = { settings: ctx.settings, store };
+  const check = { command: ['boot-smoke'], cwd: 'services/kernel' };
+  const head = git(root, 'rev-parse', 'dev');
+  const runner = async () => {
+    const running = store.devVerifierCommandRuns().find((run) => run.execution?.status === 'running');
+    const executionId = running?.execution?.id;
+    if (!executionId) throw new Error('The command execution identity was not claimed before the runner started.');
+    return {
+      passed: true,
+      output: '',
+      timedOut: false,
+      phaseReceipt: {
+        schema: 1,
+        executionId,
+        commandSha256: verifierCommandSha256(check.command, check.cwd),
+        runner: { kind: 'check-host', id: 'physical-run-prep-failed', host: 'kernel-check-a' },
+        phases: {
+          queue: { status: 'measured', clockId: 'client-clock', startedMs: 1, completedMs: 2 },
+          preparation: { status: 'measured', clockId: 'kernel-check-a:boot-1', startedMs: 4, completedMs: 9 },
+          execution: { status: 'unreached', reason: 'Preparation failed before the boot command started.' },
+          settlement: { status: 'measured', clockId: 'client-clock', startedMs: 12, completedMs: 13 },
+        },
+      },
+    };
+  };
+
+  const result = await executeCheck(execution, runner, check, head, root, 'boot-unreached-cache-key', undefined, undefined, 'boot-unreached-round', true);
+  expect(result).toMatchObject({ passed: false, result: 'unknown' });
+  const stored = store.devVerifierRun(result.commandRunIds![0]!)!;
+  expect(stored.execution?.outcome).toBe('unknown');
+  expect(stored.evidence.passed).toBe(false);
+  expect(stored.execution?.phaseEvidence?.phases.execution).toMatchObject({ status: 'unreached' });
 });
 
 test('terminal result and UTC-midnight flow completion roll back together when the companion write fails', () => {

@@ -1002,7 +1002,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.verifier.findingAssertions`                   | `64`                                                                       | Maximum stable assertions per verifier result; larger results remain infrastructure/unverified.                                                                                             |
 | `policy.verifier.diagnosticCharacters`                | `6000`                                                                     | Maximum output characters included per failure in an urgent verifier repair.                                                                                                                |
 | `policy.verifier.residentPollMs`                      | `60000`                                                                    | Pause between completed resident verifier passes (ms).                                                                                                                                      |
-| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Boot-smoke deadline for each test (ms).                                                                                                                                                     |
+| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Boot-smoke deadline per test (ms); structured execution timing measures only the command phase, while missing phase evidence keeps the current wrapper deadline.                             |
 | `policy.verifier.roundIntervalMs`                     | `3600000`                                                                  | Minimum time between verifier rounds (ms).                                                                                                                                                  |
 | `policy.verifier.roundDeadlineMs`                     | `3300000`                                                                  | Maximum elapsed time scheduled for one verifier round (ms); unstarted checks carry into the next round.                                                                                     |
 | `policy.verifier.maxSelectionCommits`                 | `1000`                                                                     | Largest changed commit range selected by changed paths before using the complete configured test set.                                                                                       |
@@ -3180,6 +3180,34 @@ command runs. Keep product failure, infrastructure, skipped and unknown distinct
 Decision: retain the existing head/check cache key separately from round-scoped attempt keys, write one `check`
 completion event per command identity, and represent a missing boot-smoke file or a tree without `package.json` as
 skipped with no start time.
+
+Decision: persist schema-1 phase evidence on boot command receipts, bound to the exact verifier execution, runner and
+command; mark missing and unreached phases explicitly, and retain the current round deadline until the Kernel producer
+handoff supplies authoritative live boundaries.
+
+Boot command receipts record queue, preparation, execution and terminal settlement as measured, unreached or unknown
+phases. A phase measurement carries its producer clock identity and monotonic start/end; the command digest binds it to
+the exact selected argv and cwd, while the round-scoped execution ID and runner identity preserve custody. The
+configured execution budget is stored with the receipt and compared only with a measured execution interval. Receipts
+from before this field existed remain readable and count as unknown. A valid receipt that says execution was unreached
+cannot produce a passing boot result. The overall round deadline continues to cover the complete wrapper; a local
+process spawn is not treated as remote command execution. Phase data does not establish token allowance, which remains
+unknown until measured.
+
+The phase receipt handoff is not yet available on the Kernel path. `services/kernel/scripts/check.ts` calls
+`runOnCheckHost` without forwarding a settlement callback; `scripts/stack-run.ts` can relay settlement but exposes no
+queue, preparation or live execution-boundary event to its caller. The remote producer's `RemotePhysicalRunReceipt`
+has host/run identity and monotonic command start/terminal evidence, but the Goal `processGroupRunner` captures only
+stdout/stderr. The smallest producer follow-up is a typed phase callback from `scripts/remote-check.ts` through
+`scripts/stack-run.ts` and the Kernel check to a dedicated Goal runner receipt channel. The Goal adapter must add the
+active execution ID and command digest, and cross-check the physical host/run identity; the producer callback must
+include admission, preparation, actual command start, and terminal settlement. Until that channel carries an
+authoritative start before execution, use the existing round deadline for the path.
+
+For the first two complete UTC days after adoption, require every terminal remote boot run to have all four phases
+measured or explicitly unreached, and require zero non-passing outcomes labeled passed. Compare per-head boot timeouts,
+completion rate and round time at comparable offered work. Phase coverage is an accounting result only; time savings
+and allowance savings remain unproven until measured.
 
 Measure the first two full UTC days after deployment against the
 [delivery-step audit](reports/daily-step-audit-2026-11-11.md#one-structural-change-and-its-measure): all terminal command
