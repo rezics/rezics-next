@@ -19528,6 +19528,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         query: {
                             revisionId?: string;
                             kind?: "publication" | "structure";
+                            includeTitle?: "1";
                         };
                         headers: unknown;
                         response: {
@@ -19536,6 +19537,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                 revisionId: string;
                                 kind: "publication" | "structure";
                                 sourceRevisionId: string | null;
+                                title?: string;
                             };
                             400: Response | {
                                 type: unknown;

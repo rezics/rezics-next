@@ -19512,6 +19512,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                     query: {
                         revisionId?: string;
                         kind?: "publication" | "structure";
+                        includeTitle?: "1";
                     };
                     headers: unknown;
                     response: {
@@ -19520,6 +19521,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                             revisionId: string;
                             kind: "publication" | "structure";
                             sourceRevisionId: string | null;
+                            title?: string;
                         };
                         400: Response | {
                             type: unknown;

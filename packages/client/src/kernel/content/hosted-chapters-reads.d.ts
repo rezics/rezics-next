@@ -1,12 +1,16 @@
 import type { ReadContext } from './model.ts';
 import { type HostedDependencies, type HostedReadSelection, type HostedChildrenInput, type HostedNavigationInput, type HostedOccurrenceView, type HostedPageView, type HostedResolutionView } from './hosted-chapters-model.ts';
-export declare function readHostedCatalogue(deps: HostedDependencies, catalogueId: string, selection: HostedReadSelection, context: ReadContext): Promise<{
-    value: Readonly<{
+type HostedCatalogueReadSelection = HostedReadSelection & Readonly<{
+    includeTitle?: '1';
+}>;
+export declare function readHostedCatalogue(deps: HostedDependencies, catalogueId: string, selection: HostedCatalogueReadSelection, context: ReadContext): Promise<{
+    value: {
         catalogueId: string;
         revisionId: string;
         kind: 'structure' | 'publication';
         sourceRevisionId: string | null;
-    }>;
+        title?: string;
+    };
     anchors: Readonly<{
         partition: import("../partition/partition.ts").Partition;
         epoch: number;
@@ -63,3 +67,4 @@ export declare function navigateHostedChapters(deps: HostedDependencies, catalog
         position: bigint;
     }>[];
 }>;
+export {};
