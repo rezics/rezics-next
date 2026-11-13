@@ -109,8 +109,13 @@ Sources checked before this decision: this document; Knowledge's
 [`hosted-chapters-store.ts`](hosted-chapters-store.ts), [`hosted-chapters-append.ts`](hosted-chapters-append.ts),
 [`hosted-chapters-commands.ts`](hosted-chapters-commands.ts),
 [`hosted-chapters-attachments.ts`](hosted-chapters-attachments.ts), [`hosted-chapters-reads.ts`](hosted-chapters-reads.ts),
+[`hosted-migration-input.ts`](hosted-migration-input.ts) and its model and native tests,
 [`hosted-append-lifecycle.ts`](hosted-append-lifecycle.ts),
-[`db/content/schema.sql`](../../db/content/schema.sql);
+[`db/content/schema.sql`](../../db/content/schema.sql),
+[`20261111120000_hosted_chapters.sql`](../../db/content/migrations/20261111120000_hosted_chapters.sql),
+[`20261113025800_hosted_root_append.sql`](../../db/content/migrations/20261113025800_hosted_root_append.sql),
+[`20261113035450_hosted_private_title_redaction.sql`](../../db/content/migrations/20261113035450_hosted_private_title_redaction.sql), and
+[`20261113091612_hosted_migration_input.sql`](../../db/content/migrations/20261113091612_hosted_migration_input.sql);
 the independent [Knowledge model](../../../../docs/research/knowledge-workspaces-model-astra.md) and
 [product investigation](../../../../docs/research/knowledge-workspaces-product-astra.md),
 [scalability audit](../../../../docs/research/universal-scalability-audit.md) and its
@@ -145,6 +150,11 @@ historical point/summary access paths with a pinned resumable baseline, and reta
 do not fabricate unavailable pre-baseline history. For the first point publication over a legacy public manifest,
 build a separate pinned public baseline from that manifest, never from the private draft. Hold it privately until
 the point commit CASes the original publication; racing publication invalidates it. Old public IDs stay readable.
+
+Decision: the public-baseline source binds the active publication ID, route/home and actor context, then pages only
+that retained manifest by raw ordinal; it reports pointer staleness without following the draft, preserves neutral
+unavailable slots, and relies on immutable publication retention while the ordered-generation builder owns its
+frontier, candidate state and CAS of the original publication ID.
 
 ## Book publication contract
 
