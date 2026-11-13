@@ -98,6 +98,10 @@ draft, stage all three sequence workspaces in that transaction, then commit sequ
 changed ancestor summaries, receipt/event and expected-head CAS atomically. The planner remains pure and owns no
 command or persistence authority.
 
+Decision: point insertion and subtree removal resolve one expected snapshot and update the existing sibling,
+preorder and chapter indexes; removal cuts ranges by stored aggregates without visiting descendants, preserving
+historical roots and permanent occurrence identity.
+
 ### Evidence and migration
 
 Sources checked before this decision: this document; Knowledge's
