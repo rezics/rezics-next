@@ -68,7 +68,7 @@ type BaselineRow = Readonly<{
   chapter_root_id: string | null;
   phase: HostedVersionPublicBaselineState['cursor']['phase'];
   occurrence_after_ordinal: string;
-  node_after_kind: string;
+  node_after_kind: HostedVersionPublicBaselineCursor['nodeAfterKind'];
   node_after_id: string;
   root_null_done: boolean;
   root_after_parent_id: string;

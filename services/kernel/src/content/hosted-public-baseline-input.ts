@@ -74,7 +74,7 @@ function requireAccount(actor: Actor): asserts actor is Extract<Actor, { kind: '
 
 /** Bind resumable source handles to the same native actor context as the
  * installed private cursor, without storing its access token or raw scopes. */
-function actorBinding(actor: Extract<Actor, { kind: 'account' }>): string {
+export function hostedPublicBaselineActorBinding(actor: Extract<Actor, { kind: 'account' }>): string {
   return createHash('sha256')
     .update(
       JSON.stringify([actor.accountId, actor.clientId, actor.requestedBy, actor.authnEpoch, [...actor.scopes].sort()]),
@@ -101,7 +101,7 @@ function assertSource(source: HostedPublicBaselineSource, actor: Extract<Actor, 
     source.expectedPlacementCount < 0
   )
     throw new InvalidHostedPublicBaselineInputError('Invalid hosted public baseline source');
-  if (source.actorBinding !== actorBinding(actor)) throw new ContentNotFoundError();
+  if (source.actorBinding !== hostedPublicBaselineActorBinding(actor)) throw new ContentNotFoundError();
   return route;
 }
 
@@ -214,7 +214,7 @@ export async function captureHostedPublicBaselineInput(
         route,
         threadId: catalogue.thread_id,
         publicationId: input.expectedPublicationId,
-        actorBinding: actorBinding(actor),
+        actorBinding: hostedPublicBaselineActorBinding(actor),
         expectedPlacementCount: expected,
       };
       return noEffect({ source, frontier: { afterOrdinal: -1 } });

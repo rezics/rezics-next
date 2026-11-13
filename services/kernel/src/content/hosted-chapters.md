@@ -234,6 +234,10 @@ Decision: public-baseline receiving copies the sealed source into one private ca
 pages, shares activation's occurrence/node/root writer, verifies counts and roots without a final source scan, and
 returns only after rechecking the original publication; unavailable values remain null.
 
+Decision: a private author progression endpoint advances one bounded build or receiving page, or one lifecycle
+transition per request against its retained publication and actor-bound frontier; only an internally completed and
+verified receiver candidate may enter the point-publication transaction.
+
 ## Book publication contract
 
 Choose one exact public snapshot model with two launch paths: **point publish** for serial work, and

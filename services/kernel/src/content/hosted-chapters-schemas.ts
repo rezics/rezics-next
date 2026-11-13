@@ -111,6 +111,68 @@ export const HostedReplacePublishedChapterSchema = t.Object(
   },
   closed,
 );
+const HostedPublicBaselineFrontierSchema = t.Object(
+  { afterOrdinal: t.Integer({ minimum: -1, maximum: Number.MAX_SAFE_INTEGER }) },
+  closed,
+);
+const HostedBaselineCursorIdSchema = t.String({
+  pattern:
+    '^(?:00000000-0000-0000-0000-000000000000|[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$',
+});
+const HostedVersionPublicBaselineCursorSchema = t.Object(
+  {
+    phase: t.Union([t.Literal('occurrences'), t.Literal('nodes'), t.Literal('roots'), t.Literal('complete')]),
+    occurrenceAfterOrdinal: t.String({ pattern: '^(?:0|[1-9][0-9]{0,15})$' }),
+    nodeAfterKind: t.Union([t.Literal(''), t.Literal('chapters'), t.Literal('preorder'), t.Literal('siblings')]),
+    nodeAfterId: HostedBaselineCursorIdSchema,
+    rootNullDone: t.Boolean(),
+    rootAfterParentId: HostedBaselineCursorIdSchema,
+  },
+  closed,
+);
+const hostedPublicBaselineCommon = {
+  expectedRevisionId: HostedIdSchema,
+  expectedPublicationId: HostedIdSchema,
+};
+export const HostedLegacyPublicBaselineSchema = t.Union([
+  t.Object({ ...hostedPublicBaselineCommon, step: t.Literal('startBuild') }, closed),
+  t.Object(
+    { ...hostedPublicBaselineCommon, step: t.Literal('build'), frontier: HostedPublicBaselineFrontierSchema },
+    closed,
+  ),
+  t.Object(
+    { ...hostedPublicBaselineCommon, step: t.Literal('seal'), frontier: HostedPublicBaselineFrontierSchema },
+    closed,
+  ),
+  t.Object(
+    { ...hostedPublicBaselineCommon, step: t.Literal('receive'), frontier: HostedPublicBaselineFrontierSchema },
+    closed,
+  ),
+  t.Object(
+    { ...hostedPublicBaselineCommon, step: t.Literal('apply'), cursor: HostedVersionPublicBaselineCursorSchema },
+    closed,
+  ),
+  t.Object({ ...hostedPublicBaselineCommon, step: t.Literal('complete') }, closed),
+]);
+export const HostedLegacyPublicBaselineProgressSchema = t.Object(
+  {
+    catalogueId: HostedIdSchema,
+    sourcePublicationId: HostedIdSchema,
+    expectedPlacementCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    nextStep: t.Union([
+      t.Literal('build'),
+      t.Literal('seal'),
+      t.Literal('receive'),
+      t.Literal('apply'),
+      t.Literal('complete'),
+      t.Literal('done'),
+    ]),
+    buildFrontier: t.Union([HostedPublicBaselineFrontierSchema, t.Null()]),
+    sealFromFrontier: t.Union([HostedPublicBaselineFrontierSchema, t.Null()]),
+    receivingCursor: t.Union([HostedVersionPublicBaselineCursorSchema, t.Null()]),
+  },
+  closed,
+);
 export const HostedCommandSchema = t.Object({ catalogueId: HostedIdSchema, revisionId: HostedIdSchema }, closed);
 const revision = {
   catalogueId: HostedIdSchema,
