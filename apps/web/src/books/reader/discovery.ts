@@ -12,6 +12,7 @@ const schema = v.strictObject({
         kind: v.literal('publication'),
         sourceRevisionId: v.nullable(hostedId),
         threadId: hostedId,
+        title: v.optional(v.pipe(v.string(), v.maxLength(512))),
       }),
     ),
     v.maxLength(20),
@@ -30,7 +31,7 @@ export async function readHostedDiscovery(
   signal: AbortSignal,
 ): Promise<HostedRead<HostedDiscoveryPage>> {
   const result = await client.subjects({ id: subjectId }).hostedCatalogues.get({
-    query: { limit: '20', ...(cursor ? { cursor } : {}) },
+    query: { includeTitle: '1', limit: '20', ...(cursor ? { cursor } : {}) },
     ...(authorization ? { headers: { authorization } } : {}),
     fetch: { signal, cache: 'no-store', redirect: 'manual' },
   });

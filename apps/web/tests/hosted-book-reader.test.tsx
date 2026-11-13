@@ -12,6 +12,7 @@ import {
   illustrativePublication,
 } from '../src/books/reader/illustrative-source';
 import { createHostedCatalogueApi } from '../src/books/reader/native-api';
+import type { HostedDiscoveryPage } from '../src/books/reader/discovery';
 import { decodeHostedBookDocument, readHostedBook } from '../src/books/reader/native-mapper';
 import type { BookAddress, BookReadRequest, BookReadResult, HostedBookSource } from '../src/books/reader/source';
 
@@ -891,62 +892,128 @@ test('Subject discovery keeps sparse continuation and a current publication link
   const { readHostedDiscovery } = await import('../src/books/reader/discovery');
   const { HostedBookVisitView, hostedBookSubjectHref } = await import('../src/books/reader/route');
   const requests: Request[] = [];
-  const page = { subjectId: ids.post, items: [], nextCursor: illustrativeBookCursor };
+  const controller = new AbortController();
+  const page: HostedDiscoveryPage = { subjectId: ids.post, items: [], nextCursor: illustrativeBookCursor };
+  let response: unknown = page;
+  let status = 200;
   const native = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       requests.push(new Request(input, init));
-      return Response.json(page);
+      return Response.json(response, { status });
     },
   });
-  const result = await readHostedDiscovery(
-    native,
-    null,
-    ids.post,
-    illustrativeBookCursor,
-    new AbortController().signal,
-  );
+  async function read(cursor: string | undefined) {
+    const before = requests.length;
+    const result = await readHostedDiscovery(native, null, ids.post, cursor, controller.signal);
+    expect(requests).toHaveLength(before + 1);
+    const request = requests.at(-1)!;
+    const url = new URL(request.url);
+    expect(request.method).toBe('GET');
+    expect(url.pathname).toBe(`/v1/subjects/${ids.post}/hostedCatalogues`);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      includeTitle: '1',
+      limit: '20',
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    expect(request.cache).toBe('no-store');
+    return result;
+  }
+  const result = await read(undefined);
   expect(result).toEqual({ state: 'ready', value: page });
-  const url = new URL(requests[0]!.url);
-  expect(url.pathname).toBe(`/v1/subjects/${ids.post}/hostedCatalogues`);
-  expect(url.searchParams.get('limit')).toBe('20');
-  expect(url.searchParams.get('cursor')).toBe(illustrativeBookCursor);
   host = document.createElement('main');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () =>
-    root!.render(
-      <HostedBookVisitView visit={{ state: 'catalogues', page }} locale="en" navigate={() => {}} reload={() => {}} />,
-    ),
-  );
+  async function render(value: HostedDiscoveryPage, locale: 'en' | 'zh-Hant' = 'en') {
+    await act(async () =>
+      root!.render(
+        <HostedBookVisitView
+          visit={{ state: 'catalogues', page: value }}
+          locale={locale}
+          navigate={() => {}}
+          reload={() => {}}
+        />,
+      ),
+    );
+  }
+  if (result.state !== 'ready') throw new Error('Expected sparse discovery');
+  await render(result.value);
   expect(host.querySelector('a')?.getAttribute('href')).toBe(
     hostedBookSubjectHref(ids.post, 'en', illustrativeBookCursor),
   );
-  const populated = {
+  const row = {
+    catalogueId: ids.catalogue,
+    revisionId: ids.release,
+    sourceRevisionId: ids.structure,
+    kind: 'publication' as const,
+    threadId: ids.thread,
+  };
+  const title = '<img src=x onerror=alert(1)> & The public opening';
+  const populated: HostedDiscoveryPage = {
     ...page,
     items: [
-      {
-        catalogueId: ids.catalogue,
-        revisionId: ids.release,
-        sourceRevisionId: ids.structure,
-        kind: 'publication' as const,
-        threadId: ids.thread,
-      },
+      { ...row, title },
+      { ...row, catalogueId: ids.nested },
+      { ...row, catalogueId: ids.part, title: '' },
     ],
   };
-  await act(async () =>
-    root!.render(
-      <HostedBookVisitView
-        visit={{ state: 'catalogues', page: populated }}
-        locale="en"
-        navigate={() => {}}
-        reload={() => {}}
-      />,
-    ),
-  );
+  response = populated;
+  const continued = await read(illustrativeBookCursor);
+  expect(continued).toEqual({ state: 'ready', value: populated });
+  if (continued.state !== 'ready') throw new Error('Expected continued discovery');
+  for (const locale of ['en', 'zh-Hant'] as const) {
+    await render(continued.value, locale);
+    const links = [...host.querySelectorAll<HTMLAnchorElement>('li a')];
+    expect(links.map((link) => link.textContent)).toEqual([
+      title,
+      m.book_reader_publication({ number: 2 }, { locale }),
+      m.book_reader_publication({ number: 3 }, { locale }),
+    ]);
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(
+      populated.items.map(
+        (item) => `/${locale}/books/${item.catalogueId}/read?subject=${ids.post}&release=${ids.release}`,
+      ),
+    );
+    expect(links.every((link) => link.classList.contains('min-h-11'))).toBe(true);
+    expect(host.querySelector('img')).toBeNull();
+    expect(host.querySelector('ol')?.nextElementSibling?.getAttribute('href')).toBe(
+      hostedBookSubjectHref(ids.post, locale, illustrativeBookCursor),
+    );
+  }
+  await render(continued.value);
   const chapterLink = new URL(host.querySelector('a')!.href);
   expect(chapterLink.pathname).toBe(`/en/books/${ids.catalogue}/read`);
   expect(chapterLink.searchParams.get('subject')).toBe(ids.post);
   expect(chapterLink.searchParams.get('release')).toBe(ids.release);
+
+  status = 503;
+  expect(await read(illustrativeBookCursor)).toEqual({ state: 'unavailable' });
+  status = 200;
+  response = { ...page, items: [{ ...row, title: 'A new current opening' }], nextCursor: null };
+  const retried = await read(illustrativeBookCursor);
+  expect(retried).toEqual({ state: 'ready', value: response });
+  if (retried.state !== 'ready') throw new Error('Expected retried discovery');
+  await render(retried.value);
+  expect(host.querySelector('li a')?.textContent).toBe('A new current opening');
+  expect(host.querySelectorAll('a')).toHaveLength(1);
+
+  response = { ...page, items: [{ ...row, title: 'x'.repeat(512) }] };
+  expect(await read(illustrativeBookCursor)).toEqual({ state: 'ready', value: response });
+  for (const invalidTitle of ['x'.repeat(513), null, 42]) {
+    response = { ...page, items: [{ ...row, title: invalidTitle }] };
+    expect(await read(illustrativeBookCursor)).toEqual({ state: 'unavailable' });
+  }
+  for (const [code, state] of [
+    [400, 'changed'],
+    [412, 'changed'],
+    [401, 'denied'],
+    [403, 'denied'],
+    [404, 'not-found'],
+  ] as const) {
+    status = code;
+    expect(await read(illustrativeBookCursor)).toEqual({ state });
+  }
+  controller.abort();
+  expect(requests.every((request) => request.signal.aborted)).toBe(true);
 });
 
 test('native checkpoints use body-free metadata for observation and CAS readback', async () => {

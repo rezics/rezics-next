@@ -17,23 +17,30 @@ composition entry.
 preload cache or stale route payload: `staleTime: 0`, `gcTime: 0`, `shouldReload: true` and `sessionReread: true`.
 The default catalogue visit is the current public publication's root contents. Subject discovery uses the same
 route with `view=catalogues`; its path ID is then the Subject ID. It calls the generated
-`subjects({id}).hostedCatalogues.get` once with `limit=20` and the optional opaque cursor. Empty and sparse windows
-retain More when supplied, and Retry rereads the same URL. Each row opens its disclosed publication and retains
-`subject` in subsequent exact chapter and contents links. Discovery supplies no catalogue titles, so rows use a
-localized numbered publication label without per-row hydration. `readHostedBookVisit` prepares the native Web
+`subjects({id}).hostedCatalogues.get` once with `includeTitle=1`, `limit=20` and the original optional opaque cursor
+on initial, continuation and Retry reads. Empty and sparse windows retain More when supplied, and Retry rereads
+the same URL. Each row opens its disclosed publication and retains `subject` in subsequent exact chapter and
+contents links. `readHostedBookVisit` prepares the native Web
 session, reads the current publication with the installed generated catalogue operation, resolves any frozen
 release and selected occurrence, and produces `NativeHostedBookAdmission` for this visit. An omitted or empty
 catalogue title uses the localized Book title; it does not refuse an otherwise readable chapter. Credentials never enter URLs or
 loader data. Missing native origin never falls back to Web's development fixtures.
 
-Decision: only the existing current-publication admission GET opts into `includeTitle: '1'`. Its strict point
+Decision: Subject discovery opts into native list titles independently of point admission. Its strict HTTP decoder
+accepts an optional string of at most 512 characters through the generated page type. Each nonempty admitted title
+is ordinary escaped link text describing the current admitted public opening, not a frozen historical title;
+an omitted or empty title uses the existing localized numbered publication label. Supplied order, exact destinations
+and 44px link targets stay unchanged. Every explicit page is one list request of at most 20 rows with no per-Book
+metadata/body reads, refill or hydration. Native cursors bind the title opt-in; an incompatible cursor keeps changed-state
+recovery with its original operands, rather than changing query mode or becoming an empty page.
+
+Decision: the existing current-publication admission GET separately opts into `includeTitle: '1'`. Its strict point
 response decoder accepts an optional string of at most 512 characters, matching Content; the private reader input
 retains that bound. The admitted label describes the currently public opening even for a frozen historical
 selection. Only that admission supplies the display label; omitted or empty labels use the current localized
 fallback, with no inference from the URL, draft, chapter body or previous visit. Frozen coordinates, current-access
-rechecks, header composition and request counts stay unchanged. Subject discovery keeps numbered labels without
-list title opt-in or per-row hydration. Occurrence/page response shapes and 256-character occurrence titles stay
-unchanged.
+rechecks, header composition and request counts stay unchanged. Neither receiver infers titles from IDs, a draft,
+previous visit, URL or chapter. Occurrence/page response shapes and 256-character occurrence titles stay unchanged.
 
 URL values are HTTP selections, validated at the boundary in `address.ts`, not admission or expected credentials.
 The host always asks for `kind: publication`; a private structure revision cannot turn into a public draft read.
@@ -185,7 +192,10 @@ The incumbent refinement keeps the existing reading measure, wrapping controls, 
 `tests/hosted-book-reader.test.tsx` retains original bounds, exact operands, reuse, sparse retry, move, focus,
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native
 host observations, public-only selectors, canonical links in eight locales, the actual default file route and
-bounded return through browser Back/Forward. New assertions pin sparse Subject discovery, exact CAS save/get/clear,
+bounded return through browser Back/Forward. The existing sparse Subject discovery case also pins exact title opt-in
+operands on initial/continued/retried reads, one list request without point reads, escaped supplied titles,
+absent/empty localized fallbacks, the HTTP title bound and unchanged link coordinates and cursor failures.
+New assertions pin exact CAS save/get/clear,
 withheld resume, response target mismatch, uncertain same-key retry, and retirement of late checkpoint reads.
 Block-position assertions cover explicit visible-block save, exact retry/readback, nonzero native offsets, article
 scoping, every exact coordinate, null/missing anchors, withheld targets, viewer retirement, user scrolling, once-only

@@ -83,7 +83,7 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
                   release: item.revisionId,
                 })}
               >
-                {m.book_reader_publication({ number: index + 1 }, options)}
+                {item.title || m.book_reader_publication({ number: index + 1 }, options)}
               </a>
             </li>
           ))}
