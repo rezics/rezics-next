@@ -41,6 +41,25 @@ export const HostedRootAppendSchema = t.Object(
   { expectedRevisionId: HostedIdSchema, occurrenceId: HostedIdSchema, title, target },
   closed,
 );
+const draftPointPlacement = t.Union([
+  t.Object({ kind: t.Literal('part') }, closed),
+  t.Object({ kind: t.Literal('chapter'), target }, closed),
+]);
+export const HostedInsertDraftPointSchema = t.Object(
+  {
+    expectedRevisionId: HostedIdSchema,
+    occurrenceId: HostedIdSchema,
+    parentId: nullableId,
+    beforeOccurrenceId: nullableId,
+    title,
+    placement: draftPointPlacement,
+  },
+  closed,
+);
+export const HostedRemoveDraftPointSchema = t.Object(
+  { expectedRevisionId: HostedIdSchema, occurrenceId: HostedIdSchema },
+  closed,
+);
 export const HostedPublishSchema = t.Object(
   {
     expectedRevisionId: HostedIdSchema,
