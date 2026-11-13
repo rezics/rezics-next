@@ -10,6 +10,7 @@ import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { contentRequestId } from './adapters/bind.ts';
 import type { contentRoutes } from './routes.ts';
 import { strictContentSchema } from './schema-validation.ts';
+import { HostedIdSchema } from './hosted-chapters-schemas.ts';
 import {
   ContentNotFoundError as CommandNotFoundError,
   ContentForbiddenError,
@@ -35,7 +36,6 @@ import {
   type HostedPublicationPreparationDependencies,
 } from './hosted-publication-preparation.ts';
 import {
-  HostedIdSchema,
   HostedPublicationPreparationAdvanceSchema,
   HostedPublicationPreparationBatchSchema,
   HostedPublicationPreparationEmptySchema,
@@ -110,9 +110,8 @@ function context(request: Request, deadline: number) {
   };
 }
 
-function record<T>(result: T, session: { record: (value: T) => void }, set: { headers: Record<string, string> }) {
+function record<T>(result: T, session: { record: (value: T) => void }) {
   session.record(result);
-  set.headers['cache-control'] = 'private, no-store';
 }
 
 /** Adds only the private preparation author API. It is registered by the
@@ -140,7 +139,8 @@ export function hostedPublicationPreparationRoutes(
           startHostedPublicationPreparation(deps, actor, id, body, context(request, job.deadline)),
         ),
       );
-      record(result, session, set);
+      record(result, session);
+      set.headers['cache-control'] = 'private, no-store';
       set.status = 202;
       return result.value;
     },
@@ -165,7 +165,8 @@ export function hostedPublicationPreparationRoutes(
           appendHostedPublicationPreparationBatch(deps, actor, id, stageId, body, context(request, job.deadline)),
         ),
       );
-      record(result, session, set);
+      record(result, session);
+      set.headers['cache-control'] = 'private, no-store';
       return result.value;
     },
   );
@@ -189,7 +190,8 @@ export function hostedPublicationPreparationRoutes(
           freezeHostedPublicationPreparationSelection(deps, actor, id, stageId, context(request, job.deadline)),
         ),
       );
-      record(result, session, set);
+      record(result, session);
+      set.headers['cache-control'] = 'private, no-store';
       return result.value;
     },
   );
@@ -213,7 +215,8 @@ export function hostedPublicationPreparationRoutes(
           advanceHostedPublicationPreparation(deps, actor, id, stageId, body.stepId, context(request, job.deadline)),
         ),
       );
-      record(result, session, set);
+      record(result, session);
+      set.headers['cache-control'] = 'private, no-store';
       return result.value;
     },
   );
@@ -237,7 +240,8 @@ export function hostedPublicationPreparationRoutes(
           readHostedPublicationPreparationProgress(deps, actor, id, stageId, context(request, job.deadline)),
         ),
       );
-      record(result, session, set);
+      record(result, session);
+      set.headers['cache-control'] = 'private, no-store';
       return result.value;
     },
   );
@@ -261,7 +265,8 @@ export function hostedPublicationPreparationRoutes(
           cancelHostedPublicationPreparation(deps, actor, id, stageId, context(request, job.deadline)),
         ),
       );
-      record(result, session, set);
+      record(result, session);
+      set.headers['cache-control'] = 'private, no-store';
       return result.value;
     },
   );
@@ -285,7 +290,8 @@ export function hostedPublicationPreparationRoutes(
           sealHostedPublicationPreparation(deps, actor, id, stageId, context(request, job.deadline)),
         ),
       );
-      record(result, session, set);
+      record(result, session);
+      set.headers['cache-control'] = 'private, no-store';
       return result.value;
     },
   );
