@@ -195,13 +195,12 @@ export async function issueRevisionDisclosure(
       const recordSource = state.source;
       const sourceDigest = revisionDisclosureSourceDigest(
         {
+          ...recordSource,
           route,
           disclosure_id: disclosureId,
           catalogue_id: selected.catalogueId,
           issued_transaction_id: transactionId,
-          licence: recordSource.licence,
           issuer_account_id: issuer.accountId,
-          ...recordSource,
         },
         operationId,
       );

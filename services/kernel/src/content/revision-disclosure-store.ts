@@ -154,13 +154,27 @@ export function revisionDisclosureCatalogueHome(catalogueId: string): number | n
   return routedRevisionDisclosureId(catalogueId);
 }
 
+type RevisionDisclosureSqlRow = Omit<RevisionDisclosureRow, 'actor_scopes'> & {
+  actor_scopes: readonly (string | null)[];
+};
+
+/** Compiled SQL types `text[]` as `(string | null)[]`; stored scopes are non-null. */
+export function revisionDisclosureFromSql(
+  row: RevisionDisclosureSqlRow | null | undefined,
+): RevisionDisclosureRow | null {
+  if (!row) return null;
+  const actor_scopes = row.actor_scopes;
+  if (!actor_scopes.every((scope): scope is string => scope !== null)) return null;
+  return { ...row, actor_scopes };
+}
+
 export async function revisionDisclosureRow(
   client: AccessClient,
   disclosureId: string,
 ): Promise<RevisionDisclosureRow | null> {
   const route = routedRevisionDisclosureId(disclosureId);
   if (route === null) return null;
-  return (await readDisclosure.run(client, { route, disclosure_id: disclosureId })) ?? null;
+  return revisionDisclosureFromSql(await readDisclosure.run(client, { route, disclosure_id: disclosureId }));
 }
 
 export async function lockRevisionDisclosureRow(
@@ -169,7 +183,7 @@ export async function lockRevisionDisclosureRow(
 ): Promise<RevisionDisclosureRow | null> {
   const route = routedRevisionDisclosureId(disclosureId);
   if (route === null) return null;
-  return (await lockDisclosure.run(client, { route, disclosure_id: disclosureId })) ?? null;
+  return revisionDisclosureFromSql(await lockDisclosure.run(client, { route, disclosure_id: disclosureId }));
 }
 
 export async function lookupIssuedRevisionDisclosure(
@@ -180,15 +194,15 @@ export async function lookupIssuedRevisionDisclosure(
   const route = revisionDisclosureSourceHome(target);
   const catalogueRoute = revisionDisclosureCatalogueHome(catalogueId);
   if (route === null || catalogueRoute === null) return null;
-  return (
-    (await lookupDisclosure.run(client, {
+  return revisionDisclosureFromSql(
+    await lookupDisclosure.run(client, {
       route,
       catalogue_id: catalogueId,
       thread_id: target.threadId,
       post_id: target.postId,
       revision_id: target.revisionId,
       sha256: target.sha256,
-    })) ?? null
+    }),
   );
 }
 

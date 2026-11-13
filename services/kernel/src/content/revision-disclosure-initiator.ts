@@ -8,7 +8,13 @@ import {
   type RevisionDisclosureRow,
   type RevisionDisclosureSource,
 } from './revision-disclosure-model.ts';
-import { revisionDisclosureDigest, revisionDisclosureHex, sourceOf, targetOf } from './revision-disclosure-store.ts';
+import {
+  revisionDisclosureDigest,
+  revisionDisclosureFromSql,
+  revisionDisclosureHex,
+  sourceOf,
+  targetOf,
+} from './revision-disclosure-store.ts';
 import readInitiator from './revision-disclosure-initiator.sql';
 
 export function revisionDisclosureSourceDigest(
@@ -47,7 +53,7 @@ function actorFrom(row: RevisionDisclosureRow): DurableInitiatorRecord['actor'] 
     !Number.isSafeInteger(authnEpoch) ||
     authnEpoch <= 0 ||
     !Array.isArray(row.actor_scopes) ||
-    !row.actor_scopes.every((scope) => typeof scope === 'string') ||
+    !row.actor_scopes.every((scope): scope is string => typeof scope === 'string') ||
     (row.actor_requested_by === null
       ? row.original_delegation_transaction_id !== null || row.original_delegation_issued_valid !== null
       : row.original_delegation_transaction_id === null || row.original_delegation_issued_valid === null)
@@ -71,12 +77,14 @@ export const readRevisionDisclosureInitiator: DurableInitiatorReader = async (cl
     routeOf(operation.sourceId) !== operation.route
   )
     return null;
-  const row = await readInitiator.run(client, {
-    route: operation.route,
-    operation_id: operation.id,
-    disclosure_id: operation.sourceId,
-    partition_no: partitionOf(operation.route),
-  });
+  const row = revisionDisclosureFromSql(
+    await readInitiator.run(client, {
+      route: operation.route,
+      operation_id: operation.id,
+      disclosure_id: operation.sourceId,
+      partition_no: partitionOf(operation.route),
+    }),
+  );
   if (!row || row.revoked_at !== null) return null;
   const actor = actorFrom(row);
   if (!actor) return null;
