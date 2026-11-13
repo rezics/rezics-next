@@ -21,11 +21,17 @@ const target = t.Object(
 const address = {
   occurrenceId: HostedIdSchema,
   parentId: nullableId,
+  position: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+};
+// Full replacement keeps its bounded legacy input contract; only read addresses
+// span a sealed append prefix. An exact position is never truncated or renumbered.
+const replacementAddress = {
+  ...address,
   position: t.Integer({ minimum: 0, maximum: HOSTED_PLACEMENT_LIMIT - 1 }),
 };
 const placement = t.Union([
-  t.Object({ ...address, title, kind: t.Literal('part') }, closed),
-  t.Object({ ...address, title, kind: t.Literal('chapter'), target }, closed),
+  t.Object({ ...replacementAddress, title, kind: t.Literal('part') }, closed),
+  t.Object({ ...replacementAddress, title, kind: t.Literal('chapter'), target }, closed),
 ]);
 const placements = t.Array(placement, { maxItems: HOSTED_PLACEMENT_LIMIT });
 export const HostedCreateSchema = t.Object({ postId: HostedIdSchema, threadId: HostedIdSchema, placements }, closed);

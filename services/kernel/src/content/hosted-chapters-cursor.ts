@@ -66,11 +66,11 @@ export function readHostedCursor(
     typeof revisionId !== 'string' ||
     routeOf(revisionId) !== routeOf(catalogueId) ||
     typeof after !== 'number' ||
+    !Number.isSafeInteger(after) ||
     after < 0 ||
-    after > 511 ||
     typeof origin !== 'number' ||
+    !Number.isSafeInteger(origin) ||
     origin < -1 ||
-    origin > 511 ||
     typeof issuedAt !== 'number' ||
     !Number.isSafeInteger(issuedAt) ||
     issuedAt > deps.clock().getTime() + 60_000 ||

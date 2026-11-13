@@ -5,7 +5,11 @@ import {
   HOSTED_PLACEMENT_LIMIT,
   InvalidHostedStructureError,
   type OrderedHostedPlacement,
+  type HostedAppendDescriptor,
 } from './hosted-chapters-model.ts';
+import appendExact from './hosted-append-read-exact.sql';
+import appendNext from './hosted-append-read-next.sql';
+import appendPrevious from './hosted-append-read-previous.sql';
 
 export type HostedCatalogueRow = {
   route: number;
@@ -135,6 +139,127 @@ export function hostedPlacement(row: HostedPlacementRow): OrderedHostedPlacement
     },
   };
 }
+/** Append offsets cross the PostgreSQL bigint boundary as decimal text. Do not
+ * decode them through pg's number parser: rounding there loses exact old links.
+ * The immutable descriptor's checked counts bound both derived addresses. */
+type HostedAppendReadRow = {
+  append_offset: string;
+  occurrence_id: string;
+  title: string;
+  thread_id: string | null;
+  post_id: string | null;
+  target_revision_id: string;
+  sha256: string;
+};
+
+function appendedPlacement(row: HostedAppendReadRow, descriptor: HostedAppendDescriptor): OrderedHostedPlacement {
+  const offset = BigInt(row.append_offset);
+  return hostedPlacement({
+    ...row,
+    parent_id: null,
+    kind: 'chapter',
+    position: Number(descriptor.baseRootCount + offset),
+    ordinal: Number(descriptor.basePlacementCount + offset),
+  });
+}
+
+/** Exact immutable membership has two keys, never a descriptor chain. A legacy
+ * snapshot or frozen publication keeps its original placement primary key.
+ * The append occurrence key is also fenced by the selected high-water mark. */
+export async function hostedReadPlacement(
+  client: AccessClient,
+  id: string,
+  revisionId: string,
+  occurrenceId: string,
+  descriptor: HostedAppendDescriptor | null,
+): Promise<OrderedHostedPlacement | null> {
+  const row = (
+    await client.query<HostedPlacementRow>(`${HOSTED_PLACEMENT_SELECT} AND p.occurrence_id=$4`, [
+      routeOf(id),
+      id,
+      descriptor?.baseRevisionId ?? revisionId,
+      occurrenceId,
+    ])
+  ).rows[0];
+  if (row) return hostedPlacement(row);
+  if (!descriptor || descriptor.highWater < 0n) return null;
+  const appended = await appendExact.run(client, {
+    route: routeOf(id)!,
+    catalogue_id: id,
+    stream_id: descriptor.baseRevisionId,
+    occurrence_id: occurrenceId,
+    high_water: descriptor.highWater.toString(),
+  });
+  return appended[0] ? appendedPlacement(appended[0], descriptor) : null;
+}
+
+export type HostedPlacementPageQuery = Readonly<{
+  mode: 'children' | 'outline' | 'previous' | 'next';
+  parentId: string | null;
+  after: number;
+  /** Raw candidate bound, including the one continuation sentinel. */
+  limit: number;
+}>;
+
+/** One indexed segment seek. bigint parameter casts let an append frontier above
+ * int4's range seek the legacy index without narrowing or casting its column.
+ * Nested children retain parent/position order; navigation skips parts in SQL. */
+async function hostedBasePage(
+  client: AccessClient,
+  id: string,
+  revisionId: string,
+  query: HostedPlacementPageQuery,
+): Promise<OrderedHostedPlacement[]> {
+  const values: unknown[] = [routeOf(id), id, revisionId, query.after, query.limit];
+  let condition: string;
+  if (query.mode === 'children') {
+    condition = ' AND p.position>$4::bigint AND ';
+    if (query.parentId === null) condition += 'p.parent_id IS NULL';
+    else {
+      condition += 'p.parent_id=$6';
+      values.push(query.parentId);
+    }
+  } else if (query.mode === 'outline') condition = ' AND p.ordinal>$4::bigint';
+  else
+    condition = ` AND p.target_revision_id IS NOT NULL AND p.ordinal${query.mode === 'previous' ? '<' : '>'}$4::bigint`;
+  const order = query.mode === 'children' ? 'p.position' : `p.ordinal ${query.mode === 'previous' ? 'DESC' : 'ASC'}`;
+  const result = await client.query<HostedPlacementRow>(
+    `${HOSTED_PLACEMENT_SELECT}${condition} ORDER BY ${order} LIMIT $5`,
+    values,
+  );
+  return result.rows.map(hostedPlacement);
+}
+
+/** There are exactly two non-overlapping address ranges: all base positions
+ * precede every append position. Concatenating in traversal order and taking
+ * one bounded prefix is the merge; no sort, refill, history walk or count is
+ * needed. At most twice query.limit rows can enter it. Disclosures happen later
+ * and cannot change this raw frontier or the continuation sentinel. */
+export async function hostedReadPlacementPage(
+  client: AccessClient,
+  id: string,
+  revisionId: string,
+  query: HostedPlacementPageQuery,
+  descriptor: HostedAppendDescriptor | null,
+): Promise<OrderedHostedPlacement[]> {
+  const base = await hostedBasePage(client, id, descriptor?.baseRevisionId ?? revisionId, query);
+  if (!descriptor || descriptor.highWater < 0n || (query.mode === 'children' && query.parentId !== null)) return base;
+  const parameters = {
+    route: routeOf(id)!,
+    catalogue_id: id,
+    stream_id: descriptor.baseRevisionId,
+    after_offset: (
+      BigInt(query.after) - (query.mode === 'children' ? descriptor.baseRootCount : descriptor.basePlacementCount)
+    ).toString(),
+    high_water: descriptor.highWater.toString(),
+    limit: query.limit,
+  };
+  const rows =
+    query.mode === 'previous' ? await appendPrevious.run(client, parameters) : await appendNext.run(client, parameters);
+  const append = rows.map((row) => appendedPlacement(row, descriptor));
+  return (query.mode === 'previous' ? [...append, ...base] : [...base, ...append]).slice(0, query.limit);
+}
+
 /** Read only explicit release candidates from the immutable source revision.
  * The placement primary key includes all four selectors. Never load the draft
  * siblings to fill gaps or sort by the caller's selection order. */

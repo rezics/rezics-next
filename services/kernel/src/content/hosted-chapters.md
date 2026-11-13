@@ -72,145 +72,127 @@ replay. Existing replay acceptance in `hosted-chapters.test.ts` remains unchange
 the dev verifier. Mounted native and growth proof remain deferred; this source pass runs changed-file formatting
 and the affected Kernel typecheck.
 
-## First bounded write: internal storage and exposure contract
+## Bounded root append
 
-Decision: first implement one exact chapter append at the root, using a sealed snapshot plus an indexed append
-prefix per immutable draft; do not copy the Book or walk prior revisions. The additive storage and internal command
-implement this slice. They do not remove every logical limit or enable installed readers for mixed revisions. The [Book requirement](../../../../docs/goals/content.md)
-still includes nested parts, add/reorder/move, frozen publication and exact links; a root-only slice cannot close it.
+Decision: use one sealed legacy snapshot and one indexed append prefix per immutable draft. The internal root
+command and mixed-revision reader are implemented; append remains unmounted pending the receiving work below.
+The [Book requirement](../../../../docs/goals/content.md) still includes nested parts, arbitrary add/reorder/move,
+frozen publication and exact links. This root-only slice does not close it or remove every logical limit.
 
-### Premises and design evidence
+### Premises and sources
 
-The base has indexed preorder author pages in `hosted-chapters-reads.ts` and selected-only release reads in
-`hosted-chapters-store.ts`. Nevertheless, `hosted-chapters-tree.ts`, `hosted-chapters-limits.ts` and
-`hosted-chapters-schemas.ts` limit complete replacement to 512 placements and depth 16;
-`db/content/schema.sql` also restricts placement ordinal and position to 0–511. `hosted-chapters-commands.ts`
-inserts every supplied placement into every new snapshot. Web's `studio/hosted-native.ts` drains outline pages,
-`studio/hosted-structure.ts` materializes the complete tree, and `studio/hosted-adapter.ts` sends complete replacements.
-Paging alone therefore does not enable a long Book write.
+Legacy complete replacement remains limited to 512 placements and depth 16 by `hosted-chapters-{tree,limits,schemas}.ts`;
+`db/content/schema.sql` restricts legacy positions/ordinals to 0–511. Its writer inserts complete snapshots.
+Web's `studio/hosted-native.ts` drains outlines, `hosted-structure.ts` materializes the tree, and `hosted-adapter.ts`
+sends complete replacements. Paging alone therefore cannot enable a long Book write.
 
-Sources read before this choice: the current authoring/release and cost sections here; the files above;
-`hosted-chapters-model.ts`; `test/content/hosted-chapters.test.ts`, `hosted-author-outline.test.ts` and
-`hosted-chapters-growth.test.ts`; Web's `tests/studio-hosted-outline.test.ts`;
+Original design sources: the authoring/release and cost contracts here; those files; `hosted-chapters-model.ts`;
+`test/content/hosted-{chapters,author-outline,chapters-growth}.test.ts`; Web's `tests/studio-hosted-outline.test.ts`;
 [architecture's bounded-work rule](../../../../docs/architecture.md);
 [Knowledge structure/storage](../../../../docs/knowledge-workspaces.md#structure-storage-and-concurrency);
 `library/collection-order-placement.ts`; and the main checkout's read-only `.reference/INDEX.md`.
-PostgreSQL's primary documentation on [ordered index seeks](https://www.postgresql.org/docs/18/indexes-ordering.html)
-and [leading-key constraints](https://www.postgresql.org/docs/18/indexes-multicolumn.html) supports the access paths below;
-their actual plans remain measurement work. No external implementation is imported.
+PostgreSQL's [ordered index seeks](https://www.postgresql.org/docs/18/indexes-ordering.html) and
+[leading-key constraints](https://www.postgresql.org/docs/18/indexes-multicolumn.html) support the access-path design;
+actual plans remain measurement work. Knowledge's mutable notebook and Collection's order repair cannot preserve
+old immutable Book membership directly; root append needs neither fractional keys nor rebalance.
 
-Knowledge shares stable placements, native structure serialization and bounded ancestry, but its mutable notebook
-does not supply immutable Book membership. Collection placement may rewrite a bounded sibling window and retain
-an order-repair generation; applying that directly would change old Book selections. Root append needs neither
-fractional keys nor rebalance. Reuse native command, authorization and indexed SQL machinery, without requiring a
-universal placement engine. General insertion, moves and nested append need a subsequent immutable-order design.
+Sources read before mixed-reader implementation: this owner contract and the named internal storage handoff's
+`hosted-chapters-append.ts`, append migration and root-append fixtures; `hosted-chapters-{reads,store,cursor,schemas,
+model,disclosure}.ts`; and the existing author-outline/navigation metadata fixtures. The dependency is received
+by cherry-pick. The read slice changes no writer or migration.
 
-### One write and its representation
+### Immutable representation and internal write
 
-The internal `appendHostedRootChapter` operation takes catalogue identity, `expectedRevisionId`, one fresh routed `occurrenceId`,
-title and exact chapter target, plus the ordinary Idempotency-Key. Parent is always null and placement is after
-the last root, hence after its entire subtree. It accepts duplicate target Posts under different occurrences.
-It cannot retarget an existing occurrence or move a subtree. Kind and target Post remain permanent identities;
-thread/revision/digest selection is immutable in the resulting draft. Chapter bodies are independently saved Posts.
+`hosted_append_descriptor` names one sealed legacy structure revision, its placement/root counts and an inclusive
+high-water mark. The base revision is also the stream identity; an empty prefix has high-water -1. Each append adds
+one immutable `hosted_append` row and one descriptor sharing that base. Offsets start at zero; root position is
+base root count plus offset, and preorder ordinal is base placement count plus offset. There are exactly two
+segments, never a descriptor chain. Old descriptors cannot see later rows. Complete replacement starts a fresh
+legacy snapshot; a subsequent append seals it as a new stream without changing earlier rows or bindings.
 
-A draft descriptor names one sealed legacy structure revision, its placement/root counts, an append-stream identity
-and an inclusive append high-water mark. A legacy snapshot is a descriptor with an empty prefix. Each successful
-append adds one immutable stream row and one immutable descriptor sharing that same base. The row records the
-exact target and title; its root position is base root count plus append offset, and its preorder ordinal is base
-placement count plus offset. Stream offsets start at zero. There are exactly two segments, never a descriptor chain.
-An old descriptor cannot see rows beyond its watermark. A later complete replacement starts a new sealed base and
-stream; it never modifies an earlier base, prefix, descriptor or occurrence binding.
+Full `(route,catalogue,stream,offset)` and `(route,catalogue,stream,occurrence)` indexes support prefix seeks and
+exact membership. Base/revision and occurrence/stream indexes support bounded cleanup discovery. Same-home
+foreign keys retain existing native routing and keep shared bases alive. Migration up copies/scans no legacy tree;
+down removes unused storage/lazy base descriptors but refuses while any append row remains, even after replacement.
+No destructive cascade, compaction, mutable prefix or history walk is introduced.
 
-Required append indexes have full prefixes `(route,catalogue,stream,offset)` and
-`(route,catalogue,stream,occurrence)`. Exact membership probes the base occurrence key and one stream occurrence key,
-checking the watermark. Root children, preorder and chapter navigation seek each segment with at most `limit+1`
-rows per segment, merge at most twice that bound and return at most 20 raw slots. Nested children use only the base.
-No offset pagination, count scan, revision-history reconstruction or target-body loading is admitted. Cursors retain
-the exact revision and raw frontier; current authorization and concealed-slot behavior remain as specified above.
+The internal operation in `hosted-chapters-commands.ts` takes catalogue, expected draft revision, one fresh routed
+occurrence, title and exact chapter target with ordinary Idempotency-Key. Parent is null; the new root follows
+the last root's entire subtree. Duplicate target Posts under fresh occurrences are valid; identity reuse,
+retargeting, moves and nested append are not. Kind and target Post remain permanent occurrence identities.
+Chapter bodies are independently saved Posts. Publication pointers and those Posts are untouched.
 
-Append reads one catalogue/head, one descriptor and one occurrence identity key; locks/CAS serialize on the native
-catalogue row. It writes one occurrence, one stream row, one descriptor, one head update and ordinary receipt/event
-records. It validates one external placement and one distinct exact target through initial/final native metadata
-observations, with zero chapter bodies. Rows, title bytes and dependency calls are independent of Book width,
-depth and revision count; ordinary B-tree descent costs O(log N). Include existing native Access/container/partition
-bounds in the composed cost. No earlier attachment is revalidated merely because the draft retains it.
+Native Post authorship, container disclosure/participation and `post:revise` precede receipts. Preparation and final
+retained metadata validate one distinct exact target with known deadlines and zero bodies; earlier targets are not
+revalidated. The ordinary command transaction, single-use authority, receipt and rollback machinery remain in use.
+An authorized exact replay returns its original immutable draft after later appends; changed operands conflict.
+Receipt lookup precedes locked head CAS; two fresh keys against one expected head have one winner and one 412,
+without spending an offset or leaving partial placements. Revoked authority cannot recover access from a receipt.
+The append receipt kind is separate; the existing revise event contains only catalogue/revision identities.
 
-Admission remains native Post authorship, current container disclosure/participation and `post:revise`, before
-receipts. Preparation and final retained attachment checks keep the existing deadlines and rollback behavior.
-Receipt lookup precedes head CAS: an authorized exact replay returns its committed immutable draft after later
-appends; changed operands under the same key conflict. Two fresh keys against one expected head have one winner
-and one 412, without a consumed offset or partial placement. Revoked authority cannot use a retained receipt.
-Events contain catalogue/revision identities only. Publication pointer and independent target Posts are untouched.
+A legacy head seals lazily after admission/receipt/head fence with two indexed descending `LIMIT 1` probes:
+preorder maximum and root-position maximum, each plus one, empty yielding zero. At most two placements are read,
+none copied. Append then reads one descriptor/occurrence identity and writes one occurrence, stream row,
+descriptor, head update and ordinary receipt/event records. Structural rows/title bytes/dependency calls do not
+grow with Book width, depth or revision history, apart from B-tree descent. Native Access/container/partition work
+remains charged. The internal root fixtures pin these bounds, replay, races and depth-16 append beyond 512.
 
-### Migration, mixed callers and limits
+### Pinned mixed-revision reads
 
-Keep stored legacy snapshots, publications, exact identities, URLs and receipts unchanged. Lazily establish a
-descriptor for an admitted legacy head using two indexed descending `LIMIT 1` probes: preorder maximum and root
-position maximum, each plus one, with empty sets yielding zero. Pin the exact revision and install under the same
-head fence; concurrent replacement requires a fresh attempt. This reads at most two placements and copies none.
-Old releases continue through their existing manifest reader, regardless of later conversion or replacement.
-New release selection probes only its explicit IDs across base/prefix, verifies membership and ancestors, and
-builds the existing separate dense manifest. Later edits cannot change an exact release or its chapter bytes.
+Decision: read each exact draft through its immutable descriptor, seek at most `limit+1` candidates per indexed
+base/prefix segment and merge once; preserve legacy snapshot/publication semantics, widen only read addresses and
+cursor frontiers to safe integers, and keep append unmounted.
 
-Old create/revise still mean complete replacement with at most 512 input placements. An exact replacement can
-intentionally shrink a larger draft; it is never interpreted as a merge. A stale replacement still gets 412.
-Old Web refuses an oversized outline and must never save a partially loaded tree. New Web must append from an
-exact head and bounded outline window without draining pages; unsupported organize actions remain explicit until
-their native slices exist. Unchanged old-sized callers and exact old links keep their behavior. New large-draft
-read schemas must represent positions beyond 511 before exposure; old clients may report unsupported size rather
-than truncate, renumber or reinterpret an exact address.
+Selection reads the revision and optional descriptor in one partition snapshot. Missing descriptors retain the
+legacy snapshot key; frozen publications use their original manifests without a descriptor probe. Current native
+catalogue metadata and retained revise admission precede placement disclosure and close again before response.
+Exact selectors, query/viewer/session binding, partition epoch, private/no-store and anchors remain unchanged.
 
-Depth 16, title length 256, page size 20 and 512 selected release IDs remain logical limits, as does the legacy
-replacement input bound. The append stream has no 512-placement lifetime limit. Fixed-width database counters,
-wire integer precision, request bytes and storage capacity are physical limits. Counters use PostgreSQL bigint and
-TypeScript bigint arithmetic; counts may reach 9,007,199,254,740,991 and addresses may reach one less. An append
-that would exceed either exact count fails before occurrence insertion, rolling back lazy sealing as well. This
-prevents rounding at a future JSON number boundary without adopting a larger arbitrary Book maximum. Publishing an entire
-long Book, deeper nesting and scalable arbitrary reorganization remain required follow-on capability work.
-Retained drafts keep their shared rows alive. Erasure/cleanup must seek bounded catalogue/stream keysets through
-the existing native lifecycle; neither migration nor append may add an unbounded cascade or synchronous compaction.
+Exact occurrence lookup probes the base primary key then, if needed, one stream/occurrence key fenced by the
+inclusive watermark. It cannot see another stream or later append. Root children seek base sibling positions and
+prefix offsets; outline seeks base preorder and prefix offsets; previous/next seek the base chapter-only ordinal
+index and prefix offsets in the requested direction. Parts remain navigation origins. Nested children use only
+the base parent/position index. There is no whole-tree selection, count, offset pagination, history walk or refill.
 
-### Implementation handoff and acceptance
+All base addresses precede every append address. Forward merge concatenates base then prefix; reverse merge
+concatenates prefix then base. It inspects at most twice `limit+1` candidates and retains the first `limit+1`.
+Only the first `limit` raw slots receive ordinary retained metadata disclosure; duplicate exact targets share the
+existing observation. Withheld slots expose only address/kind and advance the raw frontier. Pages/occurrence
+metadata select zero chapter bodies; exact opening alone fetches and verifies the ordinary Post body.
 
-The internal command lives in `hosted-chapters-commands.ts` and shares the existing native Post edit authority,
-preparation/final checks, fixed request deadline, receipt and transaction runner. It has its own append receipt kind
-and emits the existing revise event with catalogue/revision identities only. It changes the head under the same
-locked expected-head fence and leaves the publication pointer untouched. Complete replacements still write fresh
-legacy snapshots and do not merge a prefix. A following internal append seals that replacement as a new stream.
+Offsets cross the database boundary as decimal text. Derived ordinal/position use bigint arithmetic before exact
+number conversion; storage checks keep counts at or below `MAX_SAFE_INTEGER`. Legacy seeks cast the boundary
+parameter to bigint, leaving the indexed column untouched, so a frontier beyond int4 stays exact. Read wire
+positions and cursor frontiers accept safe integers beyond 511; legacy replacement input stays at 0–511 and 512
+placements. The concrete compatibility defect fixed is position 512 being rejected by the old response schema
+and continuation decoder. No larger arbitrary Book cap is adopted; checked arithmetic rejects exact-count overflow.
 
-Decision: ship additive immutable storage and the internal root command only; defer mounted exposure until mixed
-readers and lifecycle receiving are complete. No HTTP schema, route, generated Client or Web operation exposes it.
-Before mounting, Contents, outline, navigation, exact occurrence resolution and selected-only release preparation
-must all combine the pinned base and watermark with bounded seeks, including retained metadata disclosure and
-concealed raw-slot cursors. Read schemas must represent large exact positions, old clients must refuse oversized
-outlines, and lifecycle erasure/cleanup must receive the new rows with bounded keysets and shared-base retention.
-Those prerequisites must land together before a large draft can be created through the mounted API. Existing
-legacy/publication readers remain installed; using the internal command is not an installed-reader readiness claim.
+### Receiving, exposure and verification
 
-`hosted_append_descriptor` and `hosted_append` are additive, immutable relations. The sealed base revision is the
-stream identity. Same-home revision/occurrence foreign keys preserve existing native routing. Full stream/offset,
-stream/occurrence, base/revision and occurrence/stream indexes support prefix and bounded cleanup discovery.
-Migration up scans/copies no legacy tree. Migration down may remove unused storage and lazy base descriptors;
-it refuses while any retained append row exists, including after a later replacement. There is no destructive
-cascade, compaction, mutable prefix or descriptor-history walk.
+Depth 16, title length 256, page size 20, 512 release IDs and bounded complete-replacement input remain logical
+limits. Exact full replacement may intentionally shrink a larger draft; it is not a merge, and stale replacement
+still gets 412. Existing snapshots, publications, exact identities, links and receipts remain immutable.
 
-Source fixtures in `test/content/hosted-root-append*.test.ts` pin indexed lazy extrema, constant append rows, exact
-integer overflow, immutable old snapshot identities, concurrent keys, exact replay and depth-16 append beyond 512.
-They are source acceptance to run after landing in the dev verifier. Changed-file formatting and one Kernel
-typecheck are the source checks. Mounted/native, browser, growth, query-plan and lifecycle measurements are deferred;
-no end-to-end latency, native nested authority cost or 1,000/10,000/100,000-row growth has been measured here.
+Before exposure, the following must receive the representation:
 
-Implementation acceptance belongs in the existing hosted native/outline/release fixtures, plus one focused append
-case group: append beyond 512 to a depth-16 base; reopen old drafts/releases and exact links unchanged; verify
-cross-segment order, concealed slots and cursor continuation; race two keys, replay after later writes, reject
-changed-key operands and revoked authority; retain duplicate-target occurrences and reject changed identity;
-convert empty/nonempty legacy heads without copying rows; and preserve old full-replacement semantics and 412s.
-Extend the existing growth fixture at 1,000/10,000/100,000 appended chapters and many prior revisions: one append
-must select/write constant structural rows, load zero bodies, and perform no sibling/subtree/history scan or copy.
-Observe plans and nested authority work, including migration, release selection and bounded lifecycle steps.
-Web acceptance must prove windowed append without a full-outline request loop and explicit old-client size failure.
-Keep existing assertions; add these executable cases with their implementation, not tests claiming absent behavior.
-The remaining mixed-reader, mounted/native, browser and growth acceptance runs after its follow-on implementation.
+- Release selection must probe only explicit IDs across the pinned base/prefix, verify membership/ancestors and
+  build the existing separate dense manifest. Empty withdrawal remains valid. The existing writer still selects
+  legacy placements; this reader does not change release preparation.
+- Lifecycle erasure/cleanup must seek bounded catalogue/stream keysets and retain shared rows while any draft
+  references them. Index affordances do not constitute lifecycle integration or authorize an unbounded cascade.
+- The additive HTTP operation, installed Client and Web must receive large-address responses. Old Web must refuse
+  oversized outlines and never save a partial tree; new Web must append from an exact head and bounded outline
+  window without draining pages. Unsupported organizing stays explicit pending its own immutable-order design.
+
+The mixed-reader fixtures `test/content/hosted-append-read*.test.ts` cover cross-segment order, root/preorder address
+differences, nested children, exact prefix membership, old links, zero-body metadata, concealed raw progression,
+revision-pinned continuation/expiry, revoked catalogue disclosure and exact large addresses. Existing
+outline/navigation session/query-binding and initial/final revise-loss assertions remain unchanged.
+Source checks are changed-file formatting and one affected Kernel typecheck; these native fixtures run after
+landing in the dev verifier. Mounted, browser, query-plan and growth verification remain deferred. Growth proof
+must cover 1,000/10,000/100,000 appends and many revisions, indexed extrema, constant structural rows/zero bodies,
+release selection, bounded lifecycle and composed native authority costs. No measured latency/cost claim is made.
+Publishing an entire long Book, deeper nesting and scalable arbitrary reorganization remain follow-on work.
 
 ## Author inventory
 

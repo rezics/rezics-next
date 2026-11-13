@@ -16,12 +16,12 @@ import {
   prepareHostedTargetMetadata,
 } from './hosted-chapters-disclosure.ts';
 import {
-  HOSTED_PLACEMENT_SELECT,
   hostedCatalogue,
   hostedRevision,
-  hostedPlacement,
-  type HostedPlacementRow,
+  hostedReadPlacement,
+  hostedReadPlacementPage,
 } from './hosted-chapters-store.ts';
+import { hostedAppendDescriptor } from './hosted-chapters-append.ts';
 import { hostedCursorBinding, readHostedCursor, writeHostedCursor } from './hosted-chapters-cursor.ts';
 import {
   HOSTED_PAGE_LIMIT,
@@ -36,6 +36,7 @@ import {
   type OrderedHostedPlacement,
   type HostedPageView,
   type HostedResolutionView,
+  type HostedAppendDescriptor,
 } from './hosted-chapters-model.ts';
 
 function identity(catalogueId: string, revisionId?: string): number {
@@ -66,9 +67,15 @@ async function selectCatalogue(
   const revisionId =
     selection.revisionId ?? (selection.kind === 'structure' ? catalogue.head_revision_id : catalogue.publication_id);
   if (!revisionId) throw new ContentNotFoundError();
-  const selected = await snapshot(deps, catalogueId, context, (client) =>
-    hostedRevision(client, catalogueId, revisionId),
-  );
+  const selected = await snapshot(deps, catalogueId, context, async (client) => {
+    const revision = await hostedRevision(client, catalogueId, revisionId);
+    if (!revision) return null;
+    // Publications remain immutable manifests. A structure optionally selects
+    // one sealed base/prefix, in this same partition observation as its header.
+    const descriptor =
+      revision.kind === 'structure' ? await hostedAppendDescriptor(client, catalogueId, revisionId) : null;
+    return { ...revision, descriptor };
+  });
   if (!selected.value || selected.anchor.epoch !== initial.anchor.epoch) throw new ContentNotFoundError();
   if (selection.kind !== undefined && selected.value.kind !== selection.kind) throw new ContentNotFoundError();
   const revise =
@@ -99,7 +106,7 @@ async function selectCatalogue(
     kind: selected.value.kind,
     sourceRevisionId: selected.value.source_revision_id,
   };
-  return { route, epoch: initial.anchor.epoch, view, finish };
+  return { route, epoch: initial.anchor.epoch, view, descriptor: selected.value.descriptor, finish };
 }
 
 function slot(placement: OrderedHostedPlacement) {
@@ -141,19 +148,12 @@ async function placementAt(
   revisionId: string,
   occurrenceId: string,
   context: ReadContext,
+  descriptor: HostedAppendDescriptor | null,
 ) {
   if (routeOf(occurrenceId) !== routeOf(catalogueId)) throw new InvalidHostedStructureError('Invalid occurrence');
-  return snapshot(deps, catalogueId, context, async (client) => {
-    const row = (
-      await client.query<HostedPlacementRow>(`${HOSTED_PLACEMENT_SELECT} AND p.occurrence_id=$4`, [
-        routeOf(catalogueId),
-        catalogueId,
-        revisionId,
-        occurrenceId,
-      ])
-    ).rows[0];
-    return row ? hostedPlacement(row) : null;
-  });
+  return snapshot(deps, catalogueId, context, (client) =>
+    hostedReadPlacement(client, catalogueId, revisionId, occurrenceId, descriptor),
+  );
 }
 
 export async function resolveHostedOccurrence(
@@ -164,7 +164,14 @@ export async function resolveHostedOccurrence(
   context: ReadContext,
 ) {
   const selected = await selectCatalogue(deps, catalogueId, selection, context);
-  const found = await placementAt(deps, catalogueId, selected.view.revisionId, occurrenceId, context);
+  const found = await placementAt(
+    deps,
+    catalogueId,
+    selected.view.revisionId,
+    occurrenceId,
+    context,
+    selected.descriptor,
+  );
   if (!found.value || found.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
   const placement = found.value;
   const anchors: AnchoredPosition[] = [found.anchor];
@@ -200,7 +207,14 @@ export async function resolveHostedOccurrenceMetadata(
   context: ReadContext,
 ) {
   const selected = await selectCatalogue(deps, catalogueId, selection, context);
-  const found = await placementAt(deps, catalogueId, selected.view.revisionId, occurrenceId, context);
+  const found = await placementAt(
+    deps,
+    catalogueId,
+    selected.view.revisionId,
+    occurrenceId,
+    context,
+    selected.descriptor,
+  );
   if (!found.value || found.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
   const placement = found.value;
   const anchors: AnchoredPosition[] = [found.anchor];
@@ -287,7 +301,14 @@ async function page(
   let origin = -1;
   const referenceId = query.mode === 'children' ? query.parentId : query.occurrenceId;
   if (referenceId !== null) {
-    const reference = await placementAt(deps, catalogueId, selected.view.revisionId, referenceId, context);
+    const reference = await placementAt(
+      deps,
+      catalogueId,
+      selected.view.revisionId,
+      referenceId,
+      context,
+      selected.descriptor,
+    );
     if (
       !reference.value ||
       reference.anchor.epoch !== selected.epoch ||
@@ -303,33 +324,17 @@ async function page(
     throw new InvalidHostedCursorError();
   const after = cursor?.after ?? origin;
   const issuedAt = cursor?.issuedAt ?? deps.clock().getTime();
-  const raw = await snapshot(deps, catalogueId, context, async (client) => {
-    const values: unknown[] = [route, catalogueId, selected.view.revisionId, after, limit + 1];
-    let condition: string;
-    if (query.mode === 'children') {
-      condition = ' AND p.position>$4 AND ';
-      if (query.parentId === null) condition += 'p.parent_id IS NULL';
-      else {
-        condition += 'p.parent_id=$6';
-        values.push(query.parentId);
-      }
-    } else if (query.mode === 'outline') {
-      // The unique route/catalogue/revision/ordinal index covers parts and
-      // chapters in one seek; target disclosure cannot refill denied slots.
-      condition = ' AND p.ordinal>$4';
-    } else {
-      condition = ` AND p.target_revision_id IS NOT NULL AND p.ordinal${query.mode === 'previous' ? '<' : '>'}$4`;
-    }
-    const order = query.mode === 'children' ? 'p.position' : `p.ordinal ${query.mode === 'previous' ? 'DESC' : 'ASC'}`;
-    return (
-      await client.query<HostedPlacementRow>(
-        `${HOSTED_PLACEMENT_SELECT}${condition} ORDER BY ${order} LIMIT $5`,
-        values,
-      )
-    ).rows;
-  });
+  const raw = await snapshot(deps, catalogueId, context, (client) =>
+    hostedReadPlacementPage(
+      client,
+      catalogueId,
+      selected.view.revisionId,
+      { mode: query.mode, parentId: query.parentId, after, limit: limit + 1 },
+      selected.descriptor,
+    ),
+  );
   if (raw.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
-  const placements = raw.value.slice(0, limit).map(hostedPlacement);
+  const placements = raw.value.slice(0, limit);
   const guards = new Map<string, Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>();
   for (const placement of placements) {
     if (placement.kind !== 'chapter') continue;
