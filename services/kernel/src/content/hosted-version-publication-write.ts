@@ -67,7 +67,7 @@ function sameTarget(left: HostedChapterTarget, right: HostedChapterTarget): bool
 
 function chapterValue(
   value: HostedVersionPublicationValue,
-): Extract<HostedVersionPublicationValue, { kind: 'chapter' }> | null {
+): Readonly<{ kind: 'chapter'; title: string; target: HostedChapterTarget }> | null {
   return value.kind === 'chapter' && value.title !== null && value.target !== null
     ? { kind: 'chapter', title: value.title, target: value.target }
     : null;
