@@ -35,6 +35,7 @@ import {
   captureTypingInputs,
   isDirectKernelTypingCompiler,
   isKnownTypingCompiler,
+  isRetainedKernelTypingCompiler,
   readTypingInputReceipt,
   qualifyTypingInputs,
   type TypingInput,
@@ -2012,7 +2013,7 @@ export function workerCheckHostTypingSettlement(input: {
       const retainedKernelPass =
         index !== newestIndex &&
         receipt !== undefined &&
-        isDirectKernelTypingCompiler(input.worktree, receipt.compilerCommand);
+        isRetainedKernelTypingCompiler(input.worktree, receipt.compilerCommand);
       if (index !== newestIndex && !retainedKernelPass) continue;
 
       const qualification = receipt

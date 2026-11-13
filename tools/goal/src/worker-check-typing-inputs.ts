@@ -37,6 +37,11 @@ export type TypingInputReceipt = {
 };
 export const typingInputsReceiptPath = (physical: string): string => `.temp/goal/checks/typing-inputs/${physical}.json`;
 const GENERATED_CLIENT = 'packages/client/src/kernel/';
+const REMOTE_PREPARATION_MARKERS = new Set([
+  '.preparation-started',
+  '.remote-check-supervisor',
+  'preparation-install.json',
+]);
 // These are outputs of the owning generation commands, before their compiler programs run.
 const producedDuringPreparation = (file: string): boolean =>
   /^apps\/(web|auth)\/src\/(?:paraglide\/|routeTree\.gen\.ts$)/.test(file);
@@ -49,7 +54,21 @@ function gitFiles(root: string): string[] {
     encoding: 'utf8',
   });
   if (run.status !== 0) throw new Error(`typing inputs: source inventory unavailable: ${run.stderr.trim()}`);
-  return [...new Set(run.stdout.split('\0').filter(Boolean))].sort();
+  const files = new Set(run.stdout.split('\0').filter(Boolean));
+  // The worker's Git inventory omits ignored files. These exact controls still belong to source custody whenever a
+  // local entry exists; their producer ownership can be projected only when qualifying a retained remote receipt.
+  for (const marker of REMOTE_PREPARATION_MARKERS) if (localEntryPresent(root, marker)) files.add(marker);
+  return [...files].sort();
+}
+
+function localEntryPresent(root: string, file: string): boolean {
+  try {
+    lstatSync(join(root, file));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 function localPath(root: string, file: string): string | undefined {
@@ -121,6 +140,29 @@ function directKernelOwnerCommand(argv: readonly string[]): boolean {
   );
 }
 
+/** Mirror the installed Kernel emitter's closed schema selector and output-directory rules. */
+function installedKernelSchemaEmissionCommand(root: string, argv: readonly string[]): boolean {
+  if (
+    argv.length !== 6 ||
+    argv[0] !== 'bun' ||
+    argv[1] !== 'run' ||
+    argv[2] !== '--cwd' ||
+    argv[3] !== 'services/kernel' ||
+    argv[4] !== 'typecheck' ||
+    !argv[5]!.startsWith('--emit-schema=')
+  )
+    return false;
+  const schema = argv[5]!.slice('--emit-schema='.length);
+  if (schema === 'core') return true;
+  if (!/^[a-z][a-z0-9_]*$/.test(schema) || schema === 'migrations') return false;
+  try {
+    return statSync(join(root, 'services/kernel/db', schema, 'migrations')).isDirectory();
+  } catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return false;
+    throw error;
+  }
+}
+
 /** Recognize only the owning manifest scripts and fail-fast sequences of their standard argv. */
 function compilerGraph(root: string, argv: readonly string[], files: readonly string[]): CompilerGraph | undefined {
   const manifests = new Map(
@@ -142,6 +184,15 @@ function compilerGraph(root: string, argv: readonly string[], files: readonly st
     selected.add('services/kernel');
     selected.add('packages/client');
   } else if (directKernelOwnerCommand(argv)) {
+    const kernel = manifests.get('services/kernel');
+    if (
+      kernel?.name !== '@rezics/kernel' ||
+      kernel.scripts?.typecheck !== 'bun scripts/typecheck.ts' ||
+      !files.includes('services/kernel/scripts/typecheck.ts')
+    )
+      return undefined;
+    selected.add('services/kernel');
+  } else if (installedKernelSchemaEmissionCommand(root, argv)) {
     const kernel = manifests.get('services/kernel');
     if (
       kernel?.name !== '@rezics/kernel' ||
@@ -214,6 +265,14 @@ export function isKnownTypingCompiler(root: string, command: readonly string[]):
 /** The direct installed Kernel entrypoint has the same configured graph as its manifest typecheck owner. */
 export function isDirectKernelTypingCompiler(root: string, command: readonly string[]): boolean {
   return directKernelOwnerCommand(command) && isKnownTypingCompiler(root, command);
+}
+
+/** A retained Kernel pass is reusable only for the direct owner or the exact installed schema-emission argv. */
+export function isRetainedKernelTypingCompiler(root: string, command: readonly string[]): boolean {
+  return (
+    isDirectKernelTypingCompiler(root, command) ||
+    (installedKernelSchemaEmissionCommand(root, command) && isKnownTypingCompiler(root, command))
+  );
 }
 
 function misorderedWorkspaceTypecheckIntent(command: readonly string[]): boolean {
@@ -409,12 +468,9 @@ export function captureTypingInputs(root: string, compilerCommand: readonly stri
         !configured.documents.has(file)
       ) &&
       !(
-        (profile === 'configured-typescript' &&
-          !configured.paths.has(file) &&
-          ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'].includes(file)) ||
-        (pipeline &&
-          (file === '.temp/check-output-tree/kernel-client-v1.bin' ||
-            file.startsWith('packages/client/src/.kernel-output-tree/')))
+        pipeline &&
+        (file === '.temp/check-output-tree/kernel-client-v1.bin' ||
+          file.startsWith('packages/client/src/.kernel-output-tree/'))
       ),
   );
   const preparedFiles = new Set([
@@ -603,19 +659,32 @@ export function readTypingInputReceipt(
 
 export type TypingInputQualification = 'matched' | 'source-changed' | 'prepared-changed' | 'evidence-unavailable';
 
-const REMOTE_PREPARATION_MARKERS = new Set([
-  '.preparation-started',
-  '.remote-check-supervisor',
-  'preparation-install.json',
-]);
+function stableRemotePreparationMarkers(receipt: TypingInputReceipt): boolean {
+  const started = new Map(receipt.started.source.map((entry) => [entry.path, entry.digest]));
+  const completed = new Map(receipt.completed.source.map((entry) => [entry.path, entry.digest]));
+  return [...REMOTE_PREPARATION_MARKERS].every((path) => {
+    const before = started.get(path);
+    const after = completed.get(path);
+    return before !== undefined && before !== 'missing' && before === after;
+  });
+}
 
 /**
- * A pre-recognition direct Kernel receipt captured the conservative inventory. Project only that legacy snapshot
- * onto the current configured inventory: all admitted source paths still bind exactly, while documents are
- * omitted only when the installed Kernel graph proves they are unconsumed.
+ * Project a legacy Kernel inventory onto the installed graph only when every admitted source still binds. The
+ * remote-check owner validates these three reserved controls against the physical run before a successful terminal;
+ * only their stable, now-absent source entries can be projected. Local entries, compiler inputs and other artifacts
+ * remain part of identity.
  */
-function retainedKernelSourceMatches(completed: TypingInputs, current: TypingInputs): boolean {
+function retainedKernelSourceMatches(root: string, receipt: TypingInputReceipt, current: TypingInputs): boolean {
+  const { completed } = receipt;
   if (completed.profile !== 'conservative' || current.profile !== 'configured-typescript') return false;
+  const directKernel = directKernelOwnerCommand(receipt.compilerCommand);
+  const schemaEmission = installedKernelSchemaEmissionCommand(root, receipt.compilerCommand);
+  if (!directKernel && !schemaEmission) return false;
+  const files = gitFiles(root);
+  const graph = compilerGraph(root, receipt.compilerCommand, files);
+  if (!graph) return false;
+  const configured = configuredInputs(root, files, graph);
   const compiled = new Map(completed.source.map((entry) => [entry.path, entry.digest]));
   if (compiled.size !== completed.source.length) return false;
   const currentPaths = new Set(current.source.map((entry) => entry.path));
@@ -623,11 +692,31 @@ function retainedKernelSourceMatches(completed: TypingInputs, current: TypingInp
   for (const entry of current.source) if (compiled.get(entry.path) !== entry.digest) return false;
 
   const excludedDocuments = new Set(current.excludedDocuments);
+  const missingMarkers = [...REMOTE_PREPARATION_MARKERS].filter(
+    (path) => compiled.has(path) && !currentPaths.has(path),
+  );
+  const preparedPaths = new Set([
+    ...receipt.started.prepared.map((entry) => entry.path),
+    ...receipt.completed.prepared.map((entry) => entry.path),
+  ]);
+  const projectRemoteMarkers =
+    missingMarkers.length > 0 &&
+    missingMarkers.length === REMOTE_PREPARATION_MARKERS.size &&
+    stableRemotePreparationMarkers(receipt) &&
+    [...REMOTE_PREPARATION_MARKERS].every(
+      (path) =>
+        !currentPaths.has(path) &&
+        !localEntryPresent(root, path) &&
+        !configured.paths.has(path) &&
+        !configured.documents.has(path) &&
+        !preparedPaths.has(path),
+    );
+
   for (const entry of completed.source) {
     if (currentPaths.has(entry.path)) continue;
     if (excludedDocuments.has(entry.path)) continue;
-    if (entry.path.startsWith('.temp/')) continue;
-    if (REMOTE_PREPARATION_MARKERS.has(entry.path)) continue;
+    if (directKernel && entry.path.startsWith('.temp/')) continue;
+    if (projectRemoteMarkers && REMOTE_PREPARATION_MARKERS.has(entry.path)) continue;
     return false;
   }
   return true;
@@ -652,7 +741,8 @@ export function qualifyTypingInputs(
   const current = captureTypingInputs(root, receipt.compilerCommand);
   if (current.runtime !== receipt.completed.runtime) return 'evidence-unavailable';
   const retainedKernelReceipt =
-    directKernelOwnerCommand(receipt.compilerCommand) && retainedKernelSourceMatches(receipt.completed, current);
+    isRetainedKernelTypingCompiler(root, receipt.compilerCommand) &&
+    retainedKernelSourceMatches(root, receipt, current);
   if (!same(current.source, receipt.completed.source) && !retainedKernelReceipt) return 'source-changed';
   // This legacy pass is reused only when every installed dependency and generated input remains identical.
   if (retainedKernelReceipt && !same(current.prepared, receipt.completed.prepared)) return 'prepared-changed';

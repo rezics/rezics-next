@@ -165,6 +165,7 @@ landing nor a source-writing retry. Failing tests alone keep today's handling. T
 per attempt in its state directory, not the worktree. Proof-run, registered-proof and acceptance-requiring briefs keep
 their declared checks; urgent and control-plane tasks are exempt. `status` shows `checksUsed` and `checkBudget` on each
 running or waiting attempt.
+Decision: Schema-emission evidence admits only exact Kernel workspace argv with one installed selector; capture local files and artifacts, and project only the stable, absent remote-check marker trio with existing terminal proof and compiler-consumption checks intact.
 A check-host run that ends with infrastructure exit 75 before the check command ran (probe, upload or transport
 failure) gives that stamp back, so it does not count toward the one check and one rerun. The wrapper releases the
 stamp where it records the run's final exit code. A run that reached the check command keeps its stamp, including

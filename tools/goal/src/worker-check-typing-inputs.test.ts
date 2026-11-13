@@ -14,12 +14,14 @@ import {
   isKnownTypingCompiler,
   isDirectKernelTypingCompiler,
   resolveTypingCompilerCommand,
+  type TypingInputReceipt,
 } from './worker-check-typing-inputs.ts';
 import {
   admitWorkerCheckHostRun,
   recordWorkerCheckTypingInputs,
   settleWorkerCheckHostBudget,
   workerCheckHostTypingSettlement,
+  workerCheckBudgetDirectory,
 } from './worker-check-budget.ts';
 import {
   CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
@@ -628,6 +630,84 @@ test('a retained conservative receipt qualifies for the installed direct Kernel 
   expect(qualifyTypingInputs(root, receipt)).toBe('source-changed');
 });
 
+test('the exact Kernel schema emitter captures local files and projects only stable absent remote controls', () => {
+  const root = fixture();
+  const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-schema=content'];
+  const markers = ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'];
+  const host = 'check-host-a';
+  write(root, 'services/kernel/package.json', JSON.stringify({ name: '@rezics/kernel', scripts: { typecheck: 'bun scripts/typecheck.ts' }, dependencies: { fixture: '1' } }));
+  write(root, 'services/kernel/tsconfig.json', '{"extends":"../../tsconfig.base.json","include":["src","scripts"]}');
+  write(root, 'services/kernel/scripts/typecheck.ts', 'export {};');
+  write(root, 'services/kernel/src/index.ts', 'export const ready = true;');
+  write(root, 'services/kernel/node_modules/fixture/package.json', '{"version":"1"}');
+  write(root, 'services/kernel/db/content/migrations/001_fixture.sql', 'SELECT 1;');
+  write(root, 'services/kernel/db/content/schema.sql', 'CREATE TABLE fixture (id text);');
+  write(root, '.gitignore', `${readFileSync(join(root, '.gitignore'), 'utf8')}node_modules/\n${markers.join('\n')}\n`);
+  const owned = { schema: 1, host, run: physical };
+  const controls: Record<string, object> = {
+    '.preparation-started': { ...owned, deadline: 1000, limitMs: 60_000 },
+    '.remote-check-supervisor': { ...owned, pid: 42, started: '1', group: 42, uid: 1000 },
+    'preparation-install.json': { ...owned, cache: 'hit', nativeCache: null, key: 'a'.repeat(64), packages: [], nativeChecks: [] },
+  };
+  for (const [path, value] of Object.entries(controls)) write(root, path, JSON.stringify(value));
+
+  expect(isKnownTypingCompiler(root, command)).toBe(true);
+  expect(isKnownTypingCompiler(root, [...command.slice(0, 5), '--emit-schema=core'])).toBe(true);
+  expect(isKnownTypingCompiler(root, [...command.slice(0, 5), '--emit-schema=unknown'])).toBe(false);
+  expect(isKnownTypingCompiler(root, [...command, '--emit-client'])).toBe(false);
+  expect(isKnownTypingCompiler(root, ['sh', '-c', command.join(' ')])).toBe(false);
+
+  const env = {
+    ...environment,
+    REMOTE_CHECK_HOST: host,
+    REZICS_CHECK_RUN: physical,
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
+  };
+  const complete = beginTypingInputReceipt(root, env, command)!;
+  complete(0);
+  const forward = readTypingInputReceipt(root, physical, command)!;
+  expect(forward.completed.profile).toBe('configured-typescript');
+  expect(forward.sourceStable).toBe(true);
+  expect(forward.completed.source.map(({ path }) => path)).toEqual(
+    expect.arrayContaining([...markers, 'services/kernel/db/content/schema.sql']),
+  );
+  expect(qualifyTypingInputs(root, forward)).toBe('matched');
+
+  const legacy = captureTypingInputs(root, ['bun', 'unknown-compiler.ts']);
+  legacy.prepared = forward.completed.prepared;
+  const retained: TypingInputReceipt = { version: 1, physicalRunId: physical, command, compilerCommand: command, started: legacy, completed: legacy, sourceStable: true, exitCode: 0 };
+  const controller = mkdtempSync(join(dirname(root), 'typing-controller-'));
+  roots.push(controller);
+  const budget = workerCheckBudgetDirectory(controller, 'schema-emission', 1);
+  mkdirSync(budget, { recursive: true });
+  write(budget, '1', JSON.stringify({ includedTypecheck: true, exitCode: 0, typingRequest: { physicalRunId: physical, command, localPrepared: [], capture: 'physical-command' }, typingInputs: retained }));
+  write(budget, '2', JSON.stringify({ includedTypecheck: true, exitCode: 0, typingRequest: { physicalRunId: 'b2b2b2b2-2222-4222-8222-222222222222', command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'], localPrepared: [], capture: 'physical-command' } }));
+  for (const marker of markers) rmSync(join(root, marker));
+  expect(workerCheckHostTypingSettlement({ directory: budget, worktree: root, limit: 2 })).toEqual({ ok: true });
+  for (const [path, value] of Object.entries(controls)) write(root, path, JSON.stringify(value));
+
+  write(root, '.preparation-started', JSON.stringify({ ...controls['.preparation-started'], deadline: 1001 }));
+  expect(qualifyTypingInputs(root, forward)).toBe('source-changed');
+  write(root, '.preparation-started', JSON.stringify(controls['.preparation-started']));
+  write(root, 'services/kernel/src/index.ts', 'export const ready = false;');
+  expect(qualifyTypingInputs(root, forward)).toBe('source-changed');
+  write(root, 'services/kernel/src/index.ts', 'export const ready = true;');
+  write(root, 'services/kernel/node_modules/fixture/package.json', '{"version":"2"}');
+  expect(qualifyTypingInputs(root, forward)).toBe('prepared-changed');
+  write(root, 'services/kernel/node_modules/fixture/package.json', '{"version":"1"}');
+  write(root, 'services/kernel/db/content/schema.sql', 'CREATE TABLE fixture (id integer);');
+  expect(qualifyTypingInputs(root, forward)).toBe('source-changed');
+  write(root, 'services/kernel/db/content/schema.sql', 'CREATE TABLE fixture (id text);');
+  write(root, 'services/kernel/db/content/unknown-output.bin', 'unrecognized artifact');
+  expect(qualifyTypingInputs(root, forward)).toBe('source-changed');
+  rmSync(join(root, 'services/kernel/db/content/unknown-output.bin'));
+
+  write(root, '.remote-check-supervisor', JSON.stringify(controls['.remote-check-supervisor']));
+  execFileSync('git', ['add', '-f', '.remote-check-supervisor'], { cwd: root });
+  rmSync(join(root, '.remote-check-supervisor'));
+  expect(qualifyTypingInputs(root, forward)).toBe('source-changed');
+});
+
 test('typing recovery canonicalizes only a recognized misordered workspace compiler intent', () => {
   const root = standardFixture();
   const misordered = ['bun', '--cwd', 'services/kernel', 'run', 'typecheck'];
@@ -671,8 +751,6 @@ test.each(['services/kernel', 'services/auth', 'apps/web', 'chain'])(
       },
       command,
     )!;
-    for (const file of ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'])
-      rmSync(join(root, file));
     rmSync(join(root, '.temp/search-walk/persona.log'));
     write(root, '.temp/search-walk/census.json', '{"phase":"controller"}');
     write(root, '.temp/continuation/owner.md', 'controller operational artifact');
@@ -681,6 +759,9 @@ test.each(['services/kernel', 'services/auth', 'apps/web', 'chain'])(
     const receipt = readTypingInputReceipt(root, physical, command)!;
     expect(receipt.completed.profile).toBe('configured-typescript');
     expect(receipt.sourceStable).toBe(true);
+    expect(receipt.completed.source.map(({ path }) => path)).toEqual(
+      expect.arrayContaining(['.preparation-started', '.remote-check-supervisor', 'preparation-install.json']),
+    );
     expect(typingInputsMatch(root, receipt)).toBe(true);
     const owner = workspace === 'chain' ? 'services/kernel' : workspace;
     for (const file of [
