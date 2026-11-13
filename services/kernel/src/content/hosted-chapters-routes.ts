@@ -39,8 +39,8 @@ import { listHostedCatalogueHistory } from './hosted-chapters-history.ts';
 import { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
 import { listHostedCataloguesForSubject } from './hosted-catalogue-subject.ts';
 import {
-  HostedSubjectCataloguePageSchema,
-  HostedSubjectCatalogueQuerySchema,
+  hostedSubjectCataloguePageSchema,
+  hostedSubjectCatalogueQuerySchema,
 } from './hosted-catalogue-subject-schemas.ts';
 import {
   HostedIdSchema,
@@ -421,9 +421,9 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
       '/v1/subjects/:id/hostedCatalogues',
       {
         params: params(),
-        query: strictContentSchema(HostedSubjectCatalogueQuerySchema),
+        query: strictContentSchema(hostedSubjectCatalogueQuerySchema()),
         response: {
-          200: withHeaders(strictContentSchema(HostedSubjectCataloguePageSchema), responseHeaders),
+          200: withHeaders(strictContentSchema(hostedSubjectCataloguePageSchema()), responseHeaders),
           ...failures(),
         },
         detail: { ...readDetail, operationId: 'hosted_catalogue.for_subject' },

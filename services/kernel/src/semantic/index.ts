@@ -1,3 +1,5 @@
+import type { definitionRoutes } from './http/definitions.ts';
+
 export { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from './account-agents.ts';
 export {
   AccountAgentLabelEditError,
@@ -73,6 +75,7 @@ export type {
   IdentityRatingRepairVote,
   IdentityRatingRepairVoteKey,
 } from './identity-rating-repair-producer.ts';
+export type DefinitionRoutes = ReturnType<typeof definitionRoutes>;
 export type { DefinitionImportRoutes } from './definition-import.ts';
 export type {
   CopyWorkDisclosureObservation,

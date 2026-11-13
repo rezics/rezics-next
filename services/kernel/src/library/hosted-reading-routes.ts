@@ -1,5 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
-import { t, type Elysia } from 'elysia';
+import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/contract/errors.ts';
@@ -12,6 +12,7 @@ import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { DefinitionRoutes } from '../semantic/index.ts';
 import {
   HOSTED_READING_LIST_LIMIT,
   HOSTED_READING_POSITION_BLOCK_MAX,
@@ -225,10 +226,7 @@ export type HostedReadingRouteDependencies = {
   content?: HostedReadingPort;
 };
 
-export function hostedReadingRoutes<App extends Elysia>(
-  app: App,
-  dependencies: HostedReadingRouteDependencies,
-) {
+export function hostedReadingRoutes(app: DefinitionRoutes, dependencies: HostedReadingRouteDependencies) {
   const content = () => dependencies.content ?? requireHostedReadingPort();
   const reads = () =>
     createHostedReadingReads({
