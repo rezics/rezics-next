@@ -359,8 +359,7 @@ async function registerWork(
     ...retry,
   });
   const hostedPublicationRetentionPage = DBOS.registerStep(
-    async (passId: string, cutoff: string) =>
-      advanceHostedPublicationRetention(context.pool, passId, new Date(cutoff)),
+    async (passId: string, cutoff: string) => advanceHostedPublicationRetention(context.pool, passId, new Date(cutoff)),
     { name: 'content.hosted-publication-retention.page', ...retry },
   );
   const purgeDeleted = DBOS.registerStep(async (_name: string, action: () => Promise<unknown>) => action(), {

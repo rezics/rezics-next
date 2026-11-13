@@ -77,10 +77,7 @@ async function createSource() {
   return { target, occurrenceIds, sourceRevisionId: created.revisionId, publicationId: published.revisionId };
 }
 
-async function createCandidate(
-  source: Awaited<ReturnType<typeof createSource>>,
-  expiresAt: Date,
-) {
+async function createCandidate(source: Awaited<ReturnType<typeof createSource>>, expiresAt: Date) {
   const locator = { catalogueId: f.catalogueId, stageId: f.newOccurrenceId() };
   await transaction((client) =>
     beginHostedPublicationStaging(client, f.native.author.actor, {
@@ -115,8 +112,11 @@ async function createCandidate(
     );
   }
 
-  const seal = (await transaction((client) => sealHostedPublicationStaging(client, f.native.author.actor, locator))).seal;
-  let candidate = await transaction((client) => beginHostedVersionReleaseCandidate(client, f.native.author.actor, seal));
+  const seal = (await transaction((client) => sealHostedPublicationStaging(client, f.native.author.actor, locator)))
+    .seal;
+  let candidate = await transaction((client) =>
+    beginHostedVersionReleaseCandidate(client, f.native.author.actor, seal),
+  );
   while (!candidate.checkpoint.coverageComplete) {
     candidate = await transaction((client) =>
       applyHostedVersionReleaseCandidatePage(
@@ -135,10 +135,7 @@ async function createCandidate(
   };
 }
 
-async function createUnsealedStage(
-  source: Awaited<ReturnType<typeof createSource>>,
-  expiresAt: Date,
-) {
+async function createUnsealedStage(source: Awaited<ReturnType<typeof createSource>>, expiresAt: Date) {
   const locator = { catalogueId: f.catalogueId, stageId: f.newOccurrenceId() };
   await transaction((client) =>
     beginHostedPublicationStaging(client, f.native.author.actor, {

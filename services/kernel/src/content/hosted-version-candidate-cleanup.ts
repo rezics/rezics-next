@@ -228,10 +228,7 @@ async function requireExpiredStage(client: AccessClient, stage: StageRow): Promi
 }
 
 function assertExactWholeCandidate(stage: StageRow, candidate: CandidateRow): void {
-  if (
-    candidate.initiator_account_id !== stage.initiator_account_id ||
-    candidate.owner_epoch !== stage.owner_epoch
-  ) {
+  if (candidate.initiator_account_id !== stage.initiator_account_id || candidate.owner_epoch !== stage.owner_epoch) {
     throw new HostedVersionCandidateCleanupNotFoundError();
   }
   if (

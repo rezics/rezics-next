@@ -115,18 +115,10 @@ function locatorOf(row: DueStageRow): HostedPublicationStagingLocator {
 }
 
 function stepIdFor(passId: string, row: DueStageRow): string {
-  return derivedId(
-    STEP_NAMESPACE,
-    `${passId}\n${row.catalogue_id}\n${row.stage_id}\n${row.owner_epoch}`,
-    row.route,
-  );
+  return derivedId(STEP_NAMESPACE, `${passId}\n${row.catalogue_id}\n${row.stage_id}\n${row.owner_epoch}`, row.route);
 }
 
-async function scanDueStages(
-  client: AccessClient,
-  cutoff: Date,
-  cursor: Cursor,
-): Promise<DueStageRow[]> {
+async function scanDueStages(client: AccessClient, cutoff: Date, cursor: Cursor): Promise<DueStageRow[]> {
   const values: Readonly<Record<string, unknown>> = {
     cutoff: cutoff.toISOString(),
     after_expires_at: cursor?.expiresAt ?? null,
@@ -175,7 +167,9 @@ function unsupportedCandidateState(row: DueStageRow): string {
   return `Sealed hosted stage cannot be retired: status=${row.status}, sourceKind=${row.source_kind}, mode=${row.mode}, candidateStatus=${row.candidate_status ?? 'missing'}, candidateMode=${row.candidate_mode ?? 'missing'}, cleanupClaim=${row.candidate_generation_id ?? 'missing'}`;
 }
 
-function cleanupConflict(error: unknown): error is
+function cleanupConflict(
+  error: unknown,
+): error is
   | HostedPublicationStagingConflictError
   | HostedVersionCandidateCleanupConflictError
   | HostedVersionCandidateCleanupNotFoundError {
@@ -218,10 +212,10 @@ export async function advanceHostedPublicationRetention(
   return withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
-      await client.query('INSERT INTO content.hosted_publication_retention_cursor (singleton) VALUES (true) ON CONFLICT DO NOTHING');
-      const cursorRow = (
-        await client.query<CursorRow>(readCursor)
-      ).rows[0];
+      await client.query(
+        'INSERT INTO content.hosted_publication_retention_cursor (singleton) VALUES (true) ON CONFLICT DO NOTHING',
+      );
+      const cursorRow = (await client.query<CursorRow>(readCursor)).rows[0];
       if (!cursorRow) throw new Error('Hosted publication retention cursor is missing');
       if (cursorRow.last_pass_id === passId && cursorRow.last_pass_result) {
         await client.query('COMMIT');
