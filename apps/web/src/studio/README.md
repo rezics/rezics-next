@@ -669,6 +669,23 @@ the existing typed proxy extension seam binds them locally. Deferred acceptance:
 tests/studio-hosted-release-preparation.test.tsx`; browser, native, ordinary acceptance and Storybook builds stay with
 the dev verifier. Source verification uses changed-file formatting and the Web workspace typecheck.
 
+### Selected release preparation
+
+Decision: selected release preparation uses the same lifecycle with one exact draft outline window and one pending
+page batch. Each batch keeps its routed ID, idempotency key and exact operands until acknowledged; an unknown append
+must resolve before navigation, new choices or freeze. Only native counts describe retained input, including duplicate
+settlement. Input must be nonempty and explicitly frozen before building; withdrawal remains the separate action.
+Ancestors must be selected explicitly, and native incomplete, missing-ancestor and stale-source results require fresh
+review and a new stage. Account, source, draft and visit replacement retire the window and discard late replies.
+A locator-only collecting resume can freeze retained input; adding pages requires a new reviewed stage because the
+progress wire does not expose the pinned draft ID. No current draft is guessed and no selected-ID listing is invented.
+
+Selection sources read before design: the [Prepared Book publication contract](../../../../services/kernel/src/content/hosted-chapters.md#prepared-book-publication),
+`hosted-publication-preparation-routes.ts` and schemas, the existing preparation visit and transport,
+`HostedOutlineWindow`, and the owner outline transport. Focused deferred acceptance adds
+`tests/studio-hosted-release-selection.test.tsx`; the named stories cover two-page desktop input and narrow lost-batch
+recovery with the existing published release unchanged.
+
 ## Exact source permission in point review
 
 Decision: the exact saved-version point review offers an explicit source Post issue command for one version and
@@ -694,17 +711,3 @@ pins explicit issue/revoke without publication, exact retry operands and key, de
 and response identity/state checks. Illustrative stories show same-author desktop review, issue and explicit
 revoke, plus narrow denial and lost-reply replay. Source verification formats changed files and runs the Web
 workspace typecheck after commit. Native, browser, ordinary acceptance, root and Storybook checks stay deferred.
-Decision: selected release preparation uses the same lifecycle with one exact draft outline window and one pending
-page batch. Each batch keeps its routed ID, idempotency key and exact operands until acknowledged; an unknown append
-must resolve before navigation, new choices or freeze. Only native counts describe retained input, including duplicate
-settlement. Input must be nonempty and explicitly frozen before building; withdrawal remains the separate action.
-Ancestors must be selected explicitly, and native incomplete, missing-ancestor and stale-source results require fresh
-review and a new stage. Account, source, draft and visit replacement retire the window and discard late replies.
-A locator-only collecting resume can freeze retained input; adding pages requires a new reviewed stage because the
-progress wire does not expose the pinned draft ID. No current draft is guessed and no selected-ID listing is invented.
-
-Selection sources read before design: the [Prepared Book publication contract](../../../../services/kernel/src/content/hosted-chapters.md#prepared-book-publication),
-`hosted-publication-preparation-routes.ts` and schemas, the existing preparation visit and transport,
-`HostedOutlineWindow`, and the owner outline transport. Focused deferred acceptance adds
-`tests/studio-hosted-release-selection.test.tsx`; the named stories cover two-page desktop input and narrow lost-batch
-recovery with the existing published release unchanged.
