@@ -398,42 +398,44 @@ reconnect, schema migration and erasure proof. Published snapshots stay exact.
 
 ### Shared versioned outline primitive
 
-Decision: share an owner-neutral **versioned ordered forest**: stable placements, containment, balanced sibling
-sequences, exact version roots and bounded traversal. Reuse Knowledge's AVL balancing/path-copy machinery through
-owner storage/value adapters; keep product types, tables, permissions, publication and lifecycle separate. Book owns
-[point and staged publication](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).
-No total placement, sibling, chapter or publication-selection count defines supported structure. The installed
-512-row request bounds remain compatibility bounds; this decision changes no code, schema or settings.
+Decision: share an owner-neutral **versioned ordered forest** with linear generations: stable placement handles,
+containment, balanced sibling/preorder/chapter sequences, generation/as-of node and occurrence lookup, current
+membership proof, and head CAS. Book and Knowledge keep distinct storage adapters, tables, permissions, publication
+and lifecycle. Book owns [point and staged publication](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).
+`10cec8a9ed` delivered keyed copy-on-write balancing only in
+[`versioned-outline-order.ts`](../services/kernel/src/content/versioned-outline-order.ts); it does not implement
+rank/select, split/join, as-of occurrence lookup, chapter indexes or membership proof. No total placement, sibling,
+chapter or publication-selection count defines supported structure. The installed 512-row request bounds remain
+compatibility bounds. This decision names the shared port and initial adapter; it changes no installed route, schema
+or production setting.
 
-A head selects immutable placement facts and parent sequence roots. Facts contain membership/removal, parent,
-owner value reference and exact subtree height/size. Identity bindings survive removal. Keep current adjacency as
-an accelerator. Commit changed facts/roots, head CAS, receipt and identity-only event in one owner transaction.
-Historical lookup seeks selected facts, never replays an unbounded chain. Versions freeze structure, not permission.
+A generation is one forward-only sequence of committed snapshots. Draft and publication are independent generations.
+A snapshot names generation, sequence and the sibling, preorder and chapter-only roots. Facts contain membership,
+containment parent, owner value reference and subtree size. Sequence-tree parent links are distinct from containment.
+Identity bindings survive removal. Historical lookup seeks the last node/occurrence row at `sequence <= snapshot`
+through a complete equality prefix, then proves membership by walking inverse sequence parents to the selected root;
+it never replays an unbounded history chain or a per-edit full copy. An old whole-tree root is readable; continuing
+writes on it in the same generation is unsupported and starts a new generation. Commit changed node versions, roots,
+head CAS, receipt and identity-only event in one owner transaction. Versions freeze structure, not permission.
 
-The structural port is `point(version,id)`, `children(version,parent,cursor,limit,direction)`,
-`insert(expectedHead,freshId,parent,before)`, `move(expectedHead,id,parent,before)` and `remove(expectedHead,id)`.
-`before` is a stable sibling ID; null means end. Resolve source, destination and anchor against the same head,
-excluding source from neighbors. Reject self, missing, foreign and wrong-parent anchors. Never reinterpret a stale
-rank/deleted anchor as end. Same-position movement is a no-effect; cross-forest transfer is a separate operation.
+The structural port is `point(snapshot,id)`, `children(snapshot,parent,cursor,limit,direction)`,
+`outline(snapshot,cursor,limit)`, `projected(snapshot,origin,direction,cursor,limit)` for chapter-only pages,
+`rank(snapshot,index,id)`, `select(snapshot,index,rank)`, `insert(expectedHead,freshId,parent,before)`,
+`move(expectedHead,id,parent,before)` and `remove(expectedHead,id)`. `apply` computes the local split/join/rotation
+write set; owners authorize and CAS. `before` is a stable sibling handle; null means end. Resolve source, destination
+and anchor against the same snapshot, excluding source from neighbors. Reject self, missing, foreign and wrong-parent
+anchors. Never reinterpret a stale rank or deleted handle as end. Same-position movement is a no-effect; cross-forest
+transfer is a separate operation. `point` and `children` fail closed unless membership to the selected root is proved;
+a residual sibling root must not disclose a detached subtree.
 
-Choose **sequence topology, not persisted numeric ranks**, for the scalable adapter. Each sibling entry has a stable
-logical handle, selected left/right/parent handles, AVL height and subtree count. Rank is computed from counts;
-`before` resolves the handle and ancestor path. Insert/remove/reorder change O(log S) nodes and a constant number
-of links per rotation, without relabeling unaffected siblings. A cross-parent move removes/inserts one entry and
-changes its containment parent; descendants keep their identity, order and values. Book chapter-count summaries
-skip empty parts. Dense Book position/preorder and Knowledge decimal position are compatibility projections, never
-mutation addresses or a requirement to persist every changed ordinal/depth.
+Choose **stable handles and count/rank/select**, not persisted numeric ranks or global key relabel. Insert, remove,
+reorder and subtree cut/splice change O(log N) sequence nodes plus O(H) containment ancestors, without relabeling
+unaffected siblings or rewriting descendants. Book chapter-count summaries skip empty parts. Dense Book
+position/preorder and Knowledge decimal position are compatibility projections, never mutation addresses.
 
-Knowledge's current `(numeric(38,0) position, placementId)` comparator and 64-neighbor/side repair remain usable
-through the keyed compatibility adapter, but cannot provide this guarantee: 130 consecutive integer keys around a
-middle gap can exhaust its repair window. Repeated whole-generation spacing after exhaustion can become quadratic;
-reject that as the scalable solution, even in background batches. Arbitrary-length fractional keys also need a key
-length/cost proof. The sequence adapter instead reuses AVL rotations, balancing, path copying and aggregate laws,
-with rank/handle descent replacing key comparison. Removal transplants sequence handles, never rebinds placement
-identity; sequence-parent links are distinct from containment-parent links. It needs versioned handle-to-node and
-parent-root directories.
-Do not copy Knowledge's notebook/document columns into a shared schema or claim the delivered keyed index already
-implements this adapter.
+Knowledge's current `(numeric(38,0) position, placementId)` comparator and 64-neighbor/side repair remain a keyed
+compatibility adapter. 130 consecutive integer keys around a middle gap can exhaust its repair window; that bound is
+a step budget, not a permanent total capacity. Do not copy Knowledge's notebook/document columns into a shared schema.
 
 Serialize structural writers and lifecycle fences on one forest head. Under that lock check owner admission,
 complete source/destination ancestor paths, self-parent/cycles and destination depth plus exact moved height.
@@ -457,9 +459,10 @@ empty parts; parts remain origins and unavailable chapters consume slots. Stack 
 legacy ordinal views without materializing a whole outline. Keep Book page 20/no refill and Knowledge's own page/
 scan bounds. Metadata paths read zero bodies; exact opening remains each owner's native byte/digest reader.
 
-[`versioned-outline-order.ts`](../services/kernel/src/content/versioned-outline-order.ts) supplies copy-on-write AVL
-insert/remove and bounded seek behind node/value/summary ports; [`knowledge-order.ts`](../services/kernel/src/content/knowledge-order.ts)
-keeps the keyed native adapter. Add reverse/rank/handle traversal for the sequence adapter.
+[`versioned-outline-order.ts`](../services/kernel/src/content/versioned-outline-order.ts) supplies keyed copy-on-write
+AVL insert/remove and bounded seek behind node/value/summary ports. Count/rank/select, split/join, generation/as-of
+lookup, sibling/preorder/chapter indexes and membership proof are additional port operations, not that extract.
+[`knowledge-order.ts`](../services/kernel/src/content/knowledge-order.ts) keeps the keyed native adapter.
 [`knowledge-commands.ts`](../services/kernel/src/content/knowledge-commands.ts) supplies head locking, stable anchors,
 ancestor/cycle checks and exact heights. Its parent-root predecessor rows and
 [`knowledge-reads.ts`](../services/kernel/src/content/knowledge-reads.ts) prove historical children, not historical
@@ -468,44 +471,37 @@ Knowledge still publishes individual documents; Book release membership never be
 
 ### Cost, storage choice and retention
 
-Let N be placements, S sibling width, H bounded owner depth, P raw page size, T retained edits and W native ID width
-([128 UUID bits](../services/kernel/src/route/route.ts)). With bounded directory access, point membership costs
-O(H), children O(log S + P), preorder O(H log N + P), and chapter navigation O(H log N + P) index visits. Thus at fixed
-owner depth pages target O(log N + P); native disclosure adds per-raw-candidate checks, never body loads. A move
-changes O(H log N) sequence/summary nodes and O(H) containment facts/root entries. H is bounded independently of N.
-A million-descendant move has the leaf move's bound at equal ancestor paths and sibling widths: no descendant rewrite.
+Let N be placements, S sibling width, H bounded owner depth, P raw page size and T retained edits. Count **logical
+probes** (node/occurrence/membership visits) separately from **physical SQL/I/O**. Logical point membership is
+O(log N) sequence probes plus the containment path; children are O(log S + P); preorder and chapter navigation are
+O(log N + P) once the cursor carries the traversal stack. Native disclosure adds per-raw-candidate checks, never body
+loads. A move or point publish copies O(log N) sibling, preorder and chapter index nodes plus O(H) containment facts.
+H is bounded independently of N. A million-descendant move has the leaf move's bound at equal ancestor paths and
+sibling widths: no descendant rewrite, global key relabel, history-chain replay or per-edit full copy.
 
 A hot gap costs the same O(log S) path/rotation changes on every insertion; there is no spacing generation to scan.
-T edits retain O(N + T H log N) logical nodes/directory updates, rather than N rows per edit; radix storage adds
-the bounded W factor, O(W(N + T H log N)). Whole input/release
-build costs O(N log N) with incremental insertion (or O(N) with an ordered builder), in bounded resumable steps.
-Never rescan the committed prefix on resume or rebuild the full selection on every batch. Structural withdrawal
-changes one pointer; reclamation costs O(retained storage) total in bounded steps. Finite address/counter widths,
-bytes, deadlines, depth and page/batch limits are architectural resources, not a business count cap.
+T edits retain O(N + T (log N + H)) logical node versions. Whole input/release build costs O(N log N) with incremental
+insertion (or O(N) with an ordered builder), in bounded resumable steps. Never rescan the committed prefix on resume
+or rebuild the full selection on every batch. Structural withdrawal changes one pointer; reclamation costs O(retained
+storage) total in bounded steps. Finite address/counter widths, bytes, deadlines, depth and page/batch limits are
+architectural resources, not a business count cap. There is no permanent total structure cap.
+
+Decision: the initial persistence adapter is **row-per-node PostgreSQL temporal storage**, hidden behind the sequence
+port: `(owner, generation, index, nodeId, sequence DESC)` for as-of node lookup and the matching occurrence-state
+index. One logical probe is one historical B-tree seek; if history rows are V, conservative physical work is
+O((logical probes) · log_B V), plus WAL and round trips. Do not treat O(log N + P) logical as already-proved
+O(log_B N + P/B) I/O. A later **fixed-page** adapter may replace the row layout only after native evidence on the
+same 1k/10k/100k fixtures (hot-gap inserts, large unchanged subtree moves, historical point/children/preorder/
+chapter pages, complete Book publish/withdrawal, interrupted batches and reclamation) recording buffers, EXPLAIN
+rows/loops, WAL and retained bytes. Predecessor-history versus radix-directory comparison is not the remaining
+choice. Algorithm, point-publication and durable-preparation work start against the port; staged Book activation
+still waits for the owner proofs in the Book contract.
 
 The independent [model](research/knowledge-workspaces-model-astra.md#physical-model-and-operation-costs) supports
 stable identities, serialized moves and bounded sequence maintenance; the [audit](research/universal-scalability-audit.md)
-and [follow-up](research/universal-scalability-follow-up.md#adopted-boundaries) identify whole-snapshot costs and
-separate total coverage from paging. They do not decide the expensive **directory** choice:
-
-- **Indexed predecessor rows:** `(forest, logicalHandle, revision DESC)` selects facts, AVL links and parent roots;
-  each visited node adds O(log V) history seek at V retained versions. It reuses Knowledge storage but history growth
-  can exceed the physical-page target; current-only adjacency does not repair historical lookup.
-- **Persistent fixed-width radix directories:** each exact head names maps from native IDs to selected facts/nodes
-  and parent roots. A lookup/update traverses at most W bits; one sequence edit copies O(W H log N) directory nodes,
-  with bounded local compression/splits. It avoids history search and parent-path relabeling but adds write/storage
-  amplification and shared-root reclamation. No unbounded hash-collision bucket is an acceptable substitute.
-
-Freeze the sequence/owner ports now; do not commit an irreversible shared storage migration from this evidence.
-The smallest distinguishing native check implements both directories under the same sequence adapter: at
-1k/10k/100k placements vary history separately from width, repeat insertion into one hot gap, and move an unchanged
-large subtree. Compare exact historical point/children/preorder/navigation, physical buffers/EXPLAIN, node reads,
-writes/WAL, retained bytes and head-lock time. At fixed W/H the radix design has the required asymptotic bound;
-measure its constants against predecessor histories before selecting storage. Include complete Book publish and
-withdrawal, interrupted/resumed batches and reclamation, not only a twenty-row read. Record observed values;
-logarithmic height estimates (roughly 10/14/17 binary levels before AVL constants) are not benchmark evidence.
-Algorithm extraction, point-publication orchestration, durable preparation and mounted review contracts can start
-before that comparison; scalable activation waits for the owner proofs named in the Book contract.
+and [follow-up](research/universal-scalability-follow-up.md#adopted-boundaries) separate total coverage from paging
+and reject whole-snapshot costs as the serial path. They remain the prior independent evidence; this decision supplies
+the missing generation/as-of, three-index and physical-accounting contract.
 
 Removal tombstones membership/detaches one root; targets and old exact membership survive under current lifecycle.
 Book withdrawal does not erase retained releases; Knowledge restore never republishes. Erasure/moderation governs
@@ -656,3 +652,7 @@ explicit publication, exact references, viewer-aware composition and bounded nav
 loop; database, collaboration and computation parity remain deferred. Cross-domain APIs use existing module contracts
 and composition roots, without a separate graph database, permissions engine, workspace CRDT, recursive publication
 or private search inputs. Their native proof gaps remain implementation work.
+
+Decision: ordered structure uses generation/as-of indexes, stable handles, rank/select and split/join behind a
+row-per-node temporal port, with distinct Book and Knowledge adapters. Book exact-source consent and staged
+activation-currentness stay in the [Book publication contract](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).

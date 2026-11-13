@@ -17,10 +17,11 @@ an attachment failure rolls back only the structure command, never the independe
 
 Release selects an ancestor-closed subset of a specific current structure and compares the previous publication
 ID, atomically appending a frozen manifest and advancing its public pointer. Unselected placements are absent.
-Ordinary Post publication remains the body publication boundary: a release neither publishes a draft Post nor
-grants draft access. Authors publish selected Posts through that existing boundary before public reading; other
-drafts stay private. Later body or structure edits do not change a released revision's bytes. Releasing an empty
-selection withdraws the current TOC; explicit historical manifests still obey current catalogue and target Access.
+A release does not globally publish a target Post or grant other-product draft access. Exact Book-scoped source
+consent and current native disclosure are owned in
+[hosted chapters](hosted-chapters.md#private-to-public-boundary); unselected revisions stay private. Later body or
+structure edits do not change a released revision's bytes. Releasing an empty selection withdraws the current TOC;
+explicit historical manifests still obey current catalogue and target Access.
 
 The mounted `/v1/hostedCatalogues` operations create and revise structures, append a root chapter, publish, read
 metadata, page children and resolve an occurrence at an explicit structure or publication revision.
@@ -35,8 +36,9 @@ including Board, Realm, ancestry, erasure and revision disclosure. Unavailable c
 parent, order and kind only; their title, target, digest and attribution are withheld. Available resolution delivers
 canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
 
-Decision: books and columns share ordinary Post ownership and publication boundaries; the book profile adds immutable
-placements and release snapshots, and a release never publishes a target Post or grants draft access.
+Decision: books and columns share ordinary Post ownership; the book profile adds immutable placements and release
+snapshots. A release never globally publishes a target Post; Book-scoped exact source consent is the hosted-chapters
+contract.
 
 Decision: `hosted_catalogue.for_subject` lists current public publications for an existing Subject from indexed
 `subject_thread` rows and same-route published catalogue-post subject references. Empty publications leave that
