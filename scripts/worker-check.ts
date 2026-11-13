@@ -1102,26 +1102,64 @@ function logPath(cwd: string, id: string): string {
   );
 }
 
+const FAILURE_DIAGNOSTIC =
+  /error|fail|not ok|assert|expected|received|actual|panic|exception|deadline_exceeded|overloaded|\b503\b/i;
+const REMOTE_SECONDARY_DIAGNOSTIC =
+  /^remote-check:.*(?:connection|transport|cleanup|settlement|timeout|failed|failure|unverified|unavailable|status)/i;
+const RECOVERED_COMMAND_OUTPUT =
+  /(?:^|\n)remote-check: recovered command output after disconnect run=([a-z0-9-]+)\r?\n([\s\S]*?)\r?\nremote-check: end recovered command output run=\1(?:\r?\n|$)/g;
+
+/** Keep recovered command evidence primary while reporting remote transport and cleanup as secondary. */
+export function summarizeFailureOutput(output: string): string {
+  const normalized = output.replace(/\x1b\[[0-9;]*m/g, '');
+  const recovered = [...normalized.matchAll(RECOVERED_COMMAND_OUTPUT)].at(-1);
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const secondary = [...new Set(lines.filter((line) => REMOTE_SECONDARY_DIAGNOSTIC.test(line)))].slice(-30);
+
+  if (recovered) {
+    const commandText = recovered[2] ?? '';
+    const commandLines = commandText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => Boolean(line) && !line.startsWith('remote-check:'));
+    const failures = commandLines.filter((line) => FAILURE_DIAGNOSTIC.test(line));
+    const evidence = [...new Set(failures.length ? failures : commandLines.slice(-30))].slice(-30);
+    const sections = [
+      `command diagnostics (run ${recovered[1]}):\n${evidence.join('\n') || '(no original command diagnostic was observed)'}`,
+    ];
+    if (secondary.length) sections.push(`transport and cleanup (secondary):\n${secondary.join('\n')}`);
+    return sections.join('\n').slice(-4_000);
+  }
+
+  const commandLines = lines.filter((line) => !line.startsWith('remote-check:'));
+  const failures = commandLines.filter((line) => FAILURE_DIAGNOSTIC.test(line));
+  if (secondary.length) {
+    const evidence = [...new Set(failures.length ? failures : commandLines.slice(-30))].slice(-30);
+    return [
+      `command diagnostics:\n${evidence.join('\n') || '(the original command diagnostic was not observed)'}`,
+      `transport and cleanup (secondary):\n${secondary.join('\n')}`,
+    ]
+      .join('\n')
+      .slice(-4_000);
+  }
+
+  const ordinaryFailures = lines.filter((line) => FAILURE_DIAGNOSTIC.test(line));
+  const summary = [...new Set(ordinaryFailures.length ? ordinaryFailures : lines.slice(-30))].slice(-30).join('\n');
+  return summary.slice(-4_000) || '(the check produced no output)';
+}
+
 function failureSummary(file: string): string {
   const fd = openSync(file, 'r');
   try {
     const size = fstatSync(fd).size;
     if (size === 0) return '(the check produced no output)';
-    const buffer = Buffer.alloc(Math.min(size, 12_000));
+    // The remote supervisor retains 64 KiB; include its framing and the subsequent settlement footer.
+    const buffer = Buffer.alloc(Math.min(size, 128_000));
     readSync(fd, buffer, 0, buffer.length, size - buffer.length);
-    const lines = buffer
-      .toString('utf8')
-      .replace(/\x1b\[[0-9;]*m/g, '')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const failures = lines.filter((line) =>
-      /error|fail|not ok|assert|expected|received|actual|panic|exception|deadline_exceeded|overloaded|\b503\b/i.test(
-        line,
-      ),
-    );
-    const summary = [...new Set(failures.length ? failures : lines.slice(-30))].slice(-30).join('\n');
-    return summary.slice(-4_000) || '(the check produced no output)';
+    return summarizeFailureOutput(buffer.toString('utf8'));
   } finally {
     closeSync(fd);
   }

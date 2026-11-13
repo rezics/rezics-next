@@ -3833,7 +3833,7 @@ def supervise():
     for sig in [signal.SIGHUP, signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda number, frame: interrupted.append(number))
     tail = bytearray()
-    disconnected_tail = bytearray()
+    command_tail = bytearray()
     disconnected_streams = set()
     last_test = None
     packages = []
@@ -3873,6 +3873,19 @@ def supervise():
                     pending = output.with_name(output.name + '.pending')
                     pending.write_bytes(tail)
                     pending.replace(output)
+                # Persist the exact run's bounded command output before forwarding it. A lost SSH reader may
+                # disappear without making the next small write fail, so BrokenPipe cannot define the tail.
+                if (root / 'command-started').exists():
+                    command_tail.extend(block)
+                    del command_tail[:-65536]
+                    try:
+                        output = root / '.temp/check-host/disconnected-output'
+                        output.parent.mkdir(parents=True, exist_ok=True)
+                        pending = output.with_name(output.name + '.pending')
+                        pending.write_bytes(command_tail)
+                        pending.replace(output)
+                    except OSError:
+                        pass  # Supplemental output custody must not replace the root command result.
                 fd = event.data.fileno()
                 if fd not in disconnected_streams:
                     try:
@@ -3883,9 +3896,6 @@ def supervise():
                         disconnected_streams.add(fd)
                         with open(os.devnull, 'wb') as sink:
                             os.dup2(sink.fileno(), fd)
-                if fd in disconnected_streams:
-                    disconnected_tail.extend(block)
-                    del disconnected_tail[:-65536]
             else:
                 selected.unregister(event.fileobj)
                 event.fileobj.close()
@@ -3910,11 +3920,6 @@ def supervise():
                     marker = root / '.bun-install-complete'
                     preparation_done = marker.exists() and marker.stat().st_mtime_ns <= wall_started_ns + int(limit_ms) * 1000000
                 break
-    if disconnected_tail:
-        try:
-            (root / '.temp/check-host/disconnected-output').write_bytes(disconnected_tail)
-        except OSError:
-            pass  # Output evidence must not change the original command result.
     if not preparation_done or failure:
         code = 128 + interrupted[0] if interrupted else 70
         receipt = {'status': 'infrastructure-failure', 'host': host, 'run': run, 'phase': 'command' if preparation_done else 'install/preparation',
@@ -5246,19 +5251,37 @@ function localRsyncSupportsZstd(): boolean {
   return result.exitCode === 0 && /zstd/i.test(result.stdout.toString());
 }
 
-const recoveredOutputHeader = 'remote-check: recovered output after disconnect\n';
+const recoveredOutputHeader = 'remote-check: recovered command output after disconnect run=';
+const recoveredOutputFooter = 'remote-check: end recovered command output run=';
 
-/** Reads the command's recorded exit status and optional retained output when ssh reports 255. */
-export function statusScript(directory: string): string {
+/** Reads status only from the exact host/run supervisor and optionally returns its bounded command output tail. */
+export function statusScript(directory: string, host: string, run: string, recoverOutput = true): string {
+  const marker = quote(`${directory}/.remote-check-supervisor`);
   const disconnectedOutput = quote(`${directory}/.temp/check-host/disconnected-output`);
+  const identityCheck = String.raw`import json,sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as source: marker=json.load(source)
+except (OSError,UnicodeError,ValueError):
+    raise SystemExit(1)
+if (type(marker) is not dict or type(marker.get('schema')) is not int or marker.get('schema') != 1 or
+        marker.get('host') != sys.argv[2] or marker.get('run') != sys.argv[3]):
+    raise SystemExit(1)`;
+  const recoveredOutput = recoverOutput
+    ? `  if [ -f ${disconnectedOutput} ]; then
+    printf '%s%s\\n' ${quote(recoveredOutputHeader)} ${quote(run)} >&2
+    cat -- ${disconnectedOutput} >&2 || :
+    printf '\\n%s%s\\n' ${quote(recoveredOutputFooter)} ${quote(run)} >&2
+  fi\n`
+    : '';
   return `# REMOTE_CHECK_STATUS
+if ! python3 -c ${quote(identityCheck)} ${marker} ${quote(host)} ${quote(run)}; then
+  printf 'remote-check: run identity unavailable for status\\n' >&2
+  exit 75
+fi
 if [ -d ${quote(directory)} ]; then touch ${quote(`${directory}/.alive`)} || exit 75; fi
 if [ -e ${quote(`${directory}/exit-status`)} ]; then
   cat -- ${quote(`${directory}/exit-status`)} || exit 75
-  if [ -f ${disconnectedOutput} ]; then
-    printf '%s' ${quote(recoveredOutputHeader)} >&2
-    cat -- ${disconnectedOutput} >&2 || :
-  fi
+${recoveredOutput}
 elif [ -e ${quote(`${directory}/.owned-cleanup-incomplete.json`)} ] || [ -e ${quote(`${directory}/.owned-resources-incomplete.json`)} ] || [ -e ${quote(`${directory}/run-lifetime-status.json`)} ] || [ -e ${quote(`${directory}/.command-result`)} ]; then printf 'CLEANING\\n'
 elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
 else printf 'NOT_STARTED\\n'; fi`;
@@ -5291,6 +5314,7 @@ export function parseRemoteCommandStatus(
 /** Reconnects with bounded status probes and waits for this run's host-owned terminal result. */
 async function waitForRemoteCommandStatus(
   host: Host,
+  run: string,
   connectionId: string,
   directory: string,
   deadlineAt: number,
@@ -5305,7 +5329,13 @@ async function waitForRemoteCommandStatus(
   const probe = async (timeoutMs: number): Promise<RemoteCommandStatus | null> => {
     let response: { code: number; output: string; stdout: string; stderr: string };
     try {
-      response = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', timeoutMs);
+      response = await boundedSsh(
+        host,
+        connectionId,
+        statusScript(directory, host.name, run),
+        'remote command status',
+        timeoutMs,
+      );
     } catch (error) {
       if (!(error instanceof RemoteTransportError)) throw error;
       if (!reconnectPending) reconnectStartedAt = performance.now();
@@ -5326,7 +5356,7 @@ async function waitForRemoteCommandStatus(
     }
     consecutiveDrops = 0;
     const status = parseRemoteCommandStatus(host, response);
-    const recovered = response.stderr.indexOf(recoveredOutputHeader);
+    const recovered = response.stderr.indexOf(`${recoveredOutputHeader}${run}`);
     if (status.kind === 'completed' && recovered >= 0) process.stderr.write(response.stderr.slice(recovered));
     return status;
   };
@@ -8405,11 +8435,19 @@ async function runLeased(
       let child: ReturnType<typeof Bun.spawn> | undefined;
       let probeTimer: ReturnType<typeof setTimeout> | undefined;
       try {
-        child = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, statusScript(directory)], {
-          stdin: 'ignore',
-          stdout: 'pipe',
-          stderr: 'ignore',
-        });
+        child = Bun.spawn(
+          [
+            sshExecutable(),
+            ...sshOptions(host, connectionId),
+            host.address,
+            statusScript(directory, host.name, id, false),
+          ],
+          {
+            stdin: 'ignore',
+            stdout: 'pipe',
+            stderr: 'ignore',
+          },
+        );
         heartbeatChildren.add(child);
         const outputStream = child.stdout;
         if (outputStream === undefined || typeof outputStream === 'number')
@@ -8501,7 +8539,7 @@ async function runLeased(
     }
     assertExecutionAllowed(options, signal);
     if (code === 255) {
-      const status = await waitForRemoteCommandStatus(host, connectionId, directory, deadlineAt, options, signal);
+      const status = await waitForRemoteCommandStatus(host, id, connectionId, directory, deadlineAt, options, signal);
       assertExecutionAllowed(options, signal);
       if (status.kind === 'unreachable') {
         preserveRemoteRun = true;
