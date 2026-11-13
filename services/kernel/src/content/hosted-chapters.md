@@ -15,10 +15,12 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.remove_draft_point`  | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`  | `expectedRevisionId`, `occurrenceId`                                                                 |
 | `hosted_catalogue.update_draft_point`  | `POST /v1/hostedCatalogues/{id}:updateDraftPoint`  | `expectedRevisionId`, `occurrenceId`, `title`, explicit nullable `target`                            |
 | `hosted_catalogue.move_draft_point`    | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`    | `expectedRevisionId`, `occurrenceId`, `parentId`, nullable `beforeOccurrenceId`                      |
+| `hosted_catalogue.convert_draft`       | `POST /v1/hostedCatalogues/{id}:convertDraft`      | `expectedRevisionId`, bounded `step`, retained `inputId` and native page cursor when paging          |
 | `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
 
-Every command requires an Idempotency-Key and returns `catalogueId` and the newly selected `revisionId`. Create
-returns 201; revise, root append, draft point writes and publish return 200. A fresh command with a stale head or release returns 412.
+Every command requires an Idempotency-Key and returns `catalogueId`. Create returns 201; revise, root append, draft
+point writes, conversion steps and publish return 200. Conversion returns private phase/count progress and adds the
+new `revisionId` only after activation. A fresh command with a stale head or release returns 412.
 Native authorization precedes receipt lookup, while concurrency comparisons follow it: an authorized exact retry
 can return its original immutable revision after later changes. An altered request under the same key conflicts.
 
@@ -203,6 +205,12 @@ retaining parent subtree accumulators until exact coverage is recorded; commit t
 revision and CAS-advances only the current source draft head. Empty complete sources stay on the first-point-write
 path; cancelled, erased, expired or stale sources keep the previous head, old exact revisions, cursors and the public
 pointer. Unavailable titles stay null. No HTTP route and no publication pointer change.
+
+Decision: `POST /v1/hostedCatalogues/:id:convertDraft` is a private author step command for source capture, builder
+begin/page/seal, and activation begin/page/commit. A page step replays native input advancement and applies at most
+20 retained entries; callers echo only the returned native frontier as a replay precondition, while source records,
+page payloads, coverage proof, seal readiness and activation stay producer-owned. Every step remains bound to the
+captured input and original expected draft revision.
 
 Retain the 512-row snapshot writer and explicit-selection publisher as compatibility operations. A replacement
 may intentionally shrink a larger draft; the client must identify it as whole replacement, never a saved page. Existing exact snapshots, descriptors, publications, receipts, checkpoints and cursors retain
