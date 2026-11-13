@@ -24,7 +24,13 @@ export type { SourceFenceTuple } from './source-fences.ts';
 /** Explicit local composition only; production servers do not mount this transport. */
 export { developmentMediaHandler } from './media-local-http.ts';
 
-export { createHostedCatalogue, reviseHostedCatalogue, publishHostedCatalogue } from './hosted-chapters-commands.ts';
+export {
+  createHostedCatalogue,
+  insertHostedDraftPoint,
+  publishHostedCatalogue,
+  removeHostedDraftPoint,
+  reviseHostedCatalogue,
+} from './hosted-chapters-commands.ts';
 export type { HostedCommandDependencies } from './hosted-chapters-commands.ts';
 export {
   readHostedCatalogue,

@@ -21,6 +21,8 @@ import {
   hostedReadPlacement,
   hostedReadPlacementPage,
 } from './hosted-chapters-store.ts';
+import { readHostedDraftPointSnapshot } from './hosted-version-draft-write.ts';
+import { pageVersionedHostedPlacements, readVersionedHostedPlacement } from './hosted-chapters-version-reads.ts';
 import { hostedAppendDescriptor } from './hosted-chapters-append.ts';
 import { hostedCursorBinding, readHostedCursor, writeHostedCursor } from './hosted-chapters-cursor.ts';
 import {
@@ -164,9 +166,11 @@ async function placementAt(
   descriptor: HostedAppendDescriptor | null,
 ) {
   if (routeOf(occurrenceId) !== routeOf(catalogueId)) throw new InvalidHostedStructureError('Invalid occurrence');
-  return snapshot(deps, catalogueId, context, (client) =>
-    hostedReadPlacement(client, catalogueId, revisionId, occurrenceId, descriptor),
-  );
+  return snapshot(deps, catalogueId, context, async (client) => {
+    const versioned = await readHostedDraftPointSnapshot(client, catalogueId, revisionId);
+    if (versioned) return readVersionedHostedPlacement(client, versioned, occurrenceId);
+    return hostedReadPlacement(client, catalogueId, revisionId, occurrenceId, descriptor);
+  });
 }
 
 export async function resolveHostedOccurrence(
@@ -311,6 +315,42 @@ async function page(
     query.mode === 'outline',
   );
   if (cursor && cursor.epoch !== selected.epoch) throw new InvalidHostedCursorError();
+  const issuedAt = cursor?.issuedAt ?? deps.clock().getTime();
+  const mapped = await snapshot(deps, catalogueId, context, async (client) => {
+    const versioned = await readHostedDraftPointSnapshot(client, catalogueId, selected.view.revisionId);
+    if (!versioned) return null;
+    return pageVersionedHostedPlacements(client, versioned, {
+      mode: query.mode,
+      parentId: query.parentId,
+      occurrenceId: query.occurrenceId,
+      cursorAfter: cursor?.after ?? null,
+      limit,
+    });
+  });
+  if (mapped.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
+  if (mapped.value) {
+    if (
+      cursor &&
+      (cursor.origin !== mapped.value.origin ||
+        (query.mode === 'previous' ? cursor.after >= mapped.value.origin : cursor.after <= mapped.value.origin))
+    )
+      throw new InvalidHostedCursorError();
+    const disclosed = await disclosePage(deps, mapped.value.placements, context, [mapped.anchor]);
+    const lastAfter = mapped.value.lastAfter;
+    const nextCursor =
+      mapped.value.hasMore && lastAfter !== null
+        ? writeHostedCursor(deps, binding, {
+            revisionId: selected.view.revisionId,
+            after: lastAfter,
+            origin: mapped.value.origin,
+            issuedAt,
+            epoch: selected.epoch,
+          })
+        : null;
+    disclosed.anchors.push((await selected.finish()).anchor);
+    const value: HostedPageView = { ...selected.view, items: disclosed.items, nextCursor };
+    return { value, anchors: disclosed.anchors };
+  }
   let origin = -1;
   const referenceId = query.mode === 'children' ? query.parentId : query.occurrenceId;
   if (referenceId !== null) {
@@ -336,7 +376,6 @@ async function page(
   )
     throw new InvalidHostedCursorError();
   const after = cursor?.after ?? origin;
-  const issuedAt = cursor?.issuedAt ?? deps.clock().getTime();
   const raw = await snapshot(deps, catalogueId, context, (client) =>
     hostedReadPlacementPage(
       client,
@@ -348,25 +387,7 @@ async function page(
   );
   if (raw.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
   const placements = raw.value.slice(0, limit);
-  const guards = new Map<string, Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>();
-  for (const placement of placements) {
-    if (placement.kind !== 'chapter') continue;
-    const key = hostedTargetKey(placement.target);
-    if (!guards.has(key)) guards.set(key, await prepareHostedTargetMetadata(deps, placement.target, context));
-  }
-  const targets = new Map<
-    string,
-    Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>['final']>>
-  >();
-  for (const [key, guard] of guards) targets.set(key, (await guard?.final()) ?? null);
-  const anchors: AnchoredPosition[] = [raw.anchor];
-  const items = placements.map((placement) => {
-    if (placement.kind === 'part') return available(placement);
-    const target = targets.get(hostedTargetKey(placement.target));
-    if (!target) return unavailable(placement);
-    anchors.push(target.anchor);
-    return available(placement);
-  });
+  const disclosed = await disclosePage(deps, placements, context, [raw.anchor]);
   const last = placements.at(-1);
   const nextCursor =
     raw.value.length > limit && last
@@ -378,7 +399,35 @@ async function page(
           epoch: selected.epoch,
         })
       : null;
-  anchors.push((await selected.finish()).anchor);
-  const value: HostedPageView = { ...selected.view, items, nextCursor };
-  return { value, anchors };
+  disclosed.anchors.push((await selected.finish()).anchor);
+  const value: HostedPageView = { ...selected.view, items: disclosed.items, nextCursor };
+  return { value, anchors: disclosed.anchors };
+}
+
+async function disclosePage(
+  deps: HostedDependencies,
+  placements: readonly OrderedHostedPlacement[],
+  context: ReadContext,
+  initial: AnchoredPosition[],
+) {
+  const guards = new Map<string, Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>();
+  for (const placement of placements) {
+    if (placement.kind !== 'chapter') continue;
+    const key = hostedTargetKey(placement.target);
+    if (!guards.has(key)) guards.set(key, await prepareHostedTargetMetadata(deps, placement.target, context));
+  }
+  const targets = new Map<
+    string,
+    Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>['final']>>
+  >();
+  for (const [key, guard] of guards) targets.set(key, (await guard?.final()) ?? null);
+  const anchors = [...initial];
+  const items = placements.map((placement) => {
+    if (placement.kind === 'part') return available(placement);
+    const target = targets.get(hostedTargetKey(placement.target));
+    if (!target) return unavailable(placement);
+    anchors.push(target.anchor);
+    return available(placement);
+  });
+  return { items, anchors };
 }
