@@ -69,6 +69,60 @@ export const hostedPage = v.strictObject({
   ),
   nextCursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
 });
+/** A single author page is not a complete replacement tree. Native sibling addresses are safe integers. */
+const windowAddress = {
+  occurrenceId: hostedId,
+  parentId: nullableId,
+  position: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+};
+export const hostedOutlineWindowPage = v.strictObject({
+  ...revision,
+  items: v.pipe(
+    v.array(
+      v.union([
+        v.strictObject({
+          ...windowAddress,
+          kind: v.picklist(['part', 'chapter']),
+          availability: v.literal('unavailable'),
+        }),
+        v.strictObject({
+          ...windowAddress,
+          kind: v.literal('part'),
+          availability: v.literal('available'),
+          title,
+          target: v.null(),
+        }),
+        v.strictObject({
+          ...windowAddress,
+          kind: v.literal('chapter'),
+          availability: v.literal('available'),
+          title,
+          target,
+        }),
+      ]),
+    ),
+    v.maxLength(20),
+  ),
+  nextCursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+});
+export const hostedOutlineWindowRequest = v.pipe(
+  v.strictObject({
+    revision: hostedRevision,
+    cursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+  }),
+  v.check(({ revision }) =>
+    revision.kind === 'structure' ? revision.sourceRevisionId === null : revision.sourceRevisionId !== null,
+  ),
+);
+export type HostedOutlineWindowRequest = v.InferOutput<typeof hostedOutlineWindowRequest>;
+export type HostedOutlineWindowPage = v.InferOutput<typeof hostedOutlineWindowPage>;
+/** Separate capability: no append command or conversion to HostedBook. */
+export interface HostedOutlineWindowNative {
+  readOutlineWindow(
+    input: HostedOutlineWindowRequest,
+    signal: AbortSignal,
+  ): Promise<StudioResult<HostedOutlineWindowPage>>;
+}
 /** Author-only metadata: list rendering never needs chapter or document reads. */
 export const hostedHistoryRequest = v.strictObject({
   catalogueId: hostedId,

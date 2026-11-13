@@ -32,6 +32,35 @@ implementation stays in Content and Studio remains the receiving owner.
 Decision: The shared book/article Studio puts the active document first, collapses outline and drafts into a compact
 phone disclosure, and separates its wide navigation without an outer frame.
 
+## Native author outline window
+
+Decision: prepare a separate exact-revision, one-page author outline reader for the future large-draft append view;
+do not mount it or enable append. `hostedOutlineWindowNative` uses the authenticated session BFF and the installed
+generated outline route. Its request carries the admitted catalogue/kind/revision/source and an opaque cursor;
+the acting private viewer comes from the prepared session. Both boundaries keep no-store and request cancellation.
+The closed response admits at most 20 slots with nonnegative safe-integer sibling positions, including positions
+beyond 511. Withheld slots retain only native addresses, kind and availability. Missing parents, labels and targets
+are never synthesized, empty sparse pages keep their continuation, and each call makes exactly one native request.
+
+`HostedOutlineWindow` is an unmounted page owner. It keeps only the current page, retries the failed cursor exactly,
+and permanently retires on session replacement (including the same account), aborting requests and discarding late
+responses. A caller disposes it on departure or supplies the owning workspace's currentness predicate. Its page wire
+is separate from `HostedBook`: no partial or withheld page becomes an editable whole tree. The existing complete-tree
+reader still drains the exact stream, refuses unavailable slots or more than 512 placements, and retains the legacy
+position, dense sibling, parent and depth checks. Replacement commands and the mounted editor keep those bounds.
+
+Sources read before design: `hosted-contract.ts`, `hosted-native.ts`, `hosted-actions.ts`, this Book owner document,
+the installed `hosted-chapters-routes.d.ts` outline declaration and `hosted-chapters-reads.d.ts`, Content's
+[Book author outline contract](../../../../services/kernel/src/content/hosted-chapters.md#author-outline), and the
+existing complete-tree fixture, inventory/history callers and session provenance source. The generated route is
+already present on the base; no merge, cherry-pick, public-reader or Backend change is needed.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-outline-window.test.ts
+tests/studio-hosted-outline.test.ts`. The new source fixture pins exact URL/cursor, one request, positions beyond 511,
+safe-integer and closed wire admission, withheld slots, sparse pages, exact revision matching, cancellation, native
+failure categories, exact retry and credential retirement. Existing assertions remain unchanged. Source verification
+formats changed files and runs one affected Web typecheck. Browser, native, Storybook and broad checks are deferred.
+
 ## Book outline index
 
 Decision: Book organization memoizes one index for the loaded structure revision, derived from the existing admitted

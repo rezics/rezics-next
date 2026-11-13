@@ -16,6 +16,8 @@ import {
   hostedPublish,
   hostedRevise,
   hostedSelection,
+  hostedOutlineWindowRequest,
+  type HostedOutlineWindowNative,
   type HostedBook,
   type HostedBookNative,
 } from './hosted-contract';
@@ -81,7 +83,11 @@ export const publishHostedBook = createServerFn({ method: 'POST' })
   );
 
 async function admittedOwner<T>(
-  run: (native: HostedBookNative, accountId: string, signal: AbortSignal) => Promise<StudioResult<T>>,
+  run: (
+    native: HostedBookNative & HostedOutlineWindowNative,
+    accountId: string,
+    signal: AbortSignal,
+  ) => Promise<StudioResult<T>>,
 ): Promise<StudioResult<T>> {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
@@ -118,6 +124,15 @@ export const listHostedBookHistory = createServerFn({ method: 'GET' })
   .handler(({ data }) =>
     admittedOwner((native, _accountId, signal) => native.listHistory(data.catalogueId, data.cursor, signal)),
   );
+
+/** Exact author-only page; authentication is required even when the selected release is public. */
+export const readHostedOutlineWindow = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(hostedOutlineWindowRequest, input))
+  .handler(({ data }) => admittedOwner((native, _accountId, signal) => native.readOutlineWindow(data, signal)));
+
+export const hostedOutlineWindowNative: HostedOutlineWindowNative = {
+  readOutlineWindow: (data, signal) => readHostedOutlineWindow({ data, signal }),
+};
 
 export const readOwnedHostedBook = createServerFn({ method: 'GET' })
   .validator((input: unknown) =>

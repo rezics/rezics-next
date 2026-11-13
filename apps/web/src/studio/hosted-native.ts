@@ -15,6 +15,11 @@ import {
   type HostedOwnerViewer,
   hostedOwnerInventoryResponse,
   hostedPage,
+  hostedOutlineWindowPage,
+  hostedOutlineWindowRequest,
+  type HostedOutlineWindowNative,
+  type HostedOutlineWindowRequest,
+  type HostedOutlineWindowPage,
   hostedPublish,
   hostedRevise,
   hostedRevision,
@@ -56,13 +61,50 @@ function failure(status: number, mutation: boolean): StudioResult<never> {
 }
 
 /** Uses the existing credential-bearing client and its read-your-writes session-token handling. */
-export function createHostedBookNative(client: KernelClient): HostedBookNative {
+export function createHostedBookNative(client: KernelClient): HostedBookNative & HostedOutlineWindowNative {
   const fetchOptions = (signal: AbortSignal) => ({ signal, cache: 'no-store' as const, redirect: 'manual' as const });
   const queryOptions = (signal: AbortSignal, query: Record<string, string>) => ({ query, fetch: fetchOptions(signal) });
   const commandOptions = (signal: AbortSignal, key: string) => ({
     headers: { 'idempotency-key': JSON.stringify(key) },
     fetch: fetchOptions(signal),
   });
+  async function readOutlineWindow(
+    input: HostedOutlineWindowRequest,
+    signal: AbortSignal,
+  ): Promise<StudioResult<HostedOutlineWindowPage>> {
+    const missing = () =>
+      hostedFailure('unavailable', 'This exact book outline page could not be read. Retry this page.');
+    const parsed = v.safeParse(hostedOutlineWindowRequest, input);
+    if (!parsed.success) return hostedFailure('invalid', 'The exact book outline address is invalid. Reopen the book.');
+    if (signal.aborted) return missing();
+    const { revision, cursor } = parsed.output;
+    try {
+      const response = await client.hostedCatalogues({ id: revision.catalogueId }).outline.get(
+        queryOptions(signal, {
+          kind: revision.kind,
+          revisionId: revision.revisionId,
+          limit: '20',
+          ...(cursor === null ? {} : { cursor }),
+        }),
+      );
+      if (signal.aborted) return missing();
+      if (response.status === 400 || response.status === 409)
+        return hostedFailure('stale', 'This outline continuation is no longer valid. Reopen the exact book version.');
+      if (response.error || response.status !== 200) return failure(response.status, false);
+      const page = v.safeParse(hostedOutlineWindowPage, response.data);
+      if (!page.success) return missing();
+      if (
+        page.output.catalogueId !== revision.catalogueId ||
+        page.output.kind !== revision.kind ||
+        page.output.revisionId !== revision.revisionId ||
+        page.output.sourceRevisionId !== revision.sourceRevisionId
+      )
+        return missing();
+      return { ok: true, value: page.output };
+    } catch {
+      return missing();
+    }
+  }
   async function read(input: HostedSelection, signal: AbortSignal): Promise<StudioResult<HostedBook>> {
     try {
       const selection = v.parse(hostedSelection, input);
@@ -254,6 +296,7 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative {
     }
   }
   return {
+    readOutlineWindow,
     read,
     listHistory,
     listOwn,
