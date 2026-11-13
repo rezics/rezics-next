@@ -38,6 +38,9 @@ const staging = t.Object(
       t.Literal('failed'),
     ]),
     mode: t.Union([t.Literal('whole'), t.Literal('selection')]),
+    sourceRevisionId: t.Optional(HostedIdSchema),
+    expectedHeadRevisionId: t.Optional(HostedIdSchema),
+    expectedPublicationId: t.Optional(t.Union([HostedIdSchema, t.Null()])),
     inputVersion: t.String(),
     inputCount: t.String(),
     settledInputCount: t.String(),
@@ -76,7 +79,7 @@ const candidate = t.Object(
   closed,
 );
 
-/** Public wire shape contains only private progress counts and native locators. */
+/** New progress adds only immutable source/publication IDs; optional binding fields keep older receipts replayable. */
 export const HostedPublicationPreparationProgressSchema = t.Object(
   {
     catalogueId: HostedIdSchema,

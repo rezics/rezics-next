@@ -191,6 +191,9 @@ function checkpoint(row: StageRow): HostedPublicationStagingCheckpoint {
     locator: { catalogueId: row.catalogue_id, stageId: row.stage_id },
     state: row.status,
     mode: row.mode,
+    sourceRevisionId: row.source_revision_id,
+    expectedHeadRevisionId: row.expected_head_revision_id,
+    expectedPublicationId: row.expected_publication_id,
     inputVersion: row.input_version,
     inputCount: row.input_count,
     settledInputCount: row.settled_input_count,
@@ -439,6 +442,21 @@ export async function appendHostedPublicationSelectionBatch(
   const live = await requireLiveStage(client, row);
   if (live.mode !== 'selection' || live.status !== 'collecting' || live.input_frozen_version !== null)
     throw stagingConflict('Selection input is already frozen or not being collected');
+  const current = (
+    await client.query<QueryResultRow & { head_revision_id: string; publication_id: string | null }>(
+      `SELECT head_revision_id,publication_id
+       FROM content.hosted_catalogue
+       WHERE route=$1 AND catalogue_id=$2
+       FOR SHARE`,
+      [route, live.catalogue_id],
+    )
+  ).rows[0];
+  if (
+    !current ||
+    current.head_revision_id !== live.expected_head_revision_id ||
+    !sameOptional(current.publication_id, live.expected_publication_id)
+  )
+    throw stagingConflict('Pinned draft or publication changed before selection input');
   const nextVersion = BigInt(live.input_version) + 1n;
   const first = BigInt(live.input_count);
   const inputRows = input.occurrenceIds.map((occurrenceId, index) => ({

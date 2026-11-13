@@ -359,7 +359,10 @@ rollback refuses to restore the unusable `{1,1024}` expression or reject valid n
 
 ## Prepared Book publication
 
-Decision: the mounted author API uses expected draft/publication IDs only as stale-intent preconditions, gives each source-pinned stage a 24-hour lifetime from native command time, and returns only retained progress and candidate counts; preparation never selects the publication pointer.
+Decision: the mounted author API uses expected draft/publication IDs only as stale-intent preconditions, gives each
+source-pinned stage a 24-hour lifetime from native command time, and returns retained progress, candidate counts and
+only the stage's immutable source revision, expected draft and expected publication IDs; preparation never selects
+the publication pointer.
 
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
@@ -390,7 +393,9 @@ under current native admission. `whole` selects every placement of that pinned d
 IDs in bounded batches into an indexed selection set; settle duplicate/unknown IDs and require explicit ancestor
 closure before seal. Neither mode has a total 512 ceiling. The current `:publish` remains a <=512 compatibility
 request; larger input uses retained batches, never one giant request or growing JSON array. A fresh later draft
-is not substituted. Empty explicit selection is deliberate atomic withdrawal, never incomplete preparation.
+is not substituted. A new selection batch locks and compares both current pointers before inserting; an existing
+exact batch receipt replays before that stale-pointer check. Empty explicit selection is deliberate atomic
+withdrawal, never incomplete preparation.
 
 Persist a small control row, indexed input/output, selected snapshot roots and a durable raw traversal frontier.
 Use existing Book page 20 plus lookahead for one processing step (512 is at most an ingestion batch). Each step

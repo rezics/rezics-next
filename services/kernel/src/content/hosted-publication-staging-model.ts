@@ -35,6 +35,10 @@ export type HostedPublicationStagingCheckpoint = Readonly<{
   locator: HostedPublicationStagingLocator;
   state: HostedPublicationStagingState;
   mode: HostedPublicationStagingMode;
+  /** Optional only for checkpoints persisted before the binding fields were added. */
+  sourceRevisionId?: string;
+  expectedHeadRevisionId?: string;
+  expectedPublicationId?: string | null;
   inputVersion: string;
   inputCount: string;
   settledInputCount: string;

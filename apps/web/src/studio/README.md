@@ -677,14 +677,17 @@ must resolve before navigation, new choices or freeze. Only native counts descri
 settlement. Input must be nonempty and explicitly frozen before building; withdrawal remains the separate action.
 Ancestors must be selected explicitly, and native incomplete, missing-ancestor and stale-source results require fresh
 review and a new stage. Account, source, draft and visit replacement retire the window and discard late replies.
-A locator-only collecting resume can freeze retained input; adding pages requires a new reviewed stage because the
-progress wire does not expose the pinned draft ID. No current draft is guessed and no selected-ID listing is invented.
+Decision: collecting progress returns only the stage's immutable source revision, expected draft and expected release
+IDs. After reload, Studio reads the current owned Book, compares both current pointers, then opens one bounded outline
+page at the retained source revision. A changed pointer requires fresh review; native append checks both pointers,
+while an exact prior receipt still replays. Older receipts can omit these additive IDs; the client reads fresh
+progress for the binding before opening a page. No current draft is substituted and no selected-ID listing is added.
 
 Selection sources read before design: the [Prepared Book publication contract](../../../../services/kernel/src/content/hosted-chapters.md#prepared-book-publication),
 `hosted-publication-preparation-routes.ts` and schemas, the existing preparation visit and transport,
 `HostedOutlineWindow`, and the owner outline transport. Focused deferred acceptance adds
-`tests/studio-hosted-release-selection.test.tsx`; the named stories cover two-page desktop input and narrow lost-batch
-recovery with the existing published release unchanged.
+`tests/studio-hosted-release-selection.test.tsx`; the stories cover two-page desktop input, same-stage recovery after
+reload and narrow lost-batch recovery with the existing published release unchanged.
 
 ## Exact source permission in point review
 

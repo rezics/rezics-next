@@ -36,6 +36,10 @@ export const releaseProgress = v.strictObject({
     locator: v.strictObject(locator),
     state: v.picklist(['collecting', 'building', 'closing', 'ready', 'sealed', 'cancelled', 'expired', 'failed']),
     mode: v.picklist(['whole', 'selection']),
+    // Missing only on durable command receipts written before stage binding was added.
+    sourceRevisionId: v.optional(hostedId),
+    expectedHeadRevisionId: v.optional(hostedId),
+    expectedPublicationId: v.optional(v.nullable(hostedId)),
     inputVersion: count,
     inputCount: count,
     settledInputCount: count,

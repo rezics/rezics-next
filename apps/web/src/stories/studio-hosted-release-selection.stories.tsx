@@ -11,7 +11,7 @@ import { releaseSelectionCopy } from '../studio/hosted-release-selection-copy';
 import { HostedReleasePreparationView } from '../studio/hosted-release-preparation-view';
 
 const id = (n: number) => `00000000-0000-8000-8000-${String(n).padStart(12, '0')}`;
-type Scenario = 'two-pages' | 'lost-batch';
+type Scenario = 'two-pages' | 'lost-batch' | 'resume';
 const owner: HostedOwnedBook = {
   viewer: { accountId: id(10), authnEpoch: 1 },
   scope: { kind: 'all-homes', route: 0, crossHome: 'complete' },
@@ -45,8 +45,8 @@ async function prepare(scenario: Scenario, locale: Locale) {
       csrfReady: true,
     }),
   };
-  let inputCount = 0;
-  let inputVersion = 0;
+  let inputCount = scenario === 'resume' ? 1 : 0;
+  let inputVersion = scenario === 'resume' ? 1 : 0;
   let stageState: ReleaseProgress['stage']['state'] = 'collecting';
   let lost = false;
   const receipts = new Map<string, ReleaseProgress>();
@@ -57,6 +57,9 @@ async function prepare(scenario: Scenario, locale: Locale) {
       locator: { catalogueId: id(1), stageId },
       mode: 'selection',
       state: stageState,
+      sourceRevisionId: id(4),
+      expectedHeadRevisionId: id(4),
+      expectedPublicationId: id(5),
       inputVersion: String(inputVersion),
       inputCount: String(inputCount),
       settledInputCount: '0',
@@ -144,6 +147,7 @@ async function prepare(scenario: Scenario, locale: Locale) {
         return { ok: true, value };
       },
     },
+    stageId: scenario === 'resume' ? id(40) : null,
   });
   if (scenario === 'lost-batch') {
     visit.confirmReview();
@@ -151,6 +155,7 @@ async function prepare(scenario: Scenario, locale: Locale) {
     visit.choosePlacement(id(60));
     await visit.appendSelection();
   }
+  if (scenario === 'resume') await visit.readProgress();
   return visit;
 }
 
@@ -187,7 +192,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'An admitted author selects explicit placements on two exact draft pages, acknowledges native counts and freezes input. The narrow case retries the exact lost batch. The published release stays current.',
+          'An admitted author selects explicit placements on two exact draft pages, acknowledges native counts and freezes input. Resume recovers the same stage and exact draft after reload; the narrow case retries the exact lost batch. The published release stays current.',
       },
     },
   },
@@ -230,5 +235,23 @@ export const LostBatchThenFreezePhone: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: selection.freeze }));
     await expect(await canvas.findByText(selection.frozen)).toBeVisible();
     await expect(canvas.getByText(id(5), { exact: true })).toBeVisible();
+  },
+};
+
+export const ResumeSameDraftAfterReload: Story = {
+  args: { scenario: 'resume' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const selection = releaseSelectionCopy[getLocale()];
+    const section = await canvas.findByRole('region', { name: selection.heading });
+    await expect(within(section).getByText('1', { exact: true })).toBeVisible();
+    await expect(canvas.getByText(selection.resumed)).toBeVisible();
+    await userEvent.click(await within(section).findByRole('button', { name: selection.next }));
+    await userEvent.click(await within(section).findByRole('checkbox', { name: /Tide pools/ }));
+    await userEvent.click(within(section).getByRole('button', { name: selection.add }));
+    await userEvent.click(await within(section).findByRole('button', { name: selection.freeze }));
+    await expect(within(section).getByText(selection.frozen)).toBeVisible();
+    await expect(within(section).getByText('2', { exact: true })).toBeVisible();
   },
 };

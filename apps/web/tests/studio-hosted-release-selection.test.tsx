@@ -72,6 +72,9 @@ function progress(
       locator: { catalogueId: id(1), stageId },
       mode: 'selection',
       state,
+      sourceRevisionId: id(4),
+      expectedHeadRevisionId: id(4),
+      expectedPublicationId: id(5),
       inputVersion: count === '0' ? '0' : '1',
       inputCount: count,
       settledInputCount: '0',
@@ -249,6 +252,7 @@ test('locator-only resume keeps native counts, freezes retained input and explai
   const stageId = id(40);
   const commands: ReleaseRequest[] = [];
   const selectionNative = pages();
+  let currentOwner = owner;
   const visit = new HostedReleasePreparationVisit({
     owner,
     source: session().source,
@@ -257,7 +261,7 @@ test('locator-only resume keeps native counts, freezes retained input and explai
     stageId,
     selectionNative,
     native: {
-      readOwn: async () => ({ ok: true, value: { ...owner, item: { ...owner.item, headRevisionId: id(9) } } }),
+      readOwn: async () => ({ ok: true, value: currentOwner }),
       command: async (input) => {
         commands.push(input);
         const value = progress(
@@ -283,13 +287,20 @@ test('locator-only resume keeps native counts, freezes retained input and explai
     });
     expect(getByText(container, releaseSelectionCopy.en.resumed)).toBeDefined();
     expect(getByText(container, '9,007,199,254,740,993')).toBeDefined();
-    expect(selectionNative.readOutlineWindow).not.toHaveBeenCalled();
+    expect(selectionNative.readOutlineWindow).toHaveBeenCalledWith(
+      {
+        revision: { catalogueId: id(1), revisionId: id(4), kind: 'structure', sourceRevisionId: null },
+        cursor: null,
+      },
+      expect.any(AbortSignal),
+    );
     await act(async () => visit.freezeSelection());
     await act(async () => visit.resume());
     expect(getByRole(container, 'alert').textContent).toBe(releaseSelectionCopy.en.missing);
     expect(commands.map((input) => input.kind)).toEqual(['progress', 'freeze', 'advance']);
     expect(commands[1]).toMatchObject({ expectedMode: 'selection' });
     expect(queryByRole(container, 'button', { name: releaseCopy.en.seal })).toBeNull();
+    currentOwner = { ...owner, item: { ...owner.item, headRevisionId: id(9) } };
     await act(async () => visit.refreshReview());
     expect(visit.snapshot()).toMatchObject({
       phase: 'review',
@@ -302,6 +313,132 @@ test('locator-only resume keeps native counts, freezes retained input and explai
       root.unmount();
     });
     container.remove();
+  }
+});
+
+test('reload resumes the same selected stage and adds another exact outline page', async () => {
+  const commands: ReleaseRequest[] = [];
+  const selectionNative = pages();
+  let inputCount = 0;
+  let stageId = '';
+  const native: ReleaseTransport = {
+    readOwn: mock(async () => ({ ok: true, value: owner })),
+    command: async (input) => {
+      commands.push(input);
+      stageId = input.stageId;
+      if (input.kind === 'append') {
+        const firstInputPosition = String(inputCount);
+        inputCount += input.body.occurrenceIds.length;
+        return {
+          ok: true,
+          value: {
+            ...progress(stageId, String(inputCount)),
+            batch: {
+              replayed: false,
+              inputVersion: String(inputCount),
+              firstInputPosition,
+              itemCount: input.body.occurrenceIds.length,
+            },
+          },
+        };
+      }
+      if (input.kind === 'freeze') return { ok: true, value: progress(stageId, String(inputCount), 'building') };
+      return { ok: true, value: progress(stageId, String(inputCount)) };
+    },
+  };
+  const firstVisit = new HostedReleasePreparationVisit({
+    owner,
+    source: session().source,
+    csrfToken: 'csrf',
+    locale: 'en',
+    native,
+    selectionNative,
+  });
+  firstVisit.confirmReview();
+  await firstVisit.start('selection');
+  firstVisit.choosePlacement(id(60));
+  await firstVisit.appendSelection();
+  expect(inputCount).toBe(1);
+  const retainedStageId = firstVisit.snapshot().kind === 'active' ? firstVisit.snapshot().stageId! : '';
+  firstVisit.dispose();
+
+  const resumed = new HostedReleasePreparationVisit({
+    owner,
+    source: session().source,
+    csrfToken: 'csrf',
+    locale: 'en',
+    native,
+    selectionNative,
+    stageId: retainedStageId,
+  });
+  try {
+    await resumed.readProgress();
+    expect(resumed.snapshot()).toMatchObject({
+      kind: 'active',
+      phase: 'selecting',
+      stageId: retainedStageId,
+      progress: { stage: { inputCount: '1', sourceRevisionId: id(4), expectedPublicationId: id(5) } },
+    });
+    expect(selectionNative.readOutlineWindow).toHaveBeenLastCalledWith(
+      {
+        revision: { catalogueId: id(1), revisionId: id(4), kind: 'structure', sourceRevisionId: null },
+        cursor: null,
+      },
+      expect.any(AbortSignal),
+    );
+    await resumed.loadSelectionPage('next');
+    resumed.choosePlacement(id(61));
+    await resumed.appendSelection();
+    expect(commands.at(-1)).toMatchObject({
+      kind: 'append',
+      stageId: retainedStageId,
+      body: { occurrenceIds: [id(61)] },
+    });
+    await resumed.freezeSelection();
+    expect(inputCount).toBe(2);
+    expect(resumed.snapshot()).toMatchObject({
+      phase: 'paused',
+      stageId: retainedStageId,
+      progress: { stage: { state: 'building', inputCount: '2' } },
+    });
+  } finally {
+    resumed.dispose();
+  }
+});
+
+test('a changed draft or release pointer blocks outline recovery and new selection input', async () => {
+  for (const currentOwner of [
+    { ...owner, item: { ...owner.item, headRevisionId: id(9) } },
+    { ...owner, item: { ...owner.item, publicationId: id(9) } },
+  ]) {
+    const stageId = id(40);
+    const selectionNative = pages();
+    const commands: ReleaseRequest[] = [];
+    const visit = new HostedReleasePreparationVisit({
+      owner,
+      source: session().source,
+      csrfToken: 'csrf',
+      locale: 'en',
+      stageId,
+      selectionNative,
+      native: {
+        readOwn: async () => ({ ok: true, value: currentOwner }),
+        command: async (input) => {
+          commands.push(input);
+          return { ok: true, value: progress(stageId, '1') };
+        },
+      },
+    });
+    try {
+      await visit.readProgress();
+      visit.choosePlacement(id(61));
+      await visit.appendSelection();
+      expect(visit.snapshot()).toMatchObject({ kind: 'active', phase: 'stale', stageId });
+      expect(selectionNative.readOutlineWindow).not.toHaveBeenCalled();
+      expect(commands.map((input) => input.kind)).toEqual(['progress']);
+    } finally {
+      visit.dispose();
+    }
   }
 });
 

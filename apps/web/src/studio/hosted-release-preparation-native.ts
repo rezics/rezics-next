@@ -36,6 +36,14 @@ export type ReleaseCommand = (
 export const releaseUnknown = () =>
   hostedFailure('uncertain', 'The preparation result is unknown. Retry the same command.');
 
+function hasPinnedBinding(progress: ReleaseProgress): boolean {
+  return (
+    typeof progress.stage.sourceRevisionId === 'string' &&
+    progress.stage.sourceRevisionId === progress.stage.expectedHeadRevisionId &&
+    Object.prototype.hasOwnProperty.call(progress.stage, 'expectedPublicationId')
+  );
+}
+
 export function createReleaseCommand(client: KernelClient): ReleaseCommand {
   return async (input, signal) => {
     const book = client.hostedCatalogues({ id: input.catalogueId }) as PreparationClient;
@@ -108,6 +116,46 @@ export function createReleaseCommand(client: KernelClient): ReleaseCommand {
         (!parsed.output.batch || parsed.output.batch.itemCount !== input.body.occurrenceIds.length))
     )
       return releaseUnknown();
-    return { ok: true, value: parsed.output };
+    if (parsed.output.stage.mode !== 'selection' || hasPinnedBinding(parsed.output))
+      return { ok: true, value: parsed.output };
+
+    // Old command receipts remain replayable. A new private progress read supplies only their immutable binding.
+    const stage = book.publicationPreparations({ stageId: input.stageId });
+    let current: Result;
+    try {
+      current = await stage.$progress.post(
+        {},
+        {
+          headers: { 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+          fetch: options.fetch,
+        },
+      );
+    } catch {
+      return releaseUnknown();
+    }
+    if (current.status !== 200 || current.error) return releaseUnknown();
+    const fresh = v.safeParse(releaseProgress, current.data);
+    if (
+      !fresh.success ||
+      fresh.output.catalogueId !== input.catalogueId ||
+      fresh.output.stageId !== input.stageId ||
+      fresh.output.stage.locator.catalogueId !== input.catalogueId ||
+      fresh.output.stage.locator.stageId !== input.stageId ||
+      fresh.output.stage.mode !== (expectedMode ?? parsed.output.stage.mode) ||
+      !hasPinnedBinding(fresh.output)
+    )
+      return releaseUnknown();
+    return {
+      ok: true,
+      value: {
+        ...parsed.output,
+        stage: {
+          ...parsed.output.stage,
+          sourceRevisionId: fresh.output.stage.sourceRevisionId,
+          expectedHeadRevisionId: fresh.output.stage.expectedHeadRevisionId,
+          expectedPublicationId: fresh.output.stage.expectedPublicationId,
+        },
+      },
+    };
   };
 }

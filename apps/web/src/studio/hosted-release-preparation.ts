@@ -250,28 +250,84 @@ export class HostedReleasePreparationVisit {
   };
 
   private async openSelection() {
-    if (!this.collecting() || this.state.kind !== 'active' || !this.state.review || this.selectionWindow) return;
-    // A locator-only resume cannot recover the pinned revision from the counts response.
-    // It can freeze stored input, but new pages need a newly reviewed stage, never an assumed current draft.
-    const { review, owner } = this.state;
-    const window = new HostedReleaseSelectionWindow(
-      this.options.selectionNative!,
-      this.options.source,
-      owner.viewer.accountId,
-      {
-        catalogueId: review.catalogueId,
-        revisionId: review.expectedRevisionId,
-        kind: 'structure',
-        sourceRevisionId: null,
-      },
-      () => this.isCurrent() && this.selectionWindow === window,
-      (selection) => {
-        if (this.state.kind === 'active') this.update({ ...this.state, selection });
-      },
-    );
-    this.selectionWindow = window;
-    this.update({ ...this.state, selection: window.snapshot() });
-    await window.load();
+    if (
+      !this.collecting() ||
+      this.state.kind !== 'active' ||
+      this.selectionWindow ||
+      !this.options.selectionNative
+    )
+      return;
+    const state = this.state;
+    const stage = state.progress!.stage;
+    if (
+      !stage.sourceRevisionId ||
+      !stage.expectedHeadRevisionId ||
+      !Object.prototype.hasOwnProperty.call(stage, 'expectedPublicationId') ||
+      stage.sourceRevisionId !== stage.expectedHeadRevisionId
+    ) {
+      this.update({ ...state, phase: 'unavailable', busy: false, error: null, selection: null });
+      return;
+    }
+
+    const request = new AbortController();
+    this.request = request;
+    this.update({ ...state, busy: true, error: null });
+    try {
+      const admitted = await this.options.native.readOwn(
+        state.owner.viewer.accountId,
+        state.owner.item.catalogueId,
+        request.signal,
+        state.owner.viewer,
+      );
+      if (!this.current(request)) return;
+      const active = this.state;
+      if (active.kind !== 'active') return;
+      if (!admitted.ok) {
+        if (admitted.error.kind === 'denied') {
+          this.retire('denied');
+          return;
+        }
+        const phase = admitted.error.kind === 'stale' ? 'stale' : 'unavailable';
+        this.closeSelection();
+        this.update({ ...active, phase, busy: false, selection: null, error: admitted.error });
+        return;
+      }
+      const owner = admitted.value;
+      if (
+        owner.item.catalogueId !== state.owner.item.catalogueId ||
+        owner.item.headRevisionId !== stage.expectedHeadRevisionId ||
+        owner.item.publicationId !== stage.expectedPublicationId
+      ) {
+        this.closeSelection();
+        this.update({ ...active, owner, phase: 'stale', busy: false, selection: null, error: null });
+        return;
+      }
+
+      const window = new HostedReleaseSelectionWindow(
+        this.options.selectionNative,
+        this.options.source,
+        owner.viewer.accountId,
+        {
+          catalogueId: stage.locator.catalogueId,
+          revisionId: stage.sourceRevisionId,
+          kind: 'structure',
+          sourceRevisionId: null,
+        },
+        () => this.isCurrent() && this.selectionWindow === window,
+        (selection) => {
+          if (this.state.kind === 'active' && this.selectionWindow === window)
+            this.update({ ...this.state, selection });
+        },
+      );
+      this.selectionWindow = window;
+      this.update({ ...active, owner, busy: true, selection: window.snapshot() });
+      await window.load();
+      if (!this.current(request)) return;
+      const latest = this.state;
+      if (latest.kind === 'active') this.update({ ...latest, busy: false });
+    } finally {
+      if (this.request === request) this.request = null;
+    }
   }
 
   private async perform(kind: ReleaseRequest['kind'] | 'retry') {

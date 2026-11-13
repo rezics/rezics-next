@@ -193,6 +193,80 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
 });
 
+test('selection progress exposes only its pinned binding and rejects new batches after either pointer changes', async () => {
+  const draftBook = await newBook();
+  const draftStart = await f.native.call('POST', `${draftBook.path}:prepareRelease`, {
+    stageId: draftBook.newId(),
+    expectedRevisionId: draftBook.created.revisionId,
+    expectedPublicationId: draftBook.published.revisionId,
+    mode: 'selection',
+  });
+  expect(draftStart.status).toBe(202);
+  expect(draftStart.value.stage).toMatchObject({
+    sourceRevisionId: draftBook.created.revisionId,
+    expectedHeadRevisionId: draftBook.created.revisionId,
+    expectedPublicationId: draftBook.published.revisionId,
+  });
+  const draftStageId = draftStart.value.stageId as string;
+  const draftStage = prepPath(draftBook.path, draftStageId);
+  const firstBody = { batchId: draftBook.newId(), occurrenceIds: [draftBook.rootPart] };
+  const firstKey = crypto.randomUUID();
+  const firstBatch = await f.native.call('POST', `${draftStage}:appendSelectionBatch`, firstBody, { key: firstKey });
+  expect(firstBatch.status).toBe(200);
+
+  const revised = await f.native.call('POST', `${draftBook.path}:appendRootChapter`, {
+    expectedRevisionId: draftBook.created.revisionId,
+    occurrenceId: draftBook.newId(),
+    title: 'A later draft edit',
+    target: draftBook.target,
+  });
+  expect(revised.status).toBe(200);
+  const replayed = await f.native.call('POST', `${draftStage}:appendSelectionBatch`, firstBody, { key: firstKey });
+  expect(replayed.status).toBe(200);
+  expect(replayed.value).toEqual(firstBatch.value);
+
+  const blockedDraftBatch = await f.native.call('POST', `${draftStage}:appendSelectionBatch`, {
+    batchId: draftBook.newId(),
+    occurrenceIds: [draftBook.childPart],
+  });
+  expect(blockedDraftBatch.status).toBe(412);
+  const draftProgress = await f.native.call('POST', `${draftStage}:progress`, {});
+  expect(draftProgress.value.stage).toMatchObject({
+    inputCount: '1',
+    sourceRevisionId: draftBook.created.revisionId,
+    expectedHeadRevisionId: draftBook.created.revisionId,
+    expectedPublicationId: draftBook.published.revisionId,
+  });
+
+  const releaseBook = await newBook();
+  const releaseStart = await f.native.call('POST', `${releaseBook.path}:prepareRelease`, {
+    stageId: releaseBook.newId(),
+    expectedRevisionId: releaseBook.created.revisionId,
+    expectedPublicationId: releaseBook.published.revisionId,
+    mode: 'selection',
+  });
+  expect(releaseStart.status).toBe(202);
+  const releaseStage = prepPath(releaseBook.path, releaseStart.value.stageId as string);
+  const changedRelease = await f.native.call('POST', `${releaseBook.path}:publish`, {
+    expectedRevisionId: releaseBook.created.revisionId,
+    expectedPublicationId: releaseBook.published.revisionId,
+    occurrenceIds: [releaseBook.nestedChapter],
+  });
+  expect(changedRelease.status).toBe(200);
+  const blockedReleaseBatch = await f.native.call('POST', `${releaseStage}:appendSelectionBatch`, {
+    batchId: releaseBook.newId(),
+    occurrenceIds: [releaseBook.rootPart],
+  });
+  expect(blockedReleaseBatch.status).toBe(412);
+  const releaseProgress = await f.native.call('POST', `${releaseStage}:progress`, {});
+  expect(releaseProgress.value.stage).toMatchObject({
+    inputCount: '0',
+    sourceRevisionId: releaseBook.created.revisionId,
+    expectedHeadRevisionId: releaseBook.created.revisionId,
+    expectedPublicationId: releaseBook.published.revisionId,
+  });
+});
+
 test('mounted boundary rejects malformed batches and non-authors; cancel and stale intents keep A selected', async () => {
   const book = await newBook();
   const start = (mode: 'whole' | 'selection' = 'whole') =>
