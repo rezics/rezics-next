@@ -710,11 +710,11 @@ test('a finished owned check is proved before a resumed writer hands off its exa
   try {
     const id = randomUUID();
     const { task, ref } = await startWaitingAttempt(h, [id]);
+    const sliceRoot = join(directory.path, 'slice');
+    const { scope, unrelated } = capacitySlice(sliceRoot, task.id, 20, true);
     const { physicalRunId, history } = terminalCheckFixture(task, id);
     const remoteCustody = remoteRunCustodyPath(task.worktree, physicalRunId);
     const remoteCustodyBefore = readFileSync(remoteCustody, 'utf8');
-    const sliceRoot = join(directory.path, 'slice');
-    const { scope, unrelated } = capacitySlice(sliceRoot, task.id, 20, true);
     const snapshots: Set<string>[] = [];
     const job = wakingJob(h, sliceRoot, snapshots);
     writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
