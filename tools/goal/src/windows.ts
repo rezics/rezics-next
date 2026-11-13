@@ -15,6 +15,23 @@ const run = async (executable: string, argv: string[], policy = defaultPolicy.wi
   return result.stdout.trim();
 };
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+const command = (argv: string[]) => argv.map(quote).join(' ');
+function unquote(value: string): string | undefined {
+  if (value.length < 2 || value[0] !== "'" || value.at(-1) !== "'") return undefined;
+  const decoded = value.slice(1, -1).replaceAll("'\\''", "'");
+  return quote(decoded) === value ? decoded : undefined;
+}
+function differsOnlyByRemoteEndpoint(current: string, argv: string[]): boolean {
+  const remote = argv.indexOf('--remote');
+  if (remote < 0 || remote !== argv.lastIndexOf('--remote') || !argv[remote + 1]) return false;
+  const prefix = `${command(argv.slice(0, remote + 1))} `;
+  const rest = argv.slice(remote + 2);
+  const suffix = rest.length ? ` ${command(rest)}` : '';
+  if (!current.startsWith(prefix) || !current.endsWith(suffix)) return false;
+  const end = suffix ? current.length - suffix.length : current.length;
+  const oldEndpoint = unquote(current.slice(prefix.length, end));
+  return oldEndpoint !== undefined && oldEndpoint !== argv[remote + 1];
+}
 /** tmux 3.7c with no locale replaces unprintable `-F` tabs with underscores. */
 function tmuxFields(line: string): string[] {
   if (line.includes('\t')) return line.split('\t');
@@ -71,6 +88,8 @@ export interface ManagerWindows {
   alive?(manager: string): boolean | Promise<boolean>;
   /** Run argv in the manager's window again, replacing whatever it holds. */
   respawn?(manager: string, argv: string[], cwd: string): void | Promise<void>;
+  /** Rebind an existing live Codex viewer only when its owned pane proves that only the remote endpoint is stale. */
+  rebindIfStale?(manager: string, argv: string[], cwd: string): boolean | Promise<boolean>;
   /** Type a message into the manager's live session and submit it; the session queues it if a turn is running. */
   prompt?(manager: string, text: string): void | Promise<void>;
 }
@@ -170,6 +189,21 @@ export class TermspacesWindows implements ManagerWindows {
       return;
     }
     await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
+  }
+  async rebindIfStale(manager: string, argv: string[], cwd: string): Promise<boolean> {
+    const session = await this.lookupSession();
+    if (!session) return false;
+    const id = await this.find(session, manager);
+    if (!id) return false;
+    const dead = await this.observe(() => this.tmux(['display-message', '-p', '-t', id, '#{pane_dead}']));
+    if (dead?.trim() !== '0') return false;
+    const startCommand = await this.observe(() =>
+      this.tmux(['display-message', '-p', '-t', id, '#{pane_start_command}']),
+    );
+    const current = startCommand?.trim();
+    if (!current || current === command(argv) || !differsOnlyByRemoteEndpoint(current, argv)) return false;
+    await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, command(argv)]);
+    return true;
   }
   async prompt(manager: string, text: string): Promise<void> {
     const id = await this.find(await this.session(), manager);

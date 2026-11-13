@@ -9,6 +9,7 @@ import {
   readTerminalTaskOwners,
   sweepAbandonedResources,
   TERMINAL_TASK_STATES,
+  type CurrentTerminalOwnerLookup,
   type TerminalProcessSweep,
 } from './attempt-resources.ts';
 import { completedUtcHour } from './efficiency-report-time.ts';
@@ -17,13 +18,159 @@ import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { ManagerSessions } from './managers.ts';
 import { defaultPolicy } from './policy.ts';
+import type { Database } from 'bun:sqlite';
 import { sameProcess, terminateProcessGroup, type ProcessIdentity } from './process.ts';
+import type { Task } from './types.ts';
+import { activeOrdinaryProofRunner } from './verification.ts';
 import { currentCodeVersion } from './runtime-version.ts';
 import { runHostOperation, startHostHeartbeat } from './service.ts';
 import {
   workerCheckHostActiveTypingRecovery,
+  workerCheckHostActiveTypingRecoveries,
   type WorkerCheckHostActiveTypingRecovery,
 } from './worker-check-budget.ts';
+
+/**
+ * Retain only the identified live local runner of a stopped registered ordinary proof. Explicit stop/cancel, settled,
+ * stale and foreign processes stay sweepable.
+ */
+export function stoppedTaskSweepRetainsOrdinaryProof(
+  db: Database,
+  owner: string,
+  worktree: string,
+  processIdentity: ProcessIdentity,
+): boolean {
+  const taskRow = db.query('SELECT current_attempt, body FROM worker_tasks WHERE id=?').get(owner) as {
+    current_attempt: number;
+    body: string;
+  } | null;
+  if (!taskRow || !Number.isSafeInteger(taskRow.current_attempt) || taskRow.current_attempt < 1) return false;
+  let task: Task;
+  try {
+    const parsed: unknown = JSON.parse(taskRow.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    task = parsed as Task;
+  } catch {
+    return false;
+  }
+  if (task.id !== owner || task.worktree !== worktree || task.state !== 'stopped' || task.workspace) return false;
+  const attemptRow = db
+    .query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+    .get(owner, taskRow.current_attempt) as { body: string } | null;
+  if (!attemptRow) return false;
+  let intent: { operation?: unknown } | undefined;
+  try {
+    const parsed: unknown = JSON.parse(attemptRow.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    intent = (parsed as { terminationIntent?: { operation?: unknown } }).terminationIntent;
+  } catch {
+    return false;
+  }
+  if (intent?.operation === 'stop' || intent?.operation === 'cancel') return false;
+  const runner = activeOrdinaryProofRunner(task, processIdentity);
+  if (!runner) return false;
+  const current = activeOrdinaryProofRunner(task, processIdentity);
+  return Boolean(
+    current &&
+    current.checkId === runner.checkId &&
+    current.physicalRunId === runner.physicalRunId &&
+    current.runnerHost === runner.runnerHost &&
+    current.runnerIdentity.pid === runner.runnerIdentity.pid &&
+    current.runnerIdentity.start === runner.runnerIdentity.start &&
+    current.runnerIdentity.boot === runner.runnerIdentity.boot &&
+    current.runnerIdentity.group === runner.runnerIdentity.group,
+  );
+}
+
+function typingRecoveryOwnsProcess(recovery: WorkerCheckHostActiveTypingRecovery, identity: ProcessIdentity): boolean {
+  return (
+    recovery.runnerIdentity.group === identity.group &&
+    recovery.runnerIdentity.boot === identity.boot &&
+    BigInt(identity.start) >= BigInt(recovery.runnerIdentity.start)
+  );
+}
+
+function sameTypingRecovery(
+  left: WorkerCheckHostActiveTypingRecovery | undefined,
+  right: WorkerCheckHostActiveTypingRecovery,
+): boolean {
+  return Boolean(
+    left &&
+    left.token === right.token &&
+    left.checkId === right.checkId &&
+    left.physicalRunId === right.physicalRunId &&
+    left.runnerHost === right.runnerHost &&
+    left.runnerIdentity.pid === right.runnerIdentity.pid &&
+    left.runnerIdentity.start === right.runnerIdentity.start &&
+    left.runnerIdentity.boot === right.runnerIdentity.boot &&
+    left.runnerIdentity.group === right.runnerIdentity.group,
+  );
+}
+
+/** Revalidate the exact cached grant and runner at the sweep's TERM/KILL ownership decision. */
+export function stoppedTaskSweepRetainsTypingRecovery(
+  db: Database,
+  stateDirectory: string,
+  owner: string,
+  worktree: string,
+  processIdentity: ProcessIdentity,
+  recoveries: readonly WorkerCheckHostActiveTypingRecovery[],
+): boolean {
+  if (!sameProcess(processIdentity)) return false;
+  for (const recovery of recoveries) {
+    if (!typingRecoveryOwnsProcess(recovery, processIdentity)) continue;
+    const current = workerCheckHostActiveTypingRecovery({
+      db,
+      stateDirectory,
+      taskId: owner,
+      worktree,
+      token: recovery.token,
+    });
+    if (current && sameTypingRecovery(current, recovery) && typingRecoveryOwnsProcess(current, processIdentity))
+      return true;
+  }
+  return false;
+}
+
+/** Cache one bounded current-attempt stamp scan, then revalidate each matching grant before the sweep signals. */
+export function createManagerTerminalOwnerLookup(db: Database, stateDirectory: string): CurrentTerminalOwnerLookup {
+  const activeRecoveries = new Map<string, WorkerCheckHostActiveTypingRecovery[]>();
+  return (owner, worktree, processIdentity) => {
+    const task = db
+      .query(
+        `SELECT current_attempt, json_extract(body, '$.state') AS state, json_extract(body, '$.worktree') AS worktree, json_extract(body, '$.workspace') AS workspace FROM worker_tasks WHERE id=?`,
+      )
+      .get(owner) as {
+      current_attempt: number;
+      state: string;
+      worktree: string;
+      workspace: unknown;
+    } | null;
+    const current = Boolean(
+      task &&
+      (TERMINAL_TASK_STATES as readonly string[]).includes(task.state) &&
+      task.worktree === worktree &&
+      !task.workspace,
+    );
+    if (!current || !processIdentity || task?.state !== 'stopped') return current;
+
+    const cacheKey = `${owner}/${task.current_attempt}`;
+    let recoveries = activeRecoveries.get(cacheKey);
+    if (!recoveries) {
+      recoveries = workerCheckHostActiveTypingRecoveries({
+        db,
+        stateDirectory,
+        taskId: owner,
+        worktree,
+      });
+      activeRecoveries.set(cacheKey, recoveries);
+    }
+    if (stoppedTaskSweepRetainsTypingRecovery(db, stateDirectory, owner, worktree, processIdentity, recoveries))
+      return false;
+    if (stoppedTaskSweepRetainsOrdinaryProof(db, owner, worktree, processIdentity)) return false;
+    return true;
+  };
+}
 
 /** Socket server, registry, shutdown and periodic host scheduling; CLI dispatch stays in `integration-cli.ts`. */
 
@@ -377,64 +524,13 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
       reaping = Promise.resolve()
         .then(() =>
           runHostOperation('container reaper', async () => {
-            const activeRecoveries = new Map<string, WorkerCheckHostActiveTypingRecovery | null>();
             await sweepAbandonedResources({
               tasks: readTerminalTaskOwners(runtime.db),
               stateDirectory: runtime.stateDirectory,
               containers: policy.containers,
               graceMs: 1000,
               ...(options.terminalProcessSweep ? { terminalProcessSweep: options.terminalProcessSweep } : {}),
-              currentTerminalOwner(owner, worktree, processIdentity) {
-                const task = runtime.db
-                  .query(
-                    `SELECT json_extract(body, '$.state') AS state, json_extract(body, '$.worktree') AS worktree, json_extract(body, '$.workspace') AS workspace FROM worker_tasks WHERE id=?`,
-                  )
-                  .get(owner) as { state: string; worktree: string; workspace: unknown } | null;
-                const current = Boolean(
-                  task &&
-                  (TERMINAL_TASK_STATES as readonly string[]).includes(task.state) &&
-                  task.worktree === worktree &&
-                  !task.workspace,
-                );
-                if (!current || !processIdentity || task?.state !== 'stopped') return current;
-
-                let recovery = activeRecoveries.get(owner);
-                if (!activeRecoveries.has(owner)) {
-                  recovery =
-                    workerCheckHostActiveTypingRecovery({
-                      db: runtime.db,
-                      stateDirectory: runtime.stateDirectory,
-                      taskId: owner,
-                      worktree,
-                    }) ?? null;
-                  activeRecoveries.set(owner, recovery);
-                }
-                if (
-                  recovery &&
-                  recovery.runnerIdentity.group === processIdentity.group &&
-                  recovery.runnerIdentity.boot === processIdentity.boot &&
-                  BigInt(processIdentity.start) >= BigInt(recovery.runnerIdentity.start)
-                ) {
-                  const currentRecovery = workerCheckHostActiveTypingRecovery({
-                    db: runtime.db,
-                    stateDirectory: runtime.stateDirectory,
-                    taskId: owner,
-                    worktree,
-                  });
-                  if (
-                    currentRecovery?.token === recovery.token &&
-                    currentRecovery.checkId === recovery.checkId &&
-                    currentRecovery.physicalRunId === recovery.physicalRunId &&
-                    currentRecovery.runnerHost === recovery.runnerHost &&
-                    currentRecovery.runnerIdentity.pid === recovery.runnerIdentity.pid &&
-                    currentRecovery.runnerIdentity.start === recovery.runnerIdentity.start &&
-                    currentRecovery.runnerIdentity.boot === recovery.runnerIdentity.boot &&
-                    currentRecovery.runnerIdentity.group === recovery.runnerIdentity.group
-                  )
-                    return false;
-                }
-                return true;
-              },
+              currentTerminalOwner: createManagerTerminalOwnerLookup(runtime.db, runtime.stateDirectory),
             });
             await reapContainersAsync(
               runtime.db,

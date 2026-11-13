@@ -2308,7 +2308,13 @@ test('unavailable optional historical reader records one diagnostic while ordina
   }
 });
 
-import { ordinaryProofCommand, observeOrdinaryProof, readProofObservation, registeredProof } from './verification.ts';
+import {
+  activeOrdinaryProofRunner,
+  ordinaryProofCommand,
+  observeOrdinaryProof,
+  readProofObservation,
+  registeredProof,
+} from './verification.ts';
 
 function ordinaryTask(root: string): import('./types.ts').Task {
   const contract = {
@@ -2443,7 +2449,11 @@ test('ordinary original records wait then terminate without token/physical recei
       JSON.stringify({ ...record, id: old, ownership: { taskId: task.id, attempt: 0 } }),
     );
     expect((await readProofObservation(task, [id])).status).toBe('running');
-    expect((await readProofObservation(task, [`bun check ${id}`])).passed).toBe(false);
+    expect(await readProofObservation(task, [`bun check ${id}`])).toMatchObject({
+      status: 'running',
+      passed: false,
+      record: { id },
+    });
     writeFileSync(join(results, `${id}.json`), JSON.stringify({ ...record, status: 'finished', exitCode: 0 }));
     expect(await readProofObservation(task)).toMatchObject({ status: 'terminal', passed: true, record: { id } });
     writeFileSync(join(results, `${duplicate}.json`), JSON.stringify({ ...record, id: duplicate }));
@@ -2452,6 +2462,113 @@ test('ordinary original records wait then terminate without token/physical recei
       passed: false,
       cause: expect.stringContaining('exactly one'),
     });
+  } finally {
+    directory.close();
+  }
+});
+
+test('a transposed or foreign worker hint cannot displace the unique owned current ordinary invocation', async () => {
+  const directory = temporaryDirectory();
+  try {
+    const task = ordinaryTask(directory.path);
+    const results = join(directory.path, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    const actual = 'f69713e5-efe7-406b-b88b-4161307eb1f0';
+    const hint = 'f69713e5-efe7-406b-88b4-4161307eb1f0';
+    const foreign = crypto.randomUUID();
+    const record = {
+      id: actual,
+      cwd: task.worktree,
+      ownership: { taskId: task.id, attempt: 1 },
+      argv: task.brief.acceptance.command,
+      status: 'running',
+      log: '.temp/original.log',
+    };
+    writeFileSync(join(results, `${actual}.json`), JSON.stringify(record));
+    writeFileSync(
+      join(results, `${foreign}.json`),
+      JSON.stringify({
+        ...record,
+        id: foreign,
+        ownership: { taskId: 'foreign-task', attempt: 1 },
+      }),
+    );
+    expect(await readProofObservation(task, [hint])).toMatchObject({
+      status: 'running',
+      passed: false,
+      record: { id: actual },
+      reportedHint: hint,
+      cause: expect.stringContaining(hint),
+    });
+    expect(await readProofObservation(task, [foreign])).toMatchObject({
+      status: 'running',
+      record: { id: actual },
+      reportedHint: foreign,
+    });
+    expect(await readProofObservation(task)).toMatchObject({ status: 'running', record: { id: actual } });
+    writeFileSync(join(results, `${actual}.json`), JSON.stringify({ ...record, status: 'finished', exitCode: 0 }));
+    expect(await readProofObservation(task, [hint])).toMatchObject({
+      status: 'terminal',
+      passed: true,
+      record: { id: actual },
+      reportedHint: hint,
+    });
+    writeFileSync(
+      join(results, `${actual}.json`),
+      JSON.stringify({ ...record, cwd: '/other/worktree', status: 'finished', exitCode: 0 }),
+    );
+    expect(await readProofObservation(task, [actual])).toMatchObject({ status: 'unknown', passed: false });
+    writeFileSync(
+      join(results, `${actual}.json`),
+      JSON.stringify({ ...record, argv: ['bun', 'test', 'other.test.ts'], status: 'finished', exitCode: 0 }),
+    );
+    expect(await readProofObservation(task, [hint])).toMatchObject({ status: 'unknown', passed: false });
+    writeFileSync(
+      join(results, `${actual}.json`),
+      JSON.stringify({ ...record, ownership: { taskId: task.id, attempt: 2 }, status: 'finished', exitCode: 0 }),
+    );
+    expect(await readProofObservation(task, [actual])).toMatchObject({
+      status: 'unknown',
+      cause: expect.stringContaining('exactly one'),
+    });
+  } finally {
+    directory.close();
+  }
+});
+
+test('a live unique ordinary-proof runner is identified only for the stopped current attempt on this host', () => {
+  const directory = temporaryDirectory();
+  try {
+    const identity = processIdentity();
+    if (!identity) throw new Error('test process identity unavailable');
+    const task = { ...ordinaryTask(directory.path), state: 'stopped' as const };
+    const results = join(directory.path, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    const checkId = crypto.randomUUID();
+    const record = {
+      id: checkId,
+      cwd: task.worktree,
+      ownership: { taskId: task.id, attempt: 1 },
+      argv: task.brief.acceptance.command,
+      status: 'running',
+      runnerHost: hostname(),
+      runnerPid: identity.pid,
+      runnerIdentity: identity,
+      physicalRunId: crypto.randomUUID(),
+      log: '.temp/original.log',
+    };
+    writeFileSync(join(results, `${checkId}.json`), JSON.stringify(record));
+    expect(activeOrdinaryProofRunner(task, identity)).toMatchObject({
+      checkId,
+      runnerHost: hostname(),
+      runnerIdentity: identity,
+    });
+    expect(activeOrdinaryProofRunner({ ...task, state: 'running' }, identity)).toBeUndefined();
+    expect(
+      activeOrdinaryProofRunner(task, { ...identity, group: identity.group + 1, pid: identity.pid + 1 }),
+    ).toBeUndefined();
+    writeFileSync(join(results, `${checkId}.json`), JSON.stringify({ ...record, status: 'finished', exitCode: 0 }));
+    expect(activeOrdinaryProofRunner(task, identity)).toBeUndefined();
   } finally {
     directory.close();
   }

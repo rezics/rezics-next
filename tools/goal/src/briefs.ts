@@ -627,6 +627,11 @@ export function parseBrief(
     if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
       throw new Error(`estimate.${key} must be a positive integer`);
   const continuationRequest = continuation(raw.continuation);
+  const after = list(raw.after ?? [], 'after');
+  const afterSource = list(raw.afterSource ?? [], 'afterSource');
+  const afterNotSourceRequired = afterSource.filter((dependency) => !after.includes(dependency));
+  if (afterNotSourceRequired.length)
+    throw new Error(`afterSource dependencies must also appear in after: ${afterNotSourceRequired.join(', ')}`);
   const brief: Brief = {
     ...(lintWarnings.length ? { lintWarnings } : {}),
     ...(continuationRequest ? { continuation: continuationRequest } : {}),
@@ -654,7 +659,8 @@ export function parseBrief(
     ...(raw.urgent === undefined ? {} : { urgent: boolean(raw.urgent, 'urgent') }),
     criticalPath: boolean(raw.criticalPath, 'criticalPath'),
     waiting: list(raw.waiting, 'waiting'),
-    after: list(raw.after ?? [], 'after'),
+    after,
+    ...(afterSource.length ? { afterSource } : {}),
     inseparable: boolean(raw.inseparable, 'inseparable', false),
     citesSources: boolean(raw.citesSources, 'citesSources', false),
     hostileInput: boolean(raw.hostileInput, 'hostileInput', false),

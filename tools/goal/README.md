@@ -3120,10 +3120,12 @@ Product work integrating into dev can be retried at any generation: `retry <task
 start, which keeps its place in that order and its options. Other work refuses a second retry while one is pending;
 before its first start it is amended with `amend` or, for verification, registered with the proof start below.
 `cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. A predecessor
-that ends cancelled or stopped without landing is dropped from dependent `after` gates: the host releases held tasks and
-notifies each owner with the predecessor ID. Continuation overlap admission ignores these ended tasks. Cancellation
-notices use the committed terminal generation without reopening ordinary worker writes; genuinely stale command
-generations still refuse.
+that ends cancelled or stopped without landing is dropped from ordinary `after` gates: the host releases held tasks and
+notifies each owner with the predecessor ID. A held `afterSource` edge remains unmet and receives an actionable notice;
+it releases only after an integrated or merged producer commit is present in the target branch, or after an authenticated
+reshape changes the edge with evidence. Continuation overlap admission ignores ended tasks. Cancellation notices use
+the committed terminal generation without reopening ordinary worker writes; genuinely stale command generations
+still refuse.
 A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
 The next host sweep can then release it under the task lease and start the amended contract from the updated base.
 An unstarted held task can use `retry --brief` on the same task id to replace the brief and dependency edges while keeping attempt 0, its branch, worktree and uncommitted files. The host creates its first attempt once the new dependencies are merged.
@@ -3147,8 +3149,10 @@ Each manager host starts a loopback WebSocket app-server for its Codex pool and 
 app-server leads its own process group, so its helpers and thread writers share that group. The host stops the group on
 shutdown; a replacement host reclaims every surviving recorded group and waits until it is empty before resuming
 persisted threads, so resume never meets a writer left by the previous host. A record written before this change names a
-shared group, so only its process is stopped. Recovery reopens each Codex viewer on the current endpoint with
-`codex resume <thread> --remote <endpoint>`.
+shared group, so only its process is stopped. Recovery and actionable inbox wakes rebind an already-open, live,
+manager-owned Codex viewer only when its tmux launch command proves the same `codex resume <thread>` and only the
+`--remote` endpoint differs. They leave a healthy or missing viewer alone. Recovery keeps an inbox-parked thread
+paused without resuming it; a later wake reuses that thread. Explicit manager stop still closes its owned window.
 The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
 uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
 configured `CLAUDE_CONFIG_DIR`. Managed manager recovery follows the normal host code-version handoff: after Goal code
@@ -3348,8 +3352,27 @@ delivered after the manager stops. Manager events are attributed through `GOAL_M
 priority authorization requires the persisted provider session identity described above, so a worker-supplied
 `GOAL_MANAGER` cannot grant or consume critical priority. Workers get fresh session identities.
 Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has integrated or merged;
-unknown task ids are refused, and already integrated or merged dependencies are ready immediately. A dependency that
-ends cancelled or stopped without landing is dropped and releases its held dependents. For a Goal that uses
+unknown task ids are refused, and already integrated or merged dependencies are ready immediately for ordinary edges. A dependency that
+ends cancelled or stopped without landing is dropped and releases its held dependents. `afterSource: [task-id, ...]`
+marks a subset of `after` whose producer source is required:
+
+```yaml
+after: [producer-task]
+afterSource: [producer-task]
+```
+
+A source-required dependency releases only when it is integrated or merged with a commit present in the dependent's
+target branch; a missing commit does not establish source presence. A stopped or cancelled producer leaves that task
+held and sends its owner one instruction to integrate the producer commit or submit an authenticated evidence-bearing
+reshape that removes or replaces the `afterSource` edge. Use `bun tools/goal/src/cli.ts amend <task> --expected-attempt 0 --brief <file>`
+for a never-started task, or `bun tools/goal/src/cli.ts retry <task> --brief <file>` for a later attempt. Continuations
+retain source-required edges from the brief they continue.
+
+Decision: `afterSource` is an optional subset of `after`; it requires an integrated or merged producer commit contained
+in the dependent's target branch, survives producer stop or cancellation, and can be removed or replaced only by an
+authenticated reshape. Existing `after` edges keep their advisory stop/cancellation release behavior.
+
+For a Goal that uses
 `after`, once an integration leaves no ready, running, landing, held or integrated tasks, the control plane delivers one
 waking `goal-idle` event to its manager; replayed integration outcomes do not deliver it again. The host releases held
 tasks under their task lease and starts them from the updated target branch. A pending attempt whose launcher was
@@ -3699,7 +3722,7 @@ from the current-attempt index; attempt-resource sweeps project only terminal ta
 and run Docker asynchronously; the daily audit reads unsettled tasks and removal reads finished tasks through the
 state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
 Decision: the periodic resource sweep inventories `/proc` once in yielding batches, maps processes only to unique terminal isolated worktrees, and rechecks process birth, cwd and indexed task ownership before TERM/KILL; immediate task cleanup and Docker selection keep their existing paths. Focused worker acceptance covers terminal-history scaling, unique-owner matching and socket responsiveness during chunked inventory; unchanged host lifecycle cases remain release checks.
-Decision: the terminal sweep excludes only a live process group bound to the current task, attempt and worktree, its authenticated typing-recovery grant and consumed stamp, and the exact registered running check and physical runner identity. Terminal siblings and existing Docker ownership continue through normal cleanup.
+Decision: the terminal sweep caches every live exact typing-recovery grant from the current attempt's bounded stamp index, then revalidates that same grant, result, attempt, runner and candidate process birth at each TERM/KILL decision; only its runner group is retained. Invalid, terminal, stale, cancelled, foreign and unrelated groups remain sweepable; ordinary-proof protection and Docker ownership keep their existing rules.
 Decision: terminal recovery sweep fixtures isolate Docker effects through the injected fake `DockerInvoke` seam because sweep options omit immediate-cleanup flags; the protected-group and terminal-sibling assertions remain unchanged.
 Decision: an idle daily-audit tick checks the current flow schema, UTC run row and failure outbox with reads before
 taking any SQLite write transaction. It acquires the existing transaction only for a pending migration, new audit
@@ -3711,6 +3734,7 @@ host loop. Git, tmux and worker launch run through `runHostProcess`; start, retr
 once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
+Decision: Rebind a Codex viewer only when its live owned pane proves the same thread and an endpoint-only change; recovery and inbox wakes keep parked Goal state intact and never recreate a missing viewer.
 Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 
@@ -3966,6 +3990,17 @@ ordinary wrapper record may settle the same proof once when its terminal result 
 unchanged. A still-running wrapper is awaited by its exact UUID even when the worker's logical release omitted linked
 check IDs; duplicate wakes read that same record. Missing, mismatched or ambiguous ownership remains unknown and
 keeps custody. Optional native evidence retains its separate, strict acceptance path.
+
+Decision: a worker-reported ordinary-proof check UUID is a hint only. Wait, wake and settlement use the unique
+current-attempt native record on the exact registered worktree after ownership, cwd and argv checks. A missing,
+transposed or foreign hint stays bounded diagnostics and cannot displace that record. Zero, several, wrong-attempt,
+wrong-cwd or wrong-argv records remain unknown. An observation defect does not route as a product assertion, and
+the stopped-task sweep retains only that live owned runner (birth/group plus the authorized capture), never the
+whole worktree, a stale or foreign check, an explicit stop/cancel, or a settled runner. A stopped attempt is
+reconciled on the same generation only after that exact record is terminal; a still-running record whose local
+runner is already gone stays unknown, with original status, logs and receipt retained, and no later attempt is
+started. Book import proof ec36303b attempt 4 keeps that remaining gap: physical
+af80a375-0973-4624-aa10-c353289cd967 has no local PID and no terminal exit, and remote final state is unobserved.
 
 Disposition: fb066745 attempt 1 is unknown and custody stays retained because no durable authoritative host/run
 binding exists; do not reconstruct it from logs, signal or replay Auth, infer success, or fabricate a receipt.
