@@ -628,6 +628,17 @@ slope. The hourly `.rate` is that evidenced short-window value or `null` when th
 is unresolved, so a 12→13 step is not an alarm and a flat integer sample is not claimed as zero; `observedRate` and
 `evidence` are diagnostics. Token counts are not quota.
 
+For expiry planning, follow the [allowance planning rule](../../docs/development/efficiency.md#operating-discipline) and
+run [`scripts/hourly-allowance.ts`](scripts/hourly-allowance.ts). It emits every configured pool with observation
+freshness and each provider window's exact identity, reset status and remaining milliseconds. The existing weekly
+`used`, burn rate, evidence and ceiling fields retain their meaning. Fresh retained readings are reused; a missing or
+stale allowance causes at most one configured-source read for its shared `allowanceKey`. Render shared aliases as one
+allowance by that key, while keeping the per-pool rows and freshness visible. Grok without a configured observation
+continues to show unavailable windows and operators use its provider `/usage` view.
+
+Decision: replace the temporary all-pool display with this tracked JSON report; share each `allowanceKey` once, use
+retained TUI evidence or a configured quota source, and never invent reset dates, call models or add local config keys.
+
 Decision: the fewest tests that pin Codex burn evidence are the 12→13 hourly replay with plateau, one 6 h / burst /
 fractional / reset / isolation case, and shared retention with the hourly consumer.
 
@@ -3154,10 +3165,16 @@ Each manager host starts a loopback WebSocket app-server for its Codex pool and 
 app-server leads its own process group, so its helpers and thread writers share that group. The host stops the group on
 shutdown; a replacement host reclaims every surviving recorded group and waits until it is empty before resuming
 persisted threads, so resume never meets a writer left by the previous host. A record written before this change names a
-shared group, so only its process is stopped. Recovery and actionable inbox wakes rebind an already-open, live,
-manager-owned Codex viewer only when its tmux launch command proves the same `codex resume <thread>` and only the
-`--remote` endpoint differs. They leave a healthy or missing viewer alone. Recovery keeps an inbox-parked thread
-paused without resuming it; a later wake reuses that thread. Explicit manager stop still closes its owned window.
+shared group, so only its process is stopped. Recovery and actionable inbox wakes match a manager-owned Codex pane
+semantically only when its command proves the same manager role, `CODEX_HOME`, thread, executable and remaining
+arguments, and its current pane path matches the manager's working directory; only the `--remote` endpoint may differ.
+Tmux's supported quoting wrappers are parsed as literal argv without executing the recorded command. Endpoint repair
+opens a sibling pane at the authoritative pool endpoint and retains the original pane, so visible unsent drafts remain
+in place. The Codex transport cannot export and restore a draft as editable input; drafts are not migrated to the new
+pane. An exited stale pane is repaired only when the native Goal is active or an inbox wake explicitly activates it.
+Current-endpoint viewers, missing viewers, and command or path mismatches are left alone, and an existing current
+endpoint sibling prevents repeat launches after an immediate exit. Recovery keeps an inbox-parked thread paused
+without resuming it; a later wake reuses that thread. Explicit manager stop still closes its owned window.
 The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
 uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
 configured `CLAUDE_CONFIG_DIR`. Managed manager recovery follows the normal host code-version handoff: after Goal code
@@ -3739,7 +3756,7 @@ host loop. Git, tmux and worker launch run through `runHostProcess`; start, retr
 once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
-Decision: Rebind a Codex viewer only when its live owned pane proves the same thread and an endpoint-only change; recovery and inbox wakes keep parked Goal state intact and never recreate a missing viewer.
+Decision: Parse only literal shell and tmux quoting for the same Goal manager role, pool home, thread, executable, command and working directory; on a stale endpoint add a current-endpoint sibling and retain the original pane so drafts stay in place, not migrated; restore dead panes only for an active Goal or authorized inbox wake, and reuse existing current-endpoint siblings to avoid repeat launches.
 Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 
