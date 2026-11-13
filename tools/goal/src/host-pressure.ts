@@ -122,8 +122,7 @@ export function reclaimCleanFileCacheEvidence(
     cleanMiB = reclaimableFileMiB(root);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (unavailableReclaimCodes.has(code ?? ''))
-      return { requestedMiB: 0, ...(code ? { errorCode: code } : {}) };
+    if (unavailableReclaimCodes.has(code ?? '')) return { requestedMiB: 0, ...(code ? { errorCode: code } : {}) };
     throw error;
   }
   const requestedMiB = Math.floor(Math.min(deficitMiB, MAX_RECLAIM_MIB, cleanMiB));

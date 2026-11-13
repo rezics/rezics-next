@@ -197,7 +197,8 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
         result.writers.add(attemptKey(row.task_id, row.current_attempt));
         result.active.add(writer);
       } else if (attempt.process !== null) continue;
-      let allChecksTerminal = attempt.state === 'waiting' && attempt.process === null && (attempt.checks?.length ?? 0) > 0;
+      let allChecksTerminal =
+        attempt.state === 'waiting' && attempt.process === null && (attempt.checks?.length ?? 0) > 0;
       for (const id of attempt.checks ?? []) {
         const note = (cause: string) => {
           const detail = `attempt ${row.task_id}/${row.current_attempt} check ${id}: ${cause}`;
@@ -486,11 +487,7 @@ export async function awaitHostCapacity(
         const otherAdmitted = hostCapacity ? admittedTicketCount(tickets, queueName(!urgent)) : 0;
         const now = options.now?.() ?? Date.now();
         const pressure = (options.pressure ?? readHostPressure)();
-        const brake = pressureBrake(
-          readPressureBrake(stateDirectory),
-          pressure,
-          now,
-        );
+        const brake = pressureBrake(readPressureBrake(stateDirectory), pressure, now);
         if (hostCapacity) writeFileSync(join(stateDirectory, 'capacity-pressure.json'), JSON.stringify(brake));
         const sliceRoot = options.workerSliceRoot ?? WORKER_SLICE_ROOT;
         const scopes = workerScopes(store, sliceRoot);
@@ -600,11 +597,14 @@ export async function awaitHostCapacity(
         if (brake.paused) clearReclaimEpisode(stateDirectory);
         else {
           const request = normalizeReclaimRequest(
-            (options.reclaim ?? ((deficit) => reclaimCleanFileCacheEvidence(deficit, options.workerSliceRoot ?? WORKER_SLICE_ROOT)))(
-              reclaimDeficitMiB,
-            ),
+            (
+              options.reclaim ??
+              ((deficit) => reclaimCleanFileCacheEvidence(deficit, options.workerSliceRoot ?? WORKER_SLICE_ROOT))
+            )(reclaimDeficitMiB),
           );
-          const memoryCurrentAfterMiB = (options.memoryCurrentMiB ?? (() => workerMemoryCurrentMiB(options.workerSliceRoot ?? WORKER_SLICE_ROOT)))();
+          const memoryCurrentAfterMiB = (
+            options.memoryCurrentMiB ?? (() => workerMemoryCurrentMiB(options.workerSliceRoot ?? WORKER_SLICE_ROOT))
+          )();
           const memoryProgressMiB =
             reclaimMemoryCurrentBeforeMiB === undefined || memoryCurrentAfterMiB === undefined
               ? 0
@@ -974,7 +974,10 @@ function readReclaimEpisode(stateDirectory: string): ReclaimEpisode {
           !nullableNonNegativeFinite(record.memoryCurrentBeforeMiB) ||
           !nullableNonNegativeFinite(record.memoryCurrentAfterMiB) ||
           !nullableNonNegativeFinite(record.reservedMemoryMiB) ||
-          !(record.runningCount === null || (nonNegativeFinite(record.runningCount) && Number.isSafeInteger(record.runningCount))) ||
+          !(
+            record.runningCount === null ||
+            (nonNegativeFinite(record.runningCount) && Number.isSafeInteger(record.runningCount))
+          ) ||
           terminalScopes.some((scope) => typeof scope !== 'string') ||
           !nonNegativeFinite(record.requestedMiB) ||
           !nonNegativeFinite(record.memoryProgressMiB) ||
@@ -1036,7 +1039,14 @@ function reclaimRetryAllowed(episode: ReclaimEpisode | undefined, current: Recla
   const measuredHeadroomIncrease =
     previous.id !== 'legacy-blocked' &&
     current.headroomMiB - previous.headroomAfterMiB >= RECLAIM_OBSERVATION_DELTA_MIB;
-  return memoryDrop || reservationDrop || writerFinished || newTerminalScope || legacyTerminalProof || measuredHeadroomIncrease;
+  return (
+    memoryDrop ||
+    reservationDrop ||
+    writerFinished ||
+    newTerminalScope ||
+    legacyTerminalProof ||
+    measuredHeadroomIncrease
+  );
 }
 function observeLegacyReclaim(
   stateDirectory: string,
@@ -1094,7 +1104,10 @@ function normalizeReclaimRequest(result: number | void | CacheReclaimRequest): C
 function completeReclaimAttempt(
   stateDirectory: string,
   id: string,
-  result: Pick<ReclaimAttempt, 'headroomAfterMiB' | 'memoryCurrentAfterMiB' | 'requestedMiB' | 'memoryProgressMiB' | 'outcome' | 'errorCode'>,
+  result: Pick<
+    ReclaimAttempt,
+    'headroomAfterMiB' | 'memoryCurrentAfterMiB' | 'requestedMiB' | 'memoryProgressMiB' | 'outcome' | 'errorCode'
+  >,
 ): void {
   const episode = readReclaimEpisode(stateDirectory);
   const history = [...episode.history];
