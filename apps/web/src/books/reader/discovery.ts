@@ -40,7 +40,12 @@ export async function readHostedDiscovery(
   if (result.status === 400 || result.status === 412) return { state: 'changed' };
   if (result.status !== 200 || result.error) return { state: 'unavailable' };
   const parsed = v.safeParse(schema, result.data);
-  return parsed.success && parsed.output.subjectId === subjectId
-    ? { state: 'ready', value: parsed.output }
-    : { state: 'unavailable' };
+  if (!parsed.success || parsed.output.subjectId !== subjectId) return { state: 'unavailable' };
+  return {
+    state: 'ready',
+    value: {
+      ...parsed.output,
+      items: parsed.output.items.map(({ title, ...rest }) => (title === undefined ? rest : { ...rest, title })),
+    },
+  };
 }

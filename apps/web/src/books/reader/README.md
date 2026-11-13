@@ -27,7 +27,8 @@ catalogue title uses the localized Book title; it does not refuse an otherwise r
 loader data. Missing native origin never falls back to Web's development fixtures.
 
 Decision: Subject discovery opts into native list titles independently of point admission. Its strict HTTP decoder
-accepts an optional string of at most 512 characters through the generated page type. Each nonempty admitted title
+accepts an optional string of at most 512 characters through the generated page type. Validated items omit an
+undefined title while preserving every other field, matching the generated exact optional property. Each nonempty admitted title
 is ordinary escaped link text describing the current admitted public opening, not a frozen historical title;
 an omitted or empty title uses the existing localized numbered publication label. Supplied order, exact destinations
 and 44px link targets stay unchanged. Every explicit page is one list request of at most 20 rows with no per-Book
