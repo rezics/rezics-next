@@ -1046,6 +1046,56 @@ test('a Codex manager opening ends idle turns instead of sleeping and names its 
   }
 });
 
+test('a parked manager accepts a same-thread operator UserMessage after turn/started and reparks on completion', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({ waitingForInbox: true, activeTurnId: null });
+
+    const threadId = manager.threadId!;
+    await s.notify({
+      method: 'turn/started',
+      params: { threadId, turn: { id: 'operator-turn-1', status: 'inProgress' } },
+    });
+    await s.notify({
+      method: 'item/started',
+      params: {
+        threadId,
+        turnId: 'operator-turn-1',
+        startedAtMs: Date.now(),
+        item: { type: 'userMessage', id: 'operator-message-1', clientId: null, content: [] },
+      },
+    });
+
+    expect(s.managers.get(manager.id)).toMatchObject({
+      waitingForInbox: false,
+      activeTurnId: 'operator-turn-1',
+      turns: 2,
+      turnDisposition: { threadId, turnId: 'operator-turn-1', status: 'inProgress', intent: 'work' },
+    });
+    expect(
+      s.requests().filter((request) => request.method === 'turn/interrupt' && request.params.turnId === 'operator-turn-1'),
+    ).toHaveLength(0);
+
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: 'operator-turn-1', status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      waitingForInbox: true,
+      activeTurnId: null,
+      turnDisposition: { threadId, turnId: 'operator-turn-1', status: 'completed', intent: 'work' },
+      goalState: { status: 'paused' },
+    });
+  } finally {
+    await s.close();
+  }
+});
+
 test('an event for an idle manager whose thread is not loaded rejoins the thread and starts a new turn', async () => {
   const s = await setup();
   try {
