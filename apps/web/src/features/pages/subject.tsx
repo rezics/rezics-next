@@ -681,7 +681,7 @@ export function SubjectPage({
     target.focus();
   }, [currentAddress, gameReturnStatus]);
   const showcaseWork = read && !page.account ? showcaseWorkKind(read.subject.type, read.summary?.types) : undefined;
-  const bookOverview = isBookOverview(read?.subject.type, view, !!page.account);
+  const bookOverview = isBookOverview(read?.subject.type, view, !!page.account, !!literarySubject);
   const workAddress =
     read && !page.account
       ? subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale)

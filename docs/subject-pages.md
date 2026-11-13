@@ -136,21 +136,22 @@ Decision: Literary facts include the released work form, tag (`schema:keywords`)
 
 Decision: Generic Recipe and software-release templates have no Statements node; the overview projects those released facts from the current anonymous page so visible copy, sharing metadata and JSON-LD stay the same. Anonymous Game work overviews SSR admitted work facts from that same page; edition destinations stay the existing inverse window. SoftwareApplication pages overlay `schema:sameAs` and `schema:url`; Person and Organization keep their existing overviews. Route pages use that same current catalogue release so home TypeList selectors stay admitted.
 
-Every membership and Edition window supplied by the current Subject composition is discoverable in native order,
-labelled by its released property and direction. The explicitly selected node wins only in its own family; the
-reader retains at most one membership page and one Edition page at a time. Rows retain statement identity, repeated
-occurrences, direction, source references and qualifiers; a missing target summary never becomes a link. Preparing,
-withheld, unavailable, unsupported, empty terminal, sparse, continued and truncated states remain distinct from a
-missing canonical work mapping. The native page's row limit applies before projection. A deliberate stream change
-starts that node without a cursor. A sparse page can continue; a stale cursor offers a fresh reading instead of
-claiming exhaustion. Overview enters the existing full view, since its preview node need not be the full view's node.
-Destinations opened from an Overview preview return to that exact preview node, property, direction and focus without
-a cursor; entering the full view remains a fresh address.
+Decision: Book, Series and Edition Overview share the composition-owned cover, title, synopsis, available rating/review entry and essential facts. Use light/dark neutral surfaces, separators and purposeful whitespace; long prose expands in place. Long memberships, editions and related works belong in existing detailed destinations, with concise Overview links. Never repeat framed cards, action bars or identity headers, and never introduce a native select. Preserve the existing mounted route choices and supplied rating populations; absent results stay absent. TODO: customize the shared tabs later.
+
+Every supplied membership and Edition window is discoverable in native order within its detailed destination,
+labelled by its released property and direction. Contents retains one membership page; Editions retains one Edition
+page. Overview retains no projected stream rows. A deliberate stream change starts that exact node without a cursor.
+Rows retain statement identity, repeated occurrences, direction, source references and qualifiers; a missing target
+summary never becomes a link. Preparing, withheld, unavailable, unsupported, empty terminal, sparse, continued and
+truncated states remain distinct from missing canonical work mapping. The native row limit applies before projection.
+Overview enters a fresh existing full view, since its preview node need not be the full view's node. Older Overview
+return addresses retain their node/property/direction and report unavailable focus when that row no longer appears;
+recovery never guesses another row or silently forwards its cursor.
 Full-view continuation uses the exact current node and opaque cursor, replacing the loaded page rather than
 accumulating a catalogue. A selected stream that disappears or changes its released property or direction is
 unavailable until the reader explicitly reloads the current Subject.
 
-Decision: Keep stream choices in native order, render one active page per family, and restart a deliberate stream change at its own node without carrying another node's cursor.
+Decision: Keep stream choices in native order within their destination, render one active page, and restart a deliberate stream change at its own node without carrying another node's cursor.
 
 Decision: the family overview keeps Works distinct from Person, Organization and Episode targets, retains und labels and citations, and lists outgoing publisher, staff and cast statements beside inverse windows. Local preview is twenty Work targets plus twenty credit targets. BookSeries inherits the CreativeWorkSeries counterparts `RelationGroups` node: inverse `rezics:crossMediaCounterpart`, limit 3, titles in all eight launch locales. Episode, person and organization kind labels complete every launch catalogue. The showcase family stories are illustrative authored responses, not recorded native proof.
 
@@ -165,7 +166,7 @@ parent resolver or per-target read is added.
 
 Decision: Previous retains at most eight prior addresses, evicting the oldest; it reloads current native facts and restores focus only when the exact assertion remains disclosed. A removed row leaves a currentness message and the available Restart or Next actions.
 
-`subject.tsx` mounts the public `LiteraryReaderEntry` on Overview, Contents and Editions. Its module exports that entry
+`subject.tsx` keeps the composition-owned literary Overview and mounts the public `LiteraryReaderEntry` on Contents and Editions. Its module exports that entry
 plus `literaryWorkIdentity`, `literaryAuthorityKey` and `literaryReaderRetired`. The local `/sources` link continues to
 the existing Subject Sources page; the reader does not create correction actions.
 
