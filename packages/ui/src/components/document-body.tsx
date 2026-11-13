@@ -21,9 +21,9 @@ type AuthoredBlockAttributes = {
 function authoredBlockAttributes(node: DocumentNode): AuthoredBlockAttributes {
   const attrs = node.attrs as { id?: string | null; lang?: string | null; dir?: string | null } | undefined;
   return {
-    'data-block-id': attrs?.id ?? undefined,
-    lang: attrs?.lang ?? undefined,
-    dir: attrs?.dir ?? undefined,
+    ...(attrs?.id == null ? {} : { 'data-block-id': attrs.id }),
+    ...(attrs?.lang == null ? {} : { lang: attrs.lang }),
+    ...(attrs?.dir == null ? {} : { dir: attrs.dir }),
   };
 }
 
