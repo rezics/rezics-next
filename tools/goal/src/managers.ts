@@ -1629,12 +1629,7 @@ export class ManagerSessions {
             return;
           }
           this.save(current);
-          if (
-            current.engine === 'codex' &&
-            current.threadId &&
-            current.status === 'running' &&
-            client
-          ) {
+          if (current.engine === 'codex' && current.threadId && current.status === 'running' && client) {
             await this.transport.rebindCodexViewer(current, current.threadId, client);
           }
           if (await this.handleGoalUpdate(current)) return;

@@ -405,7 +405,10 @@ test('recovery rebinds a parked Codex viewer without waking or recreating its th
   try {
     const started = await first.start(spec);
     const threadId = started.threadId!;
-    notify?.({ method: 'turn/completed', params: { threadId, turn: { id: started.activeTurnId, status: 'completed' } } });
+    notify?.({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: started.activeTurnId, status: 'completed' } },
+    });
     await first.flush();
     expect(first.get('accounts')).toMatchObject({
       threadId,
