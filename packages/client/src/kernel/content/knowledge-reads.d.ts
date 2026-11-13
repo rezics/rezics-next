@@ -1,7 +1,7 @@
 import type { ReadContext } from './model.ts';
 import { type KnowledgeOutlinePageInput, type KnowledgePageInput, type KnowledgeStructureHistoryInput, type KnowledgeStructureChangeAction, type KnowledgeStructureChangeKind, type KnowledgeDependencies } from './knowledge-model.ts';
-/** A public read selects only the document's current publication pointer. Search may be behind or paused;
- * its candidate is never authority to return an older publication. */
+/** A public read selects the live pointer or an exact revision retained in the current publication generation.
+ * Search may be behind or paused; its candidate is never authority to return an unselected revision. */
 export declare function readKnowledgePublicDocument(deps: KnowledgeDependencies, documentId: string, selection: Readonly<{
     revisionId?: string;
 }>, context: ReadContext): Promise<{
