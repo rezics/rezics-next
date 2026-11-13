@@ -2,17 +2,20 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { hostname } from 'node:os';
+import { dirname, join } from 'node:path';
 import { cleanupReceiptPath, physicalHistoryPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
 import { recoverWorkerTyping } from './typing-recovery.ts';
 import {
   grantWorkerTypingRecovery,
   TYPING_RECOVERY_ENV,
   workerCheckBudgetDirectory,
+  workerCheckHostActiveTypingRecovery,
   workerCheckHostAttemptCheckCustody,
   workerCheckHostAttemptHasResultlessCleanup,
   workerCheckHostContentTree,
 } from './worker-check-budget.ts';
+import { processIdentity } from './process.ts';
 import type { Attempt } from './types.ts';
 import {
   harness,
@@ -141,6 +144,86 @@ function prepareConsumedWebRecovery(h: ReturnType<typeof harness>) {
   });
   return { task, ref, actor, budget, original };
 }
+
+test('active typing recovery requires its consumed grant and exact running physical check', async () => {
+  const h = harness();
+  try {
+    const { task, ref, actor, budget, original } = prepareConsumedWebRecovery(h);
+    h.store.event(ref, 'typing-recovery-authorized', {
+      actor,
+      token: original.token,
+      identity: original.identity,
+      command: original.command,
+      checkId: original.checkId,
+    });
+    const runner = processIdentity();
+    if (!runner) throw new Error('typing recovery fixture has no runner identity');
+    const resultPath = join(task.worktree, '.temp/goal/checks/results', `${original.checkId}.json`);
+    const physicalPath = physicalHistoryPath(task.worktree, original.checkId, original.physicalRunId);
+    const owner = { taskId: task.id, attempt: ref.attempt };
+    const record = {
+      version: 1,
+      id: original.checkId,
+      cwd: task.worktree,
+      argv: webCompiler,
+      ownership: owner,
+      physicalRunId: original.physicalRunId,
+      runnerHost: hostname(),
+      runnerPid: runner.pid,
+      runnerIdentity: runner,
+      status: 'running',
+    };
+    const physical = {
+      ...record,
+      remoteExpected: false,
+      createdAt: new Date().toISOString(),
+    };
+    mkdirSync(dirname(resultPath), { recursive: true });
+    mkdirSync(dirname(physicalPath), { recursive: true });
+    writeFileSync(resultPath, JSON.stringify(record));
+    writeFileSync(physicalPath, JSON.stringify(physical));
+
+    expect(
+      workerCheckHostActiveTypingRecovery({
+        db: h.store.db,
+        stateDirectory: h.settings.stateDirectory,
+        taskId: task.id,
+        worktree: task.worktree,
+      }),
+    ).toMatchObject({
+      token: original.token,
+      checkId: original.checkId,
+      physicalRunId: original.physicalRunId,
+      runnerIdentity: runner,
+    });
+
+    writeFileSync(resultPath, JSON.stringify({ ...record, status: 'finished', exitCode: 0 }));
+    expect(
+      workerCheckHostActiveTypingRecovery({
+        db: h.store.db,
+        stateDirectory: h.settings.stateDirectory,
+        taskId: task.id,
+        worktree: task.worktree,
+      }),
+    ).toBeUndefined();
+
+    writeFileSync(resultPath, JSON.stringify(record));
+    const stampPath = join(budget, '1');
+    const stamp = JSON.parse(readFileSync(stampPath, 'utf8')) as Record<string, unknown>;
+    const consumed = stamp.typingRecovery as Record<string, unknown>;
+    writeFileSync(stampPath, JSON.stringify({ ...stamp, typingRecovery: { ...consumed, token: randomUUID() } }));
+    expect(
+      workerCheckHostActiveTypingRecovery({
+        db: h.store.db,
+        stateDirectory: h.settings.stateDirectory,
+        taskId: task.id,
+        worktree: task.worktree,
+      }),
+    ).toBeUndefined();
+  } finally {
+    await h.disposeAsync();
+  }
+});
 
 test('settled cleanup accepts only exact ownership and terminal local and remote custody', () => {
   const worktree = temporaryDirectory();

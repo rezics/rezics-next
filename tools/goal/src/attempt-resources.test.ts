@@ -16,6 +16,7 @@ import {
   selectOwnedVolumes,
   sweepAbandonedResources,
   type TerminalProcessSweep,
+  type TerminalWorktreeProcess,
   type DockerInvoke,
   type InventoryContainer,
 } from './attempt-resources.ts';
@@ -270,6 +271,86 @@ test('a five-minute sweep reaps cancelled, stopped, integrated and merged tasks 
     expect(counts.processes).toBe(1);
     expect(defaultPolicy.containers.cleanupIntervalMs).toBe(300_000);
     expect(defaultPolicy.containers.keep).toEqual([...SHARED_KEEP_PREFIXES]);
+  } finally {
+    box.close();
+  }
+});
+
+test('a live exact typing recovery process group survives the sweep while a terminal sibling is reaped', async () => {
+  const box = stateDir();
+  const recovering = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+  const sibling = '11111111-1111-4111-8111-111111111111';
+  const recoveryRunner = { pid: 9101, start: '100', boot: 'test-boot', group: 9101 };
+  const candidates = [
+    {
+      owner: recovering,
+      worktree: '/tmp/recovering',
+      identity: recoveryRunner,
+      sizeBytes: 4096,
+    },
+    {
+      owner: recovering,
+      worktree: '/tmp/recovering',
+      identity: { pid: 9102, start: '110', boot: 'test-boot', group: recoveryRunner.group },
+      sizeBytes: 2048,
+    },
+    {
+      owner: recovering,
+      worktree: '/tmp/recovering',
+      identity: { pid: 9103, start: '120', boot: 'test-boot', group: 9103 },
+      sizeBytes: 1024,
+    },
+    {
+      owner: sibling,
+      worktree: '/tmp/sibling',
+      identity: { pid: 9201, start: '130', boot: 'test-boot', group: 9201 },
+      sizeBytes: 512,
+    },
+  ];
+  const stopped: number[] = [];
+  const docker = dockerScript({});
+  const terminalProcessSweep: TerminalProcessSweep = {
+    inventory: async () => candidates,
+    stop: async (rows, isCurrentOwner) => {
+      const reaped: TerminalWorktreeProcess[] = [];
+      for (const candidate of rows) {
+        if (!(await isCurrentOwner(candidate.owner, candidate.worktree, candidate.identity))) continue;
+        stopped.push(candidate.identity.pid);
+        reaped.push(candidate);
+      }
+      return reaped;
+    },
+  };
+  try {
+    const counts = await sweepAbandonedResources({
+      tasks: [
+        { id: recovering, state: 'stopped', worktree: '/tmp/recovering' },
+        { id: sibling, state: 'cancelled', worktree: '/tmp/sibling' },
+      ],
+      stateDirectory: box.directory,
+      docker: docker.invoke,
+      terminalProcessSweep,
+      currentTerminalOwner(owner, worktree, processIdentity) {
+        if (
+          (owner !== recovering && owner !== sibling) ||
+          (owner === recovering && worktree !== '/tmp/recovering') ||
+          (owner === sibling && worktree !== '/tmp/sibling')
+        )
+          return false;
+        if (
+          owner === recovering &&
+          processIdentity !== undefined &&
+          processIdentity.group === recoveryRunner.group &&
+          processIdentity.boot === recoveryRunner.boot &&
+          BigInt(processIdentity.start) >= BigInt(recoveryRunner.start)
+        )
+          return false;
+        return true;
+      },
+      log: () => {},
+    });
+    expect(stopped).toEqual([9103, 9201]);
+    expect(counts.processes).toBe(2);
   } finally {
     box.close();
   }

@@ -78,7 +78,11 @@ export type TerminalWorktreeProcess = {
   identity: ProcessIdentity;
   sizeBytes: number;
 };
-export type CurrentTerminalOwnerLookup = (owner: string, worktree: string) => boolean | Promise<boolean>;
+export type CurrentTerminalOwnerLookup = (
+  owner: string,
+  worktree: string,
+  process?: ProcessIdentity,
+) => boolean | Promise<boolean>;
 /** The periodic host sweep inventories once, then signals only candidates that still belong to a terminal owner. */
 export type TerminalProcessSweep = {
   inventory(owners: readonly TerminalWorktreeOwner[]): Promise<TerminalWorktreeProcess[]>;
@@ -436,14 +440,14 @@ async function terminalCandidateState(
 ): Promise<'gone' | 'unowned' | 'owned'> {
   const current = await readProcessIdentityAt(candidate.identity.pid, procRoot, boot);
   if (!sameIdentity(current, candidate.identity)) return 'gone';
-  if (!(await isCurrentOwner(candidate.owner, candidate.worktree))) return 'unowned';
   let cwd: string;
   try {
     cwd = (await readlinkAsync(`${procRoot}/${candidate.identity.pid}/cwd`)).replace(/ \(deleted\)$/, '');
   } catch {
     return 'unowned';
   }
-  return cwd === candidate.worktree || cwd.startsWith(`${candidate.worktree}/`) ? 'owned' : 'unowned';
+  if (cwd !== candidate.worktree && !cwd.startsWith(`${candidate.worktree}/`)) return 'unowned';
+  return (await isCurrentOwner(candidate.owner, candidate.worktree, candidate.identity)) ? 'owned' : 'unowned';
 }
 
 async function stopTerminalWorktreeProcesses(
