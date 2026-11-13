@@ -628,6 +628,17 @@ slope. The hourly `.rate` is that evidenced short-window value or `null` when th
 is unresolved, so a 12→13 step is not an alarm and a flat integer sample is not claimed as zero; `observedRate` and
 `evidence` are diagnostics. Token counts are not quota.
 
+For expiry planning, follow the [allowance planning rule](../../docs/development/efficiency.md#operating-discipline) and
+run [`scripts/hourly-allowance.ts`](scripts/hourly-allowance.ts). It emits every configured pool with observation
+freshness and each provider window's exact identity, reset status and remaining milliseconds. The existing weekly
+`used`, burn rate, evidence and ceiling fields retain their meaning. Fresh retained readings are reused; a missing or
+stale allowance causes at most one configured-source read for its shared `allowanceKey`. Render shared aliases as one
+allowance by that key, while keeping the per-pool rows and freshness visible. Grok without a configured observation
+continues to show unavailable windows and operators use its provider `/usage` view.
+
+Decision: replace the temporary all-pool display with this tracked JSON report; share each `allowanceKey` once, use
+retained TUI evidence or a configured quota source, and never invent reset dates, call models or add local config keys.
+
 Decision: the fewest tests that pin Codex burn evidence are the 12→13 hourly replay with plateau, one 6 h / burst /
 fractional / reset / isolation case, and shared retention with the hourly consumer.
 
