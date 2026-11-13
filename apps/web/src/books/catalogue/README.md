@@ -44,6 +44,10 @@ reader also offers the shelf for the actual Subject type, including a released d
 to a guessed work's shelf. This link disappears with the existing retired reading. Unsupported shelf type syntax
 does not fall back to an unfiltered private list.
 
+Decision: native Book discovery evidence seeds actual Book, BookSeries and Edition identities, waits for the installed
+default Search response, follows exact types into the literary reader and separate Library shelf, changes Book state
+through its existing shelf command, and reads the new revision independently. Native execution remains post-integration.
+
 Shelf links open separately so the originating entry or reader remains at its current window. The shelf receives
 only `type`: omitted state, order, layout, size and columns retain native URL/default-preference resolution. The
 destination's existing private route owns safe sign-in, session admission, private request retirement, entry actions,
