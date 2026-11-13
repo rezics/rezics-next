@@ -595,6 +595,7 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
           return {
             data: persistedItems.filter((entry) => entry.turnId === params.turnId),
             nextCursor: null,
+            backwardsCursor: null,
           } as T;
         if (method === 'thread/goal/get')
           return { goal: { status: goalStatus, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } } as T;

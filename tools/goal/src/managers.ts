@@ -600,6 +600,13 @@ export class ManagerSessions {
       this.admitParkedOperatorTurn(state, threadId, turnId);
       return;
     }
+    const hasPersistedUserMessage = await this.transport.turnHasUserMessage(client, threadId, turnId);
+    if (!this.isParkedTurnInProgress(state, threadId, turnId)) return;
+    if (hasPersistedUserMessage || this.hasUserMessageTurn(state, threadId, turnId)) {
+      this.userMessageTurns.add(this.turnKey(state.id, threadId, turnId));
+      this.admitParkedOperatorTurn(state, threadId, turnId);
+      return;
+    }
     const key = this.turnKey(state.id, threadId, turnId);
     await this.transport.interruptExactTurn(client, threadId, turnId, (interruptingTurnId) => {
       if (state.threadId !== threadId || interruptingTurnId !== turnId)

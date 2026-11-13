@@ -3348,12 +3348,17 @@ retain their meaning. Blocked Goals accept admitted explicit inbox turns without
 recovery leave idle threads parked. See the
 [OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
 
-Decision: An inbox-parked Codex turn waits 250 ms for a same-thread, same-turn `item/started` or `item/completed`
-notification whose protocol `ThreadItem.type` is `userMessage`; that evidence promotes the operator turn to counted
-work and the controller reparks after completion. Without it, the controller interrupts only that exact turn. On
-host recovery, `thread/items/list` checks that exact thread and turn: a persisted `userMessage` promotes and rejoins
-the operator turn; without one, recovery starts a fresh 250 ms origin window before the exact-turn interrupt. A
-`userMessage` notification arriving only after the exact-turn interrupt is issued cannot be restored.
+Decision: An inbox-parked Codex turn waits 250 ms to allow the common `turn/started` then UserMessage item ordering;
+this timing window alone never authorizes an interrupt. Same-thread, same-turn `item/started` or `item/completed`
+notifications with protocol `ThreadItem.type` `userMessage`, or an authoritative `thread/items/list` read for that
+exact turn, promote the operator turn to counted work and the controller reparks after completion. The live
+pre-interrupt read paginates the complete result and recognizes only the 0.169 `ThreadItem` discriminants. A
+successful complete list without a `userMessage` permits an interrupt of only that exact turn. On host recovery,
+the same list promotes and rejoins persisted operator input; a complete negative result starts a fresh 250 ms
+ordering window and a second authoritative read before interrupting. Unavailable, busy or ambiguous reads never
+prove automation: the active turn stays untouched until its terminal event or an explicit stop, with no polling or
+automatic retry. A UserMessage not yet persisted in the final complete read cannot be distinguished; if it is
+emitted only after that read, the exact-turn interrupt may still race it.
 
 Public `status` keeps manager lifecycle separate from `operation`: `waiting-for-inbox`, `active-turn`, `idle`,
 `turn-interrupted` or `turn-failed`, with native Goal status and the current turn disposition alongside it. Interrupt

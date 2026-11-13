@@ -75,6 +75,28 @@ function userMessageItem(item: unknown): boolean {
   );
 }
 
+const THREAD_ITEM_TYPES = new Set([
+  'userMessage',
+  'hookPrompt',
+  'agentMessage',
+  'functionCallOutput',
+  'plan',
+  'reasoning',
+  'commandExecution',
+  'fileChange',
+  'mcpToolCall',
+  'dynamicToolCall',
+  'collabAgentToolCall',
+  'subAgentActivity',
+  'webSearch',
+  'imageView',
+  'sleep',
+  'imageGeneration',
+  'enteredReviewMode',
+  'exitedReviewMode',
+  'contextCompaction',
+]);
+
 /** Provider-facing manager sessions: connection cache, concrete Codex/Claude requests and viewer argv. */
 export class ManagerSessionTransport {
   private pools = new Map<string, Promise<AppServer>>();
@@ -188,19 +210,25 @@ export class ManagerSessionTransport {
       });
       if (!response || typeof response !== 'object' || Array.isArray(response))
         throw new Error('Invalid thread/items/list response for manager turn');
-      const page = response as { data?: unknown; nextCursor?: unknown };
+      const page = response as { data?: unknown; nextCursor?: unknown; backwardsCursor?: unknown };
       if (!Array.isArray(page.data)) throw new Error('Invalid thread/items/list data for manager turn');
-      if (
-        page.data.some(
-          (entry) =>
-            entry &&
-            typeof entry === 'object' &&
-            !Array.isArray(entry) &&
-            (entry as { turnId?: unknown }).turnId === turnId &&
-            userMessageItem((entry as { item?: unknown }).item),
-        )
-      )
-        return true;
+      if (page.backwardsCursor !== null && (typeof page.backwardsCursor !== 'string' || !page.backwardsCursor))
+        throw new Error('Invalid thread/items/list backwards cursor for manager turn');
+      for (const entry of page.data) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+          throw new Error('Invalid thread/items/list entry for manager turn');
+        const itemEntry = entry as { turnId?: unknown; item?: unknown };
+        if (typeof itemEntry.turnId !== 'string' || !itemEntry.turnId)
+          throw new Error('Invalid thread/items/list turn identity for manager turn');
+        if (itemEntry.turnId !== turnId)
+          throw new Error('Mismatched thread/items/list turn identity for manager turn');
+        const item = itemEntry.item;
+        const type =
+          item && typeof item === 'object' && !Array.isArray(item) ? (item as { type?: unknown }).type : null;
+        if (typeof type !== 'string' || !THREAD_ITEM_TYPES.has(type))
+          throw new Error('Invalid thread/items/list item type for manager turn');
+        if (userMessageItem(item)) return true;
+      }
       if (page.nextCursor === null) return false;
       if (typeof page.nextCursor !== 'string' || !page.nextCursor || seenCursors.has(page.nextCursor))
         throw new Error('Invalid thread/items/list cursor for manager turn');

@@ -1156,6 +1156,67 @@ test('an eventless automatic turn is interrupted after the item-ordering window'
   }
 });
 
+test('a delayed UserMessage notification is recovered from the exact turn item list before interrupt', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    const threadId = manager.threadId!;
+    await s.notify({
+      method: 'turn/started',
+      params: { threadId, turn: { id: 'delayed-input-turn', status: 'inProgress' } },
+    });
+    await s.client.request('test/persist-item', {
+      threadId,
+      turnId: 'delayed-input-turn',
+      item: { type: 'userMessage', id: 'delayed-user-message', clientId: null, content: [] },
+    });
+
+    await Bun.sleep(300);
+    await s.managers.flush();
+
+    expect(s.requests().filter((request) => request.method === 'thread/items/list')).toContainEqual(
+      expect.objectContaining({ params: expect.objectContaining({ threadId, turnId: 'delayed-input-turn' }) }),
+    );
+    expect(s.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
+    expect(s.managers.get(manager.id)).toMatchObject({
+      waitingForInbox: false,
+      activeTurnId: 'delayed-input-turn',
+      turns: 2,
+      turnDisposition: {
+        threadId,
+        turnId: 'delayed-input-turn',
+        status: 'inProgress',
+        intent: 'work',
+      },
+    });
+
+    await s.notify({
+      method: 'item/completed',
+      params: {
+        threadId,
+        turnId: 'delayed-input-turn',
+        completedAtMs: Date.now(),
+        item: { type: 'userMessage', id: 'delayed-user-message', clientId: null, content: [] },
+      },
+    });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: 'delayed-input-turn', status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      waitingForInbox: true,
+      activeTurnId: null,
+      turnDisposition: { threadId, turnId: 'delayed-input-turn', status: 'completed', intent: 'work' },
+    });
+  } finally {
+    await s.close();
+  }
+});
+
 test('a real manager stop cancels the pending parked-turn decision and keeps stop intent', async () => {
   const s = await setup();
   try {
