@@ -2408,12 +2408,12 @@ CREATE TABLE content.hosted_version_builder (
 CASE
     WHEN ((source_kind = 'prefix'::text) AND (source_high_water >= 0)) THEN (source_high_water + 1)
     ELSE (0)::bigint
-END)) AND (((source_kind = 'snapshot'::text) AND (source_revision_id = base_revision_id) AND (source_high_water = '-1'::integer)) OR (source_kind = 'prefix'::text)))),
+END)) AND (((source_kind = 'snapshot'::text) AND (source_revision_id = base_revision_id) AND (source_high_water = '-1'::integer)) OR (source_kind = 'prefix'::text) OR ((source_kind = 'public'::text) AND (source_revision_id = base_revision_id) AND (source_high_water = '-1'::integer) AND (expected_placement_count = base_placement_count) AND (base_root_count = 0))))),
     CONSTRAINT hosted_version_builder_check2 CHECK (((frontier_segment = ANY (ARRAY['base'::text, 'prefix'::text, 'complete'::text])) AND ((after_ordinal >= '-1'::integer) AND (after_ordinal <= base_placement_count)) AND ((after_offset >= '-1'::integer) AND (after_offset <= source_high_water)) AND ((frontier_segment <> 'prefix'::text) OR (source_kind = 'prefix'::text)) AND ((frontier_segment <> 'complete'::text) OR coverage_complete OR (expected_placement_count = 0)))),
     CONSTRAINT hosted_version_builder_check3 CHECK (((jsonb_typeof(active_ancestors) = 'array'::text) AND (jsonb_array_length(active_ancestors) <= 16) AND ((root_next_position >= 0) AND (root_next_position <= '9007199254740991'::bigint)))),
     CONSTRAINT hosted_version_builder_check4 CHECK ((((status = 'building'::text) AND (sealed_at IS NULL)) OR ((status = 'sealed'::text) AND (sealed_at IS NOT NULL) AND coverage_complete))),
     CONSTRAINT hosted_version_builder_check5 CHECK ((isfinite(created_at) AND isfinite(updated_at) AND ((sealed_at IS NULL) OR isfinite(sealed_at)))),
-    CONSTRAINT hosted_version_builder_source_kind_check CHECK ((source_kind = ANY (ARRAY['snapshot'::text, 'prefix'::text])))
+    CONSTRAINT hosted_version_builder_source_kind_check CHECK ((source_kind = ANY (ARRAY['snapshot'::text, 'prefix'::text, 'public'::text])))
 );
 
 
@@ -2526,6 +2526,27 @@ CREATE TABLE content.hosted_version_builder_sibling_root (
     CONSTRAINT hosted_version_builder_sibling_root_check CHECK (((parent_id IS NULL) OR (route = ((get_byte(uuid_send(parent_id), 10) * 256) + get_byte(uuid_send(parent_id), 11))))),
     CONSTRAINT hosted_version_builder_sibling_root_check1 CHECK ((route = ((get_byte(uuid_send(root_id), 10) * 256) + get_byte(uuid_send(root_id), 11)))),
     CONSTRAINT hosted_version_builder_sibling_root_next_position_check CHECK (((next_position >= 1) AND (next_position <= '9007199254740991'::bigint)))
+);
+
+
+--
+-- Name: hosted_version_builder_source; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_builder_source (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    source_kind text NOT NULL,
+    migration_input_id uuid,
+    publication_id uuid,
+    thread_id uuid,
+    actor_binding bytea,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_version_builder_source_check CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(input_id), 10) * 256) + get_byte(uuid_send(input_id), 11))) AND ((thread_id IS NULL) OR (route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))))),
+    CONSTRAINT hosted_version_builder_source_check1 CHECK ((((source_kind = 'migration'::text) AND (migration_input_id = input_id) AND (publication_id IS NULL) AND (thread_id IS NULL) AND (actor_binding IS NULL)) OR ((source_kind = 'public'::text) AND (migration_input_id IS NULL) AND (publication_id IS NOT NULL) AND (thread_id IS NOT NULL) AND (actor_binding IS NOT NULL) AND (octet_length(actor_binding) = 32)))),
+    CONSTRAINT hosted_version_builder_source_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_builder_source_source_kind_check CHECK ((source_kind = ANY (ARRAY['migration'::text, 'public'::text])))
 );
 
 
@@ -4795,6 +4816,22 @@ ALTER TABLE ONLY content.hosted_version_builder_sequence_node
 
 ALTER TABLE ONLY content.hosted_version_builder_sibling_root
     ADD CONSTRAINT hosted_version_builder_siblin_route_catalogue_id_input_id_p_key UNIQUE NULLS NOT DISTINCT (route, catalogue_id, input_id, parent_id);
+
+
+--
+-- Name: hosted_version_builder_source hosted_version_builder_source_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_source
+    ADD CONSTRAINT hosted_version_builder_source_pkey PRIMARY KEY (route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder_source hosted_version_builder_source_route_catalogue_id_publicatio_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_source
+    ADD CONSTRAINT hosted_version_builder_source_route_catalogue_id_publicatio_key UNIQUE (route, catalogue_id, publication_id, actor_binding);
 
 
 --
@@ -7248,7 +7285,7 @@ ALTER TABLE ONLY content.hosted_version_builder
 --
 
 ALTER TABLE ONLY content.hosted_version_builder
-    ADD CONSTRAINT hosted_version_builder_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_migration_input(route, catalogue_id, input_id);
+    ADD CONSTRAINT hosted_version_builder_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder_source(route, catalogue_id, input_id);
 
 
 --
@@ -7321,6 +7358,30 @@ ALTER TABLE ONLY content.hosted_version_builder_sibling_root
 
 ALTER TABLE ONLY content.hosted_version_builder_sibling_root
     ADD CONSTRAINT hosted_version_builder_sibling_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder_source hosted_version_builder_source_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_source
+    ADD CONSTRAINT hosted_version_builder_source_route_catalogue_id_fkey FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_version_builder_source hosted_version_builder_source_route_catalogue_id_migration_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_source
+    ADD CONSTRAINT hosted_version_builder_source_route_catalogue_id_migration_fkey FOREIGN KEY (route, catalogue_id, migration_input_id) REFERENCES content.hosted_migration_input(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder_source hosted_version_builder_source_route_catalogue_id_publicati_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_source
+    ADD CONSTRAINT hosted_version_builder_source_route_catalogue_id_publicati_fkey FOREIGN KEY (route, catalogue_id, publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
 
 
 --
