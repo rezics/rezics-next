@@ -112,6 +112,10 @@ five minutes.
 
 ## Check hosts
 
+The Kernel migration filename preflight runs during worker-check admission before its budget stamp or upload, using
+the exact checkout's Kernel `check`, `test` and `typecheck` entrypoints. Its policy and receiver-side validation are
+owned by [Compiler entrypoint placement](../docs/development/compiler-check-placement.md).
+
 `bun scripts/check-startup.ts` owns the combined compiler-database, SSH/remote transport, command-phase/lifetime,
 stack/walk, worker memory, root/direct placement, Kernel startup, Auth composition and Web dual-program/ratings
 regression selection. It runs inside the existing placement boundary, in sequence, preserving each command's argv,

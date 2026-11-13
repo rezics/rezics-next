@@ -15,7 +15,8 @@ import {
   reclaimAdmittedFileCache,
   type CompilerPlacementDependencies,
 } from '../../../scripts/typecheck.ts';
-import { schemaDumps, validateMigrationVersions } from './database.ts';
+import { schemaDumps } from './database.ts';
+import { validateKernelMigrationVersions } from './migration-versions.ts';
 import { prepareReyloAnalysisCache } from './reylo-cache.ts';
 import { withCommandPhase, writeCommandObservation, commandObservation } from './command-phases.ts';
 
@@ -247,10 +248,7 @@ export async function runKernelTypecheck(
   if (placed !== null) return compilerPlacementResult(label, placed);
   writeCommandObservation('kernel typecheck', commandObservation(remoteCommand, repository, env), env);
   // The compiler database applies the same migrations as derived generation, in admitted custody only.
-  validateMigrationVersions(
-    Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory })),
-    new Date(),
-  );
+  validateKernelMigrationVersions(directory, new Date());
   // The analysis cache is prepared by typecheck itself, with its own phases, so the seam must not prepare it again.
   const run = async () => {
     if (env.DATABASE_URL) return compile(env);

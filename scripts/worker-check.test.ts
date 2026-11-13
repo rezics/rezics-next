@@ -39,7 +39,10 @@ import {
   requestWorkerCheckCancellation,
   workerCheckCancellation,
 } from './worker-check.ts';
-import { WORKER_CHECK_TESTS_AFTER_LANDING } from '../tools/goal/src/worker-check-budget.ts';
+import {
+  TYPING_RECOVERY_ENV,
+  WORKER_CHECK_TESTS_AFTER_LANDING,
+} from '../tools/goal/src/worker-check-budget.ts';
 import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 import {
   controllerProofReservationPath,
@@ -198,6 +201,80 @@ test('an ordinary product attempt refuses a test, native, browser or growth comm
     else process.env.GOAL_WORKER_CHECK_BUDGET = previousBudget;
     if (previousDirectory === undefined) delete process.env.GOAL_WORKER_CHECK_BUDGET_DIR;
     else process.env.GOAL_WORKER_CHECK_BUDGET_DIR = previousDirectory;
+  }
+});
+
+test('Kernel migration filename failures refuse before budget admission and launch', () => {
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-kernel-migrations-'));
+  dirs.push(root);
+  const migrations = join(root, 'services/kernel/db/core/migrations');
+  mkdirSync(migrations, { recursive: true });
+  writeFileSync(
+    join(root, 'services/kernel/package.json'),
+    JSON.stringify({
+      scripts: {
+        check: 'bun scripts/check.ts',
+        test: 'bun scripts/check.ts',
+        typecheck: 'bun scripts/typecheck.ts',
+      },
+    }),
+  );
+  const futureMigration = join(migrations, '29991231235959_future.sql');
+  writeFileSync(futureMigration, 'select 1;\n');
+  writeFileSync(join(root, 'tracked.txt'), 'base\n');
+  git(root, 'init', '-b', 'worker');
+  git(root, 'config', 'user.email', 'worker-check@example.test');
+  git(root, 'config', 'user.name', 'Worker Check');
+  git(root, 'add', '.');
+  git(root, 'commit', '-m', 'fixture');
+
+  const budget = join(suiteRoot, 'worker-check-kernel-migration-budget');
+  const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-schema=core'];
+  const launched: string[][] = [];
+  const environmentKeys = [
+    'GOAL_WORKER_CHECK_BUDGET',
+    'GOAL_WORKER_CHECK_BUDGET_DIR',
+    'GOAL_WORKER_CHECK_BUDGET_STAMP',
+    'GOAL_CHECK_REGISTRY',
+    'GOAL_TASK_ID',
+    'GOAL_ATTEMPT',
+    TYPING_RECOVERY_ENV,
+  ];
+  const oldEnvironment = Object.fromEntries(environmentKeys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.GOAL_WORKER_CHECK_BUDGET = '2';
+    process.env.GOAL_WORKER_CHECK_BUDGET_DIR = budget;
+    for (const key of environmentKeys) {
+      if (key !== 'GOAL_WORKER_CHECK_BUDGET' && key !== 'GOAL_WORKER_CHECK_BUDGET_DIR') delete process.env[key];
+    }
+
+    let migrationFailure: unknown;
+    try {
+      startWorkerCheck(command, root, (record) => launched.push(record.argv));
+    } catch (error) {
+      migrationFailure = error;
+    }
+    expect(migrationFailure).toBeInstanceOf(Error);
+    expect((migrationFailure as Error).message).toContain(
+      'db/core/migrations/29991231235959_future.sql: migration version is later than the current UTC time plus five minutes',
+    );
+    expect((migrationFailure as Error).message).toContain('Name migrations with `date -u +%Y%m%d%H%M%S`.');
+    expect(launched).toEqual([]);
+    expect(existsSync(budget)).toBe(false);
+    expect(existsSync(join(root, '.temp/goal/checks'))).toBe(false);
+
+    rmSync(futureMigration);
+    writeFileSync(join(migrations, '20200101000000_valid.sql'), 'select 1;\n');
+    const id = startWorkerCheck(command, root, (record) => launched.push(record.argv));
+    expect(id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(launched).toEqual([command]);
+    expect(readdirSync(budget).filter((name) => /^[1-9]\d*$/.test(name))).toEqual(['1']);
+  } finally {
+    rmSync(budget, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(oldEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });
 

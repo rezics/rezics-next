@@ -54,6 +54,7 @@ import {
   performanceHosts,
   splitEnvironmentCommand,
 } from './check-placement.ts';
+import { validateKernelMigrationVersions } from '../services/kernel/scripts/migration-versions.ts';
 import {
   checkCommandIncludesTypecheck,
   recordWorkerCheckTypingInputs,
@@ -2529,6 +2530,66 @@ function wrapperExecutionArgv(argv: readonly string[]): string[] {
   return argv.slice(index);
 }
 
+function kernelMigrationCheckCommand(argv: readonly string[], cwd: string): boolean {
+  const parsed = splitEnvironmentCommand(argv);
+  if (!parsed || parsed.command.length === 0) return false;
+  const command = parsed.command;
+  const executable = command[0]!;
+  if (
+    executable !== 'bun' &&
+    executable !== process.execPath &&
+    executable.split(/[\\/]/).at(-1) !== 'bun'
+  )
+    return false;
+
+  const root = resolve(cwd);
+  const kernelDirectory = resolve(root, 'services/kernel');
+  let directory = root;
+  let index = 1;
+  const readCwd = () => {
+    while (index < command.length) {
+      const argument = command[index]!;
+      if (argument === '--cwd' && command[index + 1]) {
+        directory = resolve(directory, command[index + 1]!);
+        index += 2;
+      } else if (argument.startsWith('--cwd=')) {
+        directory = resolve(directory, argument.slice('--cwd='.length));
+        index += 1;
+      } else break;
+    }
+  };
+
+  readCwd();
+  if (command[index] === 'run') {
+    index += 1;
+    readCwd();
+  }
+  const entry = command[index];
+  if (!entry) return false;
+
+  if (directory === kernelDirectory && ['check', 'test', 'typecheck'].includes(entry)) {
+    const manifestPath = join(kernelDirectory, 'package.json');
+    if (!existsSync(manifestPath)) return false;
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      scripts?: Record<string, unknown>;
+    };
+    const expected = entry === 'typecheck' ? 'bun scripts/typecheck.ts' : 'bun scripts/check.ts';
+    return manifest.scripts?.[entry] === expected;
+  }
+
+  const scriptPath = resolve(directory, entry);
+  return (
+    scriptPath === resolve(kernelDirectory, 'scripts/check.ts') ||
+    scriptPath === resolve(kernelDirectory, 'scripts/typecheck.ts')
+  );
+}
+
+function validateKernelMigrationsBeforeAdmission(argv: readonly string[], root: string): void {
+  if (kernelMigrationCheckCommand(argv, root)) {
+    validateKernelMigrationVersions(resolve(root, 'services/kernel'), new Date());
+  }
+}
+
 /** Start a detached check whose durable result can be retrieved by id after this process exits. */
 export function startWorkerCheck(
   argv: readonly string[],
@@ -2539,6 +2600,7 @@ export function startWorkerCheck(
   const root = resolve(cwd);
   const execution = wrapperExecutionArgv(argv);
   refuseOrdinaryProductTestCheck(process.env, execution, root);
+  validateKernelMigrationsBeforeAdmission(execution, root);
   const admission = refuseExcessWorkerCheckHostRun(
     process.env,
     workerCheckNeedsStack(execution, root),
