@@ -308,6 +308,7 @@ test('a live exact typing recovery process group survives the sweep while a term
     },
   ];
   const stopped: number[] = [];
+  const docker = dockerScript({});
   const terminalProcessSweep: TerminalProcessSweep = {
     inventory: async () => candidates,
     stop: async (rows, isCurrentOwner) => {
@@ -327,7 +328,7 @@ test('a live exact typing recovery process group survives the sweep while a term
         { id: sibling, state: 'cancelled', worktree: '/tmp/sibling' },
       ],
       stateDirectory: box.directory,
-      reapDocker: false,
+      docker: docker.invoke,
       terminalProcessSweep,
       currentTerminalOwner(owner, worktree, processIdentity) {
         if (
