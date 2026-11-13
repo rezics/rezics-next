@@ -2646,6 +2646,101 @@ CREATE TABLE content.hosted_version_draft_activation_subtree (
 
 
 --
+-- Name: hosted_version_public_baseline; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_public_baseline (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    build_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    source_publication_id uuid NOT NULL,
+    actor_binding bytea NOT NULL,
+    placement_count bigint NOT NULL,
+    root_count bigint NOT NULL,
+    chapter_count bigint NOT NULL,
+    sibling_root_id uuid,
+    preorder_root_id uuid,
+    chapter_root_id uuid,
+    phase text NOT NULL,
+    occurrence_after_ordinal bigint CONSTRAINT hosted_version_public_baselin_occurrence_after_ordinal_not_null NOT NULL,
+    node_after_kind text NOT NULL,
+    node_after_id uuid NOT NULL,
+    root_null_done boolean NOT NULL,
+    root_after_parent_id uuid NOT NULL,
+    occurrences_written bigint DEFAULT 0 NOT NULL,
+    nodes_written bigint DEFAULT 0 NOT NULL,
+    sibling_roots_written bigint DEFAULT 0 NOT NULL,
+    coverage_complete boolean DEFAULT false NOT NULL,
+    status text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_version_public_baseline_actor_binding_check CHECK ((octet_length(actor_binding) = 32)),
+    CONSTRAINT hosted_version_public_baseline_check CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(build_id), 10) * 256) + get_byte(uuid_send(build_id), 11))) AND (route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11))) AND (route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11))) AND (route = ((get_byte(uuid_send(source_publication_id), 10) * 256) + get_byte(uuid_send(source_publication_id), 11))) AND ((node_after_id = '00000000-0000-0000-0000-000000000000'::uuid) OR (route = ((get_byte(uuid_send(node_after_id), 10) * 256) + get_byte(uuid_send(node_after_id), 11)))) AND ((root_after_parent_id = '00000000-0000-0000-0000-000000000000'::uuid) OR (route = ((get_byte(uuid_send(root_after_parent_id), 10) * 256) + get_byte(uuid_send(root_after_parent_id), 11)))))),
+    CONSTRAINT hosted_version_public_baseline_check1 CHECK ((((placement_count >= 0) AND (placement_count <= '9007199254740991'::bigint)) AND ((root_count >= 0) AND (root_count <= placement_count)) AND ((chapter_count >= 0) AND (chapter_count <= placement_count)) AND ((occurrences_written >= 0) AND (occurrences_written <= placement_count)) AND ((nodes_written >= 0) AND (nodes_written <= '27021597764222973'::bigint)) AND (sibling_roots_written >= 0) AND ((occurrence_after_ordinal >= '-1'::integer) AND (occurrence_after_ordinal <= placement_count)))),
+    CONSTRAINT hosted_version_public_baseline_check2 CHECK ((((status = 'materializing'::text) AND (phase <> 'complete'::text) AND (NOT coverage_complete)) OR ((status = 'complete'::text) AND (phase = 'complete'::text) AND coverage_complete))),
+    CONSTRAINT hosted_version_public_baseline_check3 CHECK ((isfinite(created_at) AND isfinite(updated_at))),
+    CONSTRAINT hosted_version_public_baseline_node_after_kind_check CHECK ((node_after_kind = ANY (ARRAY[''::text, 'chapters'::text, 'preorder'::text, 'siblings'::text]))),
+    CONSTRAINT hosted_version_public_baseline_phase_check CHECK ((phase = ANY (ARRAY['occurrences'::text, 'nodes'::text, 'roots'::text, 'complete'::text]))),
+    CONSTRAINT hosted_version_public_baseline_status_check CHECK ((status = ANY (ARRAY['materializing'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: hosted_version_public_baseline_page; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_public_baseline_page (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    build_id uuid NOT NULL,
+    from_phase text NOT NULL,
+    from_occurrence_after_ordinal bigint CONSTRAINT hosted_version_public_basel_from_occurrence_after_ordi_not_null NOT NULL,
+    from_node_after_kind text CONSTRAINT hosted_version_public_baseline_pa_from_node_after_kind_not_null NOT NULL,
+    from_node_after_id uuid NOT NULL,
+    from_root_null_done boolean CONSTRAINT hosted_version_public_baseline_pag_from_root_null_done_not_null NOT NULL,
+    from_root_after_parent_id uuid CONSTRAINT hosted_version_public_baseli_from_root_after_parent_id_not_null NOT NULL,
+    to_phase text NOT NULL,
+    to_occurrence_after_ordinal bigint CONSTRAINT hosted_version_public_basel_to_occurrence_after_ordina_not_null NOT NULL,
+    to_node_after_kind text NOT NULL,
+    to_node_after_id uuid NOT NULL,
+    to_root_null_done boolean NOT NULL,
+    to_root_after_parent_id uuid CONSTRAINT hosted_version_public_baseline_to_root_after_parent_id_not_null NOT NULL,
+    occurrences_written integer CONSTRAINT hosted_version_public_baseline_pag_occurrences_written_not_null NOT NULL,
+    nodes_written integer NOT NULL,
+    sibling_roots_written integer CONSTRAINT hosted_version_public_baseline_p_sibling_roots_written_not_null NOT NULL,
+    coverage_complete boolean NOT NULL,
+    generation_sequence bigint CONSTRAINT hosted_version_public_baseline_pag_generation_sequence_not_null NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_version_public_baseline_page_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_public_baseline_page_from_phase_check CHECK ((from_phase = ANY (ARRAY['occurrences'::text, 'nodes'::text, 'roots'::text]))),
+    CONSTRAINT hosted_version_public_baseline_page_generation_sequence_check CHECK ((generation_sequence >= 0)),
+    CONSTRAINT hosted_version_public_baseline_page_nodes_written_check CHECK (((nodes_written >= 0) AND (nodes_written <= 20))),
+    CONSTRAINT hosted_version_public_baseline_page_occurrences_written_check CHECK (((occurrences_written >= 0) AND (occurrences_written <= 20))),
+    CONSTRAINT hosted_version_public_baseline_page_sibling_roots_written_check CHECK (((sibling_roots_written >= 0) AND (sibling_roots_written <= 20))),
+    CONSTRAINT hosted_version_public_baseline_page_to_phase_check CHECK ((to_phase = ANY (ARRAY['occurrences'::text, 'nodes'::text, 'roots'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: hosted_version_public_baseline_subtree; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_public_baseline_subtree (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    build_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    subtree_size bigint NOT NULL,
+    chapter_count bigint NOT NULL,
+    CONSTRAINT hosted_version_public_baseline_subtree_chapter_count_check CHECK ((chapter_count >= 0)),
+    CONSTRAINT hosted_version_public_baseline_subtree_check CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
+    CONSTRAINT hosted_version_public_baseline_subtree_subtree_size_check CHECK ((subtree_size >= 0))
+);
+
+
+--
 -- Name: hosted_version_revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -4875,6 +4970,38 @@ ALTER TABLE ONLY content.hosted_version_draft_activation_subtree
 
 
 --
+-- Name: hosted_version_public_baseline hosted_version_public_baselin_route_catalogue_id_generation_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline
+    ADD CONSTRAINT hosted_version_public_baselin_route_catalogue_id_generation_key UNIQUE (route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_version_public_baseline_page hosted_version_public_baseline_page_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline_page
+    ADD CONSTRAINT hosted_version_public_baseline_page_pkey PRIMARY KEY (route, catalogue_id, build_id, from_phase, from_occurrence_after_ordinal, from_node_after_kind, from_node_after_id, from_root_null_done, from_root_after_parent_id);
+
+
+--
+-- Name: hosted_version_public_baseline hosted_version_public_baseline_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline
+    ADD CONSTRAINT hosted_version_public_baseline_pkey PRIMARY KEY (route, catalogue_id, build_id);
+
+
+--
+-- Name: hosted_version_public_baseline_subtree hosted_version_public_baseline_subtree_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline_subtree
+    ADD CONSTRAINT hosted_version_public_baseline_subtree_pkey PRIMARY KEY (route, catalogue_id, build_id, occurrence_id);
+
+
+--
 -- Name: hosted_version_revision hosted_version_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -5955,6 +6082,13 @@ CREATE INDEX hosted_version_builder_state_idx ON content.hosted_version_builder 
 --
 
 CREATE INDEX hosted_version_draft_activation_status_idx ON content.hosted_version_draft_activation USING btree (route, catalogue_id, status, input_id);
+
+
+--
+-- Name: hosted_version_public_baseline_status_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_version_public_baseline_status_idx ON content.hosted_version_public_baseline USING btree (route, catalogue_id, status, build_id);
 
 
 --
@@ -7430,6 +7564,54 @@ ALTER TABLE ONLY content.hosted_version_draft_activation
 
 ALTER TABLE ONLY content.hosted_version_draft_activation
     ADD CONSTRAINT hosted_version_draft_activatio_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_public_baseline_subtree hosted_version_public_baselin_route_catalogue_id_build_id_fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline_subtree
+    ADD CONSTRAINT hosted_version_public_baselin_route_catalogue_id_build_id_fkey1 FOREIGN KEY (route, catalogue_id, build_id) REFERENCES content.hosted_version_public_baseline(route, catalogue_id, build_id);
+
+
+--
+-- Name: hosted_version_public_baseline_page hosted_version_public_baselin_route_catalogue_id_build_id_fkey2; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline_page
+    ADD CONSTRAINT hosted_version_public_baselin_route_catalogue_id_build_id_fkey2 FOREIGN KEY (route, catalogue_id, build_id) REFERENCES content.hosted_version_public_baseline(route, catalogue_id, build_id);
+
+
+--
+-- Name: hosted_version_public_baseline hosted_version_public_baselin_route_catalogue_id_generatio_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline
+    ADD CONSTRAINT hosted_version_public_baselin_route_catalogue_id_generatio_fkey FOREIGN KEY (route, catalogue_id, generation_id) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_version_public_baseline_subtree hosted_version_public_baselin_route_catalogue_id_occurrenc_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline_subtree
+    ADD CONSTRAINT hosted_version_public_baselin_route_catalogue_id_occurrenc_fkey FOREIGN KEY (route, catalogue_id, occurrence_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_version_public_baseline hosted_version_public_baselin_route_catalogue_id_source_pu_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline
+    ADD CONSTRAINT hosted_version_public_baselin_route_catalogue_id_source_pu_fkey FOREIGN KEY (route, catalogue_id, source_publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_public_baseline hosted_version_public_baseline_route_catalogue_id_build_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_public_baseline
+    ADD CONSTRAINT hosted_version_public_baseline_route_catalogue_id_build_id_fkey FOREIGN KEY (route, catalogue_id, build_id) REFERENCES content.hosted_version_builder_source(route, catalogue_id, input_id);
 
 
 --
