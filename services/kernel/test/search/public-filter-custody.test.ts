@@ -1,7 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
-import { createPublicFilterCustody, readPublicFilterConsumerCustody } from '../../src/search/public-filter-custody.ts';
+import {
+  createPublicFilterCustody,
+  readPublicFilterConsumerCustody,
+  stepRetainedTargetErasure,
+} from '../../src/search/public-filter-custody.ts';
 import type { CustodyDefinition } from '../../src/search/public-filter-custody-contract.ts';
 import { releaseDigest, RELEASE_FORMAT, RELEASE_LIMITS, releaseAdmission, validateRelease } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -97,6 +101,160 @@ async function append(
   }
   return execution;
 }
+
+test('native interrupted prepared builds replay one fixed segment and read exact deep output windows with linear byte growth', async () => {
+  const resumed = createPublicFilterCustody(pool);
+  const samples: { count: number; bytes: number; rows: number }[] = [];
+  try {
+    for (const [scale, count] of [100, 500, 1000].entries()) {
+      const n = await setup();
+      const build = crypto.randomUUID();
+      const generation = BigInt(scale + 1);
+      const expected: unknown[] = [];
+      const cost = { bytes: 0, rows: 0 };
+      const charge = (result: { cost: { bytes: number; rows: number } }) => {
+        cost.bytes += result.cost.bytes;
+        cost.rows += result.cost.rows;
+      };
+      let rawCount = 0;
+      let outputCount = 0;
+      let after: readonly (string | number | null)[] | undefined;
+      let interrupted = false;
+      while (rawCount < count) {
+        const end = Math.min(count, rawCount + 100);
+        const expectedOutputCount = outputCount;
+        const entries = [];
+        for (let ordinal = rawCount; ordinal < end; ordinal++) {
+          const selected = ordinal % 4 !== 0;
+          const outputOrdinal = selected ? outputCount++ : null;
+          const hit = { id: `${build}:${ordinal}`, sort: [ordinal] };
+          const entry = {
+            rawOrdinal: ordinal,
+            outputOrdinal,
+            payload: { hit, owner: { original: hit.id, terminal: `${build}:owner:${ordinal}` } },
+          };
+          entries.push(entry);
+          if (selected) expected.push(hit);
+        }
+        const nextAfter = [end - 1] as const;
+        const request = {
+          registration: n.registration,
+          consumer: n.consumer,
+          build,
+          generation,
+          expected: { rawCount, outputCount: expectedOutputCount, after },
+          entries,
+          after: nextAfter,
+          rawExhausted: end === count,
+        };
+        // The producer loses its reply after the committed first segment.
+        const first = await registry.appendPreparationSegment(request, context());
+        expect(first.status).toBe('appended');
+        if (first.status !== 'appended') throw new Error(first.status);
+        charge(first);
+        if (!interrupted) {
+          const replay = await resumed.appendPreparationSegment(request, context());
+          expect(replay.status).toBe('replayed');
+          if (replay.status !== 'replayed') throw new Error(replay.status);
+          charge(replay);
+          const frontier = await resumed.readPreparationFrontier(
+            { registration: n.registration, build, generation },
+            context(),
+          );
+          expect(frontier.status).toBe('found');
+          if (frontier.status !== 'found') throw new Error(frontier.reason);
+          expect(frontier.frontier.rawCount).toBe(end);
+          expect(frontier.frontier.outputCount).toBe(outputCount);
+          expect(frontier.frontier.after).toEqual(nextAfter);
+          interrupted = true;
+        }
+        rawCount = end;
+        after = nextAfter;
+      }
+      const retained = await resumed.retainPreparedSegments(
+        {
+          registration: n.registration,
+          covered: n.covered,
+          build,
+          generation,
+          rawCount,
+          outputCount,
+          expiresAt: Date.now() + 60_000,
+        },
+        context(),
+      );
+      expect(retained.status).toBe('retained');
+      if (retained.status !== 'retained') throw new Error(retained.reason);
+      charge(retained);
+      const completed = await resumed.completePreparationBuild(
+        { queried: retained.queried, rawCount, outputCount },
+        context(),
+      );
+      expect(completed.status).toBe('complete');
+      if (completed.status !== 'complete') throw new Error(completed.reason);
+      charge(completed);
+      const acquired = await resumed.acquire(retained.queried, context());
+      expect(acquired.status).toBe('acquired');
+      if (acquired.status !== 'acquired') throw new Error(acquired.reason);
+      charge(acquired);
+      try {
+        const firstWindow = await resumed.readPreparedWindow(
+          { queried: retained.queried, use: acquired.use, afterOutputOrdinal: 0, size: 13 },
+          context(),
+        );
+        expect(firstWindow.status).toBe('ready');
+        if (firstWindow.status !== 'ready') throw new Error('Prepared first window is unavailable');
+        expect(firstWindow.hits).toEqual(expected.slice(0, 13));
+        charge(firstWindow);
+        const deepStart = Math.max(0, outputCount - 11);
+        const deepWindow = await resumed.readPreparedWindow(
+          { queried: retained.queried, use: acquired.use, afterOutputOrdinal: deepStart, size: 7 },
+          context(),
+        );
+        expect(deepWindow.status).toBe('ready');
+        if (deepWindow.status !== 'ready') throw new Error('Prepared deep window is unavailable');
+        expect(deepWindow.hits).toEqual(expected.slice(deepStart, deepStart + 7));
+        charge(deepWindow);
+      } finally {
+        const released = await resumed.release(acquired.use, context());
+        expect(released.status).toBe('released');
+        if (released.status !== 'released') throw new Error(released.reason);
+        charge(released);
+      }
+      const stored = await pool.query<{ raw_count: number; output_count: number; rows: number }>(
+        `SELECT p.raw_count,p.output_count,count(s.raw_ordinal)::integer AS rows
+         FROM search.public_filter_prepared p
+         LEFT JOIN search.public_filter_preparation_segment s
+           ON (s.partition_no,s.registration,s.build,s.generation)=
+              (p.partition_no,p.registration,p.build,p.generation)
+         WHERE (p.partition_no,p.registration,p.build,p.generation)=($1,$2,$3,$4::numeric)
+         GROUP BY p.raw_count,p.output_count`,
+        [n.registration.partition, n.registration.id, build, generation.toString()],
+      );
+      expect(stored.rows).toEqual([{ raw_count: count, output_count: expected.length, rows: count }]);
+      await resumed.closeObservation(retained.queried, search, context());
+      await resumed.retire(n.registration, context());
+      let erasureAfter: string | null = null;
+      for (;;) {
+        const erasure = await stepRetainedTargetErasure(
+          pool,
+          { partition: n.registration.partition, physicalTarget: n.physical.index, after: erasureAfter },
+          search,
+          context(),
+        );
+        if (erasure.state === 'pending') throw new Error(`Prepared fixture erasure held: ${erasure.reason}`);
+        if (erasure.state === 'complete') break;
+        erasureAfter = erasure.after;
+      }
+      samples.push({ count, ...cost });
+    }
+  } finally {
+    await resumed.close();
+  }
+  expect(samples.map(({ count }) => count)).toEqual([100, 500, 1000]);
+  expect(samples[2]!.bytes).toBeLessThan(samples[0]!.bytes * 18);
+  expect(samples[2]!.rows).toBeLessThan(samples[0]!.rows * 18);
+}, 120_000);
 
 test('real migrated durable custody preserves immutable definition observation cut and each exact execution across process recovery and rejects tuple mutation unknown execution expiry closed or replaced registrations without borrowing live coverage', async () => {
   const n = await setup();

@@ -15,6 +15,10 @@ import type {
 import type { OpenSearch } from './opensearch.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type { PublicFilterSourceBinding, NativeSourceRepairLocator, PublicSourceRepair } from '../semantic/index.ts';
+import type {
+  PublicFilterPreparationSegmentEntry,
+  PublicFilterPreparationSegmentFrontier,
+} from './public-filter-preparation-segment.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =
@@ -78,6 +82,18 @@ export type CustodyRetained = Readonly<{
   cost: CustodyCost;
 }>;
 export type CustodyRead = Readonly<{ queried: PublicFilterQueriedObservation; execution?: string }>;
+export type CustodyPreparationFrontier = PublicFilterPreparationSegmentFrontier;
+export type CustodyPreparationWindow = Readonly<{
+  status: 'ready';
+  hits: readonly unknown[];
+  rawCount: number;
+  outputCount: number;
+  cost: CustodyCost;
+}>;
+export type CustodyPreparationUnavailable = Readonly<{
+  status: 'preparing' | 'missing';
+  cost: CustodyCost;
+}>;
 /** Only the native reader may return this opaque locator. It is never caller evidence. */
 declare const privateProducerBrand: unique symbol;
 export type NativePublicFilterRepairSettlement = Readonly<{ id: string; [privateProducerBrand]: true }>;
@@ -167,6 +183,65 @@ export interface PublicFilterCustody {
     }>,
     context: PublicFilterConsumerContext,
   ): Promise<CustodyRetained | CustodyFailure>;
+  /** Read the small source cursor/count frontier for one exact immutable build. */
+  readPreparationFrontier(
+    request: Readonly<{
+      registration: CustodyRegistration;
+      build: string;
+      generation: bigint;
+    }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<Readonly<{ status: 'found'; frontier: CustodyPreparationFrontier; cost: CustodyCost }> | CustodyFailure>;
+  /** Atomically append one bounded step and advance its indexed raw/output frontier. */
+  appendPreparationSegment(
+    request: Readonly<{
+      registration: CustodyRegistration;
+      consumer: PublicFilterConsumer;
+      build: string;
+      generation: bigint;
+      expected: Readonly<{
+        rawCount: number;
+        outputCount: number;
+        after: readonly (string | number | null)[] | undefined;
+      }>;
+      entries: readonly PublicFilterPreparationSegmentEntry[];
+      after: readonly (string | number | null)[] | undefined;
+      rawExhausted: boolean;
+    }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<Readonly<{ status: 'appended' | 'replayed'; cost: CustodyCost }> | CustodyFailure>;
+  /** Create or recover the prepared observation after raw Search exhaustion; still unreadable until finalization. */
+  retainPreparedSegments(
+    request: Readonly<{
+      registration: CustodyRegistration;
+      covered: PrivacyReductionStart;
+      build: string;
+      generation: bigint;
+      rawCount: number;
+      outputCount: number;
+      expiresAt: number;
+    }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<CustodyRetained | CustodyFailure>;
+  /** Mark a raw-exhausted build servable after the consumer's source disclosure has completed. */
+  completePreparationBuild(
+    request: Readonly<{
+      queried: PublicFilterQueriedObservation;
+      rawCount: number;
+      outputCount: number;
+    }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<Readonly<{ status: 'complete'; cost: CustodyCost }> | CustodyFailure>;
+  /** One indexed output-ordinal window. It never includes the stored owner witness. */
+  readPreparedWindow(
+    request: Readonly<{
+      queried: PublicFilterQueriedObservation;
+      use: CustodyUse;
+      afterOutputOrdinal: number;
+      size: number;
+    }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<CustodyPreparationWindow | CustodyPreparationUnavailable | CustodyFailure>;
   acquire(
     queried: PublicFilterQueriedObservation,
     context: PublicFilterConsumerContext,

@@ -632,6 +632,7 @@ import type {
   CustodyCost,
   CustodyExecution,
 } from './public-filter-custody-contract.ts';
+import type { PublicFilterPreparationSegmentEntry } from './public-filter-preparation-segment.ts';
 import {
   createPublicFilterCustody,
   stepRetainedObservationErasure,
@@ -739,10 +740,11 @@ type ConsumerWork = {
   bootstrap: Omit<PublicSourceBootstrap, 'definition'>;
   queried: PublicFilterQueriedObservation | null;
   materializing: PublicFilterQueriedObservation | null;
-  prepared: (SearchResult['hits'][number] | DiscoveryEngineHit)[];
-  preparedRows: { original: string; terminal: string }[];
+  /** Older in-flight generations keep their original replayable payload until they settle. */
+  prepared?: (SearchResult['hits'][number] | DiscoveryEngineHit)[];
+  preparedRows?: { original: string; terminal: string }[];
   projectionSource: PublicSourceRepair['source'] | null;
-  after: readonly (string | number | null)[] | undefined;
+  after?: readonly (string | number | null)[];
   execution: string | null;
   frontier: string | null;
   repair: RetainedSourceRepair | null;
@@ -1355,6 +1357,36 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       throw new ConsumerFailure('routing_incomplete');
     return observed;
   }
+  async function finishPreparationBuild(
+    work: ConsumerWork,
+    q: PublicFilterQueriedObservation,
+    m: Meter,
+    context: PublicFilterConsumerContext,
+  ): Promise<boolean> {
+    if (q.snapshot.kind !== 'prepared') return true;
+    if (q.snapshot.build !== work.bootstrap.id) throw new ConsumerFailure('observation_lost');
+    const found = m.take(
+      await custody.readPreparationFrontier(
+        { registration: work.registration, build: q.snapshot.build, generation: q.snapshot.generation },
+        context,
+      ),
+    );
+    if (found.status !== 'found') throw new ConsumerFailure('observation_lost');
+    const frontier = found.frontier;
+    // In-flight observations from the array-backed generation remain readable
+    // under their original custody reader and erasure contract.
+    if (frontier.state === 'legacy') return true;
+    if (frontier.state === 'complete') return frontier.rawExhausted;
+    if (frontier.state !== 'building' || !frontier.rawExhausted) return false;
+    const completed = m.take(
+      await custody.completePreparationBuild(
+        { queried: q, rawCount: frontier.rawCount, outputCount: frontier.outputCount },
+        context,
+      ),
+    );
+    if (completed.status !== 'complete') throw new ConsumerFailure('observation_lost');
+    return true;
+  }
   async function ownRows(
     hits: readonly SearchResult['hits'][number][],
     m: Meter,
@@ -1641,57 +1673,196 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // page plan exists. The ordinary bounded preparation owner advances this
       // retained frontier; a later capture can adopt only its actual result.
       if (page) return { status: 'preparing', repair: job, cost: m.cost };
-      const q = work.materializing;
-      const acquired = m.take(await custody.acquire(q, context));
-      if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
-      try {
-        const result = await nativeBatch(
-          q,
-          recovery.bootstrap.definition.capture,
-          PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
-          work.after,
-          acquired.use,
-          m,
-          context,
-        );
-        const raw = result.raw;
-        m.cost.candidates += raw.length;
-        m.cost.rows += raw.length;
-        m.cost.bytes += Buffer.byteLength(encodeState(raw));
-        let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
+      const legacy = Array.isArray(work.prepared) && Array.isArray(work.preparedRows);
+      if (!legacy && (work.prepared !== undefined || work.preparedRows !== undefined))
+        throw new ConsumerFailure('observation_lost');
+      if (legacy) {
+        const q = work.materializing;
+        const acquired = m.take(await custody.acquire(q, context));
+        if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
         try {
-          checked =
-            'representation' in recovery.bootstrap.definition.capture
-              ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
-              : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
-        } catch (error) {
-          if (error instanceof MixedOwnerPending) {
+          const result = await nativeBatch(
+            q,
+            recovery.bootstrap.definition.capture,
+            PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
+            work.after,
+            acquired.use,
+            m,
+            context,
+          );
+          const raw = result.raw;
+          m.cost.candidates += raw.length;
+          m.cost.rows += raw.length;
+          m.cost.bytes += Buffer.byteLength(encodeState(raw));
+          let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
+          try {
+            checked =
+              'representation' in recovery.bootstrap.definition.capture
+                ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
+                : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
+          } catch (error) {
+            if (error instanceof MixedOwnerPending) {
+              await save(work, encoded, true, m);
+              return { status: 'preparing', repair: job, cost: m.cost };
+            }
+            throw error;
+          }
+          work.prepared!.push(
+            ...('representation' in recovery.bootstrap.definition.capture
+              ? raw
+              : checked.accepted.map((position) => raw[position]!)),
+          );
+          work.preparedRows!.push(...checked.rows);
+          work.materializing = result.queried;
+          const after = raw.at(-1)?.sort ?? work.after;
+          if (after === undefined) delete work.after;
+          else work.after = after;
+          if (work.prepared!.length > PUBLIC_FILTER_PREPARATION_RAW_LIMIT)
+            return m.unavailable('dependency_unavailable');
+          if (!result.exhausted) {
             await save(work, encoded, true, m);
             return { status: 'preparing', repair: job, cost: m.cost };
           }
-          throw error;
+          const prepared = m.take(
+            await custody.retainPrepared(
+              {
+                registration: work.registration,
+                covered: work.bootstrap.covered,
+                build: work.bootstrap.id,
+                generation: 1n,
+                rows: work.preparedRows!,
+                expiresAt: publication ? Number.MAX_SAFE_INTEGER : Date.now() + 300_000,
+              },
+              context,
+            ),
+          );
+          if (prepared.status !== 'retained') return m.unavailable('observation_lost');
+          work.queried = prepared.queried;
+          encoded = await save(work, encoded, true, m);
+          owned.set(prepared.queried.snapshot.observation, prepared.queried);
+        } finally {
+          m.add((await custody.release(acquired.use, context)).cost);
         }
-        work.prepared.push(
-          ...('representation' in recovery.bootstrap.definition.capture
-            ? raw
-            : checked.accepted.map((position) => raw[position]!)),
+      } else {
+        // A PIT renewal and the segment commit are separate owners. Re-read its
+        // exact custody tuple before resuming so a lost consumer-work save can
+        // still continue from the database frontier and current PIT locator.
+        const saved = (
+          await m.sql<{ queried: string; registration: string }>(
+            `SELECT queried,registration FROM search.public_filter_observation
+             WHERE (partition_no,observation)=($1,$2) AND state='open'`,
+            [locatorHome(work.materializing.snapshot.observation), work.materializing.snapshot.observation],
+          )
+        ).rows[0];
+        if (!saved || saved.registration !== work.registration.id) return m.unavailable('observation_lost');
+        const q = decodeState<PublicFilterQueriedObservation>(saved.queried);
+        if (
+          q.snapshot.kind !== 'pit' ||
+          q.snapshot.observation !== work.materializing.snapshot.observation ||
+          !isDeepStrictEqual(q.consumer, consumer)
+        )
+          return m.unavailable('observation_lost');
+        work.materializing = q;
+        encoded = await save(work, encoded, true, m);
+        const found = m.take(
+          await custody.readPreparationFrontier(
+            { registration: work.registration, build: work.bootstrap.id, generation: 1n },
+            context,
+          ),
         );
-        work.preparedRows.push(...checked.rows);
-        work.materializing = result.queried;
-        work.after = raw.at(-1)?.sort ?? work.after;
-        if (work.prepared.length > PUBLIC_FILTER_PREPARATION_RAW_LIMIT) return m.unavailable('dependency_unavailable');
-        if (!result.exhausted) {
-          await save(work, encoded, true, m);
-          return { status: 'preparing', repair: job, cost: m.cost };
+        if (found.status !== 'found') return m.unavailable('observation_lost');
+        let rawCount = found.frontier.rawCount;
+        let outputCount = found.frontier.outputCount;
+        let exhausted = found.frontier.rawExhausted;
+        if (!['missing', 'building', 'complete'].includes(found.frontier.state))
+          return m.unavailable('observation_lost');
+        if (!exhausted) {
+          const acquired = m.take(await custody.acquire(q, context));
+          if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
+          try {
+            const result = await nativeBatch(
+              q,
+              recovery.bootstrap.definition.capture,
+              PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
+              found.frontier.after,
+              acquired.use,
+              m,
+              context,
+            );
+            const raw = result.raw;
+            m.cost.candidates += raw.length;
+            m.cost.rows += raw.length;
+            m.cost.bytes += Buffer.byteLength(encodeState(raw));
+            let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
+            try {
+              checked =
+                'representation' in recovery.bootstrap.definition.capture
+                  ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
+                  : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
+            } catch (error) {
+              if (error instanceof MixedOwnerPending) {
+                await save(work, encoded, true, m);
+                return { status: 'preparing', repair: job, cost: m.cost };
+              }
+              throw error;
+            }
+            const accepted = new Set(
+              'representation' in recovery.bootstrap.definition.capture
+                ? raw.map((_hit, index) => index)
+                : checked.accepted,
+            );
+            let nextOutputOrdinal = outputCount;
+            const entries: PublicFilterPreparationSegmentEntry[] = raw.map((hit, index) => {
+              const outputOrdinal = accepted.has(index) ? nextOutputOrdinal++ : null;
+              return {
+                rawOrdinal: rawCount + index,
+                outputOrdinal,
+                payload: { hit, owner: checked.rows[index]! },
+              };
+            });
+            const nextRawCount = rawCount + raw.length;
+            if (nextRawCount > PUBLIC_FILTER_PREPARATION_RAW_LIMIT) return m.unavailable('dependency_unavailable');
+            const appended = m.take(
+              await custody.appendPreparationSegment(
+                {
+                  registration: work.registration,
+                  consumer,
+                  build: work.bootstrap.id,
+                  generation: 1n,
+                  expected: {
+                    rawCount,
+                    outputCount,
+                    after: found.frontier.after,
+                  },
+                  entries,
+                  after: raw.at(-1)?.sort ?? found.frontier.after,
+                  rawExhausted: result.exhausted,
+                },
+                context,
+              ),
+            );
+            if (appended.status !== 'appended' && appended.status !== 'replayed')
+              return m.unavailable('observation_lost');
+            rawCount = nextRawCount;
+            outputCount = nextOutputOrdinal;
+            exhausted = result.exhausted;
+            work.materializing = result.queried;
+            owned.set(result.queried.snapshot.observation, result.queried);
+            encoded = await save(work, encoded, true, m);
+          } finally {
+            m.add((await custody.release(acquired.use, context)).cost);
+          }
         }
+        if (!exhausted) return { status: 'preparing', repair: job, cost: m.cost };
         const prepared = m.take(
-          await custody.retainPrepared(
+          await custody.retainPreparedSegments(
             {
               registration: work.registration,
               covered: work.bootstrap.covered,
               build: work.bootstrap.id,
               generation: 1n,
-              rows: work.preparedRows,
+              rawCount,
+              outputCount,
               expiresAt: publication ? Number.MAX_SAFE_INTEGER : Date.now() + 300_000,
             },
             context,
@@ -1701,8 +1872,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         work.queried = prepared.queried;
         encoded = await save(work, encoded, true, m);
         owned.set(prepared.queried.snapshot.observation, prepared.queried);
-      } finally {
-        m.add((await custody.release(acquired.use, context)).cost);
       }
     }
     if (publication && work.materializing && work.queried) {
@@ -1762,6 +1931,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (!page) {
         const observation = await observe(q, null, undefined, m, context);
         if (!observationIsDisclosableFromUnknown(observation))
+          return { status: 'preparing', repair: job, cost: m.cost };
+        if (!(await finishPreparationBuild(work, q, m, context)))
           return { status: 'preparing', repair: job, cost: m.cost };
       }
       return { status: 'captured', queried: q, repair: job, cost: m.cost };
@@ -1868,10 +2039,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         bootstrap: retainedBootstrap(begun.bootstrap),
         queried: null,
         materializing: null,
-        prepared: [],
-        preparedRows: [],
         projectionSource: null,
-        after: undefined,
         execution: null,
         frontier: null,
         repair: null,
@@ -1962,6 +2130,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (page) await beginPage(page, q, use, prefix, previousEncoded, allowance);
       const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
       if ('blocking' in started && !observationIsDisclosableFromUnknown(started)) return preparing();
+      if (!(await finishPreparationBuild(work, q, m, context))) return preparing();
       await physical(q, m, context);
       // Reserve this attempt before external dispatch. An uncertain engine result cannot regain allowance.
       const execution = randomUUID();
@@ -1979,9 +2148,21 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let total: SearchResult['total'] | undefined;
       if (q.snapshot.kind === 'prepared') {
         const offset = prefix ? previous!.consumed + prefix.consumed : 0;
-        raw = work.prepared.slice(offset, offset + size);
-        exhausted = offset + raw.length >= work.prepared.length;
-        if (!mixed) total = { value: work.prepared.length, relation: 'exact' };
+        if (Array.isArray(work.prepared)) {
+          // Legacy generations retain their original observation and reader.
+          raw = work.prepared.slice(offset, offset + size);
+          exhausted = offset + raw.length >= work.prepared.length;
+          if (!mixed) total = { value: work.prepared.length, relation: 'exact' };
+        } else {
+          const window = m.take(
+            await custody.readPreparedWindow({ queried: q, use: use!, afterOutputOrdinal: offset, size }, context),
+          );
+          if (window.status === 'preparing') return preparing();
+          if (window.status !== 'ready') return m.unavailable('observation_lost');
+          raw = window.hits as RetainedWindow['raw'];
+          exhausted = offset + raw.length >= window.outputCount;
+          if (!mixed) total = { value: window.outputCount, relation: 'exact' };
+        }
       } else if (reused.length >= size || previous?.exhausted) {
         raw = reused.slice(0, size);
         exhausted = previous!.exhausted && reused.length <= size;
@@ -2614,6 +2795,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             context,
             m,
           );
+        } else if (original.publication.queried.snapshot.kind === 'prepared') {
+          const q = original.publication.queried;
+          const loaded = await load({ consumer: input.consumer, job: q.snapshot.observation }, m);
+          if (!(await finishPreparationBuild(loaded.work, q, m, context))) return m.unavailable('source_pending');
         }
         return { ...original, cost: m.cost };
       }
@@ -2687,6 +2872,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (completion.status === 'pending') {
         await repairStep(job, context, m);
       }
+      if (completion.status === 'complete' && !(await finishPreparationBuild(work, q, m, context)))
+        return m.unavailable('source_pending');
       return { ...completion, cost: m.cost };
     } catch (error) {
       return failure(error, m);

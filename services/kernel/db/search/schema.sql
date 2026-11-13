@@ -1168,9 +1168,12 @@ CREATE TABLE search.public_filter_observation (
     prepared_rows text,
     consumer_work text,
     consumer_bootstrap text,
+    prepared_build text COLLATE pg_catalog."C",
+    prepared_generation numeric,
     CONSTRAINT public_filter_observation_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
     CONSTRAINT public_filter_observation_covered_check CHECK ((octet_length(covered) <= 4096)),
     CONSTRAINT public_filter_observation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT public_filter_observation_prepared_build_check CHECK ((((prepared_build IS NULL) AND (prepared_generation IS NULL)) OR ((prepared_build IS NOT NULL) AND (prepared_generation > (0)::numeric) AND (scale(prepared_generation) = 0)))),
     CONSTRAINT public_filter_observation_prepared_rows_check CHECK ((octet_length(prepared_rows) <= 1048576)),
     CONSTRAINT public_filter_observation_queried_check CHECK ((octet_length(queried) <= 65536)),
     CONSTRAINT public_filter_observation_revision_check CHECK ((revision > 0)),
@@ -1194,6 +1197,24 @@ CREATE TABLE search.public_filter_pit (
 
 
 --
+-- Name: public_filter_preparation_segment; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_preparation_segment (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    build text NOT NULL COLLATE pg_catalog."C",
+    generation numeric NOT NULL,
+    raw_ordinal integer NOT NULL,
+    output_ordinal integer,
+    payload jsonb NOT NULL,
+    CONSTRAINT public_filter_preparation_segment_generation_check CHECK (((generation > (0)::numeric) AND (scale(generation) = 0))),
+    CONSTRAINT public_filter_preparation_segment_output_ordinal_check CHECK (((output_ordinal >= 0) AND (output_ordinal <= 999))),
+    CONSTRAINT public_filter_preparation_segment_raw_ordinal_check CHECK (((raw_ordinal >= 0) AND (raw_ordinal <= 999)))
+);
+
+
+--
 -- Name: public_filter_prepared; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1204,8 +1225,17 @@ CREATE TABLE search.public_filter_prepared (
     generation numeric NOT NULL,
     rows text NOT NULL,
     state text DEFAULT 'active'::text NOT NULL,
+    segment_state text DEFAULT 'legacy'::text NOT NULL,
+    raw_count integer DEFAULT 0 NOT NULL,
+    output_count integer DEFAULT 0 NOT NULL,
+    raw_exhausted boolean DEFAULT false NOT NULL,
+    source_cursor text,
+    CONSTRAINT public_filter_prepared_check CHECK (((output_count >= 0) AND (output_count <= raw_count))),
     CONSTRAINT public_filter_prepared_generation_check CHECK (((generation > (0)::numeric) AND (scale(generation) = 0))),
+    CONSTRAINT public_filter_prepared_raw_count_check CHECK (((raw_count >= 0) AND (raw_count <= 1000))),
     CONSTRAINT public_filter_prepared_rows_check CHECK ((octet_length(rows) <= 1048576)),
+    CONSTRAINT public_filter_prepared_segment_state_check CHECK ((segment_state = ANY (ARRAY['legacy'::text, 'building'::text, 'complete'::text, 'erasing'::text]))),
+    CONSTRAINT public_filter_prepared_source_cursor_check CHECK ((octet_length(source_cursor) <= 4096)),
     CONSTRAINT public_filter_prepared_state_check CHECK ((state = ANY (ARRAY['active'::text, 'erasing'::text])))
 );
 
@@ -1879,6 +1909,14 @@ ALTER TABLE ONLY search.public_filter_pit
 
 
 --
+-- Name: public_filter_preparation_segment public_filter_preparation_segment_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_preparation_segment
+    ADD CONSTRAINT public_filter_preparation_segment_pkey PRIMARY KEY (partition_no, registration, build, generation, raw_ordinal);
+
+
+--
 -- Name: public_filter_prepared public_filter_prepared_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2193,6 +2231,13 @@ CREATE UNIQUE INDEX public_filter_observation_bootstrap ON search.public_filter_
 
 
 --
+-- Name: public_filter_observation_prepared_build; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_observation_prepared_build ON search.public_filter_observation USING btree (partition_no, registration, prepared_build, prepared_generation) WHERE ((prepared_build IS NOT NULL) AND (state = 'open'::text));
+
+
+--
 -- Name: public_filter_observation_publication; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -2211,6 +2256,13 @@ CREATE INDEX public_filter_observation_registration ON search.public_filter_obse
 --
 
 CREATE INDEX public_filter_pit_owned ON search.public_filter_pit USING btree (partition_no, observation, id) WHERE (state = 'owned'::text);
+
+
+--
+-- Name: public_filter_preparation_segment_output; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_preparation_segment_output ON search.public_filter_preparation_segment USING btree (partition_no, registration, build, generation, output_ordinal) WHERE (output_ordinal IS NOT NULL);
 
 
 --
@@ -2573,6 +2625,14 @@ ALTER TABLE ONLY search.public_filter_observation
 
 ALTER TABLE ONLY search.public_filter_pit
     ADD CONSTRAINT public_filter_pit_partition_no_observation_fkey FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation(partition_no, observation);
+
+
+--
+-- Name: public_filter_preparation_segment public_filter_preparation_seg_partition_no_registration_bu_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_preparation_segment
+    ADD CONSTRAINT public_filter_preparation_seg_partition_no_registration_bu_fkey FOREIGN KEY (partition_no, registration, build, generation) REFERENCES search.public_filter_prepared(partition_no, registration, build, generation);
 
 
 --

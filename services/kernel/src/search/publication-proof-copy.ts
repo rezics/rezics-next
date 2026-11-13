@@ -31,10 +31,33 @@ export async function drainGenerationPublicationProofCopy(
   if (!retained.rowCount) return false;
   const row = retained.rows[0]!;
   const work = decode<Record<string, unknown>>(row.consumer_work);
-  const proofWork = JSON.stringify(tree({ ...work, prepared: [], preparedRows: [], after: undefined }, 'value'));
+  const { prepared: _prepared, preparedRows: _preparedRows, ...boundedWork } = work;
+  const proofWork = JSON.stringify(tree({ ...boundedWork, after: undefined }, 'value'));
+  await tx.query(
+    `UPDATE search.public_filter_prepared SET state='erasing',
+       segment_state=CASE WHEN segment_state='legacy' THEN 'legacy' ELSE 'erasing' END
+     WHERE partition_no=0 AND registration=$1 AND build=$2`,
+    [row.registration, '0:' + row.bootstrap],
+  );
+  const segments = await tx.query(
+    `WITH candidate AS MATERIALIZED (
+       SELECT partition_no,registration,build,generation,raw_ordinal
+       FROM search.public_filter_preparation_segment
+       WHERE partition_no=0 AND registration=$1 AND build=$2
+       ORDER BY generation,raw_ordinal LIMIT 100
+     ) DELETE FROM search.public_filter_preparation_segment s USING candidate c
+       WHERE (s.partition_no,s.registration,s.build,s.generation,s.raw_ordinal)=
+             (c.partition_no,c.registration,c.build,c.generation,c.raw_ordinal)
+       RETURNING s.raw_ordinal`,
+    [row.registration, '0:' + row.bootstrap],
+  );
+  if (segments.rowCount) return true;
   const prepared = await tx.query(
-    `UPDATE search.public_filter_prepared SET rows=$3,state='erasing'
-     WHERE partition_no=0 AND registration=$1 AND build=$2 AND (state<>'erasing' OR rows<>$3)`,
+    `UPDATE search.public_filter_prepared SET rows=$3,state='erasing',raw_count=0,output_count=0,
+       raw_exhausted=false,source_cursor=NULL
+     WHERE partition_no=0 AND registration=$1 AND build=$2 AND
+       (state<>'erasing' OR rows<>$3 OR raw_count<>0 OR output_count<>0 OR raw_exhausted OR source_cursor IS NOT NULL
+         OR segment_state NOT IN ('legacy','erasing'))`,
     [row.registration, '0:' + row.bootstrap, encode([])],
   );
   const observation = await tx.query(
@@ -66,7 +89,13 @@ export async function hasRetainedWriterPublicationCopies(
     UNION ALL
     SELECT 1 FROM search.public_filter_prepared p
     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(p.partition_no,p.registration)
-    WHERE r.partition_no=$1 AND r.physical_target=$2 AND (p.state<>'erasing' OR p.rows<>$3)
+    WHERE r.partition_no=$1 AND r.physical_target=$2 AND
+      (p.state<>'erasing' OR p.rows<>$3 OR p.raw_count<>0 OR p.output_count<>0 OR p.raw_exhausted
+       OR p.source_cursor IS NOT NULL OR p.segment_state NOT IN ('legacy','erasing') OR EXISTS (
+      SELECT 1 FROM search.public_filter_preparation_segment s
+      WHERE (s.partition_no,s.registration,s.build,s.generation)=
+        (p.partition_no,p.registration,p.build,p.generation)
+    ))
     LIMIT 1`,
     [partition, physicalTarget, encode([]), publicationJob, Date.now()],
   );

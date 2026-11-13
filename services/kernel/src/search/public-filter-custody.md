@@ -57,6 +57,18 @@ it does not assert population completeness. Each observation stores its own cove
 under a durable active use lease and retain the original start plus original/terminal rows. Exact retries are
 idempotent; different values under the same execution ID reject. Observation-only reads return execution:null.
 
+New public-filter generations use `public_filter_preparation_segment` under the exact
+`(partition_no,registration,build,generation)` key. Each `appendPreparationSegment` transaction checks the expected
+raw/output counts and Source cursor, inserts at most 100 raw candidates with their already-checked owner witnesses,
+and advances the parent counts, cursor and exhaustion bit under one row lock. Exact retries compare the bounded raw
+ordinal range; a changed retry or stale frontier is refused. New `consumer_work` rows contain only the build locator
+and bounded control state, never accumulated hit or owner arrays. `retainPreparedSegments` binds the terminal build
+to an observation without making it readable. After the consumer's native Source disclosure succeeds,
+`completePreparationBuild` proves raw and selected output ordinals each have exact contiguous coverage and marks the
+build complete. `readPreparedWindow` then uses the output ordinal index for one bounded window and returns only hit
+payloads. Existing legacy rows keep their original reader. Observation and registration erasure delete segment rows
+in bounded batches under the existing custody barriers before clearing their parent cursor and counts.
+
 Acquire precedes external engine work; release belongs in the producer's finally block. Leases expire at the
 request deadline (at most five minutes) so process loss cannot permanently pin a PIT. Callers must enforce that
 same deadline on external work. Close installs a durable admission barrier, drains existing leases and releases

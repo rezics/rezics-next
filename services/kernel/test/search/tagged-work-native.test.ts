@@ -159,25 +159,41 @@ test('released tagged discovery agrees across native direct and resumed prepared
     expect(firstDirect.body.code).toBe('index_not_ready');
     expect(firstDirect.headers.get('retry-after')).toBeTruthy();
     const targetPattern = `${fixture.search.indexPrefix}discovery-g%`;
-    const progress = await fixture.inspect<{ consumer_work: string }>(
-      `SELECT consumer_work FROM search.public_filter_registration
+    const progress = await fixture.inspect<{ consumer_work: string; id: string; partition_no: number }>(
+      `SELECT consumer_work,id,partition_no FROM search.public_filter_registration
        WHERE physical_target LIKE $1 AND consumer_work IS NOT NULL LIMIT 1`,
       [targetPattern],
     );
     expect(progress.rows).toHaveLength(1);
     const work = decodeConsumerState(JSON.parse(progress.rows[0]!.consumer_work)) as {
-      prepared: { key: { id: string }; sort: readonly (string | number | null)[] }[];
-      after?: readonly (string | number | null)[];
+      bootstrap: { id: string };
       rounds: number;
       charged: number;
     };
-    const rawIds = work.prepared.map(({ key }) => key.id);
+    expect(work).not.toHaveProperty('prepared');
+    expect(work).not.toHaveProperty('preparedRows');
+    const prepared = await fixture.inspect<{ raw_count: number; output_count: number; source_cursor: string | null }>(
+      `SELECT raw_count,output_count,source_cursor FROM search.public_filter_prepared
+       WHERE partition_no=$1 AND registration=$2 AND build=$3 AND generation=1`,
+      [progress.rows[0]!.partition_no, progress.rows[0]!.id, work.bootstrap.id],
+    );
+    expect(prepared.rows).toHaveLength(1);
+    const segments = await fixture.inspect<{ raw_ordinal: number; output_ordinal: number | null; id: string }>(
+      `SELECT raw_ordinal,output_ordinal,payload->'hit'->'key'->>'id' AS id
+       FROM search.public_filter_preparation_segment
+       WHERE partition_no=$1 AND registration=$2 AND build=$3 AND generation=1 ORDER BY raw_ordinal`,
+      [progress.rows[0]!.partition_no, progress.rows[0]!.id, work.bootstrap.id],
+    );
+    const rawIds = segments.rows.map(({ id }) => id);
     const rawBound = taggedWorkHitScanBound(undefined, idRequest.limit);
     expect(rawIds.length).toBeGreaterThanOrEqual(PUBLIC_FILTER_PREPARATION_BATCH_SIZE);
     expect(rawIds.length).toBeGreaterThan(rawBound);
     expect(rawIds.length).toBeLessThanOrEqual(PUBLIC_FILTER_PREPARATION_RAW_LIMIT);
     expect(new Set(rawIds).size).toBe(rawIds.length);
-    expect(work.after).toEqual(work.prepared.at(-1)?.sort);
+    expect(prepared.rows[0]!.raw_count).toBe(rawIds.length);
+    expect(prepared.rows[0]!.output_count).toBeGreaterThan(0);
+    expect(prepared.rows[0]!.source_cursor).toBeTruthy();
+    expect(segments.rows.map(({ raw_ordinal }) => raw_ordinal)).toEqual(rawIds.map((_id, index) => index));
     expect(work.rounds).toBeLessThanOrEqual(3);
     expect(work.charged).toBeLessThanOrEqual(rawBound);
     const preparedFirst = await usefulPage(fixture, idRequest);
@@ -192,15 +208,18 @@ test('released tagged discovery agrees across native direct and resumed prepared
     expect(preparedSecond.body.next).toBeNull();
     expect(preparedIds).not.toContain(excluded.id);
     expect(preparedIds).not.toContain(wrongSpoiler.id);
-    const retained = await fixture.inspect<{ rows: string; state: string }>(
-      `SELECT p.rows,p.state FROM search.public_filter_prepared p
+    const retained = await fixture.inspect<{ segment_state: string; output_count: number }>(
+      `SELECT p.segment_state,p.output_count FROM search.public_filter_prepared p
        JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(p.partition_no,p.registration)
-       WHERE r.physical_target LIKE $1 AND p.rows LIKE '%' || $2 || '%' LIMIT 1`,
-      [targetPattern, exactA.id],
+       WHERE r.physical_target LIKE $1 AND p.build=$2 AND p.generation=1`,
+      [targetPattern, work.bootstrap.id],
     );
     expect(retained.rows).toHaveLength(1);
-    expect(retained.rows[0]!.state).toBe('active');
-    expect(decoys.filter(({ id }) => retained.rows[0]!.rows.includes(id)).length).toBeGreaterThanOrEqual(100);
+    expect(retained.rows[0]!.segment_state).toBe('complete');
+    expect(retained.rows[0]!.output_count).toBeGreaterThan(0);
+    expect(rawIds).toContain(exactA.id);
+    expect(rawIds).toContain(exactB.id);
+    expect(decoys.filter(({ id }) => rawIds.includes(id)).length).toBeGreaterThanOrEqual(100);
 
     const nameRequest = { ...idRequest, sort: 'name' };
     const directFirst = await usefulPage(fixture, nameRequest);

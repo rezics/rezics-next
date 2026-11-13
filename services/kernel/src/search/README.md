@@ -1077,6 +1077,14 @@ measurements; broader acceptance remains with integration.
 
 ## Cost
 
+### Prepared public-filter generations
+
+Decision: new public-filter generations store raw candidates and their checked owner witnesses in indexed rows keyed by the exact registration, build and generation; each bounded append atomically advances one scalar frontier, and ordinal reads open only after raw exhaustion, exact coverage and native Source disclosure.
+
+Let `N` be the global physical candidate population, `n` the raw candidates retained by one selected immutable build, `o` its output rows after owner and duplicate reduction, `b=100` the raw append batch, and `p<=200` one bounded output window. The skew `n/o` is retained explicitly: rejected and duplicate raw candidates still consume the `n<=1000` build ceiling. A build appends `b` engine candidates and at most `b` owner witnesses per step. The exact registration and target lookup plus one primary-key parent read, one shared admission lock and one parent-row lock are constant per step. Segment rows add one primary-key write each and selected outputs add one partial output-index write; one parent update advances counts, exhaustion and a cursor bounded to 4096 bytes. Request, parameter and result bytes, returned rows, affected writes, engine candidates and frontier writes use the existing Search/Custody meter. Thus cumulative append payload bytes are `O(n)` and indexed insert work is `O(n log n)` over complete consumption; appends never serialize the retained prefix.
+
+An exact replay of a lost append reply performs one indexed raw-ordinal range seek and compares at most `b` stored payloads; the attempted request, read, bytes and lock stay charged. Failed attempts do not move the frontier. Finalization locks the exact observation and parent, scans at most `n` indexed raw keys once, proves raw and selected output ordinals each cover their exact contiguous range, then writes one completion state; it does not copy the payload. A page or mixed refill seeks the output index once and reads at most `p` rows, for `O(log n+p)` index work and response bytes proportional to that window. Retirement uses the existing admission/reference barrier and deletes at most 100 raw-key rows per invocation, including their output-index entries, before clearing the small parent counters and cursor. `N` remains global engine work, `n` is one selected build, `b` is append work, `p` is served work, and `n/o` captures filtering skew; these native bounds do not claim an OpenSearch latency bound.
+
 - Retained count-free facet pages touch prepared generation/value keys, current contributor/target Source and
   shared privacy observations. [The composed derivation](cost-retained-facets.md) separates ready pages from
   preparation and identifies the population-dependent eligible-value refill; LIMIT does not bound the whole call.
@@ -2183,7 +2191,8 @@ proof metadata remains available for replay. Every other retained copy and dispa
 drain. Preparation retires its temporary materialization observation through the existing finite custody
 cleanup, retaining its locator until removal so a restart resumes child-before-parent retirement.
 The publication's prepared observation remains until explicit custody retirement, independently of serving
-lease expiry. Draining clears both prepared row stores and the consumer work's duplicate preparation arrays.
+lease expiry. Draining removes legacy prepared payloads or deletes new segment rows in batches of at most 100,
+then clears their parent counters and cursor; new consumer control rows retain no candidate or owner arrays.
 The existing prepared `erasing` state prevents a new reader from enrolling on that drained proof even after
 the publication gate releases; original admitted readers drain before that transition.
 Reconciliation retries preserve the original Source tuple and the retained alias intent.

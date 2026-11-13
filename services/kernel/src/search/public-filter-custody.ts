@@ -52,6 +52,7 @@ import type {
   RetainedRepairPage,
   PublicFilterRepairSourceBinding,
   CustodyCost,
+  CustodyPreparationFrontier,
   CustodyDefinition,
   CustodyExecution,
   CustodyFailure,
@@ -62,6 +63,14 @@ import type {
   CustodyRegistration,
   PublicFilterCustody,
 } from './public-filter-custody-contract.ts';
+import {
+  insertSegmentRows,
+  readSegmentReplay,
+  readSegmentWindow,
+  retireSegmentRows,
+  type PublicFilterPreparationSegmentEntry,
+  type PublicFilterPreparationSegmentKey,
+} from './public-filter-preparation-segment.ts';
 
 const readSql = readFileSync(new URL('./public-filter-custody-read.sql', import.meta.url), 'utf8');
 // Process-local hints span factories (and wrapped pools). No hint can establish durable drain.
@@ -393,6 +402,40 @@ async function read(
     cost: meter,
   };
 }
+
+function preparationKey(
+  registration: CustodyRegistration,
+  build: string,
+  generation: bigint,
+): PublicFilterPreparationSegmentKey {
+  return { partition: registration.partition, registration: registration.id, build, generation };
+}
+
+function preparationFrontier(
+  row:
+    | {
+        segment_state: CustodyPreparationFrontier['state'];
+        raw_count: number;
+        output_count: number;
+        source_cursor: string | null;
+        raw_exhausted: boolean;
+      }
+    | undefined,
+): CustodyPreparationFrontier {
+  if (!row) return { state: 'missing', rawCount: 0, outputCount: 0, after: undefined, rawExhausted: false };
+  return {
+    state: row.segment_state,
+    rawCount: row.raw_count,
+    outputCount: row.output_count,
+    after: row.source_cursor === null ? undefined : decode(row.source_cursor),
+    rawExhausted: row.raw_exhausted,
+  };
+}
+
+function preparationCursor(value: readonly (string | number | null)[] | undefined) {
+  return value === undefined ? null : encode(value);
+}
+
 export async function readPublicFilterConsumerCustody(
   pool: Pool,
   request: CustodyRead,
@@ -933,12 +976,15 @@ export function createPublicFilterCustody(
     prepared: unknown,
     meter: Meter,
     db: Pool | PoolClient = pool,
+    preparedKey?: Readonly<{ build: string; generation: bigint }>,
   ) {
     const inserted = await sql(
       db,
       meter,
-      `WITH retained AS (INSERT INTO search.public_filter_observation (partition_no,observation,registration,queried,covered,expires_at,state,prepared_rows)
-      SELECT r.partition_no,$3,r.id,$4,$5,$6,'open',$7 FROM search.public_filter_registration r JOIN search.public_filter_target t USING (partition_no,physical_target)
+      `WITH retained AS (INSERT INTO search.public_filter_observation
+        (partition_no,observation,registration,queried,covered,expires_at,state,prepared_rows,prepared_build,prepared_generation)
+      SELECT r.partition_no,$3,r.id,$4,$5,$6,'open',$7,$11,$12
+      FROM search.public_filter_registration r JOIN search.public_filter_target t USING (partition_no,physical_target)
       WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND t.incarnation=$8 FOR SHARE OF r FOR UPDATE OF t RETURNING partition_no,observation), owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,$9,$10,'owned' FROM retained WHERE $10::text IS NOT NULL) SELECT observation FROM retained`,
       [
         value.partition,
@@ -951,10 +997,43 @@ export function createPublicFilterCustody(
         q.consumer.incarnation,
         q.snapshot.kind === 'pit' ? digest(q.snapshot.pit) : null,
         q.snapshot.kind === 'pit' ? q.snapshot.pit : null,
+        preparedKey?.build ?? null,
+        preparedKey?.generation.toString() ?? null,
       ],
     );
     if (!inserted.rowCount) throw new Failure('binding_mismatch');
     return { status: 'retained' as const, queried: q, cost: meter };
+  }
+  async function admitPreparationWrite(
+    client: PoolClient,
+    meter: Meter,
+    input: Readonly<{ registration: CustodyRegistration; consumer: PublicFilterConsumer }>,
+  ) {
+    await sql(client, meter, 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [
+      input.consumer.physicalTarget,
+    ]);
+    const fenced = await sql(
+      client,
+      meter,
+      'SELECT 1 FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1 AND publication_fence IS NOT NULL LIMIT 1',
+      [input.consumer.physicalTarget],
+    );
+    if (fenced.rowCount) throw new Failure('binding_mismatch');
+    const active = await sql(
+      client,
+      meter,
+      `SELECT r.consumer,t.incarnation FROM search.public_filter_registration r
+       JOIN search.public_filter_target t USING(partition_no,physical_target)
+       WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND r.physical_target=$3
+       FOR SHARE OF r,t`,
+      [input.registration.partition, input.registration.id, input.consumer.physicalTarget],
+    );
+    if (
+      !active.rowCount ||
+      active.rows[0]!.incarnation !== input.consumer.incarnation ||
+      !isDeepStrictEqual(decode<PublicFilterConsumer>(active.rows[0]!.consumer), input.consumer)
+    )
+      throw new Failure('binding_mismatch');
   }
   const api: PublicFilterCustody = {
     register(request, search, context) {
@@ -1085,6 +1164,377 @@ export function createPublicFilterCustody(
         });
       });
     },
+    readPreparationFrontier(request, context) {
+      const input = decode<typeof request>(encode(request));
+      registration(input.registration);
+      text(input.build);
+      requireValue(typeof input.generation === 'bigint' && input.generation > 0n);
+      return run(context, async (meter) => {
+        await registered(input.registration, meter);
+        const result = await sql(
+          pool,
+          meter,
+          `SELECT segment_state,raw_count,output_count,source_cursor,raw_exhausted
+           FROM search.public_filter_prepared
+           WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)`,
+          [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
+        );
+        return {
+          status: 'found' as const,
+          frontier: preparationFrontier(result.rows[0]),
+          cost: meter,
+        };
+      });
+    },
+    appendPreparationSegment(request, context) {
+      const input = decode<typeof request>(encode(request));
+      registration(input.registration);
+      text(input.consumer.physicalTarget);
+      text(input.consumer.incarnation);
+      text(input.build);
+      requireValue(typeof input.generation === 'bigint' && input.generation > 0n);
+      requireValue(input.entries.length <= 100);
+      requireValue(Number.isInteger(input.expected.rawCount) && Number.isInteger(input.expected.outputCount));
+      for (const [index, entry] of input.entries.entries()) {
+        requireValue(entry.rawOrdinal === input.expected.rawCount + index);
+        if (entry.outputOrdinal !== null) requireValue(Number.isInteger(entry.outputOrdinal));
+      }
+      return run(context, async (meter) => {
+        const known = await registered(input.registration, meter);
+        if (!isDeepStrictEqual(known, input.consumer)) throw new Failure('binding_mismatch');
+        const result = await transaction(meter, async (client) => {
+          await admitPreparationWrite(client, meter, input);
+          const key = preparationKey(input.registration, input.build, input.generation);
+          await sql(
+            client,
+            meter,
+            `INSERT INTO search.public_filter_prepared
+              (partition_no,registration,build,generation,rows,state,segment_state,raw_count,output_count,raw_exhausted,source_cursor)
+             VALUES ($1,$2,$3,$4,$5,'active','building',0,0,false,NULL)
+             ON CONFLICT (partition_no,registration,build,generation) DO NOTHING`,
+            [input.registration.partition, input.registration.id, input.build, input.generation.toString(), encode([])],
+          );
+          const saved = await sql(
+            client,
+            meter,
+            `SELECT state,segment_state,raw_count,output_count,source_cursor,raw_exhausted
+             FROM search.public_filter_prepared
+             WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric) FOR UPDATE`,
+            [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
+          );
+          const row = saved.rows[0];
+          if (!row || row.state !== 'active' || row.segment_state === 'erasing' || row.segment_state === 'legacy')
+            throw new Failure('binding_mismatch');
+          const current = preparationFrontier(row);
+          const nextRaw = input.expected.rawCount + input.entries.length;
+          const nextOutput =
+            input.expected.outputCount + input.entries.filter((entry) => entry.outputOrdinal !== null).length;
+          const nextCursor = preparationCursor(input.after);
+          const sameNext =
+            current.rawCount === nextRaw &&
+            current.outputCount === nextOutput &&
+            current.rawExhausted === input.rawExhausted &&
+            (row.source_cursor ?? null) === nextCursor;
+          const replay =
+            sameNext &&
+            input.expected.rawCount <= current.rawCount &&
+            (input.entries.length > 0 || current.rawExhausted);
+          if (replay) {
+            const prior = await readSegmentReplay(
+              (statement, values) => sql(client, meter, statement, values),
+              key,
+              input.expected.rawCount,
+              nextRaw,
+            );
+            if (
+              prior.rows.length === input.entries.length &&
+              prior.rows.every((savedEntry, index) => {
+                const requested = input.entries[index]!;
+                return (
+                  savedEntry.raw_ordinal === requested.rawOrdinal &&
+                  savedEntry.output_ordinal === requested.outputOrdinal &&
+                  isDeepStrictEqual(savedEntry.payload, requested.payload)
+                );
+              })
+            )
+              return 'replayed' as const;
+            throw new Failure('binding_mismatch');
+          }
+          if (
+            current.state !== 'building' ||
+            current.rawExhausted ||
+            current.rawCount !== input.expected.rawCount ||
+            current.outputCount !== input.expected.outputCount ||
+            !isDeepStrictEqual(current.after, input.expected.after) ||
+            nextRaw > 1000
+          )
+            throw new Failure('observation_lost');
+          let nextOutputOrdinal = input.expected.outputCount;
+          for (const entry of input.entries) {
+            if (entry.outputOrdinal !== null) {
+              if (entry.outputOrdinal !== nextOutputOrdinal) throw new Failure('binding_mismatch');
+              nextOutputOrdinal++;
+            }
+          }
+          const inserted = await insertSegmentRows(
+            (statement, values) => sql(client, meter, statement, values),
+            key,
+            input.entries,
+          );
+          if (inserted !== input.entries.length) throw new Failure('binding_mismatch');
+          const advanced = await sql(
+            client,
+            meter,
+            `UPDATE search.public_filter_prepared SET raw_count=$5,output_count=$6,source_cursor=$7,raw_exhausted=$8
+             WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)
+               AND state='active' AND segment_state='building' AND raw_count=$9 AND output_count=$10
+               AND raw_exhausted=false RETURNING raw_count`,
+            [
+              input.registration.partition,
+              input.registration.id,
+              input.build,
+              input.generation.toString(),
+              nextRaw,
+              nextOutput,
+              nextCursor,
+              input.rawExhausted,
+              input.expected.rawCount,
+              input.expected.outputCount,
+            ],
+          );
+          if (advanced.rowCount !== 1) throw new Failure('observation_lost');
+          meter.frontierWrites++;
+          return 'appended' as const;
+        });
+        return { status: result, cost: meter };
+      });
+    },
+    retainPreparedSegments(request, context) {
+      const input = decode<typeof request>(encode(request));
+      registration(input.registration);
+      text(input.build);
+      text(input.covered.observation);
+      requireValue(typeof input.generation === 'bigint' && input.generation > 0n);
+      requireValue(Number.isInteger(input.rawCount) && input.rawCount >= 0 && input.rawCount <= 1000);
+      requireValue(
+        Number.isInteger(input.outputCount) && input.outputCount >= 0 && input.outputCount <= input.rawCount,
+      );
+      requireValue(Number.isSafeInteger(input.expiresAt) && input.expiresAt > Date.now());
+      return run(context, async (meter) => {
+        const consumer = await registered(input.registration, meter);
+        return transaction(meter, async (client) => {
+          const key = preparationKey(input.registration, input.build, input.generation);
+          const prepared = await sql(
+            client,
+            meter,
+            `SELECT state,segment_state,raw_count,output_count,raw_exhausted
+             FROM search.public_filter_prepared
+             WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric) FOR UPDATE`,
+            [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
+          );
+          const frontier = preparationFrontier(prepared.rows[0]);
+          if (
+            prepared.rows[0]?.state !== 'active' ||
+            (frontier.state !== 'building' && frontier.state !== 'complete') ||
+            !frontier.rawExhausted ||
+            frontier.rawCount !== input.rawCount ||
+            frontier.outputCount !== input.outputCount
+          )
+            throw new Failure('observation_lost');
+          const prior = await sql(
+            client,
+            meter,
+            `SELECT queried FROM search.public_filter_observation
+             WHERE (partition_no,registration,prepared_build,prepared_generation)=($1,$2,$3,$4::numeric)
+               AND state='open' ORDER BY observation DESC LIMIT 1`,
+            [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
+          );
+          if (prior.rowCount) {
+            const queriedValue = decode<PublicFilterQueriedObservation>(prior.rows[0]!.queried);
+            queried(queriedValue);
+            if (
+              queriedValue.consumer.incarnation !== consumer.incarnation ||
+              queriedValue.snapshot.kind !== 'prepared' ||
+              queriedValue.snapshot.build !== input.build ||
+              queriedValue.snapshot.generation !== input.generation
+            )
+              throw new Failure('binding_mismatch');
+            return { status: 'retained' as const, queried: queriedValue, cost: meter };
+          }
+          const marker = {
+            storage: 'segments-v1',
+            build: input.build,
+            generation: input.generation,
+            rawCount: input.rawCount,
+            outputCount: input.outputCount,
+          };
+          return retain(
+            input.registration,
+            {
+              consumer,
+              snapshot: {
+                kind: 'prepared',
+                observation: `${input.registration.partition}:${randomUUID()}`,
+                build: input.build,
+                generation: input.generation,
+              },
+            },
+            input.covered,
+            input.expiresAt,
+            marker,
+            meter,
+            client,
+            { build: input.build, generation: input.generation },
+          );
+        });
+      });
+    },
+    completePreparationBuild(request, context) {
+      const input = decode<typeof request>(encode(request));
+      queried(input.queried);
+      requireValue(input.queried.snapshot.kind === 'prepared');
+      requireValue(Number.isInteger(input.rawCount) && input.rawCount >= 0 && input.rawCount <= 1000);
+      requireValue(
+        Number.isInteger(input.outputCount) && input.outputCount >= 0 && input.outputCount <= input.rawCount,
+      );
+      return run(context, async (meter) => {
+        const q = input.queried;
+        if (q.snapshot.kind !== 'prepared') throw new Failure('binding_mismatch');
+        return transaction(meter, async (client) => {
+          const snapshot = q.snapshot;
+          if (snapshot.kind !== 'prepared') throw new Failure('binding_mismatch');
+          const found = await sql(
+            client,
+            meter,
+            `SELECT o.state,o.queried,o.registration,p.state AS prepared_state,p.segment_state,p.raw_count,p.output_count,
+                    p.raw_exhausted
+             FROM search.public_filter_observation o
+             JOIN search.public_filter_prepared p
+               ON (p.partition_no,p.registration,p.build,p.generation)=
+                  (o.partition_no,o.registration,o.prepared_build,o.prepared_generation)
+             WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3
+               AND o.prepared_build=$4 AND o.prepared_generation=$5::numeric
+             FOR UPDATE OF o,p`,
+            [
+              partition(snapshot.observation),
+              snapshot.observation,
+              encode(q),
+              snapshot.build,
+              snapshot.generation.toString(),
+            ],
+          );
+          const row = found.rows[0];
+          if (!row || row.state !== 'open' || row.prepared_state !== 'active') throw new Failure('observation_lost');
+          if (row.segment_state === 'complete') {
+            if (row.raw_count !== input.rawCount || row.output_count !== input.outputCount)
+              throw new Failure('binding_mismatch');
+            return { status: 'complete' as const, cost: meter };
+          }
+          if (
+            row.segment_state !== 'building' ||
+            !row.raw_exhausted ||
+            row.raw_count !== input.rawCount ||
+            row.output_count !== input.outputCount
+          )
+            throw new Failure('observation_lost');
+          const exact = await sql(
+            client,
+            meter,
+            `SELECT count(*)::integer AS raw_count,min(raw_ordinal) AS first_raw,max(raw_ordinal) AS last_raw,
+                    count(output_ordinal)::integer AS output_count,min(output_ordinal) AS first_output,
+                    max(output_ordinal) AS last_output
+             FROM search.public_filter_preparation_segment
+             WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)`,
+            [partition(snapshot.observation), row.registration, snapshot.build, snapshot.generation.toString()],
+          );
+          const counts = exact.rows[0]!;
+          const rawCount = Number(counts.raw_count);
+          const outputCount = Number(counts.output_count);
+          const rawComplete =
+            rawCount === input.rawCount &&
+            (rawCount === 0 || (counts.first_raw === 0 && counts.last_raw === rawCount - 1));
+          const outputComplete =
+            outputCount === input.outputCount &&
+            (outputCount === 0 || (counts.first_output === 0 && counts.last_output === outputCount - 1));
+          if (!rawComplete || !outputComplete) throw new Failure('observation_lost');
+          const completed = await sql(
+            client,
+            meter,
+            `UPDATE search.public_filter_prepared SET segment_state='complete'
+             WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)
+               AND state='active' AND segment_state='building' AND raw_exhausted=true
+               AND raw_count=$5 AND output_count=$6 RETURNING build`,
+            [
+              partition(snapshot.observation),
+              row.registration,
+              snapshot.build,
+              snapshot.generation.toString(),
+              input.rawCount,
+              input.outputCount,
+            ],
+          );
+          if (completed.rowCount !== 1) throw new Failure('observation_lost');
+          meter.frontierWrites++;
+          return { status: 'complete' as const, cost: meter };
+        });
+      });
+    },
+    readPreparedWindow(request, context) {
+      const input = decode<typeof request>(encode(request));
+      queried(input.queried);
+      requireValue(input.queried.snapshot.kind === 'prepared');
+      text(input.use.token);
+      requireValue(input.use.observation === input.queried.snapshot.observation);
+      requireValue(Number.isInteger(input.afterOutputOrdinal) && input.afterOutputOrdinal >= 0);
+      requireValue(Number.isInteger(input.size) && input.size >= 1 && input.size <= 200);
+      return run(context, async (meter) =>
+        transaction(meter, async (client) => {
+          const q = input.queried;
+          if (q.snapshot.kind !== 'prepared') throw new Failure('binding_mismatch');
+          const observation = await sql(
+            client,
+            meter,
+            `SELECT o.registration FROM search.public_filter_observation o
+           JOIN search.public_filter_reference f ON (f.partition_no,f.observation)=(o.partition_no,o.observation)
+           WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.prepared_build=$4
+             AND o.prepared_generation=$5::numeric AND o.state='open' AND o.expires_at>$7
+             AND f.token=$6 AND f.expires_at>$7 FOR SHARE OF o,f`,
+            [
+              partition(q.snapshot.observation),
+              q.snapshot.observation,
+              encode(q),
+              q.snapshot.build,
+              q.snapshot.generation.toString(),
+              input.use.token,
+              Date.now(),
+            ],
+          );
+          if (!observation.rowCount) return { status: 'missing' as const, cost: meter };
+          const result = await readSegmentWindow(
+            (statement, values) => sql(client, meter, statement, values),
+            preparationKey(
+              { partition: partition(q.snapshot.observation), id: observation.rows[0]!.registration },
+              q.snapshot.build,
+              q.snapshot.generation,
+            ),
+            input.afterOutputOrdinal,
+            input.size,
+          );
+          const row = result.rows[0];
+          if (!row) return { status: 'missing' as const, cost: meter };
+          if (row.segment_state !== 'complete' || !row.raw_exhausted)
+            return { status: 'preparing' as const, cost: meter };
+          const hits = result.rows.flatMap((entry) => (entry.payload === null ? [] : [entry.payload.hit]));
+          return {
+            status: 'ready' as const,
+            hits,
+            rawCount: row.raw_count,
+            outputCount: row.output_count,
+            cost: meter,
+          };
+        }),
+      );
+    },
     acquire(q, context) {
       const input = decode<typeof q>(encode(q));
       queried(input);
@@ -1108,7 +1558,7 @@ export function createPublicFilterCustody(
               WHERE g.partition_no=0 AND g.physical_target=r.physical_target AND g.publication_fence IS NOT NULL)
             AND NOT EXISTS (SELECT 1 FROM search.public_filter_prepared p
               WHERE (p.partition_no,p.registration,p.build,p.generation)=(r.partition_no,r.id,$8::text,$9::bigint)
-                AND p.state='erasing')
+                AND (p.state='erasing' OR (p.segment_state='building' AND p.raw_exhausted=false)))
           FOR UPDATE OF o FOR SHARE OF r,t)
           INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING token`,
             [
@@ -1500,6 +1950,7 @@ export async function stepRetainedObservationErasure(
             tx,
             meter,
             `UPDATE search.public_filter_prepared SET state='erasing'
+             ,segment_state=CASE WHEN segment_state='legacy' THEN 'legacy' ELSE 'erasing' END
              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4)`,
             [copy.partition, copy.registration, q.snapshot.build, q.snapshot.generation.toString()],
           );
@@ -1647,10 +2098,19 @@ export async function stepRetainedObservationErasure(
     if (starts.rowCount) return { state: 'more', cost: meter };
     check(context);
     if (q?.snapshot.kind === 'prepared') {
+      const key = preparationKey(
+        { partition: copy.partition, id: copy.registration },
+        q.snapshot.build,
+        q.snapshot.generation,
+      );
+      const removed = await retireSegmentRows((statement, values) => sql(pool, meter, statement, values), key, 100);
+      if (removed) return { state: 'more', cost: meter };
       await sql(
         pool,
         meter,
-        `UPDATE search.public_filter_prepared SET rows=$5
+        `UPDATE search.public_filter_prepared SET rows=$5,
+          segment_state=CASE WHEN segment_state='legacy' THEN 'legacy' ELSE 'erasing' END,
+          raw_count=0,output_count=0,raw_exhausted=false,source_cursor=NULL
          WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4) AND state='erasing'`,
         [copy.partition, copy.registration, q.snapshot.build, q.snapshot.generation.toString(), encode([])],
       );
@@ -1740,15 +2200,42 @@ export async function stepRetainedTargetErasure(
     const prepared = await sql(
       pool,
       meter,
-      `WITH candidate AS (SELECT partition_no,registration,build,generation
-        FROM search.public_filter_prepared WHERE (partition_no,registration)=($1,$2)
-          AND (state<>'erasing' OR rows<>$3) ORDER BY build,generation LIMIT 1 FOR UPDATE)
-       UPDATE search.public_filter_prepared p SET state='erasing',rows=$3 FROM candidate c
-       WHERE (p.partition_no,p.registration,p.build,p.generation)=
-             (c.partition_no,c.registration,c.build,c.generation) RETURNING p.build`,
+      `SELECT p.build,p.generation,p.segment_state,p.rows,p.state
+       FROM search.public_filter_prepared p
+       WHERE (p.partition_no,p.registration)=($1,$2)
+         AND (p.state<>'erasing' OR p.rows<>$3 OR p.raw_count<>0 OR p.output_count<>0
+           OR p.raw_exhausted OR p.source_cursor IS NOT NULL OR EXISTS (
+           SELECT 1 FROM search.public_filter_preparation_segment s
+           WHERE (s.partition_no,s.registration,s.build,s.generation)=
+             (p.partition_no,p.registration,p.build,p.generation)))
+       ORDER BY p.build,p.generation LIMIT 1 FOR UPDATE`,
       [target.partition, row.id, encode([])],
     );
-    return { state: 'more', after: prepared.rowCount ? target.after : row.id, cost: meter };
+    if (!prepared.rowCount) return { state: 'more', after: row.id, cost: meter };
+    const build = prepared.rows[0]!.build as string;
+    const generation = BigInt(String(prepared.rows[0]!.generation));
+    await sql(
+      pool,
+      meter,
+      `UPDATE search.public_filter_prepared SET state='erasing',
+         segment_state=CASE WHEN segment_state='legacy' THEN 'legacy' ELSE 'erasing' END
+       WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)`,
+      [target.partition, row.id, build, generation.toString()],
+    );
+    const key = preparationKey({ partition: target.partition, id: row.id }, build, generation);
+    const removed = await retireSegmentRows((statement, values) => sql(pool, meter, statement, values), key, 100);
+    if (removed) return { state: 'more', after: target.after, cost: meter };
+    await sql(
+      pool,
+      meter,
+      `UPDATE search.public_filter_prepared SET rows=$5,raw_count=0,output_count=0,
+         raw_exhausted=false,source_cursor=NULL
+       WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)
+         AND state='erasing' AND (rows<>$5 OR raw_count<>0 OR output_count<>0
+           OR raw_exhausted OR source_cursor IS NOT NULL)`,
+      [target.partition, row.id, build, generation.toString(), encode([])],
+    );
+    return { state: 'more', after: target.after, cost: meter };
   } catch (error) {
     if (error instanceof TypeError) throw error;
     return { state: 'pending', after: target.after, reason: 'native-ambiguous', cost: meter };
