@@ -3768,9 +3768,11 @@ CREATE TABLE content.moderation_decision (
     security_revision bigint NOT NULL,
     recorded_transaction_id uuid,
     board_id uuid,
+    revision_id uuid,
     CONSTRAINT moderation_decision_action_check CHECK ((action = 'takedown'::text)),
     CONSTRAINT moderation_decision_check CHECK ((route = ((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)))),
     CONSTRAINT moderation_decision_check1 CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT moderation_decision_revision_target_check CHECK (((revision_id IS NULL) OR (target_kind = 'post'::text))),
     CONSTRAINT moderation_decision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_decision_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT moderation_decision_statement_check CHECK (((char_length(statement) >= 0) AND (char_length(statement) <= 1024))),
@@ -4033,6 +4035,30 @@ CREATE TABLE content.post (
     CONSTRAINT post_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT post_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT post_visibility_check CHECK ((visibility = ANY (ARRAY['published'::text, 'draft'::text, 'protected'::text, 'taken_down'::text])))
+);
+
+
+--
+-- Name: post_revision_restriction; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.post_revision_restriction (
+    route integer NOT NULL,
+    decision_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    post_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    mode text NOT NULL,
+    security_revision bigint NOT NULL,
+    restricted_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    lifted_at timestamp with time zone,
+    CONSTRAINT post_revision_restriction_check CHECK ((route = ((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)))),
+    CONSTRAINT post_revision_restriction_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT post_revision_restriction_check2 CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT post_revision_restriction_check3 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT post_revision_restriction_mode_check CHECK ((mode = ANY (ARRAY['public'::text, 'hard'::text]))),
+    CONSTRAINT post_revision_restriction_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT post_revision_restriction_security_revision_check CHECK ((security_revision > 0))
 );
 
 
@@ -5918,6 +5944,14 @@ ALTER TABLE ONLY content.moderation_decision
 
 
 --
+-- Name: moderation_decision moderation_decision_revision_identity_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_decision
+    ADD CONSTRAINT moderation_decision_revision_identity_key UNIQUE (route, decision_id, revision_id, target_id);
+
+
+--
 -- Name: moderation_decision moderation_decision_route_target_kind_target_id_security_re_key; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -6003,6 +6037,14 @@ ALTER TABLE ONLY content.party_locator
 
 ALTER TABLE ONLY content.post
     ADD CONSTRAINT post_pkey PRIMARY KEY (route, post_id);
+
+
+--
+-- Name: post_revision_restriction post_revision_restriction_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.post_revision_restriction
+    ADD CONSTRAINT post_revision_restriction_pkey PRIMARY KEY (route, decision_id);
 
 
 --
@@ -6989,6 +7031,20 @@ CREATE INDEX post_hosted_pending_page_idx ON content.post USING btree (route, po
 --
 
 CREATE INDEX post_pending_draft_locator_idx ON content.post USING btree (author_account_id, route, post_id) WHERE (draft_locator_pending AND (visibility = 'draft'::text) AND (availability = 'available'::text));
+
+
+--
+-- Name: post_revision_restriction_decision_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_revision_restriction_decision_idx ON content.post_revision_restriction USING btree (route, decision_id, revision_id);
+
+
+--
+-- Name: post_revision_restriction_live_revision_key; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX post_revision_restriction_live_revision_key ON content.post_revision_restriction USING btree (route, revision_id) WHERE (lifted_at IS NULL);
 
 
 --
@@ -8817,6 +8873,14 @@ ALTER TABLE ONLY content.moderation_appeal
 
 
 --
+-- Name: moderation_decision moderation_decision_revision_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_decision
+    ADD CONSTRAINT moderation_decision_revision_fk FOREIGN KEY (route, revision_id) REFERENCES content.revision(route, revision_id);
+
+
+--
 -- Name: notice_ack notice_ack_route_notice_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -8830,6 +8894,22 @@ ALTER TABLE ONLY content.notice_ack
 
 ALTER TABLE ONLY content.post
     ADD CONSTRAINT post_head_revision_fk FOREIGN KEY (route, thread_id, post_id, head_revision_id) REFERENCES content.revision(route, thread_id, post_id, revision_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: post_revision_restriction post_revision_restriction_route_decision_id_revision_id_po_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.post_revision_restriction
+    ADD CONSTRAINT post_revision_restriction_route_decision_id_revision_id_po_fkey FOREIGN KEY (route, decision_id, revision_id, post_id) REFERENCES content.moderation_decision(route, decision_id, revision_id, target_id);
+
+
+--
+-- Name: post_revision_restriction post_revision_restriction_route_thread_id_post_id_revision_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.post_revision_restriction
+    ADD CONSTRAINT post_revision_restriction_route_thread_id_post_id_revision_fkey FOREIGN KEY (route, thread_id, post_id, revision_id) REFERENCES content.revision(route, thread_id, post_id, revision_id);
 
 
 --
