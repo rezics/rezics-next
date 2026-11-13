@@ -94,17 +94,7 @@ test('revision disclosure preserves the Access client identity rule in PostgreSQ
   expect(constraint.rows[0]?.definition).toContain('COLLATE "C"');
   expect(constraint.rows[0]?.definition).toContain('[^!-~]');
 
-  const values = [
-    '',
-    'a',
-    'a'.repeat(255),
-    'a'.repeat(256),
-    'a'.repeat(1024),
-    'a'.repeat(1025),
-    'a b',
-    'a\tb',
-    'é',
-  ];
+  const values = ['', 'a', 'a'.repeat(255), 'a'.repeat(256), 'a'.repeat(1024), 'a'.repeat(1025), 'a b', 'a\tb', 'é'];
   const result = await f.pool.query<{ accepted: boolean }>(
     `SELECT octet_length(value) BETWEEN 1 AND 1024 AND value COLLATE "C" !~ '[^!-~]' AS accepted
      FROM unnest($1::text[]) WITH ORDINALITY AS candidates(value, ordinal)
