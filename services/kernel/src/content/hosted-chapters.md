@@ -125,7 +125,10 @@ Decision: Content binds each ordered Book revision to one immutable `(catalogue,
 Exact reads distinguish ordered, compatibility and missing revisions; structure revisions bind draft generations,
 publication revisions bind candidate generations and retain the expected draft as source. The shared transaction
 seam inserts the native revision and descriptor before CAS-advancing only the caller's draft or publication pointer.
-The temporal store owner adds the snapshot and generation-kind foreign keys with its producer migration.
+Decision: keep the existing producer, command and HTTP tests; genericize snapshot helpers so structure writes require
+draft generations and publication writes require candidate generations. After both producers, add the snapshot and
+generation-kind foreign keys in `20261113121340_hosted_version_revision_snapshot_fk.sql` because the descriptor table
+did not exist at the store producer timestamp.
 
 ### Evidence and migration
 

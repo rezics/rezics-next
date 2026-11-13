@@ -3,6 +3,7 @@ import {
   commitHostedVersionRevision,
   resolveHostedVersionRevision,
   HostedVersionRevisionPointerChangedError,
+  type HostedVersionGenerationKind,
   type HostedVersionRevisionSnapshot,
 } from '../../src/content/hosted-version-revision.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -36,13 +37,13 @@ async function createCatalogue(fixture: Fixture): Promise<string> {
   return result.revisionId as string;
 }
 
-async function createGeneration(
+async function createGeneration<Kind extends HostedVersionGenerationKind>(
   tx: any,
   catalogueId: string,
   generationId: string,
-  generationKind: 'draft' | 'candidate',
+  generationKind: Kind,
   sequence: bigint,
-): Promise<HostedVersionRevisionSnapshot> {
+): Promise<HostedVersionRevisionSnapshot<Kind>> {
   const route = routeOf(catalogueId)!;
   await tx.query(
     `INSERT INTO content.hosted_tree_generation(route,catalogue_id,generation_id,generation_kind,head_sequence)
@@ -58,11 +59,11 @@ async function createGeneration(
   return { route, catalogueId, generationId, generationKind, sequence };
 }
 
-async function advanceGeneration(
+async function advanceGeneration<Kind extends HostedVersionGenerationKind>(
   tx: any,
-  snapshot: HostedVersionRevisionSnapshot,
+  snapshot: HostedVersionRevisionSnapshot<Kind>,
   nextSequence: bigint,
-): Promise<HostedVersionRevisionSnapshot> {
+): Promise<HostedVersionRevisionSnapshot<Kind>> {
   await tx.query(
     `UPDATE content.hosted_tree_generation SET head_sequence=$4
      WHERE route=$1 AND catalogue_id=$2 AND generation_id=$3`,
@@ -77,21 +78,6 @@ async function advanceGeneration(
   return { ...snapshot, sequence: nextSequence };
 }
 
-function writeBase(
-  fixture: Fixture,
-  revisionId: string,
-  snapshot: HostedVersionRevisionSnapshot,
-  expectedDraftRevisionId: string,
-) {
-  return {
-    revisionId,
-    snapshot,
-    expectedDraftRevisionId,
-    recordedTransactionId: fixture.newOccurrenceId(),
-    recordedAt: new Date().toISOString(),
-  };
-}
-
 test('resolves exact old snapshots, separates draft and publication pointers, and rolls back stale descriptors', async () => {
   const fixture = await hostedChaptersFixture();
   try {
@@ -102,8 +88,12 @@ test('resolves exact old snapshots, separates draft and publication pointers, an
       const initial = await createGeneration(tx, fixture.catalogueId, draftGenerationId, 'draft', 0n);
       const committed = await advanceGeneration(tx, initial, 1n);
       await commitHostedVersionRevision(tx, {
-        ...writeBase(fixture, firstDraftRevisionId, committed, originalRevisionId),
         revisionKind: 'structure',
+        revisionId: firstDraftRevisionId,
+        snapshot: committed,
+        expectedDraftRevisionId: originalRevisionId,
+        recordedTransactionId: fixture.newOccurrenceId(),
+        recordedAt: new Date().toISOString(),
       });
       return committed;
     });
@@ -114,9 +104,13 @@ test('resolves exact old snapshots, separates draft and publication pointers, an
       const initial = await createGeneration(tx, fixture.catalogueId, publicationGenerationId, 'candidate', 0n);
       const publication = await advanceGeneration(tx, initial, 1n);
       await commitHostedVersionRevision(tx, {
-        ...writeBase(fixture, publicationRevisionId, publication, firstDraftRevisionId),
         revisionKind: 'publication',
+        revisionId: publicationRevisionId,
+        snapshot: publication,
+        expectedDraftRevisionId: firstDraftRevisionId,
         expectedPublicationId: null,
+        recordedTransactionId: fixture.newOccurrenceId(),
+        recordedAt: new Date().toISOString(),
       });
     });
 
@@ -124,8 +118,12 @@ test('resolves exact old snapshots, separates draft and publication pointers, an
     await transaction(fixture, async (tx) => {
       const nextDraft = await advanceGeneration(tx, firstDraft, 2n);
       await commitHostedVersionRevision(tx, {
-        ...writeBase(fixture, nextDraftRevisionId, nextDraft, firstDraftRevisionId),
         revisionKind: 'structure',
+        revisionId: nextDraftRevisionId,
+        snapshot: nextDraft,
+        expectedDraftRevisionId: firstDraftRevisionId,
+        recordedTransactionId: fixture.newOccurrenceId(),
+        recordedAt: new Date().toISOString(),
       });
     });
 
@@ -164,8 +162,12 @@ test('resolves exact old snapshots, separates draft and publication pointers, an
       transaction(fixture, async (tx) => {
         const stale = await createGeneration(tx, fixture.catalogueId, staleGenerationId, 'draft', 0n);
         await commitHostedVersionRevision(tx, {
-          ...writeBase(fixture, staleRevisionId, stale, firstDraftRevisionId),
           revisionKind: 'structure',
+          revisionId: staleRevisionId,
+          snapshot: stale,
+          expectedDraftRevisionId: firstDraftRevisionId,
+          recordedTransactionId: fixture.newOccurrenceId(),
+          recordedAt: new Date().toISOString(),
         });
       }),
     ).rejects.toBeInstanceOf(HostedVersionRevisionPointerChangedError);
