@@ -510,6 +510,12 @@ function standardFixture() {
       root,
       `${workspace}/package.json`,
       JSON.stringify({
+        name:
+          workspace === 'services/kernel'
+            ? '@rezics/kernel'
+            : workspace === 'apps/web'
+              ? '@rezics/web'
+              : '@rezics/auth',
         scripts: { typecheck: 'bun scripts/typecheck.ts' },
         dependencies: { fixture: '1' },
       }),
@@ -752,6 +758,67 @@ test('the exact Kernel schema emitter captures local files and projects only sta
   execFileSync('git', ['add', '-f', '.remote-check-supervisor'], { cwd: root });
   rmSync(join(root, '.remote-check-supervisor'));
   expect(qualifyTypingInputs(root, forward)).toBe('source-changed');
+});
+
+test('exact configured Kernel and Web workspace receipts project only the complete stable remote marker trio', () => {
+  const root = standardFixture();
+  const markers = ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'];
+  const receipts: TypingInputReceipt[] = [];
+  for (const [workspace, sourceFile] of [
+    ['services/kernel', 'services/kernel/src/index.ts'],
+    ['apps/web', 'apps/web/src/index.ts'],
+  ]) {
+    const command = ['bun', 'run', '--cwd', workspace!, 'typecheck'];
+    for (const marker of markers)
+      write(root, marker, JSON.stringify({ schema: 1, host: 'check-host-a', run: physical }));
+    const request = {
+      ...environment,
+      REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
+    };
+    beginTypingInputReceipt(root, request, command)!(0);
+    const receipt = readTypingInputReceipt(root, physical, command)!;
+    expect(receipt.completed.profile).toBe('configured-typescript');
+    receipts.push(receipt);
+    for (const marker of markers) rmSync(join(root, marker));
+
+    expect(qualifyTypingInputs(root, receipt)).toBe('matched');
+    const incomplete = {
+      ...receipt,
+      started: {
+        ...receipt.started,
+        source: receipt.started.source.filter((entry) => entry.path !== markers[0]),
+      },
+      completed: {
+        ...receipt.completed,
+        source: receipt.completed.source.filter((entry) => entry.path !== markers[0]),
+      },
+    };
+    expect(qualifyTypingInputs(root, incomplete)).toBe('source-changed');
+
+    const original = readFileSync(join(root, sourceFile!), 'utf8');
+    write(root, sourceFile!, `${original}\nexport const changed = true;\n`);
+    expect(qualifyTypingInputs(root, receipt)).toBe('source-changed');
+    write(root, sourceFile!, original);
+
+    const unknown = [...command, '--root'];
+    expect(isKnownTypingCompiler(root, unknown)).toBe(false);
+    expect(qualifyTypingInputs(root, { ...receipt, command: unknown, compilerCommand: unknown })).toBe(
+      'source-changed',
+    );
+  }
+
+  const preparedMarker = {
+    ...receipts[1]!,
+    started: {
+      ...receipts[1]!.started,
+      prepared: [...receipts[1]!.started.prepared, { path: markers[0]!, digest: 'a'.repeat(64) }],
+    },
+    completed: {
+      ...receipts[1]!.completed,
+      prepared: [...receipts[1]!.completed.prepared, { path: markers[0]!, digest: 'a'.repeat(64) }],
+    },
+  };
+  expect(qualifyTypingInputs(root, preparedMarker)).toBe('source-changed');
 });
 
 test('typing recovery canonicalizes only a recognized misordered workspace compiler intent', () => {

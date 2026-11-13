@@ -262,15 +262,31 @@ export function isKnownTypingCompiler(root: string, command: readonly string[]):
   return compilerGraph(root, command, gitFiles(root)) !== undefined;
 }
 
+function installedWorkspaceTypecheck(
+  root: string,
+  command: readonly string[],
+  workspace: string,
+  packageName: string,
+): boolean {
+  const exactCommand = ['bun', 'run', '--cwd', workspace, 'typecheck'];
+  if (!same(command, exactCommand) || !isKnownTypingCompiler(root, command)) return false;
+  const manifest = JSON.parse(readFileSync(join(root, workspace, 'package.json'), 'utf8')) as {
+    name?: string;
+    scripts?: Record<string, string>;
+  };
+  return manifest.name === packageName && manifest.scripts?.typecheck === 'bun scripts/typecheck.ts';
+}
+
 /** The direct installed Kernel entrypoint has the same configured graph as its manifest typecheck owner. */
 export function isDirectKernelTypingCompiler(root: string, command: readonly string[]): boolean {
   return directKernelOwnerCommand(command) && isKnownTypingCompiler(root, command);
 }
 
-/** A retained Kernel pass is reusable only for the direct owner or the exact installed schema-emission argv. */
+/** Retained Kernel passes use only the direct owner, installed workspace owner, or exact schema-emission argv. */
 export function isRetainedKernelTypingCompiler(root: string, command: readonly string[]): boolean {
   return (
     isDirectKernelTypingCompiler(root, command) ||
+    installedWorkspaceTypecheck(root, command, 'services/kernel', '@rezics/kernel') ||
     (installedKernelSchemaEmissionCommand(root, command) && isKnownTypingCompiler(root, command))
   );
 }
@@ -662,11 +678,77 @@ export type TypingInputQualification = 'matched' | 'source-changed' | 'prepared-
 function stableRemotePreparationMarkers(receipt: TypingInputReceipt): boolean {
   const started = new Map(receipt.started.source.map((entry) => [entry.path, entry.digest]));
   const completed = new Map(receipt.completed.source.map((entry) => [entry.path, entry.digest]));
+  if (started.size !== receipt.started.source.length || completed.size !== receipt.completed.source.length)
+    return false;
   return [...REMOTE_PREPARATION_MARKERS].every((path) => {
     const before = started.get(path);
     const after = completed.get(path);
-    return before !== undefined && before !== 'missing' && before === after;
+    return (
+      receipt.started.source.filter((entry) => entry.path === path).length === 1 &&
+      receipt.completed.source.filter((entry) => entry.path === path).length === 1 &&
+      before !== undefined &&
+      before !== 'missing' &&
+      before === after
+    );
   });
+}
+
+function configuredRemotePreparationCompiler(root: string, command: readonly string[]): boolean {
+  return (
+    installedWorkspaceTypecheck(root, command, 'services/kernel', '@rezics/kernel') ||
+    installedWorkspaceTypecheck(root, command, 'apps/web', '@rezics/web')
+  );
+}
+
+/**
+ * Reuse an exact configured Kernel or Web pass after remote-check cleanup only when the full marker trio is the
+ * complete source difference. The markers remain in the receipt so their stable physical-run evidence is preserved.
+ */
+function retainedConfiguredRemotePreparationSourceMatches(
+  root: string,
+  receipt: TypingInputReceipt,
+  current: TypingInputs,
+): boolean {
+  if (
+    receipt.started.profile !== 'configured-typescript' ||
+    receipt.completed.profile !== 'configured-typescript' ||
+    current.profile !== 'configured-typescript' ||
+    !configuredRemotePreparationCompiler(root, receipt.compilerCommand) ||
+    !stableRemotePreparationMarkers(receipt)
+  )
+    return false;
+
+  const files = gitFiles(root);
+  const graph = compilerGraph(root, receipt.compilerCommand, files);
+  if (!graph) return false;
+  const configured = configuredInputs(root, files, graph);
+  if ([...REMOTE_PREPARATION_MARKERS].some((path) => configured.paths.has(path) || configured.documents.has(path)))
+    return false;
+
+  const completedPaths = new Set(receipt.completed.source.map((entry) => entry.path));
+  const currentPaths = new Set(current.source.map((entry) => entry.path));
+  if (completedPaths.size !== receipt.completed.source.length || currentPaths.size !== current.source.length)
+    return false;
+  const missingMarkers = [...REMOTE_PREPARATION_MARKERS].filter(
+    (path) => completedPaths.has(path) && !currentPaths.has(path),
+  );
+  const preparedPaths = new Set([
+    ...receipt.started.prepared.map((entry) => entry.path),
+    ...receipt.completed.prepared.map((entry) => entry.path),
+    ...current.prepared.map((entry) => entry.path),
+  ]);
+  if (
+    missingMarkers.length !== REMOTE_PREPARATION_MARKERS.size ||
+    [...REMOTE_PREPARATION_MARKERS].some(
+      (path) => currentPaths.has(path) || localEntryPresent(root, path) || preparedPaths.has(path),
+    )
+  )
+    return false;
+
+  return same(
+    current.source,
+    receipt.completed.source.filter((entry) => !REMOTE_PREPARATION_MARKERS.has(entry.path)),
+  );
 }
 
 /**
@@ -740,10 +822,14 @@ export function qualifyTypingInputs(
   if (receipt.exitCode !== 0) return 'source-changed';
   const current = captureTypingInputs(root, receipt.compilerCommand);
   if (current.runtime !== receipt.completed.runtime) return 'evidence-unavailable';
+  const sameSource = same(current.source, receipt.completed.source);
   const retainedKernelReceipt =
+    !sameSource &&
     isRetainedKernelTypingCompiler(root, receipt.compilerCommand) &&
     retainedKernelSourceMatches(root, receipt, current);
-  if (!same(current.source, receipt.completed.source) && !retainedKernelReceipt) return 'source-changed';
+  const retainedConfiguredRemotePreparationReceipt =
+    !sameSource && retainedConfiguredRemotePreparationSourceMatches(root, receipt, current);
+  if (!sameSource && !retainedKernelReceipt && !retainedConfiguredRemotePreparationReceipt) return 'source-changed';
   // This legacy pass is reused only when every installed dependency and generated input remains identical.
   if (retainedKernelReceipt && !same(current.prepared, receipt.completed.prepared)) return 'prepared-changed';
   if (receipt.outputs?.includes('kernel-client-v1')) {

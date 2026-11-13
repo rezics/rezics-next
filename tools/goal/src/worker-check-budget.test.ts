@@ -635,19 +635,26 @@ function prepareWebCompiler(worktree: string): void {
   writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const mounted = false;\n');
 }
 
-function writeDirectKernelStamp(budget: string, worktree: string, stamp: string, exitCode: number, log: string): void {
+function writeDirectKernelStamp(
+  budget: string,
+  worktree: string,
+  stamp: string,
+  exitCode: number,
+  log: string,
+  command: string[] = directKernelCompiler,
+): void {
   const physicalRunId = randomUUID();
   const env: NodeJS.ProcessEnv = {
     GOAL_WORKER_CHECK_BUDGET_DIR: budget,
     GOAL_WORKER_CHECK_BUDGET_STAMP: stamp,
     REZICS_TYPING_INPUTS_PHYSICAL: physicalRunId,
-    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(directKernelCompiler)).toString('base64'),
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
   };
-  recordWorkerCheckTypingInputs(env, worktree, physicalRunId, directKernelCompiler);
-  const complete = beginTypingInputReceipt(worktree, env, directKernelCompiler);
+  recordWorkerCheckTypingInputs(env, worktree, physicalRunId, command);
+  const complete = beginTypingInputReceipt(worktree, env, command);
   if (!complete) throw new Error('direct Kernel owner did not capture compiler inputs');
   complete(exitCode);
-  const receipt = readTypingInputReceipt(worktree, physicalRunId, directKernelCompiler);
+  const receipt = readTypingInputReceipt(worktree, physicalRunId, command);
   if (!receipt) throw new Error('direct Kernel owner did not return its physical receipt');
   const file = join(budget, stamp);
   const previous = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
@@ -659,7 +666,7 @@ function writeDirectKernelStamp(budget: string, worktree: string, stamp: string,
       includedTypecheck: true,
       typecheckFailed: exitCode !== 0,
       log,
-      typingRequest: { physicalRunId, command: directKernelCompiler, localPrepared: [], capture: 'physical-command' },
+      typingRequest: { physicalRunId, command, localPrepared: [], capture: 'physical-command' },
       typingInputs: receipt,
     }),
   );
@@ -785,10 +792,18 @@ test('a retained Kernel pass waits for later cancellation custody and then reuse
     const retained = await settleSuccessWithHostCheck(h, 'kernel typecheck completed', (_budget, worktree) => {
       prepareDirectKernelCompiler(worktree);
     });
+    const kernelTypecheck = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+    const markers = ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'];
     const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, 1);
     const successfulLog = join(h.settings.stateDirectory, 'retained-kernel-typecheck.log');
     writeFileSync(successfulLog, '');
-    writeDirectKernelStamp(budget, retained.task.worktree, '1', 0, successfulLog);
+    for (const marker of markers)
+      writeFileSync(
+        join(retained.task.worktree, marker),
+        JSON.stringify({ schema: 1, host: 'check-host-a', run: 'kernel-run' }),
+      );
+    writeDirectKernelStamp(budget, retained.task.worktree, '1', 0, successfulLog, kernelTypecheck);
+    for (const marker of markers) unlinkSync(join(retained.task.worktree, marker));
     const firstStampPath = join(budget, '1');
     const firstStamp = JSON.parse(readFileSync(firstStampPath, 'utf8')) as Record<string, unknown>;
     const retainedReceipt = firstStamp.typingInputs as Record<string, unknown>;
@@ -817,7 +832,7 @@ test('a retained Kernel pass waits for later cancellation custody and then reuse
         includedTypecheck: true,
         typingRequest: {
           physicalRunId: laterPhysical,
-          command: directKernelCompiler,
+          command: kernelTypecheck,
           localPrepared: [],
           capture: 'physical-command',
         },
@@ -916,6 +931,7 @@ test('a failed Web receipt for old inputs stays history when newer source has a 
     gitWorktree(worktree.path);
     prepareWebCompiler(worktree.path);
     const command = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    const markers = ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'];
     const budget = workerCheckBudgetDirectory(controller.path, 'web-stale-failure', 1);
     const recordRun = (stamp: string, exitCode: number, logText: string) => {
       const physicalRunId = randomUUID();
@@ -942,7 +958,10 @@ test('a failed Web receipt for old inputs stays history when newer source has a 
     expect(stale).toMatchObject({ ok: false, kind: 'evidence-unavailable' });
 
     expect(admitWorkerCheckHostRun({ directory: budget, worktree: worktree.path, limit: 2 }).ok).toBe(true);
+    for (const marker of markers)
+      writeFileSync(join(worktree.path, marker), JSON.stringify({ schema: 1, host: 'check-host-a', run: 'web-run' }));
     recordRun('2', 0, '');
+    for (const marker of markers) unlinkSync(join(worktree.path, marker));
     expect(workerCheckHostTypingSettlement({ directory: budget, worktree: worktree.path, limit: 2 })).toEqual({
       ok: true,
     });

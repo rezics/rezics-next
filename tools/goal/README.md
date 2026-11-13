@@ -2965,6 +2965,11 @@ exact result bytes and referenced Root authorization bytes/row, and its physical
 unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer compiler failure
 for matching current inputs remains authoritative. Withdrawn Web recovery uses the same exact-input failure rule.
 
+Decision: exact `bun run --cwd services/kernel typecheck` and `bun run --cwd apps/web typecheck` receipts may project
+only the complete stable, absent remote-preparation marker trio from an otherwise identical configured source
+inventory. Prepared inputs and the existing physical/terminal budget custody remain required. Forward capture keeps
+the marker digests so the receipt retains its full-trio proof.
+
 Decision: authenticated `typing-recover` may replace one consumed compiler grant only when unchanged source's exact resultless check, SIGTERM, Root authorization, local/remote terminal proof and verified cleanup receipt bind the same task, attempt, physical run and command. A missing predecessor authorizes no new run. Preserve cancellation and receipt; fence checks with compiler results, live or unknown custody, manual cancellation and later attempts. Keep the exact no-command-start recovery proof. Never retry source or infer compiler success.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
