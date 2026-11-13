@@ -175,6 +175,10 @@ exceed 4096.
 the call, and passes `finish` a detached `{ from, to }` copy; row-value snapshots remain owned by
 `growth-seed-batches.ts`.
 
+Decision: Keep seed's default ANALYZE, caller-deferred (`maintenance: false`) and relation-scoped maintenance; prove
+persisted seed rows and finish effects, observe fixed-neighborhood SQL/row/buffer evidence at 1/8/64 through the
+shared harness, and exercise queued `checkGrowth` shutdown at the real database boundary.
+
 Every capture drains registered query, connection setup and nested capture work, including tasks added while earlier
 work settles, before restoring attribution on success or failure. If cleanup also fails, `growthFailureEvidence(thrown)`
 keeps the exact initiating thrown value as primary and exposes bounded drain and cleanup causes without replacing or

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { newId } from '../../src/route/route.ts';
-import { openGrowthDatabase, type GrowthDatabase } from './growth.ts';
+import { checkGrowth, openGrowthDatabase, settleAdmin, type GrowthDatabase } from './growth.ts';
 import { placement, seed, type Population } from './growth-seed.ts';
 import { SEED_BATCH_BYTE_LIMIT, SEED_BATCH_ROW_LIMIT } from './growth-seed-batches.ts';
 
@@ -12,6 +12,10 @@ const schemas = [
   'growth_seed_cumulative_b',
   'growth_seed_write',
   'growth_seed_mutable_rows',
+  'growth_seed_default_maintenance',
+  'growth_seed_deferred_maintenance',
+  'growth_seed_scoped_maintenance',
+  'growth_seed_scale_evidence',
 ];
 type MutablePopulation = { -readonly [Key in keyof Population]: Population[Key] };
 
@@ -28,6 +32,14 @@ beforeAll(async () => {
       FOREIGN KEY (route, parent_id) REFERENCES ${schema}.parent (route, id)
     )`);
   }
+  await database.admin.query(`CREATE TABLE growth_seed_scale_evidence.history (
+    route integer NOT NULL, id integer NOT NULL, parent_id integer NOT NULL, event text NOT NULL,
+    PRIMARY KEY (route, id),
+    FOREIGN KEY (route, parent_id) REFERENCES growth_seed_scale_evidence.parent (route, id)
+  )`);
+  await database.admin.query(
+    'CREATE INDEX growth_seed_scale_evidence_history_parent ON growth_seed_scale_evidence.history (route, parent_id, id)',
+  );
   await database.admin.query(`CREATE TABLE growth_seed_test.padding (
     route integer NOT NULL, id integer NOT NULL, payload text NOT NULL, PRIMARY KEY (route, id)
   )`);
@@ -95,6 +107,143 @@ test('inserts the rows of each ordinal range once, in table order, and refreshes
     `SELECT reltuples FROM pg_class WHERE oid = 'growth_seed_test.parent'::regclass`,
   );
   expect(stats.rows[0]!.reltuples).toBe(20);
+});
+
+test('preserves seeded rows and finish effects across default, deferred, and scoped maintenance', async () => {
+  const cases = [
+    { schema: 'growth_seed_default_maintenance', mode: 'default' },
+    { schema: 'growth_seed_deferred_maintenance', mode: 'deferred' },
+    { schema: 'growth_seed_scoped_maintenance', mode: 'scoped' },
+  ] as const;
+
+  for (const { schema, mode } of cases) {
+    const population: Population = {
+      name: schema,
+      hotPartition: 23,
+      rows: ({ ordinal, route }) => ({
+        [`${schema}.parent`]: [{ route, id: ordinal }],
+        [`${schema}.child`]: [{ route, id: ordinal, parent_id: ordinal }],
+      }),
+      finish: async (admin, range) => {
+        await admin.query(
+          `UPDATE ${schema}.parent SET payload = '{"finished": true}'::jsonb WHERE id >= $1 AND id < $2`,
+          [range.from, range.to],
+        );
+      },
+    };
+    const range = { from: 0, to: 20 };
+    const target = { pool, admin: database.admin };
+
+    if (mode === 'default') await seed(target, population, range);
+    else if (mode === 'deferred') await seed(target, population, range, { maintenance: false });
+    else
+      await seed(target, population, range, {
+        maintenance: { relations: [`${schema}.parent`] },
+      });
+
+    const stats = await database.admin.query<{ parent: number; child: number }>(
+      `SELECT parent.reltuples::int AS parent, child.reltuples::int AS child
+       FROM pg_class parent, pg_class child
+       WHERE parent.oid = $1::regclass AND child.oid = $2::regclass`,
+      [`${schema}.parent`, `${schema}.child`],
+    );
+    expect(stats.rows[0]).toEqual(
+      mode === 'deferred'
+        ? { parent: -1, child: -1 }
+        : mode === 'scoped'
+          ? { parent: 20, child: -1 }
+          : { parent: 20, child: 20 },
+    );
+
+    if (mode === 'deferred')
+      await settleAdmin(database.admin, {
+        relations: [`${schema}.parent`, `${schema}.child`],
+        analyze: true,
+      });
+
+    const parents = await database.admin.query<{ id: number; route: number; finished: string }>(
+      `SELECT id, route, payload->>'finished' AS finished FROM ${schema}.parent ORDER BY id`,
+    );
+    const children = await database.admin.query<{ id: number; route: number; parent_id: number }>(
+      `SELECT id, route, parent_id FROM ${schema}.child ORDER BY id`,
+    );
+    expect(parents.rows).toEqual(
+      Array.from({ length: 20 }, (_, id) => ({ id, route: placement(population, id).route, finished: 'true' })),
+    );
+    expect(children.rows).toEqual(
+      Array.from({ length: 20 }, (_, id) => ({
+        id,
+        route: placement(population, id).route,
+        parent_id: id,
+      })),
+    );
+  }
+});
+
+test('retains fixed-neighbourhood SQL, row, and buffer evidence at three population and history scales', async () => {
+  const population: Population = {
+    name: 'scale-evidence',
+    hotPartition: 23,
+    hotShare: 1,
+    rows: ({ ordinal, route }) => ({
+      'growth_seed_scale_evidence.parent': [{ route, id: ordinal }],
+      'growth_seed_scale_evidence.history': [
+        { route, id: ordinal * 2, parent_id: ordinal, event: 'created' },
+        { route, id: ordinal * 2 + 1, parent_id: ordinal, event: 'edited' },
+      ],
+    }),
+  };
+  const selectedRoute = placement(population, 0).route;
+  const report = await checkGrowth(database, {
+    name: 'growth seed keeps a fixed population-history neighbourhood',
+    scales: [1, 8, 64],
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    warmups: 0,
+    repetitions: 1,
+    seededRelations: ['growth_seed_scale_evidence.parent', 'growth_seed_scale_evidence.history'],
+    grow: async (db, scale, previous) => {
+      await seed({ pool: db.pool, admin: db.admin }, population, { from: previous, to: scale }, { maintenance: false });
+    },
+    operation: async (db) =>
+      db.pool.query<{ id: number; history_id: number }>(
+        `SELECT p.id, h.id AS history_id
+         FROM growth_seed_scale_evidence.parent p
+         JOIN growth_seed_scale_evidence.history h
+           ON h.route = p.route AND h.parent_id = p.id
+         WHERE p.route = $1 AND p.id = $2
+         ORDER BY h.id`,
+        [selectedRoute, 0],
+      ),
+    verify: async (db, scale, _repetition, value) => {
+      expect(value).toMatchObject({
+        rows: [
+          { id: 0, history_id: 0 },
+          { id: 0, history_id: 1 },
+        ],
+      });
+      const counts = await db.admin.query<{ population: number; history: number }>(
+        `SELECT
+           (SELECT count(*)::int FROM growth_seed_scale_evidence.parent) AS population,
+           (SELECT count(*)::int FROM growth_seed_scale_evidence.history) AS history`,
+      );
+      expect(counts.rows[0]).toEqual({ population: scale, history: scale * 2 });
+    },
+  });
+
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+  expect(report.samples.map(({ seeding }) => seeding.rowsWritten)).toEqual([3, 21, 168]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+  expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.blocks > 0)).toBe(true);
+  expect(
+    report.samples.every(({ occurrenceRepetitions }) => {
+      const occurrences = occurrenceRepetitions[0]!;
+      return (
+        occurrences.statements.length === 1 &&
+        occurrences.statements[0]!.statement.includes('growth_seed_scale_evidence.history') &&
+        occurrences.backgroundStatements.length === 0
+      );
+    }),
+  ).toBe(true);
 });
 
 test('keeps a deferred Space head and revision in one transaction across row and byte splits', async () => {

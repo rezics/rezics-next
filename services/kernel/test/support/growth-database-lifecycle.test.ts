@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createGrowthDatabaseLifecycle } from './growth-capture.ts';
+import { checkGrowth, openGrowthDatabase } from './growth.ts';
 
 test('setup failure closes every acquired pool and reports cleanup failures with the setup error', async () => {
   const lifecycle = createGrowthDatabaseLifecycle();
@@ -100,4 +101,98 @@ test('close drains admitted checks in order before releasing pools', async () =>
   await Promise.all([first, second, closing]);
   expect(events).toEqual(['first:start', 'first:capture', 'first:end', 'second:start', 'second:capture', 'second:end']);
   expect(poolClosed).toBe(true);
+});
+
+test('close waits for queued native checkGrowth measurements before shutting down their pools', async () => {
+  const database = await openGrowthDatabase();
+  const scales = [1, 8, 64] as const;
+  const bounds = { rows: 'constant', blocks: 'constant', statements: 'constant' } as const;
+  let startFirst!: () => void;
+  const firstStarted = new Promise<void>((resolve) => (startFirst = resolve));
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>((resolve) => (releaseFirst = resolve));
+  let startSecond!: () => void;
+  const secondStarted = new Promise<void>((resolve) => (startSecond = resolve));
+  let releaseSecond!: () => void;
+  const secondGate = new Promise<void>((resolve) => (releaseSecond = resolve));
+  let first: Promise<unknown> | undefined;
+  let second: Promise<unknown> | undefined;
+  let third: Promise<unknown> | undefined;
+  const measurementError = new Error('native measurement failed');
+
+  const measuredCheck = (name: string, signal: () => void, gate: Promise<void>) =>
+    checkGrowth(database, {
+      name,
+      scales,
+      bounds,
+      warmups: 0,
+      repetitions: 1,
+      seededRelations: [],
+      grow: async () => {},
+      operation: async (db, scale) => {
+        const result = await db.pool.query<{ answer: number }>('SELECT $1::integer AS answer', [scale]);
+        if (scale === 1) {
+          signal();
+          await gate;
+        }
+        return result;
+      },
+      verify: async (_db, scale, _repetition, value) => {
+        expect(value).toMatchObject({ rows: [{ answer: scale }] });
+      },
+    });
+
+  try {
+    const firstReport = measuredCheck('queued close first native measurement', startFirst, firstGate);
+    first = firstReport;
+    await firstStarted;
+    const secondReport = measuredCheck('queued close second native measurement', startSecond, secondGate);
+    second = secondReport;
+    const failedMeasurement = checkGrowth(database, {
+      name: 'queued close failed native measurement',
+      scales,
+      bounds,
+      warmups: 0,
+      repetitions: 1,
+      seededRelations: [],
+      grow: async () => {},
+      operation: async (db) => {
+        await db.pool.query('SELECT 9001 AS answer');
+        throw measurementError;
+      },
+    });
+    third = failedMeasurement;
+
+    let closeSettled = false;
+    const closing = database.close();
+    void closing.then(
+      () => {
+        closeSettled = true;
+      },
+      () => {
+        closeSettled = true;
+      },
+    );
+    await Promise.resolve();
+    expect(closeSettled).toBe(false);
+
+    releaseFirst();
+    await secondStarted;
+    expect(closeSettled).toBe(false);
+    releaseSecond();
+    const [firstResult, secondResult] = await Promise.all([firstReport, secondReport]);
+    await expect(failedMeasurement).rejects.toBe(measurementError);
+    await closing;
+
+    for (const report of [firstResult, secondResult]) {
+      expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+      expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+    }
+    expect(closeSettled).toBe(true);
+  } finally {
+    releaseFirst();
+    releaseSecond();
+    await Promise.allSettled([first, second, third]);
+    await database.close();
+  }
 });
