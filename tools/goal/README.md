@@ -3768,7 +3768,10 @@ host loop. Git, tmux and worker launch run through `runHostProcess`; start, retr
 once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
-Decision: Parse only literal shell and tmux quoting for the same Goal manager role, pool home, thread, executable, command and working directory; on a stale endpoint add a current-endpoint sibling and retain the original pane so drafts stay in place, not migrated; restore dead panes only for an active Goal or authorized inbox wake, and reuse existing current-endpoint siblings to avoid repeat launches.
+Decision: Reconnect only a proven Goal-owned Codex viewer for the same role, account, thread and cwd. Keep the current
+viewer in the manager window; move old viewers to separate draft windows without killing them. On a newly attached
+viewer, a short bounded check may select Leave paused in the exact Codex startup resume menu; it never sends a prompt
+or resumes the Goal. Unknown panes and unrelated dialogs are untouched.
 Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 

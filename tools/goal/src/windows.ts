@@ -182,6 +182,24 @@ const unavailableWindowStatus = (error: unknown) => {
   });
 };
 
+/** Return only the exact, visible Codex Goal resume menu selection. */
+export function pausedGoalMenuSelection(capture: string): 'resume' | 'leave' | undefined {
+  const lines = capture.split('\n');
+  const heading = lines.findLastIndex((line) => line.includes('Resume paused goal?'));
+  if (heading < 0) return;
+  const menu = lines.slice(heading, heading + 12);
+  const resume = menu.findIndex((line) => /1\. Resume goal[ \t]+Mark it active and continue when idle/.test(line));
+  if (
+    resume < 1 ||
+    !/2\. Leave paused[ \t]+Keep it paused; use \/goal resume later/.test(menu[resume + 1] ?? '') ||
+    !menu.slice(resume + 2, resume + 5).some((line) => /enter select[ \t]+·[ \t]+esc back/.test(line))
+  )
+    return;
+  const first = /›[ \t]+1\. Resume goal/.test(menu[resume]!);
+  const second = /›[ \t]+2\. Leave paused/.test(menu[resume + 1]!);
+  if (first !== second) return first ? 'resume' : 'leave';
+}
+
 export interface ManagerWindows {
   register(manager: string, argv: string[], cwd: string): string | Promise<string>;
   unregister(manager: string): void | Promise<void>;
@@ -329,25 +347,47 @@ export class TermspacesWindows implements ManagerWindows {
     if (!session) return false;
     const id = await this.find(session, manager);
     if (!id) return false;
-    const current = await this.pane(id);
-    if (
-      !current ||
-      resolve(current.cwd) !== resolve(cwd) ||
-      this.sameViewer(current, argv, cwd) ||
-      !differsOnlyByRemoteEndpoint(current.command, argv)
-    )
-      return false;
-    if (current.dead !== '0' && !(current.dead === '1' && options.restoreExited)) return false;
     const panes = await this.paneIds(id);
-    if (!panes) return false;
-    if (panes.length > 1) {
-      for (const paneId of panes) {
-        const existing = await this.pane(paneId);
-        if (!existing || this.sameViewer(existing, argv, cwd)) return false;
+    if (!panes?.length) return false;
+    const stale: string[] = [];
+    let replacement: string | undefined;
+    for (const paneId of panes) {
+      const observed = await this.pane(paneId);
+      if (!observed || resolve(observed.cwd) !== resolve(cwd)) continue;
+      if (this.sameViewer(observed, argv, cwd)) {
+        // Do not repeatedly start a viewer that already failed on this endpoint.
+        if (observed.dead !== '0') return false;
+        replacement = paneId;
+      } else if (differsOnlyByRemoteEndpoint(observed.command, argv)) {
+        if (observed.dead === '0' || (observed.dead === '1' && options.restoreExited)) stale.push(paneId);
       }
     }
-    await this.tmux(['split-window', '-h', '-t', id, '-c', cwd, command(argv)]);
+    if (!stale.length) return false;
+    const spawned = replacement === undefined;
+    if (!replacement) {
+      replacement = await this.tmux(['split-window', '-d', '-h', '-P', '-F', '#{pane_id}', '-t', id, '-c', cwd, command(argv)]);
+      if (!/^%\d+$/.test(replacement)) return false;
+    }
+    for (const paneId of stale) {
+      // Keep the original terminal process and its unsent draft without occupying the manager's layout.
+      await this.tmux(['break-pane', '-d', '-s', paneId, '-n', `goal-draft-${manager}-${paneId.slice(1)}`]);
+    }
+    if (spawned) await this.dismissStartupGoalMenu(replacement, argv, cwd);
+    await this.tmux(['select-pane', '-t', replacement]);
     return true;
+  }
+  private async dismissStartupGoalMenu(paneId: string, argv: string[], cwd: string): Promise<void> {
+    // The startup resume dialog can arrive after the pane is created. Bound this to the exact new viewer.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (attempt) await Bun.sleep(200);
+      const pane = await this.pane(paneId);
+      if (!pane || pane.dead !== '0' || !this.sameViewer(pane, argv, cwd)) return;
+      const capture = await this.observe(() => this.tmux(['capture-pane', '-p', '-t', paneId]));
+      const selected = pausedGoalMenuSelection(capture ?? '');
+      if (!selected) continue;
+      await this.tmux(['send-keys', '-t', paneId, ...(selected === 'resume' ? ['Down'] : []), 'Enter']);
+      return;
+    }
   }
   async prompt(manager: string, text: string): Promise<void> {
     const id = await this.find(await this.session(), manager);
