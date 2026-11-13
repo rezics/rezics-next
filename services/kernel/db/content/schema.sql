@@ -2037,6 +2037,161 @@ CREATE TABLE content.hosted_structure_revision (
 
 
 --
+-- Name: hosted_version_builder; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_builder (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    source_revision_id uuid NOT NULL,
+    source_kind text NOT NULL,
+    base_revision_id uuid NOT NULL,
+    base_placement_count bigint NOT NULL,
+    base_root_count bigint NOT NULL,
+    source_high_water bigint NOT NULL,
+    expected_placement_count bigint NOT NULL,
+    frontier_segment text NOT NULL,
+    after_ordinal bigint DEFAULT '-1'::integer NOT NULL,
+    after_offset bigint DEFAULT '-1'::integer NOT NULL,
+    root_sibling_root_id uuid,
+    preorder_root_id uuid,
+    chapter_root_id uuid,
+    root_next_position bigint DEFAULT 0 NOT NULL,
+    active_ancestors jsonb DEFAULT '[]'::jsonb NOT NULL,
+    coverage_complete boolean DEFAULT false NOT NULL,
+    source_current boolean DEFAULT true NOT NULL,
+    status text DEFAULT 'building'::text NOT NULL,
+    sealed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_version_builder_check CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(input_id), 10) * 256) + get_byte(uuid_send(input_id), 11))))),
+    CONSTRAINT hosted_version_builder_check1 CHECK ((((base_placement_count >= 0) AND (base_placement_count <= '9007199254740991'::bigint)) AND ((base_root_count >= 0) AND (base_root_count <= base_placement_count)) AND ((source_high_water >= '-1'::integer) AND (source_high_water <= '9007199254740990'::bigint)) AND ((expected_placement_count >= 0) AND (expected_placement_count <= '9007199254740991'::bigint)) AND (expected_placement_count = (base_placement_count +
+CASE
+    WHEN ((source_kind = 'prefix'::text) AND (source_high_water >= 0)) THEN (source_high_water + 1)
+    ELSE (0)::bigint
+END)) AND (((source_kind = 'snapshot'::text) AND (source_revision_id = base_revision_id) AND (source_high_water = '-1'::integer)) OR (source_kind = 'prefix'::text)))),
+    CONSTRAINT hosted_version_builder_check2 CHECK (((frontier_segment = ANY (ARRAY['base'::text, 'prefix'::text, 'complete'::text])) AND ((after_ordinal >= '-1'::integer) AND (after_ordinal <= base_placement_count)) AND ((after_offset >= '-1'::integer) AND (after_offset <= source_high_water)) AND ((frontier_segment <> 'prefix'::text) OR (source_kind = 'prefix'::text)) AND ((frontier_segment <> 'complete'::text) OR coverage_complete OR (expected_placement_count = 0)))),
+    CONSTRAINT hosted_version_builder_check3 CHECK (((jsonb_typeof(active_ancestors) = 'array'::text) AND (jsonb_array_length(active_ancestors) <= 16) AND ((root_next_position >= 0) AND (root_next_position <= '9007199254740991'::bigint)))),
+    CONSTRAINT hosted_version_builder_check4 CHECK ((((status = 'building'::text) AND (sealed_at IS NULL)) OR ((status = 'sealed'::text) AND (sealed_at IS NOT NULL) AND coverage_complete))),
+    CONSTRAINT hosted_version_builder_check5 CHECK ((isfinite(created_at) AND isfinite(updated_at) AND ((sealed_at IS NULL) OR isfinite(sealed_at)))),
+    CONSTRAINT hosted_version_builder_source_kind_check CHECK ((source_kind = ANY (ARRAY['snapshot'::text, 'prefix'::text])))
+);
+
+
+--
+-- Name: hosted_version_builder_page; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_builder_page (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    from_segment text NOT NULL,
+    from_after_ordinal bigint DEFAULT '-1'::integer NOT NULL,
+    from_after_offset bigint DEFAULT '-1'::integer NOT NULL,
+    to_segment text NOT NULL,
+    to_after_ordinal bigint DEFAULT '-1'::integer NOT NULL,
+    to_after_offset bigint DEFAULT '-1'::integer NOT NULL,
+    processed integer NOT NULL,
+    source_current boolean NOT NULL,
+    coverage_complete boolean NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_version_builder_page_check CHECK (((from_segment <> 'prefix'::text) OR (from_after_ordinal = '-1'::integer))),
+    CONSTRAINT hosted_version_builder_page_check1 CHECK (((from_segment <> 'base'::text) OR (from_after_offset = '-1'::integer))),
+    CONSTRAINT hosted_version_builder_page_check2 CHECK (((to_segment <> 'prefix'::text) OR (to_after_ordinal = '-1'::integer))),
+    CONSTRAINT hosted_version_builder_page_check3 CHECK (((to_segment <> 'base'::text) OR (to_after_offset = '-1'::integer))),
+    CONSTRAINT hosted_version_builder_page_check4 CHECK ((coverage_complete = (to_segment = 'complete'::text))),
+    CONSTRAINT hosted_version_builder_page_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_builder_page_from_segment_check CHECK ((from_segment = ANY (ARRAY['base'::text, 'prefix'::text]))),
+    CONSTRAINT hosted_version_builder_page_processed_check CHECK (((processed >= 0) AND (processed <= 20))),
+    CONSTRAINT hosted_version_builder_page_source_current_check CHECK (source_current),
+    CONSTRAINT hosted_version_builder_page_to_segment_check CHECK ((to_segment = ANY (ARRAY['base'::text, 'prefix'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: hosted_version_builder_point; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_builder_point (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    source_ordinal bigint NOT NULL,
+    address_segment text NOT NULL,
+    source_revision_id uuid,
+    source_stream_id uuid,
+    source_offset bigint,
+    source_address_ordinal bigint,
+    occurrence_id uuid NOT NULL,
+    parent_id uuid,
+    "position" bigint NOT NULL,
+    kind text NOT NULL,
+    title text,
+    target_thread_id uuid,
+    target_post_id uuid,
+    target_revision_id uuid,
+    target_sha256 bytea,
+    CONSTRAINT hosted_version_builder_point_address_segment_check CHECK ((address_segment = ANY (ARRAY['base'::text, 'prefix'::text]))),
+    CONSTRAINT hosted_version_builder_point_check CHECK (((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11))) AND ((parent_id IS NULL) OR (route = ((get_byte(uuid_send(parent_id), 10) * 256) + get_byte(uuid_send(parent_id), 11)))))),
+    CONSTRAINT hosted_version_builder_point_check1 CHECK ((((address_segment = 'base'::text) AND (source_revision_id IS NOT NULL) AND (source_stream_id IS NULL) AND (source_offset IS NULL) AND (source_address_ordinal IS NOT NULL) AND (source_address_ordinal = source_ordinal)) OR ((address_segment = 'prefix'::text) AND (source_revision_id IS NULL) AND (source_stream_id IS NOT NULL) AND (source_offset IS NOT NULL) AND (source_offset >= 0) AND (source_address_ordinal IS NULL)))),
+    CONSTRAINT hosted_version_builder_point_check2 CHECK ((((kind = 'part'::text) AND (target_thread_id IS NULL) AND (target_post_id IS NULL) AND (target_revision_id IS NULL) AND (target_sha256 IS NULL)) OR ((kind = 'chapter'::text) AND (((target_thread_id IS NULL) AND (target_post_id IS NULL) AND (target_revision_id IS NULL) AND (target_sha256 IS NULL)) OR ((target_thread_id IS NOT NULL) AND (target_post_id IS NOT NULL) AND (target_revision_id IS NOT NULL) AND (target_sha256 IS NOT NULL)))))),
+    CONSTRAINT hosted_version_builder_point_kind_check CHECK ((kind = ANY (ARRAY['part'::text, 'chapter'::text]))),
+    CONSTRAINT hosted_version_builder_point_position_check CHECK ((("position" >= 0) AND ("position" <= '9007199254740990'::bigint))),
+    CONSTRAINT hosted_version_builder_point_source_ordinal_check CHECK (((source_ordinal >= 0) AND (source_ordinal <= '9007199254740990'::bigint))),
+    CONSTRAINT hosted_version_builder_point_target_sha256_check CHECK (((target_sha256 IS NULL) OR (octet_length(target_sha256) = 32))),
+    CONSTRAINT hosted_version_builder_point_title_check CHECK (((title IS NULL) OR ((char_length(title) >= 1) AND (char_length(title) <= 256))))
+);
+
+
+--
+-- Name: hosted_version_builder_sequence_node; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_builder_sequence_node (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    sequence_kind text NOT NULL,
+    node_id uuid NOT NULL,
+    left_id uuid,
+    right_id uuid,
+    tree_parent_id uuid,
+    height integer NOT NULL,
+    node_count bigint NOT NULL,
+    chapter_weight smallint DEFAULT 0 NOT NULL,
+    chapter_count bigint NOT NULL,
+    CONSTRAINT hosted_version_builder_sequence_node_chapter_weight_check CHECK ((chapter_weight = ANY (ARRAY[0, 1]))),
+    CONSTRAINT hosted_version_builder_sequence_node_check CHECK (((chapter_count >= 0) AND (chapter_count <= node_count))),
+    CONSTRAINT hosted_version_builder_sequence_node_check1 CHECK ((route = ((get_byte(uuid_send(node_id), 10) * 256) + get_byte(uuid_send(node_id), 11)))),
+    CONSTRAINT hosted_version_builder_sequence_node_check2 CHECK (((left_id IS NULL) OR (route = ((get_byte(uuid_send(left_id), 10) * 256) + get_byte(uuid_send(left_id), 11))))),
+    CONSTRAINT hosted_version_builder_sequence_node_check3 CHECK (((right_id IS NULL) OR (route = ((get_byte(uuid_send(right_id), 10) * 256) + get_byte(uuid_send(right_id), 11))))),
+    CONSTRAINT hosted_version_builder_sequence_node_check4 CHECK (((tree_parent_id IS NULL) OR (route = ((get_byte(uuid_send(tree_parent_id), 10) * 256) + get_byte(uuid_send(tree_parent_id), 11))))),
+    CONSTRAINT hosted_version_builder_sequence_node_height_check CHECK ((height > 0)),
+    CONSTRAINT hosted_version_builder_sequence_node_node_count_check CHECK ((node_count > 0)),
+    CONSTRAINT hosted_version_builder_sequence_node_sequence_kind_check CHECK ((sequence_kind = ANY (ARRAY['siblings'::text, 'preorder'::text, 'chapters'::text])))
+);
+
+
+--
+-- Name: hosted_version_builder_sibling_root; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_builder_sibling_root (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    parent_id uuid,
+    root_id uuid NOT NULL,
+    next_position bigint NOT NULL,
+    CONSTRAINT hosted_version_builder_sibling_root_check CHECK (((parent_id IS NULL) OR (route = ((get_byte(uuid_send(parent_id), 10) * 256) + get_byte(uuid_send(parent_id), 11))))),
+    CONSTRAINT hosted_version_builder_sibling_root_check1 CHECK ((route = ((get_byte(uuid_send(root_id), 10) * 256) + get_byte(uuid_send(root_id), 11)))),
+    CONSTRAINT hosted_version_builder_sibling_root_next_position_check CHECK (((next_position >= 1) AND (next_position <= '9007199254740991'::bigint)))
+);
+
+
+--
 -- Name: imported_field; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -4067,6 +4222,54 @@ ALTER TABLE ONLY content.hosted_structure_revision
 
 
 --
+-- Name: hosted_version_builder_page hosted_version_builder_page_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_page
+    ADD CONSTRAINT hosted_version_builder_page_pkey PRIMARY KEY (route, catalogue_id, input_id, from_segment, from_after_ordinal, from_after_offset);
+
+
+--
+-- Name: hosted_version_builder hosted_version_builder_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder
+    ADD CONSTRAINT hosted_version_builder_pkey PRIMARY KEY (route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder_point hosted_version_builder_point_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_point
+    ADD CONSTRAINT hosted_version_builder_point_pkey PRIMARY KEY (route, catalogue_id, input_id, source_ordinal);
+
+
+--
+-- Name: hosted_version_builder_point hosted_version_builder_point_route_catalogue_id_input_id_oc_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_point
+    ADD CONSTRAINT hosted_version_builder_point_route_catalogue_id_input_id_oc_key UNIQUE (route, catalogue_id, input_id, occurrence_id);
+
+
+--
+-- Name: hosted_version_builder_sequence_node hosted_version_builder_sequence_node_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sequence_node
+    ADD CONSTRAINT hosted_version_builder_sequence_node_pkey PRIMARY KEY (route, catalogue_id, input_id, sequence_kind, node_id);
+
+
+--
+-- Name: hosted_version_builder_sibling_root hosted_version_builder_siblin_route_catalogue_id_input_id_p_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sibling_root
+    ADD CONSTRAINT hosted_version_builder_siblin_route_catalogue_id_input_id_p_key UNIQUE NULLS NOT DISTINCT (route, catalogue_id, input_id, parent_id);
+
+
+--
 -- Name: imported_field imported_field_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -5089,6 +5292,20 @@ CREATE INDEX hosted_publication_staging_input_pending ON content.hosted_publicat
 --
 
 CREATE INDEX hosted_structure_revision_history_idx ON content.hosted_structure_revision USING btree (route, catalogue_id, created_at DESC, revision_id DESC) INCLUDE (kind, source_revision_id);
+
+
+--
+-- Name: hosted_version_builder_point_parent_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_version_builder_point_parent_idx ON content.hosted_version_builder_point USING btree (route, catalogue_id, input_id, parent_id, "position");
+
+
+--
+-- Name: hosted_version_builder_state_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_version_builder_state_idx ON content.hosted_version_builder USING btree (route, catalogue_id, status, input_id);
 
 
 --
@@ -6173,6 +6390,142 @@ ALTER TABLE ONLY content.hosted_structure_revision
 
 ALTER TABLE ONLY content.hosted_structure_revision
     ADD CONSTRAINT hosted_structure_revision_route_catalogue_id_source_revisi_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_builder_page hosted_version_builder_page_route_catalogue_id_input_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_page
+    ADD CONSTRAINT hosted_version_builder_page_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder_point hosted_version_builder_point_route_catalogue_id_input_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_point
+    ADD CONSTRAINT hosted_version_builder_point_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder_point hosted_version_builder_point_route_catalogue_id_input_id_p_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_point
+    ADD CONSTRAINT hosted_version_builder_point_route_catalogue_id_input_id_p_fkey FOREIGN KEY (route, catalogue_id, input_id, parent_id) REFERENCES content.hosted_version_builder_point(route, catalogue_id, input_id, occurrence_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_version_builder_point hosted_version_builder_point_route_catalogue_id_source_rev_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_point
+    ADD CONSTRAINT hosted_version_builder_point_route_catalogue_id_source_rev_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_builder_point hosted_version_builder_point_route_catalogue_id_source_str_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_point
+    ADD CONSTRAINT hosted_version_builder_point_route_catalogue_id_source_str_fkey FOREIGN KEY (route, catalogue_id, source_stream_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_builder hosted_version_builder_route_catalogue_id_base_revision_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder
+    ADD CONSTRAINT hosted_version_builder_route_catalogue_id_base_revision_id_fkey FOREIGN KEY (route, catalogue_id, base_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_builder hosted_version_builder_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder
+    ADD CONSTRAINT hosted_version_builder_route_catalogue_id_fkey FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_version_builder hosted_version_builder_route_catalogue_id_input_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder
+    ADD CONSTRAINT hosted_version_builder_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_migration_input(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder hosted_version_builder_route_catalogue_id_source_revision__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder
+    ADD CONSTRAINT hosted_version_builder_route_catalogue_id_source_revision__fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_builder_sequence_node hosted_version_builder_seque_route_catalogue_id_input_id__fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sequence_node
+    ADD CONSTRAINT hosted_version_builder_seque_route_catalogue_id_input_id__fkey1 FOREIGN KEY (route, catalogue_id, input_id, sequence_kind, left_id) REFERENCES content.hosted_version_builder_sequence_node(route, catalogue_id, input_id, sequence_kind, node_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_version_builder_sequence_node hosted_version_builder_seque_route_catalogue_id_input_id__fkey2; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sequence_node
+    ADD CONSTRAINT hosted_version_builder_seque_route_catalogue_id_input_id__fkey2 FOREIGN KEY (route, catalogue_id, input_id, sequence_kind, right_id) REFERENCES content.hosted_version_builder_sequence_node(route, catalogue_id, input_id, sequence_kind, node_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_version_builder_sequence_node hosted_version_builder_seque_route_catalogue_id_input_id__fkey3; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sequence_node
+    ADD CONSTRAINT hosted_version_builder_seque_route_catalogue_id_input_id__fkey3 FOREIGN KEY (route, catalogue_id, input_id, sequence_kind, tree_parent_id) REFERENCES content.hosted_version_builder_sequence_node(route, catalogue_id, input_id, sequence_kind, node_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_version_builder_sequence_node hosted_version_builder_sequen_route_catalogue_id_input_id__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sequence_node
+    ADD CONSTRAINT hosted_version_builder_sequen_route_catalogue_id_input_id__fkey FOREIGN KEY (route, catalogue_id, input_id, node_id) REFERENCES content.hosted_version_builder_point(route, catalogue_id, input_id, occurrence_id);
+
+
+--
+-- Name: hosted_version_builder_sequence_node hosted_version_builder_sequenc_route_catalogue_id_input_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sequence_node
+    ADD CONSTRAINT hosted_version_builder_sequenc_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_builder_sibling_root hosted_version_builder_sibli_route_catalogue_id_input_id__fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sibling_root
+    ADD CONSTRAINT hosted_version_builder_sibli_route_catalogue_id_input_id__fkey1 FOREIGN KEY (route, catalogue_id, input_id, root_id) REFERENCES content.hosted_version_builder_point(route, catalogue_id, input_id, occurrence_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_version_builder_sibling_root hosted_version_builder_siblin_route_catalogue_id_input_id__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sibling_root
+    ADD CONSTRAINT hosted_version_builder_siblin_route_catalogue_id_input_id__fkey FOREIGN KEY (route, catalogue_id, input_id, parent_id) REFERENCES content.hosted_version_builder_point(route, catalogue_id, input_id, occurrence_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_version_builder_sibling_root hosted_version_builder_sibling_route_catalogue_id_input_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_builder_sibling_root
+    ADD CONSTRAINT hosted_version_builder_sibling_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
 
 
 --
