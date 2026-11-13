@@ -742,10 +742,11 @@ workspace typecheck after commit. Native, browser, ordinary acceptance, root and
 
 ## Prepared Book release activation
 
-Decision: retain the complete injectable consumer and preparation-only Studio until Content mounts and generates
-activation operations after native currentness acceptance; bind that producer directly. Point publication stays
-independent. Deliver the generated transport binding and its focused transport and ordinary-entry assertions together
-once that producer exists, retaining the injectable assertions. One visit retains the exact catalogue, stage, source,
+Decision: keep ordinary Studio preparation-only while Content's activation producer is unmounted; retain the existing
+injectable consumer and resume its direct generated binding only after native currentness acceptance. Add no further
+seam or inferred HTTP operation. Point publication stays independent. Deliver the generated transport binding and its
+focused transport and ordinary-entry assertions together once that producer exists, retaining the injectable
+assertions. One visit retains the exact catalogue, stage, source,
 sealed candidate generation and previous release.
 Each explicit check advances one native page of at most 20 targets; pause retains the candidate, and a native restart
 uses explicit advance to reset authority without preparing or sealing again. Readiness never activates a release.
@@ -784,6 +785,8 @@ Focused cases cover explicit checks/activation, pause/restart, same-intent repla
 readback retry and exact-reader admission, malformed external progress, replacement and late replies. Three stories
 exercise the consumer with explicitly illustrative operations: desktop checks then activation, narrow authority
 restart retaining the candidate, and lost-reply recovery. These are source/interaction evidence only. The verifier
-must receive mounted generated transport and prove an actual sealed private candidate becomes the exact public
-release through ordinary Studio; native/browser/root/growth suites and promotion acceptance remain unverified here.
+must use the ordinary Studio preparation entry to activate a real sealed private candidate, receive the acknowledged
+publication receipt, match that receipt to the current owner publication and pass anonymous exact-reader admission.
+Injectable tests and illustrative stories cannot prove this journey. Native/browser/root/growth suites and promotion
+acceptance remain unverified here.
 Source validation formats changed files, runs the design detector once and submits one final affected Web typecheck.
