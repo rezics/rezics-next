@@ -2065,6 +2065,9 @@ CREATE TABLE content.hosted_publication_staging (
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     sealed_at timestamp with time zone,
+    source_kind text NOT NULL,
+    source_ordered_generation_id uuid,
+    source_ordered_sequence bigint,
     CONSTRAINT hosted_publication_staging_candidate_count_check CHECK ((candidate_count >= 0)),
     CONSTRAINT hosted_publication_staging_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
     CONSTRAINT hosted_publication_staging_check1 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11)))),
@@ -2085,10 +2088,13 @@ CREATE TABLE content.hosted_publication_staging (
     CONSTRAINT hosted_publication_staging_input_frontier_check CHECK ((input_frontier >= '-1'::integer)),
     CONSTRAINT hosted_publication_staging_input_version_check CHECK ((input_version >= 0)),
     CONSTRAINT hosted_publication_staging_mode_check CHECK ((mode = ANY (ARRAY['whole'::text, 'selection'::text]))),
+    CONSTRAINT hosted_publication_staging_ordered_generation_route_check CHECK (((source_ordered_generation_id IS NULL) OR (route = ((get_byte(uuid_send(source_ordered_generation_id), 10) * 256) + get_byte(uuid_send(source_ordered_generation_id), 11))))),
+    CONSTRAINT hosted_publication_staging_ordered_source_shape_check CHECK ((((source_kind = 'ordered'::text) AND (NOT source_has_descriptor) AND (source_ordered_generation_id IS NOT NULL) AND (source_ordered_sequence IS NOT NULL) AND (source_ordered_sequence >= 0)) OR ((source_kind = 'prefix'::text) AND source_has_descriptor AND (source_ordered_generation_id IS NULL) AND (source_ordered_sequence IS NULL)) OR ((source_kind = 'snapshot'::text) AND (NOT source_has_descriptor) AND (source_ordered_generation_id IS NULL) AND (source_ordered_sequence IS NULL)))),
     CONSTRAINT hosted_publication_staging_owner_epoch_check CHECK ((owner_epoch >= 0)),
     CONSTRAINT hosted_publication_staging_sealed_at_check CHECK (((sealed_at IS NULL) OR isfinite(sealed_at))),
     CONSTRAINT hosted_publication_staging_settled_input_count_check CHECK ((settled_input_count >= 0)),
     CONSTRAINT hosted_publication_staging_source_frontier_check CHECK ((source_frontier >= '-1'::integer)),
+    CONSTRAINT hosted_publication_staging_source_kind_check CHECK ((source_kind = ANY (ARRAY['snapshot'::text, 'prefix'::text, 'ordered'::text]))),
     CONSTRAINT hosted_publication_staging_status_check CHECK ((status = ANY (ARRAY['collecting'::text, 'building'::text, 'closing'::text, 'ready'::text, 'sealed'::text, 'cancelled'::text, 'expired'::text, 'failed'::text]))),
     CONSTRAINT hosted_publication_staging_target_observation_count_check CHECK ((target_observation_count >= 0)),
     CONSTRAINT hosted_publication_staging_unknown_input_count_check CHECK ((unknown_input_count >= 0))
@@ -5109,6 +5115,14 @@ ALTER TABLE ONLY content.hosted_version_release_candidate
 
 
 --
+-- Name: hosted_version_revision hosted_version_revision_exact_source_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_revision
+    ADD CONSTRAINT hosted_version_revision_exact_source_key UNIQUE (route, catalogue_id, revision_id, generation_id, sequence);
+
+
+--
 -- Name: hosted_version_revision hosted_version_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -7326,6 +7340,14 @@ ALTER TABLE ONLY content.hosted_publication_staging_cleanup
 
 ALTER TABLE ONLY content.hosted_publication_staging_input
     ADD CONSTRAINT hosted_publication_staging_inp_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_staging hosted_publication_staging_ordered_source_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_staging
+    ADD CONSTRAINT hosted_publication_staging_ordered_source_fkey FOREIGN KEY (route, catalogue_id, source_revision_id, source_ordered_generation_id, source_ordered_sequence) REFERENCES content.hosted_version_revision(route, catalogue_id, revision_id, generation_id, sequence);
 
 
 --
