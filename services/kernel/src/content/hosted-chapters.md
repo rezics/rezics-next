@@ -168,7 +168,7 @@ publication CAS. A stale fresh command fails without index or pointer changes.
 Decision: point publication prepares retained anonymous metadata checks for the catalogue opening and only newly
 selected exact targets; the seam stays unmounted until Content can join those final checks to the pointer transaction.
 
-Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; route mounting waits for the native version-store and exact-source-consent bindings.
+Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; keep insert and replacement unmounted until the native Book-version transaction and exact Book-scoped source-consent bindings are available, and coordinate Book-link reader dispatch before changing reads.
 
 Copy only the affected sibling, preorder and chapter index paths and at most H explicitly selected ancestors; create
 one small version root/count summary and atomically CAS the publication pointer with receipt/identity-only event.
