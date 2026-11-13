@@ -63,6 +63,9 @@ work and an atomic public pointer change, without copying or revalidating every 
 whole-book publication consume exact selections in bounded resumable steps; the prior release remains visible until
 the complete new selection is atomically published. Before a first release completes, preparation stays private.
 
+Decision: Hosted version write handles retain `Value` through an erased optional private unique-symbol member, so
+`hostedVersionSequence` infers node values without adding runtime state.
+
 [Knowledge](../knowledge-workspaces.md) supplies reusable ordered structure capabilities. Book publication selection,
 release lifecycle and current authority remain product-owned by Content; reuse does not import Knowledge's rollout
 scope or make an outline an authorization source. These requirements leave physical storage to implementation.

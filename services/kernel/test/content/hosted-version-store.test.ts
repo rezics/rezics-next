@@ -4,6 +4,7 @@ import {
   rankVersionedOutlineSequenceNode,
   spliceVersionedOutlineSequence,
 } from '../../src/content/versioned-outline-sequence.ts';
+import type { VersionedOutlineSequenceReadWriteSet } from '../../src/content/versioned-outline-sequence.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { HostedVersionHeadChangedError, type HostedVersionSnapshot } from '../../src/content/hosted-version-model.ts';
 import {
@@ -88,7 +89,10 @@ test('keeps exact temporal state and private generations separate from the legac
     sequenceContexts.push(write);
     return write;
   };
-  const sequence = (write: BookWrite, index: 'sibling' | 'preorder' | 'chapter') => hostedVersionSequence(write, index);
+  const sequence = (
+    write: BookWrite,
+    index: 'sibling' | 'preorder' | 'chapter',
+  ): VersionedOutlineSequenceReadWriteSet<BookNodeValue> => hostedVersionSequence(write, index);
   const nodeAt = async (snapshot: HostedVersionSnapshot, id: string, index: 'sibling' | 'preorder' | 'chapter') =>
     sequence(writeFor(snapshot), index).readNode(id);
 

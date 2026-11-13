@@ -81,9 +81,11 @@ type Overlay<Value> = {
 };
 
 /** One transaction overlay, with a producer-owned final-per-ID node map for each index. */
+declare const hostedVersionValueType: unique symbol;
 export type HostedVersionWrite<Value extends object> = Readonly<{
   snapshot: HostedVersionSnapshot;
   sequence: bigint;
+  [hostedVersionValueType]?: Value;
 }>;
 const overlays = new WeakMap<object, unknown>();
 
