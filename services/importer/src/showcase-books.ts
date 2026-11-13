@@ -1044,7 +1044,10 @@ async function seedShowcaseBooks(
     conversions: planned.conversions,
     identities,
     planned,
-    status: planned.gaps.length && seeded.status === 'imported' ? 'imported-with-gaps' : seeded.status,
+    status:
+      planned.gaps.length > 0 || seeded.status === 'imported-with-gaps' || current?.status === 'imported-with-gaps'
+        ? 'imported-with-gaps'
+        : seeded.status,
     gaps: [...planned.gaps, ...seeded.gaps],
   };
 }

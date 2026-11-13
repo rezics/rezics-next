@@ -21,6 +21,7 @@ import { acquireBangumiPersonCareerSources } from '../src/showcase-bangumi-caree
 import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
 import {
   includeShowcaseBookRecords,
+  importShowcaseBooks as runShowcaseBooks,
   planShowcaseBooks,
   prepareShowcaseBookGeneration,
   showcaseBookFamily,
@@ -402,6 +403,7 @@ test('fresh book seed publishes current authors and keeps grain, membership and 
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
     );
     expect(first.creditRoles).toEqual([expect.objectContaining({ code: '2001', property: 'schema:author' })]);
+    expect(first.status).toBe('imported');
     expect(first.creditGaps.some((item) => 'path' in item && item.path === '/subject-persons/26/6023/position')).toBe(
       false,
     );
@@ -481,6 +483,69 @@ test('fresh book seed publishes current authors and keeps grain, membership and 
     expect(again.identities['26']?.id).toBe(first.identities['26']?.id);
     expect(again.identities['person:6023']?.id).toBe(first.identities['person:6023']?.id);
     expect(again.selected).toEqual(first.selected);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test('book status reflects creator evidence lost after seeding while retaining current roles and identities', async () => {
+  const source = tables({
+    credits: [
+      { person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' },
+      { person_id: 7001, subject_id: 26, position: 2002, appear_eps: '' },
+    ],
+    people: [author, illustrator],
+  });
+  const planned = await planShowcaseBooks({ tables: source });
+  expect(planned.gaps).toEqual([]);
+
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-book-final-creator-read-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const world = reviewWorld(journal);
+    let seededStatus: string | undefined;
+    let seededAuthorId: string | undefined;
+    const result = await runShowcaseBooks({
+      seed: async (...args) => {
+        const seeded = await seedCrossMedia(...args);
+        seededStatus = seeded.status;
+        seededAuthorId = [...world.subjects.values()].find((subject) => subject.sourceExternalId === 'person:6023')?.id;
+        const authorRole = [...world.subjects.values()].find(
+          (subject) => subject.sourceExternalId === 'vocabulary:bangumi.staff:2001',
+        );
+        if (!authorRole) throw new Error('Missing seeded author-role concept');
+        authorRole.statements['schema:sameAs'] = [
+          {
+            property: { id: 'schema:sameAs' },
+            value: { type: 'value', content: 'https://example.test/retracted-author' },
+          },
+        ];
+        return seeded;
+      },
+      planned,
+      tables: source,
+      path: join(directory, 'state.sqlite'),
+      port: world.port,
+      journal,
+      review: world.review,
+      publicClient: world.publicClient,
+    });
+
+    expect(seededStatus).toBe('imported');
+    expect(result.status).toBe('imported-with-gaps');
+    expect(result.creditGaps).toEqual([
+      {
+        provider: 'bangumi',
+        path: '/subject-persons/26/6023/position',
+        code: '2001',
+        reason: 'missing_concept',
+        property: 'schema:author',
+      },
+    ]);
+    expect(result.creditRoles).toEqual([expect.objectContaining({ code: '2002', property: 'schema:illustrator' })]);
+    expect(seededAuthorId).toBeDefined();
+    expect(result.identities['person:6023']?.id).toBe(seededAuthorId);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
