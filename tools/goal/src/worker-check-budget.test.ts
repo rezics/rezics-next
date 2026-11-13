@@ -1335,7 +1335,12 @@ test('Kernel client-output recovery resumes only through the validated producer 
         exitCode: 0,
         includedTypecheck: true,
         typecheckFailed: false,
-        typingRequest: { physicalRunId: randomUUID(), command: emitter, localPrepared: [], capture: 'physical-command' },
+        typingRequest: {
+          physicalRunId: randomUUID(),
+          command: emitter,
+          localPrepared: [],
+          capture: 'physical-command',
+        },
         typingInputsUnavailable: 'Kernel emitter output receipt was not returned',
       });
       writeFileSync(stampPath, JSON.stringify(stamp));

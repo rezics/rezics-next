@@ -669,9 +669,7 @@ export function readTypingInputReceipt(
     Array.isArray(value.compilerCommand) && value.compilerCommand.every((argument) => typeof argument === 'string');
   const clientPipeline = validCompilerCommand && kernelClientTypingPipeline(root, value.compilerCommand);
   const validOutputs =
-    value.outputs === undefined
-      ? !clientPipeline
-      : same(value.outputs, ['kernel-client-v1']) && clientPipeline;
+    value.outputs === undefined ? !clientPipeline : same(value.outputs, ['kernel-client-v1']) && clientPipeline;
   const validSnapshot = (snapshot: TypingInputs): boolean =>
     Boolean(
       snapshot &&
