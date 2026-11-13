@@ -765,6 +765,7 @@ export function briefPathCloseness(
 
 /**
  * A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters`.
+ * Body oversize is a return. An under-floor estimate is an advisory observation and is not a disposition failure.
  * Urgent, research, mechanical, specification and continuation briefs are exempt; omitted estimates use 1,500 lines.
  */
 export function productBriefSizeViolation(
@@ -795,18 +796,18 @@ export function productBriefSizeViolation(
   };
 }
 
+/** Body oversize is a return; an under-floor estimate by itself is not. */
+export function productBriefSizeIsReturn(violation: ProductBriefSizeViolation | undefined): boolean {
+  return violation?.bodyCharacters !== undefined;
+}
+
 export function productBriefSizeReturnReason(
   violation: ProductBriefSizeViolation,
   policy: BriefPolicy = defaultPolicy.brief,
 ): string {
-  const parts: string[] = [];
-  if (violation.estimateLines !== undefined)
-    parts.push(
-      `estimate.lines is ${violation.estimateLines}; brief.minimumEstimateLines is ${policy.minimumEstimateLines}`,
-    );
   if (violation.bodyCharacters !== undefined)
-    parts.push(
-      `body is ${violation.bodyCharacters} characters; brief.maximumBodyCharacters is ${policy.maximumBodyCharacters}`,
-    );
-  return `${parts.join('. ')}. Merge with related briefs of the same Goal and area into one outcome, or rewrite it.`;
+    return `body is ${violation.bodyCharacters} characters; brief.maximumBodyCharacters is ${policy.maximumBodyCharacters}. Merge with related briefs of the same Goal and area into one outcome, or rewrite it.`;
+  if (violation.estimateLines !== undefined)
+    return `estimate.lines is ${violation.estimateLines}; brief.minimumEstimateLines is ${policy.minimumEstimateLines} (advisory).`;
+  return '';
 }

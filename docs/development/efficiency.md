@@ -82,10 +82,11 @@ record the effect, including when it is not yet observable.
   unbound seam. A mock binding does not finish a journey.
 - Make a task one complete outcome of about 1,500 to 3,000 product lines, landed with one check: a whole capability
   row, a whole system or one migration step across a module. Chain similar work in one worker, not in slivers. State
-  the expected line count in the brief. Keep at most six tasks in flight per Goal.
+  the expected line count in the brief. An honest under-floor estimate on a complete outcome is not a dispatch return.
+  Keep at most six tasks in flight per Goal.
 - Repairs of integrated code that is broken on dev (type diagnostics, boot failures, failing tests named in landed
-  summaries) go out as urgent briefs under the manager's urgent grant. They are exempt from the size floor, carry an
-  honest estimate, and are batched per area, never one per diagnostic.
+  summaries) go out as urgent briefs under the manager's urgent grant. They carry an honest estimate and are batched
+  per area, never one per diagnostic. The dispatch estimate floor is advisory.
 - Take outcomes in this order: capability rows still red, each built end to end until its composed acceptance passes;
   systems that [scope](../scope.md) lists as built but closed, finished to the polish bar and kept closed; then the
   [architecture migration](../research/architecture-paradigms-opus-5-5.md) steps in the Goal's own modules. Deferred

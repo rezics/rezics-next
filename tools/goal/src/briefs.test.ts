@@ -14,6 +14,7 @@ import {
   occupyingEnvironmentWalk,
   parseBrief,
   pathsOverlap,
+  productBriefSizeIsReturn,
   productBriefSizeReturnReason,
   productBriefSizeViolation,
   readRiskOwnership,
@@ -315,12 +316,27 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_t
   }
 });
 
-test('product brief size returns use policy floors and exempt urgent research mechanical specification and continuation', () => {
+test('product brief under-floor estimates are advisory; body oversize still returns; exemptions hold', () => {
   const policy = defaultPolicy.brief;
   expect(policy.minimumEstimateLines).toBe(1200);
   expect(policy.maximumBodyCharacters).toBe(4000);
   expect(productBriefSizeViolation(markdown)).toEqual({ estimateLines: 100 });
-  expect(productBriefSizeReturnReason({ estimateLines: 100 }, policy)).toContain('brief.minimumEstimateLines is 1200');
+  expect(productBriefSizeIsReturn({ estimateLines: 100 })).toBe(false);
+  expect(productBriefSizeReturnReason({ estimateLines: 100 }, policy)).toContain(
+    'brief.minimumEstimateLines is 1200 (advisory)',
+  );
+  const honest = markdown.replace('lines: 100', 'lines: 350');
+  expect(productBriefSizeViolation(honest)).toEqual({ estimateLines: 350 });
+  expect(productBriefSizeIsReturn(productBriefSizeViolation(honest))).toBe(false);
+  expect(
+    parseBrief(honest.replace('waiting: []', 'waiting: []\nafter: [blocker-1]'), { version: 1, areas: {} }),
+  ).toMatchObject({
+    estimate: { lines: 350, files: 4 },
+    after: ['blocker-1'],
+  });
+  expect(() => parseBrief(markdown.replace('lines: 100', 'lines: many'), { version: 1, areas: {} })).toThrow(
+    'estimate.lines must be a positive integer',
+  );
   const complete = markdown.replace('lines: 100', `lines: ${policy.minimumEstimateLines}`);
   expect(productBriefSizeViolation(complete)).toBeUndefined();
   const omitted = markdown.replace('estimate:\n  lines: 100\n  files: 4\n', '');
@@ -330,6 +346,7 @@ test('product brief size returns use policy floors and exempt urgent research me
   expect(productBriefSizeViolation(atLimit)).toBeUndefined();
   const over = atLimit + 'y';
   expect(productBriefSizeViolation(over)).toEqual({ bodyCharacters: policy.maximumBodyCharacters + 1 });
+  expect(productBriefSizeIsReturn(productBriefSizeViolation(over))).toBe(true);
   expect(productBriefSizeReturnReason({ bodyCharacters: policy.maximumBodyCharacters + 1 }, policy)).toContain(
     'brief.maximumBodyCharacters is 4000',
   );
@@ -355,6 +372,9 @@ test('product brief size returns use policy floors and exempt urgent research me
   expect(productBriefSizeViolation(complete, { ...policy, minimumEstimateLines: 2000 })).toEqual({
     estimateLines: 1200,
   });
+  expect(productBriefSizeIsReturn({ estimateLines: 1200, bodyCharacters: policy.maximumBodyCharacters + 1 })).toBe(
+    true,
+  );
   expect(briefPathCloseness(['tools/goal/src/backlog.ts'], ['tools/goal/src/briefs.ts'])).toBeGreaterThan(
     briefPathCloseness(['tools/goal/src/backlog.ts'], ['apps/web/src/page.ts']),
   );

@@ -782,7 +782,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.brief.pathCharacters`                         | `65536`                                                                    | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                                                                  | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated                                                    | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
-| `policy.brief.minimumEstimateLines`                   | `1200`                                                                     | Estimate floor at backlog dispatch.                                                                                                                                                         |
+| `policy.brief.minimumEstimateLines`                   | `1200`                                                                     | Advisory estimate baseline at backlog dispatch; under-floor estimates admit.                                                                                                                |
 | `policy.brief.maximumBodyCharacters`                  | `4000`                                                                     | Body ceiling at backlog dispatch.                                                                                                                                                           |
 | `policy.workerPrompt.characters`                      | `20000`                                                                    | Total worker prompt characters when delivering an owner decision.                                                                                                                           |
 | `policy.workerPrompt.gitBufferBytes`                  | `16777216`                                                                 | Worker prompt changed-path Git output buffer (bytes).                                                                                                                                       |
@@ -2787,9 +2787,13 @@ host's socket. The host skips the minute while the previous child is still runni
   beside `failed/<name>.reason`, and the event names the archived brief. Decision: keep the first failed name and use
   the next numeric suffix for later collisions; write the reason first and resume it only when its brief fingerprint
   matches.
-  A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters` moves to `returned/` with a
-  reason; urgent, research, mechanical, specification and continuation briefs are exempt. One manager instruction
-  lists path-prefix merge candidates; status and hourly reports count them.
+  A product brief over `brief.maximumBodyCharacters` moves to `returned/` with a reason. An estimate below
+  `brief.minimumEstimateLines` is an advisory dispatch observation (`flow_events` action `observed`); the honest
+  estimate is kept for routing and the brief stays in ordinary admission. Urgent, research, mechanical, specification
+  and continuation briefs are exempt from both. One manager instruction lists path-prefix merge candidates for body
+  returns; status and hourly reports count returns. Decision: the old under-floor return interrupted managers for
+  complete 350-line and 850-line Content briefs; omitted estimates still default to 1,500. Next comparison is
+  size-only (body) returns and time from complete brief to accepted start.
   An urgent brief is dispatched under the manager named in its front matter when that manager's live session owns the
   Goal directory. The sweep passes that manager as the submitting actor so an active urgent grant is honoured; without
   a confirmed owner or grant the brief moves to `returned/` with the grant reason. Non-urgent briefs still dispatch
@@ -2800,8 +2804,10 @@ host's socket. The host skips the minute while the previous child is still runni
   ready order across fresh dispatches, retries and dependency releases. `goal backlog status` reports each Goal's
   in-flight count and cap (`exempt` for control-plane); older shared local settings need no new key.
   Decision: omitted estimates on ordinary product briefs count as 1,500 lines, matching parseBrief. Interface, claim and
-  bulk-text are product. Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix
-  overlap, at most three. Invalid YAML in a backlog file is untrusted input and is not a size return.
+  bulk-text are product. `minimumEstimateLines` stays readable as an advisory baseline, including older local settings.
+  Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix overlap, at most three.
+  Invalid YAML in a backlog file is untrusted input and is not a size return. Malformed briefs still fail at parse and
+  move to `failed/`; `after` and other admission checks are unchanged.
   A brief
   left in `.dispatching/` by a host that stopped after creating the task is archived once as
   `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such
@@ -2896,8 +2902,8 @@ last `policy.chain.contextTailBytes` bytes. Urgent, verification, research, clai
 Decision: chain decisions run in the backlog child, not at landing: a chained dispatch creates a worktree and may
 install dependencies, and landing only records the offer.
 
-Decision: product-brief size returns run before chain answers, so a chained brief meets the same size bar as an ordinary
-dispatch.
+Decision: product-brief body-size returns run before chain answers, so a chained brief meets the same body bar as an
+ordinary dispatch. An under-floor estimate is observed at chained admission the same way as ordinary dispatch.
 
 Decision: `report --flow` states chained and unchained tasks on the same terms: landed lines over the worker time those
 tasks spent, with declined offers counted by reason.
