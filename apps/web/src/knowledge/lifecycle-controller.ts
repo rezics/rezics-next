@@ -103,6 +103,7 @@ export function useKnowledgeLifecycle({
 
   function review(blocked: boolean) {
     if (blocked || !observation || readState !== 'ready' || intent || inFlight.current) return;
+    if (observation.lifecycle.restoreProgress) return;
     const action = observation.lifecycle.state === 'active' ? 'trash' : 'restore';
     if (!allowed(action)) return;
     if (action === 'restore' && knowledgeRestoreExpired(observation.lifecycle)) {
@@ -130,7 +131,7 @@ export function useKnowledgeLifecycle({
         retire(result.state);
       } else if (result.state === 'acknowledged') {
         setIntent(null);
-        setCommandState(result.receipt.complete ? 'acknowledged' : 'subtree');
+        setCommandState('acknowledged');
         await reread();
       } else if (result.state === 'conflict' || result.state === 'not-found') {
         setIntent(null);
@@ -157,12 +158,15 @@ export function useKnowledgeLifecycle({
     intent,
     pending: commandState === 'pending',
     unresolved,
-    locked: !!intent || (enabled && readState !== 'ready'),
+    locked: !!intent || (enabled && (readState !== 'ready' || lifecycle?.state !== 'active')),
     editing: !enabled || (readState === 'ready' && lifecycle?.state === 'active'),
     actionAdmission: lifecycle?.state === 'trashed' ? restoreAdmission : trashAdmission,
     review,
     submit,
-    reread,
+    async reread() {
+      if (intent || inFlight.current) return;
+      await reread();
+    },
     cancel() {
       if (commandState !== 'confirm') return;
       setIntent(null);

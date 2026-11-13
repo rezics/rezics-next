@@ -14,6 +14,7 @@ const lifecycle = {
   generation: '0',
   state: 'active',
   restoreUntil: null,
+  restoreProgress: null,
 };
 let identity: string | null = viewer;
 let csrfToken = 'prepared-csrf';

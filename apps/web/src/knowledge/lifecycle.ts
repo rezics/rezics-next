@@ -1,6 +1,11 @@
 import type { KernelClient } from '@rezics/client';
 import { isKnowledgeId, type KnowledgePrivateAddress, type KnowledgePrivateFailure } from './private-knowledge';
 
+export type KnowledgeRestoreProgress = Readonly<{
+  processedDocuments: string;
+  pendingPlacements: string;
+}>;
+
 export type KnowledgeLifecycle = Readonly<{
   documentId: string;
   notebookId: string;
@@ -8,9 +13,10 @@ export type KnowledgeLifecycle = Readonly<{
   generation: string;
   state: 'active' | 'trashed';
   restoreUntil: string | null;
+  restoreProgress: KnowledgeRestoreProgress | null;
 }>;
 export type KnowledgeLifecycleReceipt = KnowledgeLifecycle &
-  Readonly<{ complete: boolean; reason: 'subtree_work_required' | null }>;
+  Readonly<{ complete: boolean; reason: 'restoring' | null }>;
 export type KnowledgeLifecycleBinding = Readonly<{ viewer: string; csrfToken: string; credential: string }>;
 export type KnowledgeLifecycleRead =
   | { state: 'ready'; lifecycle: KnowledgeLifecycle; binding: KnowledgeLifecycleBinding }
@@ -40,18 +46,29 @@ export function isKnowledgeLifecycleGeneration(value: unknown): value is string 
   return typeof value === 'string' && /^(?:0|[1-9][0-9]{0,18})$/.test(value);
 }
 
+/** Native counts remain decimal strings, including values beyond JavaScript's safe integer range. */
+function admitRestoreProgress(value: unknown): KnowledgeRestoreProgress | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const dto = value as Record<string, unknown>;
+  const decimal = (count: unknown): count is string => typeof count === 'string' && /^(?:0|[1-9][0-9]*)$/.test(count);
+  if (!decimal(dto.processedDocuments) || !decimal(dto.pendingPlacements)) return null;
+  return { processedDocuments: dto.processedDocuments, pendingPlacements: dto.pendingPlacements };
+}
+
 /** Validate the native metadata response at its exact owner-route boundary. */
 export function admitKnowledgeLifecycle(value: unknown, address: KnowledgePrivateAddress): KnowledgeLifecycle | null {
   if (typeof value !== 'object' || value === null) return null;
   const dto = value as Record<string, unknown>;
+  const restoreProgress = dto.restoreProgress === null ? null : admitRestoreProgress(dto.restoreProgress);
   if (
     dto.documentId !== address.documentId ||
     dto.notebookId !== address.notebookId ||
     !isKnowledgeId(dto.structureRevisionId) ||
     !isKnowledgeLifecycleGeneration(dto.generation) ||
     !(dto.state === 'active' || dto.state === 'trashed') ||
+    (dto.restoreProgress !== null && !restoreProgress) ||
     (dto.state === 'active'
-      ? dto.restoreUntil !== null
+      ? dto.restoreUntil !== null || restoreProgress !== null
       : typeof dto.restoreUntil !== 'string' || !Number.isFinite(Date.parse(dto.restoreUntil)))
   )
     return null;
@@ -62,6 +79,7 @@ export function admitKnowledgeLifecycle(value: unknown, address: KnowledgePrivat
     generation: dto.generation,
     state: dto.state,
     restoreUntil: dto.restoreUntil as string | null,
+    restoreProgress,
   };
 }
 
@@ -121,8 +139,13 @@ export async function changeKnowledgeLifecycle(
     !lifecycle ||
     typeof dto.complete !== 'boolean' ||
     (dto.complete
-      ? dto.reason !== null || lifecycle.state !== (input.action === 'trash' ? 'trashed' : 'active')
-      : dto.reason !== 'subtree_work_required' || lifecycle.state !== (input.action === 'trash' ? 'active' : 'trashed'))
+      ? dto.reason !== null ||
+        lifecycle.restoreProgress !== null ||
+        lifecycle.state !== (input.action === 'trash' ? 'trashed' : 'active')
+      : input.action !== 'restore' ||
+        dto.reason !== 'restoring' ||
+        lifecycle.state !== 'trashed' ||
+        lifecycle.restoreProgress === null)
   )
     return { state: 'uncertain' };
   return {

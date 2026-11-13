@@ -20,6 +20,7 @@ const active: KnowledgeLifecycle = {
   generation: '0',
   state: 'active',
   restoreUntil: null,
+  restoreProgress: null,
 };
 const trashed: KnowledgeLifecycle = {
   ...active,
@@ -95,20 +96,51 @@ test('trash and restore send native CAS and preserve exact idempotency on replay
   }
 });
 
-test('native subtree refusal is not completion; malformed success is uncertain and failures retain their meaning', async () => {
-  const intent = reviewKnowledgeLifecycle(active, binding, 'trash');
+test('native durable restoration is acknowledged; malformed success is uncertain and failures retain their meaning', async () => {
+  const intent = reviewKnowledgeLifecycle(trashed, binding, 'restore');
   const run = (value: unknown, status = 200) =>
     changeKnowledgeLifecycle(
       native(() => Response.json(value, { status })),
       { ...intent, authorization },
     );
-  expect(await run({ ...active, complete: false, reason: 'subtree_work_required' })).toMatchObject({
-    state: 'acknowledged',
-    receipt: { complete: false },
-  });
+  const restoring = {
+    ...trashed,
+    generation: '2',
+    restoreProgress: { processedDocuments: '9007199254740993', pendingPlacements: '65' },
+  };
+  const receipt = { ...restoring, complete: false, reason: 'restoring' };
+  expect(await run(receipt)).toEqual({ state: 'acknowledged', receipt });
+  expect(await run(receipt)).toEqual({ state: 'acknowledged', receipt });
+  expect(
+    await readKnowledgeLifecycle(
+      native(() => Response.json(restoring)),
+      { ...address, accountId, authorization },
+    ),
+  ).toEqual({ state: 'ready', lifecycle: restoring });
+  for (const progress of [
+    undefined,
+    {},
+    { processedDocuments: 1, pendingPlacements: '2' },
+    { processedDocuments: '01', pendingPlacements: '2' },
+    { processedDocuments: '1', pendingPlacements: '-1' },
+  ]) {
+    expect(admitKnowledgeLifecycle({ ...trashed, restoreProgress: progress }, address)).toBeNull();
+    expect(await run({ ...receipt, restoreProgress: progress })).toEqual({ state: 'uncertain' });
+  }
+  expect(admitKnowledgeLifecycle({ ...active, restoreProgress: restoring.restoreProgress }, address)).toBeNull();
+  const trash = reviewKnowledgeLifecycle(active, binding, 'trash');
+  expect(
+    await changeKnowledgeLifecycle(
+      native(() => Response.json(receipt)),
+      { ...trash, authorization },
+    ),
+  ).toEqual({ state: 'uncertain' });
   for (const value of [
     null,
-    { ...active, complete: true, reason: null },
+    { ...trashed, complete: true, reason: null },
+    { ...restoring, complete: true, reason: null },
+    { ...active, complete: false, reason: 'restoring' },
+    { ...trashed, complete: false, reason: 'subtree_work_required' },
     { ...trashed, complete: false, reason: null },
     { ...trashed, notebookId: accountId, complete: true, reason: null },
   ])
