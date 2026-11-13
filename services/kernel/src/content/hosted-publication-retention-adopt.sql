@@ -14,9 +14,12 @@ WITH input AS MATERIALIZED (
   LEFT JOIN content.hosted_version_candidate_cleanup candidate_cleanup
     ON candidate_cleanup.route=stage.route AND candidate_cleanup.catalogue_id=stage.catalogue_id
    AND candidate_cleanup.stage_id=stage.stage_id
-  WHERE input.after_route IS NULL OR
-    ROW(stage.route,stage.catalogue_id,stage.stage_id)>
-    ROW(input.after_route,input.after_catalogue_id,input.after_stage_id)
+  WHERE ROW(stage.route,stage.catalogue_id,stage.stage_id)>
+    ROW(
+      COALESCE(input.after_route,-1),
+      COALESCE(input.after_catalogue_id,'00000000-0000-0000-0000-000000000000'::uuid),
+      COALESCE(input.after_stage_id,'00000000-0000-0000-0000-000000000000'::uuid)
+    )
   ORDER BY stage.route,stage.catalogue_id,stage.stage_id
   LIMIT (SELECT row_limit FROM input)
 ), inserted AS (

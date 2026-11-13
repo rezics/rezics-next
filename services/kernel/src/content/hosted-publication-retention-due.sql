@@ -35,9 +35,13 @@ WITH input AS MATERIALIZED (
    AND candidate_cleanup.stage_id=stage.stage_id
   WHERE pending.available_at<=input.cutoff
     AND stage.expires_at<=input.cutoff
-    AND (input.after_available_at IS NULL OR
-      ROW(pending.available_at,pending.route,pending.catalogue_id,pending.stage_id)>
-      ROW(input.after_available_at,input.after_route,input.after_catalogue_id,input.after_stage_id))
+    AND ROW(pending.available_at,pending.route,pending.catalogue_id,pending.stage_id)>
+      ROW(
+        COALESCE(input.after_available_at,'-infinity'::timestamptz),
+        COALESCE(input.after_route,-1),
+        COALESCE(input.after_catalogue_id,'00000000-0000-0000-0000-000000000000'::uuid),
+        COALESCE(input.after_stage_id,'00000000-0000-0000-0000-000000000000'::uuid)
+      )
   ORDER BY pending.available_at,pending.route,pending.catalogue_id,pending.stage_id
   LIMIT (SELECT row_limit FROM input)
 )
