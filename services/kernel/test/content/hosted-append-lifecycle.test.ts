@@ -369,10 +369,16 @@ test('retained-published account authority freezes 100-row pages, replay and a l
       item_kind: 'post',
       item_id: late.firstPost.id,
     });
-    await redactHostedLifecyclePlacements(pool, lateAnchor, { revisionId: lateBase, afterOccurrence: null }, context());
+    const latePage = await redactHostedLifecyclePlacements(
+      pool,
+      lateAnchor,
+      { revisionId: lateBase, afterOccurrence: null },
+      context(),
+    );
+    expect(latePage.value.items).toEqual([{ occurrenceId: lateOccurrence, changed: true }]);
     // Resume the saved cursor after an independent late item's disposition.
     const last = await redactHostedLifecycleStream(pool, f.anchor, first.value.next!, context());
-    expect(last.value.items).toEqual([{ occurrenceId: f.appended[100], offset: '100', changed: true }]);
+    expect(last.value.items).toEqual([{ occurrenceId: f.appended[100]!, offset: '100', changed: true }]);
     expect(last.value.next).toBeNull();
     const exhausted = await redactHostedLifecycleStream(pool, f.anchor, { ...cursor, afterOffset: '100' }, context());
     expect(exhausted.value).toEqual({ items: [], next: null });
@@ -394,7 +400,7 @@ test('retained-published account authority freezes 100-row pages, replay and a l
     expect(
       (await f.native.call('GET', `${f.path}/children?revisionId=${f.release}`, undefined, { anonymous: true })).status,
     ).toBe(200);
-    const rangeStatements = new Set([revisionPage.sql, placementPage.sql, streamPage.sql]);
+    const rangeStatements = new Set<string>([revisionPage.sql, placementPage.sql, streamPage.sql]);
     const ranges = observer.records.filter((r) => rangeStatements.has(r.statement));
     expect(ranges.length).toBeGreaterThan(0);
     expect(
