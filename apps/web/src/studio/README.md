@@ -447,3 +447,22 @@ unchanged outline/publication before placement, sparse continuation and exact re
 foreign/stale refusal, same-account replacement, late responses and dirty editor preservation. Existing assertions
 remain unchanged. Source validation formats changed files and runs one affected Web typecheck; native, browser,
 Storybook, ordinary acceptance, root and growth checks remain deferred.
+
+## Shared release review language
+
+Decision: Book and article release review uses distinct `studio_release_*` messages in all eight launch locales,
+locale-selected plural chapter/article counts and complete messages around exact revisions and expiry timestamps.
+Visible copy and accessible names share the mounted locale. Existing withdrawal and account approval messages,
+review/confirm/withdraw lifecycle, user content, pinned outline, exact versions, current/empty meaning and unavailable
+states retain their contracts. Shared controls and semantic publish/cancel messages remain in use.
+
+Sources read before design: this owner document, Web's [outcome and acceptance](../../../../docs/goals/web.md),
+`publication.tsx`, its withdrawal fixture, `revisions.tsx`, exported Studio contracts and controller review/publish
+callers, and the existing hosted publication and mounted saved-version language tests. The base still contains
+English release review copy; no merge or cherry-pick is needed.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-publication-language.test.tsx
+src/studio/publication-withdrawal.test.tsx tests/studio-hosted-publication.test.ts`. One focused mounted German
+example covers exact review, accessible confirmation and outcome copy; existing assertions stay unchanged.
+Source verification checks changed-file formatting, locale key/argument consistency and one affected Web typecheck.
+Ordinary acceptance, native, browser, Storybook and broader suites remain deferred.

@@ -11,6 +11,19 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
   const review = state.review;
   const withdrawal = review?.withdrawal;
   const locale = getLocale();
+  const options = { locale };
+  const plural = new Intl.PluralRules(locale);
+  const numbers = new Intl.NumberFormat(locale);
+  const chapterCount = (count: number) =>
+    (plural.select(count) === 'one' ? m.studio_release_chapters_one : m.studio_release_chapters_other)(
+      { count: numbers.format(count) },
+      options,
+    );
+  const articleCount = (count: number) =>
+    (plural.select(count) === 'one' ? m.studio_release_articles_one : m.studio_release_articles_other)(
+      { count: numbers.format(count) },
+      options,
+    );
   const [confirmed, setConfirmed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const confirmationId = useId();
@@ -43,52 +56,56 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
   }
   if (controller.input.publicationUnavailableReason)
     return (
-      <section className="studio-stack" aria-label="Publication">
-        <h2>Publish</h2>
+      <section className="studio-stack" aria-label={m.studio_release_region({}, options)}>
+        <h2>{m.own_drafts_publish({}, options)}</h2>
         <p>{controller.input.publicationUnavailableReason}</p>
       </section>
     );
   return (
-    <section className="studio-stack" aria-label="Publication">
+    <section className="studio-stack" aria-label={m.studio_release_region({}, options)}>
       <div className="studio-section-heading">
-        <h2>Publish</h2>
-        {book ? <span>{state.selectedOccurrences.size} chapters selected</span> : null}
+        <h2>{m.own_drafts_publish({}, options)}</h2>
+        {book ? (
+          <span>
+            {(plural.select(state.selectedOccurrences.size) === 'one'
+              ? m.studio_release_selected_one
+              : m.studio_release_selected_other)({ count: numbers.format(state.selectedOccurrences.size) }, options)}
+          </span>
+        ) : null}
       </div>
       <p className="studio-help">
-        {book
-          ? 'Publish a frozen snapshot of the selected table of contents and pinned chapter versions. Unselected chapters stay outside this release.'
-          : 'Publish the reviewed saved article version. New edits continue as a private draft.'}
+        {book ? m.studio_release_book_help({}, options) : m.studio_release_article_help({}, options)}
       </p>
-      {!controller.input.canPublish ? (
-        <p>Publishing is unavailable for this visit. You can continue drafting with your available permissions.</p>
-      ) : null}
-      {unsaved ? <p>Save the current draft before reviewing publication.</p> : null}
-      {book && !hasTarget ? <p>Select chapters in the table of contents to prepare a release.</p> : null}
+      {!controller.input.canPublish ? <p>{m.studio_release_unavailable({}, options)}</p> : null}
+      {unsaved ? <p>{m.studio_release_save_first({}, options)}</p> : null}
+      {book && !hasTarget ? <p>{m.studio_release_select_chapters({}, options)}</p> : null}
       {review ? (
         <div
           className="studio-release-review"
-          aria-label={withdrawal ? m.studio_withdraw_heading({}, { locale }) : 'Review before publishing'}
+          aria-label={withdrawal ? m.studio_withdraw_heading({}, options) : m.studio_release_review_label({}, options)}
         >
-          <h3>{withdrawal ? m.studio_withdraw_heading({}, { locale }) : 'Review this release'}</h3>
+          <h3>{withdrawal ? m.studio_withdraw_heading({}, options) : m.studio_release_review_heading({}, options)}</h3>
           {withdrawal ? (
             <div className="studio-stack">
-              <p className="studio-break">{m.studio_withdraw_release({ revision: withdrawal.revision }, { locale })}</p>
-              <p>{m.studio_withdraw_discovery({}, { locale })}</p>
-              <p>{m.studio_withdraw_drafts({}, { locale })}</p>
-              <p>{m.studio_withdraw_history({}, { locale })}</p>
+              <p className="studio-break">{m.studio_withdraw_release({ revision: withdrawal.revision }, options)}</p>
+              <p>{m.studio_withdraw_discovery({}, options)}</p>
+              <p>{m.studio_withdraw_drafts({}, options)}</p>
+              <p>{m.studio_withdraw_history({}, options)}</p>
             </div>
           ) : (
             <p>
               {review.expectedPublicationRevision
-                ? 'This advances the published snapshot.'
-                : 'This creates the first published snapshot.'}
+                ? m.studio_release_advances({}, options)
+                : m.studio_release_first({}, options)}
             </p>
           )}
           {review.target.kind === 'book' ? (
-            <p className="studio-break">Structure revision: {review.target.structureRevision}</p>
+            <p className="studio-break">
+              {m.studio_release_structure_revision({ revision: review.target.structureRevision }, options)}
+            </p>
           ) : null}
           {review.bookOutline && !withdrawal ? (
-            <nav aria-label="Frozen release table of contents">
+            <nav aria-label={m.studio_release_frozen_outline({}, options)}>
               <ol className="studio-review-entries">
                 {bookTocRows({ ...review.bookOutline, canOrganize: false }).map(({ placement, depth }) => (
                   <li key={placement.occurrenceId} style={{ marginInlineStart: `${Math.min(depth, 8) * 0.75}rem` }}>
@@ -114,39 +131,42 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
             <p key={index}>{notice}</p>
           ))}
           {review.authority === 'local' && review.articleSnapshot ? (
-            <section className="studio-native-review studio-stack" aria-label="Acknowledged article revision details">
+            <section
+              className="studio-native-review studio-stack"
+              aria-label={m.studio_release_article_details({}, options)}
+            >
               <p>
-                <strong>{m.studio_account_review_destination({}, { locale: getLocale() })}:</strong>{' '}
-                {review.articleSnapshot.boardId}
+                <strong>{m.studio_account_review_destination({}, options)}:</strong> {review.articleSnapshot.boardId}
               </p>
               <p>
-                <strong>{m.studio_account_review_licence({}, { locale: getLocale() })}:</strong>{' '}
-                {review.articleSnapshot.licence}
+                <strong>{m.studio_account_review_licence({}, options)}:</strong> {review.articleSnapshot.licence}
               </p>
               <p>
-                <strong>{m.own_drafts_subjects({}, { locale: getLocale() })}:</strong>{' '}
+                <strong>{m.own_drafts_subjects({}, options)}:</strong>{' '}
                 {review.articleSnapshot.subjectIds.length
                   ? review.articleSnapshot.subjectIds.join(', ')
-                  : m.own_drafts_no_references({}, { locale: getLocale() })}
+                  : m.own_drafts_no_references({}, options)}
               </p>
               <p>
-                <strong>{m.own_drafts_media({}, { locale: getLocale() })}:</strong>{' '}
+                <strong>{m.own_drafts_media({}, options)}:</strong>{' '}
                 {review.articleSnapshot.mediaIds.length
                   ? review.articleSnapshot.mediaIds.join(', ')
-                  : m.own_drafts_no_references({}, { locale: getLocale() })}
+                  : m.own_drafts_no_references({}, options)}
               </p>
               <div>
-                <h4>{m.studio_account_review_body({}, { locale: getLocale() })}</h4>
+                <h4>{m.studio_account_review_body({}, options)}</h4>
                 <pre className="studio-reviewed-body">{documentText(review.articleSnapshot.body)}</pre>
               </div>
             </section>
           ) : null}
           {review.authority !== 'local' ? (
             <p className="studio-help">
-              Review expires <time dateTime={review.expiresAt}>{review.expiresAt}</time>.
+              <time dateTime={review.expiresAt}>
+                {m.studio_release_expires({ expiresAt: review.expiresAt }, options)}
+              </time>
             </p>
           ) : null}
-          {expired ? <p role="status">The review expired. Prepare a fresh review.</p> : null}
+          {expired ? <p role="status">{m.studio_release_expired({}, options)}</p> : null}
           <label className="studio-confirm" htmlFor={confirmationId}>
             <input
               id={confirmationId}
@@ -157,10 +177,10 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
             />
             <span>
               {withdrawal
-                ? m.studio_withdraw_confirm({}, { locale })
+                ? m.studio_withdraw_confirm({}, options)
                 : review.authority === 'local'
-                  ? m.studio_account_confirm({}, { locale: getLocale() })
-                  : 'I have reviewed these exact versions and want to publish this release.'}
+                  ? m.studio_account_confirm({}, options)
+                  : m.studio_release_confirm({}, options)}
             </span>
           </label>
           <div className="studio-action-row">
@@ -171,11 +191,13 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
               onClick={() => void controller.publish()}
             >
               {withdrawal
-                ? m.studio_withdraw_action({}, { locale })
-                : `Publish reviewed ${book ? 'chapters' : 'article'}`}
+                ? m.studio_withdraw_action({}, options)
+                : book
+                  ? m.studio_release_publish_chapters({}, options)
+                  : m.studio_release_publish_article({}, options)}
             </Button>
             <Button type="button" variant="outline" disabled={blocked} onClick={controller.cancelReview}>
-              Cancel review
+              {m.library_collection_move_cancel_review({}, options)}
             </Button>
           </div>
         </div>
@@ -186,7 +208,7 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
         disabled={blocked || !hasTarget || Boolean(unsaved) || !controller.input.canPublish}
         onClick={() => void controller.reviewPublication()}
       >
-        {review ? 'Refresh publication review' : 'Review publication…'}
+        {review ? m.studio_release_refresh({}, options) : m.studio_release_review({}, options)}
       </Button>
       {controller.canWithdrawBook() ? (
         <Button
@@ -195,34 +217,38 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
           disabled={blocked || Boolean(unsaved)}
           onClick={() => void controller.reviewWithdrawal()}
         >
-          {m.studio_withdraw_review({}, { locale })}
+          {m.studio_withdraw_review({}, options)}
         </Button>
       ) : null}
       {state.published ? (
         <p role="status">
           {state.published.state === 'withdrawn'
-            ? m.studio_withdraw_receipt({ revision: state.published.revision }, { locale })
-            : `Published snapshot ${state.published.revision}. Future draft changes do not change this release.`}
+            ? m.studio_withdraw_receipt({ revision: state.published.revision }, options)
+            : m.studio_release_receipt({ revision: state.published.revision }, options)}
         </p>
       ) : null}
       <details className="studio-publication-history">
-        <summary>Publication history</summary>
+        <summary>{m.studio_release_history({}, options)}</summary>
         {state.publications.items.length ? (
           <ol className="studio-history-list">
             {state.publications.items.map((publication) => (
               <li key={`${publication.publicationId}:${publication.revision}`}>
-                <h3>{publication.state === 'withdrawn' ? 'Withdrawn snapshot' : 'Published snapshot'}</h3>
+                <h3>
+                  {publication.state === 'withdrawn'
+                    ? m.studio_release_withdrawn_snapshot({}, options)
+                    : m.studio_release_published_snapshot({}, options)}
+                </h3>
                 <p>
                   {publication.publishedAt ? (
                     <>
                       <time dateTime={publication.publishedAt}>{publication.publishedAt}</time> ·{' '}
                     </>
                   ) : null}
-                  {publication.entries.length} {book ? 'chapters' : 'articles'}
+                  {book ? chapterCount(publication.entries.length) : articleCount(publication.entries.length)}
                 </p>
-                <p className="studio-break">Revision: {publication.revision}</p>
+                <p className="studio-break">{m.studio_release_revision({ revision: publication.revision }, options)}</p>
                 <details>
-                  <summary>Included versions</summary>
+                  <summary>{m.studio_release_included({}, options)}</summary>
                   <ol>
                     {publication.entries.map((entry) => (
                       <li key={entry.occurrenceId ?? entry.document.postId}>
@@ -236,11 +262,11 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
             ))}
           </ol>
         ) : (
-          <p>No publication history on this page.</p>
+          <p>{m.studio_release_history_empty({}, options)}</p>
         )}
         {state.publications.nextCursor ? (
           <Button type="button" variant="outline" disabled={blocked} onClick={() => void controller.loadPublications()}>
-            Next publications
+            {m.studio_release_next({}, options)}
           </Button>
         ) : null}
       </details>
