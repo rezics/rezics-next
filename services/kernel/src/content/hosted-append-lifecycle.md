@@ -2,12 +2,13 @@
 
 Decision: retain exact hosted identities and shared bases; extend existing native erasure work with bounded,
 replayable payload disposition before append exposure. A changed head, withdrawal or account tombstone alone
-does not authorize deleting a stream. This is a receiving contract, not implemented cleanup or route approval.
-Specification-only acceptance is written below; no runnable tests or runtime changes are added in this slice.
+does not authorize deleting a stream. The bounded persistence/page seam is implemented; native workflow invocation and append exposure remain separate.
+Release selection and exposure remain owned by
+[hosted-chapters.md](hosted-chapters.md#receiving-exposure-and-verification).
 
-After the overlapping release writer lands, insert a link to this note in
-[hosted-chapters.md](hosted-chapters.md#receiving-exposure-and-verification)'s lifecycle exposure prerequisite.
-Keep lifecycle detail here; release selection and exposure remain owned there.
+Decision: private titles use explicit `(title = NULL, title_redacted = true)` tombstones, authorized only by the
+native irreversible `purge_started_at` fence or retained-published `author_erased` authority; exact 100-row
+revision, placement and self-base stream pages use catalogue-home command receipts for replay.
 
 ## Sources and current evidence
 
@@ -22,18 +23,18 @@ read-only `.reference/INDEX.md` was consulted; no external source implementation
 
 The supplied base already includes the append storage revision `a675131f08` and mixed readers; no cherry-pick
 is needed. Descriptors bind a sealed legacy base and inclusive prefix; publication reads use separate manifests.
-Neither native erasure path visits append tables. `guard_hosted_snapshot` rejects every UPDATE/DELETE on
-placements, occurrences, revisions, descriptors and prefix rows. Indexes and foreign keys are retention
-affordances, not a payload-purge implementation. Existing tests prove selected read/authority behavior and
-Post cleanup, not hosted payload removal or bounded lifecycle execution.
+Neither native workflow invokes hosted disposition yet. `guard_hosted_snapshot` still rejects every UPDATE/DELETE
+on occurrences, revisions and descriptors. The two payload tables now use the narrow guard below; indexes and
+foreign keys alone remain retention affordances. Existing selected read/authority and Post cleanup tests keep
+their assertions; the added lifecycle fixture covers this internal seam.
 
 ## Three native traces
 
-| Operand                                        | Immediate authority and disclosure                                                                                                                                                                                                                                                                                                                                                                            | Deferred physical disposition                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Erased catalogue anchor `f.catalogueId`        | `hosted-chapters-reads.ts` requires available native anchor metadata before placements and closes that retained observation before response. `hostedPostAuthorization` checks original authorship, container admission and `post:revise`, then rejects erased chains in authorize/finalize. Neither an old link nor an append receipt restores authority.                                                     | `work.ts` consumes `content.post.erased.v1` into `content.erasePostRevisions`; `start-post-purge.sql` requires the committed erased Post and permanent erasure or expired 30-day soft tombstone (account erasure bypasses the delay). `null-erased-revisions.sql` clears at most 100 revisions per action; `page-erasure-media.sql` selects only actually claimed media for object purge. Hosted rows currently remain.                     |
-| Erased chapter target `concealed.firstPost.id` | `prepareHostedTargetMetadata` requires the exact thread/Post/revision/digest and retained author/licence observation. Native erased metadata returns null. Pages retain only occurrence/parent/position/kind, advance the raw cursor, and withhold title, target, digest and attribution; exact opening supplies no document. Initial or final loss has the same result.                                      | Target Post revision bodies/digests/search text and owned media follow their own erasure job. No reverse scan of every hosted catalogue is needed for disclosure. Target erasure alone grants no authority to delete another author's occurrence, label or immutable manifest.                                                                                                                                                              |
-| Account erasure of published, available anchor | `account-erasure-authored.ts` proves the account-home obligation, then `account-erasure-authored-mark.sql` records `author_erased`. `account-erasure-authored-item.sql` keeps the Post and its current body revision, clearing only non-head revisions. Current account admission revokes the author's commands/private structures; public releases still require current anchor and exact target disclosure. | The account participant pages at most 50 author-item keys and 100 older revisions per step, with receipts across homes. A retained published Post emits mechanical moderation cleanup, not a Post-erased event. Thus adding work only to `content.erasePostRevisions` would miss its private hosted outline. Published target old revisions cleared by account erasure become unavailable, never silently substituted with a head revision. |
+| Operand                                        | Immediate authority and disclosure                                                                                                                                                                                                                                                                                                                                                                            | Deferred physical disposition                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Erased catalogue anchor `f.catalogueId`        | `hosted-chapters-reads.ts` requires available native anchor metadata before placements and closes that retained observation before response. `hostedPostAuthorization` checks original authorship, container admission and `post:revise`, then rejects erased chains in authorize/finalize. Neither an old link nor an append receipt restores authority.                                                     | `work.ts` consumes `content.post.erased.v1` into `content.erasePostRevisions`; `start-post-purge.sql` requires the committed erased Post and permanent erasure or expired 30-day soft tombstone (account erasure bypasses the delay). `null-erased-revisions.sql` clears at most 100 revisions per action; `page-erasure-media.sql` selects only actually claimed media for object purge. Hosted rows remain until the native workflow receives the hosted page seam below. |
+| Erased chapter target `concealed.firstPost.id` | `prepareHostedTargetMetadata` requires the exact thread/Post/revision/digest and retained author/licence observation. Native erased metadata returns null. Pages retain only occurrence/parent/position/kind, advance the raw cursor, and withhold title, target, digest and attribution; exact opening supplies no document. Initial or final loss has the same result.                                      | Target Post revision bodies/digests/search text and owned media follow their own erasure job. No reverse scan of every hosted catalogue is needed for disclosure. Target erasure alone grants no authority to delete another author's occurrence, label or immutable manifest.                                                                                                                                                                                              |
+| Account erasure of published, available anchor | `account-erasure-authored.ts` proves the account-home obligation, then `account-erasure-authored-mark.sql` records `author_erased`. `account-erasure-authored-item.sql` keeps the Post and its current body revision, clearing only non-head revisions. Current account admission revokes the author's commands/private structures; public releases still require current anchor and exact target disclosure. | The account participant pages at most 50 author-item keys and 100 older revisions per step, with receipts across homes. A retained published Post emits mechanical moderation cleanup, not a Post-erased event. Thus adding work only to `content.erasePostRevisions` would miss its private hosted outline. Published target old revisions cleared by account erasure become unavailable, never silently substituted with a head revision.                                 |
 
 ## Retention and purge boundary
 
@@ -50,10 +51,44 @@ bindings under current disclosure, including explicitly addressed historical rel
 those bindings; it does not authorize rewriting old manifests. Hosted digests are retained exact-selection
 bindings, not a promise that native revision bytes survive. No title/digest is disclosed for an unavailable target.
 
-Current NOT NULL/title checks and blanket immutable triggers provide no private-title redaction seam. A future
-implementation must provide narrowly authorized payload redaction without changing IDs, addresses, target
-bindings, prefix membership or published manifests. Do not claim payload completion from withholding alone.
-Until that seam and the lifetime proof below exist, retain hosted rows and leave append exposure pending.
+## Implemented private-title pages
+
+`20261113120000_hosted_private_title_redaction.sql` retains every identity, exact target binding, source header,
+placement coordinate, descriptor count and watermark. Both payload tables have a nullable title and a checked
+`title_redacted` flag. Inserts require an ordinary non-null title. Updates permit only the one-way transition
+from an existing private title to the explicit null tombstone; all other columns must remain byte-equivalent.
+Deletes, restoration, retargeting, count/watermark edits and any publication-label update remain forbidden.
+Rollback refuses retained tombstones rather than inventing a title. `hostedPlacement` rejects a null tombstone
+instead of constructing an admitted editable placement, available part or publication label.
+
+The trigger requires the exact catalogue anchor and a structure revision. It locks the native Post and accepts
+only erased availability with non-null `purge_started_at`, or an available published Post with `author_erased`.
+Native purge start already checks permanent/expired-soft/account-erasure eligibility and becomes irreversible;
+the hosted seam neither sets that fence nor accepts an erasure-bypass flag. A young reversible soft tombstone,
+a live exact draft, replacement, withdrawal, target erasure or an author ID alone supplies no authority.
+
+`hosted-append-lifecycle.ts` exposes three internal functions: `pageHostedLifecycleRevisions`,
+`redactHostedLifecyclePlacements` and `redactHostedLifecycleStream`. Each runs one catalogue-home command with
+the existing partition epoch/deadline/retry rules. Admission locks the exact catalogue/native anchor and checks
+its original author before receipt lookup, including replay. Receipts bind author, catalogue, operation and exact
+cursor; they freeze returned candidates and the next frontier atomically with redaction. Changed payload pages
+emit the existing mechanical moderation-erasure event without titles or targets. Read-only and duplicate ranges
+use no-effect commands and retain receipts. Each invocation releases its connection before the next action.
+
+Revision inventory includes at most 100 legacy, append and publication headers, ordered by UUID primary key.
+It returns immutable descriptors and captures a stream's terminal offset only on its self-base descriptor with
+one descending primary-key seek. Only those entries start stream work. The receiver persists the returned
+revision page, its next frontier and the active per-revision/stream cursor. It processes private placements with
+an occurrence-ID keyset and each self-base stream once with an offset keyset bounded by that captured high water.
+All offsets/counts cross JSON and PostgreSQL as decimal text. Publications select no private payload candidates.
+Already redacted candidates still advance the same frontier under a new receipt key; the original key replays
+the original result, including changed flags. A full 100-row page returns its last raw key as continuation and
+requires a later range to prove exhaustion. No sentinel, OFFSET, count, dependent-prefix rescan or author census
+is needed. These are internal typed operands; native receivers persist and reuse the captured bound.
+
+The seam does not claim workflow completion: native Post-only `purge_completed` remains independent, and the
+account participant must persist hosted progress before dropping an authored locator or acknowledging a late item.
+Until those receivers and the lifetime/growth proof below land, append exposure stays pending.
 
 ## Smallest existing-work continuation
 
@@ -95,10 +130,27 @@ new references in the catalogue home and preserve permanent identities; lacking 
 
 ## Acceptance for implementation
 
-Keep existing assertions unchanged. Add the missing native cases to a future
+Keep existing assertions unchanged. The remaining composed native acceptance extends
 `test/content/hosted-append-lifecycle.test.ts`, reusing `hostedChaptersFixture`, its `f.target(source)`,
 `f.newOccurrenceId()`, `f.native.command`, native worker setup from `erased-post-cleanup-work.test.ts`, and
-account-obligation setup from `account-erasure-authored.test.ts`. These are test specifications, not passing tests:
+account-obligation setup from `account-erasure-authored.test.ts`. The added source fixture pins live/replaced shared-base refusal, young soft-tombstone refusal, matured native
+eligibility, exact-author refusal, terminal-only private redaction, immutable identities/bindings/descriptors,
+preserved historical release rows, tombstone read rejection and erased-anchor read/receipt refusal. It also
+pins retained-published account authority, current/old body disposition, 101 prefix candidates, 100-row revision
+inventory, receipt and duplicate-range replay, bound rebinding refusal, offset 100, exhaustion and an independent
+late item's disposition between saved stream pages. It installs account-local authority with the existing native
+participant SQL after Auth deletion, without invoking a new workflow or acknowledging hosted completion.
+
+Contract-named sources read before implementation: this note; hosted representation/exposure and Content README
+profile/account-erasure inventory; both hosted migrations; native purge and account-authored implementation/SQL;
+work.ts erasure registration; hostedPostAuthorization; retained Post/hosted disclosure readers; append/read,
+account-authored and erased-post-work fixtures and hosted fixture support; the read-only main `.reference/INDEX.md`.
+No external implementation was used.
+
+Changed-file formatting and one affected Kernel typecheck are the source checks. The new fixture and ordinary
+native acceptance run after landing in the dev verifier; native workflow integration, growth/query plans,
+mounted HTTP and browser verification are deferred and unverified. The following composed cases still belong
+to the native receiving owner, rather than claiming this seam installs its workflows:
 
 1. Reuse `hosted-append-read.test.ts`'s `base`, `first`, `pinned`, `release`, `appended[0]`/`concealed` operands.
    Erase the target between initial/final disclosure: raw slot/cursor survive, sensitive fields/document do not;
@@ -107,7 +159,7 @@ account-obligation setup from `account-erasure-authored.test.ts`. These are test
 2. Build B, append D1/D2, replace with C as in `hosted-root-append.test.ts`; run/replay lifecycle work. While
    native authority remains live, old D1/D2 resolve their original prefix and the old `release` stays byte-exact.
    An ineligible/young soft tombstone does no purge; eligible terminal work purges private titles only through
-   the future authorized seam, preserves identities and leaves unrelated catalogues/targets unchanged.
+   the authorized seam, preserves identities and leaves unrelated catalogues/targets unchanged.
 3. Give the published `published.firstPost` account-erasure fixture a base, two appends and a frozen release.
    Erase its author: current Post body and permitted release labels remain; old Post bodies and private outline
    titles are physically cleared, commands/private reads fail, and released old target revisions become
@@ -118,5 +170,5 @@ account-obligation setup from `account-erasure-authored.test.ts`. These are test
    Add unrelated catalogues/streams and retain the same indexed key bounds; actual query-plan/growth proof is
    deferred, not established by these fixtures.
 
-No mounted API/browser verification is implied. Kernel native acceptance runs after implementation lands in the
-dev verifier; this specification changes no workspace types or existing test behavior.
+No mounted API/browser verification is implied. Kernel native acceptance runs after source lands in the
+dev verifier; existing test assertions are unchanged.

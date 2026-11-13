@@ -189,8 +189,10 @@ Before exposure, the following must receive the representation:
   exact targets/replay and links, later-prefix withholding, withdrawal and zero unselected/body reads. Its native
   acceptance runs after landing in the dev verifier; this source pass uses changed-file formatting and Kernel
   typecheck only. Lifecycle and exposure remain outstanding below.
-- Lifecycle erasure/cleanup must seek bounded catalogue/stream keysets and retain shared rows while any draft
-  references them. Index affordances do not constitute lifecycle integration or authorize an unbounded cascade.
+- Lifecycle erasure/cleanup must receive the [bounded private-title disposition](hosted-append-lifecycle.md).
+  Its tombstone persistence and exact replayable pages are implemented; native workflows must still retain shared
+  identities/bases, consume terminal-only payload pages and persist completion before acknowledgement. Index
+  affordances do not constitute lifecycle integration or authorize an unbounded cascade.
 - The additive HTTP operation, installed Client and Web must receive large-address responses. Old Web must refuse
   oversized outlines and never save a partial tree; new Web must append from an exact head and bounded outline
   window without draining pages. Unsupported organizing stays explicit pending its own immutable-order design.
