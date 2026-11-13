@@ -4,7 +4,7 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import * as reads from '../../src/content/reads.ts';
 import readChain from '../../src/content/read-chain.sql';
 import { routeOf } from '../../src/route/route.ts';
-import { observeSql } from './support/sql-observer.ts';
+import { observeSql, type SqlExecution } from './support/sql-observer.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
 setDefaultTimeout(180_000);
@@ -19,14 +19,54 @@ afterAll(async () => {
   await f?.close();
 });
 
+type ObserverInterval = readonly [start: number, end: number];
+
+function readChainProbes(records: readonly SqlExecution[]) {
+  return records.filter((row) => row.statement === readChain.sql);
+}
+
 // Every authoring success/denial below must use metadata probes only. Reader
 // assertions still fetch and verify the exact canonical body independently.
 async function write(...args: Parameters<typeof f.native.call>) {
   const start = observer.records.length;
   const result = await f.native.call(...args);
-  const probes = observer.records.slice(start).filter((row) => row.statement === readChain.sql);
+  const probes = readChainProbes(observer.records.slice(start));
   expect(probes.length).toBeGreaterThan(0);
   for (const probe of probes) expect(probe.parameters[readChain.params.indexOf('include_body')]).toBe(false);
+  return result;
+}
+
+// A deliberately nested native operation owns its own SQL reads. Keep those
+// records intact while checking every outer attachment probe on either side.
+async function writeWithNestedRevision(
+  nestedRevisionInterval: () => ObserverInterval | undefined,
+  ...args: Parameters<typeof f.native.call>
+) {
+  const start = observer.records.length;
+  const result = await f.native.call(...args);
+  const end = observer.records.length;
+  const interval = nestedRevisionInterval();
+  if (!interval) throw new Error('Expected the injected revision observer interval');
+
+  const [revisionStart, revisionEnd] = interval;
+  expect(revisionStart).toBeGreaterThanOrEqual(start);
+  expect(revisionEnd).toBeGreaterThan(revisionStart);
+  expect(revisionEnd).toBeLessThanOrEqual(end);
+
+  const beforeRevision = observer.records.slice(start, revisionStart);
+  const revisionRecords = observer.records.slice(revisionStart, revisionEnd);
+  const afterRevision = observer.records.slice(revisionEnd, end);
+  const bodyParameter = readChain.params.indexOf('include_body');
+  const revisionProbes = readChainProbes(revisionRecords);
+  expect(revisionProbes.some((probe) => probe.parameters[bodyParameter] === true)).toBe(true);
+
+  const beforeProbes = readChainProbes(beforeRevision);
+  const afterProbes = readChainProbes(afterRevision);
+  expect(beforeProbes.length).toBeGreaterThan(0);
+  expect(afterProbes.length).toBeGreaterThan(0);
+  for (const probe of [...beforeProbes, ...afterProbes]) {
+    expect(probe.parameters[bodyParameter]).toBe(false);
+  }
   return result;
 }
 
@@ -337,29 +377,40 @@ test('attachment identity mismatches and a changed retained source fail closed w
   }
   const nativeRead = reads.readPostMetadata;
   let changed = false;
+  let nestedRevisionInterval: ObserverInterval | undefined;
   const retained = spyOn(reads, 'readPostMetadata').mockImplementation(async (...args) => {
     const result = await nativeRead(...args);
     if (args[2] === target.postId && !changed) {
       changed = true;
-      expect((await f.native.revise(chapter.firstPost, {})).status).toBe(200);
+      const revisionStart = observer.records.length;
+      let revisionStatus: number | undefined;
+      try {
+        revisionStatus = (await f.native.revise(chapter.firstPost, {})).status;
+      } finally {
+        nestedRevisionInterval = [revisionStart, observer.records.length];
+      }
+      expect(revisionStatus).toBe(200);
     }
     return result;
   });
   try {
     // The exact old revision still exists, but its original Post observation changed.
     // The concurrent revision's own body work is outside attachment observation.
-    expect(
-      (
-        await write('POST', '/v1/hostedCatalogues', {
-          postId: catalogue.firstPost.id,
-          threadId: catalogue.id,
-          placements: [placement],
-        })
-      ).status,
-    ).toBe(404);
+    const changedObservation = await writeWithNestedRevision(
+      () => nestedRevisionInterval,
+      'POST',
+      '/v1/hostedCatalogues',
+      {
+        postId: catalogue.firstPost.id,
+        threadId: catalogue.id,
+        placements: [placement],
+      },
+    );
+    expect(changedObservation.status).toBe(404);
     expect(changed).toBe(true);
   } finally {
     retained.mockRestore();
+    nestedRevisionInterval = undefined;
   }
   // A fresh observation can attach the exact old version without reading the head body.
   expect((await create([placement])).status).toBe(201);

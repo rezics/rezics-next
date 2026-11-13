@@ -35,6 +35,9 @@ concealment, a changed observation or any identity mismatch returns the existing
 rolls back its own changes and never erases the independently saved target Post. Metadata admits attachment
 identity; it does not prove reader bytes. Exact body resolution retains full-document fetch and digest verification.
 
+Decision: SQL observer evidence assigns only the captured half-open interval around a nested native revision to that
+revision; the enclosing attachment proof still checks metadata probes before and after it.
+
 Publication selects an ancestor-closed subset of the expected current structure. It stores a separate immutable
 manifest, with dense positions and preorder preserving the selected relative order, and advances the publication
 pointer in the same transaction. An empty selection withdraws the current TOC and removes the catalogue from
