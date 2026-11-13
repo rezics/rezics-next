@@ -5,7 +5,9 @@ import {
   pressureBrake,
   reclaimableFileMiB,
   reclaimCleanFileCache,
+  reclaimCleanFileCacheEvidence,
   workerHeadroomMiB,
+  workerMemoryCurrentMiB,
   workerReservationMiB,
 } from './host-pressure.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -104,6 +106,26 @@ test('file-cache reclaim is bounded by the deficit, four GiB and clean inactive-
     writeFileSync(join(directory.path, 'memory.reclaim'), '');
     expect(reclaimCleanFileCache(8192, directory.path)).toBe(1024);
     expect(readFileSync(join(directory.path, 'memory.reclaim'), 'utf8')).toBe(`${1024 * mib} swappiness=0`);
+  } finally {
+    directory.close();
+  }
+});
+
+test('reclaim requests retain transient kernel evidence and memory.current is measured directly', () => {
+  const directory = temporaryDirectory();
+  try {
+    const gib = 1024 ** 3;
+    writeFileSync(join(directory.path, 'memory.stat'), `inactive_file ${2 * gib}\nfile_dirty 0\n`);
+    writeFileSync(join(directory.path, 'memory.reclaim'), '');
+    writeFileSync(join(directory.path, 'memory.current'), String(10 * gib));
+    expect(workerMemoryCurrentMiB(directory.path)).toBe(10 * 1024);
+    const request = reclaimCleanFileCacheEvidence(1024, directory.path, () => {
+      throw Object.assign(new Error('resource temporarily unavailable'), { code: 'EAGAIN' });
+    });
+    expect(request).toEqual({ requestedMiB: 1024, errorCode: 'EAGAIN' });
+    expect(readFileSync(join(directory.path, 'memory.reclaim'), 'utf8')).toBe('');
+    writeFileSync(join(directory.path, 'memory.current'), 'unknown');
+    expect(workerMemoryCurrentMiB(directory.path)).toBeUndefined();
   } finally {
     directory.close();
   }

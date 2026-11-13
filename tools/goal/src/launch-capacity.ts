@@ -21,13 +21,35 @@ import {
   workerReservationMiB,
   HEAVY_WORKER_MIB,
   WORKER_SLICE_ROOT,
-  reclaimCleanFileCache,
+  reclaimCleanFileCacheEvidence,
+  workerMemoryCurrentMiB,
+  type CacheReclaimRequest,
   type PressureBrake,
   type PressureSample,
 } from './host-pressure.ts';
 
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgentSlots?: number };
 export type CapacityRelease = () => void;
+const RECLAIM_RETRY_COOLDOWN_MS = 1_000;
+const RECLAIM_OBSERVATION_DELTA_MIB = 64;
+const MAX_RECLAIM_ATTEMPTS = 3;
+type ReclaimOutcome = 'pending' | 'progress' | 'no-progress' | 'eagain' | 'unavailable' | 'legacy' | 'invalid';
+type ReclaimAttempt = {
+  id: string;
+  at: number;
+  outcome: ReclaimOutcome;
+  headroomBeforeMiB: number;
+  headroomAfterMiB: number;
+  memoryCurrentBeforeMiB: number | null;
+  memoryCurrentAfterMiB: number | null;
+  reservedMemoryMiB: number | null;
+  runningCount: number | null;
+  terminalScopes: string[];
+  requestedMiB: number;
+  memoryProgressMiB: number;
+  errorCode?: string;
+};
+type ReclaimEpisode = { version: 1; history: ReclaimAttempt[] };
 export type CapacityLifecycle = {
   currentAttempt: number;
   taskState: string;
@@ -49,7 +71,24 @@ export type HostCapacityStore = {
   capacityLifecycle?(taskId: string): CapacityLifecycle | undefined;
 };
 
-type WorkerScopes = { parked: Set<string>; writers: Set<string>; active?: Set<string> };
+type WorkerScopes = {
+  parked: Set<string>;
+  terminal: Set<string>;
+  writers: Set<string>;
+  waitCauses: string[];
+  active?: Set<string>;
+};
+function custodyEvidenceFailure(error: unknown): string | undefined {
+  if (error instanceof SyntaxError) return 'custody record is malformed';
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (['ENOENT', 'ESRCH', 'EACCES', 'EPERM', 'EIO'].includes(code ?? ''))
+    return `custody evidence is unavailable (${code})`;
+  if (error instanceof Error && error.message === 'worker-check: invalid runner identity')
+    return 'runner identity is malformed';
+  if (error instanceof Error && error.message.startsWith('process visibility unknown for PID '))
+    return 'local runner visibility is unknown';
+  return undefined;
+}
 function attemptKey(taskId: string, attempt: number): string {
   return JSON.stringify([taskId, attempt]);
 }
@@ -61,6 +100,11 @@ function matchingRunnerIdentity(value: unknown, expected: ProcessIdentity): bool
     identity.boot === expected.boot &&
     identity.group === expected.group
   );
+}
+/** A missing or changed PID incarnation proves local terminality; unreadable /proc remains unknown. */
+function recordedRunnerTerminal(identity: ProcessIdentity): boolean {
+  const current = inspectProcessSnapshot(identity.pid, '/proc');
+  return !current || current.dead || !matchingRunnerIdentity(current.identity, identity);
 }
 /** Require the physical generation on the command line; legacy runners keep their conservative reserve. */
 function detachedCheckRunner(identity: ProcessIdentity, worktree: string, id: string, physicalRunId: string): boolean {
@@ -91,9 +135,35 @@ function ownedWorkerScope(identity: ProcessIdentity, taskId: string, attempt: nu
   return scope;
 }
 /** Read only indexed live generations; unreconciled checks and scopes retain their writing reserve. */
-function workerScopes(store: HostCapacityStore): WorkerScopes {
-  const result: WorkerScopes = { parked: new Set(), writers: new Set() };
-  if (!store.db) return result;
+function workerScopePrefix(taskId: string, attempt: number): string | undefined {
+  const safeTask = taskId.replace(/[^A-Za-z0-9:_.-]/g, '-').replace(/^-+|-+$/g, '') || 'task';
+  // Sanitized names can collide. Such legacy identities remain charged instead of claiming a neighbouring task.
+  if (safeTask !== taskId) return undefined;
+  return `rezics-worker-${safeTask}-${attempt}-`;
+}
+function historicalWorkerScopes(root: string, taskId: string, attempt: number): string[] {
+  const prefix = workerScopePrefix(taskId, attempt);
+  if (!prefix) return [];
+  let names: string[];
+  try {
+    names = readdirSync(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  return names.filter((name) => name.startsWith(prefix) && /^[a-z0-9]+\.scope$/.test(name.slice(prefix.length)));
+}
+function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): WorkerScopes {
+  const result: WorkerScopes = {
+    parked: new Set(),
+    terminal: new Set(),
+    writers: new Set(),
+    waitCauses: [],
+  };
+  if (!store.db) {
+    result.waitCauses.push('current worker/check projection is unavailable; scope reserves retained');
+    return result;
+  }
   result.active = new Set();
   let rows: { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string }[];
   try {
@@ -106,8 +176,10 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
     WHERE c.attempt_state IN ('running', 'waiting') AND c.task_state='running'
     `)
       .all() as typeof rows;
-  } catch {
+  } catch (error) {
     // An unavailable projection grants no parked exemption or ticket transfer. Every running count keeps its reserve.
+    const reason = error instanceof Error ? error.message : String(error);
+    result.waitCauses.push(`current worker/check projection is unavailable (${reason}); scope reserves retained`);
     return result;
   }
   for (const row of rows) {
@@ -125,8 +197,22 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
         result.writers.add(attemptKey(row.task_id, row.current_attempt));
         result.active.add(writer);
       } else if (attempt.process !== null) continue;
+      let allChecksTerminal = attempt.state === 'waiting' && attempt.process === null && (attempt.checks?.length ?? 0) > 0;
       for (const id of attempt.checks ?? []) {
-        if (!isCheckId(id)) continue;
+        const note = (cause: string) => {
+          const detail = `attempt ${row.task_id}/${row.current_attempt} check ${id}: ${cause}`;
+          if (!result.waitCauses.includes(detail)) result.waitCauses.push(detail);
+        };
+        if (!isCheckId(id)) {
+          allChecksTerminal = false;
+          note('check identity is unavailable');
+          continue;
+        }
+        if (typeof row.worktree !== 'string' || row.worktree.length === 0) {
+          allChecksTerminal = false;
+          note('worktree path is unavailable; scope reserve retained');
+          continue;
+        }
         try {
           const record = JSON.parse(
             readFileSync(join(row.worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8'),
@@ -134,14 +220,56 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
           if (
             record.id !== id ||
             record.cwd !== row.worktree ||
-            record.status !== 'running' ||
             record.ownership?.taskId !== row.task_id ||
-            record.ownership.attempt !== row.current_attempt ||
+            record.ownership.attempt !== row.current_attempt
+          ) {
+            allChecksTerminal = false;
+            note('result ownership is missing or stale; scope reserve retained');
+            continue;
+          }
+          if (record.status === 'finished') {
+            if (!isPhysicalRunId(record.physicalRunId)) {
+              allChecksTerminal = false;
+              note('finished result has no physical run identity; scope reserve retained');
+              continue;
+            }
+            const physical = JSON.parse(
+              readFileSync(physicalHistoryPath(row.worktree, id, record.physicalRunId), 'utf8'),
+            ) as CheckPhysicalRecord;
+            const identity = validateRunnerIdentity(physical.runnerIdentity);
+            if (
+              physical.version !== 1 ||
+              physical.cwd !== row.worktree ||
+              physical.id !== id ||
+              physical.physicalRunId !== record.physicalRunId ||
+              physical.ownership?.taskId !== row.task_id ||
+              physical.ownership.attempt !== row.current_attempt ||
+              physical.runnerHost !== hostname() ||
+              physical.remoteExpected !== true ||
+              !['finished', 'unknown'].includes(physical.status) ||
+              physical.terminalProof?.local !== true ||
+              (record.runnerHost !== undefined && record.runnerHost !== physical.runnerHost) ||
+              (record.runnerIdentity !== undefined && !matchingRunnerIdentity(record.runnerIdentity, identity)) ||
+              !recordedRunnerTerminal(identity) ||
+              !Number.isSafeInteger(record.exitCode)
+            ) {
+              allChecksTerminal = false;
+              note('local terminal proof or exact physical ownership is unavailable; scope reserve retained');
+              continue;
+            }
+            // Remote terminality and cleanup stay independent. Local proof only retires this scope's future writer reserve.
+            continue;
+          }
+          allChecksTerminal = false;
+          if (
+            record.status !== 'running' ||
             record.runnerHost !== hostname() ||
             !record.runnerIdentity ||
             !isPhysicalRunId(record.physicalRunId)
-          )
+          ) {
+            note('live or replacement check identity is ambiguous; scope reserve retained');
             continue;
+          }
           const identity = validateRunnerIdentity(record.runnerIdentity);
           const physical = JSON.parse(
             readFileSync(physicalHistoryPath(row.worktree, id, record.physicalRunId), 'utf8'),
@@ -158,18 +286,39 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
             physical.remoteExpected !== true ||
             !matchingRunnerIdentity(physical.runnerIdentity, identity) ||
             !detachedCheckRunner(identity, row.worktree, id, record.physicalRunId)
-          )
+          ) {
+            note('live or replacement check custody is ambiguous; scope reserve retained');
             continue;
+          }
           const scope = ownedWorkerScope(identity, row.task_id, row.current_attempt);
           // A running session can share a scope with its check. It releases no writing reserve until parked,
           // or until a resumed writer is positively identified in a different, newly launched scope.
           if (scope && scope !== writer) result.parked.add(scope);
-        } catch {
-          // Missing, stale or legacy custody is deliberately conservative.
+          else note('live check scope ownership is unavailable; scope reserve retained');
+        } catch (error) {
+          const cause = custodyEvidenceFailure(error);
+          if (!cause) throw error;
+          allChecksTerminal = false;
+          note(`${cause}; scope reserve retained`);
         }
       }
-    } catch {
+      if (allChecksTerminal) {
+        if (!workerScopePrefix(row.task_id, row.current_attempt)) {
+          const detail = `attempt ${row.task_id}/${row.current_attempt}: task identity cannot map to a unique worker scope; scope reserve retained`;
+          if (!result.waitCauses.includes(detail)) result.waitCauses.push(detail);
+        } else {
+          for (const scope of historicalWorkerScopes(root, row.task_id, row.current_attempt)) {
+            result.parked.add(scope);
+            result.terminal.add(scope);
+          }
+        }
+      }
+    } catch (error) {
+      const cause = custodyEvidenceFailure(error);
+      if (!cause) throw error;
       // Unknown worker identity cannot release a reservation.
+      const detail = `attempt ${row.task_id}/${row.current_attempt}: ${cause}; scope reserve retained`;
+      if (!result.waitCauses.includes(detail)) result.waitCauses.push(detail);
     }
   }
   // Even contradictory ownership must never exempt a scope containing a positively identified current writer.
@@ -244,7 +393,10 @@ export async function awaitHostCapacity(
     availableMiB?: () => number;
     pressure?: () => PressureSample;
     workerHeadroomMiB?: typeof workerHeadroomMiB;
-    reclaim?: (deficitMiB: number) => number | void;
+    /** Test and host adapter seams; no persistent capacity configuration is added. */
+    workerSliceRoot?: string;
+    memoryCurrentMiB?: () => number | undefined;
+    reclaim?: (deficitMiB: number) => number | void | CacheReclaimRequest;
   } = {},
 ): Promise<CapacityRelease> {
   const policy = options.policy ?? defaultPolicy.capacity;
@@ -298,6 +450,10 @@ export async function awaitHostCapacity(
         capacityChanged = resolve;
       });
       let reclaimDeficitMiB: number | undefined;
+      let reclaimAttemptId: string | undefined;
+      let reclaimMemoryCurrentBeforeMiB: number | undefined;
+      let reclaimHeadroomBeforeMiB = 0;
+      let reclaimHeadroomAfter: (() => number) | undefined;
       let admissionLease: ReturnType<typeof acquireDirectoryLease>;
       try {
         admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'), options.leasePolicy);
@@ -328,21 +484,23 @@ export async function awaitHostCapacity(
         const running = hostCapacity ? store.capacityAttemptsCount(urgent, taskId, targetAttempt) : 0;
         const otherRunning = hostCapacity ? store.capacityAttemptsCount(!urgent, taskId, targetAttempt) : 0;
         const otherAdmitted = hostCapacity ? admittedTicketCount(tickets, queueName(!urgent)) : 0;
+        const now = options.now?.() ?? Date.now();
+        const pressure = (options.pressure ?? readHostPressure)();
         const brake = pressureBrake(
           readPressureBrake(stateDirectory),
-          (options.pressure ?? readHostPressure)(),
-          options.now?.() ?? Date.now(),
+          pressure,
+          now,
         );
         if (hostCapacity) writeFileSync(join(stateDirectory, 'capacity-pressure.json'), JSON.stringify(brake));
-        const scopes = workerScopes(store);
+        const sliceRoot = options.workerSliceRoot ?? WORKER_SLICE_ROOT;
+        const scopes = workerScopes(store, sliceRoot);
         const sliceHeadroom = (options.workerHeadroomMiB ?? workerHeadroomMiB)(
           running + otherRunning,
-          WORKER_SLICE_ROOT,
+          sliceRoot,
           scopes.parked,
           scopes.active,
         );
         const reservedMemoryMiB = admittedMemoryMiBFromTickets(tickets, scopes.writers);
-        rearmReclaimEpisode(stateDirectory, sliceHeadroom, reservedMemoryMiB);
         const requiredMemoryMiB = reservedMemoryMiB + memoryReservation;
         const sliceAvailable = sliceHeadroom >= requiredMemoryMiB;
         const ahead = hostCapacity ? ticketWaitersAhead(tickets, mine) : 0;
@@ -362,6 +520,17 @@ export async function awaitHostCapacity(
             running + otherRunning + admitted + otherAdmitted + ahead < capacity.maxWorkers &&
             memory >= capacity.minAvailableMiB &&
             !brake.paused);
+        const memoryCurrentMiB = (options.memoryCurrentMiB ?? (() => workerMemoryCurrentMiB(sliceRoot)))();
+        const reclaimSnapshot = {
+          memoryCurrentMiB,
+          reservedMemoryMiB,
+          runningCount: running + otherRunning,
+          terminalScopes: [...scopes.terminal].sort(),
+          headroomMiB: sliceHeadroom,
+        };
+        let reclaimEpisode = hostCapacity ? readReclaimEpisode(stateDirectory) : undefined;
+        if (hostCapacity && sliceHeadroom - reservedMemoryMiB >= HEAVY_WORKER_MIB)
+          reclaimEpisode = rearmReclaimEpisode(stateDirectory, reclaimEpisode);
         const hostAvailable = hostGatesAvailable && (!hostCapacity || sliceAvailable) && isOperationLeader;
         const goalAvailable = goalCap === undefined || goalInFlight + goalAdmitted + goalAhead < goalCap;
         if (hostAvailable && goalAvailable) {
@@ -383,26 +552,80 @@ export async function awaitHostCapacity(
           isOperationLeader &&
           !sliceAvailable &&
           Number.isFinite(sliceHeadroom) &&
-          claimReclaimEpisode(stateDirectory)
-        )
+          reclaimRetryAllowed(reclaimEpisode, reclaimSnapshot, now)
+        ) {
           reclaimDeficitMiB = Math.max(1, Math.ceil(requiredMemoryMiB - sliceHeadroom));
+          reclaimMemoryCurrentBeforeMiB = memoryCurrentMiB;
+          reclaimHeadroomBeforeMiB = sliceHeadroom;
+          reclaimAttemptId = crypto.randomUUID();
+          reclaimEpisode = beginReclaimAttempt(
+            stateDirectory,
+            reclaimEpisode,
+            reclaimSnapshot,
+            sliceHeadroom,
+            now,
+            reclaimAttemptId,
+          );
+          reclaimHeadroomAfter = () =>
+            (options.workerHeadroomMiB ?? workerHeadroomMiB)(
+              running + otherRunning,
+              sliceRoot,
+              scopes.parked,
+              scopes.active,
+            );
+        } else if (reclaimEpisode && reclaimEpisode.history.at(-1)?.outcome === 'legacy') {
+          reclaimEpisode = observeLegacyReclaim(stateDirectory, reclaimEpisode, reclaimSnapshot, sliceHeadroom, now);
+        }
         if (!reported)
           console.error(
             goalCap !== undefined && !goalAvailable
               ? `Waiting for Goal ${options.goal} start capacity (${goalInFlight} in flight, ${goalAdmitted + goalAhead} starts ahead, cap ${goalCap}).`
               : urgent
                 ? `Waiting for urgent host capacity (${running} urgent workers, ${ahead} urgent starts ahead, slots ${limit}; available memory ${Math.floor(memory)} MiB, floor ${capacity.minAvailableMiB} MiB).`
-                : `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
+                : `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers})${
+                    sliceAvailable
+                      ? ''
+                      : `; worker slice short by ${Math.ceil(requiredMemoryMiB - sliceHeadroom)} MiB${
+                          scopes.waitCauses.length ? `; ${scopes.waitCauses.slice(0, 2).join('; ')}` : ''
+                        }`
+                  }.`,
           );
         reported = true;
       } finally {
         admissionLease.release();
       }
-      if (reclaimDeficitMiB !== undefined) {
+      if (reclaimDeficitMiB !== undefined && reclaimAttemptId !== undefined) {
         const sample = (options.pressure ?? readHostPressure)();
         const brake = pressureBrake(readPressureBrake(stateDirectory), sample, options.now?.() ?? Date.now());
         if (brake.paused) clearReclaimEpisode(stateDirectory);
-        else (options.reclaim ?? ((deficit) => reclaimCleanFileCache(deficit)))(reclaimDeficitMiB);
+        else {
+          const request = normalizeReclaimRequest(
+            (options.reclaim ?? ((deficit) => reclaimCleanFileCacheEvidence(deficit, options.workerSliceRoot ?? WORKER_SLICE_ROOT)))(
+              reclaimDeficitMiB,
+            ),
+          );
+          const memoryCurrentAfterMiB = (options.memoryCurrentMiB ?? (() => workerMemoryCurrentMiB(options.workerSliceRoot ?? WORKER_SLICE_ROOT)))();
+          const memoryProgressMiB =
+            reclaimMemoryCurrentBeforeMiB === undefined || memoryCurrentAfterMiB === undefined
+              ? 0
+              : Math.max(0, reclaimMemoryCurrentBeforeMiB - memoryCurrentAfterMiB);
+          const outcome: ReclaimOutcome =
+            memoryProgressMiB >= RECLAIM_OBSERVATION_DELTA_MIB
+              ? 'progress'
+              : request.errorCode === 'EAGAIN'
+                ? 'eagain'
+                : request.errorCode
+                  ? 'unavailable'
+                  : 'no-progress';
+          completeReclaimAttempt(stateDirectory, reclaimAttemptId, {
+            headroomAfterMiB: reclaimHeadroomAfter?.() ?? reclaimHeadroomBeforeMiB,
+            memoryCurrentAfterMiB: memoryCurrentAfterMiB ?? null,
+            requestedMiB: request.requestedMiB,
+            memoryProgressMiB,
+            outcome,
+            ...(request.errorCode ? { errorCode: request.errorCode } : {}),
+          });
+        }
         capacityChanged?.();
       }
       await Promise.race([
@@ -678,29 +901,204 @@ function goalWaitersAhead(
   }
   return ahead.size;
 }
-function reclaimEpisodeBlocked(stateDirectory: string): boolean {
-  const path = join(stateDirectory, 'capacity-reclaim.json');
+type ReclaimSnapshot = {
+  memoryCurrentMiB: number | undefined;
+  reservedMemoryMiB: number;
+  runningCount: number;
+  terminalScopes: string[];
+  headroomMiB: number;
+};
+function emptyReclaimAttempt(id: string, outcome: ReclaimOutcome, at = 0): ReclaimAttempt {
+  return {
+    id,
+    at,
+    outcome,
+    headroomBeforeMiB: 0,
+    headroomAfterMiB: 0,
+    memoryCurrentBeforeMiB: null,
+    memoryCurrentAfterMiB: null,
+    reservedMemoryMiB: null,
+    runningCount: null,
+    terminalScopes: [],
+    requestedMiB: 0,
+    memoryProgressMiB: 0,
+  };
+}
+function nonNegativeFinite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+function nullableNonNegativeFinite(value: unknown): value is number | null {
+  return value === null || nonNegativeFinite(value);
+}
+function invalidReclaimEpisode(): ReclaimEpisode {
+  return {
+    version: 1,
+    history: Array.from({ length: MAX_RECLAIM_ATTEMPTS }, (_, index) =>
+      emptyReclaimAttempt(`invalid-${index}`, 'invalid'),
+    ),
+  };
+}
+function readReclaimEpisode(stateDirectory: string): ReclaimEpisode {
   try {
-    const value = JSON.parse(readFileSync(path, 'utf8')) as { blocked?: unknown };
-    return value?.blocked === true;
+    const parsed: unknown = JSON.parse(readFileSync(join(stateDirectory, 'capacity-reclaim.json'), 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return invalidReclaimEpisode();
+    const value = parsed as Record<string, unknown>;
+    if (value.blocked === false) return { version: 1, history: [] };
+    if (value.blocked === true) return { version: 1, history: [emptyReclaimAttempt('legacy-blocked', 'legacy')] };
+    if (value.version !== 1 || !Array.isArray(value.history) || value.history.length > MAX_RECLAIM_ATTEMPTS)
+      return invalidReclaimEpisode();
+    const history: ReclaimAttempt[] = [];
+    for (const item of value.history) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return invalidReclaimEpisode();
+      const record = item as Record<string, unknown>;
+      const currentFormat =
+        typeof record.id === 'string' &&
+        Object.hasOwn(record, 'memoryCurrentBeforeMiB') &&
+        Object.hasOwn(record, 'runningCount') &&
+        Array.isArray(record.terminalScopes);
+      if (currentFormat) {
+        const terminalScopes = record.terminalScopes as unknown[];
+        if (
+          !nonNegativeFinite(record.at) ||
+          !['pending', 'progress', 'no-progress', 'eagain', 'unavailable', 'legacy', 'invalid'].includes(
+            String(record.outcome),
+          ) ||
+          !nonNegativeFinite(record.headroomBeforeMiB) ||
+          !nonNegativeFinite(record.headroomAfterMiB) ||
+          !nullableNonNegativeFinite(record.memoryCurrentBeforeMiB) ||
+          !nullableNonNegativeFinite(record.memoryCurrentAfterMiB) ||
+          !nullableNonNegativeFinite(record.reservedMemoryMiB) ||
+          !(record.runningCount === null || (nonNegativeFinite(record.runningCount) && Number.isSafeInteger(record.runningCount))) ||
+          terminalScopes.some((scope) => typeof scope !== 'string') ||
+          !nonNegativeFinite(record.requestedMiB) ||
+          !nonNegativeFinite(record.memoryProgressMiB) ||
+          (record.errorCode !== undefined && typeof record.errorCode !== 'string')
+        )
+          return invalidReclaimEpisode();
+        history.push(record as unknown as ReclaimAttempt);
+        continue;
+      }
+      // Convert the retained partial-progress format without crediting its old inactive-file estimate.
+      if (
+        nonNegativeFinite(record.at) &&
+        typeof record.outcome === 'string' &&
+        nonNegativeFinite(record.headroomBeforeMiB) &&
+        nonNegativeFinite(record.headroomAfterMiB) &&
+        nonNegativeFinite(record.requestedMiB)
+      ) {
+        history.push({
+          ...emptyReclaimAttempt(`legacy-${history.length}`, 'legacy', Number(record.at)),
+          headroomBeforeMiB: Number(record.headroomBeforeMiB),
+          headroomAfterMiB: Number(record.headroomAfterMiB),
+          requestedMiB: Number(record.requestedMiB),
+        });
+        continue;
+      }
+      return invalidReclaimEpisode();
+    }
+    return { version: 1, history };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    if (error instanceof SyntaxError) return true;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, history: [] };
+    if (error instanceof SyntaxError) return invalidReclaimEpisode();
     throw error;
   }
 }
-function rearmReclaimEpisode(stateDirectory: string, headroomMiB: number, admittedMemoryMiB: number): void {
-  if (headroomMiB - admittedMemoryMiB < HEAVY_WORKER_MIB || !reclaimEpisodeBlocked(stateDirectory)) return;
-  writeFileSync(join(stateDirectory, 'capacity-reclaim.json'), JSON.stringify({ blocked: false }));
+function rearmReclaimEpisode(stateDirectory: string, episode?: ReclaimEpisode): ReclaimEpisode {
+  if (!episode?.history.length) return episode ?? { version: 1, history: [] };
+  const rearmed: ReclaimEpisode = { version: 1, history: [] };
+  writeFileSync(join(stateDirectory, 'capacity-reclaim.json'), JSON.stringify(rearmed));
+  return rearmed;
 }
-function claimReclaimEpisode(stateDirectory: string): boolean {
-  const path = join(stateDirectory, 'capacity-reclaim.json');
-  if (reclaimEpisodeBlocked(stateDirectory)) return false;
-  writeFileSync(path, JSON.stringify({ blocked: true }));
-  return true;
+function reclaimRetryAllowed(episode: ReclaimEpisode | undefined, current: ReclaimSnapshot, now: number): boolean {
+  if (!episode?.history.length) return true;
+  if (episode.history.length >= MAX_RECLAIM_ATTEMPTS) return false;
+  const previous = episode.history.at(-1)!;
+  if (previous.outcome === 'invalid' || now - previous.at < RECLAIM_RETRY_COOLDOWN_MS) return false;
+  const memoryDrop =
+    previous.memoryProgressMiB >= RECLAIM_OBSERVATION_DELTA_MIB ||
+    (previous.memoryCurrentAfterMiB !== null &&
+      current.memoryCurrentMiB !== undefined &&
+      previous.memoryCurrentAfterMiB - current.memoryCurrentMiB >= RECLAIM_OBSERVATION_DELTA_MIB);
+  const reservationDrop =
+    previous.reservedMemoryMiB !== null &&
+    previous.reservedMemoryMiB - current.reservedMemoryMiB >= RECLAIM_OBSERVATION_DELTA_MIB;
+  const writerFinished = previous.runningCount !== null && previous.runningCount > current.runningCount;
+  const newTerminalScope = current.terminalScopes.some((scope) => !previous.terminalScopes.includes(scope));
+  // Old one-shot latches have no baseline. A newly verified terminal scope is the material change that
+  // the old admission path could not observe; a zero-valued synthetic baseline is never treated as progress.
+  const legacyTerminalProof = previous.outcome === 'legacy' && current.terminalScopes.length > 0;
+  const measuredHeadroomIncrease =
+    previous.id !== 'legacy-blocked' &&
+    current.headroomMiB - previous.headroomAfterMiB >= RECLAIM_OBSERVATION_DELTA_MIB;
+  return memoryDrop || reservationDrop || writerFinished || newTerminalScope || legacyTerminalProof || measuredHeadroomIncrease;
+}
+function observeLegacyReclaim(
+  stateDirectory: string,
+  episode: ReclaimEpisode,
+  current: ReclaimSnapshot,
+  headroomMiB: number,
+  now: number,
+): ReclaimEpisode {
+  const previous = episode.history.at(-1);
+  if (!previous || previous.outcome !== 'legacy' || previous.reservedMemoryMiB !== null) return episode;
+  const history = [...episode.history];
+  history[history.length - 1] = {
+    ...previous,
+    at: now,
+    headroomBeforeMiB: headroomMiB,
+    headroomAfterMiB: headroomMiB,
+    memoryCurrentBeforeMiB: current.memoryCurrentMiB ?? null,
+    memoryCurrentAfterMiB: current.memoryCurrentMiB ?? null,
+    reservedMemoryMiB: current.reservedMemoryMiB,
+    runningCount: current.runningCount,
+    terminalScopes: [...current.terminalScopes],
+  };
+  const observed = { version: 1 as const, history };
+  writeFileSync(join(stateDirectory, 'capacity-reclaim.json'), JSON.stringify(observed));
+  return observed;
+}
+function beginReclaimAttempt(
+  stateDirectory: string,
+  episode: ReclaimEpisode | undefined,
+  current: ReclaimSnapshot,
+  headroomMiB: number,
+  now: number,
+  id: string,
+): ReclaimEpisode {
+  const history = [...(episode?.history ?? [])];
+  history.push({
+    ...emptyReclaimAttempt(id, 'pending', now),
+    headroomBeforeMiB: headroomMiB,
+    headroomAfterMiB: headroomMiB,
+    memoryCurrentBeforeMiB: current.memoryCurrentMiB ?? null,
+    memoryCurrentAfterMiB: current.memoryCurrentMiB ?? null,
+    reservedMemoryMiB: current.reservedMemoryMiB,
+    runningCount: current.runningCount,
+    terminalScopes: [...current.terminalScopes],
+  });
+  const updated: ReclaimEpisode = { version: 1, history };
+  writeFileSync(join(stateDirectory, 'capacity-reclaim.json'), JSON.stringify(updated));
+  return updated;
+}
+function normalizeReclaimRequest(result: number | void | CacheReclaimRequest): CacheReclaimRequest {
+  if (typeof result === 'number') return { requestedMiB: Number.isFinite(result) && result > 0 ? result : 0 };
+  if (!result) return { requestedMiB: 0 };
+  return result;
+}
+function completeReclaimAttempt(
+  stateDirectory: string,
+  id: string,
+  result: Pick<ReclaimAttempt, 'headroomAfterMiB' | 'memoryCurrentAfterMiB' | 'requestedMiB' | 'memoryProgressMiB' | 'outcome' | 'errorCode'>,
+): void {
+  const episode = readReclaimEpisode(stateDirectory);
+  const history = [...episode.history];
+  const index = history.findIndex((attempt) => attempt.id === id && attempt.outcome === 'pending');
+  if (index < 0) return;
+  history[index] = { ...history[index]!, ...result };
+  writeFileSync(join(stateDirectory, 'capacity-reclaim.json'), JSON.stringify({ version: 1, history }));
 }
 function clearReclaimEpisode(stateDirectory: string): void {
-  writeFileSync(join(stateDirectory, 'capacity-reclaim.json'), JSON.stringify({ blocked: false }));
+  writeFileSync(join(stateDirectory, 'capacity-reclaim.json'), JSON.stringify({ version: 1, history: [] }));
 }
 function staleCapacityOperation(
   taskId: string,

@@ -82,15 +82,25 @@ ordinary tasks never consume the urgent sublimit. Urgent work still waits for `m
 Only running sessions and pending launch reservations occupy slots; attempts parked for checks release them.
 Decision: a verified parked scope keeps its actual charge but releases its writing reserve; resume reacquires 4 GiB
 through the existing admission ticket before the task lease and launch.
-The worker slice always charges aggregate actual memory. Only the indexed current attempt's owned detached runner,
-with matching live process, worker scope and physical remote-check generation, releases its scope's writing reserve.
-Active scopes retain their measured-peak reserve; stale or unknown scopes retain conservative accounting and cannot
-stand in for an unidentified current writer. Check wakes use the existing capacity ticket and task lease to reserve
-the active minimum before launch. That ticket's memory charge transfers to the reconciled current writer's scope;
-pending or unreconciled launches keep their ticket charge until start or explicit release. Memory floors, PSI,
-worker caps and check slots remain independent limits.
-Decision: Admission folds tickets by task generation and operation, and may request one bounded reclaim from clean
-inactive file cache per slice-deficit episode.
+Decision: exact locally terminal custody for every check on the waiting current attempt retires only the
+future-writing reserve of that task and generation's historical scopes; it does not infer remote terminality or
+cleanup. Aggregate memory, current, replacement and unknown writers, pending tickets, and host and allowance limits
+remain charged. Reclaim episodes record actual `memory.current` before and after each request, allow at most three
+requests at least one second apart, and reopen after a 64 MiB measured memory drop, ticket-reserve release, writer
+completion, newly proved terminal scope, or measured safe-headroom increase. A migrated one-shot latch without a
+baseline can reopen immediately only on exact terminal-scope proof. Clean-cache estimates size a request and never
+count as progress.
+The worker slice always charges aggregate actual memory. The indexed current attempt's owned detached runner releases
+its scope reserve only with a matching live process, worker scope and physical remote-check generation. A waiting
+current attempt with no runner process can also release the future-writing reserve on its exact historical scopes
+when every listed check has an exactly owned finished result and physical history, a local terminal proof, and a
+locally terminal runner identity. This local proof does not settle remote execution or cleanup. Active, current,
+replacement and unknown scopes retain conservative accounting and cannot stand in for an unidentified current writer.
+Check wakes use the existing capacity ticket and task lease to reserve the active minimum before launch. That ticket's
+memory charge transfers to the reconciled current writer's scope; pending or unreconciled launches keep their ticket
+charge until start or explicit release. Memory floors, PSI, worker caps and check slots remain independent limits.
+Decision: Admission folds tickets by task generation and operation, and may request bounded reclaim from clean
+inactive file cache during a slice-deficit episode.
 Every new ticket records its target attempt and whether it starts a new generation or resumes the exact parked one.
 The oldest live, lifecycle-valid ticket owns the operation; duplicates remain successors without consuming FIFO
 positions or a second reservation. When its process ends, the next valid ticket takes over. Old tickets remain
@@ -100,9 +110,14 @@ later check wake remains its exact resume. A ticket for an already advanced star
 current-attempt projection, without consulting worktree presence or clearing another generation's reservation.
 If host limits, system memory and PSI permit admission but a finite worker-slice reserve alone blocks it, the host
 may request up to 4 GiB from clean inactive file pages with `swappiness=0`. Dirty and writeback pages are excluded.
-The shared admission lease is released before the request; the host re-samples slice headroom before launching. One
-durable latch coalesces requests until headroom recovers for a heavy worker. Unsupported or unwritable reclaim is
-ignored, and ordinary memory, PSI, lane and Goal limits continue to gate starts.
+The shared admission lease is released before the request; the host re-samples slice headroom and actual
+`memory.current` before launching. A durable episode records the current attempt and its requested amount, error and
+measured before/after values. It does not retry more than three times or faster than once per second. A further
+request needs a material safe change: at least 64 MiB of measured memory drop or safe-headroom increase, released
+ticket reserve, a finished writer, or a newly proved terminal scope. The former one-shot latch has no baseline, so
+only exact local terminal-scope proof can reopen it immediately; otherwise it waits for a measured change.
+Inactive-file estimates never count as reclaimed memory. Unsupported or unwritable reclaim is recorded without
+changing ordinary memory, PSI, lane and Goal gates.
 Urgent admission enforces its limits even without `capacity.json`; ordinary admission retains its opt-in behaviour.
 `status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
 ordinary throughput. Resource usage totals still include urgent work.

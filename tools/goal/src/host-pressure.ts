@@ -26,6 +26,16 @@ export const CODE_WORKER_MIB = 2048;
 export const HEAVY_WORKER_MIB = 4096;
 export const MAX_RECLAIM_MIB = 4096;
 const MIB = 1024 ** 2;
+const unavailableReclaimCodes = new Set([
+  'EACCES',
+  'EPERM',
+  'EROFS',
+  'EINVAL',
+  'ENOSYS',
+  'EOPNOTSUPP',
+  'ENOTSUP',
+  'ENOENT',
+]);
 export const WORKER_SLICE_ROOT = `/sys/fs/cgroup/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/rezics.slice/rezics-workers.slice`;
 /** Initial working-set reservation; hard safety limits are deliberately not expected working sets. */
 export function workerReservationMiB(goal?: string): number {
@@ -73,6 +83,19 @@ export function workerHeadroomMiB(
   }
 }
 
+/** The admission loop uses this actual cgroup counter to verify reclaim, never an inactive-file estimate. */
+export function workerMemoryCurrentMiB(root = WORKER_SLICE_ROOT): number | undefined {
+  try {
+    const raw = readFileSync(join(root, 'memory.current'), 'utf8').trim();
+    if (!/^\d+$/.test(raw)) return undefined;
+    const bytes = Number(raw);
+    return Number.isSafeInteger(bytes) && bytes >= 0 ? bytes / MIB : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
 /** Clean inactive file cache is the only evidence used to size a bounded cgroup reclaim request. */
 export function reclaimableFileMiB(root = WORKER_SLICE_ROOT): number {
   const values = new Map<string, number>();
@@ -85,27 +108,39 @@ export function reclaimableFileMiB(root = WORKER_SLICE_ROOT): number {
   return Math.max(0, Math.floor((inactive - dirty) / MIB));
 }
 
-/** Request at most the slice deficit, 4 GiB, and clean inactive-file evidence. Unsupported writes are ignored. */
-export function reclaimCleanFileCache(deficitMiB: number, root = WORKER_SLICE_ROOT): number {
-  if (!Number.isFinite(deficitMiB) || deficitMiB <= 0) return 0;
+export type CacheReclaimRequest = { requestedMiB: number; errorCode?: string };
+
+/** Request bounded reclaim and preserve expected kernel refusals for the admission episode record. */
+export function reclaimCleanFileCacheEvidence(
+  deficitMiB: number,
+  root = WORKER_SLICE_ROOT,
+  write: (path: string, value: string) => void = writeFileSync,
+): CacheReclaimRequest {
+  if (!Number.isFinite(deficitMiB) || deficitMiB <= 0) return { requestedMiB: 0 };
   let cleanMiB: number;
   try {
     cleanMiB = reclaimableFileMiB(root);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (['EACCES', 'EPERM', 'EROFS', 'EINVAL', 'ENOSYS', 'EOPNOTSUPP', 'ENOTSUP', 'ENOENT'].includes(code ?? ''))
-      return 0;
+    if (unavailableReclaimCodes.has(code ?? ''))
+      return { requestedMiB: 0, ...(code ? { errorCode: code } : {}) };
     throw error;
   }
   const requestedMiB = Math.floor(Math.min(deficitMiB, MAX_RECLAIM_MIB, cleanMiB));
-  if (requestedMiB < 1) return 0;
+  if (requestedMiB < 1) return { requestedMiB: 0 };
   try {
-    writeFileSync(join(root, 'memory.reclaim'), `${requestedMiB * MIB} swappiness=0`);
-    return requestedMiB;
+    write(join(root, 'memory.reclaim'), `${requestedMiB * MIB} swappiness=0`);
+    return { requestedMiB };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (['EACCES', 'EPERM', 'EROFS', 'EINVAL', 'ENOSYS', 'EOPNOTSUPP', 'ENOTSUP', 'ENOENT'].includes(code ?? ''))
-      return 0;
+    if (code === 'EAGAIN' || unavailableReclaimCodes.has(code ?? ''))
+      return { requestedMiB, ...(code ? { errorCode: code } : {}) };
     throw error;
   }
+}
+
+/** Compatibility helper for callers that only need the bounded request size. */
+export function reclaimCleanFileCache(deficitMiB: number, root = WORKER_SLICE_ROOT): number {
+  const result = reclaimCleanFileCacheEvidence(deficitMiB, root);
+  return result.errorCode ? 0 : result.requestedMiB;
 }
