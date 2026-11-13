@@ -305,6 +305,8 @@ const typed = [
   'GET /v1/threads/:id/posts/:postId/location',
   'GET /v1/posts/:id',
   'POST /v1/posts/:id/$restore',
+  'POST /v1/posts/:id/$issueRevisionDisclosure',
+  'POST /v1/posts/:id/$revokeRevisionDisclosure',
   'POST /v1/posts/:id/revisions',
   'GET /v1/posts/:id/revisions',
   'GET /v1/posts/:id/revision-headers',
@@ -657,6 +659,20 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   });
   expect(paths['/v1/hostedCatalogues/{id}:convertDraft']?.post).toMatchObject({
     operationId: 'hosted_catalogue.convert_draft',
+    'x-action': 'post:revise',
+    'x-exposure': 'public',
+    'x-rate-limit': { family: 'write', units: 1 },
+    security: [{ bearerAuth: [] }],
+  });
+  expect(paths['/v1/posts/{id}:issueRevisionDisclosure']?.post).toMatchObject({
+    operationId: 'post.issue_revision_disclosure',
+    'x-action': 'post:revise',
+    'x-exposure': 'public',
+    'x-rate-limit': { family: 'write', units: 1 },
+    security: [{ bearerAuth: [] }],
+  });
+  expect(paths['/v1/posts/{id}:revokeRevisionDisclosure']?.post).toMatchObject({
+    operationId: 'post.revoke_revision_disclosure',
     'x-action': 'post:revise',
     'x-exposure': 'public',
     'x-rate-limit': { family: 'write', units: 1 },
