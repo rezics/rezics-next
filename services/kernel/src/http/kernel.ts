@@ -26,6 +26,7 @@ import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
+import { createContentPostBuyerFactReader } from '../commerce/content-post-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { ensureCommunityApplication } from '../community/adapters/index.ts';
 import { createCommunityHttpDeclaration, type CommunityHttpDeclaration } from '../community/http-declaration.ts';
@@ -386,6 +387,10 @@ export function createKernelAccessResolver(options: {
     pool: options.pool,
     clock: options.clock,
   });
+  const contentPostBuyerFactReader = createContentPostBuyerFactReader({
+    pool: options.pool,
+    clock: options.clock,
+  });
   let access: Access | undefined;
   let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
   function membershipReader() {
@@ -432,6 +437,7 @@ export function createKernelAccessResolver(options: {
       realmRoleReader,
       clock: options.clock,
       contentEditionBuyerFactReader,
+      contentPostBuyerFactReader,
     }));
   };
   return { resolveAccess, realmRoleReader };
@@ -1099,7 +1105,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  const actions = actionCatalogue({ routes }, communityHttp.actions);
+  const actions = actionCatalogue({ routes }, new Map([...communityHttp.actions, ...declared.actions]));
   const consentedScopeCount = accessActionCatalogue(actions).size;
   if (consentedScopeCount > MAX_CONSENTED_SCOPES)
     throw new Error(

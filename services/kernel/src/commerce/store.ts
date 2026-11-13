@@ -3,7 +3,12 @@ import type { StripeMoneyUnit } from './money.ts';
 import { orderReceiptMoney } from './order-read.ts';
 import offerLock from './store-offer-lock.sql';
 import { routeOf } from '../route/route.ts';
-import { decodeCapturedContentEdition, encodeCapturedContentEdition } from './benefit.ts';
+import {
+  decodeCapturedContentEdition,
+  decodeCapturedContentPost,
+  encodeCapturedContentEdition,
+  encodeCapturedContentPost,
+} from './benefit.ts';
 import type { PoolClient } from 'pg';
 import type {
   CheckoutDecision,
@@ -68,6 +73,7 @@ function asOffer(row: OfferRow): Offer {
   return {
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    contentPost: decodeCapturedContentPost(row.contentPost),
     moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
     taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
@@ -77,6 +83,7 @@ function asOrder(row: OrderRow): Order {
   return {
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    contentPost: decodeCapturedContentPost(row.contentPost),
     moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
     taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
@@ -90,6 +97,7 @@ function asEntitlement(row: EntitlementRow): Entitlement {
   return {
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    contentPost: decodeCapturedContentPost(row.contentPost),
     grantedAt: iso(row.grantedAt),
     revokedAt: row.revokedAt === null ? null : iso(row.revokedAt),
   };
@@ -112,6 +120,7 @@ export async function insertOffer(
         creator_account_id: offer.creatorAccountId,
         target_subject_id: offer.targetSubjectId,
         content_edition: encodeCapturedContentEdition(offer.contentEdition) ?? '',
+        content_post: encodeCapturedContentPost(offer.contentPost) ?? '',
         title: offer.title,
         currency: offer.currency,
         unit_amount_minor: offer.unitAmountMinor,
@@ -178,6 +187,7 @@ export async function insertOrder(
         offer_revision: offer.revision,
         target_subject_id: offer.targetSubjectId,
         content_edition: encodeCapturedContentEdition(offer.contentEdition) ?? '',
+        content_post: encodeCapturedContentPost(offer.contentPost) ?? '',
         creator_account_id: offer.creatorAccountId,
         title: offer.title,
         currency: offer.currency,
@@ -210,6 +220,7 @@ export async function listBuyerOrders(
   return rows.map((row) => ({
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    contentPost: decodeCapturedContentPost(row.contentPost),
     moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
     taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
@@ -485,7 +496,7 @@ export async function applyCheckoutDecision(
     throw new Error('Commerce entitlement revision changed');
   // Late money always applies, but another legitimate acquisition/active benefit owns the slot.
   const action =
-    state.order.contentEdition &&
+    (state.order.contentEdition || state.order.contentPost) &&
     (decision.entitlement.kind === 'grant' || decision.entitlement.kind === 'restore') &&
     !(await canActivateBenefit(client, state.order))
       ? { kind: 'none' as const }
@@ -546,6 +557,7 @@ export async function applyCheckoutDecision(
           offer_id: order.offerId,
           target_subject_id: order.targetSubjectId,
           content_edition: encodeCapturedContentEdition(order.contentEdition) ?? '',
+          content_post: encodeCapturedContentPost(order.contentPost) ?? '',
           ...write(context),
         }),
       ),

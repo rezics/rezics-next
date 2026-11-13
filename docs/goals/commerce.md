@@ -8,12 +8,14 @@ distinguish attributed earnings from an actually attested external payment.
 ## Done when
 
 - Subject entry, offer, hosted Checkout, private order and owned-benefit navigation, and protected use form a complete
-  ordinary API, native-storage and reviewed-page journey. The first benefit is an exact authored Content edition:
-  `content.edition`, `edition:read`, revision ID and SHA256. Content owns genuine sale authority and final protected
-  bytes; Accounts owns current benefit admission. Historical subject-only orders remain unknown until explicitly
-  authorized mapping.
-- A one-time, account-bound, quantity-one purchase captures one fixed-version benefit and immutable accepted terms.
-  Repricing and delisting do not rewrite a sale. Signed provider evidence, buyer-home orders, entitlement fulfilment,
+  ordinary API, native-storage and reviewed-page journey. New offers selected by Post default to one exact authored
+  Content Post and its eligible historical, current and future revisions: `content.post`, `post:read`. A fixed edition
+  remains a deliberate distinct target: `content.edition`, `edition:read`, exact revision ID and SHA256. Content owns
+  current sale/source authority and final protected bytes; Accounts owns current benefit admission. Historical
+  subject-only orders remain unknown until explicitly authorized mapping.
+- A one-time, account-bound, quantity-one purchase captures one immutable Post-scope or fixed-edition benefit and
+  accepted terms. Repricing and delisting do not rewrite a sale.
+  Signed provider evidence, buyer-home orders, entitlement fulfilment,
   exact replay, reconciliation, refunds/disputes, terminal fencing, and financial erasure/custody meet the native
   Commerce contract. A redirect, Library fact or historical receipt never authorizes present use; incomplete evidence
   never grants or restores access.
@@ -35,10 +37,12 @@ distinguish attributed earnings from an actually attested external payment.
 ## Scope
 
 Direct licensed sales on one US Stripe account through hosted Checkout/Managed Payments. Commerce owns native offers,
-fixed-version benefits, orders, payment evidence, entitlements, sales, statements and their journey pages, together
+Post-scope and fixed-edition benefits, orders, payment evidence, entitlements, sales, statements and their journey pages, together
 with the linked Library Goal under this same manager. No processor catalogue, bundles, gifts, subscriptions,
 consumables, points/wallet/tokens, market/exchange or new ledger. Creator payouts remain outside Stripe.
 [Commerce modules](../commerce-modules.md) owns future scope. Dynamic definitions retain adopted Source requirements.
+
+Decision: new offers selecting a Post capture one account-bound, quantity-one benefit keyed only by that routed Post and `post:read`, covering the Post's eligible historical, current and future revisions; sellers must deliberately select an immutable exact-revision edition for fixed-edition scope.
 
 ## Ownership
 

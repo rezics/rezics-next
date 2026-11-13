@@ -6,11 +6,13 @@ import {
 } from './acquisition.ts';
 import { readCommerceMoneyPolicy, validateOfferAmount, type CommerceMoneyPolicy } from './money.ts';
 import {
+  captureCurrentContentPost,
   captureCurrentContentEdition,
   isContentEditionUnavailable,
-  requireCurrentContentEdition,
-  requireMechanicalContentEdition,
-  sameCapturedContentEdition,
+  requireCurrentCapturedContentBenefit,
+  requireMechanicalCapturedContentBenefit,
+  requireMechanicalContentPost,
+  sameCapturedContentBenefit,
   withoutUnverifiedBenefit,
   type SaleDependencies,
 } from './benefit.ts';
@@ -94,9 +96,11 @@ export type CheckoutOutcome =
   | { kind: 'unknown' }
   | { kind: 'failed'; creationAttemptId?: string };
 export type OfferInput = Pick<Offer, 'title' | 'currency' | 'unitAmountMinor' | 'taxCode'> & {
-  /** Optional only for old trusted callers/receipt replays. A fresh create must select an edition. */
+  /** New offers select one exact Post by default. */
+  postId?: string;
+  /** Fixed editions remain an explicit separate scope. */
   contentEditionId?: string;
-  /** Old receipt identity only; fresh requests cannot select or relabel a subject. */
+  /** Subject placement within the native Post; old receipt identity for legacy requests. */
   targetSubjectId?: string;
 };
 
@@ -266,6 +270,7 @@ export function createCommerceCommands(config: {
       resource = { route: r, id };
     // Copy only seller-controlled fields; the royalty comes exclusively from service configuration.
     const input: OfferInput = {
+      ...(body.postId === undefined ? {} : { postId: body.postId }),
       ...(body.contentEditionId === undefined ? {} : { contentEditionId: body.contentEditionId }),
       ...(body.targetSubjectId === undefined ? {} : { targetSubjectId: body.targetSubjectId }),
       title: body.title,
@@ -274,7 +279,9 @@ export function createCommerceCommands(config: {
       taxCode: body.taxCode,
     };
     if (
+      (input.postId !== undefined && routeOf(input.postId) === null) ||
       (input.contentEditionId !== undefined && routeOf(input.contentEditionId) === null) ||
+      (input.postId !== undefined && input.contentEditionId !== undefined) ||
       (input.targetSubjectId !== undefined && routeOf(input.targetSubjectId) === null) ||
       !input.title.trim() ||
       !/^[a-z]{3}$/.test(input.currency) ||
@@ -307,9 +314,23 @@ export function createCommerceCommands(config: {
         },
       },
     });
-    const sale = withSalePreparation(accountAuthorization(actor, authorization), async (_attempt, deadline) =>
-      captureCurrentContentEdition(input.contentEditionId ?? '', { pool, access, ...saleConsent }, { actor, deadline }),
-    );
+    const sale = withSalePreparation(accountAuthorization(actor, authorization), async (_attempt, deadline) => {
+      const dependencies = { pool, access, ...saleConsent };
+      if (input.postId !== undefined)
+        return {
+          contentPost: await captureCurrentContentPost(
+            input.postId,
+            dependencies,
+            { actor, deadline },
+            input.targetSubjectId,
+          ),
+        };
+      if (input.contentEditionId !== undefined)
+        return {
+          contentEdition: await captureCurrentContentEdition(input.contentEditionId, dependencies, { actor, deadline }),
+        };
+      throw new GrantDeniedError();
+    });
     return runCommand(
       pool,
       {
@@ -318,11 +339,16 @@ export function createCommerceCommands(config: {
       },
       async (tx, command) => {
         // Replay is already resolved. Legacy subject-only creates may replay, never mint a benefit.
-        const contentEdition = sale.at(tx, command.time);
+        const capture = sale.at(tx, command.time);
+        const contentPost = capture.contentPost;
+        const contentEdition = capture.contentEdition;
+        const nativeCapture = contentPost ?? contentEdition;
         if (
-          contentEdition.creatorAccountId !== seller.accountId ||
-          contentEdition.benefit.resource.id !== input.contentEditionId ||
-          (input.targetSubjectId !== undefined && input.targetSubjectId !== contentEdition.targetSubjectId)
+          !nativeCapture ||
+          nativeCapture.creatorAccountId !== seller.accountId ||
+          (contentPost && contentPost.benefit.resource.id !== input.postId) ||
+          (contentEdition && contentEdition.benefit.resource.id !== input.contentEditionId) ||
+          (input.targetSubjectId !== undefined && input.targetSubjectId !== nativeCapture.targetSubjectId)
         )
           throw new GrantDeniedError();
         await declareCommerceCommandHistory(tx, 'commerce.offer.create', { creatorAccountId: seller.accountId });
@@ -332,8 +358,9 @@ export function createCommerceCommands(config: {
           {
             ...input,
             ...validateOfferAmount({ currency: input.currency, amountMinor: input.unitAmountMinor }, moneyPolicy),
-            targetSubjectId: contentEdition.targetSubjectId,
-            contentEdition,
+            targetSubjectId: nativeCapture.targetSubjectId,
+            ...(contentEdition ? { contentEdition } : {}),
+            ...(contentPost ? { contentPost } : {}),
             id,
             creatorAccountId: seller.accountId,
             royaltyBasisPoints,
@@ -477,7 +504,15 @@ export function createCommerceCommands(config: {
     const { parent, authorization } = admission();
     const sale = withSalePreparation(authorization, async (attempt, deadline) => {
       const offer = parent.at(attempt.time);
-      return requireCurrentContentEdition(offer.contentEdition, { pool, access, ...saleConsent }, { actor, deadline });
+      if (offer.contentPost)
+        return {
+          contentPost: await requireMechanicalContentPost(
+            offer.contentPost,
+            { pool, access, ...saleConsent },
+            { deadline },
+          ),
+        };
+      return requireCurrentCapturedContentBenefit(offer, { pool, access, ...saleConsent }, { actor, deadline });
     });
     try {
       return await runCommand(
@@ -506,14 +541,16 @@ export function createCommerceCommands(config: {
             offer.moneyUnit.factsVersion !== money.moneyUnit.factsVersion
           )
             throw new OfferUnavailableError();
-          const contentEdition = sale.at(tx, command.time);
+          const capture = sale.at(tx, command.time);
+          const nativeCapture = capture.contentPost ?? capture.contentEdition;
           if (
-            !sameCapturedContentEdition(offer.contentEdition, contentEdition) ||
-            offer.creatorAccountId !== contentEdition.creatorAccountId ||
-            offer.targetSubjectId !== contentEdition.targetSubjectId
+            !nativeCapture ||
+            !sameCapturedContentBenefit(offer, capture) ||
+            offer.creatorAccountId !== nativeCapture.creatorAccountId ||
+            offer.targetSubjectId !== nativeCapture.targetSubjectId
           )
             throw new GrantDeniedError();
-          await admitBenefitAcquisition(tx, buyer, id, contentEdition);
+          await admitBenefitAcquisition(tx, buyer, id, nativeCapture);
           await declareCommerceCommandHistory(tx, 'commerce.order.create', {
             creatorAccountId: offer.creatorAccountId,
             buyerAccountId: buyer.accountId,
@@ -589,11 +626,7 @@ export function createCommerceCommands(config: {
       if (!current || current.buyerAccountId !== order.buyerAccountId) throw new GrantDeniedError();
       return {
         order: current,
-        contentEdition: await requireMechanicalContentEdition(
-          current.contentEdition,
-          { pool, access, ...saleConsent },
-          { deadline },
-        ),
+        ...(await requireMechanicalCapturedContentBenefit(current, { pool, access, ...saleConsent }, { deadline })),
       };
     });
     const result = await runCommand<CheckoutCreationAdmission>(
@@ -622,12 +655,14 @@ export function createCommerceCommands(config: {
         if (!stored && (!current.moneyUnit || current.taxBehavior !== 'exclusive')) return done({ kind: 'unknown' });
         // Released current native target authority is indispensable before any fresh provider call.
         const prepared = sale.at(tx, command.time);
+        const nativeCapture = prepared.contentPost ?? prepared.contentEdition;
         if (
           current.revision !== prepared.order.revision ||
           current.buyerAccountId !== prepared.order.buyerAccountId ||
-          current.creatorAccountId !== prepared.contentEdition.creatorAccountId ||
-          current.targetSubjectId !== prepared.contentEdition.targetSubjectId ||
-          !sameCapturedContentEdition(current.contentEdition, prepared.contentEdition)
+          !nativeCapture ||
+          current.creatorAccountId !== nativeCapture.creatorAccountId ||
+          current.targetSubjectId !== nativeCapture.targetSubjectId ||
+          !sameCapturedContentBenefit(current, prepared)
         )
           throw new CommandUnavailableError('contention', partitionOf(r));
         // An existing first call always retains its original parameters, even after configuration changes.
@@ -936,11 +971,7 @@ export function createCommerceCommands(config: {
       try {
         return {
           order: current,
-          contentEdition: await requireMechanicalContentEdition(
-            current.contentEdition,
-            { pool, access, ...saleConsent },
-            { deadline },
-          ),
+          ...(await requireMechanicalCapturedContentBenefit(current, { pool, access, ...saleConsent }, { deadline })),
         };
       } catch (error) {
         if (!isContentEditionUnavailable(error)) throw error;
@@ -992,21 +1023,22 @@ export function createCommerceCommands(config: {
           let verified = false;
           try {
             const prepared = sale.at(tx, command.time);
-            const current = prepared?.contentEdition;
+            const current = prepared ? (prepared.contentPost ?? prepared.contentEdition) : undefined;
             verified =
               prepared !== null &&
+              prepared !== undefined &&
               current !== undefined &&
               state.order.revision === prepared.order.revision &&
               state.order.buyerAccountId === prepared.order.buyerAccountId &&
               state.order.creatorAccountId === current.creatorAccountId &&
               state.order.targetSubjectId === current.targetSubjectId &&
-              sameCapturedContentEdition(state.order.contentEdition, current) &&
+              sameCapturedContentBenefit(state.order, prepared) &&
               (!state.entitlement ||
                 (state.entitlement.accountId === state.order.buyerAccountId &&
                   state.entitlement.orderId === state.order.id &&
                   state.entitlement.offerId === state.order.offerId &&
                   state.entitlement.targetSubjectId === state.order.targetSubjectId &&
-                  sameCapturedContentEdition(state.entitlement.contentEdition, current)));
+                  sameCapturedContentBenefit(state.entitlement, prepared)));
           } catch (error) {
             if (!isContentEditionUnavailable(error)) throw error;
           }

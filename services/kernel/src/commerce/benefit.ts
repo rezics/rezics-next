@@ -1,6 +1,11 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
-import { contentEditionBenefitBinding, copyContentEditionBenefit } from '../access/authenticated-benefit.ts';
+import {
+  contentEditionBenefitBinding,
+  contentPostBenefitBinding,
+  copyContentEditionBenefit,
+  copyContentPostBenefit,
+} from '../access/authenticated-benefit.ts';
 import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
 import type { ContentEditionSaleAuthority } from '../content/edition-model.ts';
 import {
@@ -11,7 +16,8 @@ import {
 import type { ReadContext } from '../content/model.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import type { CapturedContentEdition, CheckoutDecision } from './model.ts';
+import type { CapturedContentEdition, CapturedContentPost, CheckoutDecision } from './model.ts';
+import type { ContentPostSaleAuthority } from '../content/post-benefit.ts';
 
 export function ContentEditionUnavailableError() {
   return memoizedValue(
@@ -30,6 +36,7 @@ export function ContentEditionUnavailableError() {
 export type ContentEditionUnavailableError = InstanceType<ReturnType<typeof ContentEditionUnavailableError>>;
 
 export const MAX_CAPTURED_EDITION_BYTES = 4096;
+export const MAX_CAPTURED_POST_BYTES = 4096;
 
 /** Compatibility diagnostic for callers with no configured native dependencies.
  * Runtime admission uses the actual Content entrypoints below, never this diagnostic.
@@ -94,6 +101,38 @@ export function captureContentEditionSaleAuthority(
   }
 }
 
+/** Capture the stable Post/action promise without retaining a revision selector or body. */
+export function captureContentPostSaleAuthority(
+  postId: string,
+  authority: ContentPostSaleAuthority | null,
+  expectedTargetSubjectId?: string,
+): CapturedContentPost {
+  if (!authority) throw new (ContentEditionUnavailableError())();
+  try {
+    const benefit = copyContentPostBenefit(authority.benefit);
+    if (
+      benefit.resource.id !== postId ||
+      routeOf(postId) !== benefit.resource.route ||
+      (expectedTargetSubjectId !== undefined && authority.targetSubjectId !== expectedTargetSubjectId)
+    )
+      throw new (ContentEditionUnavailableError())();
+    const capture: CapturedContentPost = {
+      benefit,
+      creatorAccountId: authority.creatorAccountId,
+      targetSubjectId: authority.targetSubjectId,
+      saleTermsReference: 'content-post-revisions-v1',
+      delivery: 'eligible-post-revisions',
+      acquisition: 'one-time-account-bound',
+      quantity: 1,
+    };
+    encodeCapturedContentPost(capture);
+    return capture;
+  } catch (error) {
+    if (error instanceof TypeError) throw new (ContentEditionUnavailableError())();
+    throw error;
+  }
+}
+
 /** Compare every immutable field, independently of serialized JSON property order. */
 export function sameCapturedContentEdition(
   left: CapturedContentEdition | null | undefined,
@@ -118,6 +157,81 @@ export function sameCapturedContentEdition(
   return binding(left) === binding(right);
 }
 
+export function sameCapturedContentPost(
+  left: CapturedContentPost | null | undefined,
+  right: CapturedContentPost | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+  const binding = (value: CapturedContentPost) => {
+    encodeCapturedContentPost(value);
+    return JSON.stringify([
+      contentPostBenefitBinding(value.benefit),
+      value.creatorAccountId,
+      value.targetSubjectId,
+      value.saleTermsReference,
+      value.delivery,
+      value.acquisition,
+      value.quantity,
+    ]);
+  };
+  return binding(left) === binding(right);
+}
+
+/** Compare the immutable closed target union, including UNKNOWN/null preservation. */
+export function sameCapturedContentBenefit(
+  left: Readonly<{ contentEdition?: CapturedContentEdition | null; contentPost?: CapturedContentPost | null }>,
+  right: Readonly<{ contentEdition?: CapturedContentEdition | null; contentPost?: CapturedContentPost | null }>,
+): boolean {
+  const sameEdition =
+    left.contentEdition == null && right.contentEdition == null
+      ? true
+      : sameCapturedContentEdition(left.contentEdition, right.contentEdition);
+  const samePost =
+    left.contentPost == null && right.contentPost == null
+      ? true
+      : sameCapturedContentPost(left.contentPost, right.contentPost);
+  return (
+    sameEdition &&
+    samePost &&
+    (left.contentEdition == null) === (right.contentEdition == null) &&
+    (left.contentPost == null) === (right.contentPost == null)
+  );
+}
+
+/** Exhaustive current offer check for the closed Post/edition target union. */
+export async function requireCurrentCapturedContentBenefit(
+  capture: Readonly<{
+    contentEdition?: CapturedContentEdition | null;
+    contentPost?: CapturedContentPost | null;
+  }>,
+  dependencies: SaleDependencies,
+  context: ReadContext,
+): Promise<Readonly<{ contentEdition?: CapturedContentEdition; contentPost?: CapturedContentPost }>> {
+  if (capture.contentPost && !capture.contentEdition)
+    return { contentPost: await requireCurrentContentPost(capture.contentPost, dependencies, context) };
+  if (capture.contentEdition && !capture.contentPost)
+    return { contentEdition: await requireCurrentContentEdition(capture.contentEdition, dependencies, context) };
+  throw new (ContentEditionUnavailableError())();
+}
+
+/** Settlement revalidates only native source availability; Access still guards every actual read. */
+export async function requireMechanicalCapturedContentBenefit(
+  capture: Readonly<{
+    contentEdition?: CapturedContentEdition | null;
+    contentPost?: CapturedContentPost | null;
+  }>,
+  dependencies: SaleDependencies,
+  context: Readonly<{ deadline: number }>,
+): Promise<Readonly<{ contentEdition?: CapturedContentEdition; contentPost?: CapturedContentPost }>> {
+  if (capture.contentPost && !capture.contentEdition)
+    return { contentPost: await requireMechanicalContentPost(capture.contentPost, dependencies, context) };
+  if (capture.contentEdition && !capture.contentPost)
+    return {
+      contentEdition: await requireMechanicalContentEdition(capture.contentEdition, dependencies, context),
+    };
+  throw new (ContentEditionUnavailableError())();
+}
+
 export function isContentEditionUnavailable(error: unknown): boolean {
   return error instanceof ContentEditionUnavailableError() || classifyUnavailability(error) !== undefined;
 }
@@ -140,6 +254,26 @@ export async function captureCurrentContentEdition(
   }
 }
 
+export async function captureCurrentContentPost(
+  postId: string,
+  dependencies?: SaleDependencies,
+  context?: ReadContext,
+  targetSubjectId?: string,
+): Promise<CapturedContentPost> {
+  if (!dependencies || !context || routeOf(postId) === null) throw new (ContentEditionUnavailableError())();
+  try {
+    const { readContentPostSaleAuthority } = await import('../content/post-benefit.ts');
+    return captureContentPostSaleAuthority(
+      postId,
+      await readContentPostSaleAuthority(dependencies, postId, context, targetSubjectId),
+      targetSubjectId,
+    );
+  } catch (error) {
+    if (error instanceof AccessUnavailableError) throw new (ContentEditionUnavailableError())(error);
+    throw error;
+  }
+}
+
 export async function requireCurrentContentEdition(
   capture: CapturedContentEdition | null | undefined,
   dependencies?: SaleDependencies,
@@ -148,6 +282,22 @@ export async function requireCurrentContentEdition(
   if (!capture) throw new (ContentEditionUnavailableError())();
   const current = await captureCurrentContentEdition(capture.benefit.resource.id, dependencies, context);
   if (!sameCapturedContentEdition(capture, current)) throw new (ContentEditionUnavailableError())();
+  return current;
+}
+
+export async function requireCurrentContentPost(
+  capture: CapturedContentPost | null | undefined,
+  dependencies?: SaleDependencies,
+  context?: ReadContext,
+): Promise<CapturedContentPost> {
+  if (!capture) throw new (ContentEditionUnavailableError())();
+  const current = await captureCurrentContentPost(
+    capture.benefit.resource.id,
+    dependencies,
+    context,
+    capture.targetSubjectId,
+  );
+  if (!sameCapturedContentPost(capture, current)) throw new (ContentEditionUnavailableError())();
   return current;
 }
 
@@ -170,6 +320,33 @@ export async function requireMechanicalContentEdition(
     throw error;
   }
   if (!sameCapturedContentEdition(capture, current)) throw new (ContentEditionUnavailableError())();
+  return current;
+}
+
+export async function requireMechanicalContentPost(
+  capture: CapturedContentPost | null | undefined,
+  dependencies: SaleDependencies,
+  context: Readonly<{ deadline: number }>,
+): Promise<CapturedContentPost> {
+  if (!capture) throw new (ContentEditionUnavailableError())();
+  let current: CapturedContentPost;
+  try {
+    const { readContentPostMechanicalSaleAuthority } = await import('../content/post-benefit.ts');
+    current = captureContentPostSaleAuthority(
+      capture.benefit.resource.id,
+      await readContentPostMechanicalSaleAuthority(
+        dependencies,
+        capture.benefit.resource.id,
+        capture.targetSubjectId,
+        context,
+      ),
+      capture.targetSubjectId,
+    );
+  } catch (error) {
+    if (error instanceof AccessUnavailableError) throw new (ContentEditionUnavailableError())(error);
+    throw error;
+  }
+  if (!sameCapturedContentPost(capture, current)) throw new (ContentEditionUnavailableError())();
   return current;
 }
 
@@ -261,4 +438,56 @@ export function contentEditionTermsView(value: CapturedContentEdition | null | u
   if (value == null) return null;
   const { source, ...terms } = value;
   return { ...terms, source: { licence: source.licence } };
+}
+
+/** Post terms expose the stable Post selector and the all-eligible-revisions promise only. */
+export function contentPostTermsView(value: CapturedContentPost | null | undefined) {
+  return value == null ? null : { ...value };
+}
+
+/** Validate persisted Post terms without deriving identity from subject/title/provider data. */
+export function decodeCapturedContentPost(serialized: string | null): CapturedContentPost | null {
+  if (serialized === null) return null;
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_CAPTURED_POST_BYTES) throw new TypeError('Oversized Post capture');
+  const value: unknown = JSON.parse(serialized);
+  if (
+    !object(value) ||
+    !keys(value, [
+      'benefit',
+      'creatorAccountId',
+      'targetSubjectId',
+      'saleTermsReference',
+      'delivery',
+      'acquisition',
+      'quantity',
+    ])
+  )
+    throw new TypeError('Invalid Post capture');
+  const { benefit } = value;
+  if (
+    !object(benefit) ||
+    !keys(benefit, ['kind', 'resourceType', 'resource', 'action']) ||
+    benefit.kind !== 'content-post' ||
+    benefit.resourceType !== 'content.post' ||
+    benefit.action !== 'post:read' ||
+    !object(benefit.resource) ||
+    !keys(benefit.resource, ['route', 'id']) ||
+    !id(benefit.resource.id) ||
+    benefit.resource.route !== routeOf(benefit.resource.id) ||
+    !id(value.creatorAccountId) ||
+    !id(value.targetSubjectId) ||
+    value.saleTermsReference !== 'content-post-revisions-v1' ||
+    value.delivery !== 'eligible-post-revisions' ||
+    value.acquisition !== 'one-time-account-bound' ||
+    value.quantity !== 1
+  )
+    throw new TypeError('Invalid Post capture');
+  return value as CapturedContentPost;
+}
+
+export function encodeCapturedContentPost(value: CapturedContentPost | null | undefined): string | null {
+  if (value == null) return null;
+  const serialized = JSON.stringify(value);
+  decodeCapturedContentPost(serialized);
+  return serialized;
 }

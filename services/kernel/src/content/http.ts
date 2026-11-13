@@ -9,6 +9,7 @@ import { hostedChapterRoutes } from './hosted-chapters-routes.ts';
 import { hostedDraftConversionRoutes } from './hosted-draft-conversion-routes.ts';
 import { knowledgeRoutes } from './knowledge-routes.ts';
 import { revisionDisclosureRoutes } from './revision-disclosure-routes.ts';
+import { NATIVE_CONTENT_ACTIONS } from './actions.ts';
 
 /** Explicit operands for Content's HTTP surface. The trusted kernel composition constructs each object; no
  * route reads the environment, the network, a UUID source or a clock by itself. */
@@ -51,6 +52,7 @@ export type ContentHttpRoutes = ReturnType<typeof contentRoutes> &
 export function contentHttpDeclaration() {
   return Object.freeze({
     ...contentDeclaration(),
+    actions: NATIVE_CONTENT_ACTIONS,
     mount: mountContentHttp,
   });
 }

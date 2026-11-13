@@ -1,5 +1,5 @@
 WITH page AS MATERIALIZED (
-  SELECT route, buyer_account_id, order_id, offer_id, offer_revision, title, target_subject_id, content_edition, currency,
+  SELECT route, buyer_account_id, order_id, offer_id, offer_revision, title, target_subject_id, content_edition, content_post, currency,
          unit_amount_minor, money_unit, tax_behavior, tax_code, amount_tax_minor, settlement,
          checkout_url, checkout_expires_at, created_at
   FROM commerce.purchase_order
@@ -7,7 +7,7 @@ WITH page AS MATERIALIZED (
   ORDER BY order_id DESC LIMIT :limit
 )
 SELECT p.order_id AS id, p.offer_id AS "offerId", p.offer_revision AS "offerRevision",
-       p.title, p.target_subject_id AS "targetSubjectId", p.content_edition::text AS "contentEdition", p.currency,
+       p.title, p.target_subject_id AS "targetSubjectId", p.content_edition::text AS "contentEdition", p.content_post::text AS "contentPost", p.currency,
        p.money_unit::text AS "moneyUnit", p.tax_behavior AS "taxBehavior", p.unit_amount_minor::text AS "unitAmountMinor", p.tax_code AS "taxCode",
        p.amount_tax_minor::text AS "amountTaxMinor", p.settlement,
        p.checkout_url AS "checkoutUrl", p.checkout_expires_at::text AS "checkoutExpiresAt",

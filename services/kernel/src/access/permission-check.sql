@@ -14,6 +14,7 @@ WITH input AS NOT MATERIALIZED (
          NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id,
          :assignment_route::nullable(integer) AS assignment_route,
          NULLIF(:assignment_request_id::nullable(text), '')::uuid AS assignment_request_id,
+         NULLIF(:authenticated_benefit_kind::nullable(text), '') AS authenticated_benefit_kind,
          NULLIF(:authenticated_resource_id::nullable(text), '')::uuid AS authenticated_resource_id,
          :authenticated_buyer_ids::nullable(uuid[]) AS authenticated_buyer_ids,
          :anonymous::boolean AS anonymous, COALESCE(:own_account::nullable(boolean), false) AS own_account,
@@ -64,8 +65,10 @@ WITH input AS NOT MATERIALIZED (
 ), probe_sources AS MATERIALIZED (
   SELECT target.route, target.resource_id, b.explicit, b.public, k.*,
     COALESCE(NOT b.public AND NOT i.batch AND NOT i.anonymous
-       AND cardinality(i.resource_ids) = 1 AND i.action = 'edition:read' AND target.route = i.route
+       AND cardinality(i.resource_ids) = 1 AND target.route = i.route
        AND target.resource_id = i.authenticated_resource_id
+       AND ((i.authenticated_benefit_kind = 'content-edition' AND i.action = 'edition:read')
+         OR (i.authenticated_benefit_kind = 'content-post' AND i.action = 'post:read'))
        AND k.subject_kind = 'identity' AND k.subject_role = '' AND k.subject_id = k.account_id
        AND k.account_id = ANY(i.authenticated_buyer_ids), false) AS authenticated_benefit_granted,
     (i.own_account AND target.resource_id = i.actor_id AND k.subject_kind = 'identity'

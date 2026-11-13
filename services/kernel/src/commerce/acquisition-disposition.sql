@@ -3,6 +3,6 @@ WITH input AS NOT MATERIALIZED (SELECT NULLIF(:disposition::text, '') AS disposi
 UPDATE commerce.purchase_order SET acquisition_release = input.disposition
 FROM input
 WHERE route = :route AND order_id = :order_id AND buyer_account_id = :buyer_account_id
-  AND revision = :revision AND content_edition IS NOT NULL
+  AND revision = :revision AND (content_edition IS NOT NULL OR content_post IS NOT NULL)
   AND acquisition_release IS DISTINCT FROM input.disposition
 RETURNING order_id AS id;

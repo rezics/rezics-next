@@ -19,24 +19,29 @@ Keep these identities separate:
 - An **order** records one buyer's accepted, immutable offer terms and acquisition intent.
 - **Payment evidence** records provider observations and financial movements; it is neither an entitlement nor cash
   available to pay a creator.
-- A **benefit** identifies exactly the promised target, action and immutable delivered version. A purchase-derived
+- A **benefit** identifies exactly the promised target and action. Post scope keys one routed Post and covers its
+  eligible revisions; fixed-edition scope keys one exact immutable delivered revision. A purchase-derived
   **entitlement** records that buyer's current eligibility for that benefit through existing Access.
 - Library states, copies, labels, progress, Collections and follows are independent personal facts.
 - A future **transferable item** has its own identity and ownership generation. Today's licence is not such an item.
 
-The first sale is one-time, account-bound, **one immutable fixed-version benefit, quantity one**, at a positive price.
-No bundles, gifts, subscriptions, consumables, wallet, issued token/points, market, exchange or ledger implementation
-is included. This adopts the research's fixed-version recommendation without adopting its illustrative benefit-kind
-union, update-channel promise or proposed shared API signatures. There is no general benefit-kind registry to build.
+Every new sale is one-time, account-bound, **one benefit, quantity one**, at a positive price. Selecting a Post defaults
+to its exact `content.post` / `post:read` target and its eligible historical, current and future revisions. Selecting a
+fixed edition is deliberate and keeps the exact `content.edition` / `edition:read` / revision / SHA256 target. No
+benefit is inferred from a subject or payment. No bundles, gifts, subscriptions, consumables, wallet, issued
+token/points, market, exchange or ledger implementation is included. The benefit target is a closed union, not a
+general registry.
 
-The creator home owns the immutable captured Content-edition terms alongside its offers; Content owns the actual edition definition and publication. Its immutable version must identify the subject,
-exact owner resource/version, adopted action, delivery promise and accepted terms. Offer publication needs both
+The creator home owns immutable captured Content target terms alongside its offers; Content owns the actual Post or
+edition definition and publication. An edition capture identifies its exact owner resource/version; a Post capture
+identifies only the routed Post/action and never a displayed revision. Each capture records the subject, delivery
+promise and accepted terms. Offer publication needs both
 Commerce selling authority and the target owner's current authority to license that target; an offer grant or a
 subject reference alone is insufficient. Accounts owns the Access mechanism and the target owner owns final use.
 
 An order captures offer ID/revision, creator, subject, title, currency, unit amount, tax code and royalty basis.
-The benefit extension must also capture the exact benefit/version, quantity, target/action and terms/delivery
-promise. Repricing or delisting changes future acquisition, never captured terms or a paid order's identity.
+The benefit extension captures either the exact edition/version or the Post/action key, with quantity, target/action
+and delivery promise. Repricing or delisting changes future acquisition, never captured terms or a paid order's identity.
 Current account eligibility, target availability, rights restrictions and takedown remain separate current facts.
 Historic subject-only orders have **UNKNOWN benefit mapping** until an explicit authorized creator/target-owner
 mapping is adopted and recorded. Show “purchase recorded; benefit unavailable” rather than grant all subject content.
@@ -49,14 +54,14 @@ patterns, Storybook organization and visual review; its existing checkout/histor
 integrate, not duplicate rewrites. Shared subject-page changes coordinate with its owner. Every journey needs real
 API/storage behavior plus reviewed pages; an interim fake or an entitlement row is not final-use proof.
 
-| Person's step                      | Existing surface and remaining work                                                                                                                                                                                                                                                                                                                                   | Native authority                                                                                                                                                                                                |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Find a benefit on a subject        | `GET /v1/subjects/:id/offers` supplies eventual positive discovery with current native confirmation, as specified below. The generated Subject slot is bound in source; reviewed native journey evidence remains missing. Public terms contain no ownership state.                                                                                                    | Semantic owns subject identity/disclosure; creator homes confirm exact active offer/benefit keys. No all-creator or buyer scan.                                                                                 |
-| Review the offer                   | `GET /v1/offers/:offerId`, existing `/offers/$id` page. Add the captured benefit/version, delivery promise and terms display using the adopted native target.                                                                                                                                                                                                         | Creator home; `offer:read`, `gate:purchases`, subject disclosure separately. Delisted public reads match unknown `404`, even for the seller, before subject-summary reads.                                      |
-| Accept and pay                     | `POST /v1/orders` requires `{offerId, expectedOfferRevision}` and the idempotency header. The positive integer revision comes from the displayed public offer read. Changed terms require explicit reload/review and new consent; unresolved retries retain their original intent. No fresh Checkout is available while the Content authority adapter is unavailable. | `order:create` on the offer, `gate:purchases`, verified active buyer; buyer-home order/receipt before provider I/O. Selling/target authority is confirmed through owner ports, never a cross-home SQL join.     |
-| Return and find the purchase later | Existing `/orders/$id`, `/orders`, `GET /v1/orders/:orderId`, `GET /v1/orders`. Display captured terms, pending/unknown honestly and link current entitlement. Redirects have no fulfilment power.                                                                                                                                                                    | Buyer home; `order:read` and the current native own-account Access formula. No arbitrary buyer selector, including accounts sharing a route.                                                                    |
-| Inspect owned benefit              | `GET /v1/entitlements` and `GET /v1/entitlements/:entitlementId` exist. Complete private owned-benefit navigation and detail with mapped benefit/version, active/revoked/unavailable explanation and a disclosed use link.                                                                                                                                            | Buyer home; `entitlement:list` or `entitlement:read` and the current native own-account Access formula. Other owners supply permitted target summaries. History or a cached entitlement response grants no use. |
-| Actually use it                    | Target-owner page and protected server endpoint must enforce existing Access with current exact-benefit eligibility. The exact edition/action/version is adopted; native sale/buyer-fact interfaces exist; paid-use integration evidence remains pending.                                                                                                             | Buyer home supplies current eligibility; target home owns resource/action/lifecycle and final protected serialization or delivery. No second Access engine.                                                     |
+| Person's step                      | Existing surface and remaining work                                                                                                                                                                                                                                                                                                                                   | Native authority                                                                                                                                                                                            |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Find a benefit on a subject        | `GET /v1/subjects/:id/offers` supplies eventual positive discovery with current native confirmation, as specified below. The generated Subject slot is bound in source; reviewed native journey evidence remains missing. Public terms contain no ownership state.                                                                                                    | Semantic owns subject identity/disclosure; creator homes confirm exact active offer/benefit keys. No all-creator or buyer scan.                                                                             |
+| Review the offer                   | `GET /v1/offers/:offerId`, existing `/offers/$id` page. Add the captured benefit/version, delivery promise and terms display using the adopted native target.                                                                                                                                                                                                         | Creator home; `offer:read`, `gate:purchases`, subject disclosure separately. Delisted public reads match unknown `404`, even for the seller, before subject-summary reads.                                  |
+| Accept and pay                     | `POST /v1/orders` requires `{offerId, expectedOfferRevision}` and the idempotency header. The positive integer revision comes from the displayed public offer read. Changed terms require explicit reload/review and new consent; unresolved retries retain their original intent. No fresh Checkout is available while the Content authority adapter is unavailable. | `order:create` on the offer, `gate:purchases`, verified active buyer; buyer-home order/receipt before provider I/O. Selling/target authority is confirmed through owner ports, never a cross-home SQL join. |
+| Return and find the purchase later | Existing `/orders/$id`, `/orders`, `GET /v1/orders/:orderId`, `GET /v1/orders`. Display captured terms, pending/unknown honestly and link current entitlement. Redirects have no fulfilment power.                                                                                                                                                                    | Buyer home; actor equality and `order:read`. No arbitrary buyer selector, including accounts sharing a route.                                                                                               |
+| Inspect owned benefit              | `GET /v1/entitlements` and `GET /v1/entitlements/:entitlementId` exist. Complete private owned-benefit navigation and detail with mapped benefit/version, active/revoked/unavailable explanation and a disclosed use link.                                                                                                                                            | Buyer home, authenticated owner and `entitlement:read`; other owners supply permitted target summaries. History or a cached entitlement response grants no use.                                             |
+| Actually use it                    | Target-owner page and protected server endpoint enforce existing Access with current target eligibility. A Post benefit can admit eligible revisions of only that Post; a deliberate fixed edition remains tied to its exact edition/action/version. Content's per-version selection, native restrictions and final serialization remain mandatory.                   | Buyer home supplies current eligibility; target home owns resource/action/lifecycle and final protected serialization or delivery. No second Access engine.                                                 |
 
 Creator minimums are an offer/benefit editor and owned-offer list, a bounded private sales view, and statement/detail
 views. Existing HTTP mutations are `POST /v1/offers`, `PATCH /v1/offers/:offerId` (price), and
@@ -109,9 +114,10 @@ privacy, protected-use, visual and promoted-main proof remain pending.
 `GET /v1/subjects/:id/offers`, operation `subject_offers.list`, reuses the native Subject `id` segment,
 `subject:read` and `gate:purchases`. The only query fields are signed `cursor` and `limit` (default 10, 1–20).
 It returns exactly `{offers: PublicOfferCard[], next: string | null, projectionState: 'ready' | 'preparing'}`.
-`PublicOfferCard` is `{id,targetSubjectId,title,currency,unitAmountMinor,moneyUnit,taxBehavior,revision,contentEdition}`:
-unit/tax metadata remains actually nullable, and `contentEdition` uses `contentEditionTermsView`, including only
-`source.licence`. It contains no thread/post IDs, body, native receipt, buyer selector, owner selector or owned bit.
+`PublicOfferCard` is `{id,targetSubjectId,title,currency,unitAmountMinor,moneyUnit,taxBehavior,revision,contentPost,contentEdition}`:
+unit/tax metadata remains actually nullable, and each populated target omits private source identity and revision
+bodies. It contains no native receipt, buyer selector, owner selector or owned bit. Historical subject-only offers keep
+both target fields null.
 A displayed title or price grants neither sale permission nor protected bytes. Every response defaults to
 `private, no-store`; signed-in named denials never fall back to an anonymous request.
 
@@ -286,9 +292,9 @@ first-party status or an older offer scope supplies no consent. A distinct princ
 current formula operand. No role, grant, source writer or alternative authorization mechanism is added.
 
 The closed response is `{offers,next}`. Each seller row contains exactly
-`{id,targetSubjectId,title,currency,unitAmountMinor,moneyUnit,taxBehavior,taxCode,royaltyBasisPoints,state,revision,contentEdition}`.
-`contentEdition` is the actual sanitized `contentEditionTermsView` or explicit `null` for UNKNOWN historic mapping.
-It never includes native source thread/post IDs, revision bodies, transactions, receipts or other account metadata.
+`{id,targetSubjectId,title,currency,unitAmountMinor,moneyUnit,taxBehavior,taxCode,royaltyBasisPoints,state,revision,contentPost,contentEdition}`.
+Exactly one target field is populated for a new mapped offer; both are explicit `null` for UNKNOWN historic mapping.
+Target views never include source IDs, revision bodies, transactions, receipts or other account metadata.
 Captured title/terms remain readable when the current target is unavailable; they assert neither current sale
 eligibility nor permission to read bytes. There is no Content or subject HTTP fanout or foreign metadata join.
 
@@ -348,14 +354,32 @@ the same admitted compiler database. This is declaration emission, not a substit
 The exposure read advertises `commerce_sale.list` only when that mounted operation is visible through the existing
 `gate:selling` discovery. Group admission alone never enables Sales navigation; the frozen Web assertions remain valid.
 
-### Adopted native Content edition and delivery state
+### Adopted native Content Post and delivery state
 
-The first target is native `content.edition`, action `edition:read`, naming an actual authored Content post revision
+The default target for a new offer that selects a Post is the exact native `content.post`, action `post:read` identity.
+Its immutable terms bind the routed Post, creator and subject and promise one account-bound purchase of eligible
+historical, current and future revisions of that Post. Revision selection remains Content's current native decision;
+the purchase never selects a displayed version or copies a body. Content verifies the seller's current native
+`post:sell` and `post:revise` authority, source authorship, and current published source when capturing a new offer.
+An unavailable, withdrawn or erased Post cannot be newly offered. The stored capture contains no revision id or
+digest, so one entitlement can serve later eligible revisions without per-revision grants. Order and settlement
+checks revalidate current source availability; each delivered version still passes Content's current native read,
+container, rights and takedown checks.
+
+Fresh `POST /v1/offers` accepts `postId` by default, or the explicit `contentEditionId` selector for fixed-edition
+scope, plus ordinary commercial terms. It accepts no client-supplied benefit/source/version/creator/licence/action,
+terms reference or sale-authority boolean. Content validates the selector and supplies the closed capture. Post scope
+does not override native container requirements, selected-version denials, takedowns or rights restrictions.
+
+### Explicit fixed-edition Content target and delivery state
+
+The deliberate fixed-edition target is native `content.edition`, action `edition:read`, naming an actual authored Content post revision
 by `{revisionId, sha256}`. Edition ID, source tuple, creator and immutable revision licence never retarget. Creating
 another edition is necessary to sell another revision. Images, origins, URLs, Library copies and generic subject
 permission are not this product. The selected edition must have an actual native subject binding; an unrelated
-public subject cannot relabel it. Fresh `POST /v1/offers` accepts `contentEditionId` and ordinary commercial terms,
-not client-supplied benefit/source/version/creator/licence/action/subject or a sale-authority boolean.
+public subject cannot relabel it. Fresh `POST /v1/offers` accepts `contentEditionId` only when the seller deliberately
+selects fixed-edition scope; ordinary commercial terms remain separate, and client-supplied benefit/source/version/
+creator/licence/action/subject or a sale-authority boolean are never accepted.
 
 Content owns immutable edition creation/publication and the sole current sale port
 `content/edition-sale.ts:readContentEditionSaleAuthority`. It must establish authenticated creator equality with

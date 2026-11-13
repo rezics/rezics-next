@@ -1,10 +1,15 @@
 import type { PoolClient } from 'pg';
-import { contentEditionBenefitBinding, copyContentEditionBenefit } from '../access/authenticated-benefit.ts';
+import {
+  contentEditionBenefitBinding,
+  contentPostBenefitBinding,
+  copyContentEditionBenefit,
+  copyContentPostBenefit,
+} from '../access/authenticated-benefit.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { AccountActor } from '../request/access.ts';
 import { newId, routeOf } from '../route/route.ts';
-import { decodeCapturedContentEdition } from './benefit.ts';
-import type { CapturedContentEdition, CheckoutSnapshot, Order } from './model.ts';
+import { decodeCapturedContentEdition, decodeCapturedContentPost } from './benefit.ts';
+import type { CapturedContentEdition, CapturedContentPost, CheckoutSnapshot, Order } from './model.ts';
 import lock from './acquisition-lock.sql';
 import reserve from './acquisition-reserve.sql';
 import owned from './acquisition-owned.sql';
@@ -14,6 +19,12 @@ import cash from './acquisition-cash.sql';
 import orderRead from './store-order-read.sql';
 
 type Client = Pick<PoolClient, 'query'>;
+type CapturedBenefit = CapturedContentEdition | CapturedContentPost;
+type NativeCapture = Readonly<{
+  contentEdition?: CapturedContentEdition | null;
+  contentPost?: CapturedContentPost | null;
+}>;
+
 export class BenefitAcquisitionError extends Error {
   constructor(
     readonly code: 'benefit_already_owned' | 'acquisition_pending',
@@ -23,42 +34,66 @@ export class BenefitAcquisitionError extends Error {
     this.name = 'BenefitAcquisitionError';
   }
 }
-function key(buyerAccountId: string, capture: CapturedContentEdition) {
+
+function captureOf(value: NativeCapture): CapturedBenefit | null {
+  if (value.contentEdition != null && value.contentPost != null) throw new AccessUnavailableError('overloaded');
+  return value.contentEdition ?? value.contentPost ?? null;
+}
+
+function key(buyerAccountId: string, capture: CapturedBenefit) {
   const route = routeOf(buyerAccountId);
   if (route === null) throw new TypeError('Invalid acquisition buyer');
-  return {
-    route,
-    buyer_account_id: buyerAccountId,
-    benefit: JSON.stringify(copyContentEditionBenefit(capture.benefit)),
-  };
+  const benefit =
+    capture.benefit.kind === 'content-edition'
+      ? copyContentEditionBenefit(capture.benefit)
+      : copyContentPostBenefit(capture.benefit);
+  return { route, buyer_account_id: buyerAccountId, benefit: JSON.stringify(benefit) };
 }
-function sameBenefit(serialized: string | null, capture: CapturedContentEdition): boolean {
-  const actual = decodeCapturedContentEdition(serialized);
-  return (
-    actual !== null && contentEditionBenefitBinding(actual.benefit) === contentEditionBenefitBinding(capture.benefit)
-  );
+
+function sameBenefit(
+  editionSerialized: string | null,
+  postSerialized: string | null,
+  capture: CapturedBenefit,
+): boolean {
+  if (capture.benefit.kind === 'content-edition') {
+    if (postSerialized !== null) return false;
+    const actual = decodeCapturedContentEdition(editionSerialized);
+    return (
+      actual !== null && contentEditionBenefitBinding(actual.benefit) === contentEditionBenefitBinding(capture.benefit)
+    );
+  }
+  if (editionSerialized !== null) return false;
+  const actual = decodeCapturedContentPost(postSerialized);
+  return actual !== null && contentPostBenefitBinding(actual.benefit) === contentPostBenefitBinding(capture.benefit);
 }
+
 /** Caller owns the buyer-home transaction. No pool, provider or Content checkout is acquired here. */
 export async function lockBenefitAcquisition(
   client: Client,
-  order: Pick<Order, 'id' | 'buyerAccountId' | 'contentEdition'>,
+  order: Pick<Order, 'id' | 'buyerAccountId' | 'contentEdition' | 'contentPost'>,
 ) {
-  if (!order.contentEdition) return null; // UNKNOWN historical subject-only mapping is not a slot.
-  const input = key(order.buyerAccountId, order.contentEdition);
+  const capture = captureOf(order);
+  if (!capture) return null; // Historical subject-only UNKNOWN is not an acquisition slot.
+  const input = key(order.buyerAccountId, capture);
   if (routeOf(order.id) !== input.route) throw new TypeError('Invalid acquisition order');
   const row = await lock.run(client, { ...input, slot_id: newId(input.route), order_id: order.id });
   if (!row || routeOf(row.orderId) !== input.route) throw new AccessUnavailableError('overloaded');
   return row.orderId;
 }
-/** Must run after ordinary current authorization/replay, revision and exact Content capture. */
+
+/** Must run after ordinary current authorization/replay and exact native Content capture. */
 export async function admitBenefitAcquisition(
   client: Client,
   buyer: AccountActor,
   orderId: string,
-  capture: CapturedContentEdition,
+  capture: CapturedBenefit,
 ): Promise<void> {
   const input = key(buyer.accountId, capture);
-  await lockBenefitAcquisition(client, { id: orderId, buyerAccountId: buyer.accountId, contentEdition: capture });
+  const nativeCapture: NativeCapture =
+    capture.benefit.kind === 'content-edition'
+      ? { contentEdition: capture as CapturedContentEdition }
+      : { contentPost: capture as CapturedContentPost };
+  await lockBenefitAcquisition(client, { id: orderId, buyerAccountId: buyer.accountId, ...nativeCapture });
   const active = await owned.run(client, input);
   const unresolved = active ? null : await pending.run(client, input);
   const priorId = active?.orderId ?? unresolved?.id;
@@ -69,13 +104,14 @@ export async function admitBenefitAcquisition(
       !prior ||
       routeOf(priorId) !== input.route ||
       prior.buyerAccountId !== buyer.accountId ||
-      !sameBenefit(prior.contentEdition, capture) ||
+      !sameBenefit(prior.contentEdition, prior.contentPost, capture) ||
       (active &&
         (routeOf(active.id) !== input.route ||
           active.accountId !== buyer.accountId ||
-          !sameBenefit(active.contentEdition, capture))) ||
+          !sameBenefit(active.contentEdition, active.contentPost, capture))) ||
       (unresolved &&
-        (unresolved.buyerAccountId !== buyer.accountId || !sameBenefit(unresolved.contentEdition, capture)))
+        (unresolved.buyerAccountId !== buyer.accountId ||
+          !sameBenefit(unresolved.contentEdition, unresolved.contentPost, capture)))
     )
       throw new AccessUnavailableError('overloaded');
     throw new BenefitAcquisitionError(active ? 'benefit_already_owned' : 'acquisition_pending', {
@@ -85,14 +121,17 @@ export async function admitBenefitAcquisition(
   }
   await reserve.run(client, { ...input, order_id: orderId });
 }
+
 /** Slot serialization must be held before the first order lock in refresh application. */
 export async function canActivateBenefit(client: Client, order: Order): Promise<boolean> {
-  if (!order.contentEdition) return false;
+  const capture = captureOf(order);
+  if (!capture) return false;
   const incumbent = await lockBenefitAcquisition(client, order);
   if (incumbent !== order.id) return false;
-  const active = await owned.run(client, key(order.buyerAccountId, order.contentEdition));
+  const active = await owned.run(client, key(order.buyerAccountId, capture));
   return !active || active.orderId === order.id;
 }
+
 export type AcquisitionRelease = 'no-creation' | 'cancelled-no-charge' | 'refunded' | 'lost-dispute';
 
 /** Pure interpretation of an already verified, complete current native refresh, never a client status.
@@ -145,13 +184,14 @@ export function verifiedAcquisitionRelease(order: Order, snapshot: CheckoutSnaps
     return 'lost-dispute';
   return null;
 }
+
 /** Native order revision is held by the creation/refresh apply; this metadata never rewrites money/history. */
 export async function recordAcquisitionDisposition(
   client: Client,
-  order: Pick<Order, 'id' | 'buyerAccountId' | 'contentEdition' | 'revision'>,
+  order: Pick<Order, 'id' | 'buyerAccountId' | 'contentEdition' | 'contentPost' | 'revision'>,
   release: AcquisitionRelease | null,
 ) {
-  if (!order.contentEdition) return false;
+  if (!captureOf(order)) return false;
   if (
     (release === 'no-creation' || release === 'cancelled-no-charge') &&
     (await cash.run(client, { route: routeOf(order.id)!, order_id: order.id })).hasCash

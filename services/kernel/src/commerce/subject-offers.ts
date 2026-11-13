@@ -19,8 +19,11 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   captureCurrentContentEdition,
+  contentPostTermsView,
+  requireMechanicalContentPost,
   contentEditionTermsView,
   sameCapturedContentEdition,
+  sameCapturedContentPost,
   type SaleDependencies,
 } from './benefit.ts';
 import type { Offer, PublicOfferCard, SubjectOffersPage } from './model.ts';
@@ -92,7 +95,9 @@ async function mayReadOffer(deps: Dependencies, actor: Actor, offer: Offer, dead
         async verify({ client, evidence }) {
           const current = await readOffer(client, resource.route, resource.id);
           return (
-            current?.state === 'active' && current.revision === evidence.revision && current.contentEdition != null
+            current?.state === 'active' &&
+            current.revision === evidence.revision &&
+            (current.contentEdition != null) !== (current.contentPost != null)
           );
         },
       }),
@@ -113,6 +118,7 @@ export function publicOfferCard(offer: Offer): PublicOfferCard {
     taxBehavior: offer.taxBehavior ?? null,
     revision: offer.revision,
     contentEdition: contentEditionTermsView(offer.contentEdition),
+    contentPost: contentPostTermsView(offer.contentPost),
   };
 }
 
@@ -190,12 +196,12 @@ export function listSubjectOffers(
           !offer ||
           offer.state !== 'active' ||
           offer.revision !== ref.sourceRevision ||
-          !offer.contentEdition ||
+          (offer.contentEdition == null) === (offer.contentPost == null) ||
           !Number.isSafeInteger(offer.unitAmountMinor) ||
           offer.unitAmountMinor < 1 ||
           offer.targetSubjectId !== ref.originalSubjectId ||
-          offer.creatorAccountId !== offer.contentEdition.creatorAccountId ||
-          offer.targetSubjectId !== offer.contentEdition.targetSubjectId
+          offer.creatorAccountId !== (offer.contentPost ?? offer.contentEdition)!.creatorAccountId ||
+          offer.targetSubjectId !== (offer.contentPost ?? offer.contentEdition)!.targetSubjectId
         )
           continue;
         const [mapped] = await readIdentityMappings(deps.pool, [offer.targetSubjectId]);
@@ -209,17 +215,32 @@ export function listSubjectOffers(
         ]);
         if (!subjects.summaries.get(offer.targetSubjectId) || !(await mayReadOffer(deps, actor, offer, input.deadline)))
           continue;
-        const current = await captureCurrentContentEdition(offer.contentEdition.benefit.resource.id, deps, {
-          actor,
-          deadline: input.deadline,
-        });
-        if (!sameCapturedContentEdition(offer.contentEdition, current)) continue;
+        const current = offer.contentPost
+          ? await requireMechanicalContentPost(offer.contentPost, deps, { deadline: input.deadline })
+          : await captureCurrentContentEdition(offer.contentEdition!.benefit.resource.id, deps, {
+              actor,
+              deadline: input.deadline,
+            });
+        if (
+          offer.contentPost
+            ? !sameCapturedContentPost(offer.contentPost, current as typeof offer.contentPost)
+            : !sameCapturedContentEdition(
+                offer.contentEdition,
+                current as Awaited<ReturnType<typeof captureCurrentContentEdition>>,
+              )
+        )
+          continue;
         const final = await readSubjectOfferSource(deps.pool, offer.id, input.deadline);
         if (
           !final ||
           final.state !== 'active' ||
           final.revision !== offer.revision ||
-          !sameCapturedContentEdition(final.contentEdition, current) ||
+          (offer.contentPost
+            ? !sameCapturedContentPost(final.contentPost, current as typeof offer.contentPost)
+            : !sameCapturedContentEdition(
+                final.contentEdition,
+                current as Awaited<ReturnType<typeof captureCurrentContentEdition>>,
+              )) ||
           !(await mayReadOffer(deps, actor, final, input.deadline))
         )
           continue;

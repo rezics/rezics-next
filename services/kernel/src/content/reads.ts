@@ -45,6 +45,7 @@ import { readPartition, readPartitions, type Partition } from '../partition/part
 import { accessExplicitCheck, accessCheck } from './access-port.ts';
 import type { Access, AccessCheck, AccessClient, Actor, ReadDecisions, Resource } from '../request/access.ts';
 import { prepareReadDecisions } from './access-port.ts';
+import { contentPostBenefitForPost, type ContentPostBenefit } from '../access/authenticated-benefit.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -688,12 +689,14 @@ export function readResource(
   withheldReference = false,
   bookGate?: RevisionDisclosureReaderGate,
   revisionPubliclyWithheld = false,
+  postBenefit?: ContentPostBenefit,
 ): Resource {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
   const native = createReadEligibilityWork(row, resource.route, evidence, bookGate);
   const resourceWithEligibility = {
     ...resource,
+    ...(postBenefit ? { authenticatedBenefit: postBenefit } : {}),
     eligibility: createResourcePublicEligibility({
       resource,
       action,
@@ -770,6 +773,7 @@ async function prepare(
   sharedContext?: AccessContext,
   bookGate?: RevisionDisclosureReaderGate,
   revisionPubliclyWithheld = false,
+  postBenefit?: ContentPostBenefit,
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
   const resourceWithEligibility = readResource(
@@ -780,6 +784,7 @@ async function prepare(
     withheldReference,
     bookGate,
     revisionPubliclyWithheld,
+    postBenefit,
   );
   const accessContext = sharedContext ?? {
     pool: dependencies.pool,
@@ -1526,6 +1531,7 @@ async function disclose(
           undefined,
           bookGate,
           row === initial?.posts[0] && initial.revision?.revision_restriction === 'public',
+          row.kind === 'post' && row.id === postId ? contentPostBenefitForPost(row.id) : undefined,
         ),
       );
     }

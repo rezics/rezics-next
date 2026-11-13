@@ -11,7 +11,11 @@ export {
   nativePreparedAccessCheckWork,
 } from '../access/check.ts';
 import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
-import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
+import type {
+  AuthenticatedContentBenefit,
+  ContentEditionBuyerFactReader,
+  ContentPostBuyerFactReader,
+} from '../access/authenticated-benefit.ts';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
 import { hasOriginalAuthenticator } from '../access/authentication-work.ts';
 import type { Pool, PoolClient } from 'pg';
@@ -47,7 +51,7 @@ export type Resource = {
   route: number;
   id: string;
   /** Server-only exact selector, never entitlement evidence. */
-  authenticatedBenefit?: ContentEditionBenefit;
+  authenticatedBenefit?: AuthenticatedContentBenefit;
   eligibility?: ResourceEligibility;
   /** Compatibility spelling; uses the same opaque capability and evaluator. */
   anonymousEligibility?: ResourceEligibility;
@@ -105,6 +109,12 @@ export type AccessConfig = {
   contentEditionBuyerFactWork?: AccessWorkProducer<
     Parameters<ContentEditionBuyerFactReader>[0],
     Awaited<ReturnType<ContentEditionBuyerFactReader>>
+  >;
+  /** Trusted Commerce current Post buyer lookup; never supplied by HTTP input. */
+  contentPostBuyerFactReader?: ContentPostBuyerFactReader;
+  contentPostBuyerFactWork?: AccessWorkProducer<
+    Parameters<ContentPostBuyerFactReader>[0],
+    Awaited<ReturnType<ContentPostBuyerFactReader>>
   >;
   /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
   clock?: () => Date;

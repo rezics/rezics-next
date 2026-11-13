@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { BenefitAcquisitionError } from './acquisition.ts';
 import { listSubjectOffers } from './subject-offers.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
-import { ContentEditionUnavailableError, contentEditionTermsView, type SaleDependencies } from './benefit.ts';
+import { ContentEditionUnavailableError, contentEditionTermsView, contentPostTermsView, type SaleDependencies } from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { t } from 'elysia';
@@ -79,6 +79,29 @@ const contentEditionSchema = t.Union([
     object,
   ),
 ]);
+const contentPostSchema = t.Union([
+  t.Null(),
+  t.Object(
+    {
+      benefit: t.Object(
+        {
+          kind: t.Literal('content-post'),
+          resourceType: t.Literal('content.post'),
+          resource: t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, object),
+          action: t.Literal('post:read'),
+        },
+        object,
+      ),
+      creatorAccountId: id,
+      targetSubjectId: id,
+      saleTermsReference: t.Literal('content-post-revisions-v1'),
+      delivery: t.Literal('eligible-post-revisions'),
+      acquisition: t.Literal('one-time-account-bound'),
+      quantity: t.Literal(1),
+    },
+    object,
+  ),
+]);
 const moneyUnitSchema = t.Object(
   {
     system: t.Literal('stripe-api'),
@@ -116,6 +139,7 @@ function offerSchema() {
       {
         ...capturedMoneySchemas,
         contentEdition: contentEditionSchema,
+        contentPost: contentPostSchema,
         id,
         targetSubjectId: id,
         summary: t.Union([SubjectSummarySchema, t.Null()]),
@@ -134,6 +158,7 @@ function offerReadSchema() {
       {
         ...capturedMoneySchemas,
         contentEdition: contentEditionSchema,
+        contentPost: contentPostSchema,
         id,
         revision: t.Integer({ minimum: 1 }),
         targetSubjectId: id,
@@ -160,6 +185,7 @@ const sellerOfferSchema = t.Object(
     state: t.Union([t.Literal('active'), t.Literal('delisted')]),
     revision: t.Integer({ minimum: 1 }),
     contentEdition: contentEditionSchema,
+    contentPost: contentPostSchema,
   },
   object,
 );
@@ -167,6 +193,7 @@ const orderSchema = t.Object(
   {
     ...capturedMoneySchemas,
     contentEdition: contentEditionSchema,
+    contentPost: contentPostSchema,
     id,
     offerId: id,
     settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
@@ -197,6 +224,7 @@ function orderReadSchema() {
       {
         ...capturedMoneySchemas,
         contentEdition: contentEditionSchema,
+        contentPost: contentPostSchema,
         id,
         offerId: id,
         title: t.String(),
@@ -251,6 +279,7 @@ function entitlementSchema() {
     t.Object(
       {
         contentEdition: contentEditionSchema,
+        contentPost: contentPostSchema,
         id,
         offerId: id,
         orderId: id,
@@ -361,6 +390,7 @@ function offerView(offer: Offer, summary: SubjectSummary | null) {
     moneyUnit: offer.moneyUnit ?? null,
     taxBehavior: offer.taxBehavior ?? null,
     contentEdition: contentEditionTermsView(offer.contentEdition),
+    contentPost: contentPostTermsView(offer.contentPost),
   };
 }
 function offerReadView(offer: Offer, subject: SubjectSummary | null) {
@@ -377,6 +407,7 @@ function offerReadView(offer: Offer, subject: SubjectSummary | null) {
     moneyUnit: offer.moneyUnit ?? null,
     taxBehavior: offer.taxBehavior ?? null,
     contentEdition: contentEditionTermsView(offer.contentEdition),
+    contentPost: contentPostTermsView(offer.contentPost),
   };
 }
 function entitlementView(entitlement: Entitlement, summary: SubjectSummary | null) {
@@ -391,6 +422,7 @@ function entitlementView(entitlement: Entitlement, summary: SubjectSummary | nul
     revokeReason,
     active: revokedAt === null,
     contentEdition: contentEditionTermsView(entitlement.contentEdition),
+    contentPost: contentPostTermsView(entitlement.contentPost),
     summary,
   };
 }
@@ -407,6 +439,7 @@ async function orderView(pool: Pool, order: Order) {
     moneyUnit: order.moneyUnit ?? null,
     taxBehavior: order.taxBehavior ?? null,
     contentEdition: contentEditionTermsView(order.contentEdition),
+    contentPost: contentPostTermsView(order.contentPost),
     createdAt,
   };
 }
@@ -489,6 +522,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
                     ...capturedMoneySchemas,
                     revision: t.Integer({ minimum: 1 }),
                     contentEdition: contentEditionSchema,
+                    contentPost: contentPostSchema,
                   },
                   object,
                 ),
@@ -662,6 +696,17 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         body: t.Union([
           t.Object(
             {
+              postId: id,
+              targetSubjectId: t.Optional(id),
+              title: t.String({ minLength: 1, maxLength: 1024, pattern: '\\S' }),
+              currency: t.String({ pattern: '^[a-z]{3}$' }),
+              unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+              taxCode: t.String({ minLength: 1, maxLength: 256 }),
+            },
+            object,
+          ),
+          t.Object(
+            {
               contentEditionId: id,
               title: t.String({ minLength: 1, maxLength: 1024, pattern: '\\S' }),
               currency: t.String({ pattern: '^[a-z]{3}$' }),
@@ -680,7 +725,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
               taxCode: t.String({ minLength: 1, maxLength: 256 }),
             },
-            { ...object, description: 'Historical offer receipt replay only; fresh sales require contentEditionId.' },
+            { ...object, description: 'Historical offer receipt replay only.' },
           ),
         ]),
         response: {
@@ -695,8 +740,9 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
-        if (routeOf('contentEditionId' in body ? body.contentEditionId : body.targetSubjectId) === null)
-          throw new ProblemError('invalid_request');
+        const selectedId =
+          'postId' in body ? body.postId : 'contentEditionId' in body ? body.contentEditionId : body.targetSubjectId;
+        if (routeOf(selectedId) === null) throw new ProblemError('invalid_request');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
@@ -930,6 +976,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               moneyUnit: order.moneyUnit ?? null,
               taxBehavior: order.taxBehavior ?? null,
               contentEdition: contentEditionTermsView(order.contentEdition),
+              contentPost: contentPostTermsView(order.contentPost),
             })),
           };
         });
@@ -987,6 +1034,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               moneyUnit: order.moneyUnit ?? null,
               taxBehavior: order.taxBehavior ?? null,
               contentEdition: contentEditionTermsView(order.contentEdition),
+              contentPost: contentPostTermsView(order.contentPost),
               createdAt: order.createdAt,
               title: order.title,
               currency: order.currency,

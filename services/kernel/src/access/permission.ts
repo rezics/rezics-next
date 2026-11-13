@@ -9,12 +9,16 @@ import {
   type AccessWorkProducer,
 } from './work.ts';
 import {
-  copyContentEditionBenefit,
-  contentEditionBenefitBinding,
+  authenticatedContentBenefitBinding,
+  copyAuthenticatedContentBenefit,
   matchesContentEditionBuyerFact,
-  type ContentEditionBenefit,
+  matchesContentPostBuyerFact,
+  type AuthenticatedContentBenefit,
+  type ContentBuyerFact,
   type ContentEditionBuyerFact,
   type ContentEditionBuyerFactReader,
+  type ContentPostBuyerFact,
+  type ContentPostBuyerFactReader,
 } from './authenticated-benefit.ts';
 import { memoizedValue } from '../memoized.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
@@ -142,6 +146,11 @@ export type PermissionConfig = {
     Parameters<ContentEditionBuyerFactReader>[0],
     Awaited<ReturnType<ContentEditionBuyerFactReader>>
   >;
+  contentPostBuyerFactReader?: ContentPostBuyerFactReader;
+  contentPostBuyerFactWork?: AccessWorkProducer<
+    Parameters<ContentPostBuyerFactReader>[0],
+    Awaited<ReturnType<ContentPostBuyerFactReader>>
+  >;
   /** Outside a command, bind this instant. Absent uses PostgreSQL clock_timestamp(). */
   clock?: () => Date;
 };
@@ -158,10 +167,10 @@ type RoleEvidence = {
 };
 
 type BuyerEvidence = Readonly<{
-  benefit: ContentEditionBenefit;
+  benefit: AuthenticatedContentBenefit;
   time: AuthoritativeTime;
   deadline: number;
-  buyers: ReadonlyMap<string, ContentEditionBuyerFact>;
+  buyers: ReadonlyMap<string, ContentBuyerFact>;
 }>;
 
 function validBuyerEvidence(proof: BuyerEvidence, time: AuthoritativeTime | undefined): boolean {
@@ -169,12 +178,19 @@ function validBuyerEvidence(proof: BuyerEvidence, time: AuthoritativeTime | unde
   authoritativeTimeValue(proof.time);
   requireAccessDeadline(proof.deadline);
   return [...proof.buyers].every(([buyerAccountId, fact]) =>
-    matchesContentEditionBuyerFact(fact, {
-      benefit: proof.benefit,
-      buyerAccountId,
-      time: proof.time,
-      deadline: proof.deadline,
-    }),
+    proof.benefit.kind === 'content-post'
+      ? matchesContentPostBuyerFact(fact, {
+          benefit: proof.benefit,
+          buyerAccountId,
+          time: proof.time,
+          deadline: proof.deadline,
+        })
+      : matchesContentEditionBuyerFact(fact, {
+          benefit: proof.benefit,
+          buyerAccountId,
+          time: proof.time,
+          deadline: proof.deadline,
+        }),
   );
 }
 
@@ -290,7 +306,9 @@ const bind = (actor: Actor, action: string, resource: Resource, page?: ResourceP
     action,
     resource.route,
     page ? [page.resourceType, page.ids] : resource.id,
-    resource.authenticatedBenefit === undefined ? null : contentEditionBenefitBinding(resource.authenticatedBenefit),
+    resource.authenticatedBenefit === undefined
+      ? null
+      : authenticatedContentBenefitBinding(resource.authenticatedBenefit),
   ]);
 
 function eligible(account: PermissionAccount, actor: AccountActor): boolean {
@@ -341,6 +359,7 @@ function preparedFormula(
     include_global: isGlobalReachAction(action),
     action,
     own_account: facts.ownAccount,
+    authenticated_benefit_kind: facts.buyerEvidence?.benefit.kind ?? null,
     authenticated_resource_id: facts.buyerEvidence?.benefit.resource.id ?? null,
     authenticated_buyer_ids: facts.buyerEvidence ? [...facts.buyerEvidence.buyers.keys()] : [],
     actor_id: actor.kind === 'account' ? actor.accountId : '',
@@ -671,7 +690,7 @@ export function createAccess(config: PermissionConfig): Access {
       const benefit =
         resource.authenticatedBenefit === undefined
           ? undefined
-          : copyContentEditionBenefit(resource.authenticatedBenefit);
+          : copyAuthenticatedContentBenefit(resource.authenticatedBenefit);
       if (
         benefit &&
         (page ||
@@ -746,32 +765,58 @@ export function createAccess(config: PermissionConfig): Access {
       }
       let buyerEvidence: BuyerEvidence | undefined;
       if (benefit && time) {
-        const reader = config.contentEditionBuyerFactReader;
-        if (!reader) throw new AccessUnavailableError('overloaded');
-        const buyers = new Map<string, ContentEditionBuyerFact>();
-        // Actual resolved identities only, sequential and bounded to actor plus
-        // one distinct current principal. Null proves absence for that identity.
-        for (const { accountId: buyerAccountId } of members) {
-          const input = Object.freeze({ benefit, buyerAccountId, time, deadline: context.deadline });
-          let fact: ContentEditionBuyerFact | null;
-          try {
-            fact = await within(context.deadline, () =>
-              accessOwnerWork(
-                context.work,
-                'Commerce ContentEditionBuyerFactReader',
-                config.contentEditionBuyerFactWork,
-                input,
-                () => reader(input),
-              ),
-            );
-          } catch (error) {
-            throwAccessUnavailable(error, context.deadline);
-            throw new AccessUnavailableError('overloaded');
+        const buyers = new Map<string, ContentBuyerFact>();
+        if (benefit.kind === 'content-post') {
+          const reader = config.contentPostBuyerFactReader;
+          if (!reader) throw new AccessUnavailableError('overloaded');
+          for (const { accountId: buyerAccountId } of members) {
+            const input = Object.freeze({ benefit, buyerAccountId, time, deadline: context.deadline });
+            let fact: ContentPostBuyerFact | null;
+            try {
+              fact = await within(context.deadline, () =>
+                accessOwnerWork(
+                  context.work,
+                  'Commerce ContentPostBuyerFactReader',
+                  config.contentPostBuyerFactWork,
+                  input,
+                  () => reader(input),
+                ),
+              );
+            } catch (error) {
+              throwAccessUnavailable(error, context.deadline);
+              throw new AccessUnavailableError('overloaded');
+            }
+            requireAccessDeadline(deadline);
+            if (fact !== null) {
+              if (!matchesContentPostBuyerFact(fact, input)) return evidence;
+              buyers.set(buyerAccountId, fact);
+            }
           }
-          requireAccessDeadline(deadline);
-          if (fact !== null) {
-            if (!matchesContentEditionBuyerFact(fact, input)) return evidence;
-            buyers.set(buyerAccountId, fact);
+        } else {
+          const reader = config.contentEditionBuyerFactReader;
+          if (!reader) throw new AccessUnavailableError('overloaded');
+          for (const { accountId: buyerAccountId } of members) {
+            const input = Object.freeze({ benefit, buyerAccountId, time, deadline: context.deadline });
+            let fact: ContentEditionBuyerFact | null;
+            try {
+              fact = await within(context.deadline, () =>
+                accessOwnerWork(
+                  context.work,
+                  'Commerce ContentEditionBuyerFactReader',
+                  config.contentEditionBuyerFactWork,
+                  input,
+                  () => reader(input),
+                ),
+              );
+            } catch (error) {
+              throwAccessUnavailable(error, context.deadline);
+              throw new AccessUnavailableError('overloaded');
+            }
+            requireAccessDeadline(deadline);
+            if (fact !== null) {
+              if (!matchesContentEditionBuyerFact(fact, input)) return evidence;
+              buyers.set(buyerAccountId, fact);
+            }
           }
         }
         buyerEvidence = Object.freeze({ benefit, time, deadline: context.deadline, buyers });

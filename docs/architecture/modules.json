@@ -409,6 +409,7 @@
         "services/kernel/src/content/events.ts",
         "services/kernel/src/content/declared-catalogue.ts",
         "services/kernel/src/content/http.ts",
+        "services/kernel/src/content/post-benefit.ts",
         "services/kernel/src/content/report-locator-events.ts",
         "services/kernel/src/content/register.ts",
         "services/kernel/src/content/review-discovery.ts",

@@ -418,23 +418,24 @@ For `moderation:takedown`, `moderation:read_reports`, `post:erase`, `media:erase
 
 A command authorized by this Global check writes one row to `access.governance_reach` in the same transaction. The row records the command transaction id, action, requested resource and actor account. Permission proved on a separately released authority connection carries that reach use into the command transaction; authorization denies if the transaction cannot register it. Repeated authorization for the same action, resource and actor in one command registers one write. Replays, denials, rolled-back commands and checks outside a command write nothing.
 
-## Authenticated fixed-edition benefit
+## Authenticated Content benefits
 
-`authenticated-benefit.ts` owns the server-only `ContentEditionBenefit`,
-`ContentEditionBuyerFact`, `ContentEditionBuyerFactInput`,
-`createContentEditionBuyerFact` and `ContentEditionBuyerFactReader` declarations.
-Content supplies `Resource.authenticatedBenefit` only as an exact selector for one
-`content.edition`, original revision, canonical lowercase SHA256 and `edition:read`.
-It carries no evidence. Page preparation and other actions or targets reject it.
-No HTTP field, anonymous eligibility, Library entry or stored grant is introduced.
+`authenticated-benefit.ts` owns the closed `ContentPostBenefit | ContentEditionBenefit`
+selector union and separate opaque Post and edition buyer facts/readers. Content supplies
+`Resource.authenticatedBenefit` only for the exact selected Post and `post:read`, or for
+one exact edition, revision, SHA256 and `edition:read`. The Post selector has no revision
+field: Content chooses and checks each requested revision. Neither selector carries
+evidence. Page preparation, other actions and other targets reject them. No HTTP field,
+anonymous eligibility, Library entry, stored grant or general benefits registry is introduced.
 
-Content's native composition supplies Commerce's current native
-`contentEditionBuyerFactReader` to `createAccess` (including the public factory).
-Commerce alone calls the internal native issuer after validating the exact immutable
-entitlement/target/version/action and current positive safe-integer native
-`Entitlement.revision`. Entitlement and buyer keys are complete native routed UUIDs
-on the buyer's home route; the revision and edition keys are complete native routed
-UUIDs. The issuer copies and deeply freezes the bindings in a private WeakMap.
+Content's native composition supplies Commerce's separate current-native edition and Post
+buyer fact readers to `createAccess` (including the public factory). Each Commerce reader
+calls its matching internal issuer only after validating the exact immutable entitlement,
+target/action and current positive safe-integer `Entitlement.revision`. Entitlement and
+buyer keys are complete native routed UUIDs on the buyer's home route; the edition/revision
+or Post key is complete and routed. The Post fact binds only that Post/action, buyer,
+entitlement revision, authoritative time and deadline, so later eligible revisions reuse
+one current fact. The issuer copies and freezes its bindings in a private WeakMap.
 Only its opaque frozen object is evidence: structural, spread, cloned and serialized
 objects have no authority. The reader must release its Commerce checkout before
 returning and must not call Content or Access recursively. `null` proves no matching
@@ -459,27 +460,28 @@ including after its SQL statement. Neither a mutated selector nor an expired or
 released time can expand authority.
 
 The existing `permission-check.sql` consumes at most two exact buyer keys only in
-the local single-edition authenticated grant operand. Actor and principal each
+the local authenticated grant operand for the matching Post/action or edition/version.
+Actor and principal each
 need their own ordinary grant or fact. Consented client scope, current assignment,
 account standing, membership evidence, denials/bans/fences and deadlines remain
 mandatory. The operand supplies neither explicit native grant nor Global governance
 reach, public/anonymous floor, page authority or another target's permission.
 Ordinary public/free and explicit/Global rules retain their existing behavior.
 
-Content independently checks the current native edition/version/availability,
-original source/licence and full current parent/thread/board/Realm/Space authority
-before preparation and immediately before every byte or conditional response.
-The buyer operand does not authorize a post/container action, target readiness or
-sale. Sale still requires current `edition:sell` and native author/post:revise,
-licence and source authority. An edition points to the exact original revision;
-Commerce stores no copied body, so source erasure/purge cannot leave duplicate
-bytes. These checks belong to Content, outside the Commerce reader and Access
-formula; the fact is not a substitute for them.
+Content independently checks the current selected revision, availability, rights,
+source and full current parent/thread/board/Realm/Space authority before preparation
+and immediately before every byte or conditional response. The Post buyer operand
+does not override a per-version denial, draft, takedown, target readiness or native
+container action. Sale capture separately requires current `post:sell`, `post:revise`,
+the actual Post author and native source authority; fixed-edition capture retains its
+`edition:sell` and source-author checks. Commerce stores no copied body, so source
+erasure/purge cannot leave duplicate bytes. These checks belong to Content, outside
+the Commerce reader and Access formula; the fact is not a substitute for them.
 
-`test/access/authenticated-benefit.test.ts` covers this native formula boundary,
-opaque bindings, independent operands, released read-time ownership and the public
-factory wiring. Its trusted issuer fixture does not claim Commerce's current-reader
-or Content's full delivery/sale proof; those remain producer acceptance obligations.
+`test/access/authenticated-benefit.test.ts` covers the native formula boundary, opaque
+bindings, independent operands, released read-time ownership and public factory wiring.
+Commerce Post-benefit acceptance additionally proves the current buyer reader and exact
+Post read boundary; the trusted issuer fixture alone does not claim that producer proof.
 `community.space.owner` holds `space:restore`; `community.realm.owner` and `community.realm.moderator` hold
 `realm:restore`. These are additive grants on the existing installed roles. Standing and Realm membership grant
 neither restore action. No Space moderator, administrator, management reach or generic restore authority is added.

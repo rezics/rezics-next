@@ -199,6 +199,8 @@ export function createAccess(config: AccessConfig): Access {
       ? { contentEditionBuyerFactReader: config.contentEditionBuyerFactReader }
       : {}),
     ...(config.contentEditionBuyerFactWork ? { contentEditionBuyerFactWork: config.contentEditionBuyerFactWork } : {}),
+    ...(config.contentPostBuyerFactReader ? { contentPostBuyerFactReader: config.contentPostBuyerFactReader } : {}),
+    ...(config.contentPostBuyerFactWork ? { contentPostBuyerFactWork: config.contentPostBuyerFactWork } : {}),
     ...(config.clock ? { clock: config.clock } : {}),
   });
   async function preparePermission(

@@ -9,7 +9,12 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';
-import { contentEditionTermsView, decodeCapturedContentEdition } from './benefit.ts';
+import {
+  contentEditionTermsView,
+  contentPostTermsView,
+  decodeCapturedContentEdition,
+  decodeCapturedContentPost,
+} from './benefit.ts';
 import { recordedMoneyUnit, type StripeMoneyUnit } from './money.ts';
 import pageRead from './creator-offers.sql';
 
@@ -27,6 +32,7 @@ export type CreatorOffer = {
   state: 'active' | 'delisted';
   revision: number;
   contentEdition: ReturnType<typeof contentEditionTermsView>;
+  contentPost: ReturnType<typeof contentPostTermsView>;
 };
 
 export async function listCreatorOffers(
@@ -98,6 +104,7 @@ export async function listCreatorOffers(
           taxBehavior: row.taxBehavior as 'exclusive' | null,
           unitAmountMinor: amount,
           contentEdition: contentEditionTermsView(decodeCapturedContentEdition(row.contentEdition)),
+          contentPost: contentPostTermsView(decodeCapturedContentPost(row.contentPost)),
         };
       });
       transaction = 'committing';
