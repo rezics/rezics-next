@@ -1,19 +1,24 @@
 import { afterEach, expect, setDefaultTimeout, test } from 'bun:test';
+import {
+  insertVersionedOutlineSequenceNode,
+  rankVersionedOutlineSequenceNode,
+  spliceVersionedOutlineSequence,
+} from '../../src/content/versioned-outline-sequence.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { HostedVersionHeadChangedError, type HostedVersionSnapshot } from '../../src/content/hosted-version-model.ts';
 import {
   commitHostedVersionWrite,
   createHostedVersionGeneration,
   createHostedVersionWrite,
+  hostedVersionSequence,
   readHostedVersionHead,
-  readHostedVersionNode,
   readHostedVersionOccurrence,
-  readHostedVersionSnapshot,
   readHostedVersionSiblingRoot,
-  stageHostedVersionNode,
+  readHostedVersionSnapshot,
   stageHostedVersionOccurrence,
   stageHostedVersionSiblingRoot,
   stageHostedVersionSnapshotRoots,
+  type HostedVersionWrite,
 } from '../../src/content/hosted-version-store.ts';
 import createGeneration from '../../src/content/hosted-version-create-generation.sql';
 import commitVersion from '../../src/content/hosted-version-commit.sql';
@@ -34,6 +39,9 @@ afterEach(async () => {
   await closeFixture?.();
   closeFixture = undefined;
 });
+
+type BookNodeValue = Readonly<{ label: string; count: bigint }>;
+type BookWrite = HostedVersionWrite<BookNodeValue>;
 
 test('keeps exact temporal state and private generations separate from the legacy Book format', async () => {
   const fixture = await hostedChaptersFixture();
@@ -74,15 +82,20 @@ test('keeps exact temporal state and private generations separate from the legac
   expect(draft).toMatchObject({ sequence: 0n, generationKind: 'draft' });
   expect(candidate).toMatchObject({ sequence: 0n, generationKind: 'candidate' });
 
-  // The logical probe counter follows adapter calls; the observer independently records driver statements.
-  const logical = { nodes: 0, occurrences: 0, siblingRoots: 0, snapshots: 0, heads: 0 };
-  const nodeAt = (snapshot: HostedVersionSnapshot, id: string, kind: 'sibling' | 'preorder' | 'chapter') => {
-    logical.nodes++;
-    return readHostedVersionNode<Record<string, unknown>>(native.pool, snapshot, kind, id);
+  const sequenceContexts: BookWrite[] = [];
+  const writeFor = (snapshot: HostedVersionSnapshot) => {
+    const write = createHostedVersionWrite<BookNodeValue>(native.pool, snapshot);
+    sequenceContexts.push(write);
+    return write;
   };
+  const sequence = (write: BookWrite, index: 'sibling' | 'preorder' | 'chapter') => hostedVersionSequence(write, index);
+  const nodeAt = async (snapshot: HostedVersionSnapshot, id: string, index: 'sibling' | 'preorder' | 'chapter') =>
+    sequence(writeFor(snapshot), index).readNode(id);
+
+  const logical = { occurrences: 0, siblingRoots: 0, snapshots: 0, heads: 0 };
   const occurrenceAt = (snapshot: HostedVersionSnapshot, id: string) => {
     logical.occurrences++;
-    return readHostedVersionOccurrence<Record<string, unknown>>(native.pool, snapshot, id);
+    return readHostedVersionOccurrence<BookNodeValue>(native.pool, snapshot, id);
   };
   const siblingRootAt = (snapshot: HostedVersionSnapshot, parentId: string | null) => {
     logical.siblingRoots++;
@@ -97,27 +110,36 @@ test('keeps exact temporal state and private generations separate from the legac
     return readHostedVersionHead(native.pool, fixture.catalogueId, id);
   };
 
-  const firstWrite = createHostedVersionWrite(draft);
-  stageHostedVersionNode(firstWrite, 'sibling', firstPart, null, { label: 'superseded', count: 3n });
-  stageHostedVersionNode(firstWrite, 'sibling', firstPart, null, {
-    label: 'first',
-    count: 9_007_199_254_740_995n,
+  const firstWrite = writeFor(draft);
+  const siblingSet = sequence(firstWrite, 'sibling');
+  const topRoot = await insertVersionedOutlineSequenceNode(siblingSet, null, 0n, secondPart, {
+    label: 'second',
+    count: 2n,
   });
-  stageHostedVersionNode(firstWrite, 'preorder', firstPart, null, { label: 'preorder', count: 2n });
+  const childRoot = await insertVersionedOutlineSequenceNode(siblingSet, null, 0n, firstPart, {
+    label: 'superseded',
+    count: 3n,
+  });
+  const stagedChild = (await siblingSet.readNode(firstPart))!;
+  siblingSet.writeNode({ ...stagedChild, value: { label: 'first', count: 9_007_199_254_740_995n } });
+  const preorderSet = sequence(firstWrite, 'preorder');
+  let preorderRoot = await insertVersionedOutlineSequenceNode(preorderSet, null, 0n, secondPart, {
+    label: 'preorder second',
+    count: 1n,
+  });
+  preorderRoot = await insertVersionedOutlineSequenceNode(preorderSet, preorderRoot, 1n, firstPart, {
+    label: 'preorder first',
+    count: 1n,
+  });
   stageHostedVersionOccurrence(firstWrite, firstPart, {
     parentOccurrenceId: secondPart,
     subtreeSize: 1n,
-    value: { title: 'nested in Book', exactRevision: 'r1' },
+    value: { label: 'final first', count: 2n },
   });
-  stageHostedVersionOccurrence(firstWrite, firstPart, {
-    parentOccurrenceId: secondPart,
-    subtreeSize: 1n,
-    value: { title: 'final first', exactRevision: 'r2' },
-  });
-  stageHostedVersionSiblingRoot(firstWrite, null, secondPart);
-  stageHostedVersionSiblingRoot(firstWrite, secondPart, firstPart);
+  stageHostedVersionSiblingRoot(firstWrite, null, topRoot);
+  stageHostedVersionSiblingRoot(firstWrite, secondPart, childRoot);
   stageHostedVersionSnapshotRoots(firstWrite, {
-    preorderRootId: secondPart,
+    preorderRootId: preorderRoot,
     chapterRootId: null,
     placementCount: 2n,
     chapterCount: 0n,
@@ -128,79 +150,126 @@ test('keeps exact temporal state and private generations separate from the legac
   const snapshotOne = await snapshotAt(draftId, 1n);
   expect(snapshotOne).not.toBeNull();
   const firstNode = await nodeAt(snapshotOne!, firstPart, 'sibling');
-  expect(firstNode).toMatchObject({ nodeId: firstPart, treeParentId: null, sequence: 1n });
+  expect(firstNode).toMatchObject({ id: firstPart, treeParentId: null });
   expect(firstNode?.value).toEqual({ label: 'first', count: 9_007_199_254_740_995n });
   expect((await occurrenceAt(snapshotOne!, firstPart))?.parentOccurrenceId).toBe(secondPart);
   expect((await siblingRootAt(snapshotOne!, secondPart))?.rootNodeId).toBe(firstPart);
 
-  const secondWrite = createHostedVersionWrite(snapshotOne!);
-  stageHostedVersionNode(secondWrite, 'sibling', firstPart, null, { label: 'updated', count: 11n });
+  const secondWrite = writeFor(snapshotOne!);
+  const previousChild = (await sequence(secondWrite, 'sibling').readNode(firstPart))!;
+  sequence(secondWrite, 'sibling').writeNode({ ...previousChild, value: { label: 'updated', count: 11n } });
   stageHostedVersionOccurrence(secondWrite, firstPart, {
     parentOccurrenceId: null,
     subtreeSize: 1n,
-    value: { title: 'updated first', exactRevision: 'r3' },
+    value: { label: 'updated first', count: 3n },
   });
   draft = await commitHostedVersionWrite(native.pool, secondWrite);
   const exactTwo = await snapshotAt(draftId, 2n);
+  expect(exactTwo).not.toBeNull();
   expect((await nodeAt(exactTwo!, firstPart, 'sibling'))?.value).toEqual({ label: 'updated', count: 11n });
   expect((await occurrenceAt(exactTwo!, firstPart))?.parentOccurrenceId).toBeNull();
   expect((await occurrenceAt(snapshotOne!, firstPart))?.parentOccurrenceId).toBe(secondPart);
 
-  const removalWrite = createHostedVersionWrite(exactTwo!);
-  stageHostedVersionNode(removalWrite, 'sibling', firstPart, null, null);
-  stageHostedVersionNode(removalWrite, 'preorder', firstPart, null, null);
+  const removalWrite = writeFor(exactTwo!);
+  const oldChildRoot = (await siblingRootAt(exactTwo!, secondPart))?.rootNodeId ?? null;
+  const siblingRemoval = await spliceVersionedOutlineSequence(
+    sequence(removalWrite, 'sibling'),
+    oldChildRoot,
+    0n,
+    1n,
+    null,
+  );
+  const preorderRemoval = await spliceVersionedOutlineSequence(
+    sequence(removalWrite, 'preorder'),
+    exactTwo!.preorderRootId,
+    1n,
+    1n,
+    null,
+  );
   stageHostedVersionOccurrence(removalWrite, firstPart, null);
-  stageHostedVersionSiblingRoot(removalWrite, secondPart, null);
+  stageHostedVersionSiblingRoot(removalWrite, secondPart, siblingRemoval.rootId);
   stageHostedVersionSnapshotRoots(removalWrite, {
-    preorderRootId: secondPart,
+    preorderRootId: preorderRemoval.rootId,
     chapterRootId: null,
     placementCount: 1n,
     chapterCount: 0n,
   });
   draft = await commitHostedVersionWrite(native.pool, removalWrite);
   const exactThree = await snapshotAt(draftId, 3n);
-  expect(await nodeAt(exactThree!, firstPart, 'sibling')).toBeNull();
+  expect(exactThree).not.toBeNull();
   expect(await occurrenceAt(exactThree!, firstPart)).toBeNull();
-  expect((await siblingRootAt(exactThree!, secondPart))?.rootNodeId).toBeNull();
+  expect((await occurrenceAt(exactTwo!, firstPart))?.value).toEqual({ label: 'updated first', count: 3n });
+  expect((await nodeAt(snapshotOne!, firstPart, 'sibling'))?.value).toEqual({
+    label: 'first',
+    count: 9_007_199_254_740_995n,
+  });
   expect((await nodeAt(exactTwo!, firstPart, 'sibling'))?.value).toEqual({ label: 'updated', count: 11n });
+  expect((await siblingRootAt(exactThree!, secondPart))?.rootNodeId).toBeNull();
+  const currentMembership = writeFor(exactThree!);
+  expect(
+    await rankVersionedOutlineSequenceNode(
+      sequence(currentMembership, 'preorder'),
+      exactThree!.preorderRootId,
+      firstPart,
+    ),
+  ).toBeNull();
+  expect(
+    await rankVersionedOutlineSequenceNode(
+      sequence(writeFor(exactTwo!), 'preorder'),
+      exactTwo!.preorderRootId,
+      firstPart,
+    ),
+  ).toBe(1n);
 
-  const candidateWrite = createHostedVersionWrite(candidate);
-  stageHostedVersionNode(candidateWrite, 'sibling', secondPart, null, { label: 'private candidate', count: 99n });
+  const candidateWrite = writeFor(candidate);
+  const candidateRoot = await insertVersionedOutlineSequenceNode(
+    sequence(candidateWrite, 'sibling'),
+    null,
+    0n,
+    secondPart,
+    { label: 'private candidate', count: 99n },
+  );
   stageHostedVersionOccurrence(candidateWrite, secondPart, {
     parentOccurrenceId: null,
     subtreeSize: 1n,
-    value: { title: 'candidate-only' },
+    value: { label: 'candidate-only', count: 99n },
   });
-  stageHostedVersionSiblingRoot(candidateWrite, null, secondPart);
+  stageHostedVersionSiblingRoot(candidateWrite, null, candidateRoot);
   stageHostedVersionSnapshotRoots(candidateWrite, {
-    preorderRootId: secondPart,
+    preorderRootId: candidateRoot,
     chapterRootId: null,
     placementCount: 1n,
     chapterCount: 0n,
   });
   candidate = await commitHostedVersionWrite(native.pool, candidateWrite);
-  expect((await nodeAt(candidate, secondPart, 'sibling'))?.value).toEqual({
-    label: 'private candidate',
-    count: 99n,
-  });
-  expect(await nodeAt(exactThree!, secondPart, 'sibling')).toBeNull();
+  expect((await nodeAt(candidate, secondPart, 'sibling'))?.value).toEqual({ label: 'private candidate', count: 99n });
+  expect((await nodeAt(exactThree!, secondPart, 'sibling'))?.value).toEqual({ label: 'second', count: 2n });
+  expect((await occurrenceAt(candidate, secondPart))?.value).toEqual({ label: 'candidate-only', count: 99n });
   expect((await headAt(draftId))?.sequence).toBe(3n);
   expect((await headAt(candidateId))?.sequence).toBe(1n);
 
-  // A stale sequence cannot backdate into a newer generation head.
-  const staleWrite = createHostedVersionWrite(snapshotOne!);
-  stageHostedVersionNode(staleWrite, 'sibling', secondPart, null, { label: 'stale write' });
+  // Competing writes from an older sequence cannot backdate into the newer head.
+  const staleWrite = writeFor(snapshotOne!);
   await expect(commitHostedVersionWrite(native.pool, staleWrite)).rejects.toBeInstanceOf(HostedVersionHeadChangedError);
 
-  const logicalEnd = { ...logical };
+  const sequenceWork = sequenceContexts.flatMap((write) =>
+    (['sibling', 'preorder', 'chapter'] as const).map((index) => sequence(write, index).work()),
+  );
+  const logicalNodeReadCalls = sequenceWork.reduce((total, work) => total + work.nodeReadCalls, 0);
+  const logicalSnapshotProbes = sequenceWork.reduce((total, work) => total + work.snapshotProbeCount, 0);
   const physical = {
-    nodes: observer.records.filter((record) => record.statement === readNode.sql).length,
-    occurrences: observer.records.filter((record) => record.statement === readOccurrence.sql).length,
-    siblingRoots: observer.records.filter((record) => record.statement === readSiblingRoot.sql).length,
-    snapshots: observer.records.filter((record) => record.statement === readSnapshot.sql).length,
-    heads: observer.records.filter((record) => record.statement === readHead.sql).length,
+    nodeStatements: observer.records.filter((record) => record.statement === readNode.sql).length,
+    occurrenceStatements: observer.records.filter((record) => record.statement === readOccurrence.sql).length,
+    siblingRootStatements: observer.records.filter((record) => record.statement === readSiblingRoot.sql).length,
+    snapshotStatements: observer.records.filter((record) => record.statement === readSnapshot.sql).length,
+    headStatements: observer.records.filter((record) => record.statement === readHead.sql).length,
   };
-  expect(logicalEnd).toEqual(physical);
+  expect(physical.nodeStatements).toBe(logicalSnapshotProbes);
+  expect(logicalNodeReadCalls).toBeGreaterThanOrEqual(physical.nodeStatements);
+  expect(physical.occurrenceStatements).toBe(logical.occurrences);
+  expect(physical.siblingRootStatements).toBe(logical.siblingRoots);
+  expect(physical.snapshotStatements).toBe(logical.snapshots);
+  expect(physical.headStatements).toBe(logical.heads);
   expect(observer.records.filter((record) => record.statement === createGeneration.sql)).toHaveLength(2);
   expect(observer.records.filter((record) => record.statement === commitVersion.sql)).toHaveLength(5);
 

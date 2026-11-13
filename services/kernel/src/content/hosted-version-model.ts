@@ -18,14 +18,6 @@ export type HostedVersionSnapshot = Readonly<{
   chapterCount: bigint;
 }>;
 
-/** The storage envelope keeps inverse AVL parentage separate from Book containment. */
-export type HostedVersionNodeValue<Value> = Readonly<{
-  nodeId: string;
-  treeParentId: string | null;
-  value: Value;
-  sequence: bigint;
-}>;
-
 /** Occurrence state carries the product containment edge, never an AVL edge. */
 export type HostedVersionOccurrenceState<Value> = Readonly<{
   parentOccurrenceId: string | null;

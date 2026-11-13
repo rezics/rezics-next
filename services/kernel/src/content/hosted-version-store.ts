@@ -1,5 +1,10 @@
 import type { AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import {
+  createVersionedOutlineSequenceReadWriteSet,
+  type VersionedOutlineSequenceNode,
+  type VersionedOutlineSequenceReadWriteSet,
+} from './versioned-outline-sequence.ts';
 import commitVersion from './hosted-version-commit.sql';
 import createGeneration from './hosted-version-create-generation.sql';
 import readHead from './hosted-version-read-head.sql';
@@ -10,9 +15,9 @@ import readSnapshot from './hosted-version-read-snapshot.sql';
 import {
   HostedVersionHeadChangedError,
   InvalidHostedVersionIdentityError,
+  HOSTED_VERSION_INDEX_KINDS,
   type HostedVersionGenerationKind,
   type HostedVersionIndexKind,
-  type HostedVersionNodeValue,
   type HostedVersionOccurrenceState,
   type HostedVersionOccurrenceValue,
   type HostedVersionSiblingRoot,
@@ -34,7 +39,7 @@ type SnapshotRow = {
 type NodeRow = {
   node_id: string;
   tree_parent_id: string | null;
-  node_state: EncodedValue | null;
+  node_state: EncodedValue;
   is_deleted: boolean;
   sequence: string;
 };
@@ -42,7 +47,7 @@ type OccurrenceRow = {
   occurrence_id: string;
   parent_occurrence_id: string | null;
   subtree_size: string;
-  occurrence_state: EncodedValue | null;
+  occurrence_state: EncodedValue;
   is_deleted: boolean;
   sequence: string;
 };
@@ -54,13 +59,8 @@ type EncodedValue =
   | Readonly<{ kind: 'array'; value: readonly EncodedValue[] }>
   | Readonly<{ kind: 'object'; value: readonly (readonly [string, EncodedValue])[] }>
   | Readonly<{ kind: 'primitive'; value: string | number | boolean | null }>;
-
-type NodeWrite = Readonly<{
-  indexKind: HostedVersionIndexKind;
-  nodeId: string;
-  treeParentId: string | null;
-  value: unknown | null;
-}>;
+type PersistedSequenceNode<Value> = Omit<VersionedOutlineSequenceNode<Value>, 'id' | 'treeParentId'>;
+type SequenceWriteSet<Value> = VersionedOutlineSequenceReadWriteSet<Value>;
 type OccurrenceWrite = Readonly<{
   occurrenceId: string;
   parentOccurrenceId: string | null;
@@ -73,19 +73,19 @@ type SiblingRootWrite = Readonly<{
   parentKey: string;
   rootNodeId: string | null;
 }>;
-type Overlay = {
-  nodes: Map<string, NodeWrite>;
+type Overlay<Value> = {
+  sequences: Map<HostedVersionIndexKind, SequenceWriteSet<Value>>;
   occurrences: Map<string, OccurrenceWrite>;
   siblingRoots: Map<string, SiblingRootWrite>;
   roots: HostedVersionSnapshotRoots;
 };
 
-/** A private one-step transaction overlay bound to one immutable owner snapshot. */
-export type HostedVersionWrite = Readonly<{
+/** One transaction overlay, with a producer-owned final-per-ID node map for each index. */
+export type HostedVersionWrite<Value extends object> = Readonly<{
   snapshot: HostedVersionSnapshot;
   sequence: bigint;
 }>;
-const overlays = new WeakMap<HostedVersionWrite, Overlay>();
+const overlays = new WeakMap<object, unknown>();
 
 function routeForOwner(catalogueId: string, generationId: string): number {
   const route = routeOf(catalogueId);
@@ -118,7 +118,7 @@ function snapshotFromRow(row: SnapshotRow): HostedVersionSnapshot {
   return Object.freeze(snapshot);
 }
 
-/** Encode node data as tagged JSON so arbitrary object keys cannot collide with the BigInt representation. */
+/** Encode BigInt fields without JSON number conversion or collisions with owner value keys. */
 function encodeValue(value: unknown): EncodedValue {
   if (typeof value === 'bigint') return { kind: 'bigint', value: value.toString() };
   if (Array.isArray(value)) return { kind: 'array', value: value.map(encodeValue) };
@@ -137,10 +137,10 @@ function decodeValue<Value>(value: EncodedValue): Value {
   return revive(value) as Value;
 }
 
-function overlayFor(write: HostedVersionWrite): Overlay {
+function overlayFor<Value extends object>(write: HostedVersionWrite<Value>): Overlay<Value> {
   const overlay = overlays.get(write);
   if (!overlay) throw new InvalidHostedVersionIdentityError();
-  return overlay;
+  return overlay as Overlay<Value>;
 }
 
 /** Creates an empty private generation and its first exact empty snapshot. */
@@ -184,13 +184,13 @@ export async function readHostedVersionHead(
   return row ? snapshotFromRow(row) : null;
 }
 
-/** The predecessor row is selected first; a newest tombstone cannot reveal an older node value. */
-export async function readHostedVersionNode<Value extends object>(
+/** One equality-prefix predecessor query, pinned to the immutable snapshot selected by the core port. */
+async function readHostedVersionSequenceNode<Value extends object>(
   client: AccessClient,
   snapshot: HostedVersionSnapshot,
   indexKind: HostedVersionIndexKind,
   nodeId: string,
-): Promise<HostedVersionNodeValue<Value> | null> {
+): Promise<VersionedOutlineSequenceNode<Value> | null> {
   checkSnapshot(snapshot);
   checkOwnedId(snapshot.route, nodeId);
   const row = (
@@ -205,10 +205,9 @@ export async function readHostedVersionNode<Value extends object>(
   ).rows[0];
   if (!row || row.is_deleted) return null;
   return {
-    nodeId: row.node_id,
+    id: row.node_id,
     treeParentId: row.tree_parent_id,
-    value: decodeValue<Value>(row.node_state),
-    sequence: BigInt(row.sequence),
+    ...decodeValue<PersistedSequenceNode<Value>>(row.node_state),
   };
 }
 
@@ -262,13 +261,27 @@ export async function readHostedVersionSiblingRoot(
     : null;
 }
 
-/** Bind every staged key to one generation and coalesce repeated writes by their final storage key. */
-export function createHostedVersionWrite(snapshot: HostedVersionSnapshot): HostedVersionWrite {
+/** Creates the producer's snapshot reader and final-per-ID node overlays for all three Book indexes. */
+export function createHostedVersionWrite<Value extends object>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+): HostedVersionWrite<Value> {
   checkSnapshot(snapshot);
   const boundSnapshot = Object.freeze({ ...snapshot });
-  const write = Object.freeze({ snapshot: boundSnapshot, sequence: boundSnapshot.sequence + 1n });
+  const write: HostedVersionWrite<Value> = Object.freeze({
+    snapshot: boundSnapshot,
+    sequence: boundSnapshot.sequence + 1n,
+  });
+  const sequences = new Map<HostedVersionIndexKind, SequenceWriteSet<Value>>();
+  for (const indexKind of HOSTED_VERSION_INDEX_KINDS)
+    sequences.set(
+      indexKind,
+      createVersionedOutlineSequenceReadWriteSet((id) =>
+        readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
+      ),
+    );
   overlays.set(write, {
-    nodes: new Map(),
+    sequences,
     occurrences: new Map(),
     siblingRoots: new Map(),
     roots: {
@@ -277,28 +290,21 @@ export function createHostedVersionWrite(snapshot: HostedVersionSnapshot): Hoste
       placementCount: snapshot.placementCount,
       chapterCount: snapshot.chapterCount,
     },
-  });
+  } satisfies Overlay<Value>);
   return write;
 }
 
-/** Stage a final node state; a null value writes the newest tombstone for this node/index. */
-export function stageHostedVersionNode<Value extends object>(
-  write: HostedVersionWrite,
+/** Return the producer-owned write set for one sibling, preorder, or chapter forest. */
+export function hostedVersionSequence<Value extends object>(
+  write: HostedVersionWrite<Value>,
   indexKind: HostedVersionIndexKind,
-  nodeId: string,
-  treeParentId: string | null,
-  value: Value | null,
-): void {
-  const { snapshot } = write;
-  checkOwnedId(snapshot.route, nodeId);
-  checkOwnedId(snapshot.route, treeParentId);
-  if (value === null && treeParentId !== null) throw new InvalidHostedVersionIdentityError();
-  overlayFor(write).nodes.set(`${indexKind}\u0000${nodeId}`, { indexKind, nodeId, treeParentId, value });
+): VersionedOutlineSequenceReadWriteSet<Value> {
+  return overlayFor(write).sequences.get(indexKind)!;
 }
 
 /** Stage final Book containment state; removed occurrences retain only a tombstone in this sequence. */
 export function stageHostedVersionOccurrence<Value extends object>(
-  write: HostedVersionWrite,
+  write: HostedVersionWrite<Value>,
   occurrenceId: string,
   value: HostedVersionOccurrenceState<Value> | null,
 ): void {
@@ -317,8 +323,8 @@ export function stageHostedVersionOccurrence<Value extends object>(
 }
 
 /** Stage the final sibling root for a product parent, including an explicit empty root. */
-export function stageHostedVersionSiblingRoot(
-  write: HostedVersionWrite,
+export function stageHostedVersionSiblingRoot<Value extends object>(
+  write: HostedVersionWrite<Value>,
   parentOccurrenceId: string | null,
   rootNodeId: string | null,
 ): void {
@@ -327,7 +333,7 @@ export function stageHostedVersionSiblingRoot(
   checkOwnedId(snapshot.route, rootNodeId);
   const parentIsNull = parentOccurrenceId === null;
   const parentKey = parentOccurrenceId ?? ROOT_KEY;
-  overlayFor(write).siblingRoots.set(`${parentIsNull ? 'root' : parentKey}`, {
+  overlayFor(write).siblingRoots.set(parentIsNull ? 'root' : parentKey, {
     parentOccurrenceId,
     parentIsNull,
     parentKey,
@@ -335,8 +341,11 @@ export function stageHostedVersionSiblingRoot(
   });
 }
 
-/** Carry forward the untouched index roots while replacing the new snapshot tuple. */
-export function stageHostedVersionSnapshotRoots(write: HostedVersionWrite, roots: HostedVersionSnapshotRoots): void {
+/** Carry forward untouched index roots while replacing the new snapshot tuple. */
+export function stageHostedVersionSnapshotRoots<Value extends object>(
+  write: HostedVersionWrite<Value>,
+  roots: HostedVersionSnapshotRoots,
+): void {
   const { snapshot } = write;
   checkOwnedId(snapshot.route, roots.preorderRootId);
   checkOwnedId(snapshot.route, roots.chapterRootId);
@@ -346,23 +355,28 @@ export function stageHostedVersionSnapshotRoots(write: HostedVersionWrite, roots
 }
 
 /**
- * Atomically advances the one generation head fence and appends only each key's final overlay row.
+ * Atomically advances the one generation head fence and appends each producer overlay's final node per ID.
  * Callers provide their normal owner transaction; a failed insert rolls the fence back with the statement.
  */
-export async function commitHostedVersionWrite(
+export async function commitHostedVersionWrite<Value extends object>(
   client: AccessClient,
-  write: HostedVersionWrite,
+  write: HostedVersionWrite<Value>,
 ): Promise<HostedVersionSnapshot> {
   const overlay = overlayFor(write);
   const { snapshot } = write;
   checkSnapshot(snapshot);
-  const nodeRows = [...overlay.nodes.values()].map((row) => ({
-    index_kind: row.indexKind,
-    node_id: row.nodeId,
-    tree_parent_id: row.treeParentId,
-    node_state: row.value === null ? null : encodeValue(row.value),
-    is_deleted: row.value === null,
-  }));
+  const nodeRows = [...overlay.sequences].flatMap(([indexKind, sequence]) =>
+    [...sequence.nodeWrites.values()].map((node) => {
+      const { id: nodeId, treeParentId, ...state } = node;
+      return {
+        index_kind: indexKind,
+        node_id: nodeId,
+        tree_parent_id: treeParentId,
+        node_state: encodeValue(state),
+        is_deleted: false,
+      };
+    }),
+  );
   const occurrenceRows = [...overlay.occurrences.values()].map((row) => ({
     occurrence_id: row.occurrenceId,
     parent_occurrence_id: row.parentOccurrenceId,
@@ -393,6 +407,5 @@ export async function commitHostedVersionWrite(
     ])
   ).rows[0];
   if (!row) throw new HostedVersionHeadChangedError();
-  overlays.delete(write);
   return Object.freeze({ ...snapshot, ...overlay.roots, sequence: BigInt(row.sequence) });
 }
