@@ -15,6 +15,7 @@ import {
   type HostedVersionPublicationOccurrence,
   type HostedVersionPublicationOccurrenceChange,
   type HostedVersionPublicationBaseline,
+  type HostedVersionPublicationStoredValue,
   type HostedVersionPublicationValue,
   type HostedVersionPublicationWritePlan,
   type HostedVersionPublicationWritePort,
@@ -67,7 +68,9 @@ function sameTarget(left: HostedChapterTarget, right: HostedChapterTarget): bool
 function chapterValue(
   value: HostedVersionPublicationValue,
 ): Extract<HostedVersionPublicationValue, { kind: 'chapter' }> | null {
-  return value.kind === 'chapter' ? value : null;
+  return value.kind === 'chapter' && value.title !== null && value.target !== null
+    ? { kind: 'chapter', title: value.title, target: value.target }
+    : null;
 }
 
 function assertExpectedPublication(selection: HostedPointSelection, port: HostedVersionPublicationWritePort): void {
@@ -108,9 +111,14 @@ function matchesSelectedPlacement(
   placement: OrderedHostedPlacement,
 ): boolean {
   if (occurrence === null || occurrence.parentId !== placement.parentId) return false;
-  if (placement.kind === 'part') return occurrence.value.kind === 'part' && occurrence.value.title === placement.title;
+  if (placement.kind === 'part')
+    return (
+      occurrence.value.kind === 'part' && occurrence.value.title !== null && occurrence.value.title === placement.title
+    );
   return (
     occurrence.value.kind === 'chapter' &&
+    occurrence.value.title !== null &&
+    occurrence.value.target !== null &&
     occurrence.value.title === placement.title &&
     sameTarget(occurrence.value.target, placement.target)
   );
@@ -409,7 +417,7 @@ export async function writeHostedVersionPublicationPoint(
   };
 }
 
-type StoredPublicationValue = HostedVersionPublicationValue & Readonly<{ chapterCount: bigint }>;
+type StoredPublicationValue = HostedVersionPublicationStoredValue;
 type StoredPublicationIndex = VersionedOutlineSequenceReadWriteSet<StoredPublicationValue>;
 type PublicationWrite = HostedVersionWrite<StoredPublicationValue>;
 

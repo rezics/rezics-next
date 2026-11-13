@@ -212,6 +212,10 @@ Decision: the public-baseline producer binds the publication, thread and actor-s
 source identity, reuses the existing builder point, sibling-root, page and sequence stores with the source-neutral
 sequence application, and seals complete coverage without changing catalogue pointers.
 
+Decision: public-baseline receiving copies the sealed source into one private candidate through resumable temporal
+pages, shares activation's occurrence/node/root writer, verifies counts and roots without a final source scan, and
+returns only after rechecking the original publication; unavailable values remain null.
+
 ## Book publication contract
 
 Choose one exact public snapshot model with two launch paths: **point publish** for serial work, and

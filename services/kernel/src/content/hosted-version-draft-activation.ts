@@ -28,8 +28,6 @@ import {
   readHostedVersionOccurrence,
   readHostedVersionSiblingRoot,
   readHostedVersionSnapshot,
-  stageHostedVersionOccurrence,
-  stageHostedVersionSiblingRoot,
   stageHostedVersionSnapshotRoots,
   type HostedVersionWrite,
 } from './hosted-version-store.ts';
@@ -38,6 +36,13 @@ import {
   InvalidHostedVersionIdentityError,
   type HostedVersionSnapshot,
 } from './hosted-version-model.ts';
+import {
+  stageHostedVersionMaterializedNodes,
+  stageHostedVersionMaterializedOccurrences,
+  stageHostedVersionMaterializedSiblingRoots,
+  type HostedVersionMaterializedNode,
+  type HostedVersionMaterializedOccurrence,
+} from './hosted-version-materialization.ts';
 import type { HostedMigrationSourceIdentity } from './hosted-migration-input-model.ts';
 import {
   HOSTED_VERSION_DRAFT_ACTIVATION_PAGE_MAX,
@@ -682,6 +687,7 @@ async function stageOccurrencePage(
       count: 0,
     };
   }
+  const materialized: HostedVersionMaterializedOccurrence<HostedVersionDraftActivationValue>[] = [];
   for (const fact of facts) {
     const subtree = await readSubtree(tx, work, row, fact.occurrence_id);
     const childSize = subtree === null ? 0n : BigInt(subtree.subtree_size);
@@ -690,13 +696,13 @@ async function stageOccurrencePage(
     if (value.title !== null && fact.title !== value.title) {
       throw new HostedVersionDraftActivationError('invalid-tree', 'Hosted version activation changed a source title');
     }
-    stageHostedVersionOccurrence(write, fact.occurrence_id, {
-      parentOccurrenceId: fact.parent_id,
-      subtreeSize,
-      value,
+    materialized.push({
+      occurrenceId: fact.occurrence_id,
+      state: { parentOccurrenceId: fact.parent_id, subtreeSize, value },
     });
     if (fact.parent_id !== null) await addParentSubtree(tx, work, row, fact.parent_id, value, subtreeSize);
   }
+  stageHostedVersionMaterializedOccurrences(write, materialized);
   const last = facts[facts.length - 1]!;
   const exhausted = facts.length < HOSTED_VERSION_DRAFT_ACTIVATION_PAGE_MAX || last.source_ordinal === '0';
   return {
@@ -755,9 +761,11 @@ async function stageNodePage(
       count: 0,
     };
   }
+  const materialized: HostedVersionMaterializedNode<HostedVersionDraftActivationValue>[] = [];
   for (const node of nodes) {
     const value = await occurrenceValueAt(tx, snapshot, node.node_id, pending);
-    hostedVersionSequence(write, hostedVersionDraftActivationIndexKind(node.sequence_kind)).writeNode({
+    materialized.push({
+      indexKind: hostedVersionDraftActivationIndexKind(node.sequence_kind),
       id: node.node_id,
       value,
       leftId: node.left_id,
@@ -769,6 +777,7 @@ async function stageNodePage(
       chapterCount: BigInt(node.chapter_count),
     });
   }
+  stageHostedVersionMaterializedNodes(write, materialized);
   const last = nodes[nodes.length - 1]!;
   const exhausted = nodes.length < HOSTED_VERSION_DRAFT_ACTIVATION_PAGE_MAX;
   return {
@@ -813,9 +822,10 @@ async function stageRootPage(
       complete: true,
     };
   }
-  for (const root of roots) {
-    stageHostedVersionSiblingRoot(write, root.parent_id, root.root_id);
-  }
+  stageHostedVersionMaterializedSiblingRoots(
+    write,
+    roots.map((root) => ({ parentId: root.parent_id, rootId: root.root_id })),
+  );
   const last = roots[roots.length - 1]!;
   const exhausted = roots.length < HOSTED_VERSION_DRAFT_ACTIVATION_PAGE_MAX;
   return {

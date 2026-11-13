@@ -8,8 +8,11 @@ import type {
 
 /** The public value stored for one selected occurrence; order is represented by the indexes. */
 export type HostedVersionPublicationValue =
-  | Readonly<{ kind: 'part'; title: string }>
-  | Readonly<{ kind: 'chapter'; title: string; target: HostedChapterTarget }>;
+  | Readonly<{ kind: 'part'; title: string | null }>
+  | Readonly<{ kind: 'chapter'; title: string | null; target: HostedChapterTarget | null }>;
+
+/** Stored payload includes the chapter summary needed by temporal index nodes. */
+export type HostedVersionPublicationStoredValue = HostedVersionPublicationValue & Readonly<{ chapterCount: bigint }>;
 
 export type HostedVersionPublicationOccurrence = Readonly<{
   parentId: string | null;
