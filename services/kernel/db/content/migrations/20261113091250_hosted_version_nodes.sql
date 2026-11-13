@@ -1,3 +1,4 @@
+-- migrate:up
 -- The ordered Book representation is additive and private. Legacy snapshots and sealed prefixes remain owners of
 -- their current reads; no catalogue is copied or pointed at these generations by this migration.
 CREATE TABLE content.hosted_tree_generation (
