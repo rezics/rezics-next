@@ -59,6 +59,30 @@ multiple interfaces, trace the shared client boundary first. Fix the earliest sh
 interaction or component that causes the failure, and verify representative consumers. Use a page-local fix only
 when the failure is specific to that page. Representation does not determine semantic meaning or authority.
 
+### Release selection and retention
+
+A release selects an exact immutable version under its owner's current publication authority. A point publish
+changes only the selected item and affected index paths. A large selection is prepared and sealed in bounded
+steps, then made current by one atomic compare-and-set under current source authority. Until activation the
+previous selection remains current. Reuse this lifecycle across content; an ordinary article can publish in one
+step, and a Book adds ordered membership and source rules through its
+[Content contract](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).
+
+Publication selects a version. [Access](../services/kernel/src/access/README.md) and the target owner decide
+what the reader may see now. [Commerce](../services/kernel/src/commerce/README.md) owns offers, payment and
+eligibility for the exact paid benefit; neither an active release nor a receipt alone authorizes use. Public
+metadata and protected bodies may have different visibility. An authorization proof used at activation must
+remain current through that commit under the authoritative owners; a prior successful check or later read
+withholding does not close the activation race.
+
+The storage owner may reclaim an unpublished candidate only after proving terminal state and the absence of
+retained references, then fencing new writes and references before bounded, resumable keyset deletion. An expired
+deadline starts eligibility review. Withdrawal alone cannot establish absence of references. Preserve reachable
+versions and shared storage, including exact releases, current pointers, active work and retention holds; if
+retention cannot be determined, keep the data. Historical deletion and legal retention still follow the
+[deletion policy](deletion.md). Reuse the lifecycle contract across owners; share an implementation only where
+transaction, authority and retention invariants match.
+
 ## Modules and boundaries
 
 Decision: a dev candidate that adds boundary violations lands; the architecture check does not hold it. The train
