@@ -57,3 +57,21 @@ Vite Worker can start. A test that needs a driver control not yet present is als
 | page-states: empty public list explicitly says it is empty                                                                          | Failing | `beforeEach/afterEach hook timed out for this test`                               | Search API: index the fixture's three matching titles           |
 | page-states: native suspended persona personal read is 401 invalid_credentials with invalid_token challenge and no personal content | Failing | `beforeEach/afterEach hook timed out for this test`                               | Search API: index the fixture's three matching titles           |
 | search-page: anonymous zh-Hans Book search renders native order localized unique facets and no engine totals                        | Failing | `beforeEach/afterEach hook timed out for this test`                               | Search API indexing; driver task for `nativeSearch`             |
+
+## Hosted Book author-to-reader journey
+
+Decision: keep the real private-draft journey red on any missing Studio publication step, and use a separately
+reported one-chapter prepublished control only for later reader, Library checkpoint, stable-link and withdrawal
+stages. The control uses generated native setup/readback and never publishes the private journey's drafts.
+
+Run the mounted witness with:
+
+```sh
+bun run --cwd apps/web test tests/native/hosted-book-journey.host.test.ts
+```
+
+The private journey saves two original chapter drafts and a deterministic cover in Studio, creates a part, appends a
+second saved draft at Book root, moves it under the part, selects one exact version, and explicitly reviews and
+publishes it. Its stage journal preserves observations and labels dependent stages unreached. The independent control
+contains exactly one selected chapter, then drives the ordinary mounted reader and withdrawal UI. The worker does
+not run this mounted witness; the candidate controller runs it once after integration.

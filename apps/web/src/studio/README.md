@@ -543,3 +543,16 @@ anonymous metadata request, private/public refusal, draft-only and withdrawn sta
 selection and structure, and session retirement during admission. The withdrawal fixture supplies the new public
 admission dependency with existing assertions unchanged. Source verification uses changed-file formatting and one
 affected Web typecheck after commit; ordinary acceptance, native, browser, Storybook and broader checks are deferred.
+
+## Hosted Book author-to-reader witness
+
+Decision: the mounted witness keeps the private saved-draft journey independent from a one-chapter prepublished
+reader control. The private journey creates deterministic original drafts through generated native APIs, saves and
+organizes them through Studio and Root Append, and publishes only after the ordinary exact-version review. A missing
+private selected-body release path is a labeled failure; the control's generated one-chapter release is reported
+separately and cannot satisfy that author stage. The control covers anonymous exact reading, member Library
+save/continue, old-link stability after a later move, and ordinary Studio withdrawal.
+
+The command and stage report are documented in the native test
+[README](../../tests/native/README.md#hosted-book-author-to-reader-journey). The candidate controller runs the mounted
+witness once after integration; it is deferred during the worker source pass.
