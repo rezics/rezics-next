@@ -786,6 +786,46 @@ test('a resultless SIGTERM cleanup is terminal only while exact owner, runner an
   }
 });
 
+test('a resultless Web cleanup is tied to its exact check owner and compiler command', () => {
+  const worktree = temporaryDirectory();
+  const authorization = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    const taskId = randomUUID();
+    const checkId = randomUUID();
+    const physicalRunId = randomUUID();
+    const command = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    const evidence = {
+      worktree: worktree.path,
+      stateDirectory: authorization.path,
+      taskId,
+      attempt: 1,
+      checkId,
+      physicalRunId,
+      command,
+    };
+    writeVerifiedResultlessCleanupEvidence(evidence);
+    expect(workerCheckHostAttemptCheckCustody(worktree.path, taskId, 1, [checkId])).toBe('terminal');
+    expect(workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], command)).toBe(true);
+    expect(
+      workerCheckHostAttemptHasResultlessCleanup(
+        worktree.path,
+        taskId,
+        1,
+        [checkId],
+        ['bun', 'run', '--cwd', 'apps/web', 'typecheck:root'],
+      ),
+    ).toBe(false);
+
+    writeVerifiedResultlessCleanupEvidence({ ...evidence, taskId: randomUUID() });
+    expect(workerCheckHostAttemptCheckCustody(worktree.path, taskId, 1, [checkId])).toBe('unknown');
+    expect(workerCheckHostAttemptHasResultlessCleanup(worktree.path, taskId, 1, [checkId], command)).toBe(false);
+  } finally {
+    worktree.close();
+    authorization.close();
+  }
+});
+
 test('a retained Kernel pass waits for later cancellation custody and then reuses the original attempt without another run', async () => {
   const h = harness();
   try {

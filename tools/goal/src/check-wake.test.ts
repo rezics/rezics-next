@@ -2,12 +2,15 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { cleanupReceiptPath, physicalHistoryPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
+import { workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
+import { processIdentity } from './process.ts';
 import { settle } from './settle.ts';
 import type { Attempt, Task } from './types.ts';
-import { harness, markdown } from './test-support.ts';
+import { harness, markdown, temporaryDirectory } from './test-support.ts';
 
 const waitingCli = `#!/usr/bin/env bun
 import { existsSync, writeFileSync } from 'node:fs';
@@ -109,6 +112,135 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>, checks = ['che
   );
   expect(landings).toHaveLength(0);
   return { task, ref: { taskId: task.id, attempt: 1 } };
+}
+
+const GIB = 1024 ** 3;
+
+function terminalCheckFixture(
+  task: Task,
+  id: string,
+  custody: 'complete' | 'missing-history' | 'foreign-history' | 'live-runner' = 'complete',
+) {
+  const physicalRunId = randomUUID();
+  const current = processIdentity();
+  if (!current) throw new Error('test process identity unavailable');
+  const runnerIdentity = custody === 'live-runner' ? current : { ...current, pid: 2_147_483_000, group: 2_147_483_000 };
+  const now = new Date().toISOString();
+  const log = `.temp/goal/checks/worker-check-${id}.log`;
+  const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
+  mkdirSync(resultDirectory, { recursive: true });
+  mkdirSync(join(task.worktree, '.temp/goal/checks'), { recursive: true });
+  writeFileSync(join(task.worktree, log), 'check complete\n');
+  writeFileSync(
+    join(resultDirectory, `${id}.json`),
+    JSON.stringify({
+      id,
+      cwd: task.worktree,
+      ownership: { taskId: task.id, attempt: 1 },
+      physicalRunId,
+      runnerHost: hostname(),
+      runnerPid: runnerIdentity.pid,
+      runnerIdentity,
+      status: 'finished',
+      exitCode: 0,
+      argv: ['bun', 'test', 'example.test.ts'],
+      log,
+    }),
+  );
+
+  const history = physicalHistoryPath(task.worktree, id, physicalRunId);
+  if (custody !== 'missing-history') {
+    mkdirSync(dirname(history), { recursive: true });
+    writeFileSync(
+      history,
+      JSON.stringify({
+        version: 1,
+        id,
+        cwd: task.worktree,
+        ownership: {
+          taskId: custody === 'foreign-history' ? randomUUID() : task.id,
+          attempt: 1,
+        },
+        physicalRunId,
+        runnerHost: hostname(),
+        runnerIdentity,
+        log,
+        status: 'finished',
+        remoteExpected: true,
+        exitCode: 0,
+        createdAt: now,
+        finishedAt: now,
+      }),
+    );
+    const remoteCustody = remoteRunCustodyPath(task.worktree, physicalRunId);
+    mkdirSync(dirname(remoteCustody), { recursive: true });
+    writeFileSync(
+      remoteCustody,
+      JSON.stringify({
+        version: 1,
+        physicalRunId,
+        status: 'terminal',
+        attempts: [{ host: 'check-host', id: 'fixture-run', status: 'terminal', startedAt: now, endedAt: now }],
+      }),
+    );
+  }
+  return { physicalRunId, history };
+}
+
+function capacitySlice(
+  root: string,
+  taskId: string,
+  maximumGiB: number,
+  includeUnrelated = false,
+): { scope: string; unrelated?: string } {
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, 'memory.max'), String(maximumGiB * GIB));
+  writeFileSync(join(root, 'memory.current'), String(10 * GIB));
+  const makeScope = (name: string, currentGiB: number, peakGiB: number) => {
+    mkdirSync(join(root, name), { recursive: true });
+    writeFileSync(join(root, name, 'memory.current'), String(Math.round(currentGiB * GIB)));
+    writeFileSync(join(root, name, 'memory.peak'), String(Math.round(peakGiB * GIB)));
+  };
+  const scope = `rezics-worker-${taskId}-1-checkscope.scope`;
+  makeScope(scope, 0.04, 3.7);
+  if (!includeUnrelated) return { scope };
+  const unrelated = 'rezics-worker-unrelated-1-unknown.scope';
+  makeScope(unrelated, 0.1, 4.5);
+  return { scope, unrelated };
+}
+
+function wakingJob(h: ReturnType<typeof harness>, sliceRoot: string, parkedSnapshots: Set<string>[]) {
+  return new WorkerJob(
+    h.tasks,
+    { enqueue() {} },
+    { deliver() {} },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      pollIntervalMs: 5,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerSliceRoot: sliceRoot,
+      memoryCurrentMiB: () => workerMemoryCurrentMiB(sliceRoot),
+      workerHeadroomMiB: (running, root, parked, active) => {
+        parkedSnapshots.push(new Set(parked));
+        return workerHeadroomMiB(running, root, parked, active);
+      },
+      reclaim: () => 0,
+    },
+  );
+}
+
+async function waitForCondition(predicate: () => boolean, description: string): Promise<void> {
+  for (let n = 0; n < 300; n++) {
+    if (predicate()) return;
+    await Bun.sleep(10);
+  }
+  throw new Error(`timed out waiting for ${description}`);
 }
 
 test('same-session wake forwards the newly persisted minimal source-result and compiler policy with terminal evidence', async () => {
@@ -570,5 +702,101 @@ test('worker instructions start detached checks, keep working, and return waitin
     expect(prompt).not.toContain('Never poll');
   } finally {
     h.dispose();
+  }
+});
+
+test('a finished owned check is proved before a resumed writer hands off its exact scope reserve', async () => {
+  const h = harness(waitingCli);
+  const directory = temporaryDirectory();
+  let recovery: Promise<void> | undefined;
+  const capacityFile = join(h.settings.stateDirectory, 'capacity.json');
+  try {
+    const id = randomUUID();
+    const { task, ref } = await startWaitingAttempt(h, [id]);
+    const { physicalRunId, history } = terminalCheckFixture(task, id);
+    const remoteCustody = remoteRunCustodyPath(task.worktree, physicalRunId);
+    const remoteCustodyBefore = readFileSync(remoteCustody, 'utf8');
+    const sliceRoot = join(directory.path, 'slice');
+    const { scope, unrelated } = capacitySlice(sliceRoot, task.id, 20, true);
+    const snapshots: Set<string>[] = [];
+    const job = wakingJob(h, sliceRoot, snapshots);
+    writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
+
+    recovery = job.recoverOrphans();
+    await waitForCondition(
+      () => JSON.parse(readFileSync(history, 'utf8')).terminalProof?.local === true,
+      'the exact physical run terminal proof',
+    );
+    await waitForCondition(() => snapshots.length > 0, 'the resumed writer capacity observation');
+    expect(JSON.parse(readFileSync(history, 'utf8')).terminalProof).toMatchObject({
+      local: true,
+      remote: true,
+      resultKnown: true,
+    });
+    expect(snapshots[0]).toContain(scope);
+    expect(snapshots.every((parked) => !parked.has(unrelated!))).toBe(true);
+    expect(readFileSync(join(sliceRoot, 'memory.current'), 'utf8')).toBe(String(10 * GIB));
+    expect(readFileSync(remoteCustody, 'utf8')).toBe(remoteCustodyBefore);
+    expect(existsSync(cleanupReceiptPath(task.worktree, id, physicalRunId))).toBe(false);
+    expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+
+    // A repeated wake observes the same parked generation and cannot create another attempt or resume.
+    await job.recoverOrphans();
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+
+    writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+    await recovery;
+    expect(h.store.task(task.id).currentAttempt).toBe(ref.attempt);
+    expect(h.store.attempt(ref).session).toBe('wake-session');
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(readFileSync(join(task.worktree, 'result.txt'), 'utf8')).toBe('resumed');
+  } finally {
+    if (recovery) {
+      writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+      writeFileSync(join(directory.path, 'slice', 'memory.max'), String(30 * GIB));
+      await recovery.catch(() => {});
+    }
+    h.dispose();
+    directory.close();
+  }
+});
+
+test('missing, foreign, and live check custody keep the waiting scope reserve', async () => {
+  for (const custody of ['missing-history', 'foreign-history', 'live-runner'] as const) {
+    const h = harness(waitingCli);
+    const directory = temporaryDirectory();
+    const capacityFile = join(h.settings.stateDirectory, 'capacity.json');
+    let recovery: Promise<void> | undefined;
+    try {
+      const id = randomUUID();
+      const { task } = await startWaitingAttempt(h, [id]);
+      const { history } = terminalCheckFixture(task, id, custody);
+      const sliceRoot = join(directory.path, 'slice');
+      const { scope } = capacitySlice(sliceRoot, task.id, 17);
+      const snapshots: Set<string>[] = [];
+      const job = wakingJob(h, sliceRoot, snapshots);
+      writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+
+      recovery = job.recoverOrphans();
+      await waitForCondition(() => snapshots.length > 0, `${custody} capacity observation`);
+      expect(snapshots[0]).not.toContain(scope);
+      expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+      if (custody === 'missing-history') expect(existsSync(history)).toBe(false);
+      else expect(JSON.parse(readFileSync(history, 'utf8')).terminalProof).toBeUndefined();
+
+      writeFileSync(join(sliceRoot, 'memory.max'), String(30 * GIB));
+      await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+      await recovery;
+      expect(h.store.attempts(task.id)).toHaveLength(1);
+    } finally {
+      if (recovery) {
+        writeFileSync(join(directory.path, 'slice', 'memory.max'), String(30 * GIB));
+        await recovery.catch(() => {});
+      }
+      h.dispose();
+      directory.close();
+    }
   }
 });

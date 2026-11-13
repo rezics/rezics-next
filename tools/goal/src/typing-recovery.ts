@@ -20,6 +20,7 @@ import {
   workerCheckHostBudgetLimit,
   workerCheckHostAttemptCheckCustody,
   workerCheckHostAttemptHasResultlessCleanup,
+  workerCheckHostConsumedTypingRecovery,
   workerCheckHostHasRetainedKernelTypingRun,
   workerCheckHostTypingCheckIds,
   workerCheckHostHasTypecheckRun,
@@ -393,10 +394,28 @@ export async function recoverWorkerTyping(
       limit: workerCheckHostBudgetLimit(task, ref.attempt),
     });
     const checkIds = workerCheckHostTypingCheckIds(directory, attempt.checks ?? []);
+    const pendingCommand = !typing.ok ? (typing.command ?? attempt.typingEvidencePending?.command) : undefined;
+    const resolvedPendingCommand = pendingCommand
+      ? resolveTypingCompilerCommand(task.worktree, pendingCommand)
+      : undefined;
+    const consumedWebRecovery =
+      !typing.ok &&
+      typing.kind === 'evidence-unavailable' &&
+      JSON.stringify(resolvedPendingCommand) === JSON.stringify(WITHDRAWN_WEB_COMPILER)
+        ? workerCheckHostConsumedTypingRecovery({
+            directory,
+            worktree: task.worktree,
+            taskId: task.id,
+            attempt: ref.attempt,
+            checkIds,
+            command: resolvedPendingCommand!,
+          })
+        : undefined;
     const retainedKernelRun = workerCheckHostHasRetainedKernelTypingRun(directory, task.worktree);
-    const checkCustody = retainedKernelRun
-      ? workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds)
-      : 'terminal';
+    const checkCustody =
+      retainedKernelRun || consumedWebRecovery
+        ? workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds)
+        : 'terminal';
     if (retainedKernelRun && checkCustody !== 'terminal')
       return {
         ...ref,
@@ -404,11 +423,36 @@ export async function recoverWorkerTyping(
         result:
           'Retained Kernel compiler evidence is waiting for terminal custody of every same-attempt check. Existing check ownership stays fenced; no additional compiler run was authorized.',
       };
-    const pendingCommand = !typing.ok ? (typing.command ?? attempt.typingEvidencePending?.command) : undefined;
+    const verifiedWebCleanup = Boolean(
+      consumedWebRecovery && checkCustody === 'terminal' && consumedWebRecovery.resultlessCleanup,
+    );
+    if (consumedWebRecovery && (!verifiedWebCleanup || consumedWebRecovery.replacement)) {
+      const reason = consumedWebRecovery.replacement
+        ? 'the single compiler-only replacement was already consumed'
+        : checkCustody !== 'terminal'
+          ? 'physical custody of the same-attempt checks is unknown'
+          : 'terminal custody is known, but verified resultless cleanup for this exact run is unavailable';
+      return {
+        ...ref,
+        status: 'pending' as const,
+        result:
+          `Web compiler recovery remains pending for check ${consumedWebRecovery.checkId}, physical run ${consumedWebRecovery.physicalRunId}: ${reason}. ` +
+          'No compiler command was issued. Preserve the completed source until the existing check owner supplies its terminal receipt and prepared inputs, or resolves this exact run under the existing cleanup proof.',
+      };
+    }
+    if (consumedWebRecovery && !authority)
+      return {
+        ...ref,
+        status: 'pending' as const,
+        result:
+          `Verified resultless cleanup is terminal for Web check ${consumedWebRecovery.checkId}, physical run ${consumedWebRecovery.physicalRunId}. ` +
+          'An authenticated owning or operations manager must run typing-recover to authorize its single compiler-only replacement; no source retry or compiler run was started.',
+      };
     const resultlessCleanupRecovery = Boolean(
-      retainedKernelRun &&
-      pendingCommand &&
-      workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand),
+      verifiedWebCleanup ||
+      (retainedKernelRun &&
+        pendingCommand &&
+        workerCheckHostAttemptHasResultlessCleanup(task.worktree, task.id, ref.attempt, checkIds, pendingCommand)),
     );
     if (resultlessCleanupRecovery && !authority)
       return {
