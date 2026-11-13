@@ -40,8 +40,7 @@ export type HostedVersionDraftMoveCommandDependencies = HostedDependencies &
     versionAdapter: HostedVersionDraftMoveNativeAdapter<CommandTransaction>;
   }>;
 
-/** Execute the planner and native owner write inside runCommand's live transaction.
- * This stays internal until the native version adapter and its route integration land. */
+/** Execute the planner and native owner write inside runCommand's live transaction. */
 export async function commitHostedVersionDraftMoveInTransaction(
   adapter: HostedVersionDraftMoveNativeAdapter<CommandTransaction>,
   tx: CommandTransaction,

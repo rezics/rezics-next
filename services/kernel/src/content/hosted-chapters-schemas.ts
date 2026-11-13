@@ -60,6 +60,15 @@ export const HostedRemoveDraftPointSchema = t.Object(
   { expectedRevisionId: HostedIdSchema, occurrenceId: HostedIdSchema },
   closed,
 );
+export const HostedMoveDraftPointSchema = t.Object(
+  {
+    expectedRevisionId: HostedIdSchema,
+    occurrenceId: HostedIdSchema,
+    parentId: HostedIdSchema,
+    beforeOccurrenceId: nullableId,
+  },
+  closed,
+);
 export const HostedPublishSchema = t.Object(
   {
     expectedRevisionId: HostedIdSchema,

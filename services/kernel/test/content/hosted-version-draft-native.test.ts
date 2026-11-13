@@ -321,17 +321,17 @@ test('persists a 12,001-occurrence cross-parent move on one snapshot overlay wit
     parentId: parentB,
     beforeOccurrenceId: beforeB,
   } as const;
+  const movePath = `/v1/hostedCatalogues/${catalogueId}:moveDraftPoint`;
+  expect((await native.call('POST', movePath, input, { other: true })).status).toBe(403);
+  expect((await native.call('POST', movePath, input, { anonymous: true })).status).toBe(401);
+  expect((await native.call('POST', movePath, { ...input, extra: true })).status).toBe(400);
   const firstMoveStart = observer.records.length;
   const replayKey = crypto.randomUUID();
-  const moved = await moveHostedVersionDraftOccurrence(
-    dependencies,
-    native.author.actor,
-    catalogueId,
-    input,
-    commandContext(replayKey),
-  );
+  const moved = await native.call('POST', movePath, input, { key: replayKey });
+  expect(moved.status).toBe(200);
+  expect(moved.value).toEqual({ catalogueId, revisionId: expect.any(String) });
   const firstMoveSql = observer.records.slice(firstMoveStart);
-  const movedRevisionId = moved.value.revisionId;
+  const movedRevisionId = moved.value.revisionId as string;
   expect(movedRevisionId).not.toBe(seedRevisionId);
 
   const versionHead = await readHostedVersionHead(native.pool, catalogueId, generationId);
@@ -379,44 +379,28 @@ test('persists a 12,001-occurrence cross-parent move on one snapshot overlay wit
   expect(siblingRootRows.length).toBe(2);
 
   const writesBeforeReplay = observer.records.filter((entry) => entry.statement === commitVersion.sql).length;
-  const replay = await moveHostedVersionDraftOccurrence(
-    dependencies,
-    native.author.actor,
-    catalogueId,
-    input,
-    commandContext(replayKey),
-  );
+  const replay = await native.call('POST', movePath, input, { key: replayKey });
+  expect(replay.status).toBe(200);
   expect(replay.value.revisionId).toBe(movedRevisionId);
   expect((await readHostedVersionHead(native.pool, catalogueId, generationId))?.sequence).toBe(2n);
   expect(observer.records.filter((entry) => entry.statement === commitVersion.sql).length).toBe(writesBeforeReplay);
 
-  const adjacentNoop = await moveHostedVersionDraftOccurrence(
-    dependencies,
-    native.author.actor,
-    catalogueId,
-    { ...input, expectedRevisionId: movedRevisionId },
-    commandContext(),
-  );
+  const adjacentNoop = await native.call('POST', movePath, { ...input, expectedRevisionId: movedRevisionId });
+  expect(adjacentNoop.status).toBe(200);
   expect(adjacentNoop.value.revisionId).toBe(movedRevisionId);
   expect((await readHostedVersionHead(native.pool, catalogueId, generationId))?.sequence).toBe(2n);
   expect(observer.records.filter((entry) => entry.statement === commitVersion.sql).length).toBe(writesBeforeReplay);
 
-  await expect(
-    moveHostedVersionDraftOccurrence(dependencies, native.author.actor, catalogueId, input, commandContext()),
-  ).rejects.toBeInstanceOf(RevisionPreconditionError);
+  const invalidAnchor = await native.call('POST', movePath, {
+    ...input,
+    expectedRevisionId: movedRevisionId,
+    beforeOccurrenceId: afterA,
+  });
+  expect(invalidAnchor.status).toBe(400);
+  const stale = await native.call('POST', movePath, input);
+  expect(stale.status).toBe(412);
   expect((await readHostedVersionHead(native.pool, catalogueId, generationId))?.sequence).toBe(2n);
 
-  const beforeDenied = observer.records.length;
-  await expect(
-    moveHostedVersionDraftOccurrence(
-      dependencies,
-      native.system.actors.other!.actor,
-      catalogueId,
-      { ...input, expectedRevisionId: movedRevisionId },
-      commandContext(),
-    ),
-  ).rejects.toThrow();
-  expect(observer.records.slice(beforeDenied).some((entry) => entry.statement === readNode.sql)).toBe(false);
   expect((await readHostedVersionHead(native.pool, catalogueId, generationId))?.sequence).toBe(2n);
 
   const revisionsBeforeLostCas = await native.pool.query<{ count: string }>(

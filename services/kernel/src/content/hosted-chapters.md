@@ -13,6 +13,7 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.append_root_chapter` | `POST /v1/hostedCatalogues/{id}:appendRootChapter` | `expectedRevisionId`, `occurrenceId`, `title`, `target`                                              |
 | `hosted_catalogue.insert_draft_point`  | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`  | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
 | `hosted_catalogue.remove_draft_point`  | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`  | `expectedRevisionId`, `occurrenceId`                                                                 |
+| `hosted_catalogue.move_draft_point`    | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`    | `expectedRevisionId`, `occurrenceId`, `parentId`, nullable `beforeOccurrenceId`                      |
 | `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
 
 Every command requires an Idempotency-Key and returns `catalogueId` and the newly selected `revisionId`. Create
@@ -92,6 +93,12 @@ are `versioned-outline-order.ts`, `hosted-chapters-{model,store,commands,reads,a
 Decision: a cross-parent move cuts the stable occurrence subtree's contiguous preorder and chapter ranges and
 splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
 ancestor summaries, without visiting descendants.
+
+Decision: mount the stable-anchor move as `moveDraftPoint`; require an existing part `parentId`, and interpret a
+null `beforeOccurrenceId` as the end of that parent's sibling list. The existing move command retains author
+admission, receipt, idempotent replay and the identity-only revise event. The native move adapter selects and writes
+the expected ordered snapshot in the same transaction as its head CAS. An adjacent move returns the current
+revision without writing a new revision or event.
 
 Decision: the retained binder resolves the expected immutable structure descriptor after author admission; the
 native adapter proves selected membership and bounded containment paths in that draft snapshot, then commits all
