@@ -24,6 +24,27 @@ CREATE SCHEMA content;
 
 
 --
+-- Name: advance_hosted_version_head(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.advance_hosted_version_head() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.route IS DISTINCT FROM OLD.route OR
+     NEW.catalogue_id IS DISTINCT FROM OLD.catalogue_id OR
+     NEW.generation_id IS DISTINCT FROM OLD.generation_id OR
+     NEW.generation_kind IS DISTINCT FROM OLD.generation_kind OR
+     NEW.created_at IS DISTINCT FROM OLD.created_at OR
+     NEW.head_sequence <> OLD.head_sequence + 1 THEN
+    RAISE EXCEPTION 'Hosted version head must advance exactly once' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: advance_review_census_source_frontier(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -465,6 +486,19 @@ CREATE FUNCTION content.guard_hosted_snapshot() RETURNS trigger
     AS $$
 BEGIN
   RAISE EXCEPTION 'Hosted occurrence identities and snapshots are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
+-- Name: guard_hosted_version_rows(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_version_rows() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Hosted version rows are append only' USING ERRCODE = '23514';
 END;
 $$;
 
@@ -1912,6 +1946,50 @@ CREATE TABLE content.hosted_occurrence (
 
 
 --
+-- Name: hosted_occurrence_state_version; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_occurrence_state_version (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    sequence bigint NOT NULL,
+    parent_occurrence_id uuid,
+    subtree_size bigint NOT NULL,
+    occurrence_state jsonb,
+    is_deleted boolean NOT NULL,
+    CONSTRAINT hosted_occurrence_state_version_check CHECK (((is_deleted AND (occurrence_state IS NULL) AND (parent_occurrence_id IS NULL) AND (subtree_size = 0)) OR ((NOT is_deleted) AND (occurrence_state IS NOT NULL) AND (subtree_size > 0)))),
+    CONSTRAINT hosted_occurrence_state_version_check1 CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
+    CONSTRAINT hosted_occurrence_state_version_check2 CHECK (((parent_occurrence_id IS NULL) OR (route = ((get_byte(uuid_send(parent_occurrence_id), 10) * 256) + get_byte(uuid_send(parent_occurrence_id), 11))))),
+    CONSTRAINT hosted_occurrence_state_version_sequence_check CHECK ((sequence >= 0)),
+    CONSTRAINT hosted_occurrence_state_version_subtree_size_check CHECK ((subtree_size >= 0))
+);
+
+
+--
+-- Name: hosted_order_node_version; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_order_node_version (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    index_kind text NOT NULL,
+    node_id uuid NOT NULL,
+    sequence bigint NOT NULL,
+    tree_parent_id uuid,
+    node_state jsonb,
+    is_deleted boolean NOT NULL,
+    CONSTRAINT hosted_order_node_version_check CHECK (((is_deleted AND (node_state IS NULL)) OR ((NOT is_deleted) AND (node_state IS NOT NULL)))),
+    CONSTRAINT hosted_order_node_version_check1 CHECK ((route = ((get_byte(uuid_send(node_id), 10) * 256) + get_byte(uuid_send(node_id), 11)))),
+    CONSTRAINT hosted_order_node_version_check2 CHECK (((tree_parent_id IS NULL) OR (route = ((get_byte(uuid_send(tree_parent_id), 10) * 256) + get_byte(uuid_send(tree_parent_id), 11))))),
+    CONSTRAINT hosted_order_node_version_index_kind_check CHECK ((index_kind = ANY (ARRAY['sibling'::text, 'preorder'::text, 'chapter'::text]))),
+    CONSTRAINT hosted_order_node_version_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
 -- Name: hosted_owned_progress; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2218,6 +2296,25 @@ CREATE TABLE content.hosted_publication_staging_target (
 
 
 --
+-- Name: hosted_sibling_root_version; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_sibling_root_version (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    parent_id uuid,
+    parent_is_null boolean NOT NULL,
+    parent_key uuid NOT NULL,
+    sequence bigint NOT NULL,
+    root_node_id uuid,
+    CONSTRAINT hosted_sibling_root_version_check CHECK (((parent_is_null AND (parent_id IS NULL) AND (parent_key = '00000000-0000-0000-0000-000000000000'::uuid)) OR ((NOT parent_is_null) AND (parent_id IS NOT NULL) AND (parent_key = parent_id)))),
+    CONSTRAINT hosted_sibling_root_version_check1 CHECK ((((parent_id IS NULL) OR (route = ((get_byte(uuid_send(parent_id), 10) * 256) + get_byte(uuid_send(parent_id), 11)))) AND ((root_node_id IS NULL) OR (route = ((get_byte(uuid_send(root_node_id), 10) * 256) + get_byte(uuid_send(root_node_id), 11)))))),
+    CONSTRAINT hosted_sibling_root_version_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
 -- Name: hosted_structure_revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2233,6 +2330,47 @@ CREATE TABLE content.hosted_structure_revision (
     CONSTRAINT hosted_structure_revision_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
     CONSTRAINT hosted_structure_revision_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT hosted_structure_revision_kind_check CHECK ((kind = ANY (ARRAY['structure'::text, 'publication'::text])))
+);
+
+
+--
+-- Name: hosted_tree_generation; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_tree_generation (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    generation_kind text NOT NULL,
+    head_sequence bigint DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT hosted_tree_generation_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_tree_generation_check1 CHECK ((route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11)))),
+    CONSTRAINT hosted_tree_generation_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_tree_generation_generation_kind_check CHECK ((generation_kind = ANY (ARRAY['draft'::text, 'candidate'::text]))),
+    CONSTRAINT hosted_tree_generation_head_sequence_check CHECK ((head_sequence >= 0)),
+    CONSTRAINT hosted_tree_generation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: hosted_tree_snapshot_version; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_tree_snapshot_version (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    sequence bigint NOT NULL,
+    preorder_root_id uuid,
+    chapter_root_id uuid,
+    placement_count bigint NOT NULL,
+    chapter_count bigint NOT NULL,
+    CONSTRAINT hosted_tree_snapshot_version_check CHECK (((chapter_count >= 0) AND (chapter_count <= placement_count))),
+    CONSTRAINT hosted_tree_snapshot_version_check1 CHECK (((preorder_root_id IS NULL) OR (route = ((get_byte(uuid_send(preorder_root_id), 10) * 256) + get_byte(uuid_send(preorder_root_id), 11))))),
+    CONSTRAINT hosted_tree_snapshot_version_check2 CHECK (((chapter_root_id IS NULL) OR (route = ((get_byte(uuid_send(chapter_root_id), 10) * 256) + get_byte(uuid_send(chapter_root_id), 11))))),
+    CONSTRAINT hosted_tree_snapshot_version_placement_count_check CHECK ((placement_count >= 0)),
+    CONSTRAINT hosted_tree_snapshot_version_sequence_check CHECK ((sequence >= 0))
 );
 
 
@@ -4333,6 +4471,22 @@ ALTER TABLE ONLY content.hosted_occurrence
 
 
 --
+-- Name: hosted_occurrence_state_version hosted_occurrence_state_version_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_occurrence_state_version
+    ADD CONSTRAINT hosted_occurrence_state_version_pkey PRIMARY KEY (route, catalogue_id, generation_id, occurrence_id, sequence);
+
+
+--
+-- Name: hosted_order_node_version hosted_order_node_version_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_order_node_version
+    ADD CONSTRAINT hosted_order_node_version_pkey PRIMARY KEY (route, catalogue_id, generation_id, index_kind, node_id, sequence);
+
+
+--
 -- Name: hosted_owned_progress hosted_owned_progress_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -4453,6 +4607,14 @@ ALTER TABLE ONLY content.hosted_publication_staging_target
 
 
 --
+-- Name: hosted_sibling_root_version hosted_sibling_root_version_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_sibling_root_version
+    ADD CONSTRAINT hosted_sibling_root_version_pkey PRIMARY KEY (route, catalogue_id, generation_id, parent_is_null, parent_key, sequence);
+
+
+--
 -- Name: hosted_structure_revision hosted_structure_revision_identity_kind_key; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -4466,6 +4628,30 @@ ALTER TABLE ONLY content.hosted_structure_revision
 
 ALTER TABLE ONLY content.hosted_structure_revision
     ADD CONSTRAINT hosted_structure_revision_pkey PRIMARY KEY (route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_tree_generation hosted_tree_generation_identity_kind_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_tree_generation
+    ADD CONSTRAINT hosted_tree_generation_identity_kind_key UNIQUE (route, catalogue_id, generation_id, generation_kind);
+
+
+--
+-- Name: hosted_tree_generation hosted_tree_generation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_tree_generation
+    ADD CONSTRAINT hosted_tree_generation_pkey PRIMARY KEY (route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_tree_snapshot_version hosted_tree_snapshot_version_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_tree_snapshot_version
+    ADD CONSTRAINT hosted_tree_snapshot_version_pkey PRIMARY KEY (route, catalogue_id, generation_id, sequence);
 
 
 --
@@ -5516,6 +5702,20 @@ CREATE INDEX hosted_migration_input_reference_source_idx ON content.hosted_migra
 
 
 --
+-- Name: hosted_occurrence_state_asof; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_occurrence_state_asof ON content.hosted_occurrence_state_version USING btree (route, catalogue_id, generation_id, occurrence_id, sequence DESC);
+
+
+--
+-- Name: hosted_order_node_asof; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_order_node_asof ON content.hosted_order_node_version USING btree (route, catalogue_id, generation_id, index_kind, node_id, sequence DESC);
+
+
+--
 -- Name: hosted_placement_navigation_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -5548,6 +5748,13 @@ CREATE INDEX hosted_publication_staging_input_identity ON content.hosted_publica
 --
 
 CREATE INDEX hosted_publication_staging_input_pending ON content.hosted_publication_staging_input USING btree (route, catalogue_id, stage_id, input_position) WHERE (settlement = 'pending'::text);
+
+
+--
+-- Name: hosted_sibling_root_asof; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_sibling_root_asof ON content.hosted_sibling_root_version USING btree (route, catalogue_id, generation_id, parent_is_null, parent_key, sequence DESC) INCLUDE (root_node_id);
 
 
 --
@@ -6063,6 +6270,20 @@ CREATE TRIGGER hosted_occurrence_immutable BEFORE DELETE OR UPDATE ON content.ho
 
 
 --
+-- Name: hosted_occurrence_state_version hosted_occurrence_state_version_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_occurrence_state_version_immutable BEFORE DELETE OR UPDATE ON content.hosted_occurrence_state_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
+
+
+--
+-- Name: hosted_order_node_version hosted_order_node_version_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_order_node_version_immutable BEFORE DELETE OR UPDATE ON content.hosted_order_node_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
+
+
+--
 -- Name: hosted_placement hosted_placement_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -6133,10 +6354,31 @@ CREATE TRIGGER hosted_publication_staging_target_immutable BEFORE DELETE OR UPDA
 
 
 --
+-- Name: hosted_sibling_root_version hosted_sibling_root_version_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_sibling_root_version_immutable BEFORE DELETE OR UPDATE ON content.hosted_sibling_root_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
+
+
+--
 -- Name: hosted_structure_revision hosted_structure_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER hosted_structure_immutable BEFORE DELETE OR UPDATE ON content.hosted_structure_revision FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_snapshot();
+
+
+--
+-- Name: hosted_tree_generation hosted_tree_generation_head_step; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_tree_generation_head_step BEFORE UPDATE ON content.hosted_tree_generation FOR EACH ROW EXECUTE FUNCTION content.advance_hosted_version_head();
+
+
+--
+-- Name: hosted_tree_snapshot_version hosted_tree_snapshot_version_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_tree_snapshot_version_immutable BEFORE DELETE OR UPDATE ON content.hosted_tree_snapshot_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
 
 
 --
@@ -6532,6 +6774,54 @@ ALTER TABLE ONLY content.hosted_occurrence
 
 
 --
+-- Name: hosted_occurrence_state_version hosted_occurrence_state_versi_route_catalogue_id_generatio_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_occurrence_state_version
+    ADD CONSTRAINT hosted_occurrence_state_versi_route_catalogue_id_generatio_fkey FOREIGN KEY (route, catalogue_id, generation_id) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_occurrence_state_version hosted_occurrence_state_versi_route_catalogue_id_occurrenc_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_occurrence_state_version
+    ADD CONSTRAINT hosted_occurrence_state_versi_route_catalogue_id_occurrenc_fkey FOREIGN KEY (route, catalogue_id, occurrence_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_occurrence_state_version hosted_occurrence_state_versi_route_catalogue_id_parent_oc_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_occurrence_state_version
+    ADD CONSTRAINT hosted_occurrence_state_versi_route_catalogue_id_parent_oc_fkey FOREIGN KEY (route, catalogue_id, parent_occurrence_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_order_node_version hosted_order_node_version_route_catalogue_id_generation_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_order_node_version
+    ADD CONSTRAINT hosted_order_node_version_route_catalogue_id_generation_id_fkey FOREIGN KEY (route, catalogue_id, generation_id) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_order_node_version hosted_order_node_version_route_catalogue_id_node_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_order_node_version
+    ADD CONSTRAINT hosted_order_node_version_route_catalogue_id_node_id_fkey FOREIGN KEY (route, catalogue_id, node_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_order_node_version hosted_order_node_version_route_catalogue_id_tree_parent_i_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_order_node_version
+    ADD CONSTRAINT hosted_order_node_version_route_catalogue_id_tree_parent_i_fkey FOREIGN KEY (route, catalogue_id, tree_parent_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
 -- Name: hosted_placement hosted_placement_route_catalogue_id_occurrence_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -6684,6 +6974,30 @@ ALTER TABLE ONLY content.hosted_publication_staging_target
 
 
 --
+-- Name: hosted_sibling_root_version hosted_sibling_root_version_route_catalogue_id_generation__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_sibling_root_version
+    ADD CONSTRAINT hosted_sibling_root_version_route_catalogue_id_generation__fkey FOREIGN KEY (route, catalogue_id, generation_id) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_sibling_root_version hosted_sibling_root_version_route_catalogue_id_parent_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_sibling_root_version
+    ADD CONSTRAINT hosted_sibling_root_version_route_catalogue_id_parent_id_fkey FOREIGN KEY (route, catalogue_id, parent_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_sibling_root_version hosted_sibling_root_version_route_catalogue_id_root_node_i_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_sibling_root_version
+    ADD CONSTRAINT hosted_sibling_root_version_route_catalogue_id_root_node_i_fkey FOREIGN KEY (route, catalogue_id, root_node_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
 -- Name: hosted_structure_revision hosted_structure_revision_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -6697,6 +7011,38 @@ ALTER TABLE ONLY content.hosted_structure_revision
 
 ALTER TABLE ONLY content.hosted_structure_revision
     ADD CONSTRAINT hosted_structure_revision_route_catalogue_id_source_revisi_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_tree_generation hosted_tree_generation_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_tree_generation
+    ADD CONSTRAINT hosted_tree_generation_route_catalogue_id_fkey FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_tree_snapshot_version hosted_tree_snapshot_version_route_catalogue_id_chapter_ro_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_tree_snapshot_version
+    ADD CONSTRAINT hosted_tree_snapshot_version_route_catalogue_id_chapter_ro_fkey FOREIGN KEY (route, catalogue_id, chapter_root_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_tree_snapshot_version hosted_tree_snapshot_version_route_catalogue_id_generation_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_tree_snapshot_version
+    ADD CONSTRAINT hosted_tree_snapshot_version_route_catalogue_id_generation_fkey FOREIGN KEY (route, catalogue_id, generation_id) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_tree_snapshot_version hosted_tree_snapshot_version_route_catalogue_id_preorder_r_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_tree_snapshot_version
+    ADD CONSTRAINT hosted_tree_snapshot_version_route_catalogue_id_preorder_r_fkey FOREIGN KEY (route, catalogue_id, preorder_root_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
 
 
 --
@@ -6836,11 +7182,27 @@ ALTER TABLE ONLY content.hosted_version_builder_sibling_root
 
 
 --
+-- Name: hosted_version_revision hosted_version_revision_generation_kind_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_revision
+    ADD CONSTRAINT hosted_version_revision_generation_kind_fkey FOREIGN KEY (route, catalogue_id, generation_id, generation_kind) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id, generation_kind);
+
+
+--
 -- Name: hosted_version_revision hosted_version_revision_route_catalogue_id_revision_id_rev_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.hosted_version_revision
     ADD CONSTRAINT hosted_version_revision_route_catalogue_id_revision_id_rev_fkey FOREIGN KEY (route, catalogue_id, revision_id, revision_kind) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id, kind);
+
+
+--
+-- Name: hosted_version_revision hosted_version_revision_snapshot_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_revision
+    ADD CONSTRAINT hosted_version_revision_snapshot_fkey FOREIGN KEY (route, catalogue_id, generation_id, sequence) REFERENCES content.hosted_tree_snapshot_version(route, catalogue_id, generation_id, sequence);
 
 
 --
