@@ -9,12 +9,15 @@ import {
   type NativePostMetadata,
   type RetainContentRead,
 } from './reads.ts';
+import { RevisionPreconditionError } from './commands.ts';
 import {
   discloseHostedTargetMetadata,
   hostedTargetKey,
   prepareHostedTarget,
   prepareHostedTargetMetadata,
 } from './hosted-chapters-disclosure.ts';
+import { discloseHostedBookTargetMetadata, readHostedBookTarget } from './hosted-book-revision-disclosure.ts';
+import type { RevisionDisclosureMembership } from './revision-disclosure.ts';
 import {
   hostedCatalogue,
   hostedRevision,
@@ -22,6 +25,10 @@ import {
   hostedReadPlacementPage,
 } from './hosted-chapters-store.ts';
 import { readHostedDraftPointSnapshot } from './hosted-version-draft-write.ts';
+import type { HostedPointSelectionReads } from './hosted-publication-point-selection.ts';
+import { resolveHostedVersionRevision } from './hosted-version-revision.ts';
+import { readHostedVersionSnapshot } from './hosted-version-store.ts';
+import type { HostedVersionSnapshot } from './hosted-version-model.ts';
 import { pageVersionedHostedPlacements, readVersionedHostedPlacement } from './hosted-chapters-version-reads.ts';
 import { hostedAppendDescriptor } from './hosted-chapters-append.ts';
 import { hostedCursorBinding, readHostedCursor, writeHostedCursor } from './hosted-chapters-cursor.ts';
@@ -173,6 +180,50 @@ async function placementAt(
   });
 }
 
+/** Snapshot-bound readers for one publication point command. Each lookup names
+ * only its expected immutable version and requested occurrence; compatibility
+ * manifests are deliberately not expanded into an ordered candidate here. */
+export function hostedPublicationPointSelectionReads(
+  deps: HostedDependencies,
+  catalogueId: string,
+  context: ReadContext,
+): HostedPointSelectionReads {
+  const snapshots = new Map<string, Promise<HostedVersionSnapshot>>();
+  const version = (revisionId: string, kind: 'structure' | 'publication') => {
+    const key = `${kind}:${revisionId}`;
+    let found = snapshots.get(key);
+    if (!found) {
+      found = snapshot(deps, catalogueId, context, async (client) => {
+        const resolved = await resolveHostedVersionRevision(client, catalogueId, revisionId);
+        if (resolved.kind === 'compatibility') throw new RevisionPreconditionError();
+        if (resolved.kind === 'missing' || resolved.revisionKind !== kind) throw new ContentNotFoundError();
+        const selected = await readHostedVersionSnapshot(
+          client,
+          catalogueId,
+          resolved.snapshot.generationId,
+          resolved.snapshot.sequence,
+        );
+        if (!selected) throw new ContentNotFoundError();
+        return selected;
+      }).then((result) => result.value);
+      snapshots.set(key, found);
+    }
+    return found;
+  };
+  const point = async (revisionId: string, occurrenceId: string, kind: 'structure' | 'publication') => {
+    const selected = await version(revisionId, kind);
+    return (
+      await snapshot(deps, catalogueId, context, (client) =>
+        readVersionedHostedPlacement(client, selected, occurrenceId),
+      )
+    ).value;
+  };
+  return {
+    draftPoint: (revisionId, occurrenceId) => point(revisionId, occurrenceId, 'structure'),
+    publicationPoint: (publicationId, occurrenceId) => point(publicationId, occurrenceId, 'publication'),
+  };
+}
+
 export async function resolveHostedOccurrence(
   deps: HostedDependencies,
   catalogueId: string,
@@ -195,8 +246,21 @@ export async function resolveHostedOccurrence(
   let occurrence = available(placement);
   let document: HostedResolutionView['document'] = null;
   if (placement.kind === 'chapter') {
-    const guard = await prepareHostedTarget(deps, placement.target, context);
-    const target = await guard?.final();
+    const membership: RevisionDisclosureMembership | null =
+      selected.view.kind === 'publication'
+        ? {
+            catalogueId,
+            publicationId: selected.view.revisionId,
+            occurrenceId,
+            sourceRevisionId: placement.target.revisionId,
+          }
+        : null;
+    const target = membership
+      ? await readHostedBookTarget(deps, placement.target, membership, context)
+      : await (async () => {
+          const guard = await prepareHostedTarget(deps, placement.target, context);
+          return (await guard?.final()) ?? null;
+        })();
     if (!target?.canonicalBytes) occurrence = unavailable(placement);
     else {
       anchors.push(target.anchor);
@@ -237,7 +301,20 @@ export async function resolveHostedOccurrenceMetadata(
   const anchors: AnchoredPosition[] = [found.anchor];
   let occurrence = available(placement);
   if (placement.kind === 'chapter') {
-    const disclosed = await discloseHostedTargetMetadata(deps, placement.target, context);
+    const disclosed =
+      selected.view.kind === 'publication'
+        ? await discloseHostedBookTargetMetadata(
+            deps,
+            placement.target,
+            {
+              catalogueId,
+              publicationId: selected.view.revisionId,
+              occurrenceId,
+              sourceRevisionId: placement.target.revisionId,
+            },
+            context,
+          )
+        : await discloseHostedTargetMetadata(deps, placement.target, context);
     if (!disclosed) occurrence = unavailable(placement);
     else anchors.push(disclosed.anchor);
   }

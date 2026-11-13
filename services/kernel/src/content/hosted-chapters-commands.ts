@@ -2,6 +2,7 @@ import type { Actor } from '../request/access.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
+  preflightCommandReceipt,
   runCommand,
   type AuthoritativeTime,
   type CommandAuthorization,
@@ -16,6 +17,8 @@ import {
 } from './commands.ts';
 import { prepareHostedPublicationPoint, type HostedPublicationPointPreparation } from './hosted-publication-point.ts';
 import type { HostedPointSelectionReads, HostedPublicationPointInput } from './hosted-publication-point-selection.ts';
+import { commitHostedVersionPublicationPoint } from './hosted-version-publication-write.ts';
+import { HostedVersionPublicationWriteError } from './hosted-version-publication-write-model.ts';
 import { snapshot } from './reads.ts';
 import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
 import { insertHostedRootAppend } from './hosted-chapters-append.ts';
@@ -159,8 +162,10 @@ export async function prepareHostedPublicationPointCommand(
 
   return {
     catalogueId,
+    threadId: initial.thread_id,
     partition: partitionOf(route),
     receipt,
+    receiptAuthorization: base,
     authorization,
     prepared(time: AuthoritativeTime) {
       const result = preparedByTime.get(time);
@@ -168,6 +173,75 @@ export async function prepareHostedPublicationPointCommand(
       return result;
     },
   };
+}
+
+/** Publish one selected draft point after current admission and receipt preflight.
+ * The exact selection is read only after a missing receipt, then all index and
+ * pointer changes commit on the ordinary Content command transaction. */
+export async function publishHostedPublicationPoint(
+  deps: HostedCommandDependencies,
+  actor: Actor,
+  catalogueId: string,
+  operation: HostedPublicationPointInput,
+  reads: HostedPointSelectionReads,
+  context: HostedCommandContext,
+) {
+  const command = await prepareHostedPublicationPointCommand(deps, actor, catalogueId, operation, reads, context);
+  const commandOptions = {
+    ...principalCommandIdentity(actor),
+    partition: command.partition,
+    deadline: context.deadline,
+    clock: deps.clock,
+    receipt: command.receipt,
+  };
+  const replay = await preflightCommandReceipt<HostedCommandValue>(deps.pool, {
+    ...commandOptions,
+    authorization: command.receiptAuthorization,
+  });
+  if (replay) return replay;
+
+  const revisionId = newId(routeOf(catalogueId)!);
+  return runCommand<HostedCommandValue>(
+    deps.pool,
+    { ...commandOptions, authorization: command.authorization },
+    async (tx, { transactionId, time }) => {
+      const current = await hostedCatalogue(tx, catalogueId, true);
+      if (!current || current.thread_id !== command.threadId) throw new ContentNotFoundError();
+      if (
+        current.head_revision_id !== operation.input.expectedRevisionId ||
+        current.publication_id !== operation.input.expectedPublicationId
+      )
+        throw new RevisionPreconditionError();
+
+      try {
+        await commitHostedVersionPublicationPoint(tx, {
+          catalogueId,
+          revisionId,
+          recordedTransactionId: transactionId,
+          recordedAt: authoritativeTimeValue(time),
+          selection: command.prepared(time).selection,
+          // No active sealed legacy baseline export exists. The native route
+          // binds ordered candidate descriptors only.
+          preparedBaseline: null,
+        });
+      } catch (error) {
+        if (error instanceof HostedVersionPublicationWriteError) throw new RevisionPreconditionError();
+        throw error;
+      }
+
+      const value = { catalogueId, revisionId };
+      return {
+        value,
+        events: [
+          {
+            type: 'com.rezics.content.hosted-catalogue.publish.v1',
+            subject: catalogueId,
+            data: value,
+          },
+        ],
+      };
+    },
+  );
 }
 
 async function mutate(

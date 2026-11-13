@@ -33,6 +33,14 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext } from '../request/access.ts';
 import type { ContentEditionSource } from './edition-model.ts';
 import { prepareEditionSubject, type EditionSourceAuthorization } from './edition-subject.ts';
+import type {
+  RevisionDisclosureReaderGate,
+  RevisionDisclosureRow,
+  RevisionDisclosureSource,
+  RevisionDisclosureTarget,
+} from './revision-disclosure-model.ts';
+import { revisionDisclosureSourceCurrent } from './revision-disclosure-source.ts';
+import { observationOf, revisionDisclosureRow } from './revision-disclosure-store.ts';
 import { DurableInitiatorUnavailableError } from '../access/contract/index.ts';
 import type { DurableOperationAnchor, InitiatorRestorer } from '../access/content-adapter.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
@@ -586,8 +594,72 @@ function isCommittedWithheldReference(row: Row): boolean {
   return row.kind === 'post' && row.visibility === 'taken_down' && row.decision_id !== null;
 }
 
-function admissible(row: Row, actor: Actor, tombstone: boolean): boolean {
-  if (row.visibility === 'draft' && (actor.kind !== 'account' || row.author_id !== actor.accountId)) return false;
+function bookGateIsValid(gate: RevisionDisclosureReaderGate): boolean {
+  const { membership, observation } = gate;
+  if (
+    observation.state !== 'issued' ||
+    observation.catalogue.catalogueId !== membership.catalogueId ||
+    observation.target.revisionId !== membership.sourceRevisionId
+  )
+    return false;
+  return true;
+}
+
+function bookGateMatchesRow(gate: RevisionDisclosureReaderGate, row: Row): boolean {
+  if (!bookGateIsValid(gate)) return false;
+  const { observation } = gate;
+  return (
+    (row.kind === 'thread' && row.id === observation.target.threadId) ||
+    (row.kind === 'post' && row.id === observation.target.postId && row.thread_id === observation.target.threadId)
+  );
+}
+
+function sameDisclosureTarget(left: RevisionDisclosureTarget, right: RevisionDisclosureTarget): boolean {
+  return (
+    left.threadId === right.threadId &&
+    left.postId === right.postId &&
+    left.revisionId === right.revisionId &&
+    left.sha256 === right.sha256
+  );
+}
+
+async function currentBookDisclosure(
+  gate: RevisionDisclosureReaderGate,
+  readDisclosure: () => Promise<RevisionDisclosureRow | null>,
+  readCurrentSource: (source: RevisionDisclosureSource) => Promise<boolean>,
+): Promise<boolean> {
+  const original = gate.observation;
+  if (!bookGateIsValid(gate)) return false;
+  const row = await readDisclosure();
+  if (!row) return false;
+  const current = observationOf(row);
+  if (
+    current.state !== 'issued' ||
+    current.catalogue.catalogueId !== original.catalogue.catalogueId ||
+    !sameDisclosureTarget(current.target, original.target) ||
+    current.issuerAccountId !== original.issuerAccountId ||
+    current.licence !== original.licence ||
+    current.incarnation.postTransactionId !== original.incarnation.postTransactionId ||
+    current.incarnation.threadTransactionId !== original.incarnation.threadTransactionId ||
+    current.incarnation.postSecurityRevision !== original.incarnation.postSecurityRevision ||
+    current.incarnation.threadSecurityRevision !== original.incarnation.threadSecurityRevision
+  )
+    return false;
+  return readCurrentSource({
+    ...current.target,
+    licence: current.licence,
+    creatorAccountId: current.issuerAccountId,
+    incarnation: current.incarnation,
+  });
+}
+
+function admissible(row: Row, actor: Actor, tombstone: boolean, bookGate?: RevisionDisclosureReaderGate): boolean {
+  if (
+    row.visibility === 'draft' &&
+    (actor.kind !== 'account' || row.author_id !== actor.accountId) &&
+    !(bookGate && bookGateMatchesRow(bookGate, row))
+  )
+    return false;
   if (row.visibility === 'taken_down' || row.availability === 'erased') return tombstone;
   return ['published', 'protected', 'draft'].includes(row.visibility);
 }
@@ -601,10 +673,11 @@ export function readResource(
   tombstone = false,
   placeholder = false,
   withheldReference = false,
+  bookGate?: RevisionDisclosureReaderGate,
 ): Resource {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
-  const native = createReadEligibilityWork(row, resource.route, evidence);
+  const native = createReadEligibilityWork(row, resource.route, evidence, bookGate);
   const resourceWithEligibility = {
     ...resource,
     eligibility: createResourcePublicEligibility({
@@ -623,7 +696,7 @@ export function readResource(
           !current ||
           current.title !== row.title ||
           signature(current) !== signature(row) ||
-          !admissible(current, actor, tombstone)
+          !admissible(current, actor, tombstone, bookGate)
         )
           throw new ContentNotFoundError();
         if (
@@ -648,9 +721,19 @@ export function readResource(
         // Erased public slots still require the requested scope from account tokens.
         if (placeholder && actor.kind === 'account' && !actor.scopes.includes(action))
           return native.complete(context, false);
+        const bookEligible =
+          current.visibility === 'draft' &&
+          bookGate !== undefined &&
+          bookGateMatchesRow(bookGate, current) &&
+          (await currentBookDisclosure(
+            bookGate,
+            () => native.disclosure(context, () => revisionDisclosureRow(client, bookGate.observation.disclosureId)),
+            (source) => native.source(context, () => revisionDisclosureSourceCurrent(client, source)),
+          ));
         return native.complete(
           context,
           (current.visibility === 'published' ||
+            bookEligible ||
             (withheldReference && isCommittedWithheldReference(current) && current.visibility === 'taken_down')) &&
             ((!tombstone && current.availability === 'available') || placeholder),
         );
@@ -671,9 +754,10 @@ async function prepare(
   erasedProof?: ErasedReadProof,
   withheldReference = false,
   sharedContext?: AccessContext,
+  bookGate?: RevisionDisclosureReaderGate,
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
-  const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder, withheldReference);
+  const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder, withheldReference, bookGate);
   const accessContext = sharedContext ?? {
     pool: dependencies.pool,
     deadline: context.deadline,
@@ -1363,6 +1447,7 @@ async function disclose(
   beforeFinal?: () => Promise<void>,
   metadataOnly: false | 'draft' | 'post' = false,
   retain?: RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata>,
+  bookGate?: RevisionDisclosureReaderGate,
 ): Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
@@ -1403,6 +1488,8 @@ async function disclose(
           placeholder,
           row === initial?.posts[0] ? erasedProof : undefined,
           withheldReference,
+          undefined,
+          bookGate,
         ),
       );
     }
@@ -1432,6 +1519,7 @@ async function disclose(
           erased ||
             rows[index]!.availability === 'erased' ||
             (threadReference && isCommittedWithheldReference(rows[index]!)),
+          bookGate,
         ) ||
         !(await checks[index]!(client))
       )
@@ -2084,6 +2172,95 @@ export async function postReadableByAccount(
     if (error instanceof ContentNotFoundError) return false;
     throw error;
   }
+}
+
+function exactBookRevisionGate(
+  gate: RevisionDisclosureReaderGate,
+  catalogueId: string,
+  target: RevisionDisclosureTarget,
+): boolean {
+  const { membership, observation } = gate;
+  return (
+    bookGateIsValid(gate) &&
+    membership.catalogueId === catalogueId &&
+    observation.catalogue.catalogueId === catalogueId &&
+    routeOf(membership.publicationId) === routeOf(catalogueId) &&
+    routeOf(membership.occurrenceId) === routeOf(catalogueId) &&
+    membership.sourceRevisionId === target.revisionId &&
+    sameDisclosureTarget(observation.target, target)
+  );
+}
+
+/** Native body disclosure for one internally selected Book occurrence. The
+ * Book supplies its typed membership and Content rechecks issued consent,
+ * source incarnation, container Access, Board and Realm on the exact read. */
+export async function readBookScopedPost(
+  dependencies: ContentReadDependencies,
+  catalogueId: string,
+  target: RevisionDisclosureTarget,
+  gate: RevisionDisclosureReaderGate,
+  context: ReadContext,
+): Promise<Anchored<PostEntry | null>> {
+  if (
+    routeOf(target.threadId) === null ||
+    routeOf(target.postId) !== routeOf(target.threadId) ||
+    routeOf(target.revisionId) !== routeOf(target.threadId) ||
+    !exactBookRevisionGate(gate, catalogueId, target)
+  )
+    return snapshot(dependencies, target.threadId, context, async () => null);
+  return withRealmDisclosureScope(
+    async () =>
+      (await disclose(
+        dependencies,
+        target.threadId,
+        context,
+        target.postId,
+        target.revisionId,
+        false,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        false,
+        undefined,
+        gate,
+      )) as Anchored<PostEntry | null>,
+  );
+}
+
+/** Metadata-only variant of the same Book-scoped source authority. */
+export async function readBookScopedPostMetadata(
+  dependencies: ContentReadDependencies,
+  catalogueId: string,
+  target: RevisionDisclosureTarget,
+  gate: RevisionDisclosureReaderGate,
+  context: ReadContext,
+): Promise<Anchored<NativePostMetadata | null>> {
+  if (
+    routeOf(target.threadId) === null ||
+    routeOf(target.postId) !== routeOf(target.threadId) ||
+    routeOf(target.revisionId) !== routeOf(target.threadId) ||
+    !exactBookRevisionGate(gate, catalogueId, target)
+  )
+    return snapshot(dependencies, target.threadId, context, async () => null);
+  return withRealmDisclosureScope(
+    async () =>
+      (await disclose(
+        dependencies,
+        target.threadId,
+        context,
+        target.postId,
+        target.revisionId,
+        false,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        'post',
+        undefined,
+        gate,
+      )) as Anchored<NativePostMetadata | null>,
+  );
 }
 
 export async function readPost(

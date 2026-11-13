@@ -29,6 +29,7 @@ import {
   insertHostedDraftPoint,
   removeHostedDraftPoint,
   publishHostedCatalogue,
+  publishHostedPublicationPoint,
   type HostedCommandDependencies,
 } from './hosted-chapters-commands.ts';
 import {
@@ -43,6 +44,7 @@ import {
   navigateHostedChapters,
   resolveHostedOccurrence,
   resolveHostedOccurrenceMetadata,
+  hostedPublicationPointSelectionReads,
 } from './hosted-chapters-reads.ts';
 import { listHostedCatalogueHistory } from './hosted-chapters-history.ts';
 import { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
@@ -60,6 +62,8 @@ import {
   HostedRemoveDraftPointSchema,
   HostedMoveDraftPointSchema,
   HostedPublishSchema,
+  HostedPublishChapterSchema,
+  HostedReplacePublishedChapterSchema,
   HostedCommandSchema,
   HostedRevisionSchema,
   HostedHistoryQuerySchema,
@@ -345,6 +349,64 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
         const result = await operation(() =>
           admission.run('normal', job, () =>
             moveHostedVersionDraftOccurrence(moveDependencies, actor, id, body, commandContext(request, job.deadline)),
+          ),
+        );
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/hostedCatalogues/:id', 'publishChapter'),
+      {
+        params: params(),
+        headers,
+        body: strictContentSchema(HostedPublishChapterSchema),
+        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures() },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.publish_chapter' },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const context = { actor, deadline: job.deadline };
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            publishHostedPublicationPoint(
+              deps,
+              actor,
+              id,
+              { kind: 'publishChapter', input: body },
+              hostedPublicationPointSelectionReads(deps, id, context),
+              commandContext(request, job.deadline),
+            ),
+          ),
+        );
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/hostedCatalogues/:id', 'replacePublishedChapter'),
+      {
+        params: params(),
+        headers,
+        body: strictContentSchema(HostedReplacePublishedChapterSchema),
+        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures() },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.replace_published_chapter' },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const context = { actor, deadline: job.deadline };
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            publishHostedPublicationPoint(
+              deps,
+              actor,
+              id,
+              { kind: 'replacePublishedChapter', input: body },
+              hostedPublicationPointSelectionReads(deps, id, context),
+              commandContext(request, job.deadline),
+            ),
           ),
         );
         session.record(result);

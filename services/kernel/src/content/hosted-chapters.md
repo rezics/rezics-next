@@ -248,15 +248,19 @@ publication CAS. A stale fresh command fails without index or pointer changes.
 
 Decision: point publication prepares retained anonymous metadata checks for the catalogue opening and only newly
 selected exact targets. Its Content writer now binds the exact native candidate snapshot, point delta, immutable
-descriptor and publication CAS in one transaction; keep the command unmounted until its caller joins those final
-checks to this transaction.
+descriptor and publication CAS in one transaction. The native command first rechecks current post-revision admission
+and preflights the exact receipt, then prepares stale-dependent occurrence reads and changed-target checks. An
+authorized replay therefore returns before a later head can stale its original request; a fresh stale request writes
+no index rows or pointer.
 
-Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; point admission uses Content's existing exact revision-disclosure observation for private openings beside retained public eligibility, then rechecks source currentness and consent in finalization. Keep insert and replacement unmounted until route and reader owners wire this native transaction seam and coordinate Book-link reader dispatch.
+Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; point admission uses Content's existing exact revision-disclosure observation for private openings beside retained public eligibility, then rechecks source currentness and consent in finalization. Native HTTP handlers join these retained checks to the ordered-version transaction; Book reads prove the selected published occurrence internally before using the exact source-consent gate.
 
 Decision: ordered point publications resolve their exact candidate descriptor and snapshot; legacy publications use
 only a prepared candidate baseline whose captured source publication ID equals the expected public selection. The
 Content writer stages the point delta and commits native index rows, the immutable revision descriptor and
-publication pointer CAS in the same transaction.
+publication pointer CAS in the same transaction. Until the active owner exports a sealed exact legacy baseline
+binding, native point commands reject compatibility publication descriptors with a stale-publication precondition;
+the compatibility publisher remains unchanged.
 
 Copy only the affected sibling, preorder and chapter index paths and at most H explicitly selected ancestors; create
 one small version root/count summary and atomically CAS the publication pointer with receipt/identity-only event.
@@ -727,6 +731,7 @@ Decision: hosted chapter identity coverage binds occurrences to each catalogue r
 nonmatching target IDs so native admission returns `not_found`; malformed-route coverage retains its 400 contract.
 
 Pages retain metadata/authority handles; exact resolution serializes one canonical body. Charge native Access,
-Accounts, Board, Realm, partition, transaction, serialization and bytes. Content HTTP/event composition remains
-ordinary; schema dump/client publication, native integration and measured growth stay with their existing owners.
-The proposed forest/publication protocol adds no mounted operation or release-readiness claim.
+Accounts, Board, Realm, partition, transaction, serialization and bytes. Native HTTP now mounts ordered point publish
+commands and composes consent-aware Book occurrence reads; consent issue/revoke routes, schema dump/client
+publication and measured growth stay with their existing owners. The focused HTTP journey is the mount witness;
+broader acceptance and release-readiness claims remain with their owners.
