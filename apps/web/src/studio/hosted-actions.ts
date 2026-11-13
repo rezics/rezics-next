@@ -9,6 +9,8 @@ import type { StudioResult } from './contract';
 import {
   hostedCreate,
   hostedDraftPointRequest,
+  hostedPublicationPointRequest,
+  type HostedPublicationPointNative,
   type HostedDraftPointNative,
   hostedId,
   hostedHistoryRequest,
@@ -88,7 +90,11 @@ export const publishHostedBook = createServerFn({ method: 'POST' })
 
 async function admittedOwner<T>(
   run: (
-    native: HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative & HostedDraftPointNative,
+    native: HostedBookNative &
+      HostedOutlineWindowNative &
+      HostedRootAppendNative &
+      HostedDraftPointNative &
+      HostedPublicationPointNative,
     accountId: string,
     signal: AbortSignal,
   ) => Promise<StudioResult<T>>,
@@ -156,6 +162,41 @@ export const writeHostedDraftPoint = createServerFn({ method: 'POST' })
       return native.writeDraftPoint(data, signal);
     }, true),
   );
+
+export const readHostedMetadata = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(hostedSelection, input))
+  .handler(({ data }) => admittedOwner((native, _accountId, signal) => native.readMetadata(data, signal)));
+
+export const writeHostedPublicationPoint = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => v.parse(hostedPublicationPointRequest, input))
+  .handler(({ data }) =>
+    admittedOwner(async (native, accountId, signal) => {
+      if (data.expectedViewer.accountId !== accountId)
+        return hostedFailure('denied', 'This Book belongs to a different account.');
+      const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
+      if (!owner.ok) return owner;
+      return native.writePublicationPoint(data, signal);
+    }, true),
+  );
+
+export const hostedPublicationPointNative: HostedPublicationPointNative & Pick<HostedBookNative, 'readOwn'> = {
+  ...hostedOutlineWindowNative,
+  readOwn: (...args) => hostedRootAppendNative.readOwn(...args),
+  async readMetadata(data, signal) {
+    try {
+      return await readHostedMetadata({ data, signal });
+    } catch {
+      return hostedFailure('unavailable', 'This exact Book metadata could not be read. Retry reading.');
+    }
+  },
+  async writePublicationPoint(data, signal, csrfToken) {
+    try {
+      return await writeHostedPublicationPoint({ data, signal, headers: { 'X-CSRF-Token': csrfToken! } });
+    } catch {
+      return hostedFailure('uncertain', 'The command result is unknown. Retry the same operation.');
+    }
+  },
+};
 
 export const appendHostedRootChapter = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(hostedRootAppendRequest, input))

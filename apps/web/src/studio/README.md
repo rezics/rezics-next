@@ -129,9 +129,9 @@ promoted-commit acceptance remain separate verifier obligations.
 
 ## Stable draft outline anchors
 
-Decision: reuse the root-append command lifecycle for stable-anchor insert/remove; retain stale choices but require
-anchors observed at the refreshed revision and reread the original exact chapter version before a fresh intent.
-Root append, complete-tree editing and publication remain available.
+Decision: extend the bounded point visit with exact draft updates and a separate single-chapter publication review;
+public anchors are observed only in the expected public snapshot and draft-only ancestor titles require explicit inclusion.
+Switching between draft changes and publication retires the previous selection and refreshes owner pointers.
 
 The owned Book inventory offers `/studio?catalogueId=…&points=1` with its native viewer comparison before any
 complete-tree read. The separate point visit uses the existing picker and one replacing outline page of at most
@@ -177,6 +177,46 @@ assertions remain unchanged. Continue the existing native author-to-reader witne
 separate private-publication/prepublished-reader verdicts. Native, browser/visual, legacy parity, broader suites and
 promoted-commit acceptance remain independent verifier work. Source checks are changed-file formatting, locale
 key/argument parity, one changed-UI detector pass and one affected Web typecheck.
+
+## Review and publish one exact chapter
+
+Draft updates freeze expected draft revision, occurrence, title and explicit target (null for a part). Kind and target
+Post identity remain permanent. The existing saved draft picker can select another saved version of that Post;
+reading the current occurrence uses the exact revision reader, with saved body, timestamp, revision and digest.
+Other Posts cannot satisfy update review. An update changes only the draft; publication is a separate task.
+
+Point publication requires an existing non-null public pointer. It reads exact publication metadata and owns one
+replacing draft window and one replacing public window, each capped at 20 body-free rows with explicit continuation
+and retry. No complete-tree reader, manifest synthesis, scans, automatic refill or per-row request is involved.
+Select the draft chapter and explicitly read its exact saved bytes. Add review freezes both expected pointers,
+occurrence, target, public parent/before anchors and at most 15 explicitly included ancestor parts. The author
+observes each required draft ancestor and either includes its title or confirms the corresponding public part.
+Ancestor insertion anchors also come from the expected public snapshot. Newly included parts retain draft ancestry;
+the chapter can use a reviewed new part or a public part as its parent. Replacement observes the matching public
+chapter, keeps its public title/parent/order and freezes only the exact changed target.
+
+A 412 retains choices but refresh invalidates every prior anchor observation and body review, even if pointers
+happen to match. A fresh intent needs reobserved anchors and an explicit exact-version read. Unknown results lock
+the original key, operands, CSRF and session/locale binding for replay after later heads. Current native catalogue
+eligibility and exact-source consent remain authoritative; refusal guides the author to resolve the source with its
+owner and deliberately rereview, without inventing a consent endpoint or publishing the source Post.
+
+HTTP200 confirmation survives failed readback. Exact receipt metadata and a single outline window are read separately;
+retry reading never reissues publication. A fresh matching owner pointer, nonempty bounded confirmed evidence and
+anonymous admission of that exact release precede the shared published-Book link. Historical receipt replay can be
+observed without presenting it as the current owner pointer. Account/session/source/credential/locale/departure
+boundaries retire drafts, responses, links and focus effects. Controls retain Studio's wrapped 44px targets.
+
+Sources read before design: generated `packages/client/src/kernel/content/hosted-chapters-routes.d.ts` point routes,
+Content's [authoring, publication and consent contract](../../../../services/kernel/src/content/hosted-chapters.md),
+this guide's stable draft anchors and published-Book action, [Web acceptance](../../../../docs/goals/web.md#acceptance),
+the point entry/view/lifecycle and tests, picker, Post exact revision port, outline window and reader-link projection.
+The installed generated routes supersede Content's historical “not installed” wording.
+
+`tests/studio-hosted-publication-point.test.tsx` pins exact operands, public anchors, fresh review after 412, original
+replay, bounded receipt readback and retirement. Its focused execution and the native mounted author-to-reader
+journey belong to the dev verifier. Illustrative review, stale, readback and reader-link stories are presentation
+examples, not native, visual or promoted acceptance.
 
 ## Book outline index
 

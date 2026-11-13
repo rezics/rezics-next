@@ -239,16 +239,56 @@ export const hostedDraftPointInsert = v.strictObject({
     v.strictObject({ kind: v.literal('chapter'), target }),
   ]),
 });
+export const hostedDraftPointUpdate = v.strictObject({
+  expectedRevisionId: hostedId,
+  occurrenceId: hostedId,
+  title,
+  target: v.nullable(target),
+});
 export const hostedDraftPointRemove = v.strictObject({ expectedRevisionId: hostedId, occurrenceId: hostedId });
 const pointEnvelope = { catalogueId: hostedId, idempotencyKey: hostedKey, expectedViewer: hostedOwnerViewer };
 export const hostedDraftPointRequest = v.variant('kind', [
   v.strictObject({ ...pointEnvelope, kind: v.literal('insert'), body: hostedDraftPointInsert }),
   v.strictObject({ ...pointEnvelope, kind: v.literal('remove'), body: hostedDraftPointRemove }),
+  v.strictObject({ ...pointEnvelope, kind: v.literal('update'), body: hostedDraftPointUpdate }),
 ]);
 export type HostedDraftPointRequest = v.InferOutput<typeof hostedDraftPointRequest>;
 export interface HostedDraftPointNative {
   writeDraftPoint(
     input: HostedDraftPointRequest,
+    signal: AbortSignal,
+    csrfToken?: string,
+  ): Promise<StudioResult<HostedCommandReceipt>>;
+}
+
+/** Point publication changes one exact chapter; a first release remains with the release owner. */
+const publicationPoint = {
+  expectedRevisionId: hostedId,
+  expectedPublicationId: hostedId,
+  occurrenceId: hostedId,
+  target,
+};
+export const hostedPublicationPointRequest = v.variant('kind', [
+  v.strictObject({
+    ...pointEnvelope,
+    kind: v.literal('publish'),
+    body: v.strictObject({
+      ...publicationPoint,
+      parentId: nullableId,
+      beforeOccurrenceId: nullableId,
+      selectedAncestors: v.pipe(
+        v.array(v.strictObject({ occurrenceId: hostedId, beforeOccurrenceId: nullableId })),
+        v.maxLength(15),
+      ),
+    }),
+  }),
+  v.strictObject({ ...pointEnvelope, kind: v.literal('replace'), body: v.strictObject(publicationPoint) }),
+]);
+export type HostedPublicationPointRequest = v.InferOutput<typeof hostedPublicationPointRequest>;
+export interface HostedPublicationPointNative extends HostedOutlineWindowNative {
+  readMetadata(input: HostedSelection, signal: AbortSignal): Promise<StudioResult<HostedRevision>>;
+  writePublicationPoint(
+    input: HostedPublicationPointRequest,
     signal: AbortSignal,
     csrfToken?: string,
   ): Promise<StudioResult<HostedCommandReceipt>>;

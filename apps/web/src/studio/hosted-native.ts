@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import type { StudioFailure, StudioResult } from './contract';
 import {
   hostedCommand,
+  type HostedPublicationPointNative,
   type HostedDraftPointNative,
   type HostedRootAppendNative,
   hostedCreate,
@@ -65,7 +66,11 @@ function failure(status: number, mutation: boolean): StudioResult<never> {
 /** Uses the existing credential-bearing client and its read-your-writes session-token handling. */
 export function createHostedBookNative(
   client: KernelClient,
-): HostedBookNative & HostedOutlineWindowNative & HostedRootAppendNative & HostedDraftPointNative {
+): HostedBookNative &
+  HostedOutlineWindowNative &
+  HostedRootAppendNative &
+  HostedDraftPointNative &
+  HostedPublicationPointNative {
   const fetchOptions = (signal: AbortSignal) => ({ signal, cache: 'no-store' as const, redirect: 'manual' as const });
   const queryOptions = (signal: AbortSignal, query: Record<string, string>) => ({ query, fetch: fetchOptions(signal) });
   const commandOptions = (signal: AbortSignal, key: string) => ({
@@ -300,6 +305,48 @@ export function createHostedBookNative(
     }
   }
   return {
+    async readMetadata(input, signal) {
+      if (signal.aborted) return unavailable();
+      try {
+        const response = await client.hostedCatalogues({ id: input.catalogueId }).get(
+          queryOptions(signal, {
+            kind: input.kind,
+            ...(input.revisionId ? { revisionId: input.revisionId } : {}),
+          }),
+        );
+        if (response.error || response.status !== 200) return failure(response.status, false);
+        const result = v.safeParse(hostedRevision, response.data);
+        if (
+          !result.success ||
+          result.output.catalogueId !== input.catalogueId ||
+          result.output.kind !== input.kind ||
+          (input.revisionId && result.output.revisionId !== input.revisionId) ||
+          (input.kind === 'structure'
+            ? result.output.sourceRevisionId !== null
+            : result.output.sourceRevisionId === null)
+        )
+          return unavailable();
+        return { ok: true, value: result.output };
+      } catch {
+        return unavailable();
+      }
+    },
+    async writePublicationPoint(input, signal) {
+      if (signal.aborted) return unavailable();
+      try {
+        const resource = client.hostedCatalogues({ id: input.catalogueId });
+        const response =
+          input.kind === 'publish'
+            ? await resource.$publishChapter.post(input.body, commandOptions(signal, input.idempotencyKey))
+            : await resource.$replacePublishedChapter.post(input.body, commandOptions(signal, input.idempotencyKey));
+        if (response.error || response.status !== 200) return failure(response.status, true);
+        const result = v.safeParse(hostedCommand, response.data);
+        if (!result.success || result.output.catalogueId !== input.catalogueId) return uncertain();
+        return { ok: true, value: result.output };
+      } catch {
+        return uncertain();
+      }
+    },
     async writeDraftPoint(input, signal) {
       if (signal.aborted) return unavailable();
       const { catalogueId, idempotencyKey } = input;
@@ -308,7 +355,9 @@ export function createHostedBookNative(
         const response =
           input.kind === 'insert'
             ? await resource.$insertDraftPoint.post(input.body, commandOptions(signal, idempotencyKey))
-            : await resource.$removeDraftPoint.post(input.body, commandOptions(signal, idempotencyKey));
+            : input.kind === 'update'
+              ? await resource.$updateDraftPoint.post(input.body, commandOptions(signal, idempotencyKey))
+              : await resource.$removeDraftPoint.post(input.body, commandOptions(signal, idempotencyKey));
         if (response.error || response.status !== 200) return failure(response.status, true);
         const receipt = v.safeParse(hostedCommand, response.data);
         if (!receipt.success || receipt.output.catalogueId !== catalogueId) return uncertain();

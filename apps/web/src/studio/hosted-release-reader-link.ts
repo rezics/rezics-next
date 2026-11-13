@@ -17,6 +17,7 @@ export type HostedReleaseReaderBinding = Readonly<{
 export class HostedReleaseReaderLinkProjection implements HostedReleaseReaderBinding {
   private address: HostedReleaseReaderAddress | null = null;
   private retired = false;
+  private confirmation = 0;
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -39,7 +40,33 @@ export class HostedReleaseReaderLinkProjection implements HostedReleaseReaderBin
   snapshot = (): HostedReleaseReaderAddress | null => (this.current() ? this.address : null);
 
   clear = (): void => {
+    this.confirmation += 1;
     this.address = null;
+    this.listeners.forEach((listener) => listener());
+  };
+
+  /** A confirmed exact metadata/window observation proves nonempty without inventing a full manifest. */
+  confirmBounded = async (
+    owner: HostedOwnerBook,
+    evidence: Readonly<{ catalogueId: string; revisionId: string; nonempty: boolean }>,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    this.clear();
+    if (
+      !this.current() ||
+      signal.aborted ||
+      owner.catalogueId !== this.catalogueId ||
+      evidence.catalogueId !== this.catalogueId ||
+      owner.postVisibility !== 'published' ||
+      !evidence.nonempty ||
+      owner.publicationId !== evidence.revisionId
+    )
+      return;
+    const address = { catalogueId: this.catalogueId, releaseRevisionId: evidence.revisionId };
+    const confirmation = this.confirmation;
+    const admitted = await this.admit(address, signal);
+    if (!this.current() || signal.aborted || !admitted || confirmation !== this.confirmation) return;
+    this.address = address;
     this.listeners.forEach((listener) => listener());
   };
 
@@ -49,21 +76,18 @@ export class HostedReleaseReaderLinkProjection implements HostedReleaseReaderBin
     publication: PublicationRecord | null,
     signal: AbortSignal,
   ): Promise<void> => {
-    this.clear();
-    if (
-      !this.current() ||
-      signal.aborted ||
-      owner.postVisibility !== 'published' ||
-      !publication ||
-      publication.state !== 'published' ||
-      publication.entries.length === 0 ||
-      owner.publicationId !== publication.revision
-    )
+    if (!publication || publication.state !== 'published') {
+      this.clear();
       return;
-    const address = { catalogueId: this.catalogueId, releaseRevisionId: publication.revision };
-    const admitted = await this.admit(address, signal);
-    if (!this.current() || signal.aborted || !admitted) return;
-    this.address = address;
-    this.listeners.forEach((listener) => listener());
+    }
+    await this.confirmBounded(
+      owner,
+      {
+        catalogueId: this.catalogueId,
+        revisionId: publication.revision,
+        nonempty: publication.entries.length > 0,
+      },
+      signal,
+    );
   };
 }

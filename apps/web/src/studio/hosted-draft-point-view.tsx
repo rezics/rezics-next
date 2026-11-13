@@ -91,6 +91,14 @@ function Outline({
                       type="button"
                       variant="outline"
                       disabled={locked}
+                      onClick={() => visit.observe(item.occurrenceId, 'update')}
+                    >
+                      {m.studio_point_update_selected({ title: item.title }, options)}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={locked}
                       onClick={() => visit.observe(item.occurrenceId, 'removal')}
                     >
                       {m.studio_draft_point_use_remove({ title: item.title }, options)}
@@ -120,7 +128,15 @@ function Outline({
   );
 }
 
-export function HostedDraftPointView({ visit, locale }: { visit: HostedDraftPointVisit; locale: Locale }) {
+export function HostedDraftPointView({
+  visit,
+  locale,
+  onPublication,
+}: {
+  visit: HostedDraftPointVisit;
+  locale: Locale;
+  onPublication?: () => void;
+}) {
   const state = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
   const options = { locale };
   const titleId = useId();
@@ -155,6 +171,11 @@ export function HostedDraftPointView({ visit, locale }: { visit: HostedDraftPoin
         <h1>{m.studio_draft_point_heading({}, options)}</h1>
         <p className="studio-help max-w-prose">{m.studio_draft_point_help({}, options)}</p>
         <div className="studio-action-row">
+          {onPublication ? (
+            <Button type="button" variant="outline" onClick={onPublication}>
+              {m.studio_point_publication_heading({}, options)}
+            </Button>
+          ) : null}
           <a className="studio-toc-open" href={localizeHref('/studio?books=1', options)}>
             {m.studio_root_append_return({}, options)}
           </a>
@@ -168,7 +189,7 @@ export function HostedDraftPointView({ visit, locale }: { visit: HostedDraftPoin
         <section className="studio-stack" aria-label={m.studio_draft_point_operation({}, options)}>
           <h2>{m.studio_draft_point_operation({}, options)}</h2>
           <div className="studio-action-row">
-            {(['part', 'chapter', 'remove'] as const).map((kind) => (
+            {(['part', 'chapter', 'update', 'remove'] as const).map((kind) => (
               <Button
                 key={kind}
                 type="button"
@@ -179,9 +200,11 @@ export function HostedDraftPointView({ visit, locale }: { visit: HostedDraftPoin
               >
                 {kind === 'part'
                   ? m.studio_draft_point_part({}, options)
-                  : kind === 'chapter'
-                    ? m.studio_draft_point_chapter({}, options)
-                    : m.studio_draft_point_remove({}, options)}
+                  : kind === 'update'
+                    ? m.studio_point_update({}, options)
+                    : kind === 'chapter'
+                      ? m.studio_draft_point_chapter({}, options)
+                      : m.studio_draft_point_remove({}, options)}
               </Button>
             ))}
           </div>
@@ -192,24 +215,34 @@ export function HostedDraftPointView({ visit, locale }: { visit: HostedDraftPoin
             </>
           ) : (
             <>
-              <dl className="grid min-w-0 gap-2 break-all sm:grid-cols-[auto_minmax(0,1fr)]">
-                <dt>{m.studio_draft_point_parent({}, options)}</dt>
-                <dd>
-                  <Anchor anchor={choice.parent} fallback={m.studio_draft_point_root({}, options)} />
-                </dd>
-                <dt>{m.studio_draft_point_before({}, options)}</dt>
-                <dd>
-                  <Anchor anchor={choice.before} fallback={m.studio_draft_point_end({}, options)} />
-                </dd>
-              </dl>
-              <div className="studio-action-row">
-                <Button type="button" variant="outline" disabled={locked} onClick={visit.root}>
-                  {m.studio_draft_point_root({}, options)}
-                </Button>
-                <Button type="button" variant="outline" disabled={locked} onClick={visit.end}>
-                  {m.studio_draft_point_end({}, options)}
-                </Button>
-              </div>
+              {choice.kind === 'update' ? (
+                <>
+                  <Anchor anchor={choice.update} fallback={m.studio_point_choose_update({}, options)} />
+                  <p>{m.studio_point_update_help({}, options)}</p>
+                </>
+              ) : null}
+              {choice.kind !== 'update' ? (
+                <>
+                  <dl className="grid min-w-0 gap-2 break-all sm:grid-cols-[auto_minmax(0,1fr)]">
+                    <dt>{m.studio_draft_point_parent({}, options)}</dt>
+                    <dd>
+                      <Anchor anchor={choice.parent} fallback={m.studio_draft_point_root({}, options)} />
+                    </dd>
+                    <dt>{m.studio_draft_point_before({}, options)}</dt>
+                    <dd>
+                      <Anchor anchor={choice.before} fallback={m.studio_draft_point_end({}, options)} />
+                    </dd>
+                  </dl>
+                  <div className="studio-action-row">
+                    <Button type="button" variant="outline" disabled={locked} onClick={visit.root}>
+                      {m.studio_draft_point_root({}, options)}
+                    </Button>
+                    <Button type="button" variant="outline" disabled={locked} onClick={visit.end}>
+                      {m.studio_draft_point_end({}, options)}
+                    </Button>
+                  </div>
+                </>
+              ) : null}
               <Label htmlFor={titleId}>{m.studio_draft_point_title({}, options)}</Label>
               <Input
                 ref={titleInput}
@@ -222,13 +255,25 @@ export function HostedDraftPointView({ visit, locale }: { visit: HostedDraftPoin
             </>
           )}
         </section>
-        {choice.kind === 'chapter' ? (
+        {choice.kind === 'chapter' || (choice.kind === 'update' && choice.update?.item.kind === 'chapter') ? (
           <section
             className="studio-stack"
             aria-label={m.studio_draft_point_version({}, options)}
             aria-busy={phase === 'selecting' || phase === 'preparing'}
           >
             <h2>{m.studio_draft_point_version({}, options)}</h2>
+            {choice.kind === 'update' ? (
+              <div className="studio-action-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={locked}
+                  onClick={() => void visit.readUpdateVersion()}
+                >
+                  {m.studio_draft_point_reread({}, options)}
+                </Button>
+              </div>
+            ) : null}
             <HostedDraftPickerView
               picker={visit.picker}
               disabled={locked}
@@ -283,7 +328,7 @@ export function HostedDraftPointView({ visit, locale }: { visit: HostedDraftPoin
               <dd>{body.expectedRevisionId}</dd>
               <dt>{m.studio_draft_point_occurrence({}, options)}</dt>
               <dd>{body.occurrenceId}</dd>
-              {intent!.request.kind === 'insert' ? (
+              {intent!.request.kind !== 'remove' ? (
                 <>
                   <dt>{m.studio_draft_point_title({}, options)}</dt>
                   <dd>{intent!.request.body.title}</dd>
