@@ -34,16 +34,16 @@ phone disclosure, and separates its wide navigation without an outer frame.
 
 ## Native author outline window
 
-Decision: prepare a separate exact-revision, one-page author outline reader for the future large-draft append view;
-do not mount it or enable append. `hostedOutlineWindowNative` uses the authenticated session BFF and the installed
+Decision: keep a separate exact-revision, one-page author outline reader, now consumed by read-only Book history;
+append remains disabled. `hostedOutlineWindowNative` uses the authenticated session BFF and the installed
 generated outline route. Its request carries the admitted catalogue/kind/revision/source and an opaque cursor;
 the acting private viewer comes from the prepared session. Both boundaries keep no-store and request cancellation.
 The closed response admits at most 20 slots with nonnegative safe-integer sibling positions, including positions
 beyond 511. Withheld slots retain only native addresses, kind and availability. Missing parents, labels and targets
 are never synthesized, empty sparse pages keep their continuation, and each call makes exactly one native request.
 
-`HostedOutlineWindow` is an unmounted page owner. It keeps only the current page, retries the failed cursor exactly,
-and permanently retires on session replacement (including the same account), aborting requests and discarding late
+`HostedOutlineWindow` is the page owner for the mounted history inspector. It keeps only the current page, retries
+the failed cursor exactly, and permanently retires on session replacement (including the same account), aborting requests and discarding late
 responses. A caller disposes it on departure or supplies the owning workspace's currentness predicate. Its page wire
 is separate from `HostedBook`: no partial or withheld page becomes an editable whole tree. The existing complete-tree
 reader still drains the exact stream, refuses unavailable slots or more than 512 placements, and retains the legacy
@@ -269,21 +269,33 @@ distinct presentation. Failed replacement pages remove old rows and outlines. Du
 loop. Browser account or session replacement, including replacement by the same account, permanently retires the visit,
 aborts its reads and discards late responses. Book navigation and closing the panel dispose the same lifetime.
 
-Selecting a listed entry uses the existing native exact reader with catalogue, kind and revision ID. Its admitted
-source structure must also match the entry. The inspector presents native chapter order and pinned versions without
-editor, placement or publication controls. An unavailable exact tree stays unavailable rather than showing a partial
-or empty outline. The native author-history permission remains authoritative; public release access never grants
-history discovery.
+Decision: selecting a listed entry owns one `HostedOutlineWindow`, pinned to its catalogue, kind, revision, source
+revision and viewer generation. Inspection makes one authenticated outline request per explicit page action and keeps
+only that page; it never calls the complete-tree reader, hydrates metadata or traverses parents. Native preorder and
+safe sibling positions survive pages beginning inside a part. The flat read-only list shows withheld slots using only
+their admitted addresses and kind, without a title or target, and synthesizes no ancestry. The draft editor, organize
+and publication command paths keep their complete-tree bounds; append remains disabled.
 
-Sources read before design: this owner document, `book-organizer.tsx`, `hosted-actions.ts`, `hosted-native.ts`,
-`hosted-contract.ts`, their workspace and inventory callers, and Content's `hosted-chapters-routes.ts`,
-`hosted-chapters-schemas.ts` and [author-history contract](../../../../services/kernel/src/content/hosted-chapters.md#author-history).
-The base already includes the generated history client; no backend or inventory change is required.
+Next explicitly requests the opaque continuation; retry repeats the failed cursor, including rejected continuations.
+Loading or failed replacement pages remove the prior outline. History-page replacement, another selection, closing
+inspection/disclosure, Book departure and session replacement retire the old window and discard late results. Only an
+empty initial terminal page means an empty structure or withdrawn release; empty continuable and terminal continuation
+pages remain page observations. Current flags and history listing retain their native metadata behaviour. The native
+author-history permission remains authoritative; public release access never grants history discovery.
+
+Sources read before this receiving design: this owner document, `hosted-history.ts`, `hosted-history-view.tsx`,
+`hosted-history.test.tsx`, `hosted-outline-window.ts`, its source fixture, `hosted-contract.ts`, `hosted-native.ts`,
+`hosted-actions.ts`, the `hosted-workspace.ts` binding, `routes/studio.tsx` caller and historical reader provenance.
+The base already supplies the authenticated one-page window; no merge, cherry-pick, Backend or inventory change is
+required. The inspector lazily binds that existing BFF capability when its disclosure mounts.
 
 Later acceptance: the dev verifier runs `bun run --cwd apps/web test src/studio/hosted-history.test.tsx
  tests/studio-hosted-inventory.test.ts tests/studio-hosted-publication.test.ts`. History cases cover metadata-only
 paging and exact retry, native timestamps/markers, empty/denied/unavailable/stale states, exact identity and chapter
-order, withdrawal, session replacement, late selections and disposal. Existing publication and inventory assertions
+order, withdrawal, session replacement, late selections and disposal. The updated focused source fixture also pins
+mid-part pages, safe positions, withheld slots, sparse continuations, exact page retry and browsing over 512 entries
+without retaining earlier pages. Exact identity assertions now exercise the existing external page adapter, while
+selection assertions use the page wire instead of a whole Book. Existing publication and inventory assertions
 remain unchanged; their native doubles include history. Native, browser, Storybook and broader acceptance remain
 deferred; this source pass uses changed-file formatting and the affected Web typecheck.
 

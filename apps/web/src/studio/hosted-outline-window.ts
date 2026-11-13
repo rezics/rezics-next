@@ -8,7 +8,7 @@ export type HostedOutlineWindowState =
   | Readonly<{ kind: 'failed'; cursor: string | null; error: StudioFailure }>
   | Readonly<{ kind: 'ended' }>;
 
-/** A future large-draft view can own one page without entering the complete-tree edit adapter. */
+/** Exact history inspection owns one page without entering the complete-tree edit adapter. */
 export class HostedOutlineWindow {
   private state: HostedOutlineWindowState = { kind: 'loading', cursor: null };
   private readonly origin;

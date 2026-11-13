@@ -2,10 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } fro
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { historicalReaderSource } from '../threads/historical-reader-provenance';
-import { bookTocRows, type BookTocRow } from './book-toc';
-import { hostedBookStructure } from './hosted-structure';
 import { HostedHistoryVisit, type HostedHistoryBinding, type HostedHistorySelection } from './hosted-history';
-import type { HostedHistoryEntry } from './hosted-contract';
+import type { HostedHistoryEntry, HostedOutlineWindowPage } from './hosted-contract';
 
 /** Closing this disclosure unmounts the private directory and aborts both kinds of read. */
 export function HostedHistoryDisclosure({ binding }: { binding: HostedHistoryBinding }) {
@@ -26,10 +24,18 @@ function MountedHistory({ binding }: { binding: HostedHistoryBinding }) {
   const source = useMemo(() => historicalReaderSource(queryClient), [queryClient]);
   const [visit, setVisit] = useState<HostedHistoryVisit | null>(null);
   useEffect(() => {
-    const mounted = new HostedHistoryVisit(binding, source);
-    setVisit(mounted);
-    void mounted.load();
-    return () => mounted.dispose();
+    let mounted: HostedHistoryVisit | null = null;
+    let disposed = false;
+    void import('./hosted-actions').then(({ hostedOutlineWindowNative }) => {
+      if (disposed) return;
+      mounted = new HostedHistoryVisit(binding, source, hostedOutlineWindowNative);
+      setVisit(mounted);
+      void mounted.load();
+    });
+    return () => {
+      disposed = true;
+      mounted?.dispose();
+    };
   }, [binding, source]);
   return visit ? <HostedHistoryPanel visit={visit} /> : <p role="status">Loading book history…</p>;
 }
@@ -179,48 +185,75 @@ function HistorySelection({ selection, visit }: { selection: HostedHistorySelect
     return (
       <div role="alert" className="studio-stack">
         <p>{selection.error.message}</p>
-        <Button type="button" variant="outline" onClick={() => void visit.inspect(selection.entry.revisionId)}>
-          Retry exact version
+        <Button type="button" variant="outline" onClick={() => void visit.retryOutline()}>
+          Retry this outline page
         </Button>
       </div>
     );
-  const rows = bookTocRows(hostedBookStructure(selection.book));
-  if (!rows.length)
-    return (
-      <p>
-        {selection.entry.kind === 'publication'
-          ? 'This release contains no chapters (withdrawn).'
-          : 'This structure has no parts or chapters.'}
-      </p>
-    );
-  return <HistoryOutline rows={rows} parent={null} />;
+  const { page, cursor } = selection;
+  const emptyVersion = cursor === null && page.nextCursor === null && page.items.length === 0;
+  return (
+    <div className="studio-stack">
+      <p className="studio-help">One page in native outline order. Parent parts may be on another page.</p>
+      {page.items.length ? (
+        <HistoryOutline page={page} />
+      ) : (
+        <p>
+          {emptyVersion
+            ? selection.entry.kind === 'publication'
+              ? 'This release contains no chapters (withdrawn).'
+              : 'This structure has no parts or chapters.'
+            : 'No entries on this outline page.'}
+        </p>
+      )}
+      {page.nextCursor !== null ? (
+        <Button type="button" variant="outline" onClick={() => void visit.nextOutline()}>
+          Next outline page
+        </Button>
+      ) : (
+        <p className="studio-help">End of outline.</p>
+      )}
+    </div>
+  );
 }
 
-function HistoryOutline({ rows, parent }: { rows: readonly BookTocRow[]; parent: string | null }) {
+/** Flat native preorder: a page can start inside an absent part, and never becomes an editable tree. */
+function HistoryOutline({ page }: { page: HostedOutlineWindowPage }) {
   return (
-    <ol className="studio-toc-branch" aria-label={parent === null ? 'Exact chapter order' : undefined}>
-      {rows
-        .filter(({ placement }) => placement.parentOccurrenceId === parent)
-        .map(({ placement }) => (
-          <li key={placement.occurrenceId}>
-            <div className="studio-toc-entry">
-              <strong>{placement.title}</strong>
-              {placement.target.kind === 'chapter' ? (
-                <dl className="studio-help studio-break">
-                  <dt>Chapter</dt>
-                  <dd>{placement.target.document.postId}</dd>
-                  <dt>Pinned version</dt>
-                  <dd>{placement.target.document.revisionId}</dd>
-                  <dt>SHA-256</dt>
-                  <dd>{placement.target.document.sha256}</dd>
-                </dl>
-              ) : (
-                <p className="studio-help">Part</p>
-              )}
-            </div>
-            {placement.target.kind === 'part' ? <HistoryOutline rows={rows} parent={placement.occurrenceId} /> : null}
-          </li>
-        ))}
+    <ol className="studio-toc-branch" aria-label="Exact chapter order">
+      {page.items.map((item) => (
+        <li key={item.occurrenceId}>
+          <div className="studio-toc-entry">
+            {item.availability === 'unavailable' ? (
+              <p>{item.kind === 'part' ? 'Part unavailable' : 'Chapter unavailable'}</p>
+            ) : (
+              <>
+                <strong>{item.title}</strong>
+                {item.kind === 'chapter' ? (
+                  <dl className="studio-help studio-break">
+                    <dt>Chapter</dt>
+                    <dd>{item.target.postId}</dd>
+                    <dt>Pinned version</dt>
+                    <dd>{item.target.revisionId}</dd>
+                    <dt>SHA-256</dt>
+                    <dd>{item.target.sha256}</dd>
+                  </dl>
+                ) : (
+                  <p className="studio-help">Part</p>
+                )}
+              </>
+            )}
+            <dl className="studio-help studio-break">
+              <dt>Occurrence</dt>
+              <dd>{item.occurrenceId}</dd>
+              <dt>Parent occurrence</dt>
+              <dd>{item.parentId ?? 'None'}</dd>
+              <dt>Sibling position</dt>
+              <dd>{item.position}</dd>
+            </dl>
+          </div>
+        </li>
+      ))}
     </ol>
   );
 }

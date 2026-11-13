@@ -5,12 +5,17 @@ import { QueryClient } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { historicalReaderSource } from '../threads/historical-reader-provenance';
 import type { StudioResult } from './contract';
-import type { HostedBook, HostedHistoryEntry, HostedHistoryPage } from './hosted-contract';
+import type {
+  HostedHistoryEntry,
+  HostedHistoryPage,
+  HostedOutlineWindowNative,
+  HostedOutlineWindowPage,
+} from './hosted-contract';
 import { createHostedBookNative, hostedFailure } from './hosted-native';
 import { HostedHistoryVisit, type HostedHistoryBinding } from './hosted-history';
 import { HostedHistoryDisclosure, HostedHistoryPanel } from './hosted-history-view';
 
-const id = (value: number) => `00000000-0000-8000-8000-0002000000${value.toString().padStart(2, '0')}`;
+const id = (value: number) => `00000000-0000-8000-8000-${(200000000 + value).toString().padStart(12, '0')}`;
 const catalogueId = id(1);
 const accountId = id(2);
 const structure: HostedHistoryEntry = {
@@ -35,16 +40,28 @@ const page = (items = [release, structure], nextCursor: string | null = null): H
   items,
   nextCursor,
 });
-const book = (entry = structure): HostedBook => ({
-  revision: { catalogueId, revisionId: entry.revisionId, kind: entry.kind, sourceRevisionId: entry.sourceRevisionId },
-  placements: [
-    { occurrenceId: id(6), parentId: null, position: 0, title: 'Part one', kind: 'part' },
+const outline = (entry = structure): HostedOutlineWindowPage => ({
+  catalogueId,
+  revisionId: entry.revisionId,
+  kind: entry.kind,
+  sourceRevisionId: entry.sourceRevisionId,
+  items: [
+    {
+      occurrenceId: id(6),
+      parentId: null,
+      position: 0,
+      title: 'Part one',
+      kind: 'part',
+      availability: 'available',
+      target: null,
+    },
     {
       occurrenceId: id(7),
       parentId: id(6),
       position: 0,
       title: 'First chapter',
       kind: 'chapter',
+      availability: 'available',
       target: { threadId: id(8), postId: id(9), revisionId: id(10), sha256: 'a'.repeat(64) },
     },
     {
@@ -53,9 +70,11 @@ const book = (entry = structure): HostedBook => ({
       position: 1,
       title: 'Second chapter',
       kind: 'chapter',
+      availability: 'available',
       target: { threadId: id(12), postId: id(13), revisionId: id(14), sha256: 'b'.repeat(64) },
     },
   ],
+  nextCursor: null,
 });
 const ok = <T,>(value: T): StudioResult<T> => ({ ok: true, value });
 const signal = () => new AbortController().signal;
@@ -74,13 +93,14 @@ function nativeResponse(data: unknown, status = 200) {
   );
   return { native, calls };
 }
-function mounted(native: HostedHistoryBinding['native']) {
+function mounted(native: HostedHistoryBinding['native'] & HostedOutlineWindowNative) {
   const client = new QueryClient();
   const session = { state: 'signed-in', subject: accountId, csrfToken: 'test' };
   client.setQueryData(['session'], session);
   const visit = new HostedHistoryVisit(
     { native, catalogueId, accountId, isCurrent: () => true },
     historicalReaderSource(client),
+    native,
   );
   return {
     visit,
@@ -152,7 +172,7 @@ test('paging retries the failed cursor, removes prior rows, and never converts e
           ? hostedFailure('unavailable', 'Retry history')
           : ok(page([], null));
     },
-    read: noDetail,
+    readOutlineWindow: noDetail,
   });
   await screen.visit.load();
   expect(screen.html()).toContain('Current draft');
@@ -175,7 +195,7 @@ test('empty, sparse, denied and stale directories have different recovery and no
     [hostedFailure('denied', 'Author access denied'), 'Author access denied', 'Retry this page'],
     [hostedFailure('stale', 'Expired continuation'), 'Restart history', 'No saved book versions yet.'],
   ] as const) {
-    const screen = mounted({ listHistory: async () => result, read: noDetail });
+    const screen = mounted({ listHistory: async () => result, readOutlineWindow: noDetail });
     await screen.visit.load();
     expect(screen.html()).toContain(expected);
     expect(screen.html()).not.toContain(absent);
@@ -187,7 +207,7 @@ test('empty, sparse, denied and stale directories have different recovery and no
       cursors.push(cursor);
       return ok(page([], 'repeat'));
     },
-    read: noDetail,
+    readOutlineWindow: noDetail,
   });
   await screen.visit.load();
   await screen.visit.next();
@@ -199,13 +219,13 @@ test('empty, sparse, denied and stale directories have different recovery and no
 
 test('inspection reads only an admitted exact selection, preserves chapter order and cannot write draft or release state', async () => {
   const selections: unknown[] = [];
-  const draft = book();
+  const draft = outline();
   const frozen = structuredClone(draft);
   const screen = mounted({
     listHistory: async () => ok(page()),
-    read: async (selection) => {
+    readOutlineWindow: async (selection) => {
       selections.push(selection);
-      return ok(selection.kind === 'structure' ? draft : { revision: book(release).revision, placements: [] });
+      return ok(selection.revision.kind === 'structure' ? draft : { ...outline(release), items: [] });
     },
   });
   await screen.visit.load();
@@ -213,7 +233,12 @@ test('inspection reads only an admitted exact selection, preserves chapter order
   await screen.visit.inspect(id(99));
   expect(selections).toHaveLength(0);
   await screen.visit.inspect(structure.revisionId);
-  expect(selections).toEqual([{ catalogueId, kind: 'structure', revisionId: structure.revisionId }]);
+  expect(selections).toEqual([
+    {
+      revision: { catalogueId, kind: 'structure', revisionId: structure.revisionId, sourceRevisionId: null },
+      cursor: null,
+    },
+  ]);
   const html = screen.html();
   expect(html).toContain('Read-only');
   expect(html).toContain('Exact chapter order');
@@ -236,7 +261,7 @@ test('failed exact reads remain unavailable and revoked author access clears the
     let readable = true;
     const screen = mounted({
       listHistory: async () => ok(page()),
-      read: async () => (readable ? ok(book()) : hostedFailure(kind, 'Exact version access failed')),
+      readOutlineWindow: async () => (readable ? ok(outline()) : hostedFailure(kind, 'Exact version access failed')),
     });
     await screen.visit.load();
     await screen.visit.inspect(structure.revisionId);
@@ -260,7 +285,7 @@ test('a substituted catalogue, kind, revision or source cannot be shown as the s
   ]) {
     const screen = mounted({
       listHistory: async () => ok(page()),
-      read: async () => ok({ ...book(), revision: { ...book().revision, ...change } }),
+      readOutlineWindow: nativeResponse({ ...outline(), ...change }).native.readOutlineWindow,
     });
     await screen.visit.load();
     await screen.visit.inspect(structure.revisionId);
@@ -283,10 +308,10 @@ test('same-account replacement, account switch and unmount abort pending reads a
                 finish = () => resolve(ok(page()));
               })
             : ok(page()),
-        read: async (_selection, request) =>
+        readOutlineWindow: async (_selection, request) =>
           new Promise((resolve) => {
             requestSignal = request;
-            finish = () => resolve(ok(book()));
+            finish = () => resolve(ok(outline()));
           }),
       });
       let pending = screen.visit.load();
@@ -307,37 +332,159 @@ test('same-account replacement, account switch and unmount abort pending reads a
 });
 
 test('later selection and page navigation discard older pending outlines; closed disclosure mounts no history', async () => {
-  let finish!: (value: StudioResult<HostedBook>) => void;
+  let finish!: (value: StudioResult<HostedOutlineWindowPage>) => void;
   let oldSignal!: AbortSignal;
   const screen = mounted({
     listHistory: async (_id, cursor) => ok(page(undefined, cursor === null ? 'older' : null)),
-    read: async (selection, request) =>
-      selection.revisionId === structure.revisionId
+    readOutlineWindow: async (selection, request) =>
+      selection.revision.revisionId === structure.revisionId
         ? new Promise((resolve) => {
             finish = resolve;
             oldSignal = request;
           })
-        : ok({ revision: book(release).revision, placements: [] }),
+        : ok({ ...outline(release), items: [] }),
   });
   await screen.visit.load();
   const old = screen.visit.inspect(structure.revisionId);
   await screen.visit.inspect(release.revisionId);
   expect(oldSignal.aborted).toBe(true);
-  finish(ok(book()));
+  finish(ok(outline()));
   await old;
   expect(screen.visit.snapshot()).toMatchObject({ selection: { kind: 'ready', entry: release } });
   const next = screen.visit.inspect(structure.revisionId);
   await screen.visit.next();
   expect(oldSignal.aborted).toBe(true);
-  finish(ok(book()));
+  finish(ok(outline()));
   await next;
   expect(screen.visit.snapshot()).toMatchObject({ kind: 'ready', selection: { kind: 'none' } });
+  const closed = screen.visit.inspect(structure.revisionId);
+  screen.visit.closeSelection();
+  expect(oldSignal.aborted).toBe(true);
+  finish(ok(outline()));
+  await closed;
+  expect(screen.visit.snapshot()).toMatchObject({ selection: { kind: 'none' } });
   const html = renderToStaticMarkup(
     createElement(HostedHistoryDisclosure, {
-      binding: { catalogueId, accountId, isCurrent: () => true, native: { listHistory: noDetail, read: noDetail } },
+      binding: { catalogueId, accountId, isCurrent: () => true, native: { listHistory: noDetail } },
     }),
   );
   expect(html).toContain('aria-expanded="false"');
   expect(html).not.toContain('Loading book history');
   screen.dispose();
+});
+
+test('exact pages preserve orphan preorder, withheld addresses and sparse continuations with explicit next and retry', async () => {
+  const calls: URL[] = [];
+  let continuationAttempts = 0;
+  const first: HostedOutlineWindowPage = {
+    ...outline(release),
+    // Native order is authoritative even when parent parts are absent and sibling positions differ.
+    items: [
+      { ...outline().items[1]!, position: Number.MAX_SAFE_INTEGER },
+      { ...outline().items[2]!, position: 512 },
+      { occurrenceId: id(15), parentId: id(16), position: 900, kind: 'chapter', availability: 'unavailable' },
+      { occurrenceId: id(17), parentId: null, position: 600, kind: 'part', availability: 'unavailable' },
+    ],
+    nextCursor: 'opaque+/=',
+  };
+  const native = createHostedBookNative(
+    createKernelClient('https://kernel.test', {
+      fetch: async (input) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        calls.push(url);
+        if (url.pathname.endsWith('/history')) return Response.json(page());
+        const cursor = url.searchParams.get('cursor');
+        if (cursor === null) return Response.json(first);
+        if (cursor === 'opaque+/=' && ++continuationAttempts === 1) return Response.json({}, { status: 503 });
+        return Response.json({ ...outline(release), items: [], nextCursor: cursor === 'opaque+/=' ? 'last' : null });
+      },
+    }),
+  );
+  const screen = mounted(native);
+  try {
+    await screen.visit.load();
+    expect(calls).toHaveLength(1);
+    await screen.visit.inspect(release.revisionId);
+    expect(calls).toHaveLength(2);
+    const html = screen.html();
+    expect(html).toContain('Next outline page');
+    expect(html.indexOf('First chapter')).toBeLessThan(html.indexOf('Second chapter'));
+    expect(html).toContain(String(Number.MAX_SAFE_INTEGER));
+    expect(html).toContain('512');
+    expect(html).toContain('Chapter unavailable');
+    expect(html).toContain('Part unavailable');
+    expect(html).not.toContain('Part one');
+    expect(html.match(/Pinned version/g)).toHaveLength(2);
+    expect(html.match(/<ol/g)).toHaveLength(2); // Directory and one flat outline; no invented ancestry.
+    expect(screen.visit.snapshot()).toMatchObject({ selection: { page: first } });
+    await screen.visit.nextOutline();
+    expect(calls).toHaveLength(3);
+    expect(screen.html()).toContain('Retry this outline page');
+    expect(screen.html()).not.toContain('First chapter');
+    expect(screen.html()).not.toContain('withdrawn');
+    await screen.visit.retryOutline();
+    expect(calls).toHaveLength(4);
+    expect(screen.html()).toContain('No entries on this outline page.');
+    expect(screen.html()).toContain('Next outline page');
+    expect(screen.html()).not.toContain('withdrawn');
+    await screen.visit.nextOutline();
+    expect(calls).toHaveLength(5);
+    expect(screen.html()).toContain('End of outline.');
+    expect(screen.html()).not.toContain('Next outline page');
+    expect(screen.html()).not.toContain('withdrawn');
+    expect(calls.slice(1).map((url) => url.searchParams.get('cursor'))).toEqual([
+      null,
+      'opaque+/=',
+      'opaque+/=',
+      'last',
+    ]);
+    for (const url of calls.slice(1)) {
+      expect(url.pathname).toBe(`/v1/hostedCatalogues/${catalogueId}/outline`);
+      expect(url.searchParams.get('kind')).toBe('publication');
+      expect(url.searchParams.get('revisionId')).toBe(release.revisionId);
+      expect(url.searchParams.get('limit')).toBe('20');
+    }
+  } finally {
+    screen.dispose();
+  }
+});
+
+test('more than 512 native entries remain browsable while only one requested page is retained', async () => {
+  let requests = 0;
+  const screen = mounted({
+    listHistory: async () => ok(page()),
+    readOutlineWindow: async ({ revision, cursor }) => {
+      requests++;
+      const start = cursor === null ? 0 : Number(cursor);
+      return ok({
+        ...revision,
+        items: Array.from({ length: 20 }, (_, offset) => ({
+          occurrenceId: id(start + offset + 100),
+          parentId: id(99),
+          position: start + offset,
+          kind: 'part' as const,
+          availability: 'available' as const,
+          title: `Entry ${start + offset}`,
+          target: null,
+        })),
+        nextCursor: start === 520 ? null : String(start + 20),
+      });
+    },
+  });
+  try {
+    await screen.visit.load();
+    await screen.visit.inspect(structure.revisionId);
+    expect(requests).toBe(1);
+    for (let index = 1; index < 27; index++) await screen.visit.nextOutline();
+    expect(requests).toBe(27);
+    expect(screen.visit.snapshot()).toMatchObject({
+      selection: { kind: 'ready', cursor: '520', page: { nextCursor: null } },
+    });
+    const html = screen.html();
+    expect(html).toContain('Entry 539');
+    expect(html).not.toContain('Entry 519');
+    expect(html.match(/Sibling position/g)).toHaveLength(20);
+  } finally {
+    screen.dispose();
+  }
 });

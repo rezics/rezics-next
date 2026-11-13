@@ -1,19 +1,23 @@
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
 import type { StudioFailure } from './contract';
-import type { HostedBook, HostedBookNative, HostedHistoryEntry, HostedHistoryPage } from './hosted-contract';
+import type {
+  HostedBookNative,
+  HostedHistoryEntry,
+  HostedHistoryPage,
+  HostedOutlineWindowNative,
+} from './hosted-contract';
+import { HostedOutlineWindow, type HostedOutlineWindowState } from './hosted-outline-window';
 
 /** Only the admitted hosted workspace supplies this binding; local Studio has no author history. */
 export type HostedHistoryBinding = Readonly<{
-  native: Pick<HostedBookNative, 'listHistory' | 'read'>;
+  native: Pick<HostedBookNative, 'listHistory'>;
   catalogueId: string;
   accountId: string;
   isCurrent: () => boolean;
 }>;
 export type HostedHistorySelection =
   | Readonly<{ kind: 'none' }>
-  | Readonly<{ kind: 'loading'; entry: HostedHistoryEntry }>
-  | Readonly<{ kind: 'failed'; entry: HostedHistoryEntry; error: StudioFailure }>
-  | Readonly<{ kind: 'ready'; entry: HostedHistoryEntry; book: HostedBook }>;
+  | (Exclude<HostedOutlineWindowState, { kind: 'ended' }> & Readonly<{ entry: HostedHistoryEntry }>);
 export type HostedHistoryState =
   | Readonly<{ kind: 'loading'; cursor: string | null }>
   | Readonly<{ kind: 'failed'; cursor: string | null; error: StudioFailure }>
@@ -33,12 +37,13 @@ export class HostedHistoryVisit {
   private readonly listeners = new Set<() => void>();
   private readonly consumed = new Set<string>();
   private pageRequest: AbortController | null = null;
-  private detailRequest: AbortController | null = null;
+  private detail: { window: HostedOutlineWindow; unsubscribe: () => void } | null = null;
   private retired = false;
 
   constructor(
     private readonly binding: HostedHistoryBinding,
     private readonly source: HistoricalReaderSource,
+    private readonly outlineNative: HostedOutlineWindowNative,
   ) {
     this.origin = source.read();
     this.unsubscribe = source.subscribe(() => {
@@ -72,8 +77,10 @@ export class HostedHistoryVisit {
     for (const listener of this.listeners) listener();
   }
   private clearDetail() {
-    this.detailRequest?.abort();
-    this.detailRequest = null;
+    const detail = this.detail;
+    this.detail = null;
+    detail?.unsubscribe();
+    detail?.window.dispose();
   }
   private retire() {
     this.retired = true;
@@ -146,46 +153,46 @@ export class HostedHistoryVisit {
     const entry = this.state.page.items.find((item) => item.revisionId === revisionId);
     if (!entry) return;
     this.clearDetail();
-    const request = new AbortController();
-    this.detailRequest = request;
-    this.update({ ...this.state, selection: { kind: 'loading', entry } });
-    try {
-      // Exact native reads admit the whole tree, including its own sibling order and chapter pins.
-      const result = await this.binding.native.read(
-        { catalogueId: this.binding.catalogueId, kind: entry.kind, revisionId: entry.revisionId },
-        request.signal,
-      );
+    // The selected metadata pins all revision operands; the window also pins this viewer generation.
+    const window = new HostedOutlineWindow(
+      this.outlineNative,
+      this.source,
+      this.binding.accountId,
+      {
+        catalogueId: entry.catalogueId,
+        kind: entry.kind,
+        revisionId: entry.revisionId,
+        sourceRevisionId: entry.sourceRevisionId,
+      },
+      this.isCurrent,
+    );
+    const unsubscribe = window.subscribe(() => {
+      if (this.detail?.window !== window) return;
       if (!this.isCurrent()) {
         this.retire();
         return;
       }
-      if (request.signal.aborted || this.detailRequest !== request || this.state.kind !== 'ready') return;
-      if (!result.ok) {
-        if (result.error.kind === 'denied')
-          this.update({ kind: 'failed', cursor: this.state.cursor, error: result.error });
-        else this.update({ ...this.state, selection: { kind: 'failed', entry, error: result.error } });
-        return;
+      if (this.state.kind !== 'ready') return;
+      const outline = window.snapshot();
+      if (outline.kind === 'ended') {
+        this.retire();
+      } else if (outline.kind === 'failed' && outline.error.kind === 'denied') {
+        const cursor = this.state.cursor;
+        this.clearDetail();
+        this.update({ kind: 'failed', cursor, error: outline.error });
+      } else {
+        this.update({ ...this.state, selection: { ...outline, entry } });
       }
-      const revision = result.value.revision;
-      if (
-        revision.catalogueId !== this.binding.catalogueId ||
-        revision.kind !== entry.kind ||
-        revision.revisionId !== entry.revisionId ||
-        revision.sourceRevisionId !== entry.sourceRevisionId
-      ) {
-        this.update({
-          ...this.state,
-          selection: {
-            kind: 'failed',
-            entry,
-            error: { kind: 'unavailable', message: 'The exact selected version could not be read. Try again.' },
-          },
-        });
-        return;
-      }
-      this.update({ ...this.state, selection: { kind: 'ready', entry, book: result.value } });
-    } finally {
-      if (this.detailRequest === request) this.detailRequest = null;
-    }
+    });
+    this.detail = { window, unsubscribe };
+    await window.load();
+  };
+
+  /** Both actions stay on the selected revision; retry retains the failed opaque cursor. */
+  retryOutline = async (): Promise<void> => {
+    await this.detail?.window.load();
+  };
+  nextOutline = async (): Promise<void> => {
+    await this.detail?.window.next();
   };
 }
