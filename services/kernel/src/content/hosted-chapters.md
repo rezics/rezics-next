@@ -155,6 +155,8 @@ operand. Kind/target Post identity stays permanent. It does not copy newer draft
 
 Under current catalogue Post author/container/`post:revise` admission, read that exact source occurrence and its
 ancestor chain, then validate only the changed exact targets through native metadata and retained original Access/
+Decision: point publication prepares retained anonymous metadata checks for the catalogue opening and only newly
+selected exact targets; the seam stays unmounted until Content can join those final checks to the pointer transaction.
 ancestry observations. Native public eligibility of the catalogue Post is a separate precondition for reporting a
 newly public Book. Changed targets use [exact source consent](#private-to-public-boundary) or the installed public
 eligibility seam; do not require global Post publication of a private opening. Recheck these observations at commit
