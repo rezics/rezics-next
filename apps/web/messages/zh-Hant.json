@@ -12049,5 +12049,13 @@
   "studio_book_release_part": "在下次發佈中包含「{title}」內的章節",
   "studio_book_release_chapter": "在下次發佈中包含「{title}」",
   "studio_book_release_count": "已選取 {selected} / {total} 個章節",
-  "studio_book_release_help": "選取下次發佈的章節。固定版本維持不變。"
+  "studio_book_release_help": "選取下次發佈的章節。固定版本維持不變。",
+  "studio_book_start_label": "開始創作一本書",
+  "studio_book_start_help": "為已儲存的草稿建立私人目錄。貼文維持不變，發佈需另行操作。",
+  "studio_book_start_retry": "重試同一次建書操作",
+  "studio_book_start_creating": "正在建立私人目錄…",
+  "studio_book_start_confirming": "正在確認書籍擁有權…",
+  "studio_book_start_uncertain": "結果尚未確認。請重試同一次建書操作後再繼續。",
+  "studio_book_start_failed": "無法用此草稿開始創作書籍。你可以繼續編輯草稿。",
+  "studio_book_start_ended": "本次 Studio 存取已結束。請重新開啟草稿。"
 }

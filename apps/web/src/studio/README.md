@@ -330,3 +330,29 @@ remain unchanged. Native acceptance verifies author withdrawal and subsequent re
 and historical exact release/chapter reads with unchanged current Access checks. Native, browser, Storybook and
 broader acceptance are deferred to the dev verifier; this source pass uses changed-file formatting and the affected
 Web typecheck.
+
+## Start a Book from a saved opening
+
+Decision: the current account-draft visit offers Start a Book only for its admitted, saved, clean native opening.
+The action freezes that Post/thread, empty placements and one idempotency key. An uncertain command retries those
+same operands; a successful create or existing-catalogue conflict switches to exact owner-read recovery without
+creating another draft. Document controls remain held during recovery. The exact owner response must match the
+Post/thread and account/authn epoch before its existing owner href can open Book Studio. Session generation
+replacement, including the same viewer, aborts requests and discards late responses. This creates a private outline;
+the Post body, visibility and ordinary article publication lifecycle remain independent.
+
+Sources read before design: this owner note, `routes/studio.tsx`, `account-port.ts`, `workspace.tsx`,
+`hosted-actions.ts`, `hosted-contract.ts`, `hosted-native.ts`, `hosted-inventory.ts`, the native
+[Hosted catalogue authoring contract](../../../../services/kernel/src/content/hosted-chapters.md#authoring-and-release),
+`hosted-workspace.ts`, `hosted-adapter.ts`, and existing native-draft and hosted-publication fixtures. The native
+create, saved opening admission and exact owner response are already installed on the base; no integration commit
+or API change is needed. The read-only history inspector remains independent.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-book-start.test.tsx`.
+Focused cases cover clean saved-opening eligibility, start, duplicate clicks, exact uncertain retry, existing Book
+reopen, owner-read retry, mismatched viewer/identity, session replacement and first exact chapter placement through
+the installed replacement command. Mounted native/browser acceptance must also exercise the account draft visit →
+Start a Book → Book Studio path, retained retry, existing Book reopen, stale viewer disposal, and first saved chapter
+placement. Source fixtures do not claim native/browser proof. Existing assertions remain unchanged. Source validation
+formats changed files and runs one affected Web typecheck; ordinary acceptance, native/browser, root and growth
+suites remain deferred.

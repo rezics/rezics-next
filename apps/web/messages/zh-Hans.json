@@ -12049,5 +12049,13 @@
   "studio_book_release_part": "在下次发布中包含「{title}」内的章节",
   "studio_book_release_chapter": "在下次发布中包含「{title}」",
   "studio_book_release_count": "已选择 {selected} / {total} 个章节",
-  "studio_book_release_help": "选择下次发布的章节。固定版本保持不变。"
+  "studio_book_release_help": "选择下次发布的章节。固定版本保持不变。",
+  "studio_book_start_label": "开始创作一本书",
+  "studio_book_start_help": "为已保存的草稿建立私密目录。帖子保持不变，发布需另行操作。",
+  "studio_book_start_retry": "重试同一次建书操作",
+  "studio_book_start_creating": "正在创建私密目录…",
+  "studio_book_start_confirming": "正在确认书籍所有权…",
+  "studio_book_start_uncertain": "结果尚未确认。请重试同一次建书操作后再继续。",
+  "studio_book_start_failed": "无法用此草稿开始创作书籍。你可以继续编辑草稿。",
+  "studio_book_start_ended": "本次 Studio 访问已结束。请重新打开草稿。"
 }

@@ -12049,5 +12049,13 @@
   "studio_book_release_part": "Inclure les chapitres de {title} dans la prochaine publication",
   "studio_book_release_chapter": "Inclure {title} dans la prochaine publication",
   "studio_book_release_count": "{selected} chapitres sélectionnés sur {total}",
-  "studio_book_release_help": "Sélectionnez les chapitres de la prochaine publication. Les versions épinglées restent inchangées."
+  "studio_book_release_help": "Sélectionnez les chapitres de la prochaine publication. Les versions épinglées restent inchangées.",
+  "studio_book_start_label": "Commencer un livre",
+  "studio_book_start_help": "Créez un plan privé pour ce brouillon enregistré. Le billet reste inchangé ; la publication est une étape distincte.",
+  "studio_book_start_retry": "Réessayer le même démarrage",
+  "studio_book_start_creating": "Création du plan privé…",
+  "studio_book_start_confirming": "Vérification du propriétaire du livre…",
+  "studio_book_start_uncertain": "Le résultat n’est pas confirmé. Réessayez ce même démarrage avant de continuer.",
+  "studio_book_start_failed": "Ce brouillon n’a pas pu devenir un livre. Vous pouvez continuer à le modifier.",
+  "studio_book_start_ended": "Cette visite de Studio est terminée. Rouvrez vos brouillons."
 }

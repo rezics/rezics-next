@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import {
@@ -196,6 +196,7 @@ function StudioAccountVisit({
   draftCursor: string | null;
   resumePostId: string | null;
 }) {
+  const router = useRouter();
   const localWritingReader = useMemo(() => ownDraftBrowserWritingReader(() => window.localStorage), []);
   const visit = useOwnDraftVisit(ownDraftNativeReader, localWritingReader, ownDraftNativeCommandTransport, {
     scope: 'studio-account-drafts',
@@ -296,7 +297,19 @@ function StudioAccountVisit({
       };
       setLoaded({
         state: 'ready',
-        workspace: { input, port },
+        workspace: {
+          input,
+          port,
+          bookStart: {
+            native: hostedBookNative,
+            source,
+            viewer: page.viewer,
+            isCurrent,
+            navigate: (href) => {
+              void router.navigate({ href: localizeHref(href, { locale }) });
+            },
+          },
+        },
         preparing: page.state === 'preparing',
         resumeIssue,
       });
@@ -312,6 +325,7 @@ function StudioAccountVisit({
     locale,
     requestedCursor,
     resumePostId,
+    router,
     source,
     visit.active,
     visit.commands,

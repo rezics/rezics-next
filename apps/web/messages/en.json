@@ -12049,5 +12049,13 @@
   "studio_book_release_part": "Include chapters in {title} in the next release",
   "studio_book_release_chapter": "Include {title} in the next release",
   "studio_book_release_count": "{selected} of {total} chapters selected",
-  "studio_book_release_help": "Select chapters for the next release. Pinned versions stay unchanged."
+  "studio_book_release_help": "Select chapters for the next release. Pinned versions stay unchanged.",
+  "studio_book_start_label": "Start a Book",
+  "studio_book_start_help": "Create a private outline for this saved draft. The Post stays unchanged; publishing is separate.",
+  "studio_book_start_retry": "Retry the same Book start",
+  "studio_book_start_creating": "Creating private outline…",
+  "studio_book_start_confirming": "Confirming Book ownership…",
+  "studio_book_start_uncertain": "The result is not confirmed. Retry this same Book start before continuing.",
+  "studio_book_start_failed": "This draft could not start a Book. You can keep editing it.",
+  "studio_book_start_ended": "This Studio visit ended. Reopen your drafts to continue."
 }

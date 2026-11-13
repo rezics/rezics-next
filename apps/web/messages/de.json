@@ -12049,5 +12049,13 @@
   "studio_book_release_part": "Kapitel in {title} in die nächste Veröffentlichung aufnehmen",
   "studio_book_release_chapter": "{title} in die nächste Veröffentlichung aufnehmen",
   "studio_book_release_count": "{selected} von {total} Kapiteln ausgewählt",
-  "studio_book_release_help": "Kapitel für die nächste Veröffentlichung auswählen. Die angehefteten Versionen bleiben unverändert."
+  "studio_book_release_help": "Kapitel für die nächste Veröffentlichung auswählen. Die angehefteten Versionen bleiben unverändert.",
+  "studio_book_start_label": "Buch beginnen",
+  "studio_book_start_help": "Erstelle eine private Gliederung für diesen gespeicherten Entwurf. Der Beitrag bleibt unverändert; veröffentlicht wird separat.",
+  "studio_book_start_retry": "Diesen Buchstart erneut versuchen",
+  "studio_book_start_creating": "Private Gliederung wird erstellt…",
+  "studio_book_start_confirming": "Bucheigentum wird bestätigt…",
+  "studio_book_start_uncertain": "Das Ergebnis ist nicht bestätigt. Versuche denselben Buchstart erneut, bevor du fortfährst.",
+  "studio_book_start_failed": "Aus diesem Entwurf konnte kein Buch erstellt werden. Du kannst ihn weiter bearbeiten.",
+  "studio_book_start_ended": "Dieser Studio-Besuch ist beendet. Öffne deine Entwürfe erneut."
 }

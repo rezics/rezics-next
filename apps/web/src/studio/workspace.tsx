@@ -13,13 +13,26 @@ import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
 import { HostedInventoryVisit, hostedOwnerBookHref } from './hosted-inventory';
 import type { HostedHistoryBinding } from './hosted-history';
+import {
+  HostedBookStart,
+  savedOpeningForBook,
+  type HostedBookStartBinding,
+  type HostedBookStartState,
+} from './hosted-book-start';
+import { HostedBookStartAction } from './hosted-book-start-action';
 import './studio.css';
+
+const noBookStart: HostedBookStartState = { kind: 'idle' };
+const noSubscribe = () => () => {};
+const noSnapshot = () => noBookStart;
 
 export type StudioWorkspaceProps = {
   input: StudioInput;
   port: StudioPort;
   bookPort?: BookOrganizerPort;
   bookHistory?: HostedHistoryBinding;
+  /** Only the account-draft route supplies this capability; other document workspaces cannot start Books. */
+  bookStart?: HostedBookStartBinding;
   presentation?: StudioPresentation;
   /** Lets the mounted composition guard internal route navigation as well as browser departure. */
   onDepartureRiskChange?: (atRisk: boolean) => void;
@@ -36,11 +49,25 @@ function StudioVisit({
   port,
   bookPort,
   bookHistory,
+  bookStart,
   presentation = {},
   onDepartureRiskChange,
 }: StudioWorkspaceProps) {
   const [controller] = useState(() => new StudioController(input, port, bookPort));
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const [starter] = useState(() =>
+    bookStart
+      ? new HostedBookStart(bookStart, () =>
+          controller.hasUnresolvedCommand() ? null : savedOpeningForBook(controller.snapshot()),
+        )
+      : null,
+  );
+  const startState = useSyncExternalStore(
+    starter?.subscribe ?? noSubscribe,
+    starter?.snapshot ?? noSnapshot,
+    starter?.snapshot ?? noSnapshot,
+  );
+  const startingBook = starter?.locked() ?? false;
   const [tab, setTab] = useState<'write' | 'preview' | 'versions'>('write');
   const [navigation, setNavigation] = useState(false);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
@@ -54,11 +81,12 @@ function StudioVisit({
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
   const unresolved = controller.hasUnresolvedCommand();
   const atRisk = Boolean(
-    selected?.dirty || selected?.snapshotPending || selected?.uploading || state.busy || unresolved,
+    selected?.dirty || selected?.snapshotPending || selected?.uploading || state.busy || unresolved || startingBook,
   );
-  const blocked = Boolean(state.busy) || unresolved;
+  const blocked = Boolean(state.busy) || unresolved || startingBook;
 
   useEffect(() => controller.connect(), [controller]);
+  useEffect(() => starter?.connect(), [starter]);
   useEffect(() => {
     const wideLayout = window.matchMedia('(min-width: 64rem)');
     const syncNavigation = () => setNavigation(wideLayout.matches);
@@ -83,12 +111,12 @@ function StudioVisit({
     const save = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        void controller.save();
+        if (!startingBook) void controller.save();
       }
     };
     window.addEventListener('keydown', save);
     return () => window.removeEventListener('keydown', save);
-  }, [controller]);
+  }, [controller, startingBook]);
   useEffect(() => {
     if (
       !selected?.dirty ||
@@ -204,7 +232,15 @@ function StudioVisit({
           </div>
         </section>
       ) : null}
-      <div className="studio-layout">
+      {starter ? (
+        <HostedBookStartAction
+          state={startState}
+          eligible={Boolean(savedOpeningForBook(state)) && !unresolved && starter.isCurrent()}
+          start={starter.start}
+          retry={starter.retry}
+        />
+      ) : null}
+      <fieldset className="studio-layout min-w-0" disabled={startingBook}>
         <div id={`${id}-document`} className="studio-document" tabIndex={-1}>
           {selected ? (
             <>
@@ -267,6 +303,7 @@ function StudioVisit({
                   value={selected.title}
                   disabled={
                     !selected.source.permissions.edit ||
+                    startingBook ||
                     Boolean(state.busy === 'Publishing reviewed versions') ||
                     (unresolved && Boolean(state.review))
                   }
@@ -280,9 +317,11 @@ function StudioVisit({
                   label={input.profile.kind === 'book' ? 'Chapter document' : 'Article document'}
                   className="studio-rich-text"
                   toolbar="auto"
-                  readOnly={!selected.source.permissions.edit}
+                  readOnly={!selected.source.permissions.edit || startingBook}
                   disabled={
-                    Boolean(state.busy === 'Publishing reviewed versions') || (unresolved && Boolean(state.review))
+                    startingBook ||
+                    Boolean(state.busy === 'Publishing reviewed versions') ||
+                    (unresolved && Boolean(state.review))
                   }
                   onChange={(body) => {
                     if (editorCurrent()) controller.changeBody(body);
@@ -449,7 +488,7 @@ function StudioVisit({
             </div>
           </details>
         </aside>
-      </div>
+      </fieldset>
     </section>
   );
 }

@@ -12049,5 +12049,13 @@
   "studio_book_release_part": "「{title}」内の章を次の公開に含める",
   "studio_book_release_chapter": "「{title}」を次の公開に含める",
   "studio_book_release_count": "{total} 章中 {selected} 章を選択",
-  "studio_book_release_help": "次の公開に含める章を選択してください。固定されたバージョンは変わりません。"
+  "studio_book_release_help": "次の公開に含める章を選択してください。固定されたバージョンは変わりません。",
+  "studio_book_start_label": "本を作り始める",
+  "studio_book_start_help": "保存済みの下書きに非公開の目次を作成します。投稿は変更されず、公開は別の操作です。",
+  "studio_book_start_retry": "同じ本の作成を再試行",
+  "studio_book_start_creating": "非公開の目次を作成中…",
+  "studio_book_start_confirming": "本の所有者を確認中…",
+  "studio_book_start_uncertain": "結果を確認できません。同じ本の作成を再試行してから続けてください。",
+  "studio_book_start_failed": "この下書きから本を作成できませんでした。編集は続けられます。",
+  "studio_book_start_ended": "このStudioの操作は終了しました。下書きを開き直してください。"
 }

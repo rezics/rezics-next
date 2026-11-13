@@ -12049,5 +12049,13 @@
   "studio_book_release_part": "Incluir los capítulos de {title} en la próxima publicación",
   "studio_book_release_chapter": "Incluir {title} en la próxima publicación",
   "studio_book_release_count": "{selected} de {total} capítulos seleccionados",
-  "studio_book_release_help": "Selecciona los capítulos para la próxima publicación. Las versiones fijadas se conservan."
+  "studio_book_release_help": "Selecciona los capítulos para la próxima publicación. Las versiones fijadas se conservan.",
+  "studio_book_start_label": "Iniciar un libro",
+  "studio_book_start_help": "Crea un esquema privado para este borrador guardado. La publicación no cambia; publicar es un paso aparte.",
+  "studio_book_start_retry": "Reintentar el mismo inicio de libro",
+  "studio_book_start_creating": "Creando esquema privado…",
+  "studio_book_start_confirming": "Confirmando la propiedad del libro…",
+  "studio_book_start_uncertain": "El resultado no está confirmado. Reintenta este mismo inicio de libro antes de continuar.",
+  "studio_book_start_failed": "No se pudo iniciar un libro con este borrador. Puedes seguir editándolo.",
+  "studio_book_start_ended": "Esta sesión de Studio terminó. Vuelve a abrir tus borradores."
 }
