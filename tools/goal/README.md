@@ -3662,6 +3662,8 @@ from the current-attempt index; attempt-resource sweeps project only terminal ta
 and run Docker asynchronously; the daily audit reads unsettled tasks and removal reads finished tasks through the
 state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
 Decision: the periodic resource sweep inventories `/proc` once in yielding batches, maps processes only to unique terminal isolated worktrees, and rechecks process birth, cwd and indexed task ownership before TERM/KILL; immediate task cleanup and Docker selection keep their existing paths. Focused worker acceptance covers terminal-history scaling, unique-owner matching and socket responsiveness during chunked inventory; unchanged host lifecycle cases remain release checks.
+Decision: the terminal sweep excludes only a live process group bound to the current task, attempt and worktree, its authenticated typing-recovery grant and consumed stamp, and the exact registered running check and physical runner identity. Terminal siblings and existing Docker ownership continue through normal cleanup.
+Decision: terminal recovery sweep fixtures isolate Docker effects through the injected fake `DockerInvoke` seam because sweep options omit immediate-cleanup flags; the protected-group and terminal-sibling assertions remain unchanged.
 Decision: an idle daily-audit tick checks the current flow schema, UTC run row and failure outbox with reads before
 taking any SQLite write transaction. It acquires the existing transaction only for a pending migration, new audit
 claim or unreported failure, so a completed audit with an empty outbox cannot wait on another process's writer lock

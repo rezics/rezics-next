@@ -1312,6 +1312,221 @@ export type WorkerCheckHostConsumedTypingRecovery = {
   replacement: boolean;
 };
 
+export type WorkerCheckHostActiveTypingRecovery = {
+  token: string;
+  checkId: string;
+  physicalRunId: string;
+  runnerHost: string;
+  runnerIdentity: RunnerIdentity;
+};
+
+function isRunnerIdentity(value: unknown): value is RunnerIdentity {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const identity = value as Partial<RunnerIdentity>;
+  return (
+    Number.isSafeInteger(identity.pid) &&
+    identity.pid! > 0 &&
+    typeof identity.start === 'string' &&
+    /^\d+$/.test(identity.start) &&
+    typeof identity.boot === 'string' &&
+    identity.boot.length > 0 &&
+    Number.isSafeInteger(identity.group) &&
+    identity.group! > 0
+  );
+}
+
+function sameRunnerIdentity(left: RunnerIdentity, right: RunnerIdentity): boolean {
+  return left.pid === right.pid && left.start === right.start && left.boot === right.boot && left.group === right.group;
+}
+
+function authorizedTypingRecoveryEvent(db: Database, grant: TypingRecoveryGrant): boolean {
+  const rows = db
+    .query(
+      "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized' ORDER BY sequence DESC",
+    )
+    .all(grant.taskId, grant.attempt) as { body: string }[];
+  return rows.some(({ body: raw }) => {
+    let body: CheckEvidence;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+      body = parsed as CheckEvidence;
+    } catch {
+      return false;
+    }
+    const actor = body.actor as { id?: unknown; sessionId?: unknown } | null | undefined;
+    return (
+      body.token === grant.token &&
+      body.identity === grant.identity &&
+      body.checkId === grant.checkId &&
+      JSON.stringify(body.command) === JSON.stringify(grant.command) &&
+      (body.recoveryKind === undefined ? grant.recoveryKind === undefined : body.recoveryKind === grant.recoveryKind) &&
+      actor?.id === grant.actor.id &&
+      actor?.sessionId === grant.actor.sessionId
+    );
+  });
+}
+
+/**
+ * Return only the runner of a current stopped-task typing recovery whose authenticated grant was consumed into an
+ * exact check-host stamp and whose registered logical and physical run are still live on this host.
+ */
+export function workerCheckHostActiveTypingRecovery(input: {
+  db: Database;
+  stateDirectory: string;
+  taskId: string;
+  worktree: string;
+}): WorkerCheckHostActiveTypingRecovery | undefined {
+  const taskRow = input.db.query('SELECT current_attempt, body FROM worker_tasks WHERE id=?').get(input.taskId) as {
+    current_attempt: number;
+    body: string;
+  } | null;
+  if (!taskRow || !Number.isSafeInteger(taskRow.current_attempt) || taskRow.current_attempt < 1) return;
+  let task: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(taskRow.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    task = parsed as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (
+    task.id !== input.taskId ||
+    task.currentAttempt !== taskRow.current_attempt ||
+    task.state !== 'stopped' ||
+    task.worktree !== input.worktree ||
+    task.workspace
+  )
+    return;
+
+  const attemptRow = input.db
+    .query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+    .get(input.taskId, taskRow.current_attempt) as { body: string } | null;
+  if (!attemptRow) return;
+  let attempt: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(attemptRow.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    attempt = parsed as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (
+    attempt.taskId !== input.taskId ||
+    attempt.attempt !== taskRow.current_attempt ||
+    (attempt.state !== 'exited' && attempt.state !== 'stopped')
+  )
+    return;
+
+  const directory = workerCheckBudgetDirectory(input.stateDirectory, input.taskId, taskRow.current_attempt);
+  let names: string[];
+  try {
+    names = stampNames(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  const root = join(input.worktree, '.temp', 'goal', 'checks');
+  for (const name of names.reverse()) {
+    const stampSource = readOptionalCheckEvidence(join(directory, name));
+    if (stampSource.state !== 'present') continue;
+    const stamp = stampSource.value as WorkerCheckHostStampRecord;
+    const recovery = stamp.typingRecovery;
+    if (
+      !recovery ||
+      typeof stamp.content !== 'string' ||
+      !/^[0-9a-f]{40}$/.test(stamp.content) ||
+      !/^[0-9a-f-]{36}$/.test(recovery.token) ||
+      !isCheckId(recovery.checkId) ||
+      !isPhysicalRunId(recovery.physicalRunId)
+    )
+      continue;
+    const grantSource = readOptionalCheckEvidence(recoveryPath(directory, recovery.token));
+    const grant =
+      grantSource.state === 'present' ? (grantSource.value as CheckEvidence & TypingRecoveryGrant) : undefined;
+    if (
+      !grant ||
+      grant.version !== 1 ||
+      grant.token !== recovery.token ||
+      grant.taskId !== input.taskId ||
+      grant.attempt !== taskRow.current_attempt ||
+      grant.worktree !== input.worktree ||
+      grant.stateDirectory !== input.stateDirectory ||
+      grant.database !== input.db.filename ||
+      grant.stamp !== name ||
+      grant.checkId !== recovery.checkId ||
+      grant.physicalRunId !== recovery.physicalRunId ||
+      !/^[0-9a-f]{64}$/.test(grant.identity) ||
+      (grant.recoveryKind !== undefined && grant.recoveryKind !== 'withdrawn-budget-stop') ||
+      !Array.isArray(grant.command) ||
+      grant.command.some((part) => typeof part !== 'string') ||
+      !isKnownTypingCompiler(input.worktree, grant.command) ||
+      !grant.actor ||
+      typeof grant.actor.id !== 'string' ||
+      grant.actor.id.length === 0 ||
+      typeof grant.actor.sessionId !== 'string' ||
+      grant.actor.sessionId.length === 0 ||
+      !authorizedTypingRecoveryEvent(input.db, grant)
+    )
+      continue;
+
+    if (
+      existsSync(join(root, 'cancellations', `${grant.checkId}.json`)) ||
+      existsSync(join(root, 'custody', 'cancelled', `${grant.checkId}.json`)) ||
+      existsSync(join(root, 'custody', 'stopping', `${grant.checkId}.${grant.physicalRunId}.json`))
+    )
+      continue;
+
+    const resultSource = readOptionalCheckEvidence(join(root, 'results', `${grant.checkId}.json`));
+    const physicalSource = readOptionalCheckEvidence(
+      physicalHistoryPath(input.worktree, grant.checkId, grant.physicalRunId),
+    );
+    const result = resultSource.state === 'present' ? resultSource.value : undefined;
+    const physical = physicalSource.state === 'present' ? physicalSource.value : undefined;
+    const resultRunner = result && isRunnerIdentity(result.runnerIdentity) ? result.runnerIdentity : undefined;
+    const physicalRunner = physical && isRunnerIdentity(physical.runnerIdentity) ? physical.runnerIdentity : undefined;
+    if (
+      !result ||
+      result.id !== grant.checkId ||
+      result.cwd !== input.worktree ||
+      result.status !== 'running' ||
+      result.exitCode !== undefined ||
+      result.physicalRunId !== grant.physicalRunId ||
+      result.ownership?.taskId !== input.taskId ||
+      result.ownership.attempt !== taskRow.current_attempt ||
+      JSON.stringify(result.argv) !== JSON.stringify(grant.command) ||
+      typeof result.runnerHost !== 'string' ||
+      result.runnerHost !== hostname() ||
+      !resultRunner ||
+      result.runnerPid !== resultRunner.pid ||
+      !physical ||
+      physical.version !== 1 ||
+      physical.id !== grant.checkId ||
+      physical.cwd !== input.worktree ||
+      physical.status !== 'running' ||
+      physical.exitCode !== undefined ||
+      physical.terminalProof !== undefined ||
+      physical.physicalRunId !== grant.physicalRunId ||
+      physical.ownership?.taskId !== input.taskId ||
+      physical.ownership.attempt !== taskRow.current_attempt ||
+      JSON.stringify(physical.argv) !== JSON.stringify(grant.command) ||
+      physical.runnerHost !== result.runnerHost ||
+      !physicalRunner ||
+      !sameRunnerIdentity(physicalRunner, resultRunner) ||
+      !identityLive(resultRunner)
+    )
+      continue;
+
+    return {
+      token: grant.token,
+      checkId: grant.checkId,
+      physicalRunId: grant.physicalRunId,
+      runnerHost: result.runnerHost,
+      runnerIdentity: resultRunner,
+    };
+  }
+}
+
 /** Read only the current-input recovery whose grant is bound to a consumed budget stamp. */
 export function workerCheckHostConsumedTypingRecovery(input: {
   directory: string;
