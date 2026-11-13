@@ -34,6 +34,7 @@ import { onCheckHost } from './stack-run.ts';
 import { stopSpawned } from './walk-stack.ts';
 import { remoteLifetimeInfrastructureCause } from './worker-check.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
+import { processGroupMembers, processIdentity, sameProcess } from './check-custody.ts';
 import {
   DEFAULT_PREPARATION_TIMEOUT_MS,
   dependencyPreparationProgram,
@@ -541,6 +542,7 @@ test('a cached Bun whose revision does not match is not used, and the run downlo
 const fakeSsh = `#!/usr/bin/env bun
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 const positionals: string[] = [];
@@ -1066,6 +1068,12 @@ if (script.includes('/proc/loadavg')) {
   const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
   const releaseFile = config.controlledRuns ? dir + '/' + hostKey + '.release-run.' + process.pid : undefined;
   log({ kind: 'run', script, launchCommand, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld(), releaseFile });
+  if (config.proxyDescendant) {
+    const proxy = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'], {
+      stdio: 'inherit',
+    });
+    log({ kind: 'proxy-descendant', pid: proxy.pid, operationPid: process.pid });
+  }
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   const statusFile = dir + '/' + hostKey + '.status';
   if (config.treeBundle) {
@@ -1321,6 +1329,7 @@ type HostConfig = {
   controlCheckFail?: boolean;
   controlCheckDead?: boolean;
   exit?: number;
+  proxyDescendant?: boolean;
   lifetimeFailure?: boolean;
   transportFailures?: number;
   statusAlwaysFails?: boolean;
@@ -2139,6 +2148,7 @@ function startRemote(
   directory: string,
   command: string[] = ['bun', 'test'],
   options: string[] = [],
+  detached = false,
 ): {
   child: ReturnType<typeof Bun.spawn>;
   stdout: Promise<string>;
@@ -2151,6 +2161,7 @@ function startRemote(
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
+    detached,
   });
   const output = { stderr: '' };
   const stderr = (async () => {
@@ -5384,6 +5395,34 @@ test('a remote run reports how long it waited, synced, installed and ran', async
   }
   const script = events().find((event) => event.kind === 'run')!.script as string;
   expect(script).toContain('remote-check: run used');
+});
+
+test('finished SSH runs reap only their proxy group and preserve both native results', async () => {
+  const sentinel = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' });
+  const sentinelIdentity = processIdentity(sentinel.pid!);
+  expect(sentinelIdentity).not.toBeNull();
+  try {
+    for (const exit of [0, 1]) {
+      const fixture = scenario({ a: { available: 8e9, slots: 2, proxyDescendant: true, exit } });
+      const run = startRemote(fixture.env, workspace(), ['true'], [], true);
+      const worker = processIdentity(run.child.pid!);
+      expect(worker?.group).toBe(run.child.pid);
+      const [code, , stderr] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
+      expect(code, stderr).toBe(exit);
+      const proxy = fixture.events().find((event) => event.kind === 'proxy-descendant');
+      expect(proxy).toBeDefined();
+      expect(processGroupMembers(Number(proxy!.operationPid))).toEqual([]);
+      expect(processGroupMembers(worker!.group)).toEqual([]);
+      expect(sameProcess(sentinelIdentity!)).toBe(true);
+      expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+    }
+  } finally {
+    if (sentinel.exitCode === null && sentinel.signalCode === null) {
+      const exited = new Promise<void>((resolve) => sentinel.once('exit', () => resolve()));
+      sentinel.kill('SIGTERM');
+      await exited;
+    }
+  }
 });
 
 /** Executes generated host scripts with local cgroup files and command fakes, never SSH or the real Docker daemon. */

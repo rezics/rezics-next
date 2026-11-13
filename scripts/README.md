@@ -214,6 +214,10 @@ multiplexed through it (their rsync sessions end with exit 255). A socket file l
 `-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists, disabling
 multiplexing` and every connection pays a full handshake.
 
+Decision: each per-run SSH transport has an identity-fenced process group, and its remaining local descendants are
+reaped within a short bound after preserving the SSH result; uncertainty keeps transport cleanup unverified, while
+the existing host lease continues to own shared ControlMaster recovery.
+
 Once original supervisor and command terminal custody is established, admission cleanup accepts a verified absent
 owned scope or slice. A started run without its supervisor evidence remains retained. Systemd bus and stop failures
 keep their diagnostics; unit absence alone does not prove whole-run cleanup. Marker descriptor helpers scope stderr

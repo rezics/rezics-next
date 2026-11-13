@@ -12,10 +12,13 @@
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { processIdentity, terminateDetachedGroup, type RunnerIdentity } from './check-custody.ts';
 
 export const CONTROL_MASTER = 'auto';
 export const CONTROL_PERSIST = '10m';
 export const SSH_CONTROL_DIR_MODE = 0o700;
+/** A finished SSH operation gets 250 ms to close its own descendants before exact SIGKILL cleanup. */
+export const SSH_OPERATION_CLEANUP_GRACE_MS = 250;
 /**
  * ConnectTimeout bounds only the TCP connect; banner exchange, key exchange and authentication run unbounded. A cold
  * master on a loaded check host took 57 s on 2026-11-06, so the probe waits well past that before it gives up.
@@ -40,6 +43,58 @@ export type SshControlHost = {
   readonly address: string;
   readonly identity: string;
 };
+
+export type OwnedSshTransport = {
+  readonly child: ReturnType<typeof Bun.spawn>;
+  readonly identity: RunnerIdentity | null;
+};
+
+export type OwnedSshTransportCleanup = { terminal: true } | { terminal: false; reason: string };
+
+/** Start one SSH operation in a process group that cannot include its caller or a peer transport. */
+export function spawnOwnedSshTransport(
+  argv: string[],
+  options: Parameters<typeof Bun.spawn>[1] = {},
+): OwnedSshTransport {
+  const child = Bun.spawn(argv, { ...options, detached: true });
+  const identity = processIdentity(child.pid);
+  const caller = processIdentity();
+  return {
+    child,
+    identity: identity?.group === child.pid && identity.group !== caller?.group ? identity : null,
+  };
+}
+
+/** Bounded, identity-fenced cleanup of only this SSH invocation's descendants. */
+export async function reapOwnedSshTransport(
+  operation: OwnedSshTransport,
+  graceMs = SSH_OPERATION_CLEANUP_GRACE_MS,
+): Promise<OwnedSshTransportCleanup> {
+  if (!operation.identity) {
+    if ((await within(graceMs, operation.child.exited)) === null) {
+      try {
+        operation.child.kill('SIGTERM');
+      } catch {
+        // The exact spawn handle may already have exited.
+      }
+      if ((await within(1_000, operation.child.exited)) === null) {
+        try {
+          operation.child.kill('SIGKILL');
+        } catch {
+          // The exact spawn handle may already have exited.
+        }
+        if ((await within(1_000, operation.child.exited)) === null)
+          return { terminal: false, reason: 'SSH client exit is unverified without its process identity' };
+      }
+    }
+    return { terminal: false, reason: 'SSH descendants are unverified without a verifiable process-group identity' };
+  }
+  const result = await terminateDetachedGroup(operation.identity, graceMs);
+  if (!result.terminal) return { terminal: false, reason: result.reason ?? 'SSH process group cleanup is unverified' };
+  if ((await within(1_000, operation.child.exited)) === null)
+    return { terminal: false, reason: 'SSH client exit was not observed after its process group emptied' };
+  return { terminal: true };
+}
 
 export const SSH_DIAGNOSTIC_TAIL_BYTES = 4096;
 
@@ -241,22 +296,11 @@ async function within<T>(timeoutMs: number, work: Promise<T>): Promise<T | null>
   }
 }
 
-async function stopAndReap(child: ReturnType<typeof Bun.spawn>): Promise<void> {
-  try {
-    child.kill('SIGTERM');
-  } catch {
-    // The multiplexed helper may already have exited.
-  }
-  if ((await within(1_000, child.exited)) !== null) return;
-  try {
-    child.kill('SIGKILL');
-  } catch {
-    // The helper is already gone.
-  }
-  await child.exited;
+async function stopAndReap(operation: OwnedSshTransport): Promise<OwnedSshTransportCleanup> {
+  return reapOwnedSshTransport(operation);
 }
 
-export type MasterControlResult = { code: number; output: string; timedOut?: boolean };
+export type MasterControlResult = { code: number; output: string; cleanupTerminal: boolean; timedOut?: boolean };
 
 /** OpenSSH warns about a stale socket and then connects directly; the warning is not the failure. */
 const MULTIPLEX_WARNING = /disabling multiplexing/;
@@ -298,28 +342,32 @@ async function masterControl(
   operation: 'check' | 'exit',
   timeoutMs: number,
 ): Promise<MasterControlResult> {
-  const child = Bun.spawn(sshControlArgv(host, directory, operation), {
+  const transport = spawnOwnedSshTransport(sshControlArgv(host, directory, operation), {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
     env: process.env,
   });
+  const child = transport.child;
   const output = Promise.all([
     new Response(child.stdout).text(),
     child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
   ]).then(([stdout, stderr]) => stdout + stderr);
   const code = await within(timeoutMs, child.exited);
-  if (code === null) {
-    await stopAndReap(child);
-    return { code: 255, output: await output, timedOut: true };
-  }
-  return { code, output: await output };
+  const cleanup = await stopAndReap(transport);
+  const text = cleanup.terminal ? await output : '';
+  return {
+    code: code ?? 255,
+    output: text,
+    cleanupTerminal: cleanup.terminal,
+    ...(code === null ? { timedOut: true } : {}),
+  };
 }
 
 /** True when the host's persisted master is alive and accepting multiplexed sessions. */
 export async function hostMasterIsLive(host: SshControlHost, directory: string, timeoutMs = 1_000): Promise<boolean> {
   const result = await masterControl(host, directory, 'check', timeoutMs);
-  return result.code === 0;
+  return result.code === 0 && result.cleanupTerminal;
 }
 
 /**
@@ -337,7 +385,12 @@ export async function dropStaleHostMaster(host: SshControlHost, directory: strin
 }
 
 function deadMasterEvidence(result: MasterControlResult): boolean {
-  return !result.timedOut && result.code !== 0 && /Connection refused|No such file or directory/.test(result.output);
+  return (
+    result.cleanupTerminal &&
+    !result.timedOut &&
+    result.code !== 0 &&
+    /Connection refused|No such file or directory/.test(result.output)
+  );
 }
 
 type FlockHold = { release: () => Promise<void> };
@@ -560,17 +613,24 @@ export async function acquireHostControl(
     let lastDetail = 'control probe failed';
     for (let attempt = 0; attempt < 2; attempt += 1) {
       // The shared lease spans probe startup and the entire run; retirement cannot race successful admission.
-      const child = Bun.spawn(
+      const transport = spawnOwnedSshTransport(
         sshControlArgv(host, root, undefined, `# REMOTE_CHECK_CONTROL_PROBE\nprintf '${CONTROL_OK}\\n'`),
         { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
       );
+      const child = transport.child;
       const output = Promise.all([
         new Response(child.stdout).text(),
         child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
       ]).then(([stdout, stderr]) => stdout + stderr);
       const code = await within(timeoutMs, child.exited);
+      const cleanup = await stopAndReap(transport);
+      if (!cleanup.terminal) {
+        const result = code === null ? 'control probe timed out' : `control probe exited ${code}`;
+        throw new Error(
+          `remote-check: connection to ${host.name} failed during control probe: ${result}; ${cleanup.reason}`,
+        );
+      }
       if (code === null) {
-        await stopAndReap(child);
         lastDetail = probeFailureDetail(await output, null);
         if (attempt === 1)
           throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);

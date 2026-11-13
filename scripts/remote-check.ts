@@ -43,12 +43,15 @@ import {
   DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   notePlacementProbeTimeout,
   recoverHungHostMaster,
+  reapOwnedSshTransport,
   releaseHostControl,
   rsyncRemoteShell,
+  spawnOwnedSshTransport,
   sshControlDirectory,
   sshControlOptions,
   sshExecutable,
   type HostControlLease,
+  type OwnedSshTransport,
 } from './check-ssh.ts';
 
 export { controlSocketDirectoryPath, sshControlDirectory, unixListenerFits } from './check-ssh.ts';
@@ -8258,6 +8261,8 @@ async function runLeased(
   let commandTerminal = false;
   let preserveRemoteRun = false;
   let run: ReturnType<typeof Bun.spawn> | undefined;
+  let runTransport: OwnedSshTransport | undefined;
+  let transportCleanupAttempted = false;
   let transportChildReaped = true;
   let native: RemotePhysicalRunReceipt | null = null;
   let preparedInputs: RemotePreparedInputsEvidence | null = null;
@@ -8289,6 +8294,20 @@ async function runLeased(
   let liveExecutionStartUnavailableReason: string | undefined;
   let phaseChannelWarningPrinted = false;
   const cleanupFailures: string[] = [];
+  const settleRunTransport = async (): Promise<void> => {
+    if (transportCleanupAttempted) return;
+    transportCleanupAttempted = true;
+    if (!runTransport) {
+      if (run) await run.exited;
+      transportChildReaped = true;
+      return;
+    }
+    const settled = await reapOwnedSshTransport(runTransport);
+    transportChildReaped = settled.terminal;
+    if (!settled.terminal) {
+      cleanupFailures.push(`local SSH transport cleanup is unverified: ${settled.reason}`);
+    }
+  };
   const phaseClockId = `remote-check-client:${process.pid}`;
   const publishPhaseEvent = (event: RemoteCheckPhaseEvent): boolean => {
     if (!options.phaseEvent) return false;
@@ -8344,12 +8363,18 @@ async function runLeased(
         hostMemoryPerRunGiB(host),
       ),
     );
-    const launch = () =>
-      Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, envelope.command], {
-        stdin: envelope.stdin,
-        stdout: 'inherit',
-        stderr: 'inherit',
-      });
+    const launch = () => {
+      runTransport = spawnOwnedSshTransport(
+        [sshExecutable(), ...sshOptions(host, connectionId), host.address, envelope.command],
+        {
+          stdin: envelope.stdin,
+          stdout: 'inherit',
+          stderr: 'inherit',
+        },
+      );
+      transportChildReaped = false;
+      return runTransport.child;
+    };
     run = options.spawnWithCustody ? await options.spawnWithCustody({ host: host.name, run: id }, launch) : launch();
     transportChildReaped = false;
     const maxMs = effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
@@ -8442,8 +8467,6 @@ async function runLeased(
             stopped.code || REMOTE_TRANSPORT_FAILURE,
             false,
           );
-        run.kill('SIGTERM');
-        await run.exited;
         commandTerminal = true;
         code = REMOTE_DEADLINE_EXIT;
       } else {
@@ -8454,6 +8477,7 @@ async function runLeased(
       clearInterval(heartbeat);
       if (phasePoll) clearInterval(phasePoll);
       if (deadlineTimer) clearTimeout(deadlineTimer);
+      await settleRunTransport();
       // No heartbeat channel may touch the run after its result is collected or its directory is removed.
       await Promise.all([...heartbeatChildren].map(stopAndReap));
     }
@@ -8491,7 +8515,7 @@ async function runLeased(
             stopped.code || REMOTE_TRANSPORT_FAILURE,
             false,
           );
-        await run.exited;
+        await settleRunTransport();
         commandTerminal = true;
         code = REMOTE_DEADLINE_EXIT;
       } else {
@@ -8564,27 +8588,12 @@ async function runLeased(
   } catch (error) {
     primaryFailure ??= error;
   } finally {
-    if (!commandTerminal && run) {
+    if (run || runTransport) {
       try {
-        run.kill('SIGTERM');
-      } catch {
-        // The SSH client may already have exited; releasing the lease runs the host-side orphan stop first.
-      }
-      try {
-        await run.exited;
-        transportChildReaped = true;
+        await settleRunTransport();
       } catch (error) {
         cleanupFailures.push(
-          `transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
-        );
-      }
-    } else if (run) {
-      try {
-        await run.exited;
-        transportChildReaped = true;
-      } catch (error) {
-        cleanupFailures.push(
-          `transport child reap failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
+          `transport child cleanup failed: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`,
         );
       }
     }
