@@ -673,8 +673,7 @@ export function readTypingInputReceipt(
   const validOutputs =
     value.outputs === undefined ? !clientPipeline : same(value.outputs, ['kernel-client-v1']) && clientPipeline;
   const validOutputBinding =
-    value.outputBinding === undefined ||
-    (clientPipeline && isKernelClientOutputBinding(value.outputBinding));
+    value.outputBinding === undefined || (clientPipeline && isKernelClientOutputBinding(value.outputBinding));
   const validSnapshot = (snapshot: TypingInputs): boolean =>
     Boolean(
       snapshot &&
@@ -745,13 +744,15 @@ function verifiedPublishedKernelClientOutput(root: string, receipt: TypingInputR
     const outputBinding = receipt.outputBinding;
     if (!outputBinding) return false;
     const require = createRequire(import.meta.url);
-    const owner = require('../../../scripts/check-output-tree.ts') as typeof import('../../../scripts/check-output-tree.ts');
+    const owner =
+      require('../../../scripts/check-output-tree.ts') as typeof import('../../../scripts/check-output-tree.ts');
     const transport = owner.readOutputTreeFile(root, owner.KERNEL_CLIENT_OUTPUT.transport);
     const publicationPath = join(dirname(owner.KERNEL_CLIENT_OUTPUT.root), '.kernel-output-tree/receipt.json');
     const publication = JSON.parse(owner.readOutputTreeFile(root, publicationPath, 4096).toString('utf8')) as {
       authority?: { host?: unknown; run?: unknown };
     };
-    if (publication.authority?.host !== outputBinding.host || publication.authority?.run !== outputBinding.run) return false;
+    if (publication.authority?.host !== outputBinding.host || publication.authority?.run !== outputBinding.run)
+      return false;
     owner.verifyPublishedOutputTree(root, transport);
     return true;
   } catch {
@@ -801,8 +802,7 @@ export function typingFailureInputsMatch(
       same(currentGenerated, baselineGenerated) &&
       same(baselineGenerated, startedGenerated) &&
       same(startedGenerated, completedGenerated);
-    verifiedOutput =
-      same(currentGenerated, completedGenerated) && verifiedPublishedKernelClientOutput(root, receipt);
+    verifiedOutput = same(currentGenerated, completedGenerated) && verifiedPublishedKernelClientOutput(root, receipt);
     if (!unchangedGeneratedInputs && !verifiedOutput) return false;
   }
 

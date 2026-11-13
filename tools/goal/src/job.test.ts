@@ -126,11 +126,7 @@ async function typingRetryFixture(
   }));
 
   const compiler = kernelOutput
-    ? [
-        'sh',
-        '-c',
-        'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck',
-      ]
+    ? ['sh', '-c', 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck']
     : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
   const checkId = randomUUID();
   const physicalRunId = randomUUID();

@@ -452,10 +452,14 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
   const publication = JSON.parse(readFileSync(join(root, publicationPath), 'utf8')) as {
     authority: { host: string; run: string };
   };
-  write(root, publicationPath, JSON.stringify({
-    ...publication,
-    authority: { ...publication.authority, run: 'foreign-pipeline-run' },
-  }));
+  write(
+    root,
+    publicationPath,
+    JSON.stringify({
+      ...publication,
+      authority: { ...publication.authority, run: 'foreign-pipeline-run' },
+    }),
+  );
   expect(typingFailureInputsMatch(root, failedReceipt, receipt.started.prepared)).toBe(false);
   expect(qualifyTypingInputs(root, receipt)).toBe('evidence-unavailable');
   write(root, publicationPath, JSON.stringify(publication));

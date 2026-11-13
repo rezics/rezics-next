@@ -79,22 +79,22 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       const stopSettledAt = Date.parse(stop?.settledAt ?? '');
       validStoppedRetry = Boolean(
         stop &&
-          stop.operation === 'stop' &&
-          stop.state === 'complete' &&
-          stop.processIdentity === 'known' &&
-          stop.settledAt &&
-          attempt.endedAt &&
-          stop.process &&
-          attempt.process &&
-          JSON.stringify(stop.process) === JSON.stringify(attempt.process) &&
-          JSON.stringify(stop.auxiliaryProcesses) === JSON.stringify(attempt.auxiliaryProcesses ?? []) &&
-          [endedAt, stopRequestedAt, stopSettledAt, retryQueuedAt].every(Number.isFinite) &&
-          stopRequestedAt > endedAt &&
-          stopSettledAt >= stopRequestedAt &&
-          retryQueuedAt > stopSettledAt &&
-          !sameProcess(stop.process) &&
-          (attempt.driver === null || !sameProcess(attempt.driver)) &&
-          [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses].every((identity) => !sameProcess(identity)),
+        stop.operation === 'stop' &&
+        stop.state === 'complete' &&
+        stop.processIdentity === 'known' &&
+        stop.settledAt &&
+        attempt.endedAt &&
+        stop.process &&
+        attempt.process &&
+        JSON.stringify(stop.process) === JSON.stringify(attempt.process) &&
+        JSON.stringify(stop.auxiliaryProcesses) === JSON.stringify(attempt.auxiliaryProcesses ?? []) &&
+        [endedAt, stopRequestedAt, stopSettledAt, retryQueuedAt].every(Number.isFinite) &&
+        stopRequestedAt > endedAt &&
+        stopSettledAt >= stopRequestedAt &&
+        retryQueuedAt > stopSettledAt &&
+        !sameProcess(stop.process) &&
+        (attempt.driver === null || !sameProcess(attempt.driver)) &&
+        [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses].every((identity) => !sameProcess(identity)),
       );
     } else if (attempt.state === 'exited') {
       const endedAt = Date.parse(attempt.endedAt ?? '');
@@ -105,40 +105,41 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       let capturedHead: unknown;
       try {
         const progress: unknown = progressEvent ? JSON.parse(progressEvent.body) : undefined;
-        capturedHead = progress && typeof progress === 'object' ? (progress as { endHead?: unknown }).endHead : undefined;
+        capturedHead =
+          progress && typeof progress === 'object' ? (progress as { endHead?: unknown }).endHead : undefined;
       } catch {
         capturedHead = undefined;
       }
       const currentHead = branchHead(task);
       validExitedAmendment = Boolean(
         attempt.failureKind === null &&
-          attempt.exitCode === 0 &&
-          !attempt.terminationIntent &&
-          attempt.endedAt &&
-          Number.isFinite(endedAt) &&
-          Number.isFinite(retryQueuedAt) &&
-          retryQueuedAt > endedAt &&
-          Number.isFinite(acceptedAt) &&
-          acceptedAt > endedAt &&
-          acceptedAt <= retryQueuedAt &&
-          Array.isArray(attempt.typingEvidencePending?.command) &&
-          attempt.typingEvidencePending.command.length > 0 &&
-          amendment &&
-          acceptedAmendment &&
-          acceptedAmendment.writtenForAttempt === ref.attempt &&
-          briefHash(acceptedAmendment.markdown) === acceptedAmendment.newBriefHash &&
-          acceptedAmendment.previousBriefHash === amendment.previousBriefHash &&
-          acceptedAmendment.newBriefHash === amendment.newBriefHash &&
-          /^[a-f0-9]{64}$/.test(amendment.previousBriefHash) &&
-          /^[a-f0-9]{64}$/.test(amendment.newBriefHash) &&
-          amendment.previousBriefHash !== amendment.newBriefHash &&
-          amendment.newBriefHash === briefHash(task.brief.markdown) &&
-          typeof capturedHead === 'string' &&
-          /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(capturedHead) &&
-          currentHead === capturedHead &&
-          ![attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
-            (identity) => identity !== null && sameProcess(identity),
-          ),
+        attempt.exitCode === 0 &&
+        !attempt.terminationIntent &&
+        attempt.endedAt &&
+        Number.isFinite(endedAt) &&
+        Number.isFinite(retryQueuedAt) &&
+        retryQueuedAt > endedAt &&
+        Number.isFinite(acceptedAt) &&
+        acceptedAt > endedAt &&
+        acceptedAt <= retryQueuedAt &&
+        Array.isArray(attempt.typingEvidencePending?.command) &&
+        attempt.typingEvidencePending.command.length > 0 &&
+        amendment &&
+        acceptedAmendment &&
+        acceptedAmendment.writtenForAttempt === ref.attempt &&
+        briefHash(acceptedAmendment.markdown) === acceptedAmendment.newBriefHash &&
+        acceptedAmendment.previousBriefHash === amendment.previousBriefHash &&
+        acceptedAmendment.newBriefHash === amendment.newBriefHash &&
+        /^[a-f0-9]{64}$/.test(amendment.previousBriefHash) &&
+        /^[a-f0-9]{64}$/.test(amendment.newBriefHash) &&
+        amendment.previousBriefHash !== amendment.newBriefHash &&
+        amendment.newBriefHash === briefHash(task.brief.markdown) &&
+        typeof capturedHead === 'string' &&
+        /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(capturedHead) &&
+        currentHead === capturedHead &&
+        ![attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
+          (identity) => identity !== null && sameProcess(identity),
+        ),
       );
     }
     if (!validStoppedRetry && !validExitedAmendment) return false;
@@ -194,20 +195,20 @@ export function hasQueuedTypingSourceRepair(tasks: WorkerTasks, ref: AttemptRef)
   const proposal = store.newestPendingBriefProposal(task.id);
   return Boolean(
     task.currentAttempt === ref.attempt &&
-      task.state === 'ready' &&
-      task.brief.kind !== 'verification' &&
-      attempt.state === 'exited' &&
-      (attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result)) &&
-      amendment &&
-      proposal &&
-      proposal.writtenForAttempt === ref.attempt &&
-      proposal.previousBriefHash === amendment.previousBriefHash &&
-      proposal.newBriefHash === amendment.newBriefHash &&
-      /^[a-f0-9]{64}$/.test(amendment.previousBriefHash) &&
-      /^[a-f0-9]{64}$/.test(amendment.newBriefHash) &&
-      amendment.newBriefHash !== amendment.previousBriefHash &&
-      briefHash(proposal.markdown) === proposal.newBriefHash &&
-      proposal.newBriefHash === briefHash(task.brief.markdown),
+    task.state === 'ready' &&
+    task.brief.kind !== 'verification' &&
+    attempt.state === 'exited' &&
+    (attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result)) &&
+    amendment &&
+    proposal &&
+    proposal.writtenForAttempt === ref.attempt &&
+    proposal.previousBriefHash === amendment.previousBriefHash &&
+    proposal.newBriefHash === amendment.newBriefHash &&
+    /^[a-f0-9]{64}$/.test(amendment.previousBriefHash) &&
+    /^[a-f0-9]{64}$/.test(amendment.newBriefHash) &&
+    amendment.newBriefHash !== amendment.previousBriefHash &&
+    briefHash(proposal.markdown) === proposal.newBriefHash &&
+    proposal.newBriefHash === briefHash(task.brief.markdown),
   );
 }
 
