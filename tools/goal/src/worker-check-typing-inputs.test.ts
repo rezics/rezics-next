@@ -635,7 +635,15 @@ test('the exact Kernel schema emitter captures local files and projects only sta
   const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-schema=content'];
   const markers = ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'];
   const host = 'check-host-a';
-  write(root, 'services/kernel/package.json', JSON.stringify({ name: '@rezics/kernel', scripts: { typecheck: 'bun scripts/typecheck.ts' }, dependencies: { fixture: '1' } }));
+  write(
+    root,
+    'services/kernel/package.json',
+    JSON.stringify({
+      name: '@rezics/kernel',
+      scripts: { typecheck: 'bun scripts/typecheck.ts' },
+      dependencies: { fixture: '1' },
+    }),
+  );
   write(root, 'services/kernel/tsconfig.json', '{"extends":"../../tsconfig.base.json","include":["src","scripts"]}');
   write(root, 'services/kernel/scripts/typecheck.ts', 'export {};');
   write(root, 'services/kernel/src/index.ts', 'export const ready = true;');
@@ -647,7 +655,14 @@ test('the exact Kernel schema emitter captures local files and projects only sta
   const controls: Record<string, object> = {
     '.preparation-started': { ...owned, deadline: 1000, limitMs: 60_000 },
     '.remote-check-supervisor': { ...owned, pid: 42, started: '1', group: 42, uid: 1000 },
-    'preparation-install.json': { ...owned, cache: 'hit', nativeCache: null, key: 'a'.repeat(64), packages: [], nativeChecks: [] },
+    'preparation-install.json': {
+      ...owned,
+      cache: 'hit',
+      nativeCache: null,
+      key: 'a'.repeat(64),
+      packages: [],
+      nativeChecks: [],
+    },
   };
   for (const [path, value] of Object.entries(controls)) write(root, path, JSON.stringify(value));
 
@@ -675,13 +690,44 @@ test('the exact Kernel schema emitter captures local files and projects only sta
 
   const legacy = captureTypingInputs(root, ['bun', 'unknown-compiler.ts']);
   legacy.prepared = forward.completed.prepared;
-  const retained: TypingInputReceipt = { version: 1, physicalRunId: physical, command, compilerCommand: command, started: legacy, completed: legacy, sourceStable: true, exitCode: 0 };
+  const retained: TypingInputReceipt = {
+    version: 1,
+    physicalRunId: physical,
+    command,
+    compilerCommand: command,
+    started: legacy,
+    completed: legacy,
+    sourceStable: true,
+    exitCode: 0,
+  };
   const controller = mkdtempSync(join(dirname(root), 'typing-controller-'));
   roots.push(controller);
   const budget = workerCheckBudgetDirectory(controller, 'schema-emission', 1);
   mkdirSync(budget, { recursive: true });
-  write(budget, '1', JSON.stringify({ includedTypecheck: true, exitCode: 0, typingRequest: { physicalRunId: physical, command, localPrepared: [], capture: 'physical-command' }, typingInputs: retained }));
-  write(budget, '2', JSON.stringify({ includedTypecheck: true, exitCode: 0, typingRequest: { physicalRunId: 'b2b2b2b2-2222-4222-8222-222222222222', command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'], localPrepared: [], capture: 'physical-command' } }));
+  write(
+    budget,
+    '1',
+    JSON.stringify({
+      includedTypecheck: true,
+      exitCode: 0,
+      typingRequest: { physicalRunId: physical, command, localPrepared: [], capture: 'physical-command' },
+      typingInputs: retained,
+    }),
+  );
+  write(
+    budget,
+    '2',
+    JSON.stringify({
+      includedTypecheck: true,
+      exitCode: 0,
+      typingRequest: {
+        physicalRunId: 'b2b2b2b2-2222-4222-8222-222222222222',
+        command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'],
+        localPrepared: [],
+        capture: 'physical-command',
+      },
+    }),
+  );
   for (const marker of markers) rmSync(join(root, marker));
   expect(workerCheckHostTypingSettlement({ directory: budget, worktree: root, limit: 2 })).toEqual({ ok: true });
   for (const [path, value] of Object.entries(controls)) write(root, path, JSON.stringify(value));
