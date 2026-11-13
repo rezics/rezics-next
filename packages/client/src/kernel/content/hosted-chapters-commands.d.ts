@@ -36,7 +36,7 @@ export declare function prepareHostedPublicationPointCommand(deps: HostedCommand
     authorization: CommandAuthorization;
     prepared(time: AuthoritativeTime): Readonly<{
         selection: import("./hosted-publication-point-selection.ts").HostedPointSelection;
-        publicEligibility: import("./hosted-publication-point-eligibility.ts").HostedPointPublicEligibility;
-        final(): Promise<void>;
+        disclosureEligibility: import("./hosted-publication-point-eligibility.ts").HostedPointDisclosureEligibility;
+        final(client: import("../request/access.ts").AccessClient): Promise<void>;
     }>;
 }>;
