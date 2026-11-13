@@ -397,6 +397,7 @@ Stale revisions preserve drafts for comparison. CAS is not coediting; a later CR
 reconnect, schema migration and erasure proof. Published snapshots stay exact.
 
 ### Shared versioned outline primitive
+
 Implementation decision: the shared core uses stable-ID implicit AVL nodes with `treeParentId` distinct from
 containment, bigint count/chapter aggregates, root-checked rank/select, and one selected-snapshot/read-set plus
 transaction write overlay for split, arbitrary-height join, splice and range move.
