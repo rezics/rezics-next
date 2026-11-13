@@ -400,6 +400,48 @@ END $$;
 
 
 --
+-- Name: bump_publication_authority(integer); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.bump_publication_authority(home integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE core.publication_authority_epoch
+     SET epoch=epoch+1
+   WHERE home_no=home;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Publication authority home is not installed' USING ERRCODE='23514';
+  END IF;
+END;
+$$;
+
+
+--
+-- Name: bump_publication_authority_route_row(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.bump_publication_authority_route_row() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  route_value integer;
+BEGIN
+  IF TG_OP='DELETE' THEN
+    route_value := (to_jsonb(OLD)->>'route')::integer;
+  ELSE
+    route_value := (to_jsonb(NEW)->>'route')::integer;
+  END IF;
+  PERFORM core.bump_publication_authority(route_value / 16);
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: check_agent_identity_history(uuid, jsonb, jsonb, jsonb, text); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -1085,6 +1127,30 @@ $$;
 
 
 --
+-- Name: lock_publication_authority(integer[]); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.lock_publication_authority(homes integer[]) RETURNS TABLE(home_no integer, generation uuid, epoch bigint)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  selected_home integer;
+BEGIN
+  FOR selected_home IN
+    SELECT DISTINCT value FROM unnest(COALESCE(homes,'{}'::integer[])) AS requested(value)
+    ORDER BY value
+  LOOP
+    RETURN QUERY
+      SELECT authority.home_no,authority.generation,authority.epoch
+      FROM core.publication_authority_epoch authority
+      WHERE authority.home_no=selected_home
+      FOR UPDATE;
+  END LOOP;
+END;
+$$;
+
+
+--
 -- Name: operational_work_custody_guard(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -1417,6 +1483,25 @@ BEGIN
  END IF;
  RETURN NEW;
 END; $$;
+
+
+--
+-- Name: reset_publication_authority_on_move(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.reset_publication_authority_on_move() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF ROW(NEW.node,NEW.write_state,NEW.moved_to,NEW.epoch)
+       IS DISTINCT FROM ROW(OLD.node,OLD.write_state,OLD.moved_to,OLD.epoch) THEN
+    UPDATE core.publication_authority_epoch
+       SET generation=gen_random_uuid(),epoch=0
+     WHERE home_no=NEW.partition_no;
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
 
 --
@@ -2483,6 +2568,19 @@ CREATE TABLE core.preference_history_job (
 
 
 --
+-- Name: publication_authority_epoch; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.publication_authority_epoch (
+    home_no integer NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    epoch bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT publication_authority_epoch_epoch_check CHECK ((epoch >= 0)),
+    CONSTRAINT publication_authority_epoch_home_no_check CHECK (((home_no >= 0) AND (home_no <= 4095)))
+);
+
+
+--
 -- Name: publisher_operation; Type: TABLE; Schema: core; Owner: -
 --
 
@@ -3072,6 +3170,14 @@ ALTER TABLE ONLY core.partition
 
 ALTER TABLE ONLY core.preference_history_job
     ADD CONSTRAINT preference_history_job_pkey PRIMARY KEY (job_id);
+
+
+--
+-- Name: publication_authority_epoch publication_authority_epoch_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.publication_authority_epoch
+    ADD CONSTRAINT publication_authority_epoch_pkey PRIMARY KEY (home_no);
 
 
 --
@@ -3950,6 +4056,13 @@ ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_wo
 
 
 --
+-- Name: partition partition_publication_authority_move; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER partition_publication_authority_move AFTER UPDATE OF node, write_state, moved_to, epoch ON core.partition FOR EACH ROW EXECUTE FUNCTION core.reset_publication_authority_on_move();
+
+
+--
 -- Name: consumer_checkpoint public_filter_creation_checkpoint_retained; Type: TRIGGER; Schema: core; Owner: -
 --
 
@@ -4292,6 +4405,14 @@ ALTER TABLE ONLY core.preference_history_job
 
 ALTER TABLE ONLY core.preference_history_job
     ADD CONSTRAINT preference_history_job_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: publication_authority_epoch publication_authority_epoch_home_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.publication_authority_epoch
+    ADD CONSTRAINT publication_authority_epoch_home_no_fkey FOREIGN KEY (home_no) REFERENCES core.partition(partition_no);
 
 
 --

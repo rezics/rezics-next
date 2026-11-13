@@ -6152,6 +6152,13 @@ CREATE TRIGGER account_public_change BEFORE INSERT OR UPDATE ON access.account F
 
 
 --
+-- Name: account account_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_publication_authority AFTER INSERT OR DELETE OR UPDATE OF state, minimum_authn_epoch, authn_fenced ON access.account FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: agent_identity_intent agent_identity_intent_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -6379,6 +6386,13 @@ CREATE TRIGGER erasure_acknowledgement_guard BEFORE DELETE OR UPDATE ON access.e
 --
 
 CREATE TRIGGER erasure_guard BEFORE DELETE OR UPDATE ON access.erasure FOR EACH ROW EXECUTE FUNCTION access.guard_erasure();
+
+
+--
+-- Name: erasure erasure_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER erasure_publication_authority AFTER INSERT OR DELETE OR UPDATE OF version, at, completed_at ON access.erasure FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
@@ -6641,6 +6655,13 @@ CREATE TRIGGER operator_relation_version BEFORE UPDATE ON access.account FOR EAC
 
 
 --
+-- Name: principal_assignment principal_assignment_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER principal_assignment_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.principal_assignment FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: account rating_controller; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -6659,6 +6680,27 @@ CREATE TRIGGER realm_erasure_succession_custody BEFORE DELETE OR UPDATE ON acces
 --
 
 CREATE TRIGGER realm_membership_transition_guard BEFORE DELETE OR UPDATE ON access.realm_membership_transition FOR EACH ROW EXECUTE FUNCTION access.guard_realm_membership_transition();
+
+
+--
+-- Name: resource_denial resource_denial_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_denial_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.resource_denial FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
+-- Name: resource_grant resource_grant_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_grant_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.resource_grant FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
+-- Name: resource_initialization resource_initialization_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_initialization_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.resource_initialization FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
@@ -6687,6 +6729,13 @@ CREATE TRIGGER resource_role_provenance_new AFTER INSERT ON access.resource_role
 --
 
 CREATE TRIGGER resource_role_provenance_old BEFORE DELETE ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION access.capture_resource_role_provenance();
+
+
+--
+-- Name: resource_role_grant resource_role_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_role_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --

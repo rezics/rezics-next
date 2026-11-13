@@ -2449,6 +2449,13 @@ CREATE TRIGGER publication_population AFTER INSERT OR DELETE OR UPDATE ON commun
 
 
 --
+-- Name: realm_ban realm_ban_publication_authority; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_ban_publication_authority AFTER INSERT OR DELETE OR UPDATE ON community.realm_ban FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: realm_discovery_board realm_discovery_board_log; Type: TRIGGER; Schema: community; Owner: -
 --
 
@@ -2561,6 +2568,13 @@ CREATE TRIGGER realm_orphan_deadline BEFORE UPDATE ON community.realm FOR EACH R
 
 
 --
+-- Name: realm realm_publication_authority; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_publication_authority AFTER INSERT OR DELETE OR UPDATE OF state, visibility, head_revision_id, space_id ON community.realm FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: realm_revision realm_revision_board_scheme; Type: TRIGGER; Schema: community; Owner: -
 --
 
@@ -2572,6 +2586,13 @@ CREATE TRIGGER realm_revision_board_scheme BEFORE INSERT ON community.realm_revi
 --
 
 CREATE TRIGGER realm_revision_immutable BEFORE DELETE OR UPDATE ON community.realm_revision FOR EACH ROW EXECUTE FUNCTION community.guard_realm_revision();
+
+
+--
+-- Name: realm_revision realm_revision_publication_authority; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_revision_publication_authority AFTER INSERT OR DELETE OR UPDATE ON community.realm_revision FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
@@ -2617,6 +2638,13 @@ CREATE TRIGGER space_identity BEFORE UPDATE ON community.space FOR EACH ROW EXEC
 
 
 --
+-- Name: space space_publication_authority; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_publication_authority AFTER INSERT OR DELETE OR UPDATE OF state, head_revision_id ON community.space FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: space space_realm_discovery_generation; Type: TRIGGER; Schema: community; Owner: -
 --
 
@@ -2628,6 +2656,13 @@ CREATE TRIGGER space_realm_discovery_generation AFTER UPDATE ON community.space 
 --
 
 CREATE TRIGGER space_revision_immutable BEFORE DELETE OR UPDATE ON community.space_revision FOR EACH ROW EXECUTE FUNCTION community.guard_space_revision();
+
+
+--
+-- Name: space_revision space_revision_publication_authority; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_revision_publication_authority AFTER INSERT OR DELETE OR UPDATE ON community.space_revision FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --

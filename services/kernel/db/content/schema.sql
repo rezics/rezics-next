@@ -2235,6 +2235,113 @@ CREATE TABLE content.hosted_placement (
 
 
 --
+-- Name: hosted_publication_activation; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_activation (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    initiator_account_id uuid NOT NULL,
+    owner_epoch bigint NOT NULL,
+    pass_id uuid NOT NULL,
+    activation_revision_id uuid NOT NULL,
+    source_revision_id uuid NOT NULL,
+    expected_head_revision_id uuid CONSTRAINT hosted_publication_activatio_expected_head_revision_id_not_null NOT NULL,
+    expected_publication_id uuid,
+    candidate_generation_id uuid NOT NULL,
+    candidate_sequence bigint NOT NULL,
+    candidate_preorder_root_id uuid,
+    candidate_chapter_root_id uuid,
+    candidate_placement_count bigint CONSTRAINT hosted_publication_activatio_candidate_placement_count_not_null NOT NULL,
+    candidate_chapter_count bigint NOT NULL,
+    target_after_thread_id uuid,
+    target_after_post_id uuid,
+    target_after_revision_id uuid,
+    target_after_sha256 bytea,
+    target_checked_count bigint DEFAULT 0 NOT NULL,
+    target_total_count bigint NOT NULL,
+    opening_thread_id uuid,
+    opening_revision_id uuid,
+    opening_sha256 bytea,
+    opening_checked boolean DEFAULT false NOT NULL,
+    state text NOT NULL,
+    publication_id uuid,
+    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    updated_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT hosted_publication_activation_candidate_placement_count_check CHECK ((candidate_placement_count >= 0)),
+    CONSTRAINT hosted_publication_activation_candidate_sequence_check CHECK ((candidate_sequence >= 0)),
+    CONSTRAINT hosted_publication_activation_check CHECK (((candidate_chapter_count >= 0) AND (candidate_chapter_count <= candidate_placement_count))),
+    CONSTRAINT hosted_publication_activation_check1 CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check10 CHECK ((route = ((get_byte(uuid_send(candidate_generation_id), 10) * 256) + get_byte(uuid_send(candidate_generation_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check11 CHECK (((candidate_preorder_root_id IS NULL) OR (route = ((get_byte(uuid_send(candidate_preorder_root_id), 10) * 256) + get_byte(uuid_send(candidate_preorder_root_id), 11))))),
+    CONSTRAINT hosted_publication_activation_check12 CHECK (((candidate_chapter_root_id IS NULL) OR (route = ((get_byte(uuid_send(candidate_chapter_root_id), 10) * 256) + get_byte(uuid_send(candidate_chapter_root_id), 11))))),
+    CONSTRAINT hosted_publication_activation_check13 CHECK ((((target_after_thread_id IS NULL) AND (target_after_post_id IS NULL) AND (target_after_revision_id IS NULL) AND (target_after_sha256 IS NULL)) OR ((target_after_thread_id IS NOT NULL) AND (target_after_post_id IS NOT NULL) AND (target_after_revision_id IS NOT NULL) AND (octet_length(target_after_sha256) = 32)))),
+    CONSTRAINT hosted_publication_activation_check14 CHECK (((publication_id IS NULL) OR (route = ((get_byte(uuid_send(publication_id), 10) * 256) + get_byte(uuid_send(publication_id), 11))))),
+    CONSTRAINT hosted_publication_activation_check15 CHECK (((state = 'activated'::text) = ((publication_id IS NOT NULL) AND (completed_at IS NOT NULL)))),
+    CONSTRAINT hosted_publication_activation_check2 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check3 CHECK ((route = ((get_byte(uuid_send(initiator_account_id), 10) * 256) + get_byte(uuid_send(initiator_account_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check4 CHECK ((route = ((get_byte(uuid_send(pass_id), 10) * 256) + get_byte(uuid_send(pass_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check5 CHECK ((route = ((get_byte(uuid_send(activation_revision_id), 10) * 256) + get_byte(uuid_send(activation_revision_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check6 CHECK ((route = ((get_byte(uuid_send(source_revision_id), 10) * 256) + get_byte(uuid_send(source_revision_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check7 CHECK ((route = ((get_byte(uuid_send(expected_head_revision_id), 10) * 256) + get_byte(uuid_send(expected_head_revision_id), 11)))),
+    CONSTRAINT hosted_publication_activation_check8 CHECK ((expected_head_revision_id = source_revision_id)),
+    CONSTRAINT hosted_publication_activation_check9 CHECK (((expected_publication_id IS NULL) OR (route = ((get_byte(uuid_send(expected_publication_id), 10) * 256) + get_byte(uuid_send(expected_publication_id), 11))))),
+    CONSTRAINT hosted_publication_activation_completed_at_check CHECK (((completed_at IS NULL) OR isfinite(completed_at))),
+    CONSTRAINT hosted_publication_activation_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_publication_activation_opening_sha256_check CHECK (((opening_sha256 IS NULL) OR (octet_length(opening_sha256) = 32))),
+    CONSTRAINT hosted_publication_activation_owner_epoch_check CHECK ((owner_epoch >= 0)),
+    CONSTRAINT hosted_publication_activation_state_check CHECK ((state = ANY (ARRAY['checking'::text, 'ready'::text, 'restart'::text, 'activated'::text]))),
+    CONSTRAINT hosted_publication_activation_target_checked_count_check CHECK ((target_checked_count >= 0)),
+    CONSTRAINT hosted_publication_activation_target_total_count_check CHECK ((target_total_count >= 1)),
+    CONSTRAINT hosted_publication_activation_updated_at_check CHECK (isfinite(updated_at))
+);
+
+
+--
+-- Name: hosted_publication_activation_dependency; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_activation_dependency (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    pass_id uuid NOT NULL,
+    home_no integer NOT NULL,
+    generation uuid NOT NULL,
+    epoch bigint NOT NULL,
+    observation_count bigint CONSTRAINT hosted_publication_activation_depend_observation_count_not_null NOT NULL,
+    CONSTRAINT hosted_publication_activation_dependenc_observation_count_check CHECK ((observation_count > 0)),
+    CONSTRAINT hosted_publication_activation_dependency_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_publication_activation_dependency_check1 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11)))),
+    CONSTRAINT hosted_publication_activation_dependency_check2 CHECK ((route = ((get_byte(uuid_send(pass_id), 10) * 256) + get_byte(uuid_send(pass_id), 11)))),
+    CONSTRAINT hosted_publication_activation_dependency_epoch_check CHECK ((epoch >= 0)),
+    CONSTRAINT hosted_publication_activation_dependency_home_no_check CHECK (((home_no >= 0) AND (home_no <= 4095)))
+);
+
+
+--
+-- Name: hosted_publication_activation_vector; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_activation_vector (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    pass_id uuid NOT NULL,
+    home_no integer NOT NULL,
+    generation uuid NOT NULL,
+    epoch bigint NOT NULL,
+    CONSTRAINT hosted_publication_activation_vector_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_publication_activation_vector_check1 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11)))),
+    CONSTRAINT hosted_publication_activation_vector_check2 CHECK ((route = ((get_byte(uuid_send(pass_id), 10) * 256) + get_byte(uuid_send(pass_id), 11)))),
+    CONSTRAINT hosted_publication_activation_vector_epoch_check CHECK ((epoch >= 0)),
+    CONSTRAINT hosted_publication_activation_vector_home_no_check CHECK (((home_no >= 0) AND (home_no <= 4095)))
+);
+
+
+--
 -- Name: hosted_publication_retention_cursor; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -5123,6 +5230,38 @@ ALTER TABLE ONLY content.hosted_placement
 
 
 --
+-- Name: hosted_publication_activation_dependency hosted_publication_activation_dependency_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation_dependency
+    ADD CONSTRAINT hosted_publication_activation_dependency_pkey PRIMARY KEY (route, catalogue_id, stage_id, pass_id, home_no);
+
+
+--
+-- Name: hosted_publication_activation hosted_publication_activation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation
+    ADD CONSTRAINT hosted_publication_activation_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_activation hosted_publication_activation_route_catalogue_id_pass_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation
+    ADD CONSTRAINT hosted_publication_activation_route_catalogue_id_pass_id_key UNIQUE (route, catalogue_id, pass_id);
+
+
+--
+-- Name: hosted_publication_activation_vector hosted_publication_activation_vector_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation_vector
+    ADD CONSTRAINT hosted_publication_activation_vector_pkey PRIMARY KEY (route, catalogue_id, stage_id, pass_id, home_no);
+
+
+--
 -- Name: hosted_publication_retention_cursor hosted_publication_retention_cursor_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -6487,6 +6626,13 @@ CREATE INDEX hosted_placement_navigation_idx ON content.hosted_placement USING b
 
 
 --
+-- Name: hosted_publication_activation_state_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_activation_state_idx ON content.hosted_publication_activation USING btree (route, catalogue_id, state, stage_id);
+
+
+--
 -- Name: hosted_publication_staging_active_ordered_generation; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -6498,6 +6644,13 @@ CREATE INDEX hosted_publication_staging_active_ordered_generation ON content.hos
 --
 
 CREATE INDEX hosted_publication_staging_candidate_parent ON content.hosted_publication_staging_candidate USING btree (route, catalogue_id, stage_id, parent_id);
+
+
+--
+-- Name: hosted_publication_staging_candidate_target; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_staging_candidate_target ON content.hosted_publication_staging_candidate USING btree (route, catalogue_id, stage_id, thread_id, post_id, target_revision_id, body_sha256, occurrence_id) WHERE (kind = 'chapter'::text);
 
 
 --
@@ -7013,6 +7166,13 @@ CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUT
 
 
 --
+-- Name: board board_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER board_publication_authority AFTER INSERT OR DELETE OR UPDATE OF visibility, security_revision, realm_id ON content.board FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: board_thread board_thread_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -7031,6 +7191,13 @@ CREATE TRIGGER edition_identity BEFORE DELETE OR UPDATE ON content.edition FOR E
 --
 
 CREATE TRIGGER edition_publication_identity BEFORE DELETE OR UPDATE ON content.edition_publication FOR EACH ROW EXECUTE FUNCTION content.guard_edition_publication();
+
+
+--
+-- Name: erasure_fence erasure_fence_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER erasure_fence_publication_authority AFTER INSERT OR DELETE OR UPDATE OF closed_at ON content.erasure_fence FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
@@ -7293,6 +7460,13 @@ CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW 
 
 
 --
+-- Name: moderation_decision moderation_decision_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER moderation_decision_publication_authority AFTER INSERT OR DELETE OR UPDATE ON content.moderation_decision FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: board moderation_directory_registration; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -7318,6 +7492,13 @@ CREATE TRIGGER post_erasure_guard BEFORE DELETE OR UPDATE ON content.post FOR EA
 --
 
 CREATE TRIGGER post_identity BEFORE UPDATE ON content.post FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'post_id', 'reply_to_post_id', 'author_account_id', 'created_at');
+
+
+--
+-- Name: post post_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER post_publication_authority AFTER INSERT OR DELETE OR UPDATE OF visibility, security_revision, availability, author_erased, author_account_id, thread_id, head_revision_id, reply_to_post_id ON content.post FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
@@ -7398,10 +7579,24 @@ CREATE TRIGGER revision_disclosure_identity BEFORE DELETE OR UPDATE ON content.r
 
 
 --
+-- Name: revision_disclosure revision_disclosure_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER revision_disclosure_publication_authority AFTER INSERT OR DELETE OR UPDATE OF revoked_at ON content.revision_disclosure FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: revision revision_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON content.revision FOR EACH ROW EXECUTE FUNCTION content.guard_revision();
+
+
+--
+-- Name: revision revision_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER revision_publication_authority AFTER INSERT OR DELETE OR UPDATE OF availability, body, body_sha256, licence, subject_ids, board_id ON content.revision FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
@@ -7430,6 +7625,13 @@ CREATE TRIGGER subject_thread_identity BEFORE UPDATE ON content.subject_thread F
 --
 
 CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id', 'board_id', 'first_post_id', 'kind', 'review_subject_id', 'created_at');
+
+
+--
+-- Name: thread thread_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER thread_publication_authority AFTER INSERT OR DELETE OR UPDATE OF visibility, security_revision, availability, board_id, first_post_id ON content.thread FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
@@ -7677,6 +7879,78 @@ ALTER TABLE ONLY content.hosted_placement
 
 ALTER TABLE ONLY content.hosted_placement
     ADD CONSTRAINT hosted_placement_route_catalogue_id_revision_id_parent_id_fkey FOREIGN KEY (route, catalogue_id, revision_id, parent_id) REFERENCES content.hosted_placement(route, catalogue_id, revision_id, occurrence_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_publication_activation hosted_publication_activatio_route_catalogue_id_expected__fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation
+    ADD CONSTRAINT hosted_publication_activatio_route_catalogue_id_expected__fkey1 FOREIGN KEY (route, catalogue_id, expected_publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_activation_vector hosted_publication_activation__route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation_vector
+    ADD CONSTRAINT hosted_publication_activation__route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_activation(route, catalogue_id, stage_id) ON DELETE CASCADE;
+
+
+--
+-- Name: hosted_publication_activation hosted_publication_activation_route_catalogue_id_expected__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation
+    ADD CONSTRAINT hosted_publication_activation_route_catalogue_id_expected__fkey FOREIGN KEY (route, catalogue_id, expected_head_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_activation hosted_publication_activation_route_catalogue_id_publicati_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation
+    ADD CONSTRAINT hosted_publication_activation_route_catalogue_id_publicati_fkey FOREIGN KEY (route, catalogue_id, publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_activation hosted_publication_activation_route_catalogue_id_source_re_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation
+    ADD CONSTRAINT hosted_publication_activation_route_catalogue_id_source_re_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_publication_activation_dependency hosted_publication_activation_route_catalogue_id_stage_id__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation_dependency
+    ADD CONSTRAINT hosted_publication_activation_route_catalogue_id_stage_id__fkey FOREIGN KEY (route, catalogue_id, stage_id, pass_id, home_no) REFERENCES content.hosted_publication_activation_vector(route, catalogue_id, stage_id, pass_id, home_no);
+
+
+--
+-- Name: hosted_publication_activation hosted_publication_activation_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation
+    ADD CONSTRAINT hosted_publication_activation_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_version_release_candidate(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_activation_dependency hosted_publication_activation_route_catalogue_id_stage_id_fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation_dependency
+    ADD CONSTRAINT hosted_publication_activation_route_catalogue_id_stage_id_fkey1 FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_activation(route, catalogue_id, stage_id) ON DELETE CASCADE;
+
+
+--
+-- Name: hosted_publication_activation_vector hosted_publication_activation_vector_home_no_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_activation_vector
+    ADD CONSTRAINT hosted_publication_activation_vector_home_no_fkey FOREIGN KEY (home_no) REFERENCES core.publication_authority_epoch(home_no);
 
 
 --
