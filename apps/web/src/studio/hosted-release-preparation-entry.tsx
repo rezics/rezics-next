@@ -59,9 +59,9 @@ export function HostedReleasePreparationEntry(props: Props) {
       <HostedReleasePreparationView
         visit={mounted.visit}
         locale={locale}
-        activation={
-          props.activation && source && csrfToken ? { native: props.activation, source, csrfToken } : undefined
-        }
+        {...(props.activation && source && csrfToken
+          ? { activation: { native: props.activation, source, csrfToken } }
+          : {})}
       />
     );
   return <p role="status">{releaseCopy[locale].review}</p>;
