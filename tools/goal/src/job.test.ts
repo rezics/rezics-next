@@ -178,6 +178,8 @@ async function typingRetryFixture(
   if (!complete) throw new Error('Compiler fixture did not capture its inputs');
   if (kernelOutput) {
     mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
+    const artifactStage = process.env.REZICS_CHECK_ARTIFACTS_DIR;
+    if (artifactStage) mkdirSync(join(worktree, artifactStage), { recursive: true });
     const sourceSha256 = 'a'.repeat(64);
     const producerExit = await withKernelClientOutput(
       worktree,
