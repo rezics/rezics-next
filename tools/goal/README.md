@@ -3348,6 +3348,13 @@ retain their meaning. Blocked Goals accept admitted explicit inbox turns without
 recovery leave idle threads parked. See the
 [OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
 
+Decision: An inbox-parked Codex turn waits 250 ms for a same-thread, same-turn `item/started` or `item/completed`
+notification whose protocol `ThreadItem.type` is `userMessage`; that evidence promotes the operator turn to counted
+work and the controller reparks after completion. Without it, the controller interrupts only that exact turn. On
+host recovery, `thread/items/list` checks that exact thread and turn: a persisted `userMessage` promotes and rejoins
+the operator turn; without one, recovery starts a fresh 250 ms origin window before the exact-turn interrupt. A
+`userMessage` notification arriving only after the exact-turn interrupt is issued cannot be restored.
+
 Public `status` keeps manager lifecycle separate from `operation`: `waiting-for-inbox`, `active-turn`, `idle`,
 `turn-interrupted` or `turn-failed`, with native Goal status and the current turn disposition alongside it. Interrupt
 intent (`controller-park` or `controller-stop`) is persisted against the exact thread and turn before provider effects,

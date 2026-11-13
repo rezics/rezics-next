@@ -1062,11 +1062,25 @@ test('a parked manager accepts a same-thread operator UserMessage after turn/sta
       params: { threadId, turn: { id: 'operator-turn-1', status: 'inProgress' } },
     });
     await s.notify({
-      method: 'item/started',
+      method: 'item/completed',
+      params: {
+        threadId,
+        turnId: 'different-turn',
+        completedAtMs: Date.now(),
+        item: { type: 'userMessage', id: 'other-turn-message', clientId: null, content: [] },
+      },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      waitingForInbox: true,
+      activeTurnId: 'operator-turn-1',
+      turns: 1,
+    });
+    await s.notify({
+      method: 'item/completed',
       params: {
         threadId,
         turnId: 'operator-turn-1',
-        startedAtMs: Date.now(),
+        completedAtMs: Date.now(),
         item: { type: 'userMessage', id: 'operator-message-1', clientId: null, content: [] },
       },
     });
@@ -1090,6 +1104,86 @@ test('a parked manager accepts a same-thread operator UserMessage after turn/sta
       activeTurnId: null,
       turnDisposition: { threadId, turnId: 'operator-turn-1', status: 'completed', intent: 'work' },
       goalState: { status: 'paused' },
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test('an eventless automatic turn is interrupted after the item-ordering window', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    const threadId = manager.threadId!;
+    await s.notify({
+      method: 'turn/started',
+      params: { threadId, turn: { id: 'automatic-turn', status: 'inProgress' } },
+    });
+    await s.notify({
+      method: 'item/started',
+      params: {
+        threadId,
+        turnId: 'automatic-turn',
+        startedAtMs: Date.now(),
+        item: { type: 'hookPrompt', id: 'internal-context', fragments: [] },
+      },
+    });
+    expect(s.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
+    await Bun.sleep(300);
+    await s.managers.flush();
+
+    expect(s.requests().filter((request) => request.method === 'turn/interrupt')).toContainEqual(
+      expect.objectContaining({ params: { threadId, turnId: 'automatic-turn' } }),
+    );
+    expect(s.managers.get(manager.id)).toMatchObject({
+      waitingForInbox: true,
+      activeTurnId: null,
+      turns: 1,
+      turnDisposition: {
+        threadId,
+        turnId: 'automatic-turn',
+        status: 'interrupted',
+        intent: 'controller-park',
+      },
+      goalState: { status: 'paused' },
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test('a real manager stop cancels the pending parked-turn decision and keeps stop intent', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    await s.notify({
+      method: 'turn/started',
+      params: { threadId: manager.threadId, turn: { id: 'stopped-turn', status: 'inProgress' } },
+    });
+
+    await s.managers.stop(manager.id);
+    await s.managers.flush();
+    await Bun.sleep(300);
+    await s.managers.flush();
+
+    expect(s.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(1);
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'paused',
+      waitingForInbox: false,
+      turnDisposition: {
+        threadId: manager.threadId,
+        turnId: 'stopped-turn',
+        status: 'interrupted',
+        intent: 'controller-stop',
+      },
     });
   } finally {
     await s.close();
