@@ -25,7 +25,6 @@ import {
   hostedRevision,
   hostedReleasePlacements,
   insertHostedPlacements,
-  type HostedCatalogueRow,
 } from './hosted-chapters-store.ts';
 import {
   InvalidHostedStructureError,
@@ -99,7 +98,7 @@ export async function prepareHostedPublicationPointCommand(
   const route = routeOf(catalogueId);
   if (route === null || actor.kind !== 'account') throw new ContentNotFoundError();
   const initial = (
-    await snapshot<HostedCatalogueRow | null>(deps, catalogueId, { deadline: context.deadline }, (client) =>
+    await snapshot(deps, catalogueId, { actor, deadline: context.deadline }, (client) =>
       hostedCatalogue(client, catalogueId),
     )
   ).value;
