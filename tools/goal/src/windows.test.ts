@@ -85,46 +85,100 @@ test('Preserve a manager session when its window status is unavailable', async (
   expect(respawns.some((argv) => argv.includes('respawn-pane') && argv.includes('-k'))).toBe(true);
 });
 
-test('rebinds only a live owned Codex pane whose same-thread command differs only by endpoint', async () => {
+function viewerFixture(dead = '0') {
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   const command = (argv: string[]) => argv.map(quote).join(' ');
   const oldArgv = [
-    'env',
-    'CODEX_HOME=/codex',
-    'GOAL_MANAGER=manager',
-    'codex',
-    'resume',
-    'thread-1',
-    '--remote',
-    'ws://127.0.0.1:10001',
+    'env', '-u', 'CODEX_HOME', '-u', 'GOAL_MANAGER',
+    'CODEX_HOME=/codex', 'GOAL_MANAGER=manager', '/home/edge/.local/bin/codex', 'resume', 'thread-1',
+    '--remote', 'ws://127.0.0.1:10001',
   ];
   const currentArgv = [...oldArgv];
   currentArgv[currentArgv.length - 1] = 'ws://127.0.0.1:10002';
   const calls: string[][] = [];
+  const panes = new Map<string, { dead: string; cwd: string; command: string; draft: string }>([
+    ['%3', { dead, cwd: '/cwd', command: `"${command(oldArgv)}"`, draft: 'unsent screenshot notes' }],
+  ]);
+  let activePane = '%3';
   let owned = true;
-  let dead = '0';
-  let paneCommand = command(oldArgv);
   const windows = new TermspacesWindows({ socket: '/socket', session: 'stable' }, (_executable, argv) => {
     calls.push(argv);
     if (argv.includes('list-sessions')) return '$1\tstable\tstable';
     if (argv.includes('list-windows')) return owned ? '@3\tmanager' : '@2\tother';
-    if (argv.includes('display-message')) return argv.at(-1) === '#{pane_dead}' ? dead : paneCommand;
-    if (argv.includes('respawn-pane')) paneCommand = argv.at(-1)!;
+    if (argv.includes('list-panes')) return [...panes.keys()].join('\n');
+    if (argv.includes('display-message')) {
+      const target = argv[argv.indexOf('-t') + 1]!;
+      const pane = panes.get(target.startsWith('@') ? activePane : target);
+      if (!pane) return '';
+      if (argv.at(-1) === '#{pane_dead}') return pane.dead;
+      if (argv.at(-1) === '#{pane_current_path}') return pane.cwd;
+      return pane.command;
+    }
+    if (argv.includes('split-window')) {
+      const id = `%${panes.size + 3}`;
+      panes.set(id, {
+        dead: '0',
+        cwd: argv[argv.indexOf('-c') + 1]!,
+        command: argv.at(-1)!,
+        draft: '',
+      });
+      activePane = id;
+    }
     return '';
   });
+  return {
+    windows,
+    calls,
+    panes,
+    oldArgv,
+    currentArgv,
+    encode: command,
+    setActivePane: (id: string) => (activePane = id),
+    setOwned: (value: boolean) => (owned = value),
+  };
+}
 
-  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd')).toBe(true);
-  expect(paneCommand).toBe(command(currentArgv));
-  expect(calls.filter((argv) => argv.includes('respawn-pane'))).toHaveLength(1);
-  expect(calls.some((argv) => argv.includes('new-window') || argv.includes('apply'))).toBe(false);
+test('matches tmux-wrapped argv and preserves the original pane draft when restoring the current viewer', async () => {
+  const f = viewerFixture();
+  const original = f.panes.get('%3')!;
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(true);
+  expect(f.panes.get('%3')).toEqual(original);
+  expect(f.panes.get('%3')?.draft).toBe('unsent screenshot notes');
+  expect(f.panes.get('%4')?.command).toBe(f.encode(f.currentArgv));
+  expect(f.calls.filter((argv) => argv.includes('split-window'))).toHaveLength(1);
+  expect(f.calls.some((argv) => argv.includes('respawn-pane'))).toBe(false);
 
-  expect(await windows.rebindIfStale('manager', currentArgv, '/cwd')).toBe(false);
-  const beforeUnrelated = calls.filter((argv) => argv.includes('respawn-pane')).length;
-  expect(await windows.rebindIfStale('manager', ['vim'], '/cwd')).toBe(false);
-  dead = '1';
-  expect(await windows.rebindIfStale('manager', oldArgv, '/cwd')).toBe(false);
-  owned = false;
-  expect(await windows.rebindIfStale('manager', oldArgv, '/cwd')).toBe(false);
-  expect(calls.filter((argv) => argv.includes('respawn-pane'))).toHaveLength(beforeUnrelated);
-  expect(calls.some((argv) => argv.includes('new-window') || argv.includes('apply'))).toBe(false);
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  f.setActivePane('%3');
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  expect(f.calls.filter((argv) => argv.includes('split-window'))).toHaveLength(1);
+  expect(await f.windows.rebindIfStale('manager', ['vim'], '/cwd')).toBe(false);
+  for (const [index, value] of [
+    [5, 'CODEX_HOME=/other-pool'],
+    [6, 'GOAL_MANAGER=other-manager'],
+    [7, 'vim'],
+    [9, 'other-thread'],
+  ] as const) {
+    const foreign = [...f.oldArgv];
+    foreign[index] = value;
+    f.panes.get('%3')!.command = f.encode(foreign);
+    expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  }
+  f.setOwned(false);
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+});
+
+test('restores a dead stale pane only when authorized and never repeats a same-endpoint failure', async () => {
+  const f = viewerFixture('1');
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd', { restoreExited: true })).toBe(true);
+  expect(f.panes.get('%3')?.draft).toBe('unsent screenshot notes');
+  f.panes.get('%4')!.dead = '1';
+  f.setActivePane('%3');
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd', { restoreExited: true })).toBe(false);
+  expect(f.calls.filter((argv) => argv.includes('split-window'))).toHaveLength(1);
+
+  f.panes.delete('%4');
+  f.panes.get('%3')!.cwd = '/other-working-directory';
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd', { restoreExited: true })).toBe(false);
 });
