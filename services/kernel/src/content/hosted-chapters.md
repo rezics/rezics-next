@@ -18,7 +18,7 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.convert_draft`                    | `POST /v1/hostedCatalogues/{id}:convertDraft`                                           | `expectedRevisionId`, bounded `step`, retained `inputId` and native page cursor when paging          |
 | `hosted_catalogue.publish`                          | `POST /v1/hostedCatalogues/{id}:publish`                                                | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
 | `hosted_catalogue.prepare_release`                  | `POST /v1/hostedCatalogues/{id}:prepareRelease`                                         | caller-generated `stageId`, `expectedRevisionId`, nullable `expectedPublicationId`, `mode`           |
-| `hosted_catalogue.prepare_release_append_batch`     | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:appendSelectionBatch` | `batchId`, `occurrenceIds` (1–512)                                                                   |
+| `hosted_catalogue.prepare_release_append_batch`     | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:appendSelectionBatch` | `batchId`, `occurrenceIds` (1–1,024)                                                                 |
 | `hosted_catalogue.prepare_release_freeze_selection` | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:freezeSelection`      | empty object                                                                                         |
 | `hosted_catalogue.prepare_release_advance`          | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:advance`              | `stepId`                                                                                             |
 | `hosted_catalogue.prepare_release_progress`         | `POST /v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:progress`             | empty object                                                                                         |
@@ -33,7 +33,7 @@ can return its original immutable revision after later changes. An altered reque
 
 Preparation start returns 202 and the remaining preparation commands return 200. Start supplies a route-native
 `stageId`; expected draft/publication IDs are only stale-intent preconditions. Selection batches are independently
-limited to 512 IDs with no aggregate cap. Preparation responses are private and no-store, expose only retained
+limited to 1,024 IDs with no aggregate cap. Preparation responses are private and no-store, expose only retained
 progress and candidate counts, and never select the publication pointer.
 
 Each placement supplies `occurrenceId`, nullable `parentId`, zero-based sibling `position`, `title` and `kind`.
@@ -69,7 +69,7 @@ bounded explicit IDs, once per sealed-base/prefix segment. Legacy snapshots use 
 stream hits use the base stream identity and inclusive pinned high-water. Base ordinal order followed by append
 offset order preserves native preorder and exact targets. Empty withdrawal verifies that the source is a structure
 but reads no descriptor or placement rows. The shared release validator still rejects duplicate and unknown IDs
-and missing ancestors, then assigns dense sibling positions and preorder; the selection cap remains 512.
+and missing ancestors, then assigns dense sibling positions and preorder; the direct publish selection cap remains 512.
 
 Selection preparation follows `hostedPostAuthorization.prepare`; only the catalogue locator runs before native
 Post authorship/container visibility/participation, authority-anchor and authoritative-time `post:revise` admission.
@@ -78,7 +78,8 @@ attachments outside the write transaction. Keep complete preparation only for th
 retry re-admits and rereads, so failed preparation cannot lend a later transaction earlier selections. This admits
 reads, not mutation. Transactional authorization still consumes the single-use proof and rechecks the container
 before receipts, with existing finalization. For admitted authors selection/attachment errors precede receipts;
-head/publication CAS follows them. Empty withdrawal, exact replay, responses, events and both 512 limits stay unchanged.
+head/publication CAS follows them. Empty withdrawal, exact replay, responses, events and the existing 512-placement
+compatibility limits stay unchanged; prepared selection batches use the 1,024-ID cap below.
 
 ## Versioned outline adoption
 
@@ -91,8 +92,9 @@ Book adapter. Implement point add, reorder/reparent and removal against an expec
 remain permanent; a title or exact target revision change creates a new value under the same occurrence. Do not
 introduce a universal graph table, a parallel permission engine, or Knowledge's notebook/document schema. There is
 no permanent total structure cap, eager migration, global key relabel, history chain or per-edit full copy. This
-decision changes no installed route, schema or production setting. The current 512 limits bound compatibility
-requests, never the supported total structure or release. Root append establishes no arbitrary-outline,
+decision changes no installed route, schema or production setting. The 512-placement limits bound compatibility
+requests, never the supported total structure or release; prepared selection batches use the separately measured
+1,024-ID cap. Root append establishes no arbitrary-outline,
 serial-publication or release readiness.
 
 Interfaces: the shared sequence port is `point`, `children`, `outline`, `projected`, `rank`, `select`,
@@ -370,9 +372,23 @@ the publication pointer.
 
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
-Decision: private staging uses a source-ordered candidate generation, 20-row replayable steps and selection batches of
-at most 512; exact target observations stay separate from current authority proof, source titles remain source-owned
-for terminal redaction, and activation validates the sealed generation without rebuilding it.
+Decision: advertise and enforce a 1,024-ID selection batch cap, based on an isolated interleaved 40-sample benchmark;
+the cap doubles request capacity over 512 with a modest write and lock increase, while 2,048 and 4,096 materially
+increase persistence and replay costs. Keep source-ordered candidate generation, 20-row replayable steps, exact target
+observations separate from current authority proof, source-owned titles for terminal redaction, and activation of the
+sealed generation without rebuilding it.
+
+|   IDs | Compact JSON body bytes | Write P95 (ms) | Stage lock P95 (ms) | Exact replay P95 (ms) |
+| ----: | ----------------------: | -------------: | ------------------: | --------------------: |
+|   512 |                  20,036 |          11.84 |                0.79 |                  2.06 |
+| 1,024 |                  40,004 |          14.03 |                0.87 |                  3.11 |
+| 2,048 |                  79,940 |          29.22 |                1.04 |                  3.90 |
+| 4,096 |                 159,812 |          42.01 |                1.22 |                  6.64 |
+
+The measurements use route-valid generated IDs and a fresh empty selection stage. Request bytes count the compact
+UTF-8 JSON body; write P95 covers the append transaction through commit, lock P95 covers its stage `FOR UPDATE`
+query, and exact replay P95 covers the repeated transaction with the same batch ID and body. These measure bounded
+input persistence; later source selection, closure and candidate building continue in separate 20-row steps.
 
 Ordered staging pins the current immutable revision, generation and sequence, pages whole sources through bounded
 preorder reads, and resolves selected points and candidate titles from that same snapshot; legacy snapshot and prefix
@@ -402,7 +418,7 @@ exact batch receipt replays before that stale-pointer check. Empty explicit sele
 withdrawal, never incomplete preparation.
 
 Persist a small control row, indexed input/output, selected snapshot roots and a durable raw traversal frontier.
-Use existing Book page 20 plus lookahead for one processing step (512 is at most an ingestion batch). Each step
+Use existing Book page 20 plus lookahead for one processing step (1,024 is at most an ingestion batch). Each step
 bounds metadata checks, memory and writes, including O(H log N) path changes per admitted row; it commits output,
 commitment/counts and frontier atomically. Whole traverses pinned source to raw exhaustion, not visible exhaustion.
 Selection probes exact requested IDs and ancestors through indexes; it must not scan all N for every batch or

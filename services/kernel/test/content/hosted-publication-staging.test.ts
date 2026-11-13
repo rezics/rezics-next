@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { Value } from 'typebox/value';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { HostedDependencies } from '../../src/content/hosted-chapters-model.ts';
+import { HostedPublicationPreparationBatchSchema } from '../../src/content/hosted-publication-preparation-schemas.ts';
 import {
   advanceHostedPublicationStaging,
   appendHostedPublicationSelectionBatch,
@@ -12,7 +14,10 @@ import {
   readHostedPublicationStagingTargetObservations,
   sealHostedPublicationStaging,
 } from '../../src/content/hosted-publication-staging.ts';
-import type { HostedPublicationStagingLocator } from '../../src/content/hosted-publication-staging-model.ts';
+import {
+  HOSTED_PUBLICATION_STAGING_BATCH_LIMIT,
+  type HostedPublicationStagingLocator,
+} from '../../src/content/hosted-publication-staging-model.ts';
 import readChain from '../../src/content/read-chain.sql';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { hostedRootAppendBase } from './support/hosted-root-append-setup.ts';
@@ -224,6 +229,40 @@ test('selection streams past 512, replays a rolled-back step, and seals source-o
   } finally {
     await observer.close();
   }
+});
+
+test('selection batches accept 1,024 IDs through request and persistence caps and replay exactly', async () => {
+  const created = await f.native.command('/v1/hostedCatalogues', {
+    postId: f.catalogueId,
+    threadId: f.threadId,
+    placements: [],
+  });
+  const locator = await begin(created.revisionId as string, null, 'selection');
+  const request = {
+    batchId: f.newOccurrenceId(),
+    occurrenceIds: Array.from({ length: HOSTED_PUBLICATION_STAGING_BATCH_LIMIT }, () => f.newOccurrenceId()),
+  };
+  expect(Value.Check(HostedPublicationPreparationBatchSchema, request)).toBe(true);
+  const stored = await transaction((client) =>
+    appendHostedPublicationSelectionBatch(client, f.native.author.actor, { ...locator, ...request }),
+  );
+  expect(stored).toMatchObject({ replayed: false, itemCount: HOSTED_PUBLICATION_STAGING_BATCH_LIMIT });
+  expect(
+    await transaction((client) =>
+      appendHostedPublicationSelectionBatch(client, f.native.author.actor, { ...locator, ...request }),
+    ),
+  ).toMatchObject({ replayed: true, inputVersion: stored.inputVersion });
+
+  const oversized = {
+    batchId: f.newOccurrenceId(),
+    occurrenceIds: [...request.occurrenceIds, f.newOccurrenceId()],
+  };
+  expect(Value.Check(HostedPublicationPreparationBatchSchema, oversized)).toBe(false);
+  await expect(
+    transaction((client) =>
+      appendHostedPublicationSelectionBatch(client, f.native.author.actor, { ...locator, ...oversized }),
+    ),
+  ).rejects.toThrow('Selection batches must contain 1 to 1024 occurrence IDs');
 });
 
 test('whole-source staleness, missing ancestors, incomplete selection, empty selection, and cancellation fail closed', async () => {

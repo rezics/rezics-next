@@ -2524,7 +2524,7 @@ CREATE TABLE content.hosted_publication_staging_batch (
     CONSTRAINT hosted_publication_staging_batch_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT hosted_publication_staging_batch_first_input_position_check CHECK ((first_input_position >= 0)),
     CONSTRAINT hosted_publication_staging_batch_input_version_check CHECK ((input_version > 0)),
-    CONSTRAINT hosted_publication_staging_batch_item_count_check CHECK (((item_count >= 1) AND (item_count <= 512))),
+    CONSTRAINT hosted_publication_staging_batch_item_count_check CHECK (((item_count >= 1) AND (item_count <= 1024))),
     CONSTRAINT hosted_publication_staging_batch_payload_sha256_check CHECK ((octet_length(payload_sha256) = 32))
 );
 

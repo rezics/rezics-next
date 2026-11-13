@@ -1,7 +1,7 @@
 import type { HostedChapterTarget } from './hosted-chapters-model.ts';
 
 export const HOSTED_PUBLICATION_STAGING_STEP_LIMIT = 20;
-export const HOSTED_PUBLICATION_STAGING_BATCH_LIMIT = 512;
+export const HOSTED_PUBLICATION_STAGING_BATCH_LIMIT = 1024;
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 export type HostedPublicationStagingMode = 'whole' | 'selection';

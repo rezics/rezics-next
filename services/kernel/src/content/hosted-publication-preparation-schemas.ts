@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { HostedIdSchema } from './hosted-chapters-schemas.ts';
+import { HOSTED_PUBLICATION_STAGING_BATCH_LIMIT } from './hosted-publication-staging-model.ts';
 
 const closed = { additionalProperties: false } as const;
 
@@ -16,7 +17,7 @@ export const HostedPublicationPreparationStartSchema = t.Object(
 export const HostedPublicationPreparationBatchSchema = t.Object(
   {
     batchId: HostedIdSchema,
-    occurrenceIds: t.Array(HostedIdSchema, { minItems: 1, maxItems: 512 }),
+    occurrenceIds: t.Array(HostedIdSchema, { minItems: 1, maxItems: HOSTED_PUBLICATION_STAGING_BATCH_LIMIT }),
   },
   closed,
 );
