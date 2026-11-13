@@ -87,6 +87,12 @@ async function subjectReady(context: { canvasElement: HTMLElement }) {
 
 export const SignedIn: Story = {
   name: 'Member',
+  parameters: {
+    docs: {
+      codePanel: true,
+      source: { code: '<PageStory visitor="Signed In" path={pagePaths.subject} />' },
+    },
+  },
   play: subjectReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
