@@ -270,7 +270,7 @@ test('same-session wake forwards the newly persisted minimal source-result and c
     expect(prompt).toContain('return success (blocker null, `"checks":[]`)');
     expect(prompt).toContain('the deferred acceptance, which is neither a blocker nor a reason to wait');
     expect(prompt).toContain('Build the whole outcome in this attempt');
-    expect(prompt).toContain('services/kernel and services/auth may use the compiler database or a check host');
+    expect(prompt).toContain("Kernel/Auth may use compiler DB/host; don't unset KERNEL_CHECK_REMOTE or force local.");
     expect(prompt).not.toContain('Wait for a long command, even one queued for a test slot, in its open session');
     expect(prompt).toContain('through the check wrapper');
     expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
@@ -284,10 +284,9 @@ test('same-session wake forwards the newly persisted minimal source-result and c
 test('a waiting session uses the registered local command on wake even when its saved contract names the old remote route', async () => {
   const h = harness(waitingCli);
   try {
-    const localMarkdown = markdown.replace(
-      '  command: [bun, test]',
-      '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
-    );
+    const localMarkdown = markdown
+      .replace('goal: fixture', 'goal: control-plane')
+      .replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local');
     writeFileSync(h.briefFile, localMarkdown);
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
@@ -321,10 +320,9 @@ test('an adopted waiting attempt without a resumable session gets the current lo
   try {
     writeFileSync(
       h.briefFile,
-      markdown.replace(
-        '  command: [bun, test]',
-        '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
-      ),
+      markdown
+        .replace('goal: fixture', 'goal: control-plane')
+        .replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local'),
     );
     const { task, ref } = await startWaitingAttempt(h);
     h.store.updateAttempt(ref, (attempt) => {
@@ -381,7 +379,9 @@ test('a same-session wake preserves the focused Web command argv under the manag
     ];
     writeFileSync(
       h.briefFile,
-      markdown.replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`),
+      markdown
+        .replace('goal: fixture', 'goal: control-plane')
+        .replace('  command: [bun, test]', `  command: ${JSON.stringify(command)}\n  placement: local`),
     );
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
@@ -677,7 +677,7 @@ test('worker instructions start detached checks, keep working, and return waitin
     const task = {
       worktree: h.root,
       branch: 'worker/test',
-      brief: { markdown: 'Do work', kind: 'implementation' },
+      brief: { markdown: 'Do work', kind: 'implementation', goal: 'control-plane' },
     } as unknown as Task;
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
@@ -727,6 +727,16 @@ test('a finished owned check is proved before a resumed writer hands off its exa
     await waitForCondition(
       () => JSON.parse(readFileSync(history, 'utf8')).terminalProof?.local === true,
       'the exact physical run terminal proof',
+    );
+    await waitForCondition(
+      () =>
+        readFlow(h.store.db).some(
+          (event) =>
+            event.taskId === task.id &&
+            event.attempt === ref.attempt &&
+            (event.action === 'resume-ready' || event.action === 'resume-ready-unavailable'),
+        ),
+      'the direct check readiness event before capacity admission',
     );
     const readyBeforeAdmission = readFlow(h.store.db).filter(
       (event) => event.taskId === task.id && event.attempt === ref.attempt && event.action.startsWith('resume-ready'),
