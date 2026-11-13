@@ -24,7 +24,7 @@ function codexTurnSettings(spec: Pick<ManagerSpec, 'effort'>) {
   return { model: CODEX_MANAGER_MODEL, effort: spec.effort };
 }
 
-/** `ThreadGoalSetParams` from installed `codex-cli 0.164.0`; no idle-continuation field is acknowledged. */
+/** `ThreadGoalSetParams` from installed `codex-cli 0.169`; no idle-continuation field is acknowledged. */
 function activeGoalSet(threadId: string, spec: Pick<ManagerSpec, 'objective' | 'budget'>) {
   return {
     threadId,
@@ -49,6 +49,53 @@ function activeTurnId(resumed: { thread: { turns?: { id: string; status: string 
 }
 
 export type SessionTurnDelivery = { kind: 'steered' } | { kind: 'started'; turnId: string };
+
+/** The 0.169 protocol carries item origin as a ThreadItem discriminant, not its text. */
+export function userMessageTurn(notification: Notification): { threadId: string; turnId: string } | null {
+  if (notification.method !== 'item/started' && notification.method !== 'item/completed') return null;
+  const params = notification.params;
+  if (
+    !params ||
+    typeof params.threadId !== 'string' ||
+    !params.threadId ||
+    typeof params.turnId !== 'string' ||
+    !params.turnId ||
+    params.item?.type !== 'userMessage'
+  )
+    return null;
+  return { threadId: params.threadId, turnId: params.turnId };
+}
+
+function userMessageItem(item: unknown): boolean {
+  return Boolean(
+    item &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      (item as { type?: unknown }).type === 'userMessage',
+  );
+}
+
+const THREAD_ITEM_TYPES = new Set([
+  'userMessage',
+  'hookPrompt',
+  'agentMessage',
+  'functionCallOutput',
+  'plan',
+  'reasoning',
+  'commandExecution',
+  'fileChange',
+  'mcpToolCall',
+  'dynamicToolCall',
+  'collabAgentToolCall',
+  'subAgentActivity',
+  'webSearch',
+  'imageView',
+  'sleep',
+  'imageGeneration',
+  'enteredReviewMode',
+  'exitedReviewMode',
+  'contextCompaction',
+]);
 
 /** Provider-facing manager sessions: connection cache, concrete Codex/Claude requests and viewer argv. */
 export class ManagerSessionTransport {
@@ -150,6 +197,45 @@ export class ManagerSessionTransport {
       ...(latestTurn ? { latestTurn } : {}),
     };
   }
+  async turnHasUserMessage(client: AppServer, threadId: string, turnId: string): Promise<boolean> {
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
+    for (;;) {
+      const response = await client.request<unknown>('thread/items/list', {
+        threadId,
+        turnId,
+        limit: 100,
+        sortDirection: 'asc',
+        ...(cursor ? { cursor } : {}),
+      });
+      if (!response || typeof response !== 'object' || Array.isArray(response))
+        throw new Error('Invalid thread/items/list response for manager turn');
+      const page = response as { data?: unknown; nextCursor?: unknown; backwardsCursor?: unknown };
+      if (!Array.isArray(page.data)) throw new Error('Invalid thread/items/list data for manager turn');
+      if (page.backwardsCursor !== null && (typeof page.backwardsCursor !== 'string' || !page.backwardsCursor))
+        throw new Error('Invalid thread/items/list backwards cursor for manager turn');
+      for (const entry of page.data) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+          throw new Error('Invalid thread/items/list entry for manager turn');
+        const itemEntry = entry as { turnId?: unknown; item?: unknown };
+        if (typeof itemEntry.turnId !== 'string' || !itemEntry.turnId)
+          throw new Error('Invalid thread/items/list turn identity for manager turn');
+        if (itemEntry.turnId !== turnId)
+          throw new Error('Mismatched thread/items/list turn identity for manager turn');
+        const item = itemEntry.item;
+        const type =
+          item && typeof item === 'object' && !Array.isArray(item) ? (item as { type?: unknown }).type : null;
+        if (typeof type !== 'string' || !THREAD_ITEM_TYPES.has(type))
+          throw new Error('Invalid thread/items/list item type for manager turn');
+        if (userMessageItem(item)) return true;
+      }
+      if (page.nextCursor === null) return false;
+      if (typeof page.nextCursor !== 'string' || !page.nextCursor || seenCursors.has(page.nextCursor))
+        throw new Error('Invalid thread/items/list cursor for manager turn');
+      seenCursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
+  }
   private async steer(client: AppServer, threadId: string, expectedTurnId: string, summary: string): Promise<void> {
     await client.request('turn/steer', {
       threadId,
@@ -221,6 +307,15 @@ export class ManagerSessionTransport {
         await client.request('turn/interrupt', { threadId, turnId: activeTurnId });
       }
     }
+  }
+  async interruptExactTurn(
+    client: AppServer,
+    threadId: string,
+    turnId: string,
+    beforeInterrupt: (turnId: string) => void,
+  ): Promise<void> {
+    beforeInterrupt(turnId);
+    await client.request('turn/interrupt', { threadId, turnId });
   }
   async registerCodexViewer(
     spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>,
