@@ -43,7 +43,7 @@ beforeAll(async () => {
   const subjectKey = (() => {
     let key = crypto.randomUUID();
     while (
-      anchorRoute(f.native.routeKey, `${f.native.actors.author.actor.accountId}\nsubject.create\n${key}`) !==
+      anchorRoute(f.native.system.routeKey, `${f.native.author.actor.accountId}\nsubject.create\n${key}`) !==
       f.native.board.route
     )
       key = crypto.randomUUID();
@@ -114,7 +114,7 @@ beforeAll(async () => {
     .map((book) => ({
       catalogueId: book.catalogueId,
       revisionId: book.publicationId,
-      kind: 'publication',
+      kind: 'publication' as const,
       sourceRevisionId: book.structureRevisionId,
       threadId: book.threadId,
     }))

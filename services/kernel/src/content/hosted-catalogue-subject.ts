@@ -83,7 +83,7 @@ async function discloseCatalogue(
       observation.current = current;
     });
     if (
-      initial.value?.availability !== 'available' ||
+      !initial.value ||
       initial.value.visibility !== 'published' ||
       initial.anchor.epoch !== epoch ||
       !observation.current
@@ -105,12 +105,7 @@ async function discloseCatalogue(
       if (!catalogue || catalogue.thread_id !== row.thread_id || catalogue.publication_id !== row.publication_id)
         throw new ContentNotFoundError();
     });
-    if (
-      final.value?.availability !== 'available' ||
-      final.value.visibility !== 'published' ||
-      final.anchor.epoch !== epoch
-    )
-      return null;
+    if (!final.value || final.value.visibility !== 'published' || final.anchor.epoch !== epoch) return null;
     return {
       item: {
         catalogueId: row.catalogue_id,
