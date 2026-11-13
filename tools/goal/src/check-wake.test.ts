@@ -9,9 +9,11 @@ import { readFlow } from './flow.ts';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
 import { processIdentity } from './process.ts';
-import { settle } from './settle.ts';
+import { reconcileStoppedOrdinaryProof, settle } from './settle.ts';
 import type { Attempt, Task } from './types.ts';
-import { harness, markdown, temporaryDirectory } from './test-support.ts';
+import { brief, harness, markdown, temporaryDirectory } from './test-support.ts';
+import { authorizeProof } from './verification.ts';
+import { git } from './tasks.ts';
 
 const waitingCli = `#!/usr/bin/env bun
 import { existsSync, writeFileSync } from 'node:fs';
@@ -839,3 +841,196 @@ test('missing, foreign, and live check custody keep the waiting scope reserve', 
     }
   }
 });
+
+function registeredOrdinaryProofAttempt(
+  h: ReturnType<typeof harness>,
+  reportedChecks: string[],
+): {
+  taskId: string;
+  attempt: Attempt;
+} {
+  const commit = git(h.root, ['rev-parse', 'HEAD']);
+  git(h.root, ['branch', 'dev', commit]);
+  h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  const actor = { id: 'operations', sessionId: 'proof-owner-session' };
+  h.store.db
+    .query('INSERT INTO manager_sessions VALUES (?,?)')
+    .run(actor.id, JSON.stringify({ status: 'running', threadId: actor.sessionId }));
+  const sourceBrief = brief();
+  sourceBrief.acceptance.command = ['bun', 'test', 'fixture.test.ts'];
+  const source = h.store.createTask(
+    sourceBrief,
+    { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: commit },
+    'implementation',
+  );
+  h.store.updateTask({ taskId: source.id, attempt: 0 }, (task) => {
+    task.state = 'integrated';
+    task.integratedCommit = commit;
+  });
+  const proofBrief = {
+    ...sourceBrief,
+    kind: 'verification' as const,
+    paths: [],
+    proof: { journey: 'Original journey', sourceTasks: [source.id], sourceCommit: commit },
+  };
+  const authorization = authorizeProof(h.store, h.root, proofBrief, actor, 'operations', 'dev');
+  const proof = h.store.createTask(
+    proofBrief,
+    { briefPath: h.briefFile, worktree: h.root, branch: 'worker/proof', base: commit },
+    'implementation',
+  );
+  h.store.updateTask({ taskId: proof.id, attempt: 0 }, (task) => {
+    task.proofAuthorization = authorization;
+  });
+  const attempt = h.store.nextAttempt({ taskId: proof.id, attempt: 0 }, (n): Attempt => ({
+    taskId: proof.id,
+    attempt: n,
+    state: 'running',
+    profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    process: null,
+    driver: null,
+    session: 'wake-session',
+    logPath: join(h.settings.stateDirectory, 'runs', proof.id, `${n}.jsonl`),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', proof.id, String(n)),
+    auxiliaryProcesses: [],
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  }));
+  mkdirSync(join(attempt.logPath, '..'), { recursive: true });
+  writeFileSync(
+    attempt.logPath,
+    [
+      { type: 'thread.started', thread_id: 'wake-session' },
+      {
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: JSON.stringify({ status: 'waiting', summary: 'checks running', checks: reportedChecks }),
+        },
+      },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join('\n') + '\n',
+  );
+  h.store.updateTask(attempt, (task) => {
+    task.state = 'running';
+  });
+  return { taskId: proof.id, attempt };
+}
+
+function writeOrdinaryProofResult(
+  root: string,
+  taskId: string,
+  id: string,
+  status: 'running' | 'finished',
+): { id: string; cwd: string; argv: string[]; ownership: { taskId: string; attempt: number }; status: string } {
+  const results = join(root, '.temp/goal/checks/results');
+  mkdirSync(results, { recursive: true });
+  const record = {
+    id,
+    cwd: root,
+    argv: ['bun', 'test', 'fixture.test.ts'],
+    ownership: { taskId, attempt: 1 },
+    status,
+    ...(status === 'finished' ? { exitCode: 0 } : {}),
+    log: '.temp/goal/checks/original.log',
+  };
+  writeFileSync(join(results, `${id}.json`), JSON.stringify(record));
+  return record;
+}
+
+test('a transposed ordinary-proof hint waits on the unique owned UUID then consumes that terminal observation', async () => {
+  const h = harness(waitingCli);
+  try {
+    const actual = 'f69713e5-efe7-406b-b88b-4161307eb1f0';
+    const hint = 'f69713e5-efe7-406b-88b4-4161307eb1f0';
+    const { taskId, attempt } = registeredOrdinaryProofAttempt(h, [hint]);
+    const record = writeOrdinaryProofResult(h.root, taskId, actual, 'running');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue() {} });
+    expect(h.store.attempt(attempt)).toMatchObject({ state: 'waiting', checks: [actual], session: 'wake-session' });
+    expect(h.store.task(taskId).state).toBe('running');
+
+    writeFileSync(
+      join(h.root, '.temp/goal/checks/results', `${actual}.json`),
+      JSON.stringify({ ...record, status: 'finished', exitCode: 0 }),
+    );
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const recovery = job.recoverOrphans();
+    await waitFor(join(h.root, '.temp/goal/resume-started'));
+    const args = JSON.parse(readFileSync(join(h.root, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    expect(args.at(-1)).toContain(actual);
+    expect(args.at(-1)).not.toContain(`"id":"${hint}"`);
+    await recovery;
+    expect(h.store.task(taskId).currentAttempt).toBe(1);
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
+test('an ambiguous or foreign ordinary-proof invocation stays unavailable and does not wake as a product failure', async () => {
+  const h = harness(waitingCli);
+  try {
+    const first = randomUUID();
+    const second = randomUUID();
+    const { taskId, attempt } = registeredOrdinaryProofAttempt(h, [first]);
+    writeOrdinaryProofResult(h.root, taskId, first, 'finished');
+    writeOrdinaryProofResult(h.root, taskId, second, 'finished');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue() {} });
+    expect(h.store.attempt(attempt).state).toBe('waiting');
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.recoverOrphans();
+    expect(existsSync(join(h.root, '.temp/goal/resume-started'))).toBe(false);
+    expect(h.store.attempt(attempt).state).toBe('waiting');
+    expect(h.store.task(taskId).state).toBe('running');
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
+test('a stopped ordinary proof reconciles the same attempt after its unique owned record is terminal', async () => {
+  const h = harness(waitingCli);
+  try {
+    const actual = randomUUID();
+    const hint = randomUUID();
+    const { taskId, attempt } = registeredOrdinaryProofAttempt(h, [hint]);
+    const record = writeOrdinaryProofResult(h.root, taskId, actual, 'running');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue() {} });
+    h.store.updateTask(attempt, (task) => {
+      task.state = 'stopped';
+    });
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
+    expect(h.store.task(taskId)).toMatchObject({ state: 'stopped', currentAttempt: 1 });
+    expect(h.store.attempt(attempt).state).toBe('waiting');
+
+    writeFileSync(
+      join(h.root, '.temp/goal/checks/results', `${actual}.json`),
+      JSON.stringify({ ...record, status: 'finished', exitCode: 0 }),
+    );
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.recoverOrphans();
+    expect(h.store.task(taskId)).toMatchObject({ state: 'verified', currentAttempt: 1 });
+    expect(h.store.attempt(attempt)).toMatchObject({
+      state: 'exited',
+      checks: [actual],
+      failureKind: null,
+    });
+    expect(h.store.events(taskId, 1).some((event) => event.kind === 'proof-verified')).toBe(true);
+    expect(existsSync(join(h.root, '.temp/goal/resume-started'))).toBe(false);
+  } finally {
+    h.dispose();
+  }
+}, 15_000);

@@ -72,44 +72,99 @@ test('the host reports a held task whose dependency is already cancelled once, n
     await h.tasks.cancel(blocker.id);
     // Simulate a historical cancellation that predates the cancellation notification.
     h.store.db.query('DELETE FROM manager_inbox WHERE manager = ?').run('fixture');
+    h.store.db
+      .query(
+        "DELETE FROM worker_events WHERE task_id = ? AND kind IN ('cancelled-dependency-notice','dropped-dependency-notice')",
+      )
+      .run(blocker.id);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => events.push(event) });
 
     await job.recoverOrphans({ adoptRunning: false });
     await job.recoverOrphans({ adoptRunning: false });
 
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ managerId: 'fixture', taskId: held.id, kind: 'instruction' });
-    expect(events[0]?.summary).toContain(blocker.id);
+    expect(events[0]).toMatchObject({ managerId: 'fixture', taskId: blocker.id, kind: 'instruction' });
+    expect(events[0]?.summary).toContain(held.id);
   } finally {
     h.dispose();
   }
 });
 
-test('a held task whose stopped attempt the fence refuses does not stop the sweep or the other notices', async () => {
+test('cancelling a source-required predecessor keeps its dependent held and sends one actionable notice', async () => {
   const h = harness(),
     events: ManagerEvent[] = [];
   try {
     const blocker = h.tasks.dispatch(h.briefFile);
-    const dispatchHeld = (name: string) => {
+    const path = join(h.root, '.temp/goal/source-held.md');
+    writeFileSync(
+      path,
+      markdown.replace('waiting: []', `waiting: []\nafter: [${blocker.id}]\nafterSource: [${blocker.id}]`),
+    );
+    const held = h.tasks.dispatch(path);
+
+    await h.tasks.cancel(blocker.id);
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+    const pending = inbox.pending('fixture').map(({ event }) => event as ManagerEvent);
+    expect(h.store.task(held.id)).toMatchObject({ state: 'held', currentAttempt: 0 });
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.summary).toContain('remain held');
+    expect(pending[0]?.summary).toContain('authenticated reshape');
+
+    const historical = h.tasks.dispatch(h.briefFile);
+    const historicalPath = join(h.root, '.temp/goal/historical-source-held.md');
+    writeFileSync(
+      historicalPath,
+      markdown.replace('waiting: []', `waiting: []\nafter: [${historical.id}]\nafterSource: [${historical.id}]`),
+    );
+    const historicalHeld = h.tasks.dispatch(historicalPath);
+    h.store.updateTask({ taskId: historical.id, attempt: 0 }, (task) => {
+      task.state = 'stopped';
+    });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => events.push(event) });
+    await job.recoverOrphans({ adoptRunning: false });
+    await job.recoverOrphans({ adoptRunning: false });
+
+    expect(h.store.task(held.id)).toMatchObject({ state: 'held', currentAttempt: 0 });
+    expect(h.store.task(historicalHeld.id)).toMatchObject({ state: 'held', currentAttempt: 0 });
+    expect(inbox.pending('fixture')).toHaveLength(1);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ taskId: historical.id, kind: 'instruction' });
+    expect(events[0]?.summary).toContain(historicalHeld.id);
+    expect(events[0]?.summary).toContain('authenticated reshape');
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
+test('a dropped-dependency notice refused by the attempt fence does not stop other notices', async () => {
+  const h = harness(),
+    events: ManagerEvent[] = [];
+  try {
+    const refusedBlocker = h.tasks.dispatch(h.briefFile);
+    const otherBlocker = h.tasks.dispatch(h.briefFile);
+    const dispatchHeld = (name: string, blockerId: string) => {
       const path = join(h.root, `.temp/goal/${name}.md`);
-      writeFileSync(path, markdown.replace('waiting: []', `waiting: []\nafter: [${blocker.id}]`));
+      writeFileSync(path, markdown.replace('waiting: []', `waiting: []\nafter: [${blockerId}]`));
       return h.tasks.dispatch(path);
     };
-    const stopped = dispatchHeld('stopped');
-    const other = dispatchHeld('other');
-    await h.tasks.cancel(blocker.id);
+    dispatchHeld('refused', refusedBlocker.id);
+    dispatchHeld('other', otherBlocker.id);
+    await h.tasks.cancel(refusedBlocker.id);
+    await h.tasks.cancel(otherBlocker.id);
     h.store.db.query('DELETE FROM manager_inbox WHERE manager = ?').run('fixture');
-    // A task held after a stop keeps its stopped attempt current; the attempt fence refuses writes against it.
-    const write = h.store.write.bind(h.store);
-    h.store.write = ((ref, action) => {
-      if (ref.taskId === stopped.id) throw new StaleAttemptError(ref, ref.attempt);
-      return write(ref, action);
-    }) as typeof h.store.write;
+    h.store.db
+      .query("DELETE FROM worker_events WHERE kind IN ('cancelled-dependency-notice','dropped-dependency-notice')")
+      .run();
+    const notify = h.store.notifyDroppedDependency.bind(h.store);
+    h.store.notifyDroppedDependency = ((ref, event, deliver) => {
+      if (ref.taskId === refusedBlocker.id) throw new StaleAttemptError(ref, ref.attempt);
+      notify(ref, event, deliver);
+    }) as typeof h.store.notifyDroppedDependency;
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => events.push(event) });
 
     await job.recoverOrphans({ adoptRunning: false });
 
-    expect(events.map(({ taskId }) => taskId)).toEqual([other.id]);
+    expect(events.map(({ taskId }) => taskId)).toEqual([otherBlocker.id]);
   } finally {
     h.dispose();
   }

@@ -14,6 +14,7 @@ import {
   ProofUnavailableError,
   readReservationObservation,
   readProofObservation,
+  proofObservationCheckId,
   refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
@@ -73,6 +74,7 @@ import {
   finalReportPending,
   isSqliteContention,
   retrySettlementPersistence,
+  reconcileStoppedOrdinaryProof,
   settle,
 } from './settle.ts';
 import { CURSOR_FRESH_SESSION_EVENT, CURSOR_FRESH_SESSION_PROMPT } from './agents/shared.ts';
@@ -644,7 +646,13 @@ export class WorkerJob implements GateOutcomeSink {
   private async checkWakeMessage(attempt: Attempt, task: Task): Promise<string | null> {
     if (task.brief.kind === 'verification') {
       const observed = await readProofObservation(task, attempt.checks);
-      if (observed.status === 'running') return null;
+      const actualId = proofObservationCheckId(observed);
+      if (actualId && (attempt.checks?.length !== 1 || attempt.checks[0] !== actualId))
+        this.tasks.store.updateAttempt({ taskId: attempt.taskId, attempt: attempt.attempt }, (current) => {
+          current.checks = [actualId];
+        });
+      // Running stays parked. Unknown is an observation defect and must not wake as a product assertion.
+      if (observed.status !== 'terminal') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
     const checkTiming = await observeWaitingWorkerCheckTerminalProof(task, attempt);
@@ -1495,7 +1503,13 @@ export class WorkerJob implements GateOutcomeSink {
     const tasks = store.activeTasks();
     const notices = new Map<
       string,
-      { dependencyId: string; state: 'cancelled' | 'stopped'; managerId: string; taskId: string }
+      {
+        dependencyId: string;
+        state: 'cancelled' | 'stopped';
+        managerId: string;
+        sourceTaskIds: string[];
+        advisoryTaskIds: string[];
+      }
     >();
     for (const task of tasks) {
       if (task.state !== 'held') continue;
@@ -1503,19 +1517,31 @@ export class WorkerJob implements GateOutcomeSink {
         const state = store.taskState(dependencyId);
         if (state !== 'cancelled' && state !== 'stopped') continue;
         const key = `${dependencyId}:${task.brief.manager}`;
-        notices.set(key, { dependencyId, state, managerId: task.brief.manager, taskId: task.id });
+        const notice = notices.get(key) ?? {
+          dependencyId,
+          state,
+          managerId: task.brief.manager,
+          sourceTaskIds: [],
+          advisoryTaskIds: [],
+        };
+        const taskIds = task.brief.afterSource?.includes(dependencyId) ? notice.sourceTaskIds : notice.advisoryTaskIds;
+        if (!taskIds.includes(task.id)) taskIds.push(task.id);
+        notices.set(key, notice);
       }
     }
     for (const notice of notices.values()) {
       try {
         const predecessor = store.task(notice.dependencyId);
+        const summary = notice.sourceTaskIds.length
+          ? `Predecessor ${predecessor.id} ended ${notice.state} without integration; source-required held task(s) ${notice.sourceTaskIds.join(', ')} remain held. Integrate a commit from that predecessor into each task's target branch, or use an authenticated reshape to remove or replace afterSource with evidence.${notice.advisoryTaskIds.length ? ` Advisory held tasks ${notice.advisoryTaskIds.join(', ')} retain ordinary after release behavior.` : ''}`
+          : `${notice.state === 'cancelled' ? 'Cancelled' : 'Stopped'} predecessor ${predecessor.id} ended without landing; held tasks ${notice.advisoryTaskIds.join(', ')} no longer wait for it.`;
         store.notifyDroppedDependency(
           { taskId: predecessor.id, attempt: predecessor.currentAttempt },
           {
             managerId: notice.managerId,
             taskId: predecessor.id,
             kind: 'instruction',
-            summary: `Predecessor ${predecessor.id} ended ${notice.state} without landing; held task ${notice.taskId} no longer waits for it.`,
+            summary,
           },
           (event) => this.inbox.deliver(event),
         );
@@ -1575,6 +1601,21 @@ export class WorkerJob implements GateOutcomeSink {
             store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
         } catch (error) {
           this.recoveryFailed(run.binding.taskId, 'proof reservation release', error);
+        }
+      }
+    }
+    if (adoptRunning) {
+      for (const task of store.activeTasks()) {
+        if (task.state !== 'stopped' || task.brief.kind !== 'verification' || !task.currentAttempt) continue;
+        try {
+          const settled = await reconcileStoppedOrdinaryProof(this.tasks, {
+            taskId: task.id,
+            attempt: task.currentAttempt,
+          });
+          if (settled && store.task(task.id).state !== 'verified')
+            this.onAttemptExit({ taskId: task.id, attempt: task.currentAttempt });
+        } catch (error) {
+          this.recoveryFailed(task.id, 'ordinary proof reconciliation', error);
         }
       }
     }
@@ -2024,6 +2065,7 @@ export class WorkerJob implements GateOutcomeSink {
         if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
         const proof = store.record(ref)?.proof;
         const captureOnly = task.state === 'stopped' && kind === null && proof?.status === 'terminal' && proof.passed;
+        const observationUnavailable = !proof || proof.status !== 'terminal';
         store.updateTask(ref, (current) => {
           current.state = 'stopped';
         });
@@ -2033,10 +2075,12 @@ export class WorkerJob implements GateOutcomeSink {
         const event = {
           managerId: task.brief.manager,
           taskId: task.id,
-          kind: 'instruction' as const,
-          summary: (captureOnly
-            ? `Original proof passed on its captured source; current integration requires a fresh authenticated proof registration. ${attempt.result}`
-            : `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`
+          kind: (observationUnavailable ? 'environment' : 'instruction') as 'environment' | 'instruction',
+          summary: (observationUnavailable
+            ? `Original proof observation unavailable; retained the current attempt and records. ${attempt.result}`
+            : captureOnly
+              ? `Original proof passed on its captured source; current integration requires a fresh authenticated proof registration. ${attempt.result}`
+              : `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`
           ).slice(0, 1000),
           evidencePath: attempt.evidencePath,
         };

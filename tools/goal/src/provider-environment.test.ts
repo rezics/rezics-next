@@ -35,7 +35,7 @@ const capturedKeys = [
 ];
 
 const fakeCodex = String.raw`#!/usr/bin/env bun
-const { appendFileSync } = require('node:fs');
+const { appendFileSync, readFileSync } = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const args = process.argv.slice(2);
 const keys = ${JSON.stringify(capturedKeys)};
@@ -81,10 +81,22 @@ const server = Bun.serve({
       record({ kind: 'codex-rpc', method: message.method, params: p });
       let result = {};
       if (message.method === 'thread/start') result = { thread: { id: 'thread-' + crypto.randomUUID() } };
-      else if (message.method === 'thread/resume') result = { thread: { id: p.threadId, turns: [] } };
+      else if (message.method === 'thread/resume') {
+        const activeTurnId = readFileSync(process.env.FAKE_PROVIDER_CAPTURE, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .filter((entry) => entry.kind === 'codex-turn' && entry.threadId === p.threadId)
+          .at(-1)?.turnId;
+        result = { thread: { id: p.threadId, turns: activeTurnId ? [{ id: activeTurnId, status: 'inProgress' }] : [] } };
+      }
       else if (message.method === 'thread/goal/set') result = { goal: { status: p.status, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: p.tokenBudget ?? 1000 } };
       else if (message.method === 'thread/goal/get') result = { goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } };
-      else if (message.method === 'turn/start') result = { turn: { id: 'turn-' + crypto.randomUUID() } };
+      else if (message.method === 'turn/start') {
+        const turnId = 'turn-' + crypto.randomUUID();
+        record({ kind: 'codex-turn', threadId: p.threadId, turnId });
+        result = { turn: { id: turnId } };
+      }
       ws.send(JSON.stringify({ id: message.id, result }));
     }
   }
@@ -315,10 +327,12 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
   parent.PATH = `${dirname(executable)}:${parent.PATH}`;
   const ownerName = 'fixture';
   const calls: string[][] = [];
+  let viewerArgv: string[] | undefined;
   const executeWindow = (argv: string[], cwd: string) => {
     calls.push(argv);
     const result = spawnSync(argv[0]!, argv.slice(1), { cwd, env: parent, encoding: 'utf8', timeout: 10_000 });
     if (result.status !== 0) throw new Error(result.stderr || result.error?.message || 'fake provider viewer failed');
+    viewerArgv = argv;
   };
   const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory);
   const services = {
@@ -329,6 +343,16 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
       register(_id: string, argv: string[], cwd: string) {
         executeWindow(argv, cwd);
         return '@provider';
+      },
+      rebindIfStale(_id: string, argv: string[], cwd: string) {
+        const oldRemote = viewerArgv?.indexOf('--remote') ?? -1;
+        const newRemote = argv.indexOf('--remote');
+        if (oldRemote < 0 || newRemote < 0 || viewerArgv?.[oldRemote + 1] === argv[newRemote + 1]) return false;
+        const expected = [...viewerArgv!];
+        expected[oldRemote + 1] = argv[newRemote + 1]!;
+        if (JSON.stringify(expected) !== JSON.stringify(argv)) return false;
+        executeWindow(argv, cwd);
+        return true;
       },
       unregister() {},
     },

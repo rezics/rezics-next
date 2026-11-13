@@ -435,13 +435,14 @@ export class WorkerTasks {
     );
   }
   /**
-   * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A stopped
-   * or cancelled predecessor without a landing is dropped. A stabilize dependency of a dev task counts only after
-   * stabilize has been merged into dev: released earlier, the dependent started without the fix it waited for.
+   * Ordinary `after` edges release on integration or when their producer stops/cancels. A source-required edge only
+   * releases after the producer has an integrated commit and that commit is present on this task's target branch.
+   * A stabilize dependency of a dev task therefore waits until stabilize has been merged into dev.
    */
   dependenciesMet(task: Pick<Task, 'brief'>, tasks?: readonly Task[]): boolean {
     const byId = tasks ? new Map(tasks.map((candidate) => [candidate.id, candidate])) : undefined;
     const branch = taskBaseBranch(this.settings, task.brief);
+    const sourceRequired = new Set(task.brief.afterSource ?? []);
     return task.brief.after.every((id) => {
       const loaded = byId?.get(id);
       const dependency = loaded
@@ -450,6 +451,14 @@ export class WorkerTasks {
             const value = this.store.dependency(id);
             return value && { state: value.state, target: value.target, commit: value.task_commit };
           })();
+      if (sourceRequired.has(id)) {
+        if (!dependency || !['integrated', 'merged'].includes(dependency.state) || !dependency.commit) return false;
+        return (
+          spawnSync('git', ['merge-base', '--is-ancestor', dependency.commit, `refs/heads/${branch}`], {
+            cwd: this.settings.mainCheckout,
+          }).status === 0
+        );
+      }
       if (['stopped', 'cancelled'].includes(dependency?.state ?? '')) return true;
       if (!dependency || !['integrated', 'merged'].includes(dependency.state)) return false;
       if (dependency.target === task.brief.target) return true;
@@ -461,6 +470,62 @@ export class WorkerTasks {
         }).status === 0
       );
     });
+  }
+  /** Notify each manager once when a held source-required edge points to a stopped or cancelled producer. */
+  private notifyUnlandedSourceDependencies(dependencyIds: readonly string[]): void {
+    const selected = new Set(dependencyIds);
+    if (!selected.size) return;
+    const tasks = this.store.activeTasks();
+    const notices = new Map<string, { dependency: Task; managerId: string; source: string[]; advisory: string[] }>();
+    for (const task of tasks) {
+      if (task.state !== 'held') continue;
+      for (const dependencyId of task.brief.afterSource ?? []) {
+        if (!selected.has(dependencyId) || !task.brief.after.includes(dependencyId)) continue;
+        const dependency = this.store.task(dependencyId);
+        if (!['stopped', 'cancelled'].includes(dependency.state)) continue;
+        const key = `${dependencyId}:${task.brief.manager}`;
+        const notice = notices.get(key) ?? {
+          dependency,
+          managerId: task.brief.manager,
+          source: [],
+          advisory: [],
+        };
+        if (!notice.source.includes(task.id)) notice.source.push(task.id);
+        for (const related of tasks) {
+          if (
+            related.state === 'held' &&
+            related.brief.manager === task.brief.manager &&
+            related.brief.after.includes(dependencyId) &&
+            !related.brief.afterSource?.includes(dependencyId) &&
+            !notice.advisory.includes(related.id)
+          )
+            notice.advisory.push(related.id);
+        }
+        notices.set(key, notice);
+      }
+    }
+    const inbox = new SqliteManagerInbox(
+      this.store.db,
+      this.settings.integration.inboxDirectory,
+      undefined,
+      this.settings.policy?.inbox,
+    );
+    for (const notice of notices.values()) {
+      const dependency = notice.dependency;
+      const status = dependency.state === 'cancelled' ? 'cancelled' : 'stopped';
+      const summary =
+        `Predecessor ${dependency.id} ended ${status} without integration; source-required held task(s) ` +
+        `${notice.source.join(', ')} remain held. Integrate a commit from that predecessor into each task's target ` +
+        'branch, or use an authenticated reshape to remove or replace afterSource with evidence.' +
+        (notice.advisory.length
+          ? ` Advisory held tasks ${notice.advisory.join(', ')} retain ordinary after release behavior.`
+          : '');
+      this.store.notifyDroppedDependency(
+        { taskId: dependency.id, attempt: dependency.currentAttempt },
+        { managerId: notice.managerId, taskId: dependency.id, kind: 'instruction', summary },
+        (event) => inbox.deliver(event),
+      );
+    }
   }
   /** A worker's acceptance runs on its worktree, so what lands is that worktree: commit what the worker left out. */
   commitFinishedWork(task: Task, attempt: number): boolean {
@@ -530,6 +595,25 @@ export class WorkerTasks {
       if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
     this.assertEnvironmentWalkAdmission(brief, excludingTask);
     return { brief, taskClass, ...(authorization ? { authorization } : {}) };
+  }
+  /** A reshape that changes a source-required edge needs a live owner or operations manager. */
+  private assertSourceDependencyReshape(
+    task: Task,
+    nextBrief: Pick<Brief, 'afterSource'>,
+    actor: AuthenticatedManager | null | undefined,
+  ): void {
+    const previous = [...new Set(task.brief.afterSource ?? [])].sort();
+    const next = [...new Set(nextBrief.afterSource ?? [])].sort();
+    if (previous.length === next.length && previous.every((id, index) => id === next[index])) return;
+    const candidate = actor === undefined ? authenticatedManager(this.store.db) : actor;
+    const live = candidate && backlogManagerActor(this.store.db, candidate.id);
+    if (
+      !live ||
+      live.id !== candidate.id ||
+      live.sessionId !== candidate.sessionId ||
+      ![task.brief.manager, this.settings.integration.operationsManager].includes(live.id)
+    )
+      throw new Error('source-required dependency reshapes require the authenticated owning or operations manager');
   }
   private assertEnvironmentWalkAdmission(brief: Brief, excludingTask?: string): void {
     assertEnvironmentWalkAdmission(brief, this.store.tasksInStates(ENVIRONMENT_WALK_STATES), excludingTask);
@@ -1193,6 +1277,7 @@ export class WorkerTasks {
       const submitted = this.validateBrief(options.brief, taskId, actor).brief;
       if (submitted.goal !== initial.brief.goal || submitted.manager !== initial.brief.manager)
         throw new Error('a reshaped brief must keep the same goal and manager');
+      this.assertSourceDependencyReshape(initial, submitted, actor);
       this.store.db
         .transaction(() => {
           const current = this.store.task(taskId);
@@ -1275,6 +1360,7 @@ export class WorkerTasks {
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
+    this.assertSourceDependencyReshape(task, nextBrief, actor);
     // Product work on the integration branch retries at any generation, including one that never started.
     const devProduct = devProductBrief(task.brief) && devProductBrief(nextBrief);
     if (!task.currentAttempt && !devProduct)
@@ -1695,6 +1781,7 @@ export class WorkerTasks {
     if (!leased) {
       const current = this.store.task(taskId);
       const nextBrief = options.brief === undefined ? current.brief : this.validateBrief(options.brief, taskId).brief;
+      this.assertSourceDependencyReshape(current, nextBrief, undefined);
       this.assertLocalAcceptanceCustody(current, nextBrief);
       if (current.brief.kind === 'verification' && nextBrief.kind !== 'verification')
         throw new Error('registered proof contracts cannot become product retries');
@@ -2350,6 +2437,7 @@ export class WorkerTasks {
           t.state = cancelled ? 'cancelled' : 'stopped';
         });
         await this.reapOwnedResources(this.store.task(taskId));
+        this.notifyUnlandedSourceDependencies([taskId]);
         return;
       }
       const settleLogPath = this.store.attempt(ref).logPath;
@@ -2404,6 +2492,7 @@ export class WorkerTasks {
       }
       this.closeCurrentTermination(taskId, ref);
       await this.reapOwnedResources(this.store.task(taskId));
+      this.notifyUnlandedSourceDependencies([taskId]);
     } finally {
       settlementLease?.release();
       lease.release();
@@ -2441,11 +2530,12 @@ export class WorkerTasks {
   async cancel(taskId: string): Promise<void> {
     await this.stop(taskId, true);
     const dependency = this.store.task(taskId);
-    const heldByManager = new Map<string, string[]>();
+    const heldByManager = new Map<string, { source: string[]; advisory: string[] }>();
     for (const task of this.store.activeTasks()) {
       if (task.state !== 'held' || !task.brief.after.includes(taskId)) continue;
-      const held = heldByManager.get(task.brief.manager) ?? [];
-      held.push(task.id);
+      const held = heldByManager.get(task.brief.manager) ?? { source: [], advisory: [] };
+      const ids = task.brief.afterSource?.includes(taskId) ? held.source : held.advisory;
+      ids.push(task.id);
       heldByManager.set(task.brief.manager, held);
     }
     const inbox = new SqliteManagerInbox(
@@ -2455,11 +2545,14 @@ export class WorkerTasks {
       this.settings.policy?.inbox,
     );
     for (const [managerId, heldTasks] of heldByManager) {
+      const summary = heldTasks.source.length
+        ? `Predecessor ${taskId} ended cancelled without integration; source-required held task(s) ${heldTasks.source.join(', ')} remain held. Integrate a commit from that predecessor into each task's target branch, or use an authenticated reshape to remove or replace afterSource with evidence.${heldTasks.advisory.length ? ` Advisory held tasks ${heldTasks.advisory.join(', ')} retain ordinary after release behavior.` : ''}`
+        : `Cancelled predecessor ${taskId} ended without landing; held tasks ${heldTasks.advisory.join(', ')} no longer wait for it.`;
       const event = {
         managerId,
         taskId,
         kind: 'instruction' as const,
-        summary: `Cancelled predecessor ${taskId} ended without landing; held tasks ${heldTasks.join(', ')} no longer wait for it.`,
+        summary,
       };
       this.store.notifyDroppedDependency({ taskId, attempt: dependency.currentAttempt }, event, (notice) =>
         inbox.deliver(notice),

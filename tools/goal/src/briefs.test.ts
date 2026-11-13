@@ -380,6 +380,22 @@ test('product brief under-floor estimates are advisory; body oversize still retu
   );
 });
 
+test('afterSource opts selected after edges into source-presence waiting', () => {
+  const ownership = { version: 1 as const, areas: {} };
+  const strict = markdown.replace(
+    'waiting: []',
+    'waiting: []\nafter: [producer-1, advisory-1]\nafterSource: [producer-1]',
+  );
+  expect(parseBrief(strict, ownership)).toMatchObject({
+    after: ['producer-1', 'advisory-1'],
+    afterSource: ['producer-1'],
+  });
+  expect(parseBrief(markdown, ownership).afterSource).toBeUndefined();
+  expect(() =>
+    parseBrief(markdown.replace('waiting: []', 'waiting: []\nafterSource: [producer-1]'), ownership),
+  ).toThrow('afterSource dependencies must also appear in after: producer-1');
+});
+
 test('a native or browser walk occupies its Goal until it leaves ready, running, held or landing', () => {
   const walk = { goal: 'web', kind: 'implementation', acceptance: { requires: ['native'] } };
   const occupant = { id: 'walk-1', state: 'ready', brief: walk };

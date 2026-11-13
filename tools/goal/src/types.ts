@@ -216,6 +216,8 @@ export type Brief = {
   criticalPath: boolean;
   waiting: string[];
   after: string[];
+  /** A subset of `after` whose producer source must be integrated into this task's target branch. */
+  afterSource?: string[];
   inseparable: boolean;
   citesSources: boolean;
   hostileInput: boolean;

@@ -1,16 +1,29 @@
 import { expect, test } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
+import { dirname, join, relative } from 'node:path';
+import type { Attempt } from './types.ts';
 import { createInterface } from 'node:readline';
-import type { AppServer } from './app-server.ts';
+import type { AppServer, Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { dispatchDailyStepAudit, ensureFlow } from './flow.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
-import { harness, temporaryDirectory } from './test-support.ts';
+import { brief, harness, prepareKernelCompilerFixture, temporaryDirectory } from './test-support.ts';
+import { createManagerTerminalOwnerLookup, stoppedTaskSweepRetainsOrdinaryProof } from './manager-host.ts';
+import { authorizeProof } from './verification.ts';
+import { git } from './tasks.ts';
 import { hostRequest } from './integration-cli.ts';
+import { createTerminalProcessSweep } from './attempt-resources.ts';
+import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
+import {
+  grantWorkerTypingRecovery,
+  workerCheckBudgetDirectory,
+  workerCheckHostContentTree,
+} from './worker-check-budget.ts';
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const short = (path: string) => relative(process.cwd(), path);
@@ -313,36 +326,70 @@ store.db.close();
   }
 }, 30_000);
 
-test('recovery reopens each codex viewer window on the current endpoint', async () => {
+test('recovery rebinds a parked Codex viewer without waking or recreating its thread', async () => {
   const f = temporaryDirectory();
   mkdirSync(f.path, { recursive: true });
   const db = openDb(join(f.path, 'state.sqlite'));
   const inbox = new SqliteManagerInbox(db, f.path);
-  const registrations: { argv: string[]; cwd: string }[] = [];
+  const registrations: { id: string; argv: string[]; cwd: string }[] = [];
+  const rebindings: { id: string; argv: string[]; cwd: string }[] = [];
+  const viewers = new Map<string, { argv: string[]; cwd: string }>();
+  const turnStarts: { threadId: string; turnId: string }[] = [];
+  const requests: { method: string; params: any }[] = [];
+  let notify: ((notification: Notification) => void) | undefined;
   let endpoint = 'ws://127.0.0.1:10001';
+  let goalStatus = 'active';
   const services = {
     command: ['goal'],
     windows: {
-      register(_id: string, argv: string[], cwd: string) {
-        registrations.push({ argv, cwd });
+      register(id: string, argv: string[], cwd: string) {
+        registrations.push({ id, argv, cwd });
+        viewers.set(id, { argv, cwd });
         return '@1';
       },
-      unregister() {},
+      unregister(id: string) {
+        viewers.delete(id);
+      },
+      rebindIfStale(id: string, argv: string[], cwd: string) {
+        const current = viewers.get(id);
+        if (!current) return false;
+        const currentRemote = current.argv.indexOf('--remote');
+        const nextRemote = argv.indexOf('--remote');
+        if (currentRemote < 0 || nextRemote < 0 || current.argv[currentRemote + 1] === argv[nextRemote + 1])
+          return false;
+        const expected = [...current.argv];
+        expected[currentRemote + 1] = argv[nextRemote + 1]!;
+        if (JSON.stringify(expected) !== JSON.stringify(argv)) return false;
+        viewers.set(id, { argv, cwd });
+        rebindings.push({ id, argv, cwd });
+        return true;
+      },
     },
     checkCompletion: async () => ({ passed: false, evidencePath: 'completion.log', summary: 'not complete' }),
     connect: async (): Promise<AppServer> => ({
       endpoint,
       async request<T>(method: string, params: any): Promise<T> {
+        requests.push({ method, params });
         if (method === 'thread/start') return { thread: { id: 'thread-1' } } as T;
-        if (method === 'thread/goal/set')
-          return { goal: { status: params.status, tokensUsed: 0, timeUsedSeconds: 0 } } as T;
-        if (method === 'turn/start') return { turn: { id: 'turn-1' } } as T;
+        if (method === 'thread/goal/set') {
+          goalStatus = params.status;
+          return { goal: { status: goalStatus, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } } as T;
+        }
+        if (method === 'turn/start') {
+          const turnId = `turn-${turnStarts.length + 1}`;
+          turnStarts.push({ threadId: params.threadId, turnId });
+          return { turn: { id: turnId } } as T;
+        }
         if (method === 'thread/resume') return { thread: { id: params.threadId, turns: [] } } as T;
-        if (method === 'thread/goal/get') return { goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0 } } as T;
+        if (method === 'thread/goal/get')
+          return { goal: { status: goalStatus, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } } as T;
         throw new Error(`unexpected RPC ${method}`);
       },
-      onNotification() {
-        return () => {};
+      onNotification(listener) {
+        notify = listener;
+        return () => {
+          if (notify === listener) notify = undefined;
+        };
       },
       close() {},
     }),
@@ -361,19 +408,59 @@ test('recovery reopens each codex viewer window on the current endpoint', async 
     limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
   };
   const first = new ManagerSessions(db, inbox, services);
+  let recovered: ManagerSessions | undefined;
   try {
-    await first.start(spec);
+    const started = await first.start(spec);
+    const threadId = started.threadId!;
+    notify?.({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: started.activeTurnId, status: 'completed' } },
+    });
+    await first.flush();
+    expect(first.get('accounts')).toMatchObject({
+      threadId,
+      activeTurnId: null,
+      waitingForInbox: true,
+      goalState: { status: 'paused' },
+    });
     await first.close();
     endpoint = 'ws://127.0.0.1:10002';
-    const recovered = new ManagerSessions(db, inbox, services);
-    try {
-      await recovered.recover();
-    } finally {
-      await recovered.close();
-    }
-    expect(registrations).toHaveLength(2);
-    expect(registrations[1]!.argv).toContain(endpoint);
+    recovered = new ManagerSessions(db, inbox, services);
+    await recovered.recover();
+    expect(recovered.get('accounts')).toMatchObject({
+      threadId,
+      activeTurnId: null,
+      waitingForInbox: true,
+      goalState: { status: 'paused' },
+    });
+    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(0);
+    expect(turnStarts).toHaveLength(1);
+    expect(registrations).toHaveLength(1);
+    expect(rebindings).toHaveLength(1);
+    expect(rebindings[0]!.argv).toContain(threadId);
+    expect(rebindings[0]!.argv).toContain(endpoint);
+
+    await recovered.recover();
+    expect(rebindings).toHaveLength(1);
+    inbox.deliver({ managerId: 'accounts', kind: 'instruction', summary: 'Continue the same manager thread' });
+    await recovered.wake('accounts');
+    await recovered.flush();
+    expect(recovered.get('accounts')).toMatchObject({ threadId, activeTurnId: 'turn-2', waitingForInbox: false });
+    expect(turnStarts).toEqual([
+      { threadId, turnId: 'turn-1' },
+      { threadId, turnId: 'turn-2' },
+    ]);
+    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(inbox.notifications('accounts')).toHaveLength(0);
+
+    notify?.({ method: 'turn/completed', params: { threadId, turn: { id: 'turn-2', status: 'completed' } } });
+    await recovered.flush();
+    viewers.delete('accounts');
+    await recovered.recover();
+    expect(registrations).toHaveLength(1);
+    expect(viewers.has('accounts')).toBe(false);
   } finally {
+    await recovered?.close();
     await first.close();
     db.close();
     f.close();
@@ -833,3 +920,309 @@ test('a host that loaded one tools/goal revision retires once main publishes ano
     f.close();
   }
 }, 20_000);
+
+test('the stopped-task sweep retains only the live owned ordinary-proof runner', () => {
+  const h = harness();
+  try {
+    const identity = processIdentity();
+    if (!identity) throw new Error('test process identity unavailable');
+    const commit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['branch', 'dev', commit]);
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    const actor = { id: 'operations', sessionId: 'proof-owner-session' };
+    h.store.db
+      .query('INSERT INTO manager_sessions VALUES (?,?)')
+      .run(actor.id, JSON.stringify({ status: 'running', threadId: actor.sessionId }));
+    const sourceBrief = brief();
+    sourceBrief.acceptance.command = ['bun', 'test', 'fixture.test.ts'];
+    const source = h.store.createTask(
+      sourceBrief,
+      { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: commit },
+      'implementation',
+    );
+    h.store.updateTask({ taskId: source.id, attempt: 0 }, (task) => {
+      task.state = 'integrated';
+      task.integratedCommit = commit;
+    });
+    const proofBrief = {
+      ...sourceBrief,
+      kind: 'verification' as const,
+      paths: [],
+      proof: { journey: 'Original journey', sourceTasks: [source.id], sourceCommit: commit },
+    };
+    const authorization = authorizeProof(h.store, h.root, proofBrief, actor, 'operations', 'dev');
+    const proof = h.store.createTask(
+      proofBrief,
+      { briefPath: h.briefFile, worktree: h.root, branch: 'worker/proof', base: commit },
+      'implementation',
+    );
+    const attempt = h.store.nextAttempt({ taskId: proof.id, attempt: 0 }, (n): Attempt => ({
+      taskId: proof.id,
+      attempt: n,
+      state: 'exited',
+      profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+      pool: 'fixture',
+      tableVersion: 'fixture',
+      experiment: null,
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      process: null,
+      driver: null,
+      session: 'proof-session',
+      logPath: join(h.settings.stateDirectory, 'runs', proof.id, `${n}.jsonl`),
+      evidencePath: join(h.settings.stateDirectory, 'evidence', proof.id, String(n)),
+      auxiliaryProcesses: [],
+      fixRound: 0,
+      consulted: false,
+      previousFailure: null,
+      failure: null,
+      escalation: null,
+      before: null,
+      after: null,
+      exitCode: 0,
+      result: '',
+      blocker: null,
+      approaches: [],
+    }));
+    h.store.updateTask(attempt, (task) => {
+      task.proofAuthorization = authorization;
+      task.state = 'stopped';
+    });
+    const checkId = randomUUID();
+    mkdirSync(join(h.root, '.temp/goal/checks/results'), { recursive: true });
+    writeFileSync(
+      join(h.root, '.temp/goal/checks/results', `${checkId}.json`),
+      JSON.stringify({
+        id: checkId,
+        cwd: h.root,
+        argv: ['bun', 'test', 'fixture.test.ts'],
+        ownership: { taskId: proof.id, attempt: 1 },
+        status: 'running',
+        runnerHost: hostname(),
+        runnerPid: identity.pid,
+        runnerIdentity: identity,
+        physicalRunId: randomUUID(),
+        log: '.temp/goal/checks/original.log',
+      }),
+    );
+    expect(stoppedTaskSweepRetainsOrdinaryProof(h.store.db, proof.id, h.root, identity)).toBe(true);
+    expect(
+      stoppedTaskSweepRetainsOrdinaryProof(h.store.db, proof.id, h.root, {
+        ...identity,
+        group: identity.group + 1,
+        pid: identity.pid + 1,
+      }),
+    ).toBe(false);
+    h.store.updateAttempt(attempt, (current) => {
+      current.terminationIntent = {
+        operation: 'stop',
+        requestedAt: new Date().toISOString(),
+        state: 'complete',
+        processIdentity: 'known',
+        process: identity,
+        auxiliaryProcesses: [],
+        settledAt: new Date().toISOString(),
+      };
+    });
+    expect(stoppedTaskSweepRetainsOrdinaryProof(h.store.db, proof.id, h.root, identity)).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('the native terminal sweep retains both exact groups and reaps unmatched and superseded groups', async () => {
+  const h = harness();
+  const runners: { child: ChildProcess; identity: ProcessIdentity; exited: Promise<void> }[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    prepareKernelCompilerFixture(task.worktree, true);
+    mkdirSync(join(task.worktree, 'apps/web/scripts'), { recursive: true });
+    mkdirSync(join(task.worktree, 'apps/web/src'), { recursive: true });
+    writeFileSync(
+      join(task.worktree, 'apps/web/package.json'),
+      JSON.stringify({ name: '@rezics/web', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+    );
+    writeFileSync(join(task.worktree, 'apps/web/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+    writeFileSync(join(task.worktree, 'apps/web/scripts/typecheck.ts'), 'export {}\n');
+    writeFileSync(join(task.worktree, 'apps/web/src/reader.ts'), 'export const reader = true\n');
+    git(task.worktree, ['add', 'apps/web']);
+    git(task.worktree, ['commit', '-m', 'Prepare Web recovery compiler fixture']);
+
+    const ref = { taskId: task.id, attempt: 1 };
+    h.store.db
+      .query(
+        "UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1, '$.state', 'stopped') WHERE id=?",
+      )
+      .run(task.id);
+    h.store.db
+      .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
+      .run(task.id, JSON.stringify({ taskId: task.id, attempt: 1, state: 'exited' }));
+    const actor = { id: task.brief.manager, sessionId: 'native-recovery-session' };
+    const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, ref.attempt);
+    mkdirSync(join(budget, 'typing-recovery'), { recursive: true });
+    const content = workerCheckHostContentTree(task.worktree);
+
+    const startRunner = async () => {
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        cwd: task.worktree,
+        detached: true,
+        stdio: 'ignore',
+      });
+      const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', resolve);
+        child.once('error', reject);
+      });
+      const identity = processIdentity(child.pid!);
+      if (!identity) throw new Error('native recovery runner has no process identity');
+      const runner = { child, identity, exited };
+      runners.push(runner);
+      return runner;
+    };
+
+    const writeRecovery = (
+      grant: ReturnType<typeof grantWorkerTypingRecovery>,
+      stamp: string,
+      runner: ProcessIdentity,
+      runnerHost = hostname(),
+    ): void => {
+      const command = grant.command as string[];
+      writeFileSync(
+        join(budget, stamp),
+        JSON.stringify({
+          content,
+          includedTypecheck: true,
+          exitCode: 0,
+          typingRequest: {
+            physicalRunId: grant.physicalRunId,
+            command,
+            localPrepared: [],
+            capture: 'physical-command',
+          },
+          typingRecovery: {
+            token: grant.token,
+            checkId: grant.checkId,
+            physicalRunId: grant.physicalRunId,
+          },
+        }),
+      );
+      writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp }));
+      h.store.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)').run(
+        task.id,
+        ref.attempt,
+        'typing-recovery-authorized',
+        new Date().toISOString(),
+        JSON.stringify({
+          actor: grant.actor,
+          token: grant.token,
+          identity: grant.identity,
+          command,
+          checkId: grant.checkId,
+        }),
+      );
+      const record = {
+        version: 1,
+        id: grant.checkId,
+        cwd: task.worktree,
+        argv: command,
+        ownership: { taskId: task.id, attempt: ref.attempt },
+        physicalRunId: grant.physicalRunId,
+        runnerHost,
+        runnerPid: runner.pid,
+        runnerIdentity: runner,
+        status: 'running',
+      };
+      const resultPath = join(task.worktree, '.temp/goal/checks/results', `${grant.checkId}.json`);
+      const physicalPath = physicalHistoryPath(task.worktree, grant.checkId, grant.physicalRunId);
+      mkdirSync(dirname(resultPath), { recursive: true });
+      mkdirSync(dirname(physicalPath), { recursive: true });
+      writeFileSync(resultPath, JSON.stringify(record));
+      writeFileSync(physicalPath, JSON.stringify({ ...record, remoteExpected: false }));
+    };
+
+    const kernelGrant = grantWorkerTypingRecovery({
+      stateDirectory: h.settings.stateDirectory,
+      database: h.store.db.filename,
+      taskId: task.id,
+      attempt: ref.attempt,
+      worktree: task.worktree,
+      command: ['bun', 'services/kernel/scripts/typecheck.ts'],
+      actor,
+    });
+    const webGrant = grantWorkerTypingRecovery({
+      stateDirectory: h.settings.stateDirectory,
+      database: h.store.db.filename,
+      taskId: task.id,
+      attempt: ref.attempt,
+      worktree: task.worktree,
+      command: ['bun', 'run', '--cwd', 'apps/web', 'typecheck'],
+      actor,
+    });
+    const kernelRunner = await startRunner();
+    const webRunner = await startRunner();
+    const foreignRunner = await startRunner();
+    const unrelatedRunner = await startRunner();
+    writeRecovery(kernelGrant, '1', kernelRunner.identity);
+    writeRecovery(webGrant, '2', webRunner.identity);
+
+    const foreignGrant = {
+      ...kernelGrant,
+      token: randomUUID(),
+      checkId: randomUUID(),
+      physicalRunId: randomUUID(),
+    };
+    writeRecovery(foreignGrant, '3', foreignRunner.identity, 'foreign-runner');
+
+    const sweep = createTerminalProcessSweep();
+    const lookup = createManagerTerminalOwnerLookup(h.store.db, h.settings.stateDirectory);
+    const owners = [{ id: task.id, worktree: task.worktree }];
+    const first = await sweep.stop(await sweep.inventory(owners), lookup);
+    expect(first.map(({ identity }) => identity.pid).sort((a, b) => a - b)).toEqual(
+      [foreignRunner, unrelatedRunner].map(({ identity }) => identity.pid).sort((a, b) => a - b),
+    );
+    expect(sameProcess(kernelRunner.identity)).toBe(true);
+    expect(sameProcess(webRunner.identity)).toBe(true);
+
+    const terminalAt = new Date().toISOString();
+    for (const path of [
+      join(task.worktree, '.temp/goal/checks/results', `${webGrant.checkId}.json`),
+      physicalHistoryPath(task.worktree, webGrant.checkId, webGrant.physicalRunId),
+    ]) {
+      const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+      writeFileSync(path, JSON.stringify({ ...record, status: 'finished', exitCode: 0, endedAt: terminalAt }));
+    }
+    const terminal = await sweep.stop(await sweep.inventory(owners), lookup);
+    expect(terminal.map(({ identity }) => identity.pid)).toEqual([webRunner.identity.pid]);
+    expect(sameProcess(kernelRunner.identity)).toBe(true);
+    expect(sameProcess(webRunner.identity)).toBe(false);
+
+    h.store.db
+      .query(
+        "UPDATE worker_attempts SET body=json_set(body, '$.terminationIntent', json(?)) WHERE task_id=? AND attempt=1",
+      )
+      .run(JSON.stringify({ operation: 'cancel' }), task.id);
+    expect(lookup(task.id, task.worktree, kernelRunner.identity)).toBe(true);
+    h.store.db
+      .query("UPDATE worker_attempts SET body=json_remove(body, '$.terminationIntent') WHERE task_id=? AND attempt=1")
+      .run(task.id);
+
+    h.store.db
+      .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 2, ?)')
+      .run(task.id, JSON.stringify({ taskId: task.id, attempt: 2, state: 'exited' }));
+    h.store.db
+      .query(
+        "UPDATE worker_tasks SET current_attempt=2, body=json_set(body, '$.currentAttempt', 2, '$.state', 'stopped') WHERE id=?",
+      )
+      .run(task.id);
+    const third = await sweep.stop(await sweep.inventory(owners), lookup);
+    expect(third.map(({ identity }) => identity.pid)).toEqual([kernelRunner.identity.pid]);
+    expect(sameProcess(kernelRunner.identity)).toBe(false);
+    expect(sameProcess(webRunner.identity)).toBe(false);
+  } finally {
+    for (const runner of runners) {
+      if (sameProcess(runner.identity)) runner.child.kill('SIGKILL');
+    }
+    await Promise.all(runners.map(({ exited }) => exited));
+    await h.disposeAsync();
+  }
+});
