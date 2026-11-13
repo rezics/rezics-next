@@ -8,8 +8,15 @@ let nextTurn = 0;
 let lateGoalStartSent = false;
 const goals = new Map<string, any>();
 const turns = new Map<string, any>();
+const items = new Map<string, { turnId: string; item: any }[]>();
 const delayed = new Map<number, any>();
 const send = (message: unknown) => process.stdout.write(`${JSON.stringify(message)}\n`);
+
+function persistItem(threadId: string, turnId: string, item: any): void {
+  const entries = items.get(threadId) ?? [];
+  entries.push({ turnId, item });
+  items.set(threadId, entries);
+}
 
 function stalled(method: string, params: any): boolean {
   const path = process.env.FAKE_RPC_STALL_FILE;
@@ -54,6 +61,13 @@ function respond(message: any): void {
     case 'thread/resume':
       result = { thread: { id: p.threadId, turns: turns.has(p.threadId) ? [turns.get(p.threadId)] : [] } };
       break;
+    case 'thread/items/list': {
+      const data = (items.get(p.threadId) ?? [])
+        .filter((entry) => entry.turnId === p.turnId)
+        .map((entry) => ({ turnId: entry.turnId, item: entry.item, startedAtMs: null, completedAtMs: null }));
+      result = { data, nextCursor: null, backwardsCursor: null };
+      break;
+    }
     case 'thread/goal/set': {
       const previous = goals.get(p.threadId);
       const goal = { tokensUsed: 0, timeUsedSeconds: 0, ...goals.get(p.threadId), ...p };
@@ -113,7 +127,13 @@ function respond(message: any): void {
     }
     case 'test/notify':
       if (p.method === 'turn/completed') turns.delete(p.params.threadId);
+      if (p.method === 'item/started' || p.method === 'item/completed')
+        persistItem(p.params.threadId, p.params.turnId, p.params.item);
       send(p);
+      break;
+    case 'test/persist-item':
+      persistItem(p.threadId, p.turnId, p.item);
+      result = { persisted: true };
       break;
     case 'test/fail':
       send({ id: message.id, error: { code: -32000, message: 'Fake failure' } });
