@@ -299,7 +299,7 @@ export function hostedVersionSequence<Value extends object>(
   write: HostedVersionWrite<Value>,
   indexKind: HostedVersionIndexKind,
 ): VersionedOutlineSequenceReadWriteSet<Value> {
-  return overlayFor(write).sequences.get(indexKind)!;
+  return overlayFor<Value>(write).sequences.get(indexKind)!;
 }
 
 /** Stage final Book containment state; removed occurrences retain only a tombstone in this sequence. */
