@@ -242,6 +242,53 @@ $$;
 
 
 --
+-- Name: guard_hosted_private_title(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_private_title() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.title_redacted OR NEW.title IS NULL THEN
+      RAISE EXCEPTION 'Hosted tombstones require an existing private title' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Hosted identities and snapshots must survive redaction' USING ERRCODE = '23514';
+  END IF;
+  IF OLD.title_redacted OR OLD.title IS NULL OR NOT NEW.title_redacted OR NEW.title IS NOT NULL
+     OR (to_jsonb(NEW) - 'title' - 'title_redacted') IS DISTINCT FROM
+        (to_jsonb(OLD) - 'title' - 'title_redacted') THEN
+    RAISE EXCEPTION 'Hosted payload permits only one-way title redaction' USING ERRCODE = '23514';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM content.hosted_structure_revision r
+    WHERE r.route = OLD.route AND r.catalogue_id = OLD.catalogue_id
+      AND r.revision_id = OLD.revision_id AND r.kind = 'structure'
+  ) THEN
+    RAISE EXCEPTION 'Published hosted labels are immutable' USING ERRCODE = '23514';
+  END IF;
+  -- purge_started_at is native's irreversible eligibility fence: permanent,
+  -- expired soft tombstone, or the account-erasure bypass. A deleted_at or
+  -- author identity alone is never sufficient. Serialize against native changes.
+  PERFORM 1 FROM content.post p
+  JOIN content.hosted_catalogue c
+    ON c.route = p.route AND c.catalogue_id = p.post_id AND c.thread_id = p.thread_id
+  WHERE p.route = OLD.route AND p.post_id = OLD.catalogue_id
+    AND ((p.availability = 'erased' AND p.purge_started_at IS NOT NULL)
+      OR (p.availability = 'available' AND p.visibility = 'published' AND p.author_erased))
+  FOR UPDATE OF p;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Hosted title redaction requires terminal native authority' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_hosted_snapshot(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1506,12 +1553,13 @@ CREATE TABLE content.hosted_append (
     append_offset bigint NOT NULL,
     revision_id uuid NOT NULL,
     occurrence_id uuid NOT NULL,
-    title text NOT NULL,
+    title text,
     target_revision_id uuid NOT NULL,
     body_sha256 bytea NOT NULL,
+    title_redacted boolean DEFAULT false NOT NULL,
     CONSTRAINT hosted_append_append_offset_check CHECK (((append_offset >= 0) AND (append_offset <= '9007199254740990'::bigint))),
     CONSTRAINT hosted_append_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
-    CONSTRAINT hosted_append_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 256)))
+    CONSTRAINT hosted_append_title_check CHECK (((title_redacted AND (title IS NULL)) OR ((NOT title_redacted) AND (title IS NOT NULL) AND ((char_length(title) >= 1) AND (char_length(title) <= 256)))))
 );
 
 
@@ -1591,13 +1639,14 @@ CREATE TABLE content.hosted_placement (
     parent_id uuid,
     "position" integer NOT NULL,
     ordinal integer NOT NULL,
-    title text NOT NULL,
+    title text,
     target_revision_id uuid,
     body_sha256 bytea,
+    title_redacted boolean DEFAULT false NOT NULL,
     CONSTRAINT hosted_placement_check CHECK ((((target_revision_id IS NULL) AND (body_sha256 IS NULL)) OR ((target_revision_id IS NOT NULL) AND (body_sha256 IS NOT NULL) AND (octet_length(body_sha256) = 32)))),
     CONSTRAINT hosted_placement_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 511))),
     CONSTRAINT hosted_placement_position_check CHECK ((("position" >= 0) AND ("position" <= 511))),
-    CONSTRAINT hosted_placement_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 256)))
+    CONSTRAINT hosted_placement_title_check CHECK (((title_redacted AND (title IS NULL)) OR ((NOT title_redacted) AND (title IS NOT NULL) AND ((char_length(title) >= 1) AND (char_length(title) <= 256)))))
 );
 
 
@@ -4880,7 +4929,7 @@ CREATE TRIGGER hosted_append_descriptor_immutable BEFORE DELETE OR UPDATE ON con
 -- Name: hosted_append hosted_append_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER hosted_append_immutable BEFORE DELETE OR UPDATE ON content.hosted_append FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_snapshot();
+CREATE TRIGGER hosted_append_immutable BEFORE INSERT OR DELETE OR UPDATE ON content.hosted_append FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_private_title();
 
 
 --
@@ -4901,7 +4950,7 @@ CREATE TRIGGER hosted_occurrence_immutable BEFORE DELETE OR UPDATE ON content.ho
 -- Name: hosted_placement hosted_placement_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER hosted_placement_immutable BEFORE DELETE OR UPDATE ON content.hosted_placement FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_snapshot();
+CREATE TRIGGER hosted_placement_immutable BEFORE INSERT OR DELETE OR UPDATE ON content.hosted_placement FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_private_title();
 
 
 --

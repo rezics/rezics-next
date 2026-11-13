@@ -83,7 +83,7 @@ export type HostedPlacementRow = {
   parent_id: string | null;
   position: number;
   ordinal: number;
-  title: string;
+  title: string | null;
   kind: 'part' | 'chapter';
   thread_id: string | null;
   post_id: string | null;
@@ -120,6 +120,8 @@ export async function hostedRevision(client: AccessClient, id: string, revisionI
   );
 }
 export function hostedPlacement(row: HostedPlacementRow): OrderedHostedPlacement {
+  // Terminal payload tombstones must never become editable placements or labels.
+  if (row.title === null) throw new Error('Redacted hosted placement is unavailable');
   const base = {
     occurrenceId: row.occurrence_id,
     parentId: row.parent_id,
@@ -147,7 +149,7 @@ export function hostedPlacement(row: HostedPlacementRow): OrderedHostedPlacement
 type HostedAppendReadRow = {
   append_offset: string;
   occurrence_id: string;
-  title: string;
+  title: string | null;
   thread_id: string | null;
   post_id: string | null;
   target_revision_id: string;
