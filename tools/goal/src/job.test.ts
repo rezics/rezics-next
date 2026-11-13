@@ -92,7 +92,7 @@ async function typingRetryFixture(
   });
   const ref = { taskId: task.id, attempt: 1 };
   const now = Date.now();
-  const process: ProcessIdentity = { pid: 2_000_000_000, start: '1', boot: 'fixture', group: 2_000_000_000 };
+  const workerProcess: ProcessIdentity = { pid: 2_000_000_000, start: '1', boot: 'fixture', group: 2_000_000_000 };
   const endedAt = new Date(now - 5_000).toISOString();
   const stopRequestedAt = new Date(now - 3_000).toISOString();
   const stopSettledAt = new Date(now - 2_000).toISOString();
@@ -106,7 +106,7 @@ async function typingRetryFixture(
     experiment: null,
     startedAt: new Date(now - 10_000).toISOString(),
     endedAt: null,
-    process: exited ? null : process,
+    process: exited ? null : workerProcess,
     driver: null,
     logPath: join(h.settings.stateDirectory, 'runs', task.id, '1.jsonl'),
     evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, '1'),
@@ -267,7 +267,7 @@ async function typingRetryFixture(
         requestedAt: stopRequestedAt,
         state: 'complete',
         processIdentity: 'known',
-        process,
+        process: workerProcess,
         auxiliaryProcesses: options.auxiliaryProcesses ?? [],
         settledAt: stopSettledAt,
       };
