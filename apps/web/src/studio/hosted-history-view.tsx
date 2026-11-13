@@ -2,6 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } fro
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { historicalReaderSource } from '../threads/historical-reader-provenance';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import type { StudioFailure } from './contract';
 import { HostedHistoryVisit, type HostedHistoryBinding, type HostedHistorySelection } from './hosted-history';
 import type { HostedHistoryEntry, HostedOutlineWindowPage } from './hosted-contract';
 
@@ -9,10 +12,11 @@ import type { HostedHistoryEntry, HostedOutlineWindowPage } from './hosted-contr
 export function HostedHistoryDisclosure({ binding }: { binding: HostedHistoryBinding }) {
   const [open, setOpen] = useState(false);
   const id = useId();
+  const options = { locale: getLocale() };
   return (
     <div className="studio-stack">
       <Button type="button" variant="outline" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
-        {open ? 'Close book history' : 'Browse book history'}
+        {open ? m.studio_book_history_hide({}, options) : m.studio_book_history_show({}, options)}
       </Button>
       <div id={id}>{open ? <MountedHistory binding={binding} /> : null}</div>
     </div>
@@ -23,6 +27,7 @@ function MountedHistory({ binding }: { binding: HostedHistoryBinding }) {
   const queryClient = useQueryClient();
   const source = useMemo(() => historicalReaderSource(queryClient), [queryClient]);
   const [visit, setVisit] = useState<HostedHistoryVisit | null>(null);
+  const options = { locale: getLocale() };
   useEffect(() => {
     let mounted: HostedHistoryVisit | null = null;
     let disposed = false;
@@ -37,12 +42,45 @@ function MountedHistory({ binding }: { binding: HostedHistoryBinding }) {
       mounted?.dispose();
     };
   }, [binding, source]);
-  return visit ? <HostedHistoryPanel visit={visit} /> : <p role="status">Loading book history…</p>;
+  return visit ? (
+    <HostedHistoryPanel visit={visit} />
+  ) : (
+    <p role="status">{m.studio_book_history_loading({}, options)}</p>
+  );
+}
+
+function versionTitle(entry: HostedHistoryEntry) {
+  const options = { locale: getLocale() };
+  return entry.kind === 'structure'
+    ? m.studio_book_history_structure_title({ revision: entry.revisionId }, options)
+    : m.studio_book_history_release_title({ revision: entry.revisionId }, options);
+}
+
+/** Native failure kinds remain authoritative; their English transport copy does not enter the localized view. */
+function HistoryFailure({ kind, outline = false }: { kind: StudioFailure['kind']; outline?: boolean }) {
+  const options = { locale: getLocale() };
+  switch (kind) {
+    case 'denied':
+      return m.studio_book_history_denied({}, options);
+    case 'invalid':
+      return m.studio_book_history_invalid({}, options);
+    case 'withdrawn':
+      return m.studio_book_history_withdrawn({}, options);
+    case 'uncertain':
+      return m.studio_book_history_uncertain({}, options);
+    case 'stale':
+      return outline ? m.studio_book_history_outline_stale({}, options) : m.studio_book_history_stale({}, options);
+    case 'unavailable':
+      return outline
+        ? m.studio_book_history_outline_unavailable({}, options)
+        : m.studio_book_history_unavailable({}, options);
+  }
 }
 
 /** The view reads only directory metadata until the author explicitly selects one exact version. */
 export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
   const state = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
+  const options = { locale: getLocale() };
   const headingId = useId();
   const inspector = useRef<HTMLElement>(null);
   const selectedTrigger = useRef<HTMLButtonElement | null>(null);
@@ -53,23 +91,23 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
   }, [selectedId]);
   return (
     <section className="studio-stack" aria-labelledby={headingId} aria-busy={state.kind === 'loading'}>
-      <h3 id={headingId}>Book history</h3>
-      <p className="studio-help">Inspect saved structures and releases. Your current draft stays open above.</p>
-      {state.kind === 'loading' ? <p role="status">Loading book history…</p> : null}
-      {state.kind === 'ended' ? (
-        <p role="alert">Your author session changed. Reopen the book to browse its history.</p>
-      ) : null}
+      <h3 id={headingId}>{m.studio_book_history_heading({}, options)}</h3>
+      <p className="studio-help">{m.studio_book_history_intro({}, options)}</p>
+      {state.kind === 'loading' ? <p role="status">{m.studio_book_history_loading({}, options)}</p> : null}
+      {state.kind === 'ended' ? <p role="alert">{m.studio_book_history_ended({}, options)}</p> : null}
       {state.kind === 'failed' ? (
         <div className="studio-stack" role="alert">
-          <p>{state.error.message}</p>
+          <p>
+            <HistoryFailure kind={state.error.kind} />
+          </p>
           {state.error.kind === 'unavailable' ? (
             <Button type="button" variant="outline" onClick={() => void visit.load()}>
-              Retry this page
+              {m.studio_books_retry({}, options)}
             </Button>
           ) : null}
           {state.error.kind === 'stale' ? (
             <Button type="button" variant="outline" onClick={() => void visit.restart()}>
-              Restart history
+              {m.studio_book_history_restart({}, options)}
             </Button>
           ) : null}
         </div>
@@ -77,20 +115,26 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
       {state.kind === 'ready' ? (
         <>
           {state.page.items.length ? (
-            <ol className="studio-history-list" aria-label="Saved book versions">
+            <ol className="studio-history-list" aria-label={m.studio_book_history_list({}, options)}>
               {state.page.items.map((entry) => (
                 <li key={entry.revisionId} className="studio-stack">
                   <div className="studio-action-row">
-                    <strong>{entry.kind === 'structure' ? 'Structure' : 'Release'}</strong>
-                    {entry.isCurrentDraft ? <span>Current draft</span> : null}
-                    {entry.isCurrentRelease ? <span>Current release</span> : null}
+                    <strong>
+                      {entry.kind === 'structure'
+                        ? m.studio_book_history_structure({}, options)
+                        : m.studio_book_history_release({}, options)}
+                    </strong>
+                    {entry.isCurrentDraft ? <span>{m.studio_book_history_current_draft({}, options)}</span> : null}
+                    {entry.isCurrentRelease ? <span>{m.studio_book_history_current_release({}, options)}</span> : null}
                   </div>
                   <NativeTimestamp entry={entry} />
-                  <p className="studio-help studio-break">Version: {entry.revisionId}</p>
+                  <p className="studio-help studio-break">
+                    {m.studio_book_history_version_value({ revision: entry.revisionId }, options)}
+                  </p>
                   <Button
                     type="button"
                     variant="outline"
-                    aria-label={`Inspect ${entry.kind === 'structure' ? 'structure' : 'release'} ${entry.revisionId}`}
+                    aria-label={m.studio_book_history_inspect_title({ title: versionTitle(entry) }, options)}
                     aria-pressed={
                       state.selection.kind !== 'none' && state.selection.entry.revisionId === entry.revisionId
                     }
@@ -99,7 +143,7 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
                       void visit.inspect(entry.revisionId);
                     }}
                   >
-                    Inspect version
+                    {m.studio_book_history_inspect({}, options)}
                   </Button>
                 </li>
               ))}
@@ -107,21 +151,21 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
           ) : (
             <p>
               {state.cursor === null && state.page.nextCursor === null
-                ? 'No saved book versions yet.'
-                : 'No versions on this page.'}
+                ? m.studio_book_history_empty({}, options)
+                : m.studio_book_history_page_empty({}, options)}
             </p>
           )}
           <div className="studio-action-row">
             {state.page.nextCursor !== null ? (
               <Button type="button" variant="outline" onClick={() => void visit.next()}>
-                Older versions
+                {m.studio_book_history_older({}, options)}
               </Button>
             ) : (
-              <p className="studio-help">End of book history.</p>
+              <p className="studio-help">{m.studio_book_history_complete({}, options)}</p>
             )}
             {state.cursor !== null ? (
               <Button type="button" variant="ghost" onClick={() => void visit.restart()}>
-                Newest versions
+                {m.studio_book_history_newest({}, options)}
               </Button>
             ) : null}
           </div>
@@ -130,31 +174,38 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
               ref={inspector}
               tabIndex={-1}
               className="studio-stack"
-              aria-label="Read-only book version"
+              aria-label={m.studio_book_history_inspector_title(
+                { title: versionTitle(state.selection.entry) },
+                options,
+              )}
               aria-busy={state.selection.kind === 'loading'}
             >
               <div className="studio-section-heading">
-                <h4>{state.selection.entry.kind === 'structure' ? 'Saved structure' : 'Saved release'} · Read-only</h4>
+                <h4>{m.studio_book_history_readonly_title({ title: versionTitle(state.selection.entry) }, options)}</h4>
                 <Button
                   type="button"
                   variant="ghost"
+                  aria-label={m.studio_book_history_close_title(
+                    { title: versionTitle(state.selection.entry) },
+                    options,
+                  )}
                   onClick={() => {
                     visit.closeSelection();
                     selectedTrigger.current?.focus();
                   }}
                 >
-                  Close inspection
+                  {m.revision_history_close_inspector({}, options)}
                 </Button>
               </div>
-              <p className="studio-help">Inspection does not change the draft or the current release.</p>
+              <p className="studio-help">{m.studio_book_history_readonly_help({}, options)}</p>
               <dl className="studio-break">
-                <dt>Catalogue</dt>
+                <dt>{m.studio_book_catalogue({}, options)}</dt>
                 <dd>{state.selection.entry.catalogueId}</dd>
-                <dt>Version</dt>
+                <dt>{m.studio_book_history_version({}, options)}</dt>
                 <dd>{state.selection.entry.revisionId}</dd>
                 {state.selection.entry.sourceRevisionId ? (
                   <>
-                    <dt>Source structure</dt>
+                    <dt>{m.studio_book_history_source({}, options)}</dt>
                     <dd>{state.selection.entry.sourceRevisionId}</dd>
                   </>
                 ) : null}
@@ -179,14 +230,17 @@ function NativeTimestamp({ entry }: { entry: HostedHistoryEntry }) {
 }
 
 function HistorySelection({ selection, visit }: { selection: HostedHistorySelection; visit: HostedHistoryVisit }) {
+  const options = { locale: getLocale() };
   if (selection.kind === 'none') return null;
-  if (selection.kind === 'loading') return <p role="status">Loading the exact version…</p>;
+  if (selection.kind === 'loading') return <p role="status">{m.studio_book_history_exact_loading({}, options)}</p>;
   if (selection.kind === 'failed')
     return (
       <div role="alert" className="studio-stack">
-        <p>{selection.error.message}</p>
+        <p>
+          <HistoryFailure kind={selection.error.kind} outline />
+        </p>
         <Button type="button" variant="outline" onClick={() => void visit.retryOutline()}>
-          Retry this outline page
+          {m.studio_book_history_outline_retry({}, options)}
         </Button>
       </div>
     );
@@ -194,61 +248,66 @@ function HistorySelection({ selection, visit }: { selection: HostedHistorySelect
   const emptyVersion = cursor === null && page.nextCursor === null && page.items.length === 0;
   return (
     <div className="studio-stack">
-      <p className="studio-help">One page in native outline order. Parent parts may be on another page.</p>
+      <p className="studio-help">{m.studio_book_history_outline_help({}, options)}</p>
       {page.items.length ? (
-        <HistoryOutline page={page} />
+        <HistoryOutline page={page} title={versionTitle(selection.entry)} />
       ) : (
         <p>
           {emptyVersion
             ? selection.entry.kind === 'publication'
-              ? 'This release contains no chapters (withdrawn).'
-              : 'This structure has no parts or chapters.'
-            : 'No entries on this outline page.'}
+              ? m.studio_book_history_release_empty({}, options)
+              : m.studio_book_history_structure_empty({}, options)
+            : m.studio_book_history_outline_empty({}, options)}
         </p>
       )}
       {page.nextCursor !== null ? (
         <Button type="button" variant="outline" onClick={() => void visit.nextOutline()}>
-          Next outline page
+          {m.studio_book_history_outline_next({}, options)}
         </Button>
       ) : (
-        <p className="studio-help">End of outline.</p>
+        <p className="studio-help">{m.studio_book_history_outline_complete({}, options)}</p>
       )}
     </div>
   );
 }
 
 /** Flat native preorder: a page can start inside an absent part, and never becomes an editable tree. */
-function HistoryOutline({ page }: { page: HostedOutlineWindowPage }) {
+function HistoryOutline({ page, title }: { page: HostedOutlineWindowPage; title: string }) {
+  const options = { locale: getLocale() };
   return (
-    <ol className="studio-toc-branch" aria-label="Exact chapter order">
+    <ol className="studio-toc-branch" aria-label={m.studio_book_history_outline_title({ title }, options)}>
       {page.items.map((item) => (
         <li key={item.occurrenceId}>
           <div className="studio-toc-entry">
             {item.availability === 'unavailable' ? (
-              <p>{item.kind === 'part' ? 'Part unavailable' : 'Chapter unavailable'}</p>
+              <p>
+                {item.kind === 'part'
+                  ? m.studio_book_history_part_unavailable({}, options)
+                  : m.studio_book_history_chapter_unavailable({}, options)}
+              </p>
             ) : (
               <>
                 <strong>{item.title}</strong>
                 {item.kind === 'chapter' ? (
                   <dl className="studio-help studio-break">
-                    <dt>Chapter</dt>
+                    <dt>{m.book_reader_chapter({}, options)}</dt>
                     <dd>{item.target.postId}</dd>
-                    <dt>Pinned version</dt>
+                    <dt>{m.studio_book_history_pinned({}, options)}</dt>
                     <dd>{item.target.revisionId}</dd>
-                    <dt>SHA-256</dt>
+                    <dt>{m.studio_revision_digest({}, options)}</dt>
                     <dd>{item.target.sha256}</dd>
                   </dl>
                 ) : (
-                  <p className="studio-help">Part</p>
+                  <p className="studio-help">{m.book_reader_part({}, options)}</p>
                 )}
               </>
             )}
             <dl className="studio-help studio-break">
-              <dt>Occurrence</dt>
+              <dt>{m.studio_book_history_occurrence({}, options)}</dt>
               <dd>{item.occurrenceId}</dd>
-              <dt>Parent occurrence</dt>
-              <dd>{item.parentId ?? 'None'}</dd>
-              <dt>Sibling position</dt>
+              <dt>{m.studio_book_history_parent({}, options)}</dt>
+              <dd>{item.parentId ?? m.studio_book_history_none({}, options)}</dd>
+              <dt>{m.studio_book_history_position({}, options)}</dt>
               <dd>{item.position}</dd>
             </dl>
           </div>

@@ -1,5 +1,5 @@
-import { expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { afterAll, expect, spyOn, test } from 'bun:test';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
@@ -13,7 +13,18 @@ import type {
 } from './hosted-contract';
 import { createHostedBookNative, hostedFailure } from './hosted-native';
 import { HostedHistoryVisit, type HostedHistoryBinding } from './hosted-history';
-import { HostedHistoryDisclosure, HostedHistoryPanel } from './hosted-history-view';
+import { m } from '../paraglide/messages.js';
+import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
+import { installPostReadingDom } from '../../tests/post-reading-dom';
+
+const dom = installPostReadingDom();
+const { createRoot } = await import('react-dom/client');
+const { getByRole, queryByRole } = await import('@testing-library/dom');
+const { HostedHistoryDisclosure, HostedHistoryPanel } = await import('./hosted-history-view');
+afterAll(async () => {
+  setLocale('en', { reload: false });
+  await dom.restore();
+});
 
 const id = (value: number) => `00000000-0000-8000-8000-${(200000000 + value).toString().padStart(12, '0')}`;
 const catalogueId = id(1);
@@ -192,7 +203,11 @@ test('empty, sparse, denied and stale directories have different recovery and no
   for (const [result, expected, absent] of [
     [ok(page([])), 'No saved book versions yet.', 'Retry this page'],
     [ok(page([], 'sparse')), 'Older versions', 'No saved book versions yet.'],
-    [hostedFailure('denied', 'Author access denied'), 'Author access denied', 'Retry this page'],
+    [
+      hostedFailure('denied', 'Author access denied'),
+      'Your current session cannot browse this book history.',
+      'Retry this page',
+    ],
     [hostedFailure('stale', 'Expired continuation'), 'Restart history', 'No saved book versions yet.'],
   ] as const) {
     const screen = mounted({ listHistory: async () => result, readOutlineWindow: noDetail });
@@ -270,7 +285,11 @@ test('failed exact reads remain unavailable and revoked author access clears the
     await screen.visit.inspect(structure.revisionId);
     expect(screen.html()).not.toContain('First chapter');
     expect(screen.html()).not.toContain('This structure has no parts');
-    expect(screen.html()).toContain('Exact version access failed');
+    expect(screen.html()).toContain(
+      kind === 'denied'
+        ? 'Your current session cannot browse this book history.'
+        : 'This exact book outline page could not be read.',
+    );
     expect(screen.visit.snapshot().kind).toBe(kind === 'denied' ? 'failed' : 'ready');
     screen.dispose();
   }
@@ -491,3 +510,151 @@ test('more than 512 native entries remain browsable while only one requested pag
     screen.dispose();
   }
 });
+
+test('Book history locale keys and named parameters match in all installed locales', async () => {
+  const catalogues = await Promise.all(
+    locales.map((locale) => Bun.file(`${import.meta.dir}/../../messages/${locale}.json`).json()),
+  );
+  const keys = Object.keys(catalogues[0])
+    .filter((key) => key.startsWith('studio_book_history_'))
+    .sort();
+  expect(keys).toHaveLength(52);
+  const parameters = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+  for (const catalogue of catalogues) {
+    expect(
+      Object.keys(catalogue)
+        .filter((key) => key.startsWith('studio_book_history_'))
+        .sort(),
+    ).toEqual(keys);
+    for (const key of keys) {
+      expect(catalogue[key].trim().length).toBeGreaterThan(0);
+      expect(parameters(catalogue[key])).toEqual(parameters(catalogues[0][key]));
+    }
+  }
+});
+
+test.each(locales)(
+  '%s: localized history and exact sparse inspection retain focus, addresses and read-only recovery',
+  async (locale) => {
+    const previous = getLocale();
+    setLocale(locale, { reload: false });
+    const options = { locale };
+    const saved = { ...release, createdAt: '2026-11-13T12:34:56.654321+08:00' };
+    const title = m.studio_book_history_release_title({ revision: saved.revisionId }, options);
+    const label = '原稿 <img src=x onerror=alert(1)> & "B"';
+    const historyCursors: (string | null)[] = [];
+    const outlineCursors: (string | null)[] = [];
+    let fail = true;
+    const screen = mounted({
+      listHistory: async (_id, cursor) => {
+        historyCursors.push(cursor);
+        return ok(cursor === null ? page([], 'history+/=') : page([saved, structure]));
+      },
+      readOutlineWindow: async ({ revision, cursor }) => {
+        outlineCursors.push(cursor);
+        if (cursor === 'outline+/=' && fail) {
+          fail = false;
+          return hostedFailure('unavailable', '<b>Raw API explanation</b>');
+        }
+        return ok({
+          ...revision,
+          items:
+            cursor === null
+              ? [
+                  { ...outline().items[1]!, title: label, position: Number.MAX_SAFE_INTEGER },
+                  { occurrenceId: id(15), parentId: null, position: 512, kind: 'chapter', availability: 'unavailable' },
+                  { occurrenceId: id(17), parentId: id(16), position: 900, kind: 'part', availability: 'unavailable' },
+                ]
+              : [],
+          nextCursor: cursor === null ? 'outline+/=' : cursor === 'outline+/=' ? 'last' : null,
+        });
+      },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    const inspect = spyOn(screen.visit, 'inspect');
+    const next = spyOn(screen.visit, 'next');
+    const nextOutline = spyOn(screen.visit, 'nextOutline');
+    const retry = spyOn(screen.visit, 'retryOutline');
+    const button = (name: string) => getByRole(host, 'button', { name, exact: true }) as HTMLButtonElement;
+    const click = async (name: string) =>
+      act(async () => {
+        button(name).click();
+        await Promise.all([inspect, next, nextOutline, retry].map((action) => action.mock.results.at(-1)?.value));
+      });
+    try {
+      await screen.visit.load();
+      await act(async () => root.render(<HostedHistoryPanel visit={screen.visit} />));
+      expect(getByRole(host, 'region', { name: m.studio_book_history_heading({}, options) })).toBeTruthy();
+      expect(host.textContent).toContain(m.studio_book_history_page_empty({}, options));
+      expect(host.textContent).not.toContain(m.studio_book_history_empty({}, options));
+      await click(m.studio_book_history_older({}, options));
+      expect(historyCursors).toEqual([null, 'history+/=']);
+      expect(getByRole(host, 'list', { name: m.studio_book_history_list({}, options) })).toBeTruthy();
+      expect(host.textContent).toContain(m.studio_book_history_current_draft({}, options));
+      expect(host.textContent).toContain(m.studio_book_history_current_release({}, options));
+      expect(host.querySelector('time')?.dateTime).toBe(saved.createdAt);
+      const trigger = button(m.studio_book_history_inspect_title({ title }, options));
+      trigger.focus();
+      await click(trigger.getAttribute('aria-label')!);
+      const inspector = getByRole(host, 'region', { name: m.studio_book_history_inspector_title({ title }, options) });
+      expect(document.activeElement).toBe(inspector);
+      expect(
+        getByRole(inspector, 'list', { name: m.studio_book_history_outline_title({ title }, options) }),
+      ).toBeTruthy();
+      expect(inspector.textContent).toContain(label);
+      expect(inspector.querySelector('img')).toBeNull();
+      for (const exact of [
+        catalogueId,
+        saved.revisionId,
+        structure.revisionId,
+        id(6),
+        id(7),
+        id(9),
+        id(10),
+        id(15),
+        id(16),
+        id(17),
+        'a'.repeat(64),
+        saved.createdAt,
+        String(Number.MAX_SAFE_INTEGER),
+      ]) {
+        expect(inspector.textContent).toContain(exact);
+      }
+      for (const copy of [
+        m.studio_book_history_source({}, options),
+        m.studio_book_history_chapter_unavailable({}, options),
+        m.studio_book_history_part_unavailable({}, options),
+        m.studio_book_history_none({}, options),
+      ]) {
+        expect(inspector.textContent).toContain(copy);
+      }
+      expect(queryByRole(host, 'checkbox')).toBeNull();
+      await click(m.studio_book_history_outline_next({}, options));
+      expect(getByRole(host, 'alert').textContent).toContain(m.studio_book_history_outline_unavailable({}, options));
+      expect(host.textContent).not.toContain('Raw API explanation');
+      expect(host.textContent).not.toContain(label);
+      await click(m.studio_book_history_outline_retry({}, options));
+      expect(host.textContent).toContain(m.studio_book_history_outline_empty({}, options));
+      expect(host.textContent).not.toContain(m.studio_book_history_release_empty({}, options));
+      await click(m.studio_book_history_outline_next({}, options));
+      expect(host.textContent).toContain(m.studio_book_history_outline_complete({}, options));
+      expect(host.textContent).not.toContain(m.studio_book_history_release_empty({}, options));
+      expect(outlineCursors).toEqual([null, 'outline+/=', 'outline+/=', 'last']);
+      await click(m.studio_book_history_close_title({ title }, options));
+      expect(document.activeElement).toBe(trigger);
+      expect(
+        queryByRole(host, 'region', { name: m.studio_book_history_inspector_title({ title }, options) }),
+      ).toBeNull();
+      await act(async () => screen.replace());
+      expect(getByRole(host, 'alert').textContent).toBe(m.studio_book_history_ended({}, options));
+      expect(host.textContent).not.toContain(saved.revisionId);
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      screen.dispose();
+      setLocale(previous, { reload: false });
+    }
+  },
+);

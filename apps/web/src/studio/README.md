@@ -339,6 +339,27 @@ selection assertions use the page wire instead of a whole Book. Existing publica
 remain unchanged; their native doubles include history. Native, browser, Storybook and broader acceptance remain
 deferred; this source pass uses changed-file formatting and the affected Web typecheck.
 
+## Book history language
+
+Decision: the mounted Book history and exact outline inspector use current-locale messages in all eight launch
+locales, sharing existing Studio catalogue/retry/digest and Book part/chapter terms and using `studio_book_history_*`
+for the remaining copy. Metadata has no Book title: title-bearing inspection names combine the localized saved
+structure/release title with the exact revision ID. Supplied chapter labels, IDs, digests, native microseconds/offsets
+and sibling positions stay intact. Error copy follows the existing safe failure kind instead of rendering native
+English messages; unavailable reads never become empty outlines or invented chapters. Focus return, exact-cursor
+retry, one-page bounds, withdrawal and session retirement keep the existing read-only lifecycle.
+
+Sources read before design: this owner document, Web's [Goal](../../../../docs/goals/web.md#done-when),
+`hosted-history-view.tsx`, the existing `hosted-history.test.tsx` fixture, `hosted-history.ts`,
+`hosted-outline-window.ts`, the exported history/failure contracts and native error mapping, and the current-locale
+handling in `revisions.tsx` and its existing saved-version language fixture.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test src/studio/hosted-history.test.tsx`.
+The focused locale fixture spans the list and an exact sparse/withheld outline, preserving focus, native identities,
+retry cursors, escaped supplied labels and localized failures. Existing English assertions remain where meaning
+matches; raw-error assertions now expect classified copy. Source checks are locale key/parameter parity,
+changed-file formatting and one affected Web typecheck. Browser, native, Storybook and broader acceptance are deferred.
+
 ## Author Book withdrawal
 
 Decision: Studio offers a separate withdrawal review only for an admitted currently published Book with a nonempty
