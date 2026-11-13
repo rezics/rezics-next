@@ -45,6 +45,8 @@ import readCheckpoint from './hosted-reading-read.sql';
 import insertCheckpoint from './hosted-reading-insert.sql';
 import updateCheckpoint from './hosted-reading-update.sql';
 import deleteCheckpoint from './hosted-reading-delete.sql';
+import lockCheckpointFence from './hosted-reading-fence-lock.sql';
+import advanceCheckpointFence from './hosted-reading-fence-advance.sql';
 import exportPage from './hosted-reading-export.sql';
 import checkpointPage from './hosted-reading-page.sql';
 
@@ -396,10 +398,29 @@ export function createHostedReadingCommands(dependencies: HostedReadingDependenc
         },
         async (tx, _context, address): Promise<CommandResult<HostedReadingSaveResult>> => {
           const params = writeParams(route, actor.accountId, value, address);
+          const locked = await lockCheckpointFence.run(tx, {
+            route,
+            account_id: actor.accountId,
+            subject_id: value.subjectId,
+          });
+          const fence = (Array.isArray(locked) ? locked[0] : locked) as { revision: string } | undefined;
+          if (!fence) throw new ProblemError('conflict');
+          const advanced = await advanceCheckpointFence.run(tx, {
+            route,
+            account_id: actor.accountId,
+            subject_id: value.subjectId,
+            expected_revision: value.expectedRevision ?? fence.revision,
+          });
+          const nextFence = (Array.isArray(advanced) ? advanced[0] : advanced) as { revision: string } | undefined;
+          if (!nextFence) throw new ProblemError('conflict');
           const written =
             value.expectedRevision === null
-              ? await insertCheckpoint.run(tx, params)
-              : await updateCheckpoint.run(tx, { ...params, expected_revision: value.expectedRevision });
+              ? await insertCheckpoint.run(tx, { ...params, revision: nextFence.revision })
+              : await updateCheckpoint.run(tx, {
+                  ...params,
+                  revision: nextFence.revision,
+                  expected_revision: value.expectedRevision,
+                });
           const row = (Array.isArray(written) ? written[0] : written) as StoredWrite | undefined;
           if (!row) throw new ProblemError('conflict');
           return {
@@ -428,6 +449,20 @@ export function createHostedReadingCommands(dependencies: HostedReadingDependenc
           input: value,
         },
         async (tx): Promise<CommandResult<HostedReadingClearResult>> => {
+          const locked = await lockCheckpointFence.run(tx, {
+            route,
+            account_id: actor.accountId,
+            subject_id: value.subjectId,
+          });
+          const fence = (Array.isArray(locked) ? locked[0] : locked) as { revision: string } | undefined;
+          if (!fence) throw new ProblemError('conflict');
+          const advanced = await advanceCheckpointFence.run(tx, {
+            route,
+            account_id: actor.accountId,
+            subject_id: value.subjectId,
+            expected_revision: value.expectedRevision,
+          });
+          if (!(Array.isArray(advanced) ? advanced[0] : advanced)) throw new ProblemError('conflict');
           const removed = await deleteCheckpoint.run(tx, {
             route,
             account_id: actor.accountId,

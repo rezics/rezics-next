@@ -4,6 +4,7 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Pool, PoolClient } from 'pg';
 import { hostedChaptersFixture } from '../content/support/hosted-chapters-fixture.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { readHostedReadingExportPage } from '../../src/library/hosted-reading.ts';
 import { peekHostedReadingPort } from '../../src/library/hosted-reading-bind.ts';
 import type { HostedReadingPort } from '../../src/library/contract/hosted-reading.ts';
 
@@ -18,6 +19,8 @@ afterAll(async () => {
 });
 
 let restorePositionProjection: (() => void) | undefined;
+const ownerCall = (method: 'GET' | 'POST' | 'PUT', path: string, body: unknown, key?: string) =>
+  f.native.call(method, path, body, { other: true, ...(key ? { key } : {}) });
 
 async function subjectOnRoute(route: number): Promise<string> {
   let key = crypto.randomUUID();
@@ -450,14 +453,81 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     { key: crypto.randomUUID() },
   );
   expect(laterPublication.status).toBe(200);
-  const historicalSave = await f.native.call(
+  const historicalSave = await ownerCall(
     'PUT',
     '/v1/libraryHostedReading',
     { ...saveOne, expectedRevision: savedOne.value.revision },
-    { other: true, key: crypto.randomUUID() },
+    crypto.randomUUID(),
   );
   expect(historicalSave.status, JSON.stringify(historicalSave.value)).toBe(200);
   expect(historicalSave.value.address.publicationRevisionId).toBe(publication.value.revisionId);
+
+  // Rebuild the migration seed from a checkpoint that predates its durable fence.
+  await f.native.pool.query(
+    `DELETE FROM library.hosted_reading_fence WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+    [ownerRoute, ownerId, subjectOne],
+  );
+  await f.native.pool.query(
+    `INSERT INTO library.hosted_reading_fence (route,account_id,subject_id,revision)
+     SELECT route,account_id,subject_id,revision FROM library.hosted_reading
+     WHERE route=$1 AND account_id=$2 AND subject_id=$3
+     ON CONFLICT (route,account_id,subject_id) DO UPDATE SET revision=EXCLUDED.revision`,
+    [ownerRoute, ownerId, subjectOne],
+  );
+  const clearAKey = 'hosted-reading-clear-A';
+  const clearAInput = { subjectId: subjectOne, expectedRevision: historicalSave.value.revision };
+  const clearA = await ownerCall('POST', '/v1/libraryHostedReading/$clear', clearAInput, clearAKey);
+
+  const saveBInput = {
+    ...saveOne,
+    documentPosition: { blockId: 'new-checkpoint', offset: 73 },
+    expectedRevision: null,
+  };
+  const savedB = await ownerCall('PUT', '/v1/libraryHostedReading', saveBInput, 'hosted-reading-save-B');
+  expect(BigInt(savedB.value.revision)).toBeGreaterThan(BigInt(historicalSave.value.revision));
+
+  const staleUpdate = await ownerCall(
+    'PUT',
+    '/v1/libraryHostedReading',
+    {
+      ...saveOne,
+      documentPosition: { blockId: 'delayed-old-position', offset: 19 },
+      expectedRevision: historicalSave.value.revision,
+    },
+    'hosted-reading-stale-update-A',
+  );
+  expect(staleUpdate.status).toBe(409);
+  const staleClear = await ownerCall(
+    'POST',
+    '/v1/libraryHostedReading/$clear',
+    clearAInput,
+    'hosted-reading-stale-clear-A',
+  );
+  expect(staleClear.status).toBe(409);
+
+  const replayedA = await ownerCall('PUT', '/v1/libraryHostedReading', saveOne, 'hosted-reading-save-one');
+  expect(replayedA.value).toEqual(savedOne.value);
+  const replayedClearA = await ownerCall('POST', '/v1/libraryHostedReading/$clear', clearAInput, clearAKey);
+  expect(replayedClearA.value).toEqual(clearA.value);
+  const afterOldReplays = await ownerCall('GET', `/v1/libraryHostedReading?subjectId=${subjectOne}`, undefined);
+  expect(afterOldReplays.value).toMatchObject({
+    state: 'saved',
+    revision: savedB.value.revision,
+    address: savedB.value.address,
+    resume: { availability: 'available', occurrenceId: firstOccurrence, target: firstTarget },
+  });
+
+  const currentWrite = await ownerCall(
+    'PUT',
+    '/v1/libraryHostedReading',
+    {
+      ...saveBInput,
+      documentPosition: { blockId: 'current-checkpoint', offset: 88 },
+      expectedRevision: savedB.value.revision,
+    },
+    'hosted-reading-current-fence-write',
+  );
+  expect(currentWrite.status, JSON.stringify(currentWrite.value)).toBe(200);
   const withdrawn = await f.native.call(
     'POST',
     `${cataloguePath}:publish`,
@@ -476,7 +546,12 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     const current = await f.native.call('GET', '/v1/libraryHostedReading/checkpoints', undefined, { other: true });
     const historical = current.value.items.find((item: { subjectId: string }) => item.subjectId === subjectOne);
     expect(historical).toMatchObject({
-      address: { publicationRevisionId: publication.value.revisionId, occurrenceId: firstOccurrence },
+      revision: currentWrite.value.revision,
+      address: {
+        publicationRevisionId: publication.value.revisionId,
+        occurrenceId: firstOccurrence,
+        documentPosition: { blockId: 'current-checkpoint', offset: 88 },
+      },
       metadata: { availability: 'available', position: 512, title: 'First chapter', target: firstTarget },
     });
     expect(current.value.items.find((item: { subjectId: string }) => item.subjectId === subjectTwo)).toMatchObject({
@@ -490,6 +565,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     const exactBytes = Buffer.from(serializeDocument(firstDocument), 'utf8');
     expect(opened.value).toMatchObject({
       state: 'saved',
+      revision: currentWrite.value.revision,
       address: historical.address,
       resume: {
         availability: 'available',
@@ -535,8 +611,8 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     expect(unavailable.value).toMatchObject({
       state: 'saved',
       subjectId: subjectOne,
-      revision: historicalSave.value.revision,
-      address: savedOne.value.address,
+      revision: currentWrite.value.revision,
+      address: currentWrite.value.address,
       metadata: { availability: 'unavailable', occurrenceId: firstOccurrence, kind: 'chapter' },
     });
     expect(unavailablePort.counts()).toEqual({ metadata: 1, exact: 0 });
@@ -566,4 +642,26 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     occurrenceId: firstOccurrence,
     kind: 'chapter',
   });
+
+  const clearCurrent = await ownerCall(
+    'POST',
+    '/v1/libraryHostedReading/$clear',
+    { subjectId: subjectOne, expectedRevision: currentWrite.value.revision },
+    'hosted-reading-current-fence-clear',
+  );
+  expect(clearCurrent.status, JSON.stringify(clearCurrent.value)).toBe(200);
+  expect((await ownerCall('GET', `/v1/libraryHostedReading?subjectId=${subjectOne}`, undefined)).value).toEqual({
+    state: 'none',
+    subjectId: subjectOne,
+  });
+  const absentPage = await ownerCall('GET', '/v1/libraryHostedReading/checkpoints', undefined);
+  expect(absentPage.value.items.map((item: { subjectId: string }) => item.subjectId)).not.toContain(subjectOne);
+  const exported = await readHostedReadingExportPage(
+    f.native.pool,
+    ownerRoute,
+    ownerId,
+    '00000000-0000-0000-0000-000000000000',
+    100,
+  );
+  expect(exported.map((item: { subject_id: string }) => item.subject_id)).not.toContain(subjectOne);
 });

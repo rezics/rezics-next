@@ -9,6 +9,7 @@ WITH input AS NOT MATERIALIZED (
          decode(:target_sha256::text, 'hex') AS target_sha256,
          :document_block_id::nullable(text) AS document_block_id,
          :document_offset::nullable(integer) AS document_offset,
+         :revision::bigint AS revision,
          :expected_revision::bigint AS expected_revision
 )
 UPDATE library.hosted_reading AS stored
@@ -19,7 +20,7 @@ SET catalogue_id = input.catalogue_id,
     target_sha256 = input.target_sha256,
     document_block_id = input.document_block_id,
     document_offset = input.document_offset,
-    revision = stored.revision + 1,
+    revision = input.revision,
     changed_at = clock_timestamp(),
     activity_sequence = nextval('library.hosted_reading_activity_sequence')
 FROM input

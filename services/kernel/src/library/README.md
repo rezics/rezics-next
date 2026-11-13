@@ -112,6 +112,8 @@ Decision: Hosted Book checkpoint save binds the selected Subject and requires it
 
 Decision: available hosted-reading occurrence positions use Content's nonnegative safe-integer read contract in point resume, point metadata and checkpoint-list responses; Library preserves the returned position exactly. Document block offsets retain their separate existing bound, and Content remains the owner of publication and full-replacement limits. The focused Library witness projects position 512 through the existing Content port over an admitted exact chapter selection because published manifests currently assign dense positions to at most 512 selected occurrences.
 
+Decision: hosted-reading write revisions use one durable opaque fence per owner and Subject. The migration seeds each fence from any existing checkpoint revision; every successful save, update or clear advances it while holding the fence row lock. Clear deletes the saved address, and account erasure removes both checkpoint and fence rows. A later save therefore gets a revision beyond every cleared incarnation, so delayed updates and clears from an older revision conflict while exact command receipt retries replay unchanged.
+
 Library contract owns Continue session and page vocabulary. `adapters/continue-page.ts` owns the closed Continue
 HTTP schema and the native Continue adapter Content binds at composition. The page schema stays a TypeBox object
 so Feed can compose `.properties`; the Continue list operation pins that object to the disclosed page. Progress session schemas remain on `transport-contract.ts`. Wire/security metadata comes from the declarations composed by createKernel; native
