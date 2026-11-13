@@ -647,3 +647,23 @@ save/continue, old-link stability after a later move, and ordinary Studio withdr
 The command and stage report are documented in the native test
 [README](../../tests/native/README.md#hosted-book-author-to-reader-journey). The candidate controller runs the mounted
 witness once after integration; it is deferred during the worker source pass.
+
+## Private whole-Book release preparation
+
+Decision: Book Studio freezes the admitted catalogue, exact draft and known release (including proven absence) at
+explicit review, prepares the whole draft in bounded interruptible steps, and seals only native candidate readiness.
+The existing release stays current. Pause stops before another request; an ambiguous command retains its exact body,
+step and key for replay. Remount reads native progress under current admission using only the catalogue/stage locator
+in the private Studio URL. No placements, credentials or command bodies enter storage or URLs. Session or catalogue
+replacement aborts the visit and discards late replies. Activation remains a separate outcome.
+
+Sources read before design: Content's [Authoring and release and Prepared Book publication](../../../../services/kernel/src/content/hosted-chapters.md),
+`hosted-publication-preparation-routes.ts`, `hosted-publication-preparation-schemas.ts`, the focused native HTTP test
+`hosted-publication-preparation-http.test.ts`, architecture's [Release selection and retention](../../../../docs/architecture.md#release-selection-and-retention),
+`routes/studio.tsx`, `hosted-legacy-baseline-native.ts`, and `hosted-publication-point.ts`.
+
+Decision: one focused state/transport proof covers retry, remount and stale authority, with only the named interrupted
+desktop and expired narrow stories. The mounted preparation methods are absent from generated KernelClient emission;
+the existing typed proxy extension seam binds them locally. Deferred acceptance: `bun run --cwd apps/web test
+tests/studio-hosted-release-preparation.test.tsx`; browser, native, ordinary acceptance and Storybook builds stay with
+the dev verifier. Source verification uses changed-file formatting and the Web workspace typecheck.

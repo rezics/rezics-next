@@ -10,6 +10,8 @@ import {
   HostedBookInventory,
   HostedRootAppendEntry,
   HostedDraftPointEntry,
+  HostedReleasePreparationEntry,
+  releaseCopy,
   HostedInventoryVisit,
   HostedDraftPicker,
   hostedBookNative,
@@ -51,6 +53,8 @@ const searchSchema = v.pipe(
     append: v.optional(v.literal('1')),
     points: v.optional(v.literal('1')),
     baseline: v.optional(v.literal('1')),
+    prepare: v.optional(v.literal('1')),
+    stageId: v.optional(hostedId),
     ownerAccount: v.optional(hostedId),
     ownerEpoch: v.optional(
       v.pipe(
@@ -66,8 +70,12 @@ const searchSchema = v.pipe(
     draftCursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(32768))),
   }),
   v.check((value) => !(value.catalogueId && value.postId) && !(value.books && (value.catalogueId || value.postId))),
-  v.check((value) => !(value.append || value.points || value.baseline) || value.catalogueId !== undefined),
+  v.check(
+    (value) => !(value.append || value.points || value.baseline || value.prepare) || value.catalogueId !== undefined,
+  ),
   v.check((value) => !value.baseline || !(value.append || value.points)),
+  v.check((value) => !value.prepare || !(value.append || value.points || value.baseline)),
+  v.check((value) => !value.stageId || value.prepare === '1'),
   v.check(
     (value) =>
       (value.ownerAccount === undefined && value.ownerEpoch === undefined) ||
@@ -124,6 +132,8 @@ function StudioRoute() {
         append={search.append === '1'}
         points={search.points === '1'}
         baseline={search.baseline === '1'}
+        prepare={search.prepare === '1'}
+        stageId={search.stageId ?? null}
         owner={loaded.value}
         source={source}
         accountId={session.subject ?? null}
@@ -413,14 +423,32 @@ function BookStudioEntry({
   append,
   points,
   baseline,
+  prepare,
+  stageId,
   ...props
-}: Parameters<typeof BookStudioVisit>[0] & { append: boolean; points: boolean; baseline: boolean }) {
+}: Parameters<typeof BookStudioVisit>[0] & {
+  append: boolean;
+  points: boolean;
+  baseline: boolean;
+  prepare: boolean;
+  stageId: string | null;
+}) {
+  if (prepare) return <HostedReleasePreparationEntry {...props} stageId={stageId} />;
   if (baseline) return <HostedLegacyBaselineEntry {...props} />;
   if (points) return <HostedDraftPointEntry {...props} />;
   if (append) return <HostedRootAppendEntry {...props} />;
   return (
     <>
-      <nav className="mx-auto w-full max-w-4xl px-4 pt-6">
+      <nav className="mx-auto flex w-full max-w-4xl flex-wrap gap-3 px-4 pt-6">
+        <a
+          className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          href={localizeHref(
+            `/studio?catalogueId=${props.owner.item.catalogueId}&prepare=1&ownerAccount=${props.owner.viewer.accountId}&ownerEpoch=${props.owner.viewer.authnEpoch}`,
+            { locale: props.locale },
+          )}
+        >
+          {releaseCopy[props.locale].entry}
+        </a>
         <a
           className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href={localizeHref(

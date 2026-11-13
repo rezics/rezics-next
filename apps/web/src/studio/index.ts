@@ -71,3 +71,6 @@ export { HostedDraftPicker } from './hosted-draft-picker';
 export { HostedRootAppendEntry } from './hosted-root-append-entry';
 
 export { HostedDraftPointEntry } from './hosted-draft-point-entry';
+
+export { HostedReleasePreparationEntry } from './hosted-release-preparation-entry';
+export { releaseCopy } from './hosted-release-preparation-copy';
