@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import * as reads from '../../src/content/reads.ts';
 import readChain from '../../src/content/read-chain.sql';
+import { routeOf } from '../../src/route/route.ts';
 import { observeSql } from './support/sql-observer.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
@@ -305,20 +306,38 @@ test('attachment identity mismatches and a changed retained source fail closed w
       threadId: catalogue.id,
       placements,
     });
-  for (const mismatch of [
-    { ...target, threadId: catalogue.id },
-    { ...target, revisionId: catalogue.firstPost.revisionId },
-    { ...target, sha256: '0'.repeat(64) },
-  ]) {
-    // The valid duplicate must not shadow the invalid thread/revision/digest.
+  const mismatches = [
+    { identity: 'thread', target: { ...target, threadId: catalogue.id } },
+    { identity: 'revision', target: { ...target, revisionId: catalogue.firstPost.revisionId } },
+    { identity: 'digest', target: { ...target, sha256: '0'.repeat(64) } },
+  ];
+  for (const { identity, target: mismatch } of mismatches) {
+    const start = observer.records.length;
+    // The valid duplicate must not shadow this invalid thread/revision/digest.
+    const denied = await f.native.call('POST', '/v1/hostedCatalogues', {
+      postId: catalogue.firstPost.id,
+      threadId: catalogue.id,
+      placements: [
+        { ...placement, target: mismatch },
+        { ...placement, occurrenceId: f.newOccurrenceId(), position: 1 },
+      ],
+    });
+    expect(denied.status, identity).toBe(404);
+    expect(denied.value, identity).toMatchObject({ code: 'not_found' });
+    const probes = observer.records.slice(start).filter((row) => row.statement === readChain.sql);
+    const bodyParameter = readChain.params.indexOf('include_body');
     expect(
-      (
-        await create([
-          { ...placement, target: mismatch },
-          { ...placement, occurrenceId: f.newOccurrenceId(), position: 1 },
-        ])
-      ).status,
-    ).toBe(404);
+      probes.filter((probe) => probe.parameters[bodyParameter] === true),
+      identity,
+    ).toHaveLength(0);
+    for (const probe of probes) expect(probe.parameters[bodyParameter], identity).toBe(false);
+
+    // readPostMetadata rejects cross-route IDs before dispatching read-chain SQL.
+    if (
+      routeOf(mismatch.postId) !== routeOf(mismatch.threadId) ||
+      routeOf(mismatch.revisionId) !== routeOf(mismatch.threadId)
+    )
+      expect(probes, identity).toHaveLength(0);
   }
   const nativeRead = reads.readPostMetadata;
   let changed = false;

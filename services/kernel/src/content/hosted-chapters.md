@@ -472,6 +472,10 @@ compare exact identity plus unchanged author/licence. Denied slots still advance
 or targets. Exact opening loads one body through ordinary Post disclosure, verifies its canonical digest and size,
 then closes the original metadata observation; a fresh exact read cannot bless a changed original source.
 The attachment validator remains the write-admission owner; metadata disclosure does not certify canonical bytes.
+Decision: attachment-denial coverage checks each thread, revision and digest mismatch for `not_found` and zero body
+loads. Cross-route native rejection has no read-chain probe; admitted attachment writes retain the metadata-only
+probe requirement. Mounted append coverage reuses the suite-owned Auth/DBOS fixture and creates a fresh catalogue
+within it.
 
 Native observation is deferred to the dev verifier: `hosted-navigation-metadata.test.ts` observes zero body probes
 for Contents, both navigation directions and occurrence metadata, and exactly one verified body on exact opening.
