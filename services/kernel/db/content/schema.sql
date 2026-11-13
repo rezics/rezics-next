@@ -4526,7 +4526,7 @@ CREATE TABLE content.revision_disclosure (
     revocation_transaction_id uuid,
     revoker_account_id uuid,
     CONSTRAINT revision_disclosure_actor_authn_epoch_check CHECK ((actor_authn_epoch > 0)),
-    CONSTRAINT revision_disclosure_actor_client_id_check CHECK ((actor_client_id ~ '^[!-~]{1,1024}$'::text)),
+    CONSTRAINT revision_disclosure_actor_client_id_check CHECK ((((octet_length(actor_client_id) >= 1) AND (octet_length(actor_client_id) <= 1024)) AND ((actor_client_id COLLATE "C") !~ '[^!-~]'::text))),
     CONSTRAINT revision_disclosure_actor_scopes_check CHECK (content.operation_scopes_valid(actor_scopes)),
     CONSTRAINT revision_disclosure_audience_kind_check CHECK ((audience_kind = 'book-publication'::text)),
     CONSTRAINT revision_disclosure_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
