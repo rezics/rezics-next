@@ -45,14 +45,26 @@ BEGIN
          SELECT 1 FROM content.hosted_version_candidate_cleanup cleanup
          JOIN content.hosted_publication_staging stage
            USING (route,catalogue_id,stage_id)
+         JOIN content.hosted_publication_staging_seal seal
+           USING (route,catalogue_id,stage_id)
          JOIN content.hosted_version_release_candidate candidate
            USING (route,catalogue_id,stage_id)
          WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
            AND cleanup.generation_id=OLD.generation_id AND cleanup.terminal_status='expired'
            AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
-           AND stage.owner_epoch=cleanup.owner_epoch AND stage.mode='whole'
+           AND cleanup.owner_epoch=stage.owner_epoch AND cleanup.owner_epoch=candidate.owner_epoch
+           AND stage.initiator_account_id=candidate.initiator_account_id
+           AND stage.mode=candidate.mode AND stage.mode IN ('whole','selection')
            AND stage.status='expired' AND stage.sealed_at IS NOT NULL
-           AND candidate.owner_epoch=cleanup.owner_epoch AND candidate.mode='whole'
+           AND stage.source_revision_id=stage.expected_head_revision_id
+           AND stage.source_revision_id=candidate.source_revision_id
+           AND stage.expected_head_revision_id=candidate.expected_head_revision_id
+           AND stage.expected_publication_id IS NOT DISTINCT FROM candidate.expected_publication_id
+           AND stage.input_version=seal.input_version AND candidate.input_version=seal.input_version
+           AND stage.candidate_count=seal.candidate_count
+           AND candidate.source_candidate_count=seal.candidate_count
+           AND stage.sealed_at=seal.sealed_at AND candidate.source_sealed_at=seal.sealed_at
+           AND (stage.mode='whole' OR stage.input_frozen_version=stage.input_version)
            AND candidate.status='retiring' AND candidate.generation_id IS NULL
        ) THEN
       RAISE EXCEPTION 'Hosted version retirement claim is invalid' USING ERRCODE='23514';
@@ -303,9 +315,13 @@ BEGIN
     IF OLD.generation_id IS DISTINCT FROM NEW.generation_id THEN
       IF OLD.generation_id IS NULL OR NEW.generation_id IS NOT NULL
          OR OLD.status NOT IN ('building','sealed') OR NEW.status<>'retiring'
-         OR NEW.mode<>'whole' OR NEW.owner_epoch IS DISTINCT FROM OLD.owner_epoch
+         OR NEW.mode IS DISTINCT FROM OLD.mode
+         OR OLD.mode NOT IN ('whole','selection')
+         OR NEW.owner_epoch IS DISTINCT FROM OLD.owner_epoch
          OR NEW.route IS DISTINCT FROM OLD.route OR NEW.catalogue_id IS DISTINCT FROM OLD.catalogue_id
-         OR NEW.stage_id IS DISTINCT FROM OLD.stage_id THEN
+         OR NEW.stage_id IS DISTINCT FROM OLD.stage_id
+         OR (to_jsonb(NEW)-'generation_id'-'status'-'updated_at')
+              IS DISTINCT FROM (to_jsonb(OLD)-'generation_id'-'status'-'updated_at') THEN
         RAISE EXCEPTION 'Hosted release candidate generation identity is immutable' USING ERRCODE='23514';
       END IF;
       SELECT generation.retirement_claimed INTO claimed
@@ -318,17 +334,24 @@ BEGIN
         FROM content.hosted_version_candidate_cleanup cleanup
         JOIN content.hosted_publication_staging stage
           USING (route,catalogue_id,stage_id)
+        JOIN content.hosted_publication_staging_seal seal
+          USING (route,catalogue_id,stage_id)
         WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
           AND cleanup.stage_id=OLD.stage_id AND cleanup.generation_id=OLD.generation_id
           AND cleanup.owner_epoch=OLD.owner_epoch AND cleanup.terminal_status='expired'
           AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
-          AND stage.owner_epoch=OLD.owner_epoch AND stage.mode='whole'
+          AND stage.initiator_account_id=OLD.initiator_account_id
+          AND stage.owner_epoch=OLD.owner_epoch AND stage.mode=OLD.mode
           AND stage.status='expired' AND stage.sealed_at IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM content.hosted_publication_staging_seal seal
-            WHERE seal.route=stage.route AND seal.catalogue_id=stage.catalogue_id
-              AND seal.stage_id=stage.stage_id
-          )
+          AND stage.source_revision_id=stage.expected_head_revision_id
+          AND stage.source_revision_id=OLD.source_revision_id
+          AND stage.expected_head_revision_id=OLD.expected_head_revision_id
+          AND stage.expected_publication_id IS NOT DISTINCT FROM OLD.expected_publication_id
+          AND stage.input_version=seal.input_version AND OLD.input_version=seal.input_version
+          AND stage.candidate_count=seal.candidate_count
+          AND OLD.source_candidate_count=seal.candidate_count
+          AND stage.sealed_at=seal.sealed_at AND OLD.source_sealed_at=seal.sealed_at
+          AND (stage.mode='whole' OR stage.input_frozen_version=stage.input_version)
       ) THEN
         RAISE EXCEPTION 'Hosted release candidate retirement requires its expired source claim' USING ERRCODE='23514';
       END IF;
