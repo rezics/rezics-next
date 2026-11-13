@@ -2,19 +2,21 @@ import { useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '../document-body';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import type { ExactDocument, StudioPresentation, StudioRevision } from './contract';
 import type { StudioController, StudioState } from './controller';
 
 export function ExactVersionDetails({ exact }: { exact: ExactDocument }) {
+  const options = { locale: getLocale() };
   return (
     <details className="studio-technical">
-      <summary>Exact document version</summary>
+      <summary>{m.studio_revision_exact({}, options)}</summary>
       <dl>
-        <dt>Post</dt>
+        <dt>{m.studio_revision_post({}, options)}</dt>
         <dd>{exact.postId}</dd>
-        <dt>Revision</dt>
+        <dt>{m.studio_revision_id({}, options)}</dt>
         <dd>{exact.revisionId}</dd>
-        <dt>SHA-256</dt>
+        <dt>{m.studio_revision_digest({}, options)}</dt>
         <dd>{exact.sha256}</dd>
       </dl>
     </details>
@@ -27,11 +29,15 @@ export function RevisionBody({
   revision: StudioRevision;
   presentation: StudioPresentation;
 }) {
+  const options = { locale: getLocale() };
   return (
-    <section className="studio-revision-body" aria-label={`${revision.title}, exact saved version`}>
+    <section
+      className="studio-revision-body"
+      aria-label={m.studio_revision_saved_name({ title: revision.title }, options)}
+    >
       <h3>{revision.title}</h3>
       <p className="studio-help">
-        Saved <time dateTime={revision.savedAt}>{revision.savedAt}</time>
+        <time dateTime={revision.savedAt}>{m.studio_revision_saved({ savedAt: revision.savedAt }, options)}</time>
       </p>
       <ExactVersionDetails exact={revision.exact} />
       <DocumentBody
@@ -52,22 +58,20 @@ export function StudioVersions({
   presentation: StudioPresentation;
 }) {
   const [restore, setRestore] = useState(false);
+  const options = { locale: getLocale() };
   const selected = state.selected;
   if (!selected) return null;
   const blocked = Boolean(state.busy) || controller.hasUnresolvedCommand();
   const historical = state.historical;
   return (
-    <section className="studio-stack" aria-label="Document versions">
+    <section className="studio-stack" aria-label={m.studio_revision_region({}, options)}>
       <div className="studio-section-heading">
-        <h2>Versions</h2>
+        <h2>{m.studio_revision_heading({}, options)}</h2>
         <Button type="button" variant="outline" disabled={blocked} onClick={() => void controller.loadVersions()}>
-          Refresh versions
+          {m.studio_revision_refresh({}, options)}
         </Button>
       </div>
-      <p className="studio-help">
-        Compare exact saved revisions. Copying a version into the editor creates a working draft; publishing is a
-        separate action.
-      </p>
+      <p className="studio-help">{m.studio_revision_intro({}, options)}</p>
       {state.versions ? (
         <>
           <ol className="studio-version-list">
@@ -83,14 +87,18 @@ export function StudioVersions({
                     void controller.inspectVersion(version.exact);
                   }}
                 >
-                  Compare {version.savedAt}
+                  {m.studio_revision_compare({ savedAt: version.savedAt }, options)}
                 </Button>
                 <span className="studio-break">{version.exact.revisionId}</span>
               </li>
             ))}
           </ol>
           {!state.versions.items.length ? (
-            <p>{state.versions.nextCursor ? m.thread_history_page_empty() : m.thread_history_empty()}</p>
+            <p>
+              {state.versions.nextCursor
+                ? m.thread_history_page_empty({}, options)
+                : m.thread_history_empty({}, options)}
+            </p>
           ) : null}
           {state.versions.nextCursor ? (
             <Button
@@ -99,32 +107,39 @@ export function StudioVersions({
               disabled={blocked}
               onClick={() => void controller.loadVersions(true)}
             >
-              {m.thread_history_more()}
+              {m.thread_history_more({}, options)}
             </Button>
           ) : null}
         </>
       ) : (
         <Button type="button" variant="outline" disabled={blocked} onClick={() => void controller.loadVersions()}>
-          Load saved versions
+          {m.studio_revision_load({}, options)}
         </Button>
       )}
       {historical ? (
         <>
           <div className="studio-comparison">
             <div>
-              <h3>Selected version</h3>
+              <h3>{m.studio_revision_selected({}, options)}</h3>
               <RevisionBody revision={historical} presentation={presentation} />
             </div>
             <div>
-              <h3>Current saved draft</h3>
+              <h3>{m.studio_revision_current({}, options)}</h3>
               <RevisionBody revision={selected.source.revision} presentation={presentation} />
             </div>
           </div>
-          {selected.dirty ? <p className="studio-help">The editor also contains unsaved changes.</p> : null}
+          {selected.dirty ? <p className="studio-help">{m.studio_revision_unsaved({}, options)}</p> : null}
           {selected.source.permissions.edit ? (
             restore ? (
-              <div role="group" aria-label="Copy version into draft" className="studio-stack">
-                <p>Replace the working text with this version{selected.dirty ? ' and discard unsaved changes' : ''}?</p>
+              <div role="group" aria-label={m.studio_revision_copy_review({}, options)} className="studio-stack">
+                <p>
+                  {selected.dirty
+                    ? m.studio_revision_replace_dirty({ title: historical.title, savedAt: historical.savedAt }, options)
+                    : m.studio_revision_replace_clean(
+                        { title: historical.title, savedAt: historical.savedAt },
+                        options,
+                      )}
+                </p>
                 <div className="studio-action-row">
                   <Button
                     type="button"
@@ -134,10 +149,10 @@ export function StudioVersions({
                       setRestore(false);
                     }}
                   >
-                    Copy into working draft
+                    {m.studio_revision_copy({}, options)}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setRestore(false)}>
-                    Cancel
+                    {m.action_cancel({}, options)}
                   </Button>
                 </div>
               </div>
@@ -148,7 +163,7 @@ export function StudioVersions({
                 disabled={blocked || selected.snapshotPending || selected.uploading}
                 onClick={() => setRestore(true)}
               >
-                Use this version…
+                {m.studio_revision_use({}, options)}
               </Button>
             )
           ) : null}

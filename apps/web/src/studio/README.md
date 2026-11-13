@@ -32,6 +32,26 @@ implementation stays in Content and Studio remains the receiving owner.
 Decision: The shared book/article Studio puts the active document first, collapses outline and drafts into a compact
 phone disclosure, and separates its wide navigation without an outer frame.
 
+## Saved-version language
+
+Decision: Book and column version comparison uses complete `studio_revision_*` messages in all eight launch locales,
+reusing shared history and cancellation messages. Replacement review names the supplied title and precise saved
+timestamp, with separate complete prompts for clean and dirty working text. Titles, exact IDs, digests and timestamps
+remain intact; the saved timestamp retains its semantic `time` element. Comparison shows the selected exact version
+beside the current saved draft, while unsaved working text stays in the editor. Copy remains a deliberate draft-only
+action under the existing permissions, pending/upload and unresolved-command guards; publication stays separate.
+
+Sources read before design: this owner document, `revisions.tsx`, `controller.ts`, `contract.ts`, the workspace caller,
+`tests/studio-post-revision-headers.test.tsx`, the existing Studio mounted fixtures, Web's
+[acceptance](../../../../docs/goals/web.md#acceptance), and Impeccable's Operate refinement and craft-floor guidance.
+The native one-page header continuation and explicitly selected body reader already support this workflow.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-saved-version-language.test.tsx`.
+The focused mounted regression covers both profiles in every launch locale, sparse paging, translated comparison,
+exact disclosure, clean/dirty replacement review, unchanged identities and draft-only copy. Native authoring, keyboard,
+phone/desktop visual review, legacy parity and promoted-commit acceptance remain separate obligations. Source checks
+are catalogue key/argument parity, the changed-UI detector, changed-file formatting and the affected Web typecheck.
+
 ## Native author outline window
 
 Decision: keep a separate exact-revision, one-page author outline reader, now consumed by read-only Book history;
