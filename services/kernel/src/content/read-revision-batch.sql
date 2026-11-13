@@ -13,7 +13,7 @@ SELECT 'revision'::text AS kind, r.revision_id AS id, r.thread_id AS thread_id,
        r.body_sha256 AS sha256, NULL::text AS thread_kind, NULL::text AS board_purpose,
        r.vote_citation AS vote_citation, NULL::uuid AS realm_id, NULL::timestamptz AS deleted_at,
        false AS restorable, NULL::uuid AS decision_id,
-       rr.mode AS revision_restriction, rr.decision_id AS revision_restriction_decision_id,
+       r.mode AS revision_restriction, r.decision_id AS revision_restriction_decision_id,
        CASE WHEN options.query = '' THEN true
          ELSE COALESCE(to_tsvector('simple'::regconfig, r.search_text)
            @@ plainto_tsquery('simple'::regconfig, options.query), false) END AS matches
