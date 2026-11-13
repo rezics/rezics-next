@@ -3,7 +3,9 @@ import type { PoolClient } from 'pg';
 import type { HostedDependencies } from '../../src/content/hosted-chapters-model.ts';
 import {
   advanceHostedPublicationStaging,
+  appendHostedPublicationSelectionBatch,
   beginHostedPublicationStaging,
+  freezeHostedPublicationSelection,
   sealHostedPublicationStaging,
 } from '../../src/content/hosted-publication-staging.ts';
 import {
@@ -59,13 +61,14 @@ function dependencies(): HostedDependencies {
   };
 }
 
-async function createSealedCandidate() {
-  const { path, target, created, published } = await hostedRootAppendBase(f);
+async function createSealedCandidate(mode: 'whole' | 'selection' = 'whole') {
+  const { path, target, created, published, placements } = await hostedRootAppendBase(f);
+  const appendedOccurrenceId = f.newOccurrenceId();
   const sourceHead = await f.native.command(
     `${path}:appendRootChapter`,
     {
       expectedRevisionId: created.revisionId,
-      occurrenceId: f.newOccurrenceId(),
+      occurrenceId: appendedOccurrenceId,
       title: 'The 513th source placement',
       target,
     },
@@ -77,11 +80,26 @@ async function createSealedCandidate() {
       ...locator,
       expectedHeadRevisionId: sourceHead.revisionId,
       expectedPublicationId: published.revisionId,
-      mode: 'whole',
+      mode,
       expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
     }),
   );
 
+  if (mode === 'selection') {
+    const occurrenceIds = [...placements.map((placement) => placement.occurrenceId), appendedOccurrenceId];
+    for (let offset = 0; offset < occurrenceIds.length; offset += 512) {
+      await transaction((client) =>
+        appendHostedPublicationSelectionBatch(client, f.native.author.actor, {
+          ...locator,
+          batchId: f.newOccurrenceId(),
+          occurrenceIds: occurrenceIds.slice(offset, offset + 512),
+        }),
+      );
+    }
+    await transaction((client) => freezeHostedPublicationSelection(client, f.native.author.actor, locator));
+  }
+
+  let stagingPages = 0;
   let stage = await transaction((client) =>
     advanceHostedPublicationStaging(
       dependencies(),
@@ -93,6 +111,7 @@ async function createSealedCandidate() {
     ),
   );
   while (stage.progress.state !== 'ready') {
+    stagingPages += 1;
     stage = await transaction((client) =>
       advanceHostedPublicationStaging(
         dependencies(),
@@ -112,7 +131,9 @@ async function createSealedCandidate() {
   let candidate = await transaction((client) =>
     beginHostedVersionReleaseCandidate(client, f.native.author.actor, sourceSeal),
   );
+  let candidatePages = 0;
   while (!candidate.checkpoint.coverageComplete) {
+    candidatePages += 1;
     candidate = await transaction((client) =>
       applyHostedVersionReleaseCandidatePage(
         client,
@@ -132,6 +153,8 @@ async function createSealedCandidate() {
     expectedPublicationId: published.revisionId,
     generationId: candidate.checkpoint.generationId,
     generationSequence: sealedCandidate.candidate.snapshot.sequence.toString(),
+    stagingPages,
+    candidatePages,
   };
 }
 
@@ -179,12 +202,16 @@ async function stageRows(stageId: string) {
   const route = routeOf(f.catalogueId);
   const result = await f.native.pool.query<{
     source_candidate_count: string;
+    mode: 'whole' | 'selection';
+    input_version: string;
+    input_frozen_version: string | null;
     target_count: string;
     candidate_page_count: string;
     stage_seal_count: string;
     expected_publication_id: string | null;
   }>(
-    `SELECT stage.candidate_count::text AS source_candidate_count,
+    `SELECT stage.candidate_count::text AS source_candidate_count,stage.mode,
+       stage.input_version::text,stage.input_frozen_version::text,
        (SELECT count(*)::text FROM content.hosted_publication_staging_target target
         WHERE target.route=stage.route AND target.catalogue_id=stage.catalogue_id AND target.stage_id=stage.stage_id) AS target_count,
        (SELECT count(*)::text FROM content.hosted_version_release_candidate_page page
@@ -377,4 +404,208 @@ test('expired stale whole-Book candidate cleanup is fenced, replayable and bound
     [route, locator.catalogueId, locator.stageId],
   );
   expect(terminal.rows[0]).toEqual({ status: 'reclaimed', generation_id: null });
+});
+
+test('expired selected Book candidate cleanup binds its frozen seal and reclaims only unpinned generations', async () => {
+  const sharedFixture = f;
+  f = await hostedChaptersFixture();
+  try {
+    const {
+      locator,
+      target,
+      sourceHead,
+      expectedPublicationId,
+      generationId,
+      generationSequence,
+      stagingPages,
+      candidatePages,
+    } = await createSealedCandidate('selection');
+    expect(stagingPages).toBeGreaterThan(1);
+    expect(candidatePages).toBeGreaterThan(1);
+
+    const staleHead = await f.native.command(
+      `/v1/hostedCatalogues/${f.catalogueId}:appendRootChapter`,
+      {
+        expectedRevisionId: sourceHead.revisionId,
+        occurrenceId: f.newOccurrenceId(),
+        title: 'The source moved after selection preparation',
+        target,
+      },
+      200,
+    );
+    const route = routeOf(f.catalogueId);
+    if (route === null) throw new Error('Hosted fixture catalogue has no route');
+    const liveGeneration = (
+      await f.native.pool.query<{ generation_id: string }>(
+        `SELECT generation_id FROM content.hosted_version_revision
+         WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3`,
+        [route, f.catalogueId, staleHead.revisionId],
+      )
+    ).rows[0]!.generation_id;
+    const retainedBefore = await generationState(liveGeneration);
+    const retainedRowsBefore = await generationHasRows(liveGeneration);
+    const candidateBefore = await generationState(generationId);
+    const candidateRowsBefore = await generationHasRows(generationId);
+    const sourceRowsBefore = await stageRows(locator.stageId);
+    const pointersBefore = await selectedPointers();
+    expect(sourceRowsBefore).toMatchObject({
+      source_candidate_count: '513',
+      mode: 'selection',
+      input_frozen_version: sourceRowsBefore.input_version,
+      expected_publication_id: expectedPublicationId,
+    });
+
+    await expect(
+      transaction((client) =>
+        advanceHostedVersionCandidateCleanup(client, f.native.author.actor, locator, f.newOccurrenceId()),
+      ),
+    ).rejects.toBeInstanceOf(HostedVersionCandidateCleanupConflictError);
+    expect(await generationState(generationId)).toEqual(candidateBefore);
+    expect(await generationHasRows(generationId)).toEqual(candidateRowsBefore);
+
+    await transaction((client) =>
+      client.query(
+        `UPDATE content.hosted_publication_staging SET status='expired'
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND status='sealed'`,
+        [route, f.catalogueId, locator.stageId],
+      ),
+    );
+
+    await transaction((client) =>
+      client.query(
+        `UPDATE content.hosted_version_release_candidate SET mode='whole'
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+        [route, f.catalogueId, locator.stageId],
+      ),
+    );
+    await expect(
+      transaction((client) =>
+        advanceHostedVersionCandidateCleanup(client, f.native.author.actor, locator, f.newOccurrenceId()),
+      ),
+    ).rejects.toBeInstanceOf(HostedVersionCandidateCleanupConflictError);
+    expect(await generationState(generationId)).toEqual(candidateBefore);
+    expect(await generationHasRows(generationId)).toEqual(candidateRowsBefore);
+    await transaction((client) =>
+      client.query(
+        `UPDATE content.hosted_version_release_candidate SET mode='selection'
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+        [route, f.catalogueId, locator.stageId],
+      ),
+    );
+
+    await transaction((client) =>
+      client.query(
+        `UPDATE content.hosted_publication_staging SET input_frozen_version=input_version-1
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+        [route, f.catalogueId, locator.stageId],
+      ),
+    );
+    await expect(
+      transaction((client) =>
+        advanceHostedVersionCandidateCleanup(client, f.native.author.actor, locator, f.newOccurrenceId()),
+      ),
+    ).rejects.toBeInstanceOf(HostedVersionCandidateCleanupConflictError);
+    expect(await generationState(generationId)).toEqual(candidateBefore);
+    await transaction((client) =>
+      client.query(
+        `UPDATE content.hosted_publication_staging SET input_frozen_version=input_version
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+        [route, f.catalogueId, locator.stageId],
+      ),
+    );
+
+    const pinClient = await f.native.pool.connect();
+    try {
+      await pinClient.query('BEGIN');
+      await pinClient.query('SAVEPOINT temporary_candidate_pin');
+      const revisionId = f.newOccurrenceId();
+      await pinClient.query(
+        `INSERT INTO content.hosted_structure_revision
+           (route,catalogue_id,revision_id,kind,source_revision_id,recorded_transaction_id,created_at)
+         VALUES ($1,$2,$3,'publication',$4,$5,$6)`,
+        [route, f.catalogueId, revisionId, pointersBefore.head_revision_id, f.newOccurrenceId(), new Date()],
+      );
+      await pinClient.query(
+        `INSERT INTO content.hosted_version_revision
+           (route,catalogue_id,revision_id,revision_kind,generation_id,generation_kind,sequence)
+         VALUES ($1,$2,$3,'publication',$4,'candidate',$5)`,
+        [route, f.catalogueId, revisionId, generationId, generationSequence],
+      );
+      let pinConflict: unknown;
+      try {
+        await advanceHostedVersionCandidateCleanup(pinClient, f.native.author.actor, locator, f.newOccurrenceId());
+      } catch (error) {
+        pinConflict = error;
+      }
+      expect(pinConflict).toBeInstanceOf(HostedVersionCandidateCleanupConflictError);
+      expect(String((pinConflict as Error).message)).toContain('retained by retained revision');
+      await pinClient.query('ROLLBACK TO SAVEPOINT temporary_candidate_pin');
+      await pinClient.query('COMMIT');
+    } catch (error) {
+      await pinClient.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      pinClient.release();
+    }
+    expect(await generationState(generationId)).toEqual(candidateBefore);
+    expect(await generationHasRows(generationId)).toEqual(candidateRowsBefore);
+
+    const firstStepId = f.newOccurrenceId();
+    const firstPage = await transaction(async (client) => {
+      const result = await advanceHostedVersionCandidateCleanup(client, f.native.author.actor, locator, firstStepId);
+      const blockedDescriptor = await attemptDescriptor(generationId, generationSequence, true);
+      expect(blockedDescriptor).toMatchObject({ code: '55P03' });
+      return result;
+    });
+    expect(firstPage).toMatchObject({
+      replayed: false,
+      deletedRows: HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT,
+      progress: { generationId, phase: 'nodes', completed: false },
+    });
+
+    const descriptorAfterClaim = await attemptDescriptor(generationId, generationSequence, false);
+    expect(descriptorAfterClaim).toMatchObject({ code: '23514' });
+    const replay = await transaction((client) =>
+      advanceHostedVersionCandidateCleanup(client, f.native.author.actor, locator, firstStepId),
+    );
+    expect(replay).toMatchObject({
+      replayed: true,
+      deletedRows: HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT,
+      progress: { generationId, phase: 'nodes', completed: false },
+    });
+
+    let progress = replay.progress;
+    const pages = [replay];
+    while (!progress.completed) {
+      const page = await transaction((client) =>
+        advanceHostedVersionCandidateCleanup(client, f.native.author.actor, locator, f.newOccurrenceId()),
+      );
+      expect(page.deletedRows).toBeLessThanOrEqual(HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT);
+      pages.push(page);
+      progress = page.progress;
+    }
+    expect(pages.length).toBeGreaterThan(3);
+    expect(pages.reduce((total, page) => total + page.deletedRows, 0)).toBe(Number(progress.deletedRowCount));
+    expect(progress).toMatchObject({ generationId, phase: 'done', completed: true });
+    expect(await generationHasRows(generationId)).toEqual({
+      generation: false,
+      node: false,
+      occurrence: false,
+      sibling_root: false,
+      snapshot: false,
+    });
+    expect(await generationState(liveGeneration)).toEqual(retainedBefore);
+    expect(await generationHasRows(liveGeneration)).toEqual(retainedRowsBefore);
+    expect(await selectedPointers()).toEqual(pointersBefore);
+    expect(await stageRows(locator.stageId)).toEqual(sourceRowsBefore);
+    const terminal = await f.native.pool.query(
+      `SELECT status,generation_id,mode FROM content.hosted_version_release_candidate
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, locator.stageId],
+    );
+    expect(terminal.rows[0]).toEqual({ status: 'reclaimed', generation_id: null, mode: 'selection' });
+  } finally {
+    await f?.close();
+    f = sharedFixture;
+  }
 });

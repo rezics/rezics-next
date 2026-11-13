@@ -32,6 +32,7 @@ type StageRow = QueryResultRow & {
   is_expired: boolean;
   sealed_at: string | null;
   input_version: string;
+  input_frozen_version: string | null;
   candidate_count: string;
   seal_input_version: string | null;
   seal_candidate_count: string | null;
@@ -42,7 +43,7 @@ type CandidateRow = QueryResultRow & {
   route: number;
   catalogue_id: string;
   stage_id: string;
-  generation_id: string;
+  generation_id: string | null;
   initiator_account_id: string;
   owner_epoch: string;
   source_revision_id: string;
@@ -116,7 +117,7 @@ const STAGE_LOCK = `
          stage.expected_publication_id,stage.mode,stage.status,
          (stage.expires_at<=clock_timestamp()) AS is_expired,
          to_char(stage.sealed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS sealed_at,
-         stage.input_version::text,stage.candidate_count::text,
+         stage.input_version::text,stage.input_frozen_version::text,stage.candidate_count::text,
          source_seal.input_version::text AS seal_input_version,
          source_seal.candidate_count::text AS seal_candidate_count,
          to_char(source_seal.sealed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS seal_sealed_at
@@ -222,16 +223,14 @@ async function requireExpiredStage(client: AccessClient, stage: StageRow): Promi
     throw new HostedVersionCandidateCleanupConflictError('Only an expired sealed source can retire a candidate');
 }
 
-function assertExactWholeCandidate(stage: StageRow, candidate: CandidateRow, actor: AccountActor): void {
+function assertExactCandidateBinding(stage: StageRow, candidate: CandidateRow, actor: AccountActor): void {
   if (candidate.initiator_account_id !== actor.accountId || candidate.owner_epoch !== String(actor.authnEpoch)) {
     throw new HostedVersionCandidateCleanupNotFoundError();
   }
   if (
-    stage.mode !== 'whole' ||
-    candidate.mode !== 'whole' ||
-    (candidate.status !== 'building' && candidate.status !== 'sealed') ||
-    (candidate.status === 'sealed' && (candidate.sealed_at === null || !candidate.coverage_complete)) ||
-    (candidate.status === 'building' && candidate.sealed_at !== null) ||
+    candidate.initiator_account_id !== stage.initiator_account_id ||
+    candidate.owner_epoch !== stage.owner_epoch ||
+    candidate.mode !== stage.mode ||
     candidate.source_revision_id !== stage.source_revision_id ||
     candidate.expected_head_revision_id !== stage.expected_head_revision_id ||
     candidate.expected_publication_id !== stage.expected_publication_id ||
@@ -242,13 +241,28 @@ function assertExactWholeCandidate(stage: StageRow, candidate: CandidateRow, act
     stage.input_version !== stage.seal_input_version ||
     stage.candidate_count !== stage.seal_candidate_count ||
     stage.sealed_at !== stage.seal_sealed_at ||
+    (stage.mode === 'selection' && stage.input_frozen_version !== stage.input_version) ||
     BigInt(candidate.placement_count) > BigInt(candidate.source_candidate_count) ||
     (candidate.coverage_complete && candidate.placement_count !== candidate.source_candidate_count)
   ) {
     throw new HostedVersionCandidateCleanupConflictError(
-      'The expired source does not bind one complete whole-Book candidate',
+      'The expired source does not bind the exact Book candidate seal',
     );
   }
+}
+
+function assertClaimableCandidate(
+  candidate: CandidateRow,
+): asserts candidate is CandidateRow & { generation_id: string } {
+  if (candidate.status !== 'building' && candidate.status !== 'sealed')
+    throw new HostedVersionCandidateCleanupConflictError('The expired source has no reclaimable candidate checkpoint');
+  if (candidate.generation_id === null)
+    throw new HostedVersionCandidateCleanupConflictError('The expired source has no candidate generation');
+  if (
+    (candidate.status === 'sealed' && (candidate.sealed_at === null || !candidate.coverage_complete)) ||
+    (candidate.status === 'building' && candidate.sealed_at !== null)
+  )
+    throw new HostedVersionCandidateCleanupConflictError('The candidate checkpoint does not match its status');
 }
 
 async function assertNoGenerationPins(
@@ -299,14 +313,9 @@ async function ensureCleanupClaim(
       throw new HostedVersionCandidateCleanupConflictError('The retained cleanup claim does not match its source');
     if (!existing.completed) {
       const checkpoint = (
-        await client.query<{ status: string; generation_id: string | null; owner_epoch: string }>(
-          `SELECT status,generation_id,owner_epoch::text
-           FROM content.hosted_version_release_candidate
-           WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3
-           FOR UPDATE`,
-          [stage.route, stage.catalogue_id, stage.stage_id],
-        )
+        await client.query<CandidateRow>(CANDIDATE_LOCK, [stage.route, stage.catalogue_id, stage.stage_id])
       ).rows[0];
+      if (checkpoint) assertExactCandidateBinding(stage, checkpoint, actor);
       if (
         !checkpoint ||
         checkpoint.status !== 'retiring' ||
@@ -323,7 +332,12 @@ async function ensureCleanupClaim(
           [stage.route, stage.catalogue_id, existing.generation_id],
         )
       ).rows[0];
-      if (!generation || !generation.retirement_claimed || generation.generation_kind !== 'candidate')
+      if (
+        !generation ||
+        !generation.retirement_claimed ||
+        generation.generation_kind !== 'candidate' ||
+        generation.head_sequence !== checkpoint.generation_sequence
+      )
         throw new HostedVersionCandidateCleanupConflictError('The claimed candidate generation was lost');
     }
     return existing;
@@ -333,7 +347,8 @@ async function ensureCleanupClaim(
     await client.query<CandidateRow>(CANDIDATE_LOCK, [stage.route, stage.catalogue_id, stage.stage_id])
   ).rows[0];
   if (!candidate) throw new HostedVersionCandidateCleanupNotFoundError();
-  assertExactWholeCandidate(stage, candidate, actor);
+  assertExactCandidateBinding(stage, candidate, actor);
+  assertClaimableCandidate(candidate);
 
   const generation = (
     await client.query<GenerationRow>(
@@ -379,8 +394,8 @@ async function ensureCleanupClaim(
     `UPDATE content.hosted_version_release_candidate
      SET generation_id=NULL,status='retiring',updated_at=transaction_timestamp()
      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND generation_id=$4
-       AND owner_epoch=$5 AND status IN ('building','sealed') AND mode='whole'`,
-    [stage.route, stage.catalogue_id, stage.stage_id, candidate.generation_id, stage.owner_epoch],
+       AND owner_epoch=$5 AND status IN ('building','sealed') AND mode=$6`,
+    [stage.route, stage.catalogue_id, stage.stage_id, candidate.generation_id, stage.owner_epoch, stage.mode],
   );
   if (retiredCheckpoint.rowCount !== 1)
     throw new HostedVersionCandidateCleanupConflictError('The sealed candidate checkpoint changed during claim');
@@ -490,13 +505,14 @@ async function deleteGeneration(
   route: number,
   locator: HostedPublicationStagingLocator,
   row: CleanupRow,
+  mode: StageRow['mode'],
 ): Promise<number> {
   const candidate = await client.query(
     `UPDATE content.hosted_version_release_candidate
      SET status='reclaimed',updated_at=transaction_timestamp()
      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND generation_id IS NULL
-       AND owner_epoch=$4 AND status='retiring' AND mode='whole'`,
-    [route, locator.catalogueId, locator.stageId, row.owner_epoch],
+       AND owner_epoch=$4 AND status='retiring' AND mode=$5`,
+    [route, locator.catalogueId, locator.stageId, row.owner_epoch, mode],
   );
   if (candidate.rowCount !== 1)
     throw new HostedVersionCandidateCleanupConflictError('The retiring candidate checkpoint changed during cleanup');
@@ -575,7 +591,7 @@ export async function advanceHostedVersionCandidateCleanup(
     while (phase !== 'done' && deletedRows < HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT) {
       const remaining = HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT - deletedRows;
       if (phase === 'generation') {
-        deletedRows += await deleteGeneration(client, route, locator, row);
+        deletedRows += await deleteGeneration(client, route, locator, row, stage.mode);
         phase = 'done';
         cursor = null;
         continue;
