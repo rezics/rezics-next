@@ -89,6 +89,13 @@ export const flowMigrations = [
     sql: `CREATE UNIQUE INDEX flow_verifier_command_completion ON flow_events(operation_id)
       WHERE operation_id IS NOT NULL AND stage='check' AND action='command-completed';`,
   },
+  {
+    module: 'flow',
+    version: 10,
+    sql: `CREATE UNIQUE INDEX flow_check_resume_ready_once ON flow_events(task_id,attempt,operation_id)
+      WHERE operation_id IS NOT NULL AND stage='check'
+        AND action IN ('resume-ready','resume-ready-unavailable');`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);
@@ -108,6 +115,36 @@ export function recordFlowInTransaction(db: Database, event: FlowEvent): void {
 export function recordFlow(db: Database, event: FlowEvent): void {
   ensureFlow(db);
   recordFlowInTransaction(db, event);
+}
+
+/** Stable identity for one set of checks awaited by a particular worker attempt. */
+export function checkResumeOperationId(taskId: string, attempt: number, checkIds: readonly string[]): string {
+  return createHash('sha256').update(JSON.stringify([taskId, attempt, [...checkIds].sort()])).digest('hex');
+}
+
+/** Record one readiness observation even when the host re-observes the same terminal check result. */
+export function recordCheckResumeReady(db: Database, event: FlowEvent): boolean {
+  if (
+    event.stage !== 'check' ||
+    !['resume-ready', 'resume-ready-unavailable'].includes(event.action) ||
+    !event.operationId
+  )
+    throw new Error('check resume readiness requires a check event with an operation identity');
+  ensureFlow(db);
+  const result = db
+    .query(
+      'INSERT OR IGNORE INTO flow_events(task_id,attempt,stage,action,at,detail,operation_id) VALUES (?,?,?,?,?,?,?)',
+    )
+    .run(
+      event.taskId,
+      event.attempt,
+      event.stage,
+      event.action,
+      event.at,
+      event.detail ?? null,
+      event.operationId,
+    );
+  return result.changes > 0;
 }
 
 function canonicalUtc(value: string): string {
@@ -150,6 +187,39 @@ export function readFlow(db: Database, since = '0000-01-01T00:00:00.000Z', until
     ...(r.detail === null ? {} : { detail: r.detail }),
     ...(r.operation_id === null ? {} : { operationId: r.operation_id }),
   }));
+}
+
+/** Read only check-resume handoffs that touched this UTC window, then fetch their matching attempt events. */
+export function readCheckResumeFlow(db: Database, since: string, until: string): FlowEvent[] {
+  ensureFlow(db);
+  const start = canonicalUtc(since);
+  const end = canonicalUtc(until);
+  const identities = db
+    .query(
+      `SELECT DISTINCT task_id AS taskId, attempt, operation_id AS operationId
+       FROM flow_events INDEXED BY flow_events_at_window
+       WHERE stage='check' AND operation_id IS NOT NULL
+         AND action IN (
+           'resume-ready','resume-ready-unavailable','resume-ticket-requested','resume-admitted',
+           'resume-admitted-unavailable','resume-wait-reason','resume-started','resume-unavailable'
+         )
+         AND at >= ? AND at < ?`,
+    )
+    .all(start, end) as { taskId: string; attempt: number; operationId: string }[];
+  const events: FlowEvent[] = [];
+  const readOperation = db.query(
+    `SELECT task_id AS taskId, attempt, stage, action, at, detail, operation_id AS operationId
+     FROM flow_events INDEXED BY flow_events_operation_window
+     WHERE task_id=? AND attempt=? AND operation_id=? AND stage='check'
+       AND action IN (
+         'resume-ready','resume-ready-unavailable','resume-ticket-requested','resume-admitted',
+         'resume-admitted-unavailable','resume-wait-reason','resume-started','resume-unavailable'
+       )
+     ORDER BY at,sequence`,
+  );
+  for (const identity of identities)
+    events.push(...(readOperation.all(identity.taskId, identity.attempt, identity.operationId) as FlowEvent[]));
+  return events;
 }
 
 export type LandingOperation = {
@@ -340,6 +410,116 @@ const summarize = (values: number[]) => {
     p90Ms: percentile(sorted, 0.9),
   };
 };
+
+export type CheckResumeHandoffSummary = {
+  readyCount: number;
+  readyTimestampUnavailable: number;
+  resumedCount: number;
+  readyWithoutResume: number;
+  ticketTimingUnavailable: number;
+  checkExecutionMs: ReturnType<typeof summarize>;
+  terminalToResumeMs: ReturnType<typeof summarize>;
+  hostAdmissionWaitMs: ReturnType<typeof summarize>;
+  hostWaitReasons: Record<string, number>;
+};
+
+/** Pair direct check history, its admission ticket and the resumed worker by attempt and stable operation id. */
+export function summarizeCheckResumeHandoffs(events: readonly FlowEvent[]): CheckResumeHandoffSummary {
+  const groups = new Map<string, FlowEvent[]>();
+  for (const event of events) {
+    if (event.stage !== 'check' || !event.operationId || !event.action.startsWith('resume-')) continue;
+    const key = JSON.stringify([event.taskId, event.attempt, event.operationId]);
+    const group = groups.get(key) ?? [];
+    group.push(event);
+    groups.set(key, group);
+  }
+
+  const execution: number[] = [];
+  const terminalToResume: number[] = [];
+  const hostAdmissionWait: number[] = [];
+  const hostWaitReasons: Record<string, number> = {};
+  let readyCount = 0;
+  let readyTimestampUnavailable = 0;
+  let resumedCount = 0;
+  let readyWithoutResume = 0;
+  let ticketTimingUnavailable = 0;
+
+  for (const group of groups.values()) {
+    const ordered = [...group].sort((a, b) => a.at.localeCompare(b.at));
+    const ready = ordered.find((event) => event.action === 'resume-ready' || event.action === 'resume-ready-unavailable');
+    const resumed = ordered.find((event) => event.action === 'resume-started');
+    const detail = (event: FlowEvent | undefined): Record<string, unknown> =>
+      event?.detail ? (JSON.parse(event.detail) as Record<string, unknown>) : {};
+    const ticketId = (event: FlowEvent | undefined) => {
+      const value = detail(event).ticketId;
+      return typeof value === 'string' && value.length ? value : undefined;
+    };
+
+    if (ready) {
+      readyCount++;
+      if (ready.action === 'resume-ready-unavailable') readyTimestampUnavailable++;
+      const readyDetail = detail(ready);
+      const startedAt = Date.parse(String(readyDetail.executionStartedAt ?? ''));
+      const terminalAt = Date.parse(ready.at);
+      if (
+        ready.action === 'resume-ready' &&
+        Number.isFinite(startedAt) &&
+        Number.isFinite(terminalAt) &&
+        terminalAt >= startedAt
+      )
+        execution.push(terminalAt - startedAt);
+      else if (ready.action === 'resume-ready') readyTimestampUnavailable++;
+    }
+
+    if (!resumed) {
+      if (ready) readyWithoutResume++;
+    } else {
+      resumedCount++;
+      const resumedAt = Date.parse(resumed.at);
+      const resumedTicket = ticketId(resumed);
+      if (ready?.action === 'resume-ready') {
+        const terminalAt = Date.parse(ready.at);
+        if (Number.isFinite(terminalAt) && Number.isFinite(resumedAt) && resumedAt >= terminalAt)
+          terminalToResume.push(resumedAt - terminalAt);
+      }
+
+      if (resumedTicket) {
+        const requested = ordered.find(
+          (event) => event.action === 'resume-ticket-requested' && ticketId(event) === resumedTicket,
+        );
+        const admitted = ordered.find(
+          (event) => event.action === 'resume-admitted' && ticketId(event) === resumedTicket,
+        );
+        const requestedAt = requested ? Date.parse(requested.at) : Number.NaN;
+        const admittedAt = admitted ? Date.parse(admitted.at) : Number.NaN;
+        if (Number.isFinite(requestedAt) && Number.isFinite(admittedAt) && admittedAt >= requestedAt)
+          hostAdmissionWait.push(admittedAt - requestedAt);
+        else ticketTimingUnavailable++;
+      } else ticketTimingUnavailable++;
+    }
+
+    const reasons = new Set(
+      ordered.flatMap((event) => {
+        if (event.action !== 'resume-wait-reason') return [];
+        const value = detail(event).reason;
+        return typeof value === 'string' && value.length ? [value] : [];
+      }),
+    );
+    for (const reason of reasons) hostWaitReasons[reason] = (hostWaitReasons[reason] ?? 0) + 1;
+  }
+
+  return {
+    readyCount,
+    readyTimestampUnavailable,
+    resumedCount,
+    readyWithoutResume,
+    ticketTimingUnavailable,
+    checkExecutionMs: summarize(execution),
+    terminalToResumeMs: summarize(terminalToResume),
+    hostAdmissionWaitMs: summarize(hostAdmissionWait),
+    hostWaitReasons,
+  };
+}
 
 const PAGE_DATA_CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
 type PageDataClass = (typeof PAGE_DATA_CLASSES)[number];
@@ -1037,6 +1217,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     goals,
     tasks: taskRows,
     queues,
+    checkResumeHandoffs: summarizeCheckResumeHandoffs(ordered),
     bottleneck,
     flowEfficiency: eligible.length
       ? eligible.reduce((n, t) => n + (t.workingMs ?? 0), 0) / eligible.reduce((n, t) => n + (t.elapsedMs ?? 0), 0)

@@ -29,7 +29,7 @@ import {
 } from './host-pressure.ts';
 
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgentSlots?: number };
-export type CapacityRelease = () => void;
+export type CapacityRelease = (() => void) & { ticketId?: string };
 const RECLAIM_RETRY_COOLDOWN_MS = 1_000;
 const RECLAIM_OBSERVATION_DELTA_MIB = 64;
 const MAX_RECLAIM_ATTEMPTS = 3;
@@ -391,6 +391,10 @@ export async function awaitHostCapacity(
     excludeTaskId?: string | undefined;
     /** A check wake launches a new scope and must reserve its full active minimum before spawning. */
     resume?: boolean;
+    /** Only a terminal check for this exact waiting attempt may outrank recent fresh starts. */
+    resumeReadyOperationId?: string;
+    resumeTicketId?: string;
+    onWaitReasons?: (reasons: readonly string[]) => void;
     availableMiB?: () => number;
     pressure?: () => PressureSample;
     workerHeadroomMiB?: typeof workerHeadroomMiB;
@@ -415,7 +419,8 @@ export async function awaitHostCapacity(
   // the cap and the queue; with most backend tasks critical path the running count stayed above the cap and ordinary
   // starts (most web tasks) waited for days (2026-10-29). Every start now respects the cap; critical path only dates
   // its ticket half an hour earlier, so it goes ahead of recent waiters without starving older ones.
-  const ticket = `${String((options.now?.() ?? Date.now()) - (first ? policy.criticalHeadStartMs : 0)).padStart(15, '0')}.${String(++capacityTicketSequence).padStart(8, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
+  const queuedAt = options.now?.() ?? Date.now();
+  const ticket = `${String(queuedAt - (first ? policy.criticalHeadStartMs : 0)).padStart(15, '0')}.${String(++capacityTicketSequence).padStart(8, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
   const goalSequence = taskId ? (options.goalSequence ?? store.taskSequence?.(taskId)) : options.goalSequence;
   mkdirSync(queue, { recursive: true });
   const owner = processIdentity();
@@ -432,7 +437,12 @@ export async function awaitHostCapacity(
       goal: options.goal,
       goalSequence,
       memoryMiB: memoryReservation,
+      queuedAt,
+      priorityHeadStart: first,
       operation: options.resume === true ? 'resume' : 'start',
+      ...(options.resumeReadyOperationId ? { resumeReadyOperationId: options.resumeReadyOperationId } : {}),
+      ...(options.resumeTicketId ? { resumeTicketId: options.resumeTicketId } : {}),
+      ...(options.resumeReadyOperationId && options.resume === true ? { resumePriority: true } : {}),
     }),
   );
   let reported = false;
@@ -500,7 +510,9 @@ export async function awaitHostCapacity(
         const reservedMemoryMiB = admittedMemoryMiBFromTickets(tickets, scopes.writers);
         const requiredMemoryMiB = reservedMemoryMiB + memoryReservation;
         const sliceAvailable = sliceHeadroom >= requiredMemoryMiB;
-        const ahead = hostCapacity ? ticketWaitersAhead(tickets, mine) : 0;
+        const ahead = hostCapacity
+          ? ticketWaitersAhead(tickets, mine, now, policy.criticalHeadStartMs)
+          : 0;
         const limit = urgent ? capacity.urgentSlots : capacity.maxWorkers;
         const memory = hostCapacity ? (options.availableMiB ?? availableMiB)() : Number.POSITIVE_INFINITY;
         const goalInFlight = goalCap === undefined ? 0 : inFlightForGoal(store, options.goal!, options.excludeTaskId);
@@ -533,7 +545,7 @@ export async function awaitHostCapacity(
         if (hostAvailable && goalAvailable) {
           const reservation = join(queue, `${ticket}.admitted`);
           renameSync(join(queue, ticket), reservation);
-          return releaseWhenStarted(
+          const release = releaseWhenStarted(
             store,
             reservation,
             taskId,
@@ -541,6 +553,9 @@ export async function awaitHostCapacity(
             options.resume === true,
             policy.reservationPollMs,
           );
+          return options.resumeTicketId && options.resumeReadyOperationId
+            ? Object.assign(release, { ticketId: options.resumeTicketId })
+            : release;
         }
         if (
           hostCapacity &&
@@ -573,6 +588,26 @@ export async function awaitHostCapacity(
         } else if (reclaimEpisode && reclaimEpisode.history.at(-1)?.outcome === 'legacy') {
           reclaimEpisode = observeLegacyReclaim(stateDirectory, reclaimEpisode, reclaimSnapshot, sliceHeadroom, now);
         }
+        if (options.onWaitReasons)
+          options.onWaitReasons(
+            hostWaitReasons({
+              hostCapacity,
+              urgent,
+              isOperationLeader,
+              ahead,
+              running,
+              otherRunning,
+              admitted,
+              otherAdmitted,
+              limit,
+              maxWorkers: capacity.maxWorkers,
+              memory,
+              minAvailableMiB: capacity.minAvailableMiB,
+              pressurePaused: brake.paused,
+              sliceAvailable,
+              goalAvailable,
+            }),
+          );
         if (!reported)
           console.error(
             goalCap !== undefined && !goalAvailable
@@ -660,6 +695,11 @@ type TicketMetadata = ProcessIdentity & {
   attempt?: number;
   operation?: TicketOperation;
   resume?: boolean;
+  queuedAt?: number;
+  priorityHeadStart?: boolean;
+  resumeReadyOperationId?: string;
+  resumeTicketId?: string;
+  resumePriority?: boolean;
   goal?: string;
   goalSequence?: number;
   memoryMiB?: number;
@@ -673,6 +713,11 @@ type CapacityTicket = {
   taskId?: string;
   attempt?: number;
   operation?: TicketOperation;
+  queuedAt?: number;
+  priorityHeadStart?: boolean;
+  resumeReadyOperationId?: string;
+  resumeTicketId?: string;
+  resumePriority?: boolean;
   key?: string;
   goal?: string;
   goalSequence?: number;
@@ -720,6 +765,15 @@ function ticketMetadata(queue: string, name: string): TicketMetadata | undefined
         : {}),
       ...(record.operation === 'start' || record.operation === 'resume' ? { operation: record.operation } : {}),
       ...(record.resume === true ? { resume: true } : {}),
+      ...(Number.isSafeInteger(record.queuedAt) && Number(record.queuedAt) >= 0
+        ? { queuedAt: Number(record.queuedAt) }
+        : {}),
+      ...(typeof record.priorityHeadStart === 'boolean' ? { priorityHeadStart: record.priorityHeadStart } : {}),
+      ...(typeof record.resumeReadyOperationId === 'string'
+        ? { resumeReadyOperationId: record.resumeReadyOperationId }
+        : {}),
+      ...(typeof record.resumeTicketId === 'string' ? { resumeTicketId: record.resumeTicketId } : {}),
+      ...(record.resumePriority === true ? { resumePriority: true } : {}),
       ...(typeof record.goal === 'string' ? { goal: record.goal } : {}),
       ...(Number.isSafeInteger(record.goalSequence) ? { goalSequence: record.goalSequence as number } : {}),
       ...(Number.isSafeInteger(record.memoryMiB) ? { memoryMiB: record.memoryMiB as number } : {}),
@@ -822,6 +876,15 @@ function capacityTickets(stateDirectory: string, store?: HostCapacityStore): Cap
         ...(taskId ? { taskId } : {}),
         ...(attempt !== undefined ? { attempt } : {}),
         ...(operation ? { operation } : {}),
+        ...(metadata?.queuedAt !== undefined ? { queuedAt: metadata.queuedAt } : {}),
+        ...(metadata?.priorityHeadStart !== undefined
+          ? { priorityHeadStart: metadata.priorityHeadStart }
+          : lifecycle?.priorityHeadStart !== undefined
+            ? { priorityHeadStart: lifecycle.priorityHeadStart }
+            : {}),
+        ...(metadata?.resumeReadyOperationId ? { resumeReadyOperationId: metadata.resumeReadyOperationId } : {}),
+        ...(metadata?.resumeTicketId ? { resumeTicketId: metadata.resumeTicketId } : {}),
+        ...(metadata?.resumePriority ? { resumePriority: true } : {}),
         ...(typeof metadata?.goal === 'string' ? { goal: metadata.goal } : {}),
         ...(Number.isSafeInteger(metadata?.goalSequence) ? { goalSequence: metadata!.goalSequence } : {}),
         ...(Number.isSafeInteger(metadata?.memoryMiB) ? { memoryMiB: metadata!.memoryMiB } : {}),
@@ -860,19 +923,89 @@ function admittedTicketCount(tickets: readonly CapacityTicket[], lane?: Capacity
   }
   return count;
 }
-function ticketWaitersAhead(tickets: readonly CapacityTicket[], mine: CapacityTicket): number {
+function ticketQueuedAt(ticket: CapacityTicket): number | undefined {
+  if (ticket.queuedAt !== undefined) return ticket.queuedAt;
+  const value = Number(ticket.order.split('.')[0]?.split('-')[0]);
+  return Number.isFinite(value)
+    ? value + (ticket.priorityHeadStart ? defaultPolicy.capacity.criticalHeadStartMs : 0)
+    : undefined;
+}
+function ticketQueueRank(ticket: CapacityTicket, now: number, fairnessWindowMs: number): number {
+  if (ticket.operation === 'start') {
+    const queuedAt = ticketQueuedAt(ticket);
+    if (queuedAt !== undefined && now - queuedAt >= fairnessWindowMs) return 0;
+  }
+  if (ticket.operation === 'resume' && ticket.resumePriority && ticket.resumeReadyOperationId) return 1;
+  if (ticket.operation === 'start') return 2;
+  return 3;
+}
+function ticketPrecedes(
+  candidate: CapacityTicket,
+  mine: CapacityTicket,
+  now: number,
+  fairnessWindowMs: number,
+): boolean {
+  const candidateRank = ticketQueueRank(candidate, now, fairnessWindowMs);
+  const mineRank = ticketQueueRank(mine, now, fairnessWindowMs);
+  return candidateRank === mineRank ? candidate.order < mine.order : candidateRank < mineRank;
+}
+function ticketWaitersAhead(
+  tickets: readonly CapacityTicket[],
+  mine: CapacityTicket,
+  now = Date.now(),
+  fairnessWindowMs = defaultPolicy.capacity.criticalHeadStartMs,
+): number {
   const ahead = new Set<string>();
   for (const ticket of tickets) {
     if (
       ticket.lane !== mine.lane ||
       ticket.admitted ||
-      ticket.order >= mine.order ||
+      !ticketPrecedes(ticket, mine, now, fairnessWindowMs) ||
       (mine.key !== undefined && ticket.key === mine.key)
     )
       continue;
     ahead.add(ticket.key ?? `${ticket.lane}/${ticket.name}`);
   }
   return ahead.size;
+}
+function hostWaitReasons(snapshot: {
+  hostCapacity: boolean;
+  urgent: boolean;
+  isOperationLeader: boolean;
+  ahead: number;
+  running: number;
+  otherRunning: number;
+  admitted: number;
+  otherAdmitted: number;
+  limit: number;
+  maxWorkers: number;
+  memory: number;
+  minAvailableMiB: number;
+  pressurePaused: boolean;
+  sliceAvailable: boolean;
+  goalAvailable: boolean;
+}): string[] {
+  const reasons = new Set<string>();
+  if (snapshot.hostCapacity) {
+    if (!snapshot.isOperationLeader) reasons.add('ticket-operation');
+    else if (snapshot.ahead > 0) reasons.add('ticket-order');
+    if (snapshot.running + snapshot.admitted + snapshot.ahead >= snapshot.limit)
+      reasons.add(snapshot.urgent ? 'urgent-slots' : 'worker-limit');
+    if (
+      snapshot.running +
+        snapshot.otherRunning +
+        snapshot.admitted +
+        snapshot.otherAdmitted +
+        snapshot.ahead >=
+      snapshot.maxWorkers
+    )
+      reasons.add('shared-worker-limit');
+    if (snapshot.memory < snapshot.minAvailableMiB) reasons.add('memory-floor');
+    if (snapshot.pressurePaused) reasons.add('host-pressure');
+    if (!snapshot.sliceAvailable) reasons.add('worker-slice-reserve');
+  }
+  if (!snapshot.goalAvailable) reasons.add('goal-start-limit');
+  return [...reasons];
 }
 function ticketGoal(ticket: CapacityTicket, store: HostCapacityStore): string | undefined {
   return ticket.goal ?? (ticket.taskId ? store.taskGoal?.(ticket.taskId) : undefined);
@@ -1276,6 +1409,11 @@ function queueTickets(queue: string): CapacityTicket[] {
       ...(taskId ? { taskId } : {}),
       ...(attempt !== undefined ? { attempt } : {}),
       ...(operation ? { operation } : {}),
+      ...(metadata?.queuedAt !== undefined ? { queuedAt: metadata.queuedAt } : {}),
+      ...(metadata?.priorityHeadStart !== undefined ? { priorityHeadStart: metadata.priorityHeadStart } : {}),
+      ...(metadata?.resumeReadyOperationId ? { resumeReadyOperationId: metadata.resumeReadyOperationId } : {}),
+      ...(metadata?.resumeTicketId ? { resumeTicketId: metadata.resumeTicketId } : {}),
+      ...(metadata?.resumePriority ? { resumePriority: true } : {}),
     };
     if (ticket.taskId && ticket.attempt !== undefined && ticket.operation)
       ticket.key = JSON.stringify([ticket.taskId, ticket.attempt, ticket.operation]);

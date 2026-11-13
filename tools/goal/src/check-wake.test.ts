@@ -5,6 +5,7 @@ import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { cleanupReceiptPath, physicalHistoryPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
 import { workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
+import { readFlow } from './flow.ts';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
 import { processIdentity } from './process.ts';
@@ -727,6 +728,17 @@ test('a finished owned check is proved before a resumed writer hands off its exa
       () => JSON.parse(readFileSync(history, 'utf8')).terminalProof?.local === true,
       'the exact physical run terminal proof',
     );
+    const readyBeforeAdmission = readFlow(h.store.db).filter(
+      (event) => event.taskId === task.id && event.attempt === ref.attempt && event.action.startsWith('resume-ready'),
+    );
+    expect(readyBeforeAdmission).toHaveLength(1);
+    expect(readyBeforeAdmission[0]).toMatchObject({
+      stage: 'check',
+      action: 'resume-ready',
+      at: JSON.parse(readFileSync(history, 'utf8')).finishedAt,
+    });
+    const readyOperationId = readyBeforeAdmission[0]!.operationId;
+    expect(readyOperationId).toBeTruthy();
     await waitForCondition(() => snapshots.length > 0, 'the resumed writer capacity observation');
     expect(JSON.parse(readFileSync(history, 'utf8')).terminalProof).toMatchObject({
       local: true,
@@ -743,6 +755,11 @@ test('a finished owned check is proved before a resumed writer hands off its exa
     // A repeated wake observes the same parked generation and cannot create another attempt or resume.
     await job.recoverOrphans();
     expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(
+      readFlow(h.store.db).filter(
+        (event) => event.taskId === task.id && event.attempt === ref.attempt && event.action.startsWith('resume-ready'),
+      ),
+    ).toHaveLength(1);
     expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
 
     writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
@@ -752,6 +769,18 @@ test('a finished owned check is proved before a resumed writer hands off its exa
     expect(h.store.attempt(ref).session).toBe('wake-session');
     expect(h.store.attempts(task.id)).toHaveLength(1);
     expect(readFileSync(join(task.worktree, 'result.txt'), 'utf8')).toBe('resumed');
+    const handoff = readFlow(h.store.db).filter(
+      (event) => event.taskId === task.id && event.attempt === ref.attempt && event.operationId === readyOperationId,
+    );
+    const requested = handoff.find((event) => event.action === 'resume-ticket-requested');
+    const admitted = handoff.find((event) => event.action === 'resume-admitted');
+    const resumed = handoff.find((event) => event.action === 'resume-started');
+    const ticketId = (event: typeof requested) =>
+      event?.detail ? (JSON.parse(event.detail) as { ticketId?: string }).ticketId : undefined;
+    expect(ticketId(requested)).toBeTruthy();
+    expect(ticketId(admitted as typeof requested)).toBe(ticketId(requested));
+    expect(ticketId(resumed as typeof requested)).toBe(ticketId(requested));
+    expect(handoff.some((event) => event.action === 'resume-wait-reason')).toBe(true);
   } finally {
     if (recovery) {
       writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
@@ -781,6 +810,12 @@ test('missing, foreign, and live check custody keep the waiting scope reserve', 
 
       recovery = job.recoverOrphans();
       await waitForCondition(() => snapshots.length > 0, `${custody} capacity observation`);
+      const readiness = readFlow(h.store.db).filter(
+        (event) => event.taskId === task.id && event.attempt === 1 && event.action.startsWith('resume-ready'),
+      );
+      expect(readiness).toHaveLength(1);
+      expect(readiness[0]?.action).toBe('resume-ready-unavailable');
+      expect(JSON.parse(readiness[0]?.detail ?? '{}')).toMatchObject({ timestamp: 'unavailable' });
       expect(snapshots[0]).not.toContain(scope);
       expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
       if (custody === 'missing-history') expect(existsSync(history)).toBe(false);
