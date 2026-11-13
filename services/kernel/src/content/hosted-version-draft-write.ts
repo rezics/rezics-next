@@ -22,20 +22,24 @@ import {
   InvalidHostedVersionIdentityError,
   type HostedVersionOccurrenceValue,
   type HostedVersionSnapshot,
-  type HostedVersionWrite,
 } from './hosted-version-model.ts';
+import {
+  commitHostedVersionRevision,
+  HostedVersionRevisionPointerChangedError,
+  resolveHostedVersionRevision,
+} from './hosted-version-revision.ts';
 import {
   commitHostedVersionWrite,
   createHostedVersionGeneration,
   createHostedVersionWrite,
   hostedVersionSequence,
-  readHostedVersionHead,
   readHostedVersionOccurrence,
   readHostedVersionSiblingRoot,
   readHostedVersionSnapshot,
   stageHostedVersionOccurrence,
   stageHostedVersionSiblingRoot,
   stageHostedVersionSnapshotRoots,
+  type HostedVersionWrite,
 } from './hosted-version-store.ts';
 import type {
   VersionedOutlineSequenceNode,
@@ -57,9 +61,10 @@ export type HostedDraftPointMutation =
   | ({ operation: 'insert' } & HostedDraftPointInsertInput)
   | ({ operation: 'remove' } & HostedDraftPointRemoveInput);
 
-type VersionRevisionRow = Readonly<{
-  generation_id: string;
-  sequence: string;
+export type HostedDraftPointRevisionWrite = Readonly<{
+  revisionId: string;
+  recordedTransactionId: string;
+  recordedAt: string;
 }>;
 
 function pointError(error: unknown): never {
@@ -67,7 +72,8 @@ function pointError(error: unknown): never {
     if (error.code === 'stale-head') throw new RevisionPreconditionError();
     throw new InvalidHostedStructureError('Invalid hosted draft point anchor');
   }
-  if (error instanceof HostedVersionHeadChangedError) throw new RevisionPreconditionError();
+  if (error instanceof HostedVersionHeadChangedError || error instanceof HostedVersionRevisionPointerChangedError)
+    throw new RevisionPreconditionError();
   if (error instanceof InvalidHostedVersionIdentityError)
     throw new InvalidHostedStructureError('Invalid hosted version identity');
   throw error;
@@ -174,23 +180,16 @@ async function ancestorPath(
   return path;
 }
 
-async function mappedSnapshot(
+async function snapshotForDescriptor(
   client: AccessClient,
   catalogueId: string,
-  revisionId: string,
-): Promise<HostedVersionSnapshot | null> {
-  const route = routeOf(catalogueId);
-  if (route === null || routeOf(revisionId) !== route) throw new InvalidHostedStructureError();
-  const row = (
-    await client.query<VersionRevisionRow>(
-      `SELECT generation_id,sequence::text AS sequence
-     FROM content.hosted_version_revision WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3`,
-      [route, catalogueId, revisionId],
-    )
-  ).rows[0];
-  if (!row) return null;
-  const snapshot = await readHostedVersionSnapshot(client, catalogueId, row.generation_id, BigInt(row.sequence));
+  generationId: string,
+  generationKind: HostedVersionSnapshot['generationKind'],
+  sequence: bigint,
+): Promise<HostedVersionSnapshot> {
+  const snapshot = await readHostedVersionSnapshot(client, catalogueId, generationId, sequence);
   if (!snapshot) throw new ContentNotFoundError();
+  if (snapshot.generationKind !== generationKind || snapshot.sequence !== sequence) throw new ContentNotFoundError();
   return snapshot;
 }
 
@@ -216,33 +215,13 @@ async function emptyLegacyPlacementCount(client: AccessClient, catalogueId: stri
   return BigInt(count) + BigInt(appends);
 }
 
-async function bindEmptyDraftSnapshot(
-  client: AccessClient,
-  catalogueId: string,
-  expectedRevisionId: string,
-): Promise<HostedVersionSnapshot> {
-  if ((await emptyLegacyPlacementCount(client, catalogueId, expectedRevisionId)) !== 0n) {
-    throw new InvalidHostedStructureError('Hosted draft point writes require an activated versioned draft');
-  }
-  const route = routeOf(catalogueId)!;
-  const existing = (
-    await client.query<{ generation_id: string }>(
-      `SELECT generation_id FROM content.hosted_tree_generation
-     WHERE route=$1 AND catalogue_id=$2 AND generation_kind='draft' ORDER BY created_at ASC LIMIT 1`,
-      [route, catalogueId],
-    )
-  ).rows[0];
-  const snapshot = existing
-    ? await readHostedVersionHead(client, catalogueId, existing.generation_id)
-    : await createHostedVersionGeneration(client, catalogueId, newId(route), 'draft');
-  if (!snapshot || snapshot.generationKind !== 'draft') throw new ContentNotFoundError();
-  await client.query(
-    `INSERT INTO content.hosted_version_revision(route,catalogue_id,revision_id,generation_id,sequence)
-     VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT (route,catalogue_id,revision_id) DO NOTHING`,
-    [route, catalogueId, expectedRevisionId, snapshot.generationId, snapshot.sequence.toString()],
-  );
-  return (await mappedSnapshot(client, catalogueId, expectedRevisionId)) ?? snapshot;
+/** Activate one new empty draft generation for a compatibility empty head. Do not map that head. */
+async function activateEmptyDraftGeneration(client: AccessClient, catalogueId: string): Promise<HostedVersionSnapshot> {
+  const route = routeOf(catalogueId);
+  if (route === null) throw new InvalidHostedStructureError();
+  const snapshot = await createHostedVersionGeneration(client, catalogueId, newId(route), 'draft');
+  if (snapshot.generationKind !== 'draft') throw new ContentNotFoundError();
+  return snapshot;
 }
 
 export async function resolveHostedDraftPointSnapshot(
@@ -250,10 +229,24 @@ export async function resolveHostedDraftPointSnapshot(
   catalogueId: string,
   expectedRevisionId: string,
 ): Promise<HostedVersionSnapshot> {
-  return (
-    (await mappedSnapshot(client, catalogueId, expectedRevisionId)) ??
-    bindEmptyDraftSnapshot(client, catalogueId, expectedRevisionId)
-  );
+  const resolved = await resolveHostedVersionRevision(client, catalogueId, expectedRevisionId);
+  if (resolved.kind === 'missing') throw new ContentNotFoundError();
+  if (resolved.kind === 'ordered') {
+    if (resolved.revisionKind !== 'structure' || resolved.snapshot.generationKind !== 'draft') {
+      throw new InvalidHostedStructureError('Hosted draft point writes require an activated versioned draft');
+    }
+    return snapshotForDescriptor(
+      client,
+      catalogueId,
+      resolved.snapshot.generationId,
+      resolved.snapshot.generationKind,
+      resolved.snapshot.sequence,
+    );
+  }
+  if ((await emptyLegacyPlacementCount(client, catalogueId, expectedRevisionId)) !== 0n) {
+    throw new InvalidHostedStructureError('Hosted draft point writes require an activated versioned draft');
+  }
+  return activateEmptyDraftGeneration(client, catalogueId);
 }
 
 export async function readHostedDraftPointSnapshot(
@@ -261,7 +254,15 @@ export async function readHostedDraftPointSnapshot(
   catalogueId: string,
   revisionId: string,
 ): Promise<HostedVersionSnapshot | null> {
-  return mappedSnapshot(client, catalogueId, revisionId);
+  const resolved = await resolveHostedVersionRevision(client, catalogueId, revisionId);
+  if (resolved.kind === 'missing' || resolved.kind === 'compatibility') return null;
+  return snapshotForDescriptor(
+    client,
+    catalogueId,
+    resolved.snapshot.generationId,
+    resolved.snapshot.generationKind,
+    resolved.snapshot.sequence,
+  );
 }
 
 async function insertOccurrenceIdentity(client: AccessClient, catalogueId: string, input: HostedDraftPointInsertInput) {
@@ -369,7 +370,7 @@ async function stagePlan(
 export async function commitHostedDraftPointWrite(
   client: AccessClient,
   catalogueId: string,
-  revisionId: string,
+  revision: HostedDraftPointRevisionWrite,
   input: HostedDraftPointMutation,
 ): Promise<HostedVersionSnapshot> {
   try {
@@ -386,12 +387,21 @@ export async function commitHostedDraftPointWrite(
     if (input.operation === 'insert') await insertOccurrenceIdentity(client, catalogueId, input);
     await stagePlan(client, write, snapshot, input, plan);
     const next = await commitHostedVersionWrite(client, write);
-    const route = routeOf(catalogueId)!;
-    await client.query(
-      `INSERT INTO content.hosted_version_revision(route,catalogue_id,revision_id,generation_id,sequence)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [route, catalogueId, revisionId, next.generationId, next.sequence.toString()],
-    );
+    if (next.generationKind !== 'draft') throw new ContentNotFoundError();
+    await commitHostedVersionRevision(client, {
+      revisionKind: 'structure',
+      revisionId: revision.revisionId,
+      snapshot: {
+        route: next.route,
+        catalogueId: next.catalogueId,
+        generationId: next.generationId,
+        generationKind: 'draft',
+        sequence: next.sequence,
+      },
+      expectedDraftRevisionId: input.expectedRevisionId,
+      recordedTransactionId: revision.recordedTransactionId,
+      recordedAt: revision.recordedAt,
+    });
     return next;
   } catch (error) {
     pointError(error);

@@ -181,6 +181,8 @@ const typed = [
   'POST /v1/hostedCatalogues/:id/$publish',
   'POST /v1/hostedCatalogues/:id/$revise',
   'POST /v1/hostedCatalogues/:id/$appendRootChapter',
+  'POST /v1/hostedCatalogues/:id/$insertDraftPoint',
+  'POST /v1/hostedCatalogues/:id/$removeDraftPoint',
   'POST /v1/knowledge/documents/:id/publication/$select',
   'POST /v1/knowledge/documents/:id/revisions/$revise',
   'POST /v1/knowledge/documents/:id/$trash',

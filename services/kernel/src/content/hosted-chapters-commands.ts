@@ -391,18 +391,16 @@ async function mutatePoint(
       const current = await hostedCatalogue(tx, catalogueId, true);
       if (!current || current.thread_id !== threadId) throw new ContentNotFoundError();
       if (current.head_revision_id !== input.expectedRevisionId) throw new RevisionPreconditionError();
-      await tx.query(
-        `INSERT INTO content.hosted_structure_revision
-       (route,catalogue_id,revision_id,kind,source_revision_id,recorded_transaction_id,created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [route, catalogueId, revisionId, 'structure', null, transactionId, authoritativeTimeValue(time)],
-      );
-      await commitHostedDraftPointWrite(tx, catalogueId, revisionId, input);
-      await tx.query(`UPDATE content.hosted_catalogue SET head_revision_id=$3 WHERE route=$1 AND catalogue_id=$2`, [
-        route,
+      await commitHostedDraftPointWrite(
+        tx,
         catalogueId,
-        revisionId,
-      ]);
+        {
+          revisionId,
+          recordedTransactionId: transactionId,
+          recordedAt: authoritativeTimeValue(time),
+        },
+        input,
+      );
       const value = { catalogueId, revisionId };
       return {
         value,

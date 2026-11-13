@@ -16,9 +16,10 @@ import {
   hostedVersionSequence,
   readHostedVersionOccurrence,
   readHostedVersionSiblingRoot,
+  type HostedVersionWrite,
 } from './hosted-version-store.ts';
 import type { HostedVersionPointValue } from './hosted-version-draft-write.ts';
-import type { HostedVersionSnapshot, HostedVersionWrite } from './hosted-version-model.ts';
+import type { HostedVersionSnapshot } from './hosted-version-model.ts';
 import {
   chapterRankVersionedOutlineSequenceNode,
   rankVersionedOutlineSequenceNode,

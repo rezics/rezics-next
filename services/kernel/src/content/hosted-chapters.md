@@ -6,14 +6,14 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 
 ## Authoring and release
 
-| Operation ID                           | Method and path                                    | Input                                                                   |
-| -------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
-| `hosted_catalogue.create`              | `POST /v1/hostedCatalogues`                        | `postId`, `threadId`, `placements`                                      |
-| `hosted_catalogue.revise`              | `POST /v1/hostedCatalogues/{id}:revise`            | `expectedRevisionId`, `placements`                                      |
-| `hosted_catalogue.append_root_chapter` | `POST /v1/hostedCatalogues/{id}:appendRootChapter` | `expectedRevisionId`, `occurrenceId`, `title`, `target`                 |
+| Operation ID                           | Method and path                                    | Input                                                                                                |
+| -------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `hosted_catalogue.create`              | `POST /v1/hostedCatalogues`                        | `postId`, `threadId`, `placements`                                                                   |
+| `hosted_catalogue.revise`              | `POST /v1/hostedCatalogues/{id}:revise`            | `expectedRevisionId`, `placements`                                                                   |
+| `hosted_catalogue.append_root_chapter` | `POST /v1/hostedCatalogues/{id}:appendRootChapter` | `expectedRevisionId`, `occurrenceId`, `title`, `target`                                              |
 | `hosted_catalogue.insert_draft_point`  | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`  | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
-| `hosted_catalogue.remove_draft_point`  | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`  | `expectedRevisionId`, `occurrenceId`                                    |
-| `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds` |
+| `hosted_catalogue.remove_draft_point`  | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`  | `expectedRevisionId`, `occurrenceId`                                                                 |
+| `hosted_catalogue.publish`             | `POST /v1/hostedCatalogues/{id}:publish`           | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
 
 Every command requires an Idempotency-Key and returns `catalogueId` and the newly selected `revisionId`. Create
 returns 201; revise, root append, draft point writes and publish return 200. A fresh command with a stale head or release returns 412.
@@ -106,14 +106,20 @@ historical roots and permanent occurrence identity. Admitted authors bind insert
 `hostedPostAuthorization` and `runCommand` against the native `createHostedVersionWrite` producer: one expected
 snapshot per attempt, changed chapter attachments validated before the transaction, exact receipt replay before
 expected-head CAS, and an atomic commit of sibling/preorder/chapter roots, permanent occurrence identity, changed
-ancestor summaries, receipt and the identity-only revise event. Empty catalogues activate one draft generation on
-the first point write; nonempty unmapped legacy drafts stay on replacement until the ordered-generation builder
-activates them. Mapped structure revisions fork GET children, outline, navigation and resolve onto the versioned
-indexes so advancing the catalogue head never serves an empty legacy page. Do not add a parallel SQL adapter.
+ancestor summaries, exact immutable revision descriptor, draft pointer, receipt and the identity-only revise event.
+Empty catalogues activate one new draft generation on the first point write without attaching the compatibility head
+to that generation; the first committed point revision is the first ordered descriptor. Nonempty unmapped legacy
+drafts stay on replacement until the ordered-generation builder activates them. Ordered expected revisions consume
+`resolveHostedVersionRevision` and `readHostedVersionSnapshot` with the exact returned generation, kind and sequence;
+`commitHostedVersionRevision` records the new descriptor and CAS-advances the draft pointer. Compatibility readers
+remain for unmapped revisions. Mapped structure revisions fork GET children, outline, navigation and resolve onto the
+versioned indexes so advancing the catalogue head never serves an empty legacy page. Do not add a parallel SQL adapter.
 
 Decision: focused command and HTTP tests pin insert/remove admission, receipt replay before head CAS, stale-head
 412, reused occurrence identity, nested insert, subtree removal that preserves historical snapshots, and GET
-children after a point write; planner unit tests and native/browser/root suites stay with their owners.
+children after a point write; they already cover mounted author insert/remove/readback, old exact revision after
+edits, stale CAS/replay and private draft disclosure. Planner unit tests, bounded physical probes beyond 512 and
+native/browser/root suites stay with their owners.
 
 Decision: Content binds each ordered Book revision to one immutable `(catalogue, generation, sequence)` snapshot.
 Exact reads distinguish ordered, compatibility and missing revisions; structure revisions bind draft generations,
