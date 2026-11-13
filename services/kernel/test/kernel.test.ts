@@ -184,6 +184,7 @@ const typed = [
   'POST /v1/hostedCatalogues/:id/$insertDraftPoint',
   'POST /v1/hostedCatalogues/:id/$removeDraftPoint',
   'POST /v1/hostedCatalogues/:id/$moveDraftPoint',
+  'POST /v1/hostedCatalogues/:id/$convertDraft',
   'POST /v1/knowledge/documents/:id/publication/$select',
   'POST /v1/knowledge/documents/:id/revisions/$revise',
   'POST /v1/knowledge/documents/:id/$trash',
@@ -624,6 +625,13 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   });
   expect(paths['/v1/hostedCatalogues/{id}:moveDraftPoint']?.post).toMatchObject({
     operationId: 'hosted_catalogue.move_draft_point',
+    'x-action': 'post:revise',
+    'x-exposure': 'public',
+    'x-rate-limit': { family: 'write', units: 1 },
+    security: [{ bearerAuth: [] }],
+  });
+  expect(paths['/v1/hostedCatalogues/{id}:convertDraft']?.post).toMatchObject({
+    operationId: 'hosted_catalogue.convert_draft',
     'x-action': 'post:revise',
     'x-exposure': 'public',
     'x-rate-limit': { family: 'write', units: 1 },
