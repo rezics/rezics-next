@@ -1,6 +1,7 @@
 import { CONTENT_EVENTS } from './events.ts';
 import { HOSTED_CHAPTER_EVENTS } from './hosted-chapters-events.ts';
 import { REPORT_LOCATOR_EVENTS } from './report-locator-events.ts';
+import { REVISION_DISCLOSURE_EVENTS } from './revision-disclosure-events.ts';
 
 /** Content's event catalogue as a declared value. Locator events belong on the same surface as
  * thread, media and moderation events; the composition root evaluates this once at start. */
@@ -9,5 +10,6 @@ export function contentDeclaredEvents() {
     ...CONTENT_EVENTS(),
     ...HOSTED_CHAPTER_EVENTS,
     ...REPORT_LOCATOR_EVENTS,
+    ...REVISION_DISCLOSURE_EVENTS,
   });
 }

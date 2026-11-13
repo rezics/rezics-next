@@ -34,6 +34,29 @@ export {
 } from './hosted-chapters-reads.ts';
 export { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
 export { listHostedCataloguesForSubject } from './hosted-catalogue-subject.ts';
+export {
+  issueRevisionDisclosure,
+  lookupRevisionDisclosure,
+  observeIssuedRevisionDisclosure,
+  pageRevisionDisclosureErasure,
+  publicRevisionDisclosureBaseline,
+  readRevisionDisclosure,
+  readRevisionDisclosureInitiator,
+  revisionDisclosureReaderGate,
+  revokeRevisionDisclosure,
+} from './revision-disclosure.ts';
+export type {
+  RevisionDisclosureCommandContext,
+  RevisionDisclosureCommandValue,
+  RevisionDisclosureDependencies,
+  RevisionDisclosureErasurePage,
+  RevisionDisclosureIssueInput,
+  RevisionDisclosureMembership,
+  RevisionDisclosureObservation,
+  RevisionDisclosureReaderGate,
+  RevisionDisclosureReaderIntent,
+  RevisionDisclosureTarget,
+} from './revision-disclosure.ts';
 export type {
   HostedSubjectCatalogueItem,
   HostedSubjectCataloguePage,

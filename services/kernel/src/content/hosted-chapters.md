@@ -204,6 +204,12 @@ Book-scoped-consent-readable are separate native observations. Do not infer read
 read, cache a permission callback, or implement consent by loading the body. Public/anonymous projections never
 receive private progress or selection details. Embedded private media stays with Media.
 
+Decision: source-side exact consent is the unmounted `revision-disclosure` primitive. Issue and revoke use source
+`post:revise` plus container admission; attachment metadata is observed after admission and never authorizes issuance.
+Private draft openings are the first scoped case. Already-public targets keep Access public eligibility with no consent
+row. Consent observation does not grant read. Reader membership remains a Book-owned typed seam with no writable
+caller proof. Distinct migration `20261113100002_revision_disclosure.sql`. Staged activation-currentness is unchanged.
+
 ## Prepared Book publication
 
 Decision: private staging uses a source-ordered candidate generation, 20-row replayable steps and selection batches of
