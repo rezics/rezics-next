@@ -38,7 +38,15 @@ export type ContentWorkAmbient = Readonly<{
     readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
 }>;
 /** Content's declared effects. The worker register consumes this; tests may install the same list. */
-export declare function contentDeclaredEffects(pool: ContentPool, client: Parameters<typeof contentEffects>[1], access: Parameters<typeof contentNoticeEffects>[1], readIdentityMappings: ContentWorkAmbient['readIdentityMappings']): readonly import("../events/effects.ts").Effect[];
+export declare function contentDeclaredEffects(pool: ContentPool, client: Parameters<typeof contentEffects>[1], access: Parameters<typeof contentNoticeEffects>[1], readIdentityMappings: ContentWorkAmbient['readIdentityMappings']): readonly {
+    name: string;
+    types: string[];
+    run(event: {
+        type: string;
+        subject?: string;
+        data: unknown;
+    }): Promise<void>;
+}[];
 /** Content's declared surfaces, read by the composition root. Events, operations and permissions are data;
  * the worker is a factory over explicit operands. HTTP composition extends this with `mount`. */
 export declare function contentDeclaration(): Readonly<{

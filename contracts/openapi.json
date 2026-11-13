@@ -17068,6 +17068,27 @@
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
                     },
+                    "restoreProgress": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "pendingPlacements": {
+                          "pattern": "^(?:0|[1-9][0-9]{0,18})$",
+                          "type": "string"
+                        },
+                        "processedDocuments": {
+                          "pattern": "^(?:0|[1-9][0-9]{0,18})$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "processedDocuments",
+                        "pendingPlacements"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "restoreUntil": {
                       "format": "date-time",
                       "type": [
@@ -17093,7 +17114,8 @@
                     "structureRevisionId",
                     "generation",
                     "state",
-                    "restoreUntil"
+                    "restoreUntil",
+                    "restoreProgress"
                   ],
                   "type": "object"
                 }
@@ -163916,9 +163938,30 @@
                       "type": "string"
                     },
                     "reason": {
-                      "const": "subtree_work_required",
+                      "const": "restoring",
                       "type": [
                         "string",
+                        "null"
+                      ]
+                    },
+                    "restoreProgress": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "pendingPlacements": {
+                          "pattern": "^(?:0|[1-9][0-9]{0,18})$",
+                          "type": "string"
+                        },
+                        "processedDocuments": {
+                          "pattern": "^(?:0|[1-9][0-9]{0,18})$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "processedDocuments",
+                        "pendingPlacements"
+                      ],
+                      "type": [
+                        "object",
                         "null"
                       ]
                     },
@@ -163948,6 +163991,7 @@
                     "generation",
                     "state",
                     "restoreUntil",
+                    "restoreProgress",
                     "complete",
                     "reason"
                   ],
@@ -165064,9 +165108,30 @@
                       "type": "string"
                     },
                     "reason": {
-                      "const": "subtree_work_required",
+                      "const": "restoring",
                       "type": [
                         "string",
+                        "null"
+                      ]
+                    },
+                    "restoreProgress": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "pendingPlacements": {
+                          "pattern": "^(?:0|[1-9][0-9]{0,18})$",
+                          "type": "string"
+                        },
+                        "processedDocuments": {
+                          "pattern": "^(?:0|[1-9][0-9]{0,18})$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "processedDocuments",
+                        "pendingPlacements"
+                      ],
+                      "type": [
+                        "object",
                         "null"
                       ]
                     },
@@ -165096,6 +165161,7 @@
                     "generation",
                     "state",
                     "restoreUntil",
+                    "restoreProgress",
                     "complete",
                     "reason"
                   ],

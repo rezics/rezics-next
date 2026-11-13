@@ -20672,6 +20672,10 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                                     generation: string;
                                                     state: "active" | "trashed";
                                                     restoreUntil: string | null;
+                                                    restoreProgress: {
+                                                        processedDocuments: string;
+                                                        pendingPlacements: string;
+                                                    } | null;
                                                 };
                                                 400: Response | {
                                                     type: unknown;
@@ -20832,8 +20836,12 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                     generation: string;
                                     state: "active" | "trashed";
                                     restoreUntil: string | null;
+                                    restoreProgress: {
+                                        processedDocuments: string;
+                                        pendingPlacements: string;
+                                    } | null;
                                     complete: boolean;
-                                    reason: "subtree_work_required" | null;
+                                    reason: "restoring" | null;
                                 };
                                 400: Response | {
                                     type: unknown;
@@ -20990,8 +20998,12 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                     generation: string;
                                     state: "active" | "trashed";
                                     restoreUntil: string | null;
+                                    restoreProgress: {
+                                        processedDocuments: string;
+                                        pendingPlacements: string;
+                                    } | null;
                                     complete: boolean;
-                                    reason: "subtree_work_required" | null;
+                                    reason: "restoring" | null;
                                 };
                                 400: Response | {
                                     type: unknown;
