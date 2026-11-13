@@ -1,6 +1,7 @@
 import { InvalidHostedStructureError } from './hosted-chapters-model.ts';
 import { HOSTED_DEPTH_LIMIT } from './hosted-chapters-limits.ts';
 import type { OrderedHostedPlacement, HostedChapterTarget } from './hosted-chapters-model.ts';
+import type { CommandTransaction } from '../command/command.ts';
 import {
   chapterRankVersionedOutlineSequenceNode,
   insertVersionedOutlineSequenceNode,
@@ -13,11 +14,34 @@ import {
   type HostedVersionPublicationInsertion,
   type HostedVersionPublicationOccurrence,
   type HostedVersionPublicationOccurrenceChange,
+  type HostedVersionPublicationBaseline,
   type HostedVersionPublicationValue,
   type HostedVersionPublicationWritePlan,
   type HostedVersionPublicationWritePort,
 } from './hosted-version-publication-write-model.ts';
 import type { HostedPointSelection } from './hosted-publication-point-selection.ts';
+import { HostedVersionHeadChangedError, type HostedVersionSnapshot } from './hosted-version-model.ts';
+import {
+  commitHostedVersionWrite,
+  createHostedVersionWrite,
+  hostedVersionSequence,
+  readHostedVersionOccurrence,
+  readHostedVersionSiblingRoot,
+  readHostedVersionSnapshot,
+  stageHostedVersionOccurrence,
+  stageHostedVersionSiblingRoot,
+  stageHostedVersionSnapshotRoots,
+  type HostedVersionWrite,
+} from './hosted-version-store.ts';
+import {
+  commitHostedVersionRevision,
+  HostedVersionRevisionPointerChangedError,
+  resolveHostedVersionRevision,
+} from './hosted-version-revision.ts';
+import type {
+  VersionedOutlineSequenceNode,
+  VersionedOutlineSequenceReadWriteSet,
+} from './versioned-outline-sequence.ts';
 
 type Insertion = Readonly<{
   placement: OrderedHostedPlacement;
@@ -77,6 +101,19 @@ async function selectedRank(
   const rank = await rankVersionedOutlineSequenceNode(index, rootId, occurrenceId);
   if (rank === null) throw new Error('Hosted publication anchor is absent from its selected sequence');
   return rank;
+}
+
+function matchesSelectedPlacement(
+  occurrence: HostedVersionPublicationOccurrence | null,
+  placement: OrderedHostedPlacement,
+): boolean {
+  if (occurrence === null || occurrence.parentId !== placement.parentId) return false;
+  if (placement.kind === 'part') return occurrence.value.kind === 'part' && occurrence.value.title === placement.title;
+  return (
+    occurrence.value.kind === 'chapter' &&
+    occurrence.value.title === placement.title &&
+    sameTarget(occurrence.value.target, placement.target)
+  );
 }
 
 async function preorderInsertionRank(
@@ -211,6 +248,21 @@ export async function writeHostedVersionPublicationPoint(
         subtreeSize: ancestor.value.subtreeSize + 1n,
         chapterCount: ancestor.value.chapterCount + chapterDelta,
       });
+    }
+  }
+
+  if (selection.kind === 'publishChapter') {
+    const anchors = [...selection.ancestors.map(({ before }) => before), selection.before];
+    for (const anchor of anchors) {
+      if (anchor !== null && !matchesSelectedPlacement(await occurrence(anchor.occurrenceId), anchor)) {
+        throw new HostedVersionPublicationWriteError('stale-publication');
+      }
+    }
+    if (
+      selection.parent !== null &&
+      !matchesSelectedPlacement(await occurrence(selection.parent.occurrenceId), selection.parent)
+    ) {
+      throw new HostedVersionPublicationWriteError('stale-publication');
     }
   }
 
@@ -355,4 +407,228 @@ export async function writeHostedVersionPublicationPoint(
       changedSiblingRoots: siblingRootChanges.size,
     },
   };
+}
+
+type StoredPublicationValue = HostedVersionPublicationValue & Readonly<{ chapterCount: bigint }>;
+type StoredPublicationIndex = VersionedOutlineSequenceReadWriteSet<StoredPublicationValue>;
+type PublicationWrite = HostedVersionWrite<StoredPublicationValue>;
+
+function storedValue(value: HostedVersionPublicationValue, chapterCount: bigint): StoredPublicationValue {
+  return { ...value, chapterCount };
+}
+
+function publicationValue(value: StoredPublicationValue): HostedVersionPublicationValue {
+  return value.kind === 'part'
+    ? { kind: 'part', title: value.title }
+    : { kind: 'chapter', title: value.title, target: value.target };
+}
+
+function stringIndex(
+  inner: StoredPublicationIndex,
+  payloads: Map<string, StoredPublicationValue>,
+): VersionedOutlineSequenceReadWriteSet<string> {
+  const asString = (
+    node: VersionedOutlineSequenceNode<StoredPublicationValue> | null,
+  ): VersionedOutlineSequenceNode<string> | null => {
+    if (node === null) return null;
+    payloads.set(node.id, node.value);
+    return { ...node, value: node.id };
+  };
+  const nodeReads = new Map<string, VersionedOutlineSequenceNode<string> | null>();
+  const nodeWrites = new Map<string, VersionedOutlineSequenceNode<string>>();
+  return {
+    async readNode(id) {
+      const node = asString(await inner.readNode(id));
+      nodeReads.set(id, node);
+      return node;
+    },
+    writeNode(node) {
+      const value =
+        payloads.get(node.id) ?? inner.nodeWrites.get(node.id)?.value ?? inner.nodeReads.get(node.id)?.value;
+      if (value === undefined) throw new Error('Hosted publication sequence write has no occurrence value');
+      inner.writeNode({ ...node, value });
+      nodeWrites.set(node.id, node);
+    },
+    nodeReads,
+    nodeWrites,
+    work: () => inner.work(),
+  };
+}
+
+function baselineSnapshotMatches(left: HostedVersionSnapshot, right: HostedVersionSnapshot): boolean {
+  return (
+    left.route === right.route &&
+    left.catalogueId === right.catalogueId &&
+    left.generationId === right.generationId &&
+    left.generationKind === right.generationKind &&
+    left.sequence === right.sequence &&
+    left.preorderRootId === right.preorderRootId &&
+    left.chapterRootId === right.chapterRootId &&
+    left.placementCount === right.placementCount &&
+    left.chapterCount === right.chapterCount
+  );
+}
+
+async function exactPublicationSnapshot(
+  client: CommandTransaction,
+  catalogueId: string,
+  selection: HostedPointSelection,
+  preparedBaseline: HostedVersionPublicationBaseline | null,
+): Promise<HostedVersionSnapshot> {
+  const resolved = await resolveHostedVersionRevision(client, catalogueId, selection.expectedPublicationId);
+  if (resolved.kind === 'missing' || resolved.revisionKind !== 'publication') {
+    throw new HostedVersionPublicationWriteError('stale-publication');
+  }
+
+  if (resolved.kind === 'ordered') {
+    if (resolved.snapshot.generationKind !== 'candidate') {
+      throw new HostedVersionPublicationWriteError('stale-publication');
+    }
+    const snapshot = await readHostedVersionSnapshot(
+      client,
+      catalogueId,
+      resolved.snapshot.generationId,
+      resolved.snapshot.sequence,
+    );
+    if (
+      snapshot === null ||
+      snapshot.generationKind !== 'candidate' ||
+      snapshot.sequence !== resolved.snapshot.sequence
+    ) {
+      throw new HostedVersionPublicationWriteError('stale-publication');
+    }
+    return snapshot;
+  }
+
+  if (
+    preparedBaseline === null ||
+    preparedBaseline.sourcePublicationId !== selection.expectedPublicationId ||
+    preparedBaseline.snapshot.generationKind !== 'candidate' ||
+    preparedBaseline.snapshot.catalogueId !== catalogueId
+  ) {
+    throw new HostedVersionPublicationWriteError('stale-publication');
+  }
+  const snapshot = await readHostedVersionSnapshot(
+    client,
+    catalogueId,
+    preparedBaseline.snapshot.generationId,
+    preparedBaseline.snapshot.sequence,
+  );
+  if (
+    snapshot === null ||
+    snapshot.generationKind !== 'candidate' ||
+    !baselineSnapshotMatches(snapshot, preparedBaseline.snapshot)
+  ) {
+    throw new HostedVersionPublicationWriteError('stale-publication');
+  }
+  return snapshot;
+}
+
+function nativePublicationPort(
+  client: CommandTransaction,
+  snapshot: HostedVersionSnapshot,
+  selection: HostedPointSelection,
+  write: PublicationWrite,
+): HostedVersionPublicationWritePort {
+  const payloads = new Map<string, StoredPublicationValue>();
+  if (selection.kind === 'publishChapter') {
+    for (const { placement } of selection.ancestors)
+      payloads.set(placement.occurrenceId, storedValue(valueOf(placement), 0n));
+    payloads.set(
+      selection.chapter.occurrenceId,
+      storedValue(valueOf(selection.chapter), selection.chapter.kind === 'chapter' ? 1n : 0n),
+    );
+  }
+  const indexes: HostedVersionPublicationIndexes = {
+    siblings: stringIndex(hostedVersionSequence(write, 'sibling'), payloads),
+    preorder: stringIndex(hostedVersionSequence(write, 'preorder'), payloads),
+    chapters: stringIndex(hostedVersionSequence(write, 'chapter'), payloads),
+  };
+  return {
+    snapshot: {
+      publicationRevisionId: selection.expectedPublicationId,
+      generationId: snapshot.generationId,
+      generationKind: 'candidate',
+      sequence: snapshot.sequence,
+      preorderRootId: snapshot.preorderRootId,
+      chapterRootId: snapshot.chapterRootId,
+      placementCount: snapshot.placementCount,
+      chapterCount: snapshot.chapterCount,
+    },
+    indexes,
+    async readOccurrence(occurrenceId) {
+      const row = await readHostedVersionOccurrence<StoredPublicationValue>(client, snapshot, occurrenceId);
+      if (row === null) return null;
+      return {
+        parentId: row.parentOccurrenceId,
+        subtreeSize: row.subtreeSize,
+        chapterCount: row.value.chapterCount,
+        value: publicationValue(row.value),
+      };
+    },
+    async readSiblingRoot(parentId) {
+      return (await readHostedVersionSiblingRoot(client, snapshot, parentId))?.rootNodeId ?? null;
+    },
+    stageOccurrence(change) {
+      stageHostedVersionOccurrence(write, change.occurrenceId, {
+        parentOccurrenceId: change.parentId,
+        subtreeSize: change.subtreeSize,
+        value: storedValue(change.value, change.chapterCount),
+      });
+    },
+    stageSiblingRoot(parentId, rootId) {
+      stageHostedVersionSiblingRoot(write, parentId, rootId);
+    },
+    stageSnapshotRoots(roots) {
+      stageHostedVersionSnapshotRoots(write, roots);
+    },
+  };
+}
+
+export type HostedVersionPublicationPointCommitInput = Readonly<{
+  catalogueId: string;
+  revisionId: string;
+  recordedTransactionId: string;
+  recordedAt: string;
+  selection: HostedPointSelection;
+  preparedBaseline: HostedVersionPublicationBaseline | null;
+}>;
+
+export type HostedVersionPublicationPointCommit = Readonly<{
+  snapshot: HostedVersionSnapshot;
+  plan: HostedVersionPublicationWritePlan;
+}>;
+
+/** Apply one point selection and bind its descriptor and publication CAS on the caller's command transaction. */
+export async function commitHostedVersionPublicationPoint(
+  client: CommandTransaction,
+  input: HostedVersionPublicationPointCommitInput,
+): Promise<HostedVersionPublicationPointCommit> {
+  const snapshot = await exactPublicationSnapshot(client, input.catalogueId, input.selection, input.preparedBaseline);
+  const write = createHostedVersionWrite<StoredPublicationValue>(client, snapshot);
+  const port = nativePublicationPort(client, snapshot, input.selection, write);
+  const plan = await writeHostedVersionPublicationPoint(input.selection, port);
+  try {
+    const next = await commitHostedVersionWrite(client, write);
+    await commitHostedVersionRevision(client, {
+      revisionKind: 'publication',
+      revisionId: input.revisionId,
+      snapshot: {
+        route: next.route,
+        catalogueId: next.catalogueId,
+        generationId: next.generationId,
+        generationKind: 'candidate',
+        sequence: next.sequence,
+      },
+      expectedDraftRevisionId: input.selection.expectedRevisionId,
+      expectedPublicationId: input.selection.expectedPublicationId,
+      recordedTransactionId: input.recordedTransactionId,
+      recordedAt: input.recordedAt,
+    });
+    return { snapshot: next, plan };
+  } catch (error) {
+    if (error instanceof HostedVersionHeadChangedError || error instanceof HostedVersionRevisionPointerChangedError)
+      throw new HostedVersionPublicationWriteError('stale-publication');
+    throw error;
+  }
 }

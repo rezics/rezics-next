@@ -1,5 +1,6 @@
 import type { HostedChapterTarget } from './hosted-chapters-model.ts';
 import type { HostedPointSelection } from './hosted-publication-point-selection.ts';
+import type { HostedVersionSnapshot } from './hosted-version-model.ts';
 import type {
   VersionedOutlineSequenceReadWriteSet,
   VersionedOutlineSequenceWork,
@@ -35,6 +36,12 @@ export type HostedVersionPublicationWriteSnapshot = HostedVersionPublicationInde
     generationKind: 'candidate';
     sequence: bigint;
   }>;
+
+/** A private candidate prepared from one exact legacy public selection. */
+export type HostedVersionPublicationBaseline = Readonly<{
+  sourcePublicationId: string;
+  snapshot: HostedVersionSnapshot;
+}>;
 
 export type HostedVersionPublicationIndexes = Readonly<{
   siblings: VersionedOutlineSequenceReadWriteSet<string>;
