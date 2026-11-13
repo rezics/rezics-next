@@ -26,6 +26,8 @@ and publish only what they explicitly choose. Compatible subject types use the s
   participant work and no resurrection. Ordinary exact Undo uses the shared deletion contract.
 - Real APIs and storage support subject actions, Library and Collection browsing/editing, labels, copies, progress,
   following, history and import journeys through reviewed pages using Web's shared shell and patterns.
+- Owners can page every saved hosted Book across independently homed Subjects and open its exact saved chapter from any
+  page; list disclosure stays current and metadata-only.
 
 Completion requires scoped outcomes on main with checks bound to the promoted revision. Preserve the original
 Library, labels, profiles, dynamic Collection and shelf outcomes; exercise owner, other-account, anonymous and
@@ -90,3 +92,5 @@ light/dark themes, phone/desktop, fine/coarse pointer, keyboard and touch. Verif
 identity/order/notes, publication uncertainty and intent, private labels, target sizing, progress, focus recovery and
 covers. Use the Web runner and [verification workflow](../development/verification.md); screenshot inventory,
 typing or a local integrated task is not review or Goal completion.
+
+Decision: Hosted Reading cursors keep the owner account, caller, limit and owner partition epoch binding while keyset-paging Subject UUIDs from any home route.
