@@ -55,9 +55,9 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function readTerminalCheckRecord(worktree: string, id: string): CheckRecordForTerminalProof | undefined {
   try {
-    return asRecord(
-      JSON.parse(readFileSync(join(worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8')),
-    ) as CheckRecordForTerminalProof | undefined;
+    return asRecord(JSON.parse(readFileSync(join(worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8'))) as
+      | CheckRecordForTerminalProof
+      | undefined;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return undefined;
     throw error;

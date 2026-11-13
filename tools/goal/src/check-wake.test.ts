@@ -124,10 +124,7 @@ function terminalCheckFixture(
   const physicalRunId = randomUUID();
   const current = processIdentity();
   if (!current) throw new Error('test process identity unavailable');
-  const runnerIdentity =
-    custody === 'live-runner'
-      ? current
-      : { ...current, pid: 2_147_483_000, group: 2_147_483_000 };
+  const runnerIdentity = custody === 'live-runner' ? current : { ...current, pid: 2_147_483_000, group: 2_147_483_000 };
   const now = new Date().toISOString();
   const log = `.temp/goal/checks/worker-check-${id}.log`;
   const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
