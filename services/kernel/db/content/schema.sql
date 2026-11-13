@@ -995,6 +995,43 @@ END;
 $$;
 
 
+--
+-- Name: release_hosted_migration_input_on_erasure(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.release_hosted_migration_input_on_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  source_route integer;
+  source_catalogue uuid;
+  terminal boolean;
+BEGIN
+  IF TG_OP='DELETE' THEN
+    source_route := OLD.route;
+    source_catalogue := OLD.post_id;
+    terminal := true;
+  ELSE
+    source_route := NEW.route;
+    source_catalogue := NEW.post_id;
+    terminal := NEW.availability='erased' OR NEW.author_erased;
+  END IF;
+  IF terminal THEN
+    UPDATE content.hosted_migration_input i
+       SET state='source_erased',coverage_complete=false,updated_at=transaction_timestamp()
+      FROM content.hosted_migration_input_reference h
+     WHERE h.route=source_route AND h.catalogue_id=source_catalogue
+       AND i.route=h.route AND i.catalogue_id=h.catalogue_id AND i.input_id=h.input_id
+       AND i.state IN ('open','complete','incomplete');
+    DELETE FROM content.hosted_migration_input_reference
+     WHERE route=source_route AND catalogue_id=source_catalogue;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1670,6 +1707,58 @@ CREATE TABLE content.hosted_catalogue (
     publication_id uuid,
     CONSTRAINT hosted_catalogue_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
     CONSTRAINT hosted_catalogue_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: hosted_migration_input; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_migration_input (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    owner_account_id uuid NOT NULL,
+    source_revision_id uuid NOT NULL,
+    source_kind text NOT NULL,
+    base_revision_id uuid NOT NULL,
+    base_placement_count bigint NOT NULL,
+    base_root_count bigint NOT NULL,
+    source_high_water bigint NOT NULL,
+    expected_placement_count bigint NOT NULL,
+    frontier_segment text NOT NULL,
+    after_ordinal bigint DEFAULT '-1'::integer NOT NULL,
+    after_offset bigint DEFAULT '-1'::integer NOT NULL,
+    raw_visited bigint DEFAULT 0 NOT NULL,
+    coverage_complete boolean DEFAULT false NOT NULL,
+    state text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_migration_input_coverage_check CHECK ((((raw_visited >= 0) AND (raw_visited <= expected_placement_count)) AND ((NOT coverage_complete) OR ((state = ANY (ARRAY['complete'::text, 'consumed'::text, 'cancelled'::text, 'expired'::text])) AND (raw_visited = expected_placement_count))))),
+    CONSTRAINT hosted_migration_input_frontier_check CHECK (((frontier_segment = ANY (ARRAY['base'::text, 'prefix'::text, 'complete'::text])) AND ((after_ordinal >= '-1'::integer) AND (after_ordinal <= base_placement_count)) AND ((after_offset >= '-1'::integer) AND (after_offset <= source_high_water)) AND ((frontier_segment <> 'prefix'::text) OR (source_kind = 'prefix'::text)))),
+    CONSTRAINT hosted_migration_input_kind_check CHECK ((source_kind = ANY (ARRAY['snapshot'::text, 'prefix'::text]))),
+    CONSTRAINT hosted_migration_input_route_check CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(input_id), 10) * 256) + get_byte(uuid_send(input_id), 11))))),
+    CONSTRAINT hosted_migration_input_source_check CHECK ((((base_placement_count >= 0) AND (base_placement_count <= '9007199254740991'::bigint)) AND ((base_root_count >= 0) AND (base_root_count <= base_placement_count)) AND ((source_high_water >= '-1'::integer) AND (source_high_water <= '9007199254740990'::bigint)) AND ((expected_placement_count >= 0) AND (expected_placement_count <= '9007199254740991'::bigint)) AND (expected_placement_count = (base_placement_count +
+CASE
+    WHEN ((source_kind = 'prefix'::text) AND (source_high_water >= 0)) THEN (source_high_water + 1)
+    ELSE (0)::bigint
+END)) AND (((source_kind = 'snapshot'::text) AND (source_revision_id = base_revision_id) AND (source_high_water = '-1'::integer)) OR (source_kind = 'prefix'::text)))),
+    CONSTRAINT hosted_migration_input_state_check CHECK ((state = ANY (ARRAY['open'::text, 'complete'::text, 'incomplete'::text, 'consumed'::text, 'cancelled'::text, 'expired'::text, 'source_erased'::text]))),
+    CONSTRAINT hosted_migration_input_time_check CHECK ((isfinite(expires_at) AND isfinite(created_at) AND isfinite(updated_at) AND (expires_at > created_at)))
+);
+
+
+--
+-- Name: hosted_migration_input_reference; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_migration_input_reference (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    source_revision_id uuid NOT NULL,
+    base_revision_id uuid NOT NULL
 );
 
 
@@ -3842,6 +3931,22 @@ ALTER TABLE ONLY content.hosted_catalogue
 
 
 --
+-- Name: hosted_migration_input hosted_migration_input_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_migration_input
+    ADD CONSTRAINT hosted_migration_input_pkey PRIMARY KEY (route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_migration_input_reference hosted_migration_input_reference_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_migration_input_reference
+    ADD CONSTRAINT hosted_migration_input_reference_pkey PRIMARY KEY (route, catalogue_id, input_id);
+
+
+--
 -- Name: hosted_occurrence hosted_occurrence_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -4931,6 +5036,20 @@ CREATE INDEX hosted_append_occurrence_idx ON content.hosted_append USING btree (
 
 
 --
+-- Name: hosted_migration_input_owner_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_migration_input_owner_idx ON content.hosted_migration_input USING btree (route, catalogue_id, owner_account_id, input_id);
+
+
+--
+-- Name: hosted_migration_input_reference_source_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_migration_input_reference_source_idx ON content.hosted_migration_input_reference USING btree (route, catalogue_id, source_revision_id, input_id);
+
+
+--
 -- Name: hosted_placement_navigation_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -5450,6 +5569,13 @@ CREATE TRIGGER hosted_locator_pending AFTER INSERT ON content.hosted_catalogue F
 
 
 --
+-- Name: post hosted_migration_input_source_erasure; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_migration_input_source_erasure AFTER DELETE OR UPDATE OF availability, author_erased ON content.post FOR EACH ROW EXECUTE FUNCTION content.release_hosted_migration_input_on_erasure();
+
+
+--
 -- Name: hosted_occurrence hosted_occurrence_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -5855,6 +5981,38 @@ ALTER TABLE ONLY content.hosted_catalogue
 
 ALTER TABLE ONLY content.hosted_catalogue
     ADD CONSTRAINT hosted_catalogue_route_thread_id_catalogue_id_fkey FOREIGN KEY (route, thread_id, catalogue_id) REFERENCES content.post(route, thread_id, post_id);
+
+
+--
+-- Name: hosted_migration_input hosted_migration_input_catalogue_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_migration_input
+    ADD CONSTRAINT hosted_migration_input_catalogue_fk FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_migration_input_reference hosted_migration_input_reference_base_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_migration_input_reference
+    ADD CONSTRAINT hosted_migration_input_reference_base_fk FOREIGN KEY (route, catalogue_id, base_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_migration_input_reference hosted_migration_input_reference_input_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_migration_input_reference
+    ADD CONSTRAINT hosted_migration_input_reference_input_fk FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_migration_input(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_migration_input_reference hosted_migration_input_reference_source_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_migration_input_reference
+    ADD CONSTRAINT hosted_migration_input_reference_source_fk FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
 
 
 --
