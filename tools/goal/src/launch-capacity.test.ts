@@ -53,8 +53,8 @@ function liveTicketBody(value: Record<string, unknown>): string {
   if (!identity) throw new Error('test process identity unavailable');
   return JSON.stringify({ ...identity, ...value });
 }
-function scopeNames(scopes: ReadonlyMap<string, unknown>): Set<string> {
-  return new Set(scopes.keys());
+function scopeNames(scopes: ReadonlyMap<string, unknown> | undefined): Set<string> {
+  return new Set(scopes?.keys() ?? []);
 }
 function scopeIdentityMap(scopes: ReadonlyMap<string, WorkerScopeIncarnation>): Map<string, WorkerScopeIncarnation> {
   return new Map(scopes);

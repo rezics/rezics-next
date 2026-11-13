@@ -732,8 +732,8 @@ export async function awaitHostCapacity(
         const scopes = workerScopes(store, {
           root: sliceRoot,
           stateDirectory,
-          procRoot: options.workerProcessRoot,
-          cgroupRoot: options.workerCgroupRoot,
+          ...(options.workerProcessRoot === undefined ? {} : { procRoot: options.workerProcessRoot }),
+          ...(options.workerCgroupRoot === undefined ? {} : { cgroupRoot: options.workerCgroupRoot }),
           persistRetirements: true,
         });
         const sliceHeadroom = (options.workerHeadroomMiB ?? workerHeadroomMiB)(
