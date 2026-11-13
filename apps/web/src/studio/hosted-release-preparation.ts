@@ -23,7 +23,7 @@ export type ReleasePhase =
   | 'review'
   | 'reviewed'
   | 'selecting'
-  | 'paused'
+  | 'preparing'
   | 'unknown'
   | 'invalid'
   | 'ready'
@@ -46,7 +46,6 @@ export type ReleaseState =
       pending: ReleaseRequest | null;
       selection: ReleaseSelectionState | null;
       busy: boolean;
-      running: boolean;
       error: StudioFailure | null;
     };
 type Options = {
@@ -69,13 +68,12 @@ export class HostedReleasePreparationVisit {
   private request: AbortController | null = null;
   private selectionWindow: HostedReleaseSelectionWindow | null = null;
   private retired = false;
-  private running = false;
 
   constructor(private readonly options: Options) {
     this.origin = options.source.read();
     this.state = {
       kind: 'active',
-      phase: options.stageId ? 'paused' : 'review',
+      phase: options.stageId ? 'preparing' : 'review',
       owner: options.owner,
       review: null,
       stageId: options.stageId ?? null,
@@ -84,7 +82,6 @@ export class HostedReleasePreparationVisit {
       pending: null,
       selection: null,
       busy: false,
-      running: false,
       error: null,
     };
     this.unsubscribe = options.source.subscribe(() => {
@@ -126,7 +123,6 @@ export class HostedReleasePreparationVisit {
   private retire(reason: 'session' | 'denied' = 'session') {
     if (this.retired) return;
     this.retired = true;
-    this.running = false;
     this.request?.abort();
     this.request = null;
     this.closeSelection();
@@ -177,7 +173,7 @@ export class HostedReleasePreparationVisit {
     if (this.state.kind === 'active' && this.state.phase === 'unknown') await this.perform('retry');
   };
   readProgress = async () => {
-    if (this.state.kind === 'active' && this.state.stageId && this.state.phase !== 'unknown' && !this.running)
+    if (this.state.kind === 'active' && this.state.stageId && this.state.phase !== 'unknown')
       await this.perform('progress');
   };
   choosePlacement = (occurrenceId: string) => {
@@ -208,7 +204,7 @@ export class HostedReleasePreparationVisit {
       await this.perform('freeze');
   };
   seal = async () => {
-    if (this.state.kind === 'active' && this.state.phase === 'ready' && !this.running) await this.perform('seal');
+    if (this.state.kind === 'active' && this.state.phase === 'ready') await this.perform('seal');
   };
   cancel = async () => {
     if (
@@ -216,37 +212,10 @@ export class HostedReleasePreparationVisit {
       !this.state.stageId ||
       !this.state.progress ||
       this.state.phase === 'unknown' ||
-      ['prepared', 'expired', 'cancelled', 'failed'].includes(this.state.phase) ||
-      this.running
+      ['prepared', 'expired', 'cancelled', 'failed'].includes(this.state.phase)
     )
       return;
     await this.perform('cancel');
-  };
-  pause = () => {
-    this.running = false;
-    if (this.state.kind === 'active') this.update({ ...this.state, running: false });
-  };
-  resume = async () => {
-    if (
-      !this.idle() ||
-      this.running ||
-      this.state.kind !== 'active' ||
-      this.state.phase !== 'paused' ||
-      !this.state.progress
-    )
-      return;
-    this.running = true;
-    this.update({ ...this.state, running: true });
-    try {
-      while (this.running && this.current() && this.state.kind === 'active' && this.state.phase === 'paused') {
-        await this.perform('advance');
-        // Yield between bounded native requests so pause, navigation and session changes can interrupt the loop.
-        if (this.running) await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
-    } finally {
-      this.running = false;
-      if (this.state.kind === 'active') this.update({ ...this.state, running: false });
-    }
   };
 
   private async openSelection() {
@@ -387,7 +356,6 @@ export class HostedReleasePreparationVisit {
       if (!this.current(request)) return;
       const active = this.state as Extract<ReleaseState, { kind: 'active' }>;
       if (!result.ok) {
-        this.running = false;
         if (result.error.kind === 'denied') {
           this.retire('denied');
           return;
@@ -404,7 +372,6 @@ export class HostedReleasePreparationVisit {
         this.update({
           ...active,
           busy: false,
-          running: false,
           error: result.error,
           pending: phase === 'unknown' ? frozen : null,
           selection: phase === 'unknown' ? active.selection : null,
@@ -420,9 +387,8 @@ export class HostedReleasePreparationVisit {
         : progress.stage.mode === 'selection' && progress.stage.state === 'collecting'
           ? 'selecting'
           : readiness === 'advance'
-            ? 'paused'
+            ? 'preparing'
             : readiness;
-      if (phase !== 'paused') this.running = false;
       if (phase !== 'selecting') this.closeSelection();
       this.update({
         ...active,
@@ -431,7 +397,6 @@ export class HostedReleasePreparationVisit {
         pending: null,
         selection: phase === 'selecting' ? active.selection : null,
         busy: false,
-        running: this.running,
         phase,
         error: null,
       });
@@ -444,7 +409,7 @@ export class HostedReleasePreparationVisit {
 
   /** Restart obtains fresh owner admission first; an unresolved command must be replayed before discarding it. */
   refreshReview = async () => {
-    if (!this.idle() || this.running || this.state.kind !== 'active' || this.state.phase === 'unknown') return;
+    if (!this.idle() || this.state.kind !== 'active' || this.state.phase === 'unknown') return;
     const state = this.state;
     const request = new AbortController();
     this.request = request;

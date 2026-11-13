@@ -99,32 +99,20 @@ function session() {
   };
 }
 
-test('native transport replays a lost step, remount resumes its stage, pause bounds work, and seal leaves the old release current', async () => {
+test('Studio starts preparation once, remount reads native background progress, and private sealing leaves the old release current', async () => {
   const identity = session();
   const calls: { url: string; body: Record<string, unknown>; key: string; signal: AbortSignal | null | undefined }[] =
     [];
-  const receipts = new Map<string, ReleaseProgress>();
   let stored: ReleaseProgress | null = null;
-  let milestone = 0;
-  let loseAdvance = true;
-  let pauseAfterAdvance: (() => void) | null = null;
   const fetcher = (async (input, init) => {
     const url = String(input);
     const body = JSON.parse(String(init?.body));
     const key = new Headers(init?.headers).get('idempotency-key')!;
     calls.push({ url, body, key, signal: init?.signal });
-    const replay = receipts.get(key);
-    if (replay) return Response.json(replay, { status: url.endsWith(':prepareRelease') ? 202 : 200 });
     if (url.endsWith(':prepareRelease')) stored = progress(body.stageId);
-    else if (url.endsWith(':advance')) stored = progress(stored!.stageId, ++milestone);
+    else if (url.endsWith(':progress')) stored = progress(stored!.stageId, 3);
     else if (url.endsWith(':seal')) stored = progress(stored!.stageId, 4);
-    else expect(url.endsWith(':progress')).toBe(true);
-    receipts.set(key, structuredClone(stored!));
-    if (url.endsWith(':advance') && loseAdvance) {
-      loseAdvance = false;
-      throw new TypeError('Lost committed reply');
-    }
-    if (url.endsWith(':advance')) pauseAfterAdvance?.();
+    else throw new Error(`Unexpected Studio request: ${url}`);
     return Response.json(stored, { status: url.endsWith(':prepareRelease') ? 202 : 200 });
   }) as typeof fetch;
   const command = createReleaseCommand(createKernelClient('https://kernel.test', { fetch: fetcher }));
@@ -137,61 +125,47 @@ test('native transport replays a lost step, remount resumes its stage, pause bou
   await visit.start();
   const started = visit.snapshot();
   expect(started).toMatchObject({
-    phase: 'paused',
+    phase: 'preparing',
     review: { expectedRevisionId: id(4), expectedPublicationId: id(5) },
   });
   const stageId = started.kind === 'active' ? started.stageId! : '';
   expect(stageId.slice(24, 28)).toBe('12ab');
   expect(locate).toHaveBeenLastCalledWith(stageId);
   expect(calls[0]!.body).toEqual({ stageId, mode: 'whole', expectedRevisionId: id(4), expectedPublicationId: id(5) });
-  const running = visit.resume();
-  await visit.resume();
-  await running;
-  expect(visit.snapshot()).toMatchObject({ phase: 'unknown' });
-  expect(calls).toHaveLength(2);
-  expect(String(calls[1]!.body.stepId).slice(24, 28)).toBe('12ab');
-  await visit.refreshReview();
+  expect(calls).toHaveLength(1);
+  expect(calls.some((call) => call.url.endsWith(':advance'))).toBe(false);
   expect(native.readOwn).not.toHaveBeenCalled();
-  await visit.retry();
-  expect(calls[2]).toMatchObject({ url: calls[1]!.url, body: calls[1]!.body, key: calls[1]!.key });
-  expect(visit.snapshot()).toMatchObject({ phase: 'paused', progress: { stage: { state: 'ready' } } });
   visit.dispose();
   expect(identity.listeners.size).toBe(0);
   // Only the locator survives remount; the old expected draft and credentials are not recovered from storage.
-  const resumed = new HostedReleasePreparationVisit({ ...options, stageId });
-  await resumed.readProgress();
+  const returned = new HostedReleasePreparationVisit({ ...options, stageId });
+  await returned.readProgress();
   expect(calls.at(-1)!.url).toBe(
     `https://kernel.test/v1/hostedCatalogues/${id(1)}/publicationPreparations/${stageId}:progress`,
   );
-  expect(resumed.snapshot()).toMatchObject({ review: null, phase: 'paused' });
+  expect(returned.snapshot()).toMatchObject({
+    review: null,
+    phase: 'ready',
+    progress: { stage: { state: 'sealed' }, candidate: { coverageComplete: true, sealed: false } },
+  });
+  expect(calls.some((call) => call.url.endsWith(':advance'))).toBe(false);
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(async () => root.render(<HostedReleasePreparationView visit={resumed} locale="en" />));
-    pauseAfterAdvance = resumed.pause;
-    const before = calls.length;
-    await act(async () => resumed.resume());
-    expect(calls).toHaveLength(before + 1);
-    expect(resumed.snapshot()).toMatchObject({
-      phase: 'paused',
-      progress: { stage: { state: 'sealed' }, candidateReady: false },
-    });
-    expect(queryByRole(container, 'button', { name: releaseCopy.en.seal })).toBeNull();
-    pauseAfterAdvance = null;
-    await act(async () => resumed.resume());
+    await act(async () => root.render(<HostedReleasePreparationView visit={returned} locale="en" />));
     getByRole(container, 'button', { name: releaseCopy.en.seal });
-    expect(resumed.snapshot()).toMatchObject({ phase: 'ready' });
-    await act(async () => resumed.seal());
+    await act(async () => returned.seal());
     expect(getByRole(container, 'status').textContent).toBe(releaseCopy.en.prepared);
-    expect(resumed.snapshot()).toMatchObject({ phase: 'prepared', progress: { candidateReady: true } });
+    expect(returned.snapshot()).toMatchObject({ phase: 'prepared', progress: { candidateReady: true } });
     expect(queryByRole(container, 'button', { name: /publish|activate/i })).toBeNull();
     expect(owner.item.publicationId).toBe(id(5));
     expect(calls.every((call) => !call.url.includes('private-csrf') && !call.url.includes(':publish'))).toBe(true);
-    expect(new Set(calls.map((call) => call.key)).size).toBe(calls.length - 1);
+    expect(new Set(calls.map((call) => call.key)).size).toBe(calls.length);
+    expect(calls.some((call) => call.url.endsWith(':advance'))).toBe(false);
   } finally {
     await act(async () => {
-      resumed.dispose();
+      returned.dispose();
       root.unmount();
     });
     container.remove();
@@ -245,7 +219,6 @@ test('stale, expired and cancelled stages require fresh review; denial and ident
       },
     });
     await stage.readProgress();
-    await stage.resume();
     expect(stage.snapshot()).toMatchObject({ phase: terminal });
     await stage.refreshReview();
     expect(stage.snapshot()).toMatchObject({ phase: 'review', stageId: null, review: null });
@@ -328,7 +301,6 @@ test('malformed or cross-stage HTTP replies remain unresolved and a successful c
   });
   await visit.readProgress();
   await visit.cancel();
-  await visit.resume();
   await visit.seal();
   expect(commands.map((command) => command.kind)).toEqual(['progress', 'cancel']);
   expect(visit.snapshot()).toMatchObject({ phase: 'cancelled' });

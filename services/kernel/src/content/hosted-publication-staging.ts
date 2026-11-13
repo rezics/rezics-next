@@ -530,7 +530,7 @@ export async function freezeHostedPublicationSelection(
  * Target attachment reads are exact metadata-only checks; their stored rows are
  * observations, never a retained current-authority proof. */
 export async function advanceHostedPublicationStaging(
-  deps: HostedDependencies,
+  deps: Pick<HostedDependencies, 'pool' | 'access' | 'clock' | 'disclosureBarrier'>,
   client: AccessClient,
   actorInput: Actor,
   locator: HostedPublicationStagingLocator,
@@ -592,7 +592,7 @@ export async function advanceHostedPublicationStaging(
 }
 
 async function advanceWhole(
-  deps: HostedDependencies,
+  deps: Pick<HostedDependencies, 'pool' | 'access' | 'clock' | 'disclosureBarrier'>,
   client: AccessClient,
   actor: AccountActor,
   stage: StageRow,
@@ -738,7 +738,7 @@ async function readWholeSourcePage(client: AccessClient, stage: StageRow): Promi
 }
 
 async function advanceSelection(
-  deps: HostedDependencies,
+  deps: Pick<HostedDependencies, 'pool' | 'access' | 'clock' | 'disclosureBarrier'>,
   client: AccessClient,
   actor: AccountActor,
   stage: StageRow,
@@ -999,7 +999,7 @@ function targetKey(target: HostedChapterTarget): string {
   return `${target.threadId}/${target.postId}/${target.revisionId}/${target.sha256}`;
 }
 async function observeNewTargets(
-  deps: HostedDependencies,
+  deps: Pick<HostedDependencies, 'pool' | 'access' | 'clock' | 'disclosureBarrier'>,
   client: AccessClient,
   actor: AccountActor,
   deadline: number,

@@ -72,6 +72,7 @@ export const releaseProgress = v.strictObject({
     }),
   ),
   candidateReady: v.boolean(),
+  durableInitiator: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/))),
 });
 export type ReleaseRequest = v.InferOutput<typeof releaseRequest>;
 export type ReleaseProgress = v.InferOutput<typeof releaseProgress>;

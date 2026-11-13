@@ -50,6 +50,7 @@ import { createAccountUploadIndexEffect } from './account-erasure-uploads.ts';
 import { registerAccountErasureWork } from './account-erasure.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
+import { registerHostedPublicationPreparationWork } from './hosted-publication-preparation-work.ts';
 import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
 import {
   BOARD_SLOW_RECOVERY_PAGE_SIZE,
@@ -187,6 +188,12 @@ async function registerWork(
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }
+  registerHostedPublicationPreparationWork(context, {
+    access: options.access,
+    readConsent: options.readConsent,
+    routeKey: options.routeKey,
+    now,
+  });
   const realmSubjectIdentityPage = DBOS.registerStep(
     async (work: RealmSubjectIdentityWork) => realmSubject.identityPage(work, now() + 30_000),
     { name: 'content.realmSubject.identity.page', ...retry },

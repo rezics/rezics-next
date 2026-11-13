@@ -88,6 +88,7 @@ export const HostedPublicationPreparationProgressSchema = t.Object(
     batch: t.Optional(batch),
     candidate: t.Union([candidate, t.Null()]),
     candidateReady: t.Boolean(),
+    durableInitiator: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })),
   },
   closed,
 );

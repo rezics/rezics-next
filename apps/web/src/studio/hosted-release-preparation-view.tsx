@@ -23,7 +23,7 @@ export function HostedReleasePreparationView({
   const selectionCopy = releaseSelectionCopy[locale];
   const phase = state.kind === 'active' ? state.phase : 'ended';
   useEffect(() => {
-    if (visit.isCurrent() && state.kind === 'active' && !state.busy && !state.running) feedback.current?.focus();
+    if (visit.isCurrent() && state.kind === 'active' && !state.busy) feedback.current?.focus();
   }, [visit, phase]);
   if (state.kind === 'ended') return <p role="alert">{state.reason === 'denied' ? copy.denied : copy.ended}</p>;
   const { progress, review, owner } = state;
@@ -31,7 +31,7 @@ export function HostedReleasePreparationView({
   const message = {
     review: copy.review,
     reviewed: copy.reviewed,
-    paused: copy.paused,
+    preparing: copy.preparing,
     selecting: selectionCopy.selecting,
     invalid: selectionCopy.invalid,
     unknown: copy.unknown,
@@ -119,7 +119,7 @@ export function HostedReleasePreparationView({
           tabIndex={-1}
           className="max-w-prose rounded-sm outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
         >
-          {state.busy || state.running ? copy.working : message}
+          {state.busy ? copy.working : message}
         </h2>
         {failure ? (
           <p role="alert" className="max-w-prose text-pretty">
@@ -148,16 +148,6 @@ export function HostedReleasePreparationView({
               {selectionCopy.start}
             </Button>
           ) : null}
-          {state.running ? (
-            <Button className={control} variant="outline" onClick={visit.pause}>
-              {copy.pause}
-            </Button>
-          ) : null}
-          {!state.running && state.phase === 'paused' && progress ? (
-            <Button className={control} disabled={state.busy} onClick={() => void visit.resume()}>
-              {copy.resume}
-            </Button>
-          ) : null}
           {state.phase === 'unknown' ? (
             <Button className={control} disabled={state.busy} onClick={() => void visit.retry()}>
               {copy.retry}
@@ -168,7 +158,7 @@ export function HostedReleasePreparationView({
               {copy.seal}
             </Button>
           ) : null}
-          {state.stageId && state.phase !== 'unknown' && !state.running ? (
+          {state.stageId && state.phase !== 'unknown' ? (
             <Button
               className={control}
               variant="outline"
@@ -178,14 +168,12 @@ export function HostedReleasePreparationView({
               {copy.progress}
             </Button>
           ) : null}
-          {progress &&
-          !['unknown', 'prepared', 'expired', 'cancelled', 'failed'].includes(state.phase) &&
-          !state.running ? (
+          {progress && !['unknown', 'prepared', 'expired', 'cancelled', 'failed'].includes(state.phase) ? (
             <Button className={control} variant="outline" disabled={state.busy} onClick={() => void visit.cancel()}>
               {copy.cancel}
             </Button>
           ) : null}
-          {state.phase !== 'unknown' && !state.running ? (
+          {state.phase !== 'unknown' ? (
             <Button
               className={control}
               variant="outline"

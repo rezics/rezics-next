@@ -651,20 +651,20 @@ witness once after integration; it is deferred during the worker source pass.
 ## Private Book release preparation
 
 Decision: Book Studio freezes the admitted catalogue, exact draft and known release (including proven absence) at
-explicit review, prepares the whole draft or an explicit selection in bounded interruptible steps, and seals only
-native candidate readiness.
-The existing release stays current. Pause stops before another request; an ambiguous command retains its exact body,
-step and key for replay. Remount reads native progress under current admission using only the catalogue/stage locator
-in the private Studio URL. No placements, credentials or command bodies enter storage or URLs. Session or catalogue
-replacement aborts the visit and discards late replies. Activation remains a separate outcome.
+explicit review, then sends one start command for whole-draft preparation. The existing Content work owner advances
+whole drafts and frozen selections in bounded native pages through its transactional outbox; Studio does not post an
+advance for every page. On return it reads native progress once under current admission and can cancel the stage.
+Preparation remains private, and activation remains a separate explicit command. No placements, credentials or
+command bodies enter storage or URLs. Session or catalogue replacement aborts the visit and discards late replies.
 
 Sources read before design: Content's [Authoring and release and Prepared Book publication](../../../../services/kernel/src/content/hosted-chapters.md),
 `hosted-publication-preparation-routes.ts`, `hosted-publication-preparation-schemas.ts`, the focused native HTTP test
 `hosted-publication-preparation-http.test.ts`, architecture's [Release selection and retention](../../../../docs/architecture.md#release-selection-and-retention),
 `routes/studio.tsx`, `hosted-legacy-baseline-native.ts`, and `hosted-publication-point.ts`.
 
-Decision: one focused state/transport proof covers retry, remount and stale authority, with only the named interrupted
-desktop and expired narrow stories. The mounted preparation methods are absent from generated KernelClient emission;
+Decision: one focused state/transport proof covers one start, native progress after remount, no per-page browser
+advance, private seal and stale authority, with only the named interrupted desktop and expired narrow stories. The
+mounted preparation methods are absent from generated KernelClient emission;
 the existing typed proxy extension seam binds them locally. Deferred acceptance: `bun run --cwd apps/web test
 tests/studio-hosted-release-preparation.test.tsx`; browser, native, ordinary acceptance and Storybook builds stay with
 the dev verifier. Source verification uses changed-file formatting and the Web workspace typecheck.

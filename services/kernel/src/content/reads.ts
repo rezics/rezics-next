@@ -1435,7 +1435,7 @@ export async function readBoardPageActionEvidence(
 }
 
 async function disclose(
-  dependencies: ContentReadDependencies,
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock' | 'disclosureBarrier'>,
   threadId: string,
   context: ReadContext,
   postId?: string,
@@ -2337,7 +2337,7 @@ export async function readOwnDraftMetadata(
 /** Exact Post metadata follows the same native chain and current Access checks as
  * ordinary reads, while keeping canonical revision bytes out of the selected row. */
 export async function readPostMetadata(
-  dependencies: ContentReadDependencies,
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock' | 'disclosureBarrier'>,
   threadId: ThreadId,
   postId: PostId,
   context: ReadContext,

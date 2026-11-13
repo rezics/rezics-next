@@ -1,6 +1,9 @@
 import type { ReadContext } from './model.ts';
 import { ContentNotFoundError, readPostMetadata, type NativePostMetadata, type RetainContentRead } from './reads.ts';
-import type { HostedChapterTarget, HostedDependencies, OrderedHostedPlacement } from './hosted-chapters-model.ts';
+import type { ContentReadDependencies } from './reads.ts';
+import type { HostedChapterTarget, OrderedHostedPlacement } from './hosted-chapters-model.ts';
+
+type AttachmentReadDependencies = Pick<ContentReadDependencies, 'pool' | 'access' | 'clock' | 'disclosureBarrier'>;
 
 function matches(value: NativePostMetadata | null, target: HostedChapterTarget): value is NativePostMetadata {
   return (
@@ -17,7 +20,7 @@ function matches(value: NativePostMetadata | null, target: HostedChapterTarget):
  * reading the head again would lose that observation. Neither check selects bytes.
  * This is write admission only, not proof of bytes delivered to a reader. */
 async function validateTarget(
-  deps: HostedDependencies,
+  deps: AttachmentReadDependencies,
   target: HostedChapterTarget,
   context: ReadContext,
 ): Promise<NativePostMetadata> {
@@ -54,7 +57,7 @@ export type HostedChapterAttachmentObservation = Readonly<{
  * The returned values are source observations only: they are not a retained
  * eligibility or activation proof. */
 export async function observeHostedChapterAttachments(
-  deps: HostedDependencies,
+  deps: AttachmentReadDependencies,
   placements: readonly OrderedHostedPlacement[],
   context: ReadContext,
 ): Promise<readonly HostedChapterAttachmentObservation[]> {
@@ -77,7 +80,7 @@ export async function observeHostedChapterAttachments(
 /** Validate an attachment's identity for existing write admission callers.
  * Neither this result nor a persisted observation selects bytes or grants access. */
 export async function validateHostedChapterAttachments(
-  deps: HostedDependencies,
+  deps: AttachmentReadDependencies,
   placements: readonly OrderedHostedPlacement[],
   context: ReadContext,
 ): Promise<void> {

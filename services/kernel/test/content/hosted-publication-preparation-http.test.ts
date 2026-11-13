@@ -2,6 +2,17 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { createCurrentConsentReader } from '@rezics/auth/current-consent';
+import { DurableInitiatorUnavailableError } from '../../src/access/contract/index.ts';
+import { createHostedPublicationPreparationAuthority } from '../../src/content/hosted-publication-preparation-initiator.ts';
+import {
+  executeHostedPublicationPreparationPage,
+  type HostedPublicationPreparationWorkOptions,
+} from '../../src/content/hosted-publication-preparation-work.ts';
+import {
+  HOSTED_PUBLICATION_PREPARATION_WORK_EVENT,
+  type HostedPublicationPreparationWorkInput,
+} from '../../src/content/work-contract.ts';
 
 setDefaultTimeout(240_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
@@ -80,6 +91,179 @@ function prepPath(path: string, stageId: string): string {
   return `${path}/publicationPreparations/${stageId}`;
 }
 
+function workerPorts() {
+  const consent = createCurrentConsentReader({ database: f.native.system.database.authPool });
+  const options: HostedPublicationPreparationWorkOptions = {
+    access: f.native.system.access,
+    readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+    routeKey: f.native.system.routeKey,
+    now: () => Date.now(),
+  };
+  const context = { pool: f.native.pool, clock: () => new Date() };
+  const authority = createHostedPublicationPreparationAuthority({
+    pool: context.pool,
+    access: options.access,
+    readConsent: options.readConsent,
+  });
+  return { context, options, authority };
+}
+
+async function preparationWorkInputs(catalogueId: string): Promise<HostedPublicationPreparationWorkInput[]> {
+  const work = await f.native.pool.query<{ data: HostedPublicationPreparationWorkInput }>(
+    'SELECT data FROM core.outbox WHERE type=$1 AND subject=$2 ORDER BY position,event_seq',
+    [HOSTED_PUBLICATION_PREPARATION_WORK_EVENT, catalogueId],
+  );
+  return work.rows.map((row) => row.data);
+}
+
+async function newSelectionBook(size: number) {
+  const thread = await f.native.thread();
+  const route = routeOf(thread.firstPost.id);
+  if (route === null) throw new Error('Preparation fixture has no catalogue route');
+  const catalogueId = thread.firstPost.id;
+  const target = f.target(thread);
+  const placements: HostedPlacement[] = Array.from({ length: size }, (_, position) => ({
+    occurrenceId: f.newOccurrenceIdFor(catalogueId),
+    parentId: null,
+    position,
+    title: `Chapter ${position + 1}`,
+    kind: 'chapter',
+    target,
+  }));
+  const path = `/v1/hostedCatalogues/${catalogueId}`;
+  const created = await f.native.command('/v1/hostedCatalogues', {
+    postId: catalogueId,
+    threadId: thread.id,
+    placements,
+  });
+  const published = await f.native.command(
+    `${path}:publish`,
+    {
+      expectedRevisionId: created.revisionId,
+      expectedPublicationId: null,
+      occurrenceIds: [placements[0]!.occurrenceId],
+    },
+    200,
+  );
+  return { catalogueId, path, placements, created, published };
+}
+
+test('frozen selection continues from committed pages after worker restart and stops on owner-epoch change', async () => {
+  const book = await newSelectionBook(41);
+  const stageId = f.newOccurrenceIdFor(book.catalogueId);
+  const started = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    stageId,
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'selection',
+  });
+  expect(started.status).toBe(202);
+  let clientRequests = 1;
+  const stagePath = prepPath(book.path, stageId);
+  const batch = await f.native.call('POST', `${stagePath}:appendSelectionBatch`, {
+    batchId: f.newOccurrenceIdFor(book.catalogueId),
+    occurrenceIds: book.placements.map((item) => item.occurrenceId),
+  });
+  clientRequests++;
+  expect(batch.status).toBe(200);
+  const frozen = await f.native.call('POST', `${stagePath}:freezeSelection`, {});
+  clientRequests++;
+  expect(frozen.status).toBe(200);
+
+  const seen = new Set<string>();
+  const firstInput = (await preparationWorkInputs(book.catalogueId))[0];
+  expect(firstInput).toBeDefined();
+  const firstPorts = workerPorts();
+  const first = await executeHostedPublicationPreparationPage(
+    firstInput!,
+    firstPorts.context,
+    firstPorts.options,
+    firstPorts.authority,
+  );
+  seen.add(firstInput!.stepId);
+  expect(first.stage).toMatchObject({ state: 'building', settledInputCount: '20' });
+
+  // A replacement worker reconstructs only its trusted ports and resumes the
+  // committed frontier from the ID-only continuation in the native outbox.
+  const resumedPorts = workerPorts();
+  let pending = (await preparationWorkInputs(book.catalogueId)).find((item) => !seen.has(item.stepId));
+  expect(pending).toBeDefined();
+  const second = await executeHostedPublicationPreparationPage(
+    pending!,
+    resumedPorts.context,
+    resumedPorts.options,
+    resumedPorts.authority,
+  );
+  seen.add(pending!.stepId);
+  expect(second.stage).toMatchObject({ state: 'building', settledInputCount: '40' });
+
+  let final = second;
+  const candidatePageSizes: number[] = [];
+  let candidateCount = 0;
+  for (let page = 0; page < 20; page++) {
+    pending = (await preparationWorkInputs(book.catalogueId)).find((item) => !seen.has(item.stepId));
+    if (!pending) break;
+    final = await executeHostedPublicationPreparationPage(
+      pending,
+      resumedPorts.context,
+      resumedPorts.options,
+      resumedPorts.authority,
+    );
+    seen.add(pending.stepId);
+    const nextCandidateCount = Number(final.candidate?.placementCount ?? 0);
+    if (nextCandidateCount > candidateCount) candidatePageSizes.push(nextCandidateCount - candidateCount);
+    candidateCount = nextCandidateCount;
+  }
+  expect(final).toMatchObject({
+    stage: { state: 'sealed' },
+    candidate: { placementCount: '41', coverageComplete: true, sealed: true },
+    candidateReady: true,
+  });
+  expect(candidatePageSizes.reduce((sum, count) => sum + count, 0)).toBe(41);
+  expect(candidatePageSizes.every((count) => count <= 20)).toBe(true);
+  const committedSelectionPages = await f.native.pool.query<{ processed: string }>(
+    `SELECT processed::text FROM content.hosted_publication_staging_step
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND phase='selection' ORDER BY from_frontier`,
+    [routeOf(book.catalogueId), book.catalogueId, stageId],
+  );
+  expect(committedSelectionPages.rows.map((row) => Number(row.processed))).toEqual([20, 20, 1]);
+  expect(clientRequests).toBe(3);
+  expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
+
+  const changedBook = await newSelectionBook(1);
+  const changedStageId = f.newOccurrenceIdFor(changedBook.catalogueId);
+  const changedStart = await f.native.call('POST', `${changedBook.path}:prepareRelease`, {
+    stageId: changedStageId,
+    expectedRevisionId: changedBook.created.revisionId,
+    expectedPublicationId: changedBook.published.revisionId,
+    mode: 'whole',
+  });
+  expect(changedStart.status).toBe(202);
+  const changedInput = (await preparationWorkInputs(changedBook.catalogueId))[0];
+  expect(changedInput).toBeDefined();
+  await f.native.pool.query(
+    `UPDATE content.hosted_publication_staging SET owner_epoch=owner_epoch+1
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+    [routeOf(changedBook.catalogueId), changedBook.catalogueId, changedStageId],
+  );
+  const changedPorts = workerPorts();
+  await expect(
+    executeHostedPublicationPreparationPage(
+      changedInput!,
+      changedPorts.context,
+      changedPorts.options,
+      changedPorts.authority,
+    ),
+  ).rejects.toBeInstanceOf(DurableInitiatorUnavailableError);
+  const unchangedStage = await f.native.pool.query<{ candidate_count: string; status: string }>(
+    `SELECT candidate_count::text,status FROM content.hosted_publication_staging
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+    [routeOf(changedBook.catalogueId), changedBook.catalogueId, changedStageId],
+  );
+  expect(unchangedStage.rows[0]).toEqual({ candidate_count: '0', status: 'building' });
+  expect(await selectedRelease(changedBook.catalogueId)).toBe(changedBook.published.revisionId);
+});
+
 test('mounted whole and nested selection builds complete private candidates with exact retry and resume', async () => {
   const book = await newBook();
   const startBody = {
@@ -96,9 +280,17 @@ test('mounted whole and nested selection builds complete private candidates with
     stage: { state: 'building', mode: 'whole', candidateCount: '0' },
     candidate: null,
     candidateReady: false,
+    durableInitiator: expect.stringMatching(/^[0-9a-f]{64}$/),
   });
   const stageId = startBody.stageId;
   expect(started.value.stageId).toBe(stageId);
+  const work = await f.native.pool.query<{ data: Record<string, unknown> }>(
+    'SELECT data FROM core.outbox WHERE type=$1 AND subject=$2 ORDER BY position,event_seq',
+    [HOSTED_PUBLICATION_PREPARATION_WORK_EVENT, book.catalogueId],
+  );
+  expect(work.rows).toHaveLength(1);
+  expect(Object.keys(work.rows[0]!.data).sort()).toEqual(['catalogueId', 'commandKey', 'stageId', 'stepId']);
+  expect(work.rows[0]!.data).toMatchObject({ catalogueId: book.catalogueId, stageId });
   const stagePath = prepPath(book.path, stageId);
 
   const wholeStepId = book.newId();
@@ -265,6 +457,9 @@ test('selection progress exposes only its pinned binding and rejects new batches
     expectedHeadRevisionId: releaseBook.created.revisionId,
     expectedPublicationId: releaseBook.published.revisionId,
   });
+  expect((await f.native.call('POST', `${releaseStage}:freezeSelection`, {})).status).toBe(200);
+  const stopped = await f.native.call('POST', `${releaseStage}:advance`, { stepId: releaseBook.newId() });
+  expect(stopped.value.stage).toMatchObject({ state: 'failed', failure: 'stale_source' });
 });
 
 test('mounted boundary rejects malformed batches and non-authors; cancel and stale intents keep A selected', async () => {
@@ -290,6 +485,12 @@ test('mounted boundary rejects malformed batches and non-authors; cancel and sta
   const cancelled = await f.native.call('POST', `${cancelledPath}:cancel`, {});
   expect(cancelled.status).toBe(200);
   expect(cancelled.value.stage.state).toBe('cancelled');
+  const retainedAuthority = await f.native.pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM content.hosted_publication_preparation_authority
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+    [routeOf(book.catalogueId), book.catalogueId, cancelledStart.value.stageId],
+  );
+  expect(retainedAuthority.rows[0]?.count).toBe('0');
   expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
 
   const staleHead = await f.native.call('POST', `${book.path}:appendRootChapter`, {

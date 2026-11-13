@@ -1,5 +1,6 @@
 import { effectWorkflowId } from '../events/effects.ts';
 import type { Envelope } from '../events/log.ts';
+import { derivedId, routeOf } from '../route/route.ts';
 
 /** Native DBOS workflow names owned by the content worker. */
 export const CONTENT_WORKFLOWS = {
@@ -20,6 +21,28 @@ export const CONTENT_QUEUES = {
   importFromUrl: 'import',
   subjectReactionMerge: 'effects',
 } as const;
+
+/** One native continuation is created with each committed preparation frontier. */
+export const HOSTED_PUBLICATION_PREPARATION_WORKFLOW = 'content.hostedPublicationPreparation.page';
+export const HOSTED_PUBLICATION_PREPARATION_WORK_EVENT = 'com.rezics.content.hosted-catalogue.preparation.work.v1';
+export type HostedPublicationPreparationWorkInput = Readonly<{
+  catalogueId: string;
+  stageId: string;
+  stepId: string;
+  commandKey: string;
+}>;
+
+export function hostedPublicationPreparationWorkflowId(input: HostedPublicationPreparationWorkInput): string {
+  const route = routeOf(input.stageId);
+  if (
+    route === null ||
+    routeOf(input.catalogueId) !== route ||
+    routeOf(input.stepId) !== route ||
+    routeOf(input.commandKey) !== route
+  )
+    throw new RangeError('Hosted preparation work IDs must share their native route');
+  return derivedId(input.stageId, `frontier:${input.stepId}`, route);
+}
 
 export const MEDIA_WORK_EVENTS = {
   image: 'com.rezics.content.media.uploaded.v1',

@@ -370,6 +370,17 @@ Decision: private staging uses a source-ordered candidate generation, 20-row rep
 at most 512; exact target observations stay separate from current authority proof, source titles remain source-owned
 for terminal redaction, and activation validates the sealed generation without rebuilding it.
 
+Decision: whole-source and frozen-selection preparation advance through the existing Content event outbox and the
+two-worker `maintenance` queue. Each committed stage frontier creates one deterministic ID-only continuation that
+advances at most one existing 20-row page; replay retains the native step and command keys. Each page restores the
+captured author through Access DurableInitiator against the current Auth consent, account floor, delegation,
+`post:revise` authority and exact stage owner epoch. The browser reads native progress and can cancel; private
+candidate sealing may finish in the worker, while publication activation remains a separate explicit command.
+
+Follow-up: keep the 512-ID request and enforced batch cap until an isolated benchmark measures 512, 1024, 2048 and
+4096 IDs for encoded bytes, write and lock P95 latency, and retry cost; report one API-advertised recommendation and
+apply it through one shared enforced cap.
+
 Ordered staging pins the current immutable revision, generation and sequence, pages whole sources through bounded
 preorder reads, and resolves selected points and candidate titles from that same snapshot; legacy snapshot and prefix
 sources retain their existing readers.

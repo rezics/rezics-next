@@ -2358,6 +2358,21 @@ CREATE TABLE content.hosted_publication_activation_vector (
 
 
 --
+-- Name: hosted_publication_preparation_authority; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_publication_preparation_authority (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    record jsonb NOT NULL,
+    CONSTRAINT hosted_publication_preparation_authority_catalogue_route_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_publication_preparation_authority_record_check CHECK ((jsonb_typeof(record) = 'object'::text)),
+    CONSTRAINT hosted_publication_preparation_authority_stage_route_check CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11))))
+);
+
+
+--
 -- Name: hosted_publication_retention_adoption_cursor; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -5310,6 +5325,14 @@ ALTER TABLE ONLY content.hosted_publication_activation_vector
 
 
 --
+-- Name: hosted_publication_preparation_authority hosted_publication_preparation_authority_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_preparation_authority
+    ADD CONSTRAINT hosted_publication_preparation_authority_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
 -- Name: hosted_publication_retention_adoption_cursor hosted_publication_retention_adoption_cursor_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -8046,6 +8069,14 @@ ALTER TABLE ONLY content.hosted_publication_retention_issue
 
 ALTER TABLE ONLY content.hosted_publication_retention_pending
     ADD CONSTRAINT hosted_publication_retention_p_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_publication_preparation_authority hosted_publication_preparation_authority_stage_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_publication_preparation_authority
+    ADD CONSTRAINT hosted_publication_preparation_authority_stage_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id) ON DELETE CASCADE;
 
 
 --
