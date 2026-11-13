@@ -338,6 +338,10 @@ export declare function contentDeclaredEvents(): Readonly<{
         catalogueId: import("typebox").TString;
         revisionId: import("typebox").TString;
     }>;
+    'com.rezics.content.hosted-catalogue.preparation.changed.v1': import("typebox").TObject<{
+        catalogueId: import("typebox").TString;
+        stageId: import("typebox").TString;
+    }>;
     'com.rezics.content.report-reporter.projected.v1': import("typebox").TObject<{
         reportId: import("typebox").TString;
     }>;
