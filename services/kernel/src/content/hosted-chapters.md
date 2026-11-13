@@ -377,6 +377,8 @@ descriptor/identity and writes one occurrence, append row, descriptor, head plus
 Structural work does not grow with Book width/depth/history apart from B-tree descent; native Access/partition work
 remains charged.
 
+Decision: private migration input pins the admitted current structure revision and its immutable append descriptor/high-water, advances a durable ordinal/offset frontier in bounded pages, stores no source payload in receipts, reconstructs committed intervals under fresh admission, and holds the source for 30 days until consumption, expiry or cancellation; source erasure releases the hold, while unavailable/redacted slots advance raw coverage without title or target metadata disclosure.
+
 ### Pinned mixed-revision reads
 
 Select revision/descriptor in one partition snapshot; absent descriptor means legacy snapshot. Publication manifests
