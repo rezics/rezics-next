@@ -35,9 +35,34 @@ BEGIN
      NEW.catalogue_id IS DISTINCT FROM OLD.catalogue_id OR
      NEW.generation_id IS DISTINCT FROM OLD.generation_id OR
      NEW.generation_kind IS DISTINCT FROM OLD.generation_kind OR
-     NEW.created_at IS DISTINCT FROM OLD.created_at OR
-     NEW.head_sequence <> OLD.head_sequence + 1 THEN
-    RAISE EXCEPTION 'Hosted version head must advance exactly once' USING ERRCODE = '23514';
+     NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'Hosted version identity is immutable' USING ERRCODE = '23514';
+  END IF;
+
+  IF NEW.retirement_claimed IS DISTINCT FROM OLD.retirement_claimed THEN
+    IF OLD.retirement_claimed OR NOT NEW.retirement_claimed OR NEW.head_sequence<>OLD.head_sequence OR
+       NOT EXISTS (
+         SELECT 1 FROM content.hosted_version_candidate_cleanup cleanup
+         JOIN content.hosted_publication_staging stage
+           USING (route,catalogue_id,stage_id)
+         JOIN content.hosted_version_release_candidate candidate
+           USING (route,catalogue_id,stage_id)
+         WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
+           AND cleanup.generation_id=OLD.generation_id AND cleanup.terminal_status='expired'
+           AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
+           AND stage.owner_epoch=cleanup.owner_epoch AND stage.mode='whole'
+           AND stage.status='expired' AND stage.sealed_at IS NOT NULL
+           AND candidate.owner_epoch=cleanup.owner_epoch AND candidate.mode='whole'
+           AND candidate.status='retiring' AND candidate.generation_id IS NULL
+       ) THEN
+      RAISE EXCEPTION 'Hosted version retirement claim is invalid' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF OLD.retirement_claimed OR NEW.head_sequence<>OLD.head_sequence+1 THEN
+    RAISE EXCEPTION 'Hosted version head cannot advance after retirement or skip a sequence'
+      USING ERRCODE='23514';
   END IF;
   RETURN NEW;
 END;
@@ -258,6 +283,149 @@ CREATE FUNCTION content.guard_edition_publication() RETURNS trigger
     AS $$
 BEGIN
   RAISE EXCEPTION 'Edition publication provenance is immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
+-- Name: guard_hosted_candidate_checkpoint_claim(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_candidate_checkpoint_claim() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  target_generation uuid;
+  claimed boolean;
+  authority text;
+BEGIN
+  IF TG_TABLE_NAME='hosted_version_release_candidate' AND TG_OP='UPDATE' THEN
+    IF OLD.generation_id IS DISTINCT FROM NEW.generation_id THEN
+      IF OLD.generation_id IS NULL OR NEW.generation_id IS NOT NULL
+         OR OLD.status NOT IN ('building','sealed') OR NEW.status<>'retiring'
+         OR NEW.mode<>'whole' OR NEW.owner_epoch IS DISTINCT FROM OLD.owner_epoch
+         OR NEW.route IS DISTINCT FROM OLD.route OR NEW.catalogue_id IS DISTINCT FROM OLD.catalogue_id
+         OR NEW.stage_id IS DISTINCT FROM OLD.stage_id THEN
+        RAISE EXCEPTION 'Hosted release candidate generation identity is immutable' USING ERRCODE='23514';
+      END IF;
+      SELECT generation.retirement_claimed INTO claimed
+      FROM content.hosted_tree_generation generation
+      WHERE generation.route=OLD.route AND generation.catalogue_id=OLD.catalogue_id
+        AND generation.generation_id=OLD.generation_id
+      FOR UPDATE;
+      IF NOT FOUND OR claimed IS DISTINCT FROM false OR NOT EXISTS (
+        SELECT 1
+        FROM content.hosted_version_candidate_cleanup cleanup
+        JOIN content.hosted_publication_staging stage
+          USING (route,catalogue_id,stage_id)
+        WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
+          AND cleanup.stage_id=OLD.stage_id AND cleanup.generation_id=OLD.generation_id
+          AND cleanup.owner_epoch=OLD.owner_epoch AND cleanup.terminal_status='expired'
+          AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
+          AND stage.owner_epoch=OLD.owner_epoch AND stage.mode='whole'
+          AND stage.status='expired' AND stage.sealed_at IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM content.hosted_publication_staging_seal seal
+            WHERE seal.route=stage.route AND seal.catalogue_id=stage.catalogue_id
+              AND seal.stage_id=stage.stage_id
+          )
+      ) THEN
+        RAISE EXCEPTION 'Hosted release candidate retirement requires its expired source claim' USING ERRCODE='23514';
+      END IF;
+      RETURN NEW;
+    END IF;
+
+    IF OLD.generation_id IS NULL THEN
+      authority := current_setting('content.hosted_version_candidate_cleanup',true);
+      IF OLD.status='retiring' AND NEW.status='reclaimed'
+         AND (to_jsonb(NEW)-'status'-'updated_at') IS NOT DISTINCT FROM
+             (to_jsonb(OLD)-'status'-'updated_at') THEN
+        SELECT generation_id INTO target_generation
+        FROM content.hosted_version_candidate_cleanup cleanup
+        WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
+          AND cleanup.stage_id=OLD.stage_id AND cleanup.owner_epoch=OLD.owner_epoch
+          AND cleanup.terminal_status='expired' AND cleanup.phase='generation'
+          AND cleanup.cleanup_active AND cleanup.completed_at IS NULL
+          AND authority=format('%s:%s:%s:%s',cleanup.route,cleanup.catalogue_id,
+                               cleanup.stage_id,cleanup.generation_id);
+        IF target_generation IS NOT NULL THEN
+          SELECT generation.retirement_claimed INTO claimed
+          FROM content.hosted_tree_generation generation
+          WHERE generation.route=OLD.route AND generation.catalogue_id=OLD.catalogue_id
+            AND generation.generation_id=target_generation
+          FOR UPDATE;
+          IF FOUND AND claimed THEN
+            RETURN NEW;
+          END IF;
+        END IF;
+      END IF;
+      RAISE EXCEPTION 'Retired hosted release candidate checkpoint is immutable' USING ERRCODE='23514';
+    END IF;
+  END IF;
+
+  IF NEW.generation_id IS NULL THEN
+    RAISE EXCEPTION 'Hosted checkpoint requires a generation identity' USING ERRCODE='23514';
+  END IF;
+  SELECT generation.retirement_claimed INTO claimed
+  FROM content.hosted_tree_generation generation
+  WHERE generation.route=NEW.route AND generation.catalogue_id=NEW.catalogue_id
+    AND generation.generation_id=NEW.generation_id
+  FOR UPDATE;
+  IF claimed THEN
+    RAISE EXCEPTION 'Hosted candidate generation cannot receive another checkpoint' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_hosted_candidate_generation_delete(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_candidate_generation_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  authority text;
+BEGIN
+  authority := current_setting('content.hosted_version_candidate_cleanup',true);
+  IF OLD.retirement_claimed AND EXISTS (
+    SELECT 1 FROM content.hosted_version_candidate_cleanup cleanup
+    WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
+      AND cleanup.generation_id=OLD.generation_id AND cleanup.cleanup_active
+      AND cleanup.completed_at IS NULL
+      AND authority=cleanup.route::text||':'||cleanup.catalogue_id::text||':'||cleanup.stage_id::text||':'||cleanup.generation_id::text
+  ) THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION 'Hosted version generation deletion requires its exact cleanup claim' USING ERRCODE='23514';
+END;
+$$;
+
+
+--
+-- Name: guard_hosted_candidate_revision_claim(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_candidate_revision_claim() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  claimed boolean;
+BEGIN
+  IF NEW.generation_kind <> 'candidate' THEN
+    RETURN NEW;
+  END IF;
+  SELECT generation.retirement_claimed INTO claimed
+  FROM content.hosted_tree_generation generation
+  WHERE generation.route=NEW.route AND generation.catalogue_id=NEW.catalogue_id
+    AND generation.generation_id=NEW.generation_id
+  FOR UPDATE;
+  IF claimed THEN
+    RAISE EXCEPTION 'Hosted candidate generation is being retired' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -497,7 +665,24 @@ $$;
 CREATE FUNCTION content.guard_hosted_version_rows() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE
+  authority text;
 BEGIN
+  IF TG_OP='DELETE' THEN
+    authority := current_setting('content.hosted_version_candidate_cleanup',true);
+    IF EXISTS (
+      SELECT 1
+      FROM content.hosted_version_candidate_cleanup cleanup
+      JOIN content.hosted_tree_generation generation
+        USING (route,catalogue_id,generation_id)
+      WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
+        AND cleanup.generation_id=OLD.generation_id AND generation.retirement_claimed
+        AND cleanup.cleanup_active AND cleanup.completed_at IS NULL
+        AND authority=cleanup.route::text||':'||cleanup.catalogue_id::text||':'||cleanup.stage_id::text||':'||cleanup.generation_id::text
+    ) THEN
+      RETURN OLD;
+    END IF;
+  END IF;
   RAISE EXCEPTION 'Hosted version rows are append only' USING ERRCODE = '23514';
 END;
 $$;
@@ -2350,6 +2535,7 @@ CREATE TABLE content.hosted_tree_generation (
     generation_kind text NOT NULL,
     head_sequence bigint DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    retirement_claimed boolean DEFAULT false NOT NULL,
     CONSTRAINT hosted_tree_generation_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
     CONSTRAINT hosted_tree_generation_check1 CHECK ((route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11)))),
     CONSTRAINT hosted_tree_generation_created_at_check CHECK (isfinite(created_at)),
@@ -2557,6 +2743,63 @@ CREATE TABLE content.hosted_version_builder_source (
 
 
 --
+-- Name: hosted_version_candidate_cleanup; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_candidate_cleanup (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    owner_epoch bigint NOT NULL,
+    terminal_status text DEFAULT 'expired'::text NOT NULL,
+    phase text DEFAULT 'nodes'::text NOT NULL,
+    cursor jsonb DEFAULT 'null'::jsonb NOT NULL,
+    deleted_row_count bigint DEFAULT 0 NOT NULL,
+    cleanup_active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT hosted_version_candidate_cleanup_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_version_candidate_cleanup_check1 CHECK ((route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11)))),
+    CONSTRAINT hosted_version_candidate_cleanup_check2 CHECK ((route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11)))),
+    CONSTRAINT hosted_version_candidate_cleanup_check3 CHECK (((phase = 'done'::text) = (completed_at IS NOT NULL))),
+    CONSTRAINT hosted_version_candidate_cleanup_check4 CHECK (((NOT cleanup_active) OR (completed_at IS NULL))),
+    CONSTRAINT hosted_version_candidate_cleanup_completed_at_check CHECK (((completed_at IS NULL) OR isfinite(completed_at))),
+    CONSTRAINT hosted_version_candidate_cleanup_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_candidate_cleanup_cursor_check CHECK ((jsonb_typeof(cursor) = ANY (ARRAY['object'::text, 'null'::text]))),
+    CONSTRAINT hosted_version_candidate_cleanup_deleted_row_count_check CHECK ((deleted_row_count >= 0)),
+    CONSTRAINT hosted_version_candidate_cleanup_owner_epoch_check CHECK ((owner_epoch >= 0)),
+    CONSTRAINT hosted_version_candidate_cleanup_phase_check CHECK ((phase = ANY (ARRAY['nodes'::text, 'occurrences'::text, 'sibling_roots'::text, 'snapshots'::text, 'generation'::text, 'done'::text]))),
+    CONSTRAINT hosted_version_candidate_cleanup_terminal_status_check CHECK ((terminal_status = 'expired'::text))
+);
+
+
+--
+-- Name: hosted_version_candidate_cleanup_step; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_candidate_cleanup_step (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    step_id uuid NOT NULL,
+    phase text NOT NULL,
+    cursor jsonb NOT NULL,
+    deleted_row_count bigint CONSTRAINT hosted_version_candidate_cleanup_ste_deleted_row_count_not_null NOT NULL,
+    deleted_rows integer NOT NULL,
+    completed boolean NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT hosted_version_candidate_cleanup_step_check CHECK ((route = ((get_byte(uuid_send(step_id), 10) * 256) + get_byte(uuid_send(step_id), 11)))),
+    CONSTRAINT hosted_version_candidate_cleanup_step_check1 CHECK (((phase = 'done'::text) = completed)),
+    CONSTRAINT hosted_version_candidate_cleanup_step_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_candidate_cleanup_step_cursor_check CHECK ((jsonb_typeof(cursor) = ANY (ARRAY['object'::text, 'null'::text]))),
+    CONSTRAINT hosted_version_candidate_cleanup_step_deleted_row_count_check CHECK ((deleted_row_count >= 0)),
+    CONSTRAINT hosted_version_candidate_cleanup_step_deleted_rows_check CHECK (((deleted_rows >= 0) AND (deleted_rows <= 100))),
+    CONSTRAINT hosted_version_candidate_cleanup_step_phase_check CHECK ((phase = ANY (ARRAY['nodes'::text, 'occurrences'::text, 'sibling_roots'::text, 'snapshots'::text, 'generation'::text, 'done'::text])))
+);
+
+
+--
 -- Name: hosted_version_draft_activation; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2754,7 +2997,7 @@ CREATE TABLE content.hosted_version_release_candidate (
     route integer NOT NULL,
     catalogue_id uuid NOT NULL,
     stage_id uuid NOT NULL,
-    generation_id uuid NOT NULL,
+    generation_id uuid,
     initiator_account_id uuid NOT NULL,
     owner_epoch bigint NOT NULL,
     source_revision_id uuid NOT NULL,
@@ -2781,7 +3024,7 @@ CREATE TABLE content.hosted_version_release_candidate (
     CONSTRAINT hosted_version_release_candidate_active_path_check CHECK (((jsonb_typeof(active_path) = 'array'::text) AND (jsonb_array_length(active_path) <= 16))),
     CONSTRAINT hosted_version_release_candidate_after_source_order_check CHECK (((after_source_order >= '-1'::integer) AND (after_source_order <= '9007199254740990'::bigint))),
     CONSTRAINT hosted_version_release_candidate_check CHECK (((chapter_count >= 0) AND (chapter_count <= placement_count))),
-    CONSTRAINT hosted_version_release_candidate_check1 CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11))) AND (route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11))) AND (route = ((get_byte(uuid_send(initiator_account_id), 10) * 256) + get_byte(uuid_send(initiator_account_id), 11))) AND (route = ((get_byte(uuid_send(source_revision_id), 10) * 256) + get_byte(uuid_send(source_revision_id), 11))) AND (route = ((get_byte(uuid_send(expected_head_revision_id), 10) * 256) + get_byte(uuid_send(expected_head_revision_id), 11))) AND ((expected_publication_id IS NULL) OR (route = ((get_byte(uuid_send(expected_publication_id), 10) * 256) + get_byte(uuid_send(expected_publication_id), 11)))))),
+    CONSTRAINT hosted_version_release_candidate_check1 CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(stage_id), 10) * 256) + get_byte(uuid_send(stage_id), 11))) AND ((generation_id IS NULL) OR (route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11)))) AND (route = ((get_byte(uuid_send(initiator_account_id), 10) * 256) + get_byte(uuid_send(initiator_account_id), 11))) AND (route = ((get_byte(uuid_send(source_revision_id), 10) * 256) + get_byte(uuid_send(source_revision_id), 11))) AND (route = ((get_byte(uuid_send(expected_head_revision_id), 10) * 256) + get_byte(uuid_send(expected_head_revision_id), 11))) AND ((expected_publication_id IS NULL) OR (route = ((get_byte(uuid_send(expected_publication_id), 10) * 256) + get_byte(uuid_send(expected_publication_id), 11)))))),
     CONSTRAINT hosted_version_release_candidate_check2 CHECK ((expected_head_revision_id = source_revision_id)),
     CONSTRAINT hosted_version_release_candidate_check3 CHECK ((((status = 'building'::text) AND (sealed_at IS NULL)) OR ((status = 'sealed'::text) AND (sealed_at IS NOT NULL) AND coverage_complete))),
     CONSTRAINT hosted_version_release_candidate_check4 CHECK (((NOT coverage_complete) OR (placement_count = source_candidate_count))),
@@ -2795,7 +3038,7 @@ CREATE TABLE content.hosted_version_release_candidate (
     CONSTRAINT hosted_version_release_candidate_sealed_at_check CHECK (((sealed_at IS NULL) OR isfinite(sealed_at))),
     CONSTRAINT hosted_version_release_candidate_source_candidate_count_check CHECK (((source_candidate_count >= 0) AND (source_candidate_count <= '9007199254740991'::bigint))),
     CONSTRAINT hosted_version_release_candidate_source_sealed_at_check CHECK (isfinite(source_sealed_at)),
-    CONSTRAINT hosted_version_release_candidate_status_check CHECK ((status = ANY (ARRAY['building'::text, 'sealed'::text]))),
+    CONSTRAINT hosted_version_release_candidate_status_check CHECK ((((status = 'building'::text) AND (sealed_at IS NULL) AND (generation_id IS NOT NULL)) OR ((status = 'sealed'::text) AND (sealed_at IS NOT NULL) AND coverage_complete AND (generation_id IS NOT NULL)) OR ((status = 'retiring'::text) AND (generation_id IS NULL) AND ((sealed_at IS NULL) OR ((sealed_at IS NOT NULL) AND coverage_complete))) OR ((status = 'reclaimed'::text) AND (generation_id IS NULL) AND ((sealed_at IS NULL) OR ((sealed_at IS NOT NULL) AND coverage_complete))))),
     CONSTRAINT hosted_version_release_candidate_updated_at_check CHECK (isfinite(updated_at))
 );
 
@@ -5019,6 +5262,30 @@ ALTER TABLE ONLY content.hosted_version_builder_source
 
 
 --
+-- Name: hosted_version_candidate_cleanup hosted_version_candidate_clea_route_catalogue_id_generation_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_candidate_cleanup
+    ADD CONSTRAINT hosted_version_candidate_clea_route_catalogue_id_generation_key UNIQUE (route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_version_candidate_cleanup hosted_version_candidate_cleanup_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_candidate_cleanup
+    ADD CONSTRAINT hosted_version_candidate_cleanup_pkey PRIMARY KEY (route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_version_candidate_cleanup_step hosted_version_candidate_cleanup_step_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_candidate_cleanup_step
+    ADD CONSTRAINT hosted_version_candidate_cleanup_step_pkey PRIMARY KEY (route, catalogue_id, stage_id, step_id);
+
+
+--
 -- Name: hosted_version_draft_activation hosted_version_draft_activati_route_catalogue_id_generation_key; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -6143,6 +6410,13 @@ CREATE INDEX hosted_placement_navigation_idx ON content.hosted_placement USING b
 
 
 --
+-- Name: hosted_publication_staging_active_ordered_generation; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_publication_staging_active_ordered_generation ON content.hosted_publication_staging USING btree (route, catalogue_id, source_ordered_generation_id) WHERE ((source_kind = 'ordered'::text) AND (status <> ALL (ARRAY['cancelled'::text, 'expired'::text, 'failed'::text])));
+
+
+--
 -- Name: hosted_publication_staging_candidate_parent; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -6809,6 +7083,13 @@ CREATE TRIGGER hosted_structure_immutable BEFORE DELETE OR UPDATE ON content.hos
 
 
 --
+-- Name: hosted_tree_generation hosted_tree_generation_candidate_cleanup_delete; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_tree_generation_candidate_cleanup_delete BEFORE DELETE ON content.hosted_tree_generation FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_candidate_generation_delete();
+
+
+--
 -- Name: hosted_tree_generation hosted_tree_generation_head_step; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -6820,6 +7101,34 @@ CREATE TRIGGER hosted_tree_generation_head_step BEFORE UPDATE ON content.hosted_
 --
 
 CREATE TRIGGER hosted_tree_snapshot_version_immutable BEFORE DELETE OR UPDATE ON content.hosted_tree_snapshot_version FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_version_rows();
+
+
+--
+-- Name: hosted_version_draft_activation hosted_version_draft_activation_candidate_cleanup_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_version_draft_activation_candidate_cleanup_fence BEFORE INSERT OR UPDATE OF generation_id ON content.hosted_version_draft_activation FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_candidate_checkpoint_claim();
+
+
+--
+-- Name: hosted_version_public_baseline hosted_version_public_baseline_candidate_cleanup_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_version_public_baseline_candidate_cleanup_fence BEFORE INSERT OR UPDATE OF generation_id ON content.hosted_version_public_baseline FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_candidate_checkpoint_claim();
+
+
+--
+-- Name: hosted_version_release_candidate hosted_version_release_candidate_cleanup_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_version_release_candidate_cleanup_fence BEFORE INSERT OR UPDATE ON content.hosted_version_release_candidate FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_candidate_checkpoint_claim();
+
+
+--
+-- Name: hosted_version_revision hosted_version_revision_candidate_cleanup_fence; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_version_revision_candidate_cleanup_fence BEFORE INSERT ON content.hosted_version_revision FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_candidate_revision_claim();
 
 
 --
@@ -7652,6 +7961,22 @@ ALTER TABLE ONLY content.hosted_version_builder_source
 
 ALTER TABLE ONLY content.hosted_version_builder_source
     ADD CONSTRAINT hosted_version_builder_source_route_catalogue_id_publicati_fkey FOREIGN KEY (route, catalogue_id, publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_candidate_cleanup_step hosted_version_candidate_clea_route_catalogue_id_stage_id_fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_candidate_cleanup_step
+    ADD CONSTRAINT hosted_version_candidate_clea_route_catalogue_id_stage_id_fkey1 FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_version_candidate_cleanup(route, catalogue_id, stage_id);
+
+
+--
+-- Name: hosted_version_candidate_cleanup hosted_version_candidate_clean_route_catalogue_id_stage_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_candidate_cleanup
+    ADD CONSTRAINT hosted_version_candidate_clean_route_catalogue_id_stage_id_fkey FOREIGN KEY (route, catalogue_id, stage_id) REFERENCES content.hosted_publication_staging(route, catalogue_id, stage_id);
 
 
 --
