@@ -87,9 +87,7 @@ test('the normal importer commits and adopts the pinned Book in the same native 
       fixture.claims.P856[0].mainsnak.datavalue.value,
     ]);
     const date = fixture.claims.P577[0].mainsnak.datavalue.value;
-    expect(subject.statements['schema:datePublished']!.map((s) => s.value.content)).toEqual([
-      { time: date.time, precision: date.precision, calendarmodel: date.calendarmodel },
-    ]);
+    expect(subject.statements['schema:datePublished']!.map((s) => s.value.content)).toEqual([date]);
     const authors = imported.selected.filter((c) => c.property === 'schema:author');
     expect(authors).toHaveLength(fixture.claims.P50.length);
     for (const [index, author] of fixture.claims.P50.entries()) {

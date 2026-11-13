@@ -303,6 +303,8 @@ its normal native authorization again.
 
 Time content is the closed portable shape `{ time, precision, calendarmodel, timezone?, before?, after? }`: signed 4–16 digit historical year strings, precision 9–11, Gregorian or Julian calendar IRI, safe-integer timezone minutes and safe nonnegative uncertainty counts. The timestamp stays a lexical string; no calendar conversion or day/month completion occurs. Quantity content keeps exact `amount`, optional `lowerBound`/`upperBound`, and unit strings; decimal fields retain the existing 127-character bound and disclosed unit behavior. `globe-coordinate`, lexeme values and other specialized types return typed unsupported results. See the [Definitions time value contract](../../../../packages/definitions/README.md#wikidata-time-values) for the admitted schema and primary Wikibase serialization references.
 
+Decision: the released Book import-to-Search public-read assertion compares `schema:datePublished` with the complete pinned Wikidata P577 value, preserving all six time operands, including explicit zero values.
+
 Admission is linear in at most the native 1,048,576-byte request-body limit. The native statement validator caps one Subject at 512 facts, each statement at 16 qualifiers and 16 references, and each reference at 16 parts; time lexical length is at most 33 characters and quantity amount/bounds at most 127. Native candidate/revision/item storage serializes these closed objects as JSON without converting numeric strings, so proposal, acceptance, adoption, current read and candidate-linked revision detail observe the same candidate identity and exact value. Existing statement execution stays generic and Definitions-driven.
 
 ## Public exposure boundary
