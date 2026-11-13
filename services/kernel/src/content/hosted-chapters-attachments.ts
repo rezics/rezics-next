@@ -16,7 +16,11 @@ function matches(value: NativePostMetadata | null, target: HostedChapterTarget):
  * check binds the original source observation and prepared ancestry/Access checks;
  * reading the head again would lose that observation. Neither check selects bytes.
  * This is write admission only, not proof of bytes delivered to a reader. */
-async function validateTarget(deps: HostedDependencies, target: HostedChapterTarget, context: ReadContext) {
+async function validateTarget(
+  deps: HostedDependencies,
+  target: HostedChapterTarget,
+  context: ReadContext,
+): Promise<NativePostMetadata> {
   const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
   const initial = await readPostMetadata(
     deps,
@@ -37,15 +41,23 @@ async function validateTarget(deps: HostedDependencies, target: HostedChapterTar
     final.value.licence !== original.licence
   )
     throw new ContentNotFoundError();
+  return final.value;
 }
 
+export type HostedChapterAttachmentObservation = Readonly<{
+  target: HostedChapterTarget;
+  authorId: string;
+  licence: string;
+}>;
+
 /** Process each distinct exact target to completion before starting the next.
- * Duplicate placements share admission, including its final native recheck. */
-export async function validateHostedChapterAttachments(
+ * The returned values are source observations only: they are not a retained
+ * eligibility or activation proof. */
+export async function observeHostedChapterAttachments(
   deps: HostedDependencies,
   placements: readonly OrderedHostedPlacement[],
   context: ReadContext,
-): Promise<void> {
+): Promise<readonly HostedChapterAttachmentObservation[]> {
   const targets = new Map<string, HostedChapterTarget>();
   for (const placement of placements) {
     if (placement.kind !== 'chapter') continue;
@@ -54,5 +66,20 @@ export async function validateHostedChapterAttachments(
     const key = `${target.threadId}/${target.postId}/${target.revisionId}/${target.sha256}`;
     targets.set(key, target);
   }
-  for (const target of targets.values()) await validateTarget(deps, target, context);
+  const observations: HostedChapterAttachmentObservation[] = [];
+  for (const target of targets.values()) {
+    const metadata = await validateTarget(deps, target, context);
+    observations.push({ target, authorId: metadata.authorId, licence: metadata.licence });
+  }
+  return observations;
+}
+
+/** Validate an attachment's identity for existing write admission callers.
+ * Neither this result nor a persisted observation selects bytes or grants access. */
+export async function validateHostedChapterAttachments(
+  deps: HostedDependencies,
+  placements: readonly OrderedHostedPlacement[],
+  context: ReadContext,
+): Promise<void> {
+  await observeHostedChapterAttachments(deps, placements, context);
 }

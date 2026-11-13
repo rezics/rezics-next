@@ -204,6 +204,10 @@ receive private progress or selection details. Embedded private media stays with
 
 ## Prepared Book publication
 
+Decision: private staging uses a source-ordered candidate generation, 20-row replayable steps and selection batches of
+at most 512; exact target observations stay separate from current authority proof, source titles remain source-owned
+for terminal redaction, and this slice exposes no activation.
+
 Staging is Book-owned, independent of Collection custody. Collection's
 [seal reader](../library/collection-publication-staging.ts) and
 [fixture](../../test/library/collection-publication-staging.test.ts) exemplify native source identity, complete
