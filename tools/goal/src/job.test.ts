@@ -177,6 +177,7 @@ async function typingRetryFixture(
   const complete = beginTypingInputReceipt(worktree, env, compiler);
   if (!complete) throw new Error('Compiler fixture did not capture its inputs');
   if (kernelOutput) {
+    mkdirSync(join(worktree, '.temp/goal'), { recursive: true });
     const sourceSha256 = 'a'.repeat(64);
     const producerExit = await withKernelClientOutput(
       worktree,
