@@ -83,10 +83,14 @@ export function createReleaseCommand(client: KernelClient): ReleaseCommand {
       parsed.output.stageId !== input.stageId ||
       parsed.output.stage.locator.catalogueId !== input.catalogueId ||
       parsed.output.stage.locator.stageId !== input.stageId ||
-      parsed.output.stage.mode !== 'whole' ||
       (input.kind === 'start' && input.body.stageId !== input.stageId)
     )
       return releaseUnknown();
+    if (parsed.output.stage.mode !== 'whole')
+      return hostedFailure(
+        'invalid',
+        'This stage uses a custom selection. Review the Book to prepare its whole draft.',
+      );
     return { ok: true, value: parsed.output };
   };
 }

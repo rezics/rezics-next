@@ -183,7 +183,7 @@ export const ExpiredStagePhone: Story = {
     const canvas = within(canvasElement);
     const copy = releaseCopy[getLocale()];
     await expect(await canvas.findByRole('alert')).toHaveTextContent(copy.expired);
-    await userEvent.click(canvas.getByRole('button', { name: copy.refresh }));
-    await expect(await canvas.findByRole('button', { name: copy.confirm })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: copy.refresh })).toBeEnabled();
+    await expect(canvas.queryByRole('button', { name: copy.seal })).toBeNull();
   },
 };

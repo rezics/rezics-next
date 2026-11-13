@@ -64,10 +64,7 @@ export function HostedReleasePreparationView({
     <main className="studio-workspace mx-auto w-full max-w-4xl space-y-8 px-4 py-8 selection:bg-primary selection:text-primary-foreground">
       <header className="studio-header space-y-3">
         <h1>{copy.heading}</h1>
-        <a
-          className="studio-skip inline-flex min-h-11 items-center"
-          href={localizeHref(`/studio?catalogueId=${owner.item.catalogueId}`, { locale })}
-        >
+        <a className="studio-skip inline-flex min-h-11 items-center" href={localizeHref('/studio?books=1', { locale })}>
           {m.studio_root_append_return({}, { locale })}
         </a>
         <p className="studio-help max-w-prose text-pretty">{copy.private}</p>
