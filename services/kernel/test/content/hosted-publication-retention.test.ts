@@ -11,7 +11,12 @@ import {
   beginHostedVersionReleaseCandidate,
   sealHostedVersionReleaseCandidate,
 } from '../../src/content/hosted-version-release-candidate.ts';
-import { advanceHostedPublicationRetention } from '../../src/content/hosted-publication-retention.ts';
+import {
+  advanceHostedPublicationRetention,
+  HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT,
+  HOSTED_PUBLICATION_RETENTION_SWEEP_STEP_BUDGET,
+  type HostedPublicationRetentionResult,
+} from '../../src/content/hosted-publication-retention.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
@@ -171,6 +176,65 @@ async function createUnsealedStage(source: Awaited<ReturnType<typeof createSourc
   return locator;
 }
 
+async function createCompletedHistory(
+  source: Awaited<ReturnType<typeof createSource>>,
+  count: number,
+): Promise<string[]> {
+  const route = routeOf(f.catalogueId);
+  if (route === null) throw new Error('Hosted fixture catalogue has no route');
+  const expiresAt = new Date(Date.now() + 5 * 60_000);
+  const locators = Array.from({ length: count }, () => ({ catalogueId: f.catalogueId, stageId: f.newOccurrenceId() }));
+  await transaction(async (client) => {
+    for (const locator of locators) {
+      await beginHostedPublicationStaging(client, f.native.author.actor, {
+        ...locator,
+        expectedHeadRevisionId: source.sourceRevisionId,
+        expectedPublicationId: source.publicationId,
+        mode: 'whole',
+        expiresAt,
+      });
+    }
+  });
+
+  const stageIds = locators.map(({ stageId }) => stageId);
+  await transaction(async (client) => {
+    await client.query(
+      `UPDATE content.hosted_publication_staging SET status='expired'
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])`,
+      [route, f.catalogueId, stageIds],
+    );
+    await client.query(
+      `INSERT INTO content.hosted_publication_staging_cleanup
+         (route,catalogue_id,stage_id,owner_epoch,terminal_status)
+       SELECT route,catalogue_id,stage_id,owner_epoch,'expired'
+       FROM content.hosted_publication_staging
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])`,
+      [route, f.catalogueId, stageIds],
+    );
+    for (const stageId of stageIds) {
+      const authority = `${route}:${f.catalogueId}:${stageId}:${f.native.author.actor.authnEpoch}`;
+      await client.query("SELECT set_config('content.hosted_publication_staging_cleanup',$1,true)", [authority]);
+      await client.query(
+        `UPDATE content.hosted_publication_staging_cleanup SET cleanup_active=true
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+        [route, f.catalogueId, stageId],
+      );
+      await client.query(
+        `UPDATE content.hosted_publication_staging_cleanup
+         SET phase='done',completed_at=clock_timestamp(),cleanup_active=false
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+        [route, f.catalogueId, stageId],
+      );
+    }
+    await client.query(
+      `DELETE FROM content.hosted_publication_retention_pending
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])`,
+      [route, f.catalogueId, stageIds],
+    );
+  });
+  return stageIds;
+}
+
 async function pinCandidate(generationId: string, sequence: string, sourceRevisionId: string): Promise<void> {
   const route = routeOf(f.catalogueId);
   if (route === null) throw new Error('Hosted fixture catalogue has no route');
@@ -197,48 +261,47 @@ async function markExpired(stageId: string): Promise<void> {
   await transaction((client) =>
     client.query(
       `UPDATE content.hosted_publication_staging SET status='expired'
-       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND status IN ('ready','sealed')`,
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3
+         AND status NOT IN ('cancelled','expired','failed')`,
       [route, f.catalogueId, stageId],
     ),
   );
 }
 
-test('bounded retention skips a pinned candidate, advances a later stage and replays exact progress', async () => {
+async function runSweep(sweepId: string, cutoff: Date, first?: HostedPublicationRetentionResult) {
+  const results: HostedPublicationRetentionResult[] = first ? [first] : [];
+  const start = first ? 1 : 0;
+  if (first?.hasMoreWork === false) return results;
+  for (let segment = start; segment < HOSTED_PUBLICATION_RETENTION_SWEEP_STEP_BUDGET; segment++) {
+    const result = await advanceHostedPublicationRetention(f.native.pool, `${sweepId}:retention:${segment}`, cutoff);
+    results.push(result);
+    if (!result.hasMoreWork) break;
+  }
+  return results;
+}
+
+test('bounded hourly retention resumes pages, skips completed history and defers a pinned candidate', async () => {
   const route = routeOf(f.catalogueId);
   if (route === null) throw new Error('Hosted fixture catalogue has no route');
   const source = await createSource();
+  const history = await createCompletedHistory(source, HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT + 20);
   const now = Date.now();
-  const pinnedExpiresAt = new Date(now + 60 * 60_000);
-  const pinned = await createCandidate(source, pinnedExpiresAt);
-  const abandoned = await createUnsealedStage(source, new Date(now + 90 * 60_000));
-  const eligible = await createCandidate(source, new Date(now + 2 * 60 * 60_000));
+  const pinned = await createCandidate(source, new Date(now + 10 * 60_000));
+  const abandoned = await createUnsealedStage(source, new Date(now + 20 * 60_000));
+  const eligible = await createCandidate(source, new Date(now + 30 * 60_000));
   await pinCandidate(pinned.generationId, pinned.generationSequence, source.sourceRevisionId);
   await markExpired(pinned.locator.stageId);
   await markExpired(abandoned.stageId);
   await markExpired(eligible.locator.stageId);
-  await f.native.pool.query(
-    `INSERT INTO content.hosted_publication_retention_cursor(singleton) VALUES (true)
-     ON CONFLICT (singleton) DO UPDATE SET after_expires_at=$1,after_route=$2,
-       after_catalogue_id=$3,after_stage_id=$4,last_pass_id=NULL,last_pass_result=NULL`,
-    [new Date(pinnedExpiresAt.getTime() - 1), route, f.catalogueId, pinned.locator.stageId],
-  );
-  const cutoff = new Date(now + 3 * 60 * 60_000);
-  const passRoot = crypto.randomUUID();
+  const cutoff = new Date(now + 4 * 60 * 60_000);
+  const firstSweepId = crypto.randomUUID();
+  const firstPassId = `${firstSweepId}:retention:0`;
 
-  let first: Awaited<ReturnType<typeof advanceHostedPublicationRetention>> | undefined;
-  let firstPassId = '';
-  for (let pass = 0; pass < 200; pass++) {
-    const passId = `${passRoot}:${pass}`;
-    const result = await advanceHostedPublicationRetention(f.native.pool, passId, cutoff);
-    if (result.advanced && result.locator?.stageId === abandoned.stageId) {
-      first = result;
-      firstPassId = passId;
-      break;
-    }
-  }
-  expect(first).toBeDefined();
+  const first = await advanceHostedPublicationRetention(f.native.pool, firstPassId, cutoff);
   expect(first).toMatchObject({
     replayed: false,
+    adoptionScanned: HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT,
+    adopted: 0,
     advanced: true,
     locator: abandoned,
     cleanup: {
@@ -250,9 +313,51 @@ test('bounded retention skips a pinned candidate, advances a later stage and rep
       },
     },
   });
+  expect(first.examinedKeys).toBe(first.scanned + first.adoptionScanned);
+  expect(first.scanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
 
   const replay = await advanceHostedPublicationRetention(f.native.pool, firstPassId, cutoff);
-  expect(replay).toEqual({ ...first!, replayed: true });
+  expect(replay).toEqual({ ...first, replayed: true });
+
+  const results = await runSweep(firstSweepId, cutoff, first);
+  const secondPass = results[1]!;
+  expect(secondPass.adoptionScanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
+  expect(secondPass.scanned).toBeLessThan(first.scanned);
+  expect(results.reduce((sum, result) => sum + result.adoptionScanned, 0)).toBe(history.length + 3);
+  expect(results.some((result) => result.locator?.stageId === eligible.locator.stageId)).toBe(true);
+  expect(results.filter((result) => result.locator?.stageId === eligible.locator.stageId).length).toBeGreaterThan(1);
+
+  const allResults = [...results];
+  let abandonedCompleted = false;
+  let candidateCompleted = false;
+  for (let sweep = 1; sweep <= 8 && !(abandonedCompleted && candidateCompleted); sweep++) {
+    const next = await runSweep(crypto.randomUUID(), cutoff);
+    allResults.push(...next);
+    const staging = await f.native.pool.query<{ completed: boolean }>(
+      `SELECT completed_at IS NOT NULL AS completed FROM content.hosted_publication_staging_cleanup
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, abandoned.stageId],
+    );
+    const candidate = await f.native.pool.query<{ completed: boolean }>(
+      `SELECT completed_at IS NOT NULL AS completed FROM content.hosted_version_candidate_cleanup
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, eligible.locator.stageId],
+    );
+    abandonedCompleted = staging.rows[0]?.completed ?? false;
+    candidateCompleted = candidate.rows[0]?.completed ?? false;
+  }
+  expect(abandonedCompleted).toBe(true);
+  expect(candidateCompleted).toBe(true);
+
+  for (const result of allResults) {
+    expect(result.scanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
+    expect(result.adoptionScanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
+    expect(result.examinedKeys).toBe(result.scanned + result.adoptionScanned);
+    expect(result.adopted).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
+    expect(result.advanced).toBe(result.cleanup !== null);
+    expect(result.cleanup?.result.deletedRows ?? 0).toBeLessThanOrEqual(100);
+  }
+
   const issue = await f.native.pool.query<{
     owner_epoch: string;
     source_revision_id: string;
@@ -270,29 +375,12 @@ test('bounded retention skips a pinned candidate, advances a later stage and rep
     candidate_generation_id: pinned.generationId,
     state: 'The candidate generation is retained by retained revision',
   });
-
-  let abandonedCompleted = false;
-  let candidateCompleted = false;
-  for (let pass = 200; pass < 400 && !(abandonedCompleted && candidateCompleted); pass++) {
-    const result = await advanceHostedPublicationRetention(f.native.pool, `${passRoot}:${pass}`, cutoff);
-    if (result.advanced) {
-      expect(result.cleanup!.result.deletedRows).toBeLessThanOrEqual(100);
-      const samePass = await advanceHostedPublicationRetention(f.native.pool, `${passRoot}:${pass}`, cutoff);
-      expect(samePass).toEqual({ ...result, replayed: true });
-      if (result.locator?.stageId === abandoned.stageId) {
-        expect(result.cleanup!.kind).toBe('staging');
-        abandonedCompleted = result.cleanup!.result.progress.completed;
-      } else if (result.locator?.stageId === eligible.locator.stageId) {
-        expect(result.cleanup!.kind).toBe('candidate');
-        candidateCompleted = result.cleanup!.result.progress.completed;
-        if (!candidateCompleted) expect(Number(result.cleanup!.result.progress.deletedRowCount)).toBeGreaterThan(100);
-      } else {
-        throw new Error('Retention advanced a stage outside the focused fixture');
-      }
-    }
-  }
-  expect(abandonedCompleted).toBe(true);
-  expect(candidateCompleted).toBe(true);
+  const deferred = await f.native.pool.query<{ available_at: string }>(
+    `SELECT available_at::text FROM content.hosted_publication_retention_pending
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+    [route, f.catalogueId, pinned.locator.stageId],
+  );
+  expect(Date.parse(deferred.rows[0]!.available_at)).toBeGreaterThan(cutoff.getTime());
 
   const candidates = await f.native.pool.query<{ stage_id: string; status: string; generation_id: string | null }>(
     `SELECT stage_id,status,generation_id
@@ -316,13 +404,37 @@ test('bounded retention skips a pinned candidate, advances a later stage and rep
     [route, f.catalogueId, pinned.generationId],
   );
   expect(pinnedGeneration.rowCount).toBe(1);
-  const abandonedFacts = await f.native.pool.query<{ candidate_count: string; target_count: string }>(
+  const historyFacts = await f.native.pool.query<{
+    stages: string;
+    pending: string;
+    completed_cleanups: string;
+  }>(
     `SELECT
-       (SELECT count(*)::text FROM content.hosted_publication_staging_candidate
-        WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS candidate_count,
-       (SELECT count(*)::text FROM content.hosted_publication_staging_target
-        WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS target_count`,
+       (SELECT count(*)::text FROM content.hosted_publication_staging
+        WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])) AS stages,
+       (SELECT count(*)::text FROM content.hosted_publication_retention_pending
+        WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])) AS pending,
+       (SELECT count(*)::text FROM content.hosted_publication_staging_cleanup
+        WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])
+          AND completed_at IS NOT NULL) AS completed_cleanups`,
+    [route, f.catalogueId, history],
+  );
+  expect(historyFacts.rows[0]).toEqual({
+    stages: String(history.length),
+    pending: '0',
+    completed_cleanups: String(history.length),
+  });
+  const cleanupReceipts = await f.native.pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM content.hosted_publication_staging_cleanup_step
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
     [route, f.catalogueId, abandoned.stageId],
   );
-  expect(abandonedFacts.rows[0]).toEqual({ candidate_count: '0', target_count: '0' });
+  expect(Number(cleanupReceipts.rows[0]!.count)).toBeGreaterThan(0);
+
+  const emptySweepId = crypto.randomUUID();
+  const empty = await runSweep(emptySweepId, cutoff);
+  expect(
+    empty.every((result) => result.scanned === 0 && result.adoptionScanned === 0 && result.examinedKeys === 0),
+  ).toBe(true);
+  expect(empty.at(-1)?.hasMoreWork).toBe(false);
 });

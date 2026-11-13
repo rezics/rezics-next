@@ -32,7 +32,10 @@ import { CONTENT_EVENTS } from './events.ts';
 import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
-import { advanceHostedPublicationRetention } from './hosted-publication-retention.ts';
+import {
+  advanceHostedPublicationRetention,
+  HOSTED_PUBLICATION_RETENTION_SWEEP_STEP_BUDGET,
+} from './hosted-publication-retention.ts';
 import { tryContentApplication } from './adapters/bind.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
 import { repairConversationActivityPage } from './conversation-activity-repair.ts';
@@ -397,7 +400,11 @@ async function registerWork(
     async (_scheduledDate: Date, _context: unknown) => {
       // The scheduled timestamp never supplies a command cutoff. The job obtains T.
       const sweep = DBOS.workflowID!;
-      await hostedPublicationRetentionPage(sweep, await hostedPublicationRetentionCutoff());
+      const cutoff = await hostedPublicationRetentionCutoff();
+      for (let segment = 0; segment < HOSTED_PUBLICATION_RETENTION_SWEEP_STEP_BUDGET; segment++) {
+        const result = await hostedPublicationRetentionPage(`${sweep}:retention:${segment}`, cutoff);
+        if (!result.hasMoreWork) break;
+      }
       // A maintenance slot stays occupied until all children complete. Queuing
       // children behind their parents would deadlock when two sweeps overlap.
       for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY) {

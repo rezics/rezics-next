@@ -794,6 +794,33 @@ All responses use private, no-store caching and native session anchors. This
 reader owns its source SQL and index; it has no dependency on the active author
 inventory writer or Commerce checkpoint writer.
 
+## Hosted publication retention
+
+Decision: drain at most 16 deterministic cleanup steps during the existing hourly Content collection workflow,
+using a pending-work index and one-hour retry time for pins or cleanup conflicts; each step still uses the existing
+100-row transaction limit and retirement authority.
+
+The Library entry-retention worker provides the pacing reference: it runs every ten minutes, processes 100 durable
+single-key pages per segment, then enqueues a bounded maintenance continuation while its partition cursor remains.
+Content keeps its hourly `content.collection.hourly` schedule and does not add a scheduler or continuation queue. Each
+scheduled Content sweep runs at most 16 retention segments, and each segment runs at most one existing staging or
+candidate cleanup step. That caps cleanup at 1,600 deleted rows per sweep, or 1,600 rows per hour. Each segment also
+examines at most 100 due keys and advances at most 100 legacy stage keys, for at most 3,200 returned stage keys per
+sweep while legacy adoption is active.
+
+The indexed pending projection contains only unfinished stages. New stages enter it in their creation transaction;
+completed cleanup removes the projection row in the same transaction while retaining stage and cleanup receipts.
+Existing rows are adopted through a durable `(route, catalogue, stage)` keyset, at most 100 per segment. Adoption
+checks both cleanup completion markers and never inserts already-completed stages. The due index orders by
+`available_at`; a pin or recognized cleanup conflict records the existing issue and moves that stage to one hour
+after the sweep cutoff, so it leaves the current due page. Mode eligibility remains unchanged for whole and
+selection candidates returned by the cleanup primitive.
+
+Each DBOS page receives `<workflowID>:retention:<segment>` and derives the exact candidate cleanup step ID from that
+page identity and the retained owner binding. A restart reuses the committed page output and does not repeat its
+cleanup step. The focused retention test covers a 120-stage completed prefix, a persistent pin, resumable staging
+and candidate cleanup, page replay, the per-segment key/write caps and an empty due pass after adoption.
+
 ## Cost and integration boundaries
 
 Compatibility complete replacement/release validate at most 512 placements; mounted root append validates one.
