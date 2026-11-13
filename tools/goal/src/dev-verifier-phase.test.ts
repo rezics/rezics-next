@@ -62,7 +62,10 @@ test('phase evidence is accepted only for the exact command execution and named 
   });
 
   const wrongRun = consumeVerifierPhaseReceipt(receipt(binding), { ...binding, executionId: 'execution-8' });
-  const wrongCommand = consumeVerifierPhaseReceipt(receipt(binding), { ...binding, command: ['bun', 'test', 'other.test.ts'] });
+  const wrongCommand = consumeVerifierPhaseReceipt(receipt(binding), {
+    ...binding,
+    command: ['bun', 'test', 'other.test.ts'],
+  });
   const prose = consumeVerifierPhaseReceipt('remote-check: command phase execution 7.000 s', binding);
   for (const rejected of [wrongRun, wrongCommand, prose]) {
     expect(rejected.runner).toEqual({ kind: 'unknown', id: null });

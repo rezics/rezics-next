@@ -66,9 +66,10 @@ export function unknownVerifierPhaseEvidence(
     commandSha256: verifierCommandSha256(binding.command, binding.cwd),
     ...(binding.executionBudgetMs === undefined ? {} : { executionBudgetMs: binding.executionBudgetMs }),
     runner: { ...UNKNOWN_RUNNER },
-    phases: Object.fromEntries(
-      DEV_VERIFIER_PHASES.map((phase) => [phase, { status: 'unknown', reason }]),
-    ) as Record<DevVerifierPhaseName, DevVerifierPhaseObservation>,
+    phases: Object.fromEntries(DEV_VERIFIER_PHASES.map((phase) => [phase, { status: 'unknown', reason }])) as Record<
+      DevVerifierPhaseName,
+      DevVerifierPhaseObservation
+    >,
   };
 }
 
@@ -97,11 +98,7 @@ export function consumeVerifierPhaseReceipt(
   if (!value || typeof value !== 'object' || Array.isArray(value)) return unknownVerifierPhaseEvidence(binding);
   const receipt = value as Partial<DevVerifierPhaseReceipt>;
   const commandSha256 = verifierCommandSha256(binding.command, binding.cwd);
-  if (
-    receipt.schema !== 1 ||
-    receipt.executionId !== binding.executionId ||
-    receipt.commandSha256 !== commandSha256
-  )
+  if (receipt.schema !== 1 || receipt.executionId !== binding.executionId || receipt.commandSha256 !== commandSha256)
     return unknownVerifierPhaseEvidence(binding, PHASE_RECEIPT_OWNER_MISMATCH);
 
   const runner = parseRunner(receipt.runner);
@@ -121,9 +118,10 @@ export function consumeVerifierPhaseReceipt(
       commandSha256,
       ...(binding.executionBudgetMs === undefined ? {} : { executionBudgetMs: binding.executionBudgetMs }),
       runner,
-      phases: Object.fromEntries(
-        DEV_VERIFIER_PHASES.map((phase) => [phase, { status: 'unknown', reason }]),
-      ) as Record<DevVerifierPhaseName, DevVerifierPhaseObservation>,
+      phases: Object.fromEntries(DEV_VERIFIER_PHASES.map((phase) => [phase, { status: 'unknown', reason }])) as Record<
+        DevVerifierPhaseName,
+        DevVerifierPhaseObservation
+      >,
     };
   }
   return {
@@ -232,17 +230,13 @@ function parseObservation(value: unknown): DevVerifierPhaseObservation {
   };
 }
 
-function hasUnreachedPreExecutionPhase(
-  phases: Record<DevVerifierPhaseName, DevVerifierPhaseObservation>,
-): boolean {
+function hasUnreachedPreExecutionPhase(phases: Record<DevVerifierPhaseName, DevVerifierPhaseObservation>): boolean {
   const preExecution: DevVerifierPhaseName[] = ['queue', 'preparation', 'execution'];
   const unreached = preExecution.findIndex((phase) => phases[phase].status === 'unreached');
   return unreached >= 0 && preExecution.slice(unreached + 1).some((phase) => phases[phase].status !== 'unreached');
 }
 
-function hasOverlappingPreExecutionPhases(
-  phases: Record<DevVerifierPhaseName, DevVerifierPhaseObservation>,
-): boolean {
+function hasOverlappingPreExecutionPhases(phases: Record<DevVerifierPhaseName, DevVerifierPhaseObservation>): boolean {
   const adjacent: [DevVerifierPhaseName, DevVerifierPhaseName][] = [
     ['queue', 'preparation'],
     ['preparation', 'execution'],
@@ -260,9 +254,7 @@ function hasOverlappingPreExecutionPhases(
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function finiteNonNegative(value: unknown): value is number {

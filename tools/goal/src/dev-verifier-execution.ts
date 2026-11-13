@@ -407,7 +407,7 @@ export async function executeCheck(
             timedOut: true,
             output: `${final.output}${final.output ? '\n' : ''}Verifier boot execution phase exceeded its ${phaseEvidence?.executionBudgetMs ?? policy.verifier.bootSmokeTimeoutMs} ms budget.`,
           }
-      : final;
+        : final;
     const baseEvidence = createEvidence(commit, check, terminalResult, finalLog, execution.settings.policy?.verifier);
     const evidence = unexecutedSuccess ? { ...baseEvidence, result: 'unknown' as const } : baseEvidence;
     const completed: DevVerifierRun = {

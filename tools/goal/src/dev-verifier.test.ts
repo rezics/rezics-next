@@ -1195,9 +1195,9 @@ test('round summaries reference their command receipts and missing boot smoke st
   expect(skipped?.execution).toMatchObject({ status: 'terminal', outcome: 'skipped', durationMs: null });
   expect(skipped?.execution?.startedAt).toBeUndefined();
   expect(skipped?.evidence.passed).toBe(false);
-  expect(DEV_VERIFIER_PHASES.every((phase) => skipped?.execution?.phaseEvidence?.phases[phase].status === 'unreached')).toBe(
-    true,
-  );
+  expect(
+    DEV_VERIFIER_PHASES.every((phase) => skipped?.execution?.phaseEvidence?.phases[phase].status === 'unreached'),
+  ).toBe(true);
 });
 
 test('a replay preserves the first terminal result while a genuine retry gets a new command identity', async () => {
@@ -1314,7 +1314,18 @@ test('boot phase evidence is bound to one command receipt and its replay is idem
     };
   };
 
-  const first = await executeCheck(execution, runner, check, head, root, 'boot-phase-cache-key', undefined, undefined, 'boot-phase-round', true);
+  const first = await executeCheck(
+    execution,
+    runner,
+    check,
+    head,
+    root,
+    'boot-phase-cache-key',
+    undefined,
+    undefined,
+    'boot-phase-round',
+    true,
+  );
   const commandRunId = first.commandRunIds![0]!;
   const original = store.devVerifierRun(commandRunId)!;
   expect(original.execution?.phaseEvidence).toMatchObject({
@@ -1326,7 +1337,18 @@ test('boot phase evidence is bound to one command receipt and its replay is idem
   });
   expect(JSON.parse(readFlow(store.db)[0]!.detail!).phaseEvidence).toEqual(original.execution?.phaseEvidence);
 
-  const replay = await executeCheck(execution, runner, check, head, root, 'boot-phase-cache-key', undefined, undefined, 'boot-phase-round', true);
+  const replay = await executeCheck(
+    execution,
+    runner,
+    check,
+    head,
+    root,
+    'boot-phase-cache-key',
+    undefined,
+    undefined,
+    'boot-phase-round',
+    true,
+  );
   expect(replay.commandRunIds).toEqual([commandRunId]);
   expect(store.devVerifierRun(commandRunId)?.execution?.phaseEvidence).toEqual(original.execution?.phaseEvidence);
   expect(readFlow(store.db)).toHaveLength(1);
@@ -1343,7 +1365,8 @@ test('boot timeout budget charges the measured execution phase and excludes queu
   const check = { command: ['boot-smoke'], cwd: 'services/kernel' };
   const head = git(root, 'rev-parse', 'dev');
   const runner = async () => {
-    const executionId = store.devVerifierCommandRuns().find((run) => run.execution?.status === 'running')?.execution?.id;
+    const executionId = store.devVerifierCommandRuns().find((run) => run.execution?.status === 'running')
+      ?.execution?.id;
     if (!executionId) throw new Error('The command execution identity was not claimed before the runner started.');
     return {
       passed: true,
@@ -1410,7 +1433,18 @@ test('a successful wrapper with an authoritative unreached boot phase remains un
     };
   };
 
-  const result = await executeCheck(execution, runner, check, head, root, 'boot-unreached-cache-key', undefined, undefined, 'boot-unreached-round', true);
+  const result = await executeCheck(
+    execution,
+    runner,
+    check,
+    head,
+    root,
+    'boot-unreached-cache-key',
+    undefined,
+    undefined,
+    'boot-unreached-round',
+    true,
+  );
   expect(result).toMatchObject({ passed: false, result: 'unknown' });
   const stored = store.devVerifierRun(result.commandRunIds![0]!)!;
   expect(stored.execution?.outcome).toBe('unknown');
