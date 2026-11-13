@@ -53,7 +53,7 @@ bindings, not a promise that native revision bytes survive. No title/digest is d
 
 ## Implemented private-title pages
 
-`20261113120000_hosted_private_title_redaction.sql` retains every identity, exact target binding, source header,
+`20261113035450_hosted_private_title_redaction.sql` retains every identity, exact target binding, source header,
 placement coordinate, descriptor count and watermark. Both payload tables have a nullable title and a checked
 `title_redacted` flag. Inserts require an ordinary non-null title. Updates permit only the one-way transition
 from an existing private title to the explicit null tombstone; all other columns must remain byte-equivalent.
