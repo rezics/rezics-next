@@ -158,8 +158,9 @@ Sources checked before this decision: this document; Knowledge's
 [`db/content/schema.sql`](../../db/content/schema.sql),
 [`20261111120000_hosted_chapters.sql`](../../db/content/migrations/20261111120000_hosted_chapters.sql),
 [`20261113025800_hosted_root_append.sql`](../../db/content/migrations/20261113025800_hosted_root_append.sql),
-[`20261113035450_hosted_private_title_redaction.sql`](../../db/content/migrations/20261113035450_hosted_private_title_redaction.sql), and
-[`20261113091612_hosted_migration_input.sql`](../../db/content/migrations/20261113091612_hosted_migration_input.sql);
+[`20261113035450_hosted_private_title_redaction.sql`](../../db/content/migrations/20261113035450_hosted_private_title_redaction.sql),
+[`20261113091612_hosted_migration_input.sql`](../../db/content/migrations/20261113091612_hosted_migration_input.sql), and
+[`20261113131801_hosted_version_draft_activation.sql`](../../db/content/migrations/20261113131801_hosted_version_draft_activation.sql);
 the independent [Knowledge model](../../../../docs/research/knowledge-workspaces-model-astra.md) and
 [product investigation](../../../../docs/research/knowledge-workspaces-product-astra.md),
 [scalability audit](../../../../docs/research/universal-scalability-audit.md) and its
