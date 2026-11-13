@@ -11,6 +11,27 @@ export { safeDocumentUrl } from './document-url.ts';
 
 const rel = 'noopener noreferrer nofollow ugc';
 
+type AuthoredBlockAttributes = {
+  'data-block-id'?: string;
+  lang?: string;
+  dir?: string;
+};
+
+/** Project only the document's common block fields onto rendered output. */
+function authoredBlockAttributes(node: DocumentNode): AuthoredBlockAttributes {
+  const attrs = node.attrs as { id?: string | null; lang?: string | null; dir?: string | null } | undefined;
+  return {
+    'data-block-id': attrs?.id ?? undefined,
+    lang: attrs?.lang ?? undefined,
+    dir: attrs?.dir ?? undefined,
+  };
+}
+
+/** Keep default semantic roots intact; caller-owned replacements get an anchor wrapper. */
+function authoredCallbackBlock(node: DocumentNode, defaultContent: ReactNode, content: ReactNode): ReactNode {
+  return content === defaultContent ? content : <div {...authoredBlockAttributes(node)}>{content}</div>;
+}
+
 function semanticSnapshotJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(semanticSnapshotJson).join(',')}]`;
   if (value !== null && typeof value === 'object') {
@@ -180,9 +201,7 @@ export function DocumentBody({
                 return createElement(
                   `h${node.attrs.level}`,
                   {
-                    'data-block-id': node.attrs.id ?? undefined,
-                    lang: node.attrs.lang ?? undefined,
-                    dir: node.attrs.dir ?? undefined,
+                    ...authoredBlockAttributes(node),
                     draggable: 'true',
                     ...attributes,
                   },
@@ -207,14 +226,18 @@ export function DocumentBody({
             <>@</>
           );
         },
-        horizontalRule: () => <hr />,
+        horizontalRule: ({ node }: any) => <hr {...authoredBlockAttributes(node)} />,
         image: ({ node }: any) => {
           const id = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
-          if (renderImage) return renderImage({ mediaId: id, alt: node.attrs?.alt ?? '' });
+          if (renderImage)
+            return (
+              <div {...authoredBlockAttributes(node)}>{renderImage({ mediaId: id, alt: node.attrs?.alt ?? '' })}</div>
+            );
           const alt = node.attrs?.alt ?? '';
           return (
             <span
               className="block rounded-xl bg-muted p-5 text-sm text-muted-foreground"
+              {...authoredBlockAttributes(node)}
               role="img"
               aria-label={alt || resolved.imageUnavailable}
             >
@@ -224,13 +247,13 @@ export function DocumentBody({
           );
         },
         media: ({ node, children }: any) => (
-          <figure>
+          <figure {...authoredBlockAttributes(node)}>
             {children}
             <figcaption>{node.attrs?.caption}</figcaption>
           </figure>
         ),
         taskItem: ({ node, children }: any) => (
-          <li>
+          <li {...authoredBlockAttributes(node)}>
             <NativeCheckbox checked={node.attrs?.checked ?? false} disabled aria-label={resolved.taskStatus} />
             {children}
           </li>
@@ -242,11 +265,13 @@ export function DocumentBody({
             codeBlockOccurrences.set(node, occurrence);
           }
           const defaultContent = (
-            <pre>
+            <pre {...authoredBlockAttributes(node)}>
               <code data-language={node.attrs?.language ?? undefined}>{children}</code>
             </pre>
           );
-          return renderCodeBlock ? renderCodeBlock(node, children, defaultContent, occurrence) : defaultContent;
+          return renderCodeBlock
+            ? authoredCallbackBlock(node, defaultContent, renderCodeBlock(node, children, defaultContent, occurrence))
+            : defaultContent;
         },
         table: ({ node, children }: any) => {
           let occurrence = tableOccurrences.get(node);
@@ -256,31 +281,34 @@ export function DocumentBody({
           }
           const caption = typeof node.attrs?.caption === 'string' ? node.attrs.caption : undefined;
           const defaultContent = (
-            <div className="document-table-scroll">
+            <div className="document-table-scroll" {...authoredBlockAttributes(node)}>
               <table>
                 {caption !== undefined ? <caption>{caption}</caption> : null}
                 <tbody>{children}</tbody>
               </table>
             </div>
           );
-          return renderTable ? renderTable(node, children, defaultContent, occurrence) : defaultContent;
+          return renderTable
+            ? authoredCallbackBlock(node, defaultContent, renderTable(node, children, defaultContent, occurrence))
+            : defaultContent;
         },
         tableHeader: ({ node, children }: any) => (
           <th
             scope="col"
             colSpan={positiveCellSpan(node.attrs?.colspan)}
             rowSpan={positiveCellSpan(node.attrs?.rowspan)}
+            {...authoredBlockAttributes(node)}
           >
             {children}
           </th>
         ),
         extensionBlock: ({ node }: any) => (
-          <div data-document-component={node.attrs?.definition}>
+          <div data-document-component={node.attrs?.definition} {...authoredBlockAttributes(node)}>
             {node.attrs?.fallback ?? resolved.embeddedComponent}
           </div>
         ),
         extensionInline: ({ node }: any) => (
-          <span data-document-component={node.attrs?.definition}>
+          <span data-document-component={node.attrs?.definition} {...authoredBlockAttributes(node)}>
             {node.attrs?.fallback ?? resolved.embeddedComponent}
           </span>
         ),
