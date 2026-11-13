@@ -326,32 +326,39 @@ store.db.close();
   }
 }, 30_000);
 
-test('recovery restores a dead stale viewer during active screenshot work and keeps a later parked thread paused', async () => {
+test('recovery restores all five stale viewers without losing drafts or starting manager turns', async () => {
   const f = temporaryDirectory();
   mkdirSync(f.path, { recursive: true });
   const db = openDb(join(f.path, 'state.sqlite'));
   const inbox = new SqliteManagerInbox(db, f.path);
   const registrations: { id: string; argv: string[]; cwd: string }[] = [];
   const rebindings: { id: string; argv: string[]; cwd: string }[] = [];
-  const viewers = new Map<string, { argv: string[]; cwd: string; dead: boolean }>();
+  const viewers = new Map<string, { argv: string[]; cwd: string; dead: boolean; draft: string }>();
+  const replacements = new Map<string, { argv: string[]; cwd: string; dead: boolean; draft: string }>();
+  const threadStarts: string[] = [];
   const turnStarts: { threadId: string; turnId: string }[] = [];
-  const requests: { method: string; params: any }[] = [];
-  let notify: ((notification: Notification) => void) | undefined;
-  let endpoint = 'ws://127.0.0.1:10001';
-  let goalStatus = 'active';
+  const requests: { method: string; params: any; pool: string }[] = [];
+  const listeners = new Map<string, (notification: Notification) => void>();
+  const goalStatuses = new Map<string, string>();
+  const poolOne = { id: 'codex-1', codexHome: '/home/edge/.codex-1', executable: '/home/edge/.local/bin/codex' };
+  const poolTwo = { id: 'codex', codexHome: '/home/edge/.codex', executable: '/home/edge/.local/bin/codex' };
+  const endpoints = new Map([
+    [poolOne.codexHome, 'ws://127.0.0.1:33515'],
+    [poolTwo.codexHome, 'ws://127.0.0.1:36561'],
+  ]);
   const services = {
     command: ['goal'],
     windows: {
       register(id: string, argv: string[], cwd: string) {
         registrations.push({ id, argv, cwd });
-        viewers.set(id, { argv, cwd, dead: false });
+        viewers.set(id, { argv, cwd, dead: false, draft: `unsent draft for ${id}` });
         return '@1';
       },
       unregister(id: string) {
         viewers.delete(id);
       },
       rebindIfStale(id: string, argv: string[], cwd: string, options?: { restoreExited?: boolean }) {
-        const current = viewers.get(id);
+        const current = replacements.get(id) ?? viewers.get(id);
         if (!current || current.cwd !== cwd || (current.dead && !options?.restoreExited)) return false;
         const currentRemote = current.argv.indexOf('--remote');
         const nextRemote = argv.indexOf('--remote');
@@ -360,115 +367,163 @@ test('recovery restores a dead stale viewer during active screenshot work and ke
         const expected = [...current.argv];
         expected[currentRemote + 1] = argv[nextRemote + 1]!;
         if (JSON.stringify(expected) !== JSON.stringify(argv)) return false;
-        viewers.set(id, { argv, cwd, dead: current.dead });
+        replacements.set(id, { argv, cwd, dead: false, draft: '' });
         rebindings.push({ id, argv, cwd });
         return true;
       },
     },
     checkCompletion: async () => ({ passed: false, evidencePath: 'completion.log', summary: 'not complete' }),
-    connect: async (): Promise<AppServer> => ({
-      endpoint,
+    connect: async (pool: { codexHome: string }): Promise<AppServer> => ({
+      endpoint: endpoints.get(pool.codexHome),
       async request<T>(method: string, params: any): Promise<T> {
-        requests.push({ method, params });
-        if (method === 'thread/start') return { thread: { id: 'thread-1' } } as T;
+        requests.push({ method, params, pool: pool.codexHome });
+        if (method === 'thread/start') {
+          const threadId = `thread-${threadStarts.length + 1}`;
+          threadStarts.push(threadId);
+          return { thread: { id: threadId } } as T;
+        }
         if (method === 'thread/goal/set') {
-          goalStatus = params.status;
-          return { goal: { status: goalStatus, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } } as T;
+          goalStatuses.set(params.threadId, params.status);
+          return {
+            goal: { status: goalStatuses.get(params.threadId), tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 },
+          } as T;
         }
         if (method === 'turn/start') {
           const turnId = `turn-${turnStarts.length + 1}`;
           turnStarts.push({ threadId: params.threadId, turnId });
           return { turn: { id: turnId } } as T;
         }
-        if (method === 'thread/resume')
+        if (method === 'thread/resume') {
+          const active = turnStarts.findLast((turn) => turn.threadId === params.threadId);
           return {
             thread: {
               id: params.threadId,
-              turns: turnStarts.length ? [{ id: turnStarts.at(-1)!.turnId, status: 'inProgress' }] : [],
+              turns: active ? [{ id: active.turnId, status: 'inProgress' }] : [],
             },
           } as T;
+        }
         if (method === 'thread/goal/get')
-          return { goal: { status: goalStatus, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } } as T;
+          return {
+            goal: {
+              status: goalStatuses.get(params.threadId) ?? 'active',
+              tokensUsed: 0,
+              timeUsedSeconds: 0,
+              tokenBudget: 1000,
+            },
+          } as T;
         throw new Error(`unexpected RPC ${method}`);
       },
       onNotification(listener) {
-        notify = listener;
+        listeners.set(pool.codexHome, listener);
         return () => {
-          if (notify === listener) notify = undefined;
+          if (listeners.get(pool.codexHome) === listener) listeners.delete(pool.codexHome);
         };
       },
       close() {},
     }),
   };
-  const spec: ManagerSpec = {
-    id: 'accounts',
-    goal: 'accounts',
-    objective: 'Manage accounts',
+  const roles: { id: string; pool: typeof poolOne | typeof poolTwo }[] = [
+    { id: 'web', pool: poolOne },
+    { id: 'content', pool: poolOne },
+    { id: 'performance', pool: poolOne },
+    { id: 'semantic', pool: poolTwo },
+    { id: 'sprint-scheduling', pool: poolOne },
+  ];
+  const specs: ManagerSpec[] = roles.map(({ id, pool }) => ({
+    id,
+    goal: id,
+    objective: `Manage ${id}`,
     brief: 'Wait for instructions',
     cwd: f.path,
-    engine: 'codex',
-    pool: { id: 'fixture', codexHome: f.path, executable: 'codex' },
+    engine: 'codex' as const,
+    pool,
     budget: 1000,
-    effort: 'low',
+    effort: 'low' as const,
     supermanager: 'supermanager',
     limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
-  };
+  }));
   const first = new ManagerSessions(db, inbox, services);
   let recovered: ManagerSessions | undefined;
   try {
-    const started = await first.start(spec);
-    const threadId = started.threadId!;
+    const started = new Map<string, { threadId: string; turnId: string }>();
+    for (const spec of specs) {
+      const state = await first.start(spec);
+      started.set(spec.id, { threadId: state.threadId!, turnId: state.activeTurnId! });
+    }
+    expect(threadStarts).toHaveLength(5);
+    expect(turnStarts).toHaveLength(5);
     await first.close();
-    endpoint = 'ws://127.0.0.1:10002';
-    viewers.get('accounts')!.dead = true;
+    endpoints.set(poolOne.codexHome, 'ws://127.0.0.1:41015');
+    endpoints.set(poolTwo.codexHome, 'ws://127.0.0.1:41061');
     recovered = new ManagerSessions(db, inbox, services);
     await recovered.recover();
-    expect(recovered.get('accounts')).toMatchObject({
-      threadId,
-      activeTurnId: started.activeTurnId,
-      waitingForInbox: false,
-      goalState: { status: 'active' },
-    });
-    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(1);
-    expect(turnStarts).toHaveLength(1);
-    expect(registrations).toHaveLength(1);
-    expect(rebindings).toHaveLength(1);
-    expect(rebindings[0]!.argv).toContain(threadId);
-    expect(rebindings[0]!.argv).toContain(endpoint);
+    for (const spec of specs) {
+      const prior = started.get(spec.id)!;
+      expect(recovered.get(spec.id)).toMatchObject({
+        threadId: prior.threadId,
+        activeTurnId: prior.turnId,
+        waitingForInbox: false,
+        goalState: { status: 'active' },
+      });
+      expect(replacements.get(spec.id)?.argv).toContain(endpoints.get(spec.pool.codexHome));
+      expect(viewers.get(spec.id)?.draft).toBe(`unsent draft for ${spec.id}`);
+    }
+    expect(registrations).toHaveLength(5);
+    expect(rebindings).toHaveLength(5);
+    expect(threadStarts).toHaveLength(5);
+    expect(turnStarts).toHaveLength(5);
     expect(requests.filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
 
     await recovered.recover();
-    expect(rebindings).toHaveLength(1);
-    notify?.({ method: 'turn/completed', params: { threadId, turn: { id: started.activeTurnId, status: 'completed' } } });
+    expect(rebindings).toHaveLength(5);
+    expect(turnStarts).toHaveLength(5);
+    const webThread = started.get('web')!;
+    listeners.get(poolOne.codexHome)?.({
+      method: 'turn/completed',
+      params: { threadId: webThread.threadId, turn: { id: webThread.turnId, status: 'completed' } },
+    });
     await recovered.flush();
-    expect(recovered.get('accounts')).toMatchObject({
-      threadId,
+    expect(recovered.get('web')).toMatchObject({
+      threadId: webThread.threadId,
       activeTurnId: null,
       waitingForInbox: true,
       goalState: { status: 'paused' },
     });
-    const resumeCount = requests.filter((request) => request.method === 'thread/resume').length;
+    const webResumeCount = requests.filter(
+      (request) => request.method === 'thread/resume' && request.params.threadId === webThread.threadId,
+    ).length;
     await recovered.recover();
-    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(resumeCount);
-    expect(recovered.get('accounts')).toMatchObject({ threadId, activeTurnId: null, waitingForInbox: true });
+    expect(
+      requests.filter((request) => request.method === 'thread/resume' && request.params.threadId === webThread.threadId),
+    ).toHaveLength(webResumeCount);
+    expect(recovered.get('web')).toMatchObject({
+      threadId: webThread.threadId,
+      activeTurnId: null,
+      waitingForInbox: true,
+    });
 
-    inbox.deliver({ managerId: 'accounts', kind: 'instruction', summary: 'Continue the same manager thread' });
-    await recovered.wake('accounts');
+    inbox.deliver({ managerId: 'web', kind: 'instruction', summary: 'Continue the same manager thread' });
+    await recovered.wake('web');
     await recovered.flush();
-    expect(recovered.get('accounts')).toMatchObject({ threadId, activeTurnId: 'turn-2', waitingForInbox: false });
-    expect(turnStarts).toEqual([
-      { threadId, turnId: 'turn-1' },
-      { threadId, turnId: 'turn-2' },
-    ]);
-    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(1);
-    expect(inbox.notifications('accounts')).toHaveLength(0);
+    expect(recovered.get('web')).toMatchObject({
+      threadId: webThread.threadId,
+      activeTurnId: 'turn-6',
+      waitingForInbox: false,
+    });
+    expect(threadStarts).toHaveLength(5);
+    expect(turnStarts).toHaveLength(6);
+    expect(inbox.notifications('web')).toHaveLength(0);
 
-    notify?.({ method: 'turn/completed', params: { threadId, turn: { id: 'turn-2', status: 'completed' } } });
+    listeners.get(poolOne.codexHome)?.({
+      method: 'turn/completed',
+      params: { threadId: webThread.threadId, turn: { id: 'turn-6', status: 'completed' } },
+    });
     await recovered.flush();
-    viewers.delete('accounts');
+    viewers.delete('web');
+    replacements.delete('web');
     await recovered.recover();
-    expect(registrations).toHaveLength(1);
-    expect(viewers.has('accounts')).toBe(false);
+    expect(registrations).toHaveLength(5);
+    expect(viewers.has('web')).toBe(false);
   } finally {
     await recovered?.close();
     await first.close();

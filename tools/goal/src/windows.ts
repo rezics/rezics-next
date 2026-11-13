@@ -17,21 +17,93 @@ const run = async (executable: string, argv: string[], policy = defaultPolicy.wi
 };
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const command = (argv: string[]) => argv.map(quote).join(' ');
-function unquote(value: string): string | undefined {
-  if (value.length < 2 || value[0] !== "'" || value.at(-1) !== "'") return undefined;
-  const decoded = value.slice(1, -1).replaceAll("'\\''", "'");
-  return quote(decoded) === value ? decoded : undefined;
+function unwrapTmuxCommand(value: string): string | undefined {
+  const command = value.trim();
+  if (!command.startsWith('"') || !command.endsWith('"')) return command;
+  let unwrapped = '';
+  for (let index = 1; index < command.length - 1; index += 1) {
+    const character = command[index]!;
+    if (character === '"') return undefined;
+    if (character === '\\') {
+      const next = command[++index];
+      if (next === undefined) return undefined;
+      unwrapped += next === '"' || next === '\\' ? next : `\\${next}`;
+    } else unwrapped += character;
+  }
+  return unwrapped;
+}
+function shellArgv(value: string): string[] | undefined {
+  const source = unwrapTmuxCommand(value);
+  if (source === undefined) return undefined;
+  const argv: string[] = [];
+  let token = '';
+  let started = false;
+  let quote: "'" | '"' | undefined;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]!;
+    if (quote === "'") {
+      if (character === "'") quote = undefined;
+      else token += character;
+      continue;
+    }
+    if (quote === '"') {
+      if (character === '"') {
+        quote = undefined;
+        continue;
+      }
+      if (character === '$' || character === '`') return undefined;
+      if (character === '\\') {
+        const next = source[index + 1];
+        if (next === undefined) return undefined;
+        if (next === '$' || next === '`' || next === '"' || next === '\\' || next === '\n') {
+          index += 1;
+          if (next !== '\n') token += next;
+        } else token += character;
+        continue;
+      }
+      token += character;
+      continue;
+    }
+    if (/\s/.test(character)) {
+      if (started) {
+        argv.push(token);
+        token = '';
+        started = false;
+      }
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      started = true;
+      continue;
+    }
+    if (character === '$' || character === '`' || /[;&|<>()*?\[\]#]/.test(character)) return undefined;
+    if (character === '\\') {
+      const next = source[++index];
+      if (next === undefined) return undefined;
+      token += next;
+    } else token += character;
+    started = true;
+  }
+  if (quote !== undefined) return undefined;
+  if (started) argv.push(token);
+  return argv;
 }
 function differsOnlyByRemoteEndpoint(current: string, argv: string[]): boolean {
+  const observed = shellArgv(current);
   const remote = argv.indexOf('--remote');
-  if (remote < 0 || remote !== argv.lastIndexOf('--remote') || !argv[remote + 1]) return false;
-  const prefix = `${command(argv.slice(0, remote + 1))} `;
-  const rest = argv.slice(remote + 2);
-  const suffix = rest.length ? ` ${command(rest)}` : '';
-  if (!current.startsWith(prefix) || !current.endsWith(suffix)) return false;
-  const end = suffix ? current.length - suffix.length : current.length;
-  const oldEndpoint = unquote(current.slice(prefix.length, end));
-  return oldEndpoint !== undefined && oldEndpoint !== argv[remote + 1];
+  if (
+    !observed ||
+    remote < 0 ||
+    remote !== argv.lastIndexOf('--remote') ||
+    !argv[remote + 1] ||
+    observed.length !== argv.length ||
+    observed[remote] !== '--remote' ||
+    !observed[remote + 1] ||
+    observed[remote + 1] === argv[remote + 1]
+  )
+    return false;
+  return argv.every((value, index) => index === remote + 1 || observed[index] === value);
 }
 function isCodexViewer(argv: string[], manager: string): boolean {
   if (argv[0] !== 'env') return false;
@@ -117,7 +189,7 @@ export interface ManagerWindows {
   alive?(manager: string): boolean | Promise<boolean>;
   /** Run argv in the manager's window again, replacing whatever it holds. */
   respawn?(manager: string, argv: string[], cwd: string): void | Promise<void>;
-  /** Rebind a proven Codex viewer whose endpoint is stale; exited panes require explicit authorization. */
+  /** Restore access beside a proven Codex viewer whose endpoint is stale; exited panes require authorization. */
   rebindIfStale?(
     manager: string,
     argv: string[],
@@ -224,6 +296,28 @@ export class TermspacesWindows implements ManagerWindows {
     }
     await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
   }
+  private async paneIds(window: string): Promise<string[] | undefined> {
+    const result = await this.observe(() => this.tmux(['list-panes', '-t', window, '-F', '#{pane_id}']));
+    return result?.split('\n').map((pane) => pane.trim()).filter(Boolean);
+  }
+  private async pane(windowOrPane: string): Promise<{ dead: string; cwd: string; command: string } | undefined> {
+    const [dead, cwd, startCommand] = await Promise.all([
+      this.observe(() => this.tmux(['display-message', '-p', '-t', windowOrPane, '#{pane_dead}'])),
+      this.observe(() => this.tmux(['display-message', '-p', '-t', windowOrPane, '#{pane_current_path}'])),
+      this.observe(() => this.tmux(['display-message', '-p', '-t', windowOrPane, '#{pane_start_command}'])),
+    ]);
+    if (dead === undefined || cwd === undefined || startCommand === undefined) return undefined;
+    return { dead: dead.trim(), cwd: cwd.trim(), command: startCommand.trim() };
+  }
+  private sameViewer(pane: { cwd: string; command: string }, argv: string[], cwd: string): boolean {
+    const observed = shellArgv(pane.command);
+    return (
+      resolve(pane.cwd) === resolve(cwd) &&
+      observed !== undefined &&
+      observed.length === argv.length &&
+      observed.every((value, index) => value === argv[index])
+    );
+  }
   async rebindIfStale(
     manager: string,
     argv: string[],
@@ -235,16 +329,24 @@ export class TermspacesWindows implements ManagerWindows {
     if (!session) return false;
     const id = await this.find(session, manager);
     if (!id) return false;
-    const dead = await this.observe(() => this.tmux(['display-message', '-p', '-t', id, '#{pane_dead}']));
-    if (dead?.trim() !== '0' && !(dead?.trim() === '1' && options.restoreExited)) return false;
-    const paneCwd = await this.observe(() => this.tmux(['display-message', '-p', '-t', id, '#{pane_current_path}']));
-    if (!paneCwd || resolve(paneCwd.trim()) !== resolve(cwd)) return false;
-    const startCommand = await this.observe(() =>
-      this.tmux(['display-message', '-p', '-t', id, '#{pane_start_command}']),
-    );
-    const current = startCommand?.trim();
-    if (!current || current === command(argv) || !differsOnlyByRemoteEndpoint(current, argv)) return false;
-    await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, command(argv)]);
+    const current = await this.pane(id);
+    if (
+      !current ||
+      resolve(current.cwd) !== resolve(cwd) ||
+      this.sameViewer(current, argv, cwd) ||
+      !differsOnlyByRemoteEndpoint(current.command, argv)
+    )
+      return false;
+    if (current.dead !== '0' && !(current.dead === '1' && options.restoreExited)) return false;
+    const panes = await this.paneIds(id);
+    if (!panes) return false;
+    if (panes.length > 1) {
+      for (const paneId of panes) {
+        const existing = await this.pane(paneId);
+        if (!existing || this.sameViewer(existing, argv, cwd)) return false;
+      }
+    }
+    await this.tmux(['split-window', '-h', '-t', id, '-c', cwd, command(argv)]);
     return true;
   }
   async prompt(manager: string, text: string): Promise<void> {
