@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
-import { fromPlainText, serializeDocument } from '@rezics/document';
+import { fromPlainText as createPlainText, serializeDocument } from '@rezics/document';
 import type { PoolClient } from 'pg';
 import { commitHostedVersionRevision } from '../../src/content/hosted-version-revision.ts';
 import {
@@ -214,6 +214,15 @@ function metadataPath(catalogueId: string, occurrenceId: string, revisionId: str
 
 function canonicalBytes(value: ReturnType<typeof fromPlainText>): string {
   return Buffer.from(serializeDocument(value), 'utf8').toString('base64');
+}
+
+const plainTextDocuments = new Map<string, ReturnType<typeof createPlainText>>();
+function fromPlainText(text: string): ReturnType<typeof createPlainText> {
+  const existing = plainTextDocuments.get(text);
+  if (existing) return existing;
+  const document = createPlainText(text);
+  plainTextDocuments.set(text, document);
+  return document;
 }
 
 test('native point HTTP publishes, replaces and reads only exact ordered Book selections', async () => {
