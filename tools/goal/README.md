@@ -3769,9 +3769,10 @@ once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
 Decision: Reconnect only a proven Goal-owned Codex viewer for the same role, account, thread and cwd. Keep the current
-viewer in the manager window; move old viewers to separate draft windows without killing them. On a newly attached
-viewer, a short bounded check may select Leave paused in the exact Codex startup resume menu; it never sends a prompt
-or resumes the Goal. Unknown panes and unrelated dialogs are untouched.
+viewer in the manager window. Close obsolete viewers with a visible empty composer; move others to separate draft
+windows. On a new viewer, bounded asynchronous startup probes may select Leave paused in the exact Codex resume
+menu. They do not block manager recovery, submit a prompt or resume the Goal. Unknown panes and unrelated dialogs
+remain untouched.
 Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 

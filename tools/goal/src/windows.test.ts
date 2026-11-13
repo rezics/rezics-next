@@ -101,6 +101,8 @@ function viewerFixture(dead = '0') {
   ]);
   const archived = new Map<string, unknown>();
   let nextPane = 4;
+  const probes: (() => void)[] = [];
+  let menuReady = true;
   let activePane = '%3';
   let owned = true;
   const windows = new TermspacesWindows({ socket: '/socket', session: 'stable' }, (_executable, argv) => {
@@ -133,13 +135,16 @@ function viewerFixture(dead = '0') {
       panes.delete(id);
     }
     if (argv.includes('select-pane')) activePane = argv.at(-1)!;
-    if (argv.includes('capture-pane')) return 'Resume paused goal?\n› 1. Resume goal   Mark it active and continue when idle\n2. Leave paused  Keep it paused; use /goal resume later\nenter select · esc back';
+    if (argv.includes('kill-pane')) panes.delete(argv.at(-1)!);
+    if (argv.includes('capture-pane') && argv.at(-1) !== '%3' && menuReady) return 'Resume paused goal?\n› 1. Resume goal   Mark it active and continue when idle\n2. Leave paused  Keep it paused; use /goal resume later\nenter select · esc back';
     return '';
-  });
+  }, (_delayMs, probe) => { probes.push(probe); });
   return {
     windows,
     calls,
     panes,
+    probes,
+    setMenuReady: (ready: boolean) => (menuReady = ready),
     archived,
     oldArgv,
     currentArgv,
@@ -156,7 +161,7 @@ test('reconnects to one manager pane across successive endpoint changes and move
   expect(f.archived.get('%3')).toEqual(original);
   expect([...f.panes.keys()]).toEqual(['%4']);
   expect(f.panes.get('%4')?.command).toBe(f.encode(f.currentArgv));
-  expect(f.calls.find((argv) => argv.includes('send-keys'))?.slice(-3)).toEqual(['%4', 'Down', 'Enter']);
+  expect(f.calls.some((argv) => argv.includes('send-keys'))).toBe(false);
   expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
 
   const nextArgv = [...f.currentArgv];
@@ -167,6 +172,22 @@ test('reconnects to one manager pane across successive endpoint changes and move
   expect([...f.panes.keys()]).toEqual(['%5']);
   expect(f.calls.filter((argv) => argv.includes('split-window'))).toHaveLength(2);
   expect(f.calls.some((argv) => argv.includes('respawn-pane') || argv.includes('kill-pane'))).toBe(false);
+});
+
+test('a menu arriving after viewer recovery is left paused exactly once', async () => {
+  const f = viewerFixture();
+  f.setMenuReady(false);
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(true);
+  f.probes.shift()!();
+  await Bun.sleep(0);
+  expect(f.calls.some((argv) => argv.includes('send-keys'))).toBe(false);
+  f.setMenuReady(true);
+  f.probes.shift()!();
+  await Bun.sleep(0);
+  expect(f.calls.filter((argv) => argv.includes('send-keys')).map((argv) => argv.slice(-3))).toEqual([
+    ['%4', 'Down', 'Enter'],
+  ]);
+  expect(f.probes).toHaveLength(0);
 });
 
 test('leaves unrelated panes and unowned windows alone', async () => {
