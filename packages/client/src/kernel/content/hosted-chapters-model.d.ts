@@ -45,6 +45,25 @@ export type HostedRootAppendInput = Readonly<{
     title: string;
     target: HostedChapterTarget;
 }>;
+/** Insert one new stable occurrence at a parent/before anchor on the expected draft. */
+export type HostedDraftPointInsertInput = Readonly<{
+    expectedRevisionId: string;
+    occurrenceId: string;
+    parentId: string | null;
+    beforeOccurrenceId: string | null;
+    title: string;
+    placement: Readonly<{
+        kind: 'part';
+    }> | Readonly<{
+        kind: 'chapter';
+        target: HostedChapterTarget;
+    }>;
+}>;
+/** Remove one occurrence and its stored subtree from the expected draft. */
+export type HostedDraftPointRemoveInput = Readonly<{
+    expectedRevisionId: string;
+    occurrenceId: string;
+}>;
 /** Exactly one sealed legacy base and one immutable prefix; never a chain.
  * The base revision also identifies the append stream. Empty prefixes use -1. */
 export type HostedAppendDescriptor = Readonly<{

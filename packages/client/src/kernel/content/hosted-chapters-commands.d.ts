@@ -2,7 +2,7 @@ import type { Actor } from '../request/access.ts';
 import { type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
 import { type ContentCommandDependencies } from './commands.ts';
 import type { HostedPointSelectionReads, HostedPublicationPointInput } from './hosted-publication-point-selection.ts';
-import { type HostedCommandContext, type HostedCreateInput, type HostedDependencies, type HostedReviseInput, type HostedPublishInput, type HostedRootAppendInput } from './hosted-chapters-model.ts';
+import { type HostedCommandContext, type HostedCreateInput, type HostedDependencies, type HostedDraftPointInsertInput, type HostedDraftPointRemoveInput, type HostedReviseInput, type HostedPublishInput, type HostedRootAppendInput } from './hosted-chapters-model.ts';
 export type HostedCommandDependencies = HostedDependencies & ContentCommandDependencies;
 export declare function createHostedCatalogue(deps: HostedCommandDependencies, actor: Actor, input: HostedCreateInput, context: HostedCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
     catalogueId: string;
@@ -19,6 +19,16 @@ export declare function publishHostedCatalogue(deps: HostedCommandDependencies, 
 /** Appends one root chapter to an exact draft head. Shares native edit authority,
  * deadlines, receipt replay, transaction retries and final container checks. */
 export declare function appendHostedRootChapter(deps: HostedCommandDependencies, actor: Actor, catalogueId: string, input: HostedRootAppendInput, context: HostedCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
+    catalogueId: string;
+    revisionId: string;
+}>>>;
+/** Insert one occurrence at a parent/before anchor on the expected versioned draft. */
+export declare function insertHostedDraftPoint(deps: HostedCommandDependencies, actor: Actor, catalogueId: string, input: HostedDraftPointInsertInput, context: HostedCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
+    catalogueId: string;
+    revisionId: string;
+}>>>;
+/** Remove one occurrence and its stored subtree from the expected versioned draft. */
+export declare function removeHostedDraftPoint(deps: HostedCommandDependencies, actor: Actor, catalogueId: string, input: HostedDraftPointRemoveInput, context: HostedCommandContext): Promise<import("../command/command.ts").CommandOutcome<Readonly<{
     catalogueId: string;
     revisionId: string;
 }>>>;
