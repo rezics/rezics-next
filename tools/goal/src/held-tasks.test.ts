@@ -270,10 +270,7 @@ test('a continuation keeps its parent source-required edge even when its draft o
     `waiting: []\nafter: [${predecessor}]\nafterSource: [${predecessor}]`,
   );
   const parent = { id: 'parent-task', brief: parseBrief(parentMarkdown, ownership) };
-  const draft = parentMarkdown.replace(
-    `after: [${predecessor}]\nafterSource: [${predecessor}]`,
-    'after: []',
-  );
+  const draft = parentMarkdown.replace(`after: [${predecessor}]\nafterSource: [${predecessor}]`, 'after: []');
 
   const completed = completeContinuation(draft, parent, ownership);
 
@@ -284,7 +281,8 @@ test('a continuation keeps its parent source-required edge even when its draft o
 });
 
 test('a stopped source producer stays held until its commit is integrated into the target branch', async () => {
-  const h = harness(), inbox: ManagerEvent[] = [];
+  const h = harness(),
+    inbox: ManagerEvent[] = [];
   try {
     const producer = h.tasks.dispatch(h.briefFile);
     writeFileSync(join(producer.worktree, 'retained-http-source.ts'), 'export const route = "/book";\n');
@@ -296,10 +294,7 @@ test('a stopped source producer stays held until its commit is integrated into t
     const strictBrief = join(h.root, '.temp/goal/source-required.md');
     writeFileSync(
       strictBrief,
-      markdown.replace(
-        'waiting: []',
-        `waiting: []\nafter: [${producer.id}]\nafterSource: [${producer.id}]`,
-      ),
+      markdown.replace('waiting: []', `waiting: []\nafter: [${producer.id}]\nafterSource: [${producer.id}]`),
     );
     const strict = h.tasks.dispatch(strictBrief);
     expect(strict).toMatchObject({ state: 'held', currentAttempt: 0 });
@@ -398,9 +393,9 @@ test('an authenticated current-generation reshape can replace a stopped source e
     expect(owner).toBeDefined();
     if (!owner) throw new Error('fixture manager session failed authentication');
 
-    expect(() =>
-      h.tasks.queueRetry(retryConsumer.id, { expectedAttempt: 0, brief: replacementBrief }, null),
-    ).toThrow('source-required dependency reshapes require the authenticated owning or operations manager');
+    expect(() => h.tasks.queueRetry(retryConsumer.id, { expectedAttempt: 0, brief: replacementBrief }, null)).toThrow(
+      'source-required dependency reshapes require the authenticated owning or operations manager',
+    );
     h.tasks.queueRetry(retryConsumer.id, { expectedAttempt: 0, brief: replacementBrief }, owner);
     expect(h.store.task(retryConsumer.id)).toMatchObject({
       state: 'held',

@@ -473,7 +473,9 @@ export function completeContinuation(
     return dependencies;
   };
   const after = dependencyList('after', front.after);
-  const afterSource = [...new Set([...(task.brief.afterSource ?? []), ...dependencyList('afterSource', front.afterSource)])];
+  const afterSource = [
+    ...new Set([...(task.brief.afterSource ?? []), ...dependencyList('afterSource', front.afterSource)]),
+  ];
   if (afterSource.length) front.afterSource = afterSource;
   else delete front.afterSource;
   front.after = [...new Set([...after, ...afterSource, task.id])];

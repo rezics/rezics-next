@@ -391,9 +391,9 @@ test('afterSource opts selected after edges into source-presence waiting', () =>
     afterSource: ['producer-1'],
   });
   expect(parseBrief(markdown, ownership).afterSource).toBeUndefined();
-  expect(() => parseBrief(markdown.replace('waiting: []', 'waiting: []\nafterSource: [producer-1]'), ownership)).toThrow(
-    'afterSource dependencies must also appear in after: producer-1',
-  );
+  expect(() =>
+    parseBrief(markdown.replace('waiting: []', 'waiting: []\nafterSource: [producer-1]'), ownership),
+  ).toThrow('afterSource dependencies must also appear in after: producer-1');
 });
 
 test('a native or browser walk occupies its Goal until it leaves ready, running, held or landing', () => {

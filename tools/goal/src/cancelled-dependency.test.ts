@@ -73,7 +73,9 @@ test('the host reports a held task whose dependency is already cancelled once, n
     // Simulate a historical cancellation that predates the cancellation notification.
     h.store.db.query('DELETE FROM manager_inbox WHERE manager = ?').run('fixture');
     h.store.db
-      .query("DELETE FROM worker_events WHERE task_id = ? AND kind IN ('cancelled-dependency-notice','dropped-dependency-notice')")
+      .query(
+        "DELETE FROM worker_events WHERE task_id = ? AND kind IN ('cancelled-dependency-notice','dropped-dependency-notice')",
+      )
       .run(blocker.id);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => events.push(event) });
 
@@ -89,7 +91,8 @@ test('the host reports a held task whose dependency is already cancelled once, n
 });
 
 test('cancelling a source-required predecessor keeps its dependent held and sends one actionable notice', async () => {
-  const h = harness(), events: ManagerEvent[] = [];
+  const h = harness(),
+    events: ManagerEvent[] = [];
   try {
     const blocker = h.tasks.dispatch(h.briefFile);
     const path = join(h.root, '.temp/goal/source-held.md');
