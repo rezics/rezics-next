@@ -354,7 +354,7 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
         for (const anchor of result.anchors)
           session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
         set.headers['cache-control'] = 'private, no-store';
-        return result.value;
+        return { ...result.value, items: [...result.value.items] };
       },
     )
     .get(
