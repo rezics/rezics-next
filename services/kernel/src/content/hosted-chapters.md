@@ -556,6 +556,9 @@ loads. Cross-route native rejection has no read-chain probe; admitted attachment
 probe requirement. Mounted append coverage reuses the suite-owned Auth/DBOS fixture and creates a fresh catalogue
 within it.
 
+Decision: hosted chapter identity coverage binds occurrences to each catalogue route and uses route-correct
+nonmatching target IDs so native admission returns `not_found`; malformed-route coverage retains its 400 contract.
+
 Pages retain metadata/authority handles; exact resolution serializes one canonical body. Charge native Access,
 Accounts, Board, Realm, partition, transaction, serialization and bytes. Content HTTP/event composition remains
 ordinary; schema dump/client publication, native integration and measured growth stay with their existing owners.

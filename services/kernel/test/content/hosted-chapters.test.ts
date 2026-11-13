@@ -293,7 +293,7 @@ test('attachment identity mismatches and a changed retained source fail closed w
   const chapter = await f.native.thread();
   const target = f.target(chapter);
   const placement = {
-    occurrenceId: f.newOccurrenceId(),
+    occurrenceId: f.newOccurrenceIdFor(catalogue.id),
     parentId: null,
     position: 0,
     title: 'Chapter',
@@ -306,20 +306,23 @@ test('attachment identity mismatches and a changed retained source fail closed w
       threadId: catalogue.id,
       placements,
     });
+  const nonmatchingRouteId = () => f.newOccurrenceIdFor(target.postId);
   const mismatches = [
-    { identity: 'thread', target: { ...target, threadId: catalogue.id } },
-    { identity: 'revision', target: { ...target, revisionId: catalogue.firstPost.revisionId } },
+    { identity: 'thread', target: { ...target, threadId: nonmatchingRouteId() } },
+    { identity: 'revision', target: { ...target, revisionId: nonmatchingRouteId() } },
     { identity: 'digest', target: { ...target, sha256: '0'.repeat(64) } },
   ];
   for (const { identity, target: mismatch } of mismatches) {
+    expect(routeOf(mismatch.threadId), identity).toBe(routeOf(mismatch.postId));
+    expect(routeOf(mismatch.revisionId), identity).toBe(routeOf(mismatch.postId));
     const start = observer.records.length;
     // The valid duplicate must not shadow this invalid thread/revision/digest.
-    const denied = await f.native.call('POST', '/v1/hostedCatalogues', {
+    const denied = await write('POST', '/v1/hostedCatalogues', {
       postId: catalogue.firstPost.id,
       threadId: catalogue.id,
       placements: [
         { ...placement, target: mismatch },
-        { ...placement, occurrenceId: f.newOccurrenceId(), position: 1 },
+        { ...placement, occurrenceId: f.newOccurrenceIdFor(catalogue.id), position: 1 },
       ],
     });
     expect(denied.status, identity).toBe(404);
@@ -331,13 +334,6 @@ test('attachment identity mismatches and a changed retained source fail closed w
       identity,
     ).toHaveLength(0);
     for (const probe of probes) expect(probe.parameters[bodyParameter], identity).toBe(false);
-
-    // readPostMetadata rejects cross-route IDs before dispatching read-chain SQL.
-    if (
-      routeOf(mismatch.postId) !== routeOf(mismatch.threadId) ||
-      routeOf(mismatch.revisionId) !== routeOf(mismatch.threadId)
-    )
-      expect(probes, identity).toHaveLength(0);
   }
   const nativeRead = reads.readPostMetadata;
   let changed = false;
@@ -354,7 +350,7 @@ test('attachment identity mismatches and a changed retained source fail closed w
     // The concurrent revision's own body work is outside attachment observation.
     expect(
       (
-        await f.native.call('POST', '/v1/hostedCatalogues', {
+        await write('POST', '/v1/hostedCatalogues', {
           postId: catalogue.firstPost.id,
           threadId: catalogue.id,
           placements: [placement],
@@ -374,7 +370,7 @@ test('attachment identity mismatches and a changed retained source fail closed w
       await write('POST', '/v1/hostedCatalogues', {
         postId: otherCatalogue.firstPost.id,
         threadId: otherCatalogue.id,
-        placements: [placement],
+        placements: [{ ...placement, occurrenceId: f.newOccurrenceIdFor(otherCatalogue.id) }],
       })
     ).status,
   ).toBe(404);
