@@ -8,6 +8,9 @@ import {
   redactHostedLifecycleStream,
   type HostedLifecycleStreamCursor,
 } from '../../src/content/hosted-append-lifecycle.ts';
+import revisionPage from '../../src/content/hosted-append-lifecycle-revisions.sql';
+import placementPage from '../../src/content/hosted-append-lifecycle-placements.sql';
+import streamPage from '../../src/content/hosted-append-lifecycle-stream.sql';
 import startPurge from '../../src/content/start-post-purge.sql';
 import markAuthorErased from '../../src/content/account-erasure-authored-mark.sql';
 import disposeItem from '../../src/content/account-erasure-authored-item.sql';
@@ -391,14 +394,13 @@ test('retained-published account authority freezes 100-row pages, replay and a l
     expect(
       (await f.native.call('GET', `${f.path}/children?revisionId=${f.release}`, undefined, { anonymous: true })).status,
     ).toBe(200);
-    const ranges = observer.records.filter((r) =>
-      /WITH page AS MATERIALIZED|FROM \(\n  SELECT revision_id/.test(r.statement),
-    );
+    const rangeStatements = new Set([revisionPage.sql, placementPage.sql, streamPage.sql]);
+    const ranges = observer.records.filter((r) => rangeStatements.has(r.statement));
     expect(ranges.length).toBeGreaterThan(0);
     expect(
       ranges.every((r) => r.statement.includes('LIMIT 100') && !/OFFSET |COUNT\(|WITH RECURSIVE/i.test(r.statement)),
     ).toBe(true);
-    expect(ranges.filter((r) => r.statement.includes('stream_id=$'))).toHaveLength(4);
+    expect(ranges.filter((r) => r.statement === streamPage.sql)).toHaveLength(4);
   } finally {
     await observer.close();
     await f.close();
