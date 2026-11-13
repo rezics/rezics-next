@@ -190,7 +190,9 @@ export type NativeDraftMetadata = Readonly<{
   mediaIds: readonly string[];
   board: { id: string; title: string | null; realmId: string | null };
 }>;
-/** Exact Post identity under ordinary current disclosure, with no revision body selected. */
+/** Exact Post identity under ordinary current disclosure, with no revision body selected.
+ * The bounded opening-Post title shares this retained Thread observation; replies
+ * never inherit the conversation title. This is internal metadata, not a Post DTO. */
 export type NativePostMetadata = Readonly<{
   id: string;
   threadId: string;
@@ -201,6 +203,7 @@ export type NativePostMetadata = Readonly<{
   visibility: Visibility;
   kind: 'discussion' | 'review';
   documentKind: 'opening' | 'reply';
+  title: string | null;
   subjectIds: readonly string[];
 }>;
 export type { Actor };
@@ -1478,6 +1481,7 @@ async function disclose(
         visibility: post.visibility,
         kind: current.thread.thread_kind!,
         documentKind: post.id === current.thread.first_post_id ? 'opening' : 'reply',
+        title: post.id === current.thread.first_post_id ? (current.thread.title?.slice(0, 512) ?? null) : null,
         subjectIds: revision.subject_ids,
       };
     }

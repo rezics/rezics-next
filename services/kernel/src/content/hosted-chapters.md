@@ -89,7 +89,8 @@ omitted, including all identifiers and unpublished heads. Dependency errors prop
 
 Responses contain `scope`, `viewer`, `items` and `nextCursor`; exact selection returns `item` instead of the page fields.
 Entries contain catalogue/thread IDs, original Post creation time, current Post revision/visibility, structure head and
-nullable publication ID. They contain no titles, manuscript bodies or placement selections. Same-home responses keep
+nullable publication ID, plus an optional `title`. They contain no manuscript bodies or placement selections.
+Same-home responses keep
 `scope={kind:'same-home',route:accountRoute,crossHome:'unavailable'}`. All-homes responses use `kind='all-homes'` and
 `crossHome='complete'` only when both initial and final coverage observations prove the native census complete and no
 pending source projection for that author; otherwise `crossHome='partial'`. Exact foreign selection also uses all-homes
@@ -102,10 +103,19 @@ transaction. The originally observed Post revision, author and partition/epoch r
 Posts remain omitted. A fresh head read cannot replace the original proof. Scope, coverage, raw-key continuation and
 native session anchors retain the same contract.
 
+Decision: owner list and exact get copy optional `title` only from their final retained native Post/Thread
+metadata observation. The existing native draft rule applies: only the opening Post may use its observed Thread
+title, bounded with `slice(0, 512)`; reply anchors and null titles omit the field without an ID-derived fallback.
+The Thread title is part of the original native fingerprint, so a changed title withholds the item until a fresh
+request. Withheld, erased or unavailable observations supply neither an item nor a borrowed label. No additional
+lookup, authority or body read is introduced. This additive field is private to the owner inventory; public
+discovery, Thread HTTP DTOs and revision headers retain their existing contracts.
+
 Later native proof: `hosted-owner-inventory-metadata.test.ts` observes metadata-only chain selections for same-home
 and all-homes paging and exact owner get, including partial/complete coverage and private/no-store session responses.
-It also changes a Post after the initial metadata read and requires the original retained observation to withhold it;
-fresh requests can observe the new revision. Existing owner acceptance keeps its authority, pointer, erasure and cursor
+It pins available/bounded opening titles, absent reply labels and erased items. It also changes a Post title after
+the initial metadata read and requires the original retained observation to withhold it; fresh requests can observe
+the new revision. Existing owner acceptance keeps its authority, pointer, erasure and cursor
 assertions; its dependency-error injection targets the metadata reader. Run both owner test files in the dev verifier
 after landing; native acceptance is deferred in this source pass.
 

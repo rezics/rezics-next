@@ -120,6 +120,7 @@ const ownerEntry = t.Object(
     createdAt: t.String({ format: 'date-time' }),
     postRevisionId: HostedIdSchema,
     postVisibility: t.Union([t.Literal('draft'), t.Literal('published'), t.Literal('protected')]),
+    title: t.Optional(t.String({ maxLength: 512 })),
     headRevisionId: HostedIdSchema,
     publicationId: nullableId,
   },

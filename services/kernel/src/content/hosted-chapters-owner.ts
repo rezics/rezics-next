@@ -148,6 +148,8 @@ async function prepareEntry(
       createdAt: row.created_at,
       postRevisionId: post.revisionId,
       postVisibility: post.visibility,
+      // Only the final retained native observation may supply an owner label.
+      ...(post.title === null ? {} : { title: post.title }),
       headRevisionId: row.head_revision_id,
       publicationId: row.publication_id,
     };

@@ -138,7 +138,7 @@ test('bounded native recovery distinguishes catalogue membership and continues e
   expect(page.value.items.map((entry: any) => entry.catalogueId)).toEqual(ids);
   expect(new Set(page.value.items.map((entry: any) => entry.createdAt)).size).toBe(1);
   expect(JSON.stringify(page.value)).not.toContain(ordinary.firstPost.id);
-  expect(page.value.items.every((entry: any) => !('body' in entry) && !('title' in entry))).toBe(true);
+  expect(page.value.items.every((entry: any) => !('body' in entry) && entry.title === 'Publication')).toBe(true);
   let cursor: string | null = null;
   const seen: string[] = [];
   for (let index = 0; index < ids.length; index++) {

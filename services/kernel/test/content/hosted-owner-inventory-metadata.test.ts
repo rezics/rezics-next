@@ -17,6 +17,11 @@ beforeAll(async () => {
   f = await postPublicationFixture();
   for (const visibility of ['draft', 'published'] as const) {
     const thread = await f.thread(visibility);
+    if (visibility === 'published') {
+      const revised = await f.revise(thread.firstPost, { title: 'Bounded title '.repeat(70) });
+      expect(revised.status).toBe(200);
+      thread.firstPost = revised.value.post;
+    }
     const created = await f.command('/v1/hostedCatalogues', {
       postId: thread.firstPost.id,
       threadId: thread.id,
@@ -65,6 +70,7 @@ test('owner list and exact get select zero bodies across scopes, coverage recove
       createdAt: expect.any(String),
       postRevisionId: book.revisionId,
       postVisibility: book.visibility,
+      title: book.visibility === 'draft' ? 'Publication' : 'Bounded title '.repeat(70).slice(0, 512),
       headRevisionId: book.head,
       publicationId: null,
     });
@@ -102,6 +108,10 @@ test('owner list and exact get select zero bodies across scopes, coverage recove
   expect(
     [...first.value.items, ...next.value.items].map((item: { catalogueId: string }) => item.catalogueId).sort(),
   ).toEqual(books.map((book) => book.id).sort());
+  for (const item of [...first.value.items, ...next.value.items])
+    expect(item.title).toBe(
+      item.postVisibility === 'draft' ? 'Publication' : 'Bounded title '.repeat(70).slice(0, 512),
+    );
   for (const book of books)
     expect((await get(`/${book.id}`)).value.scope.crossHome).toBe(
       routeOf(book.id) === routeOf(f.author.actor.accountId) ? 'unavailable' : 'complete',
@@ -126,7 +136,7 @@ test('list and exact get close the original metadata observation after a live so
           return finish(qualify);
         });
       const result = await nativeRead(...args);
-      const revised = await f.revise(book, {});
+      const revised = await f.revise(book, { title: `Retained title ${exact}` });
       expect(revised.status).toBe(200);
       book.revisionId = revised.value.post.revisionId;
       return result;
@@ -145,6 +155,32 @@ test('list and exact get close the original metadata observation after a live so
     const fresh = await get(`/${book.id}`);
     expect(fresh.status).toBe(200);
     expect(fresh.value.item.postRevisionId).toBe(book.revisionId);
+    expect(fresh.value.item.title).toBe(`Retained title ${exact}`);
     expectNoBodies(start);
   }
+});
+
+test('reply catalogue anchors omit the conversation title and erased sources disclose no item', async () => {
+  const thread = await f.thread();
+  const post = await f.reply(thread.id);
+  await f.command('/v1/hostedCatalogues', { postId: post.id, threadId: thread.id, placements: [] });
+  let start = observer.records.length;
+  const exact = await get(`/${post.id}`);
+  expect(exact.status).toBe(200);
+  expect(exact.value.item.catalogueId).toBe(post.id);
+  expect(exact.value.item.postRevisionId).toBe(post.revisionId);
+  expect(exact.value.item).not.toHaveProperty('title');
+  expectNoBodies(start);
+  const removed = await f.system.kernel.handle(
+    new Request(`https://content.test/v1/posts/${post.id}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${f.author.bearer}`, 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+    }),
+  );
+  expect(removed.status).toBe(204);
+  start = observer.records.length;
+  const erased = await get(`/${post.id}`);
+  expect(erased.status).toBe(404);
+  expect(erased.value).not.toHaveProperty('item');
+  expectNoBodies(start);
 });
