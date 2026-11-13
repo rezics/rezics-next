@@ -32,6 +32,7 @@ import {
   publishHostedPublicationPoint,
   type HostedCommandDependencies,
 } from './hosted-chapters-commands.ts';
+import { advanceHostedLegacyPublicBaseline } from './hosted-legacy-public-baseline.ts';
 import {
   moveHostedVersionDraftOccurrence,
   type HostedVersionDraftMoveCommandDependencies,
@@ -66,6 +67,8 @@ import {
   HostedPublishSchema,
   HostedPublishChapterSchema,
   HostedReplacePublishedChapterSchema,
+  HostedLegacyPublicBaselineSchema,
+  HostedLegacyPublicBaselineProgressSchema,
   HostedCommandSchema,
   HostedRevisionSchema,
   HostedHistoryQuerySchema,
@@ -430,6 +433,30 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
               hostedPublicationPointSelectionReads(deps, id, context),
               commandContext(request, job.deadline),
             ),
+          ),
+        );
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/hostedCatalogues/:id', 'advanceLegacyPublicBaseline'),
+      {
+        params: params(),
+        headers,
+        body: strictContentSchema(HostedLegacyPublicBaselineSchema),
+        response: {
+          200: withHeaders(HostedLegacyPublicBaselineProgressSchema, responseHeaders),
+          ...failures(),
+        },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.advance_legacy_public_baseline' },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            advanceHostedLegacyPublicBaseline(deps, actor, id, body, commandContext(request, job.deadline)),
           ),
         );
         session.record(result);
