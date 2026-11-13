@@ -3,9 +3,17 @@
 ALTER TABLE content.revision_disclosure
   DROP CONSTRAINT revision_disclosure_actor_client_id_check;
 
--- Access issuer accounts can belong to a different route from the source Content row.
+-- Access principals and UUIDv7 command/provenance transactions are not Content-route resource IDs.
 ALTER TABLE content.revision_disclosure
   DROP CONSTRAINT revision_disclosure_check6;
+ALTER TABLE content.revision_disclosure
+  DROP CONSTRAINT revision_disclosure_check7;
+ALTER TABLE content.revision_disclosure
+  DROP CONSTRAINT revision_disclosure_check8;
+ALTER TABLE content.revision_disclosure
+  DROP CONSTRAINT revision_disclosure_check9;
+ALTER TABLE content.revision_disclosure
+  DROP CONSTRAINT revision_disclosure_check13;
 
 ALTER TABLE content.revision_disclosure
   ADD CONSTRAINT revision_disclosure_actor_client_id_check
@@ -15,7 +23,7 @@ ALTER TABLE content.revision_disclosure
   );
 
 -- migrate:down
--- Forward only: the former {1,1024} bound is invalid, and restoring issuer route equality would reject valid actors.
+-- Forward only: the former {1,1024} bound is invalid and route checks reject valid Access/transaction identities.
 DO $$ BEGIN
-  RAISE EXCEPTION 'Cannot restore the invalid client ID bound or reject cross-route Access issuers';
+  RAISE EXCEPTION 'Cannot restore the invalid client ID bound or reject non-local Access and transaction identities';
 END $$;

@@ -352,10 +352,10 @@ Post must equal `target.postId`. Native source, container, erasure, public-sourc
 are. Direct Post visibility, other Books and unselected revisions stay unchanged.
 
 Decision: persist the existing Access client identity rule (1–1024 printable non-space ASCII bytes) with separate
-`octet_length` bounds and a `"C"`-collated printable-character exclusion. Access issuer accounts can be on a
-different route from the source Content row, so only source-local IDs and transactions retain route equality checks.
+`octet_length` bounds and a `"C"`-collated printable-character exclusion. Access principals and UUIDv7 command or
+provenance transaction IDs are not Content-route resource IDs; only source-local resource IDs retain route equality.
 PostgreSQL limits POSIX repetition bounds to 255 ([documentation](https://www.postgresql.org/docs/current/functions-matching.html#POSIX-MATCHING));
-rollback refuses to restore the unusable `{1,1024}` expression or reject valid cross-route issuers.
+rollback refuses to restore the unusable `{1,1024}` expression or reject valid non-local principals and transactions.
 
 ## Prepared Book publication
 
