@@ -1029,7 +1029,8 @@ export async function setKnowledgePublication(
       if (input.revisionId === null) {
         if (!previous) return noEffect({ documentId, publicationId: null });
         await tx.query(
-          `UPDATE content.knowledge_document SET current_publication_id=NULL
+          `UPDATE content.knowledge_document
+           SET current_publication_id=NULL,lifecycle_generation=lifecycle_generation+1
            WHERE route=$1 AND document_id=$2`,
           [owner.route, documentId],
         );
@@ -1082,6 +1083,15 @@ export async function setKnowledgePublication(
           transactionId,
           authoritativeTimeValue(time),
         ],
+      );
+      await tx.query(
+        `INSERT INTO content.knowledge_publication_selection
+          (route,document_id,lifecycle_generation,revision_id,publication_id)
+         SELECT route,document_id,lifecycle_generation,revision_id,publication_id
+         FROM content.knowledge_publication
+         WHERE route=$1 AND document_id=$2 AND publication_id=$3
+         ON CONFLICT (route,document_id,lifecycle_generation,revision_id) DO NOTHING`,
+        [owner.route, documentId, publicationId],
       );
       await tx.query(
         `UPDATE content.knowledge_document SET current_publication_id=$3

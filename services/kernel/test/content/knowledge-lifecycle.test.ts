@@ -193,18 +193,22 @@ test('native leaf trash fences every representation and lagged discovery; restor
   expect(privateHead.revisionId).toBe(v2.revisionId);
   expect(privateHead.publicationId).toBeNull();
   expect((await f.call('GET', `${privatePath}/history`)).value.revisions).toHaveLength(2);
-  expect(
-    (await f.call('GET', `/v1/knowledge/documents/${note.documentId}`, undefined, { anonymous: true })).status,
-  ).toBe(404);
+  for (const path of [
+    `/v1/knowledge/documents/${note.documentId}`,
+    `/v1/knowledge/documents/${note.documentId}?revisionId=${note.revisionId}`,
+  ])
+    expect((await f.call('GET', path, undefined, { anonymous: true })).status).toBe(404);
   expect(await source.current(candidate!, context())).toEqual({ status: 'ready', value: null });
   // Even a lagged pointer cannot revive a retired public generation.
   await f.pool.query(
     `UPDATE content.knowledge_document SET current_publication_id=$3 WHERE route=$1 AND document_id=$2`,
     [routeOf(note.documentId), note.documentId, publication.publicationId],
   );
-  expect(
-    (await f.call('GET', `/v1/knowledge/documents/${note.documentId}`, undefined, { anonymous: true })).status,
-  ).toBe(404);
+  for (const path of [
+    `/v1/knowledge/documents/${note.documentId}`,
+    `/v1/knowledge/documents/${note.documentId}?revisionId=${note.revisionId}`,
+  ])
+    expect((await f.call('GET', path, undefined, { anonymous: true })).status).toBe(404);
   expect(await source.selected(note.documentId, publication.publicationId, context())).toBeNull();
   const republished = await f.command(
     publishPath,

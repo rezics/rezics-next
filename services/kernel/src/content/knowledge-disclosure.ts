@@ -25,8 +25,9 @@ async function referenceVisible(
   }
   const route = routeOf(target.documentId);
   if (route === null) return false;
+  const revisionId = target.kind === 'revision' ? target.revisionId : undefined;
   const selected = await snapshot(deps, target.documentId, context, (tx) =>
-    knowledgePublicSelection(tx, route, target.documentId),
+    knowledgePublicSelection(tx, route, target.documentId, revisionId),
   );
   const publication = selected.value;
   if (
@@ -42,11 +43,12 @@ async function referenceVisible(
   let visible = await read();
   if (!subjects.every((id) => visible.get(id)?.kind === 'available')) return false;
   const final = await snapshot(deps, target.documentId, context, (tx) =>
-    knowledgePublicSelection(tx, route, target.documentId),
+    knowledgePublicSelection(tx, route, target.documentId, revisionId),
   );
   visible = await read();
   return (
     final.value?.publication_id === publication.publication_id &&
+    final.value?.lifecycle_generation === publication.lifecycle_generation &&
     subjects.every((id) => visible.get(id)?.kind === 'available')
   );
 }
@@ -100,7 +102,7 @@ export async function projectKnowledgePublicProvenance(
   if (!(await referenceVisible(deps, { kind: 'document', documentId: provenance.documentId }, context))) return null;
   const route = routeOf(provenance.documentId)!;
   const selected = await snapshot(deps, provenance.documentId, context, (tx) =>
-    knowledgePublicSelection(tx, route, provenance.documentId),
+    knowledgePublicSelection(tx, route, provenance.documentId, provenance.revisionId),
   );
   return selected.value?.revision_id === provenance.revisionId &&
     selected.value.publication_id === provenance.publicationId

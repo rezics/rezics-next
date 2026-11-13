@@ -6,6 +6,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import publicRead from './knowledge-public-read.sql';
 import publicSelection from './knowledge-public-selection.sql';
+import publicExactSelection from './knowledge-public-exact-selection.sql';
 import privateRead from './knowledge-private-read.sql';
 import readAncestors from './knowledge-placement-ancestors.sql';
 import ownedNotebooks from './knowledge-owned-notebooks.sql';
@@ -20,7 +21,9 @@ import { KNOWLEDGE_ANCESTOR_LIMIT } from './knowledge-model.ts';
 export type KnowledgePublicRow = Readonly<{
   route: number;
   document_id: string;
-  current_publication_id: string;
+  current_publication_id: string | null;
+  lifecycle_generation: string;
+  publication_id: string;
   revision_id: string;
   subject_id: string;
   publication_sha256: Buffer;
@@ -39,7 +42,8 @@ export type KnowledgePublicRow = Readonly<{
 export type KnowledgePublicSelection = Readonly<{
   route: number;
   document_id: string;
-  current_publication_id: string;
+  current_publication_id: string | null;
+  lifecycle_generation: string;
   publication_id: string;
   block_ids: readonly string[];
   revision_id: string;
@@ -186,8 +190,9 @@ export async function knowledgePublicRow(
   tx: CommandTransaction,
   route: number,
   documentId: string,
+  publicationId: string,
 ): Promise<KnowledgePublicRow | null> {
-  const row = await publicRead.run(tx, { route, document_id: documentId });
+  const row = await publicRead.run(tx, { route, document_id: documentId, publication_id: publicationId });
   if (!row) return null;
   return {
     ...row,
@@ -205,8 +210,12 @@ export async function knowledgePublicSelection(
   tx: CommandTransaction,
   route: number,
   documentId: string,
+  revisionId?: string,
 ): Promise<KnowledgePublicSelection | null> {
-  const row = await publicSelection.run(tx, { route, document_id: documentId });
+  const row =
+    revisionId === undefined
+      ? await publicSelection.run(tx, { route, document_id: documentId })
+      : await publicExactSelection.run(tx, { route, document_id: documentId, revision_id: revisionId });
   return row
     ? {
         ...row,

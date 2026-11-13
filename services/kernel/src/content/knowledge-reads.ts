@@ -106,8 +106,8 @@ function validStructureRevisionNumber(value: unknown): value is string {
   return typeof value === 'string' && /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n;
 }
 
-/** A public read selects only the document's current publication pointer. Search may be behind or paused;
- * its candidate is never authority to return an older publication. */
+/** A public read selects the live pointer or an exact revision retained in the current publication generation.
+ * Search may be behind or paused; its candidate is never authority to return an unselected revision. */
 export async function readKnowledgePublicDocument(
   deps: KnowledgeDependencies,
   documentId: string,
@@ -118,7 +118,7 @@ export async function readKnowledgePublicDocument(
   if (selection.revisionId !== undefined && route(selection.revisionId) !== sourceRoute)
     throw new KnowledgeNotFoundError();
   const initial = await snapshot(deps, documentId, context, (client) =>
-    knowledgePublicSelection(client, sourceRoute, documentId),
+    knowledgePublicSelection(client, sourceRoute, documentId, selection.revisionId),
   );
   const selected = initial.value;
   if (!selected || (selection.revisionId !== undefined && selection.revisionId !== selected.revision_id))
@@ -136,13 +136,15 @@ export async function readKnowledgePublicDocument(
   if (!(await visible())) throw new KnowledgeNotFoundError();
 
   const final = await snapshot(deps, documentId, context, async (client) => {
-    const row = await knowledgePublicRow(client, sourceRoute, documentId);
+    const row = await knowledgePublicRow(client, sourceRoute, documentId, selected.publication_id);
     if (
       !row ||
-      row.current_publication_id !== selected.current_publication_id ||
+      row.publication_id !== selected.publication_id ||
+      row.lifecycle_generation !== selected.lifecycle_generation ||
       row.revision_id !== selected.revision_id ||
       row.subject_id !== selected.subject_id ||
       !row.publication_sha256.equals(selected.publication_sha256) ||
+      (selection.revisionId === undefined && row.current_publication_id !== selected.publication_id) ||
       (selection.revisionId !== undefined && selection.revisionId !== row.revision_id)
     )
       return null;
@@ -159,9 +161,13 @@ export async function readKnowledgePublicDocument(
   const canonical = serializeDocument(projection.snapshot);
   const provenance = await projectKnowledgePublicProvenance(deps, final.value.copy_provenance, context.deadline);
   const current = await snapshot(deps, documentId, context, (client) =>
-    knowledgePublicSelection(client, sourceRoute, documentId),
+    knowledgePublicSelection(client, sourceRoute, documentId, selection.revisionId),
   );
-  if (current.value?.publication_id !== selected.publication_id || !(await visible()))
+  if (
+    current.value?.publication_id !== selected.publication_id ||
+    current.value?.lifecycle_generation !== selected.lifecycle_generation ||
+    !(await visible())
+  )
     throw new KnowledgeNotFoundError();
   const value = {
     document: {
@@ -170,7 +176,7 @@ export async function readKnowledgePublicDocument(
       sha256: knowledgeDigest(canonical),
       references: [...projection.references],
       provenance,
-      publicationId: final.value.current_publication_id,
+      publicationId: final.value.publication_id,
       subjectId: final.value.subject_id,
       publishedAt: final.value.published_at.toISOString(),
       // The first loop deliberately publishes deidentified attribution. Account erasure can therefore

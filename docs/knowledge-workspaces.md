@@ -213,6 +213,8 @@ the generation and closes all old selections. Republishing authorizes only the e
 new generation; old citations remain unavailable until their revisions are explicitly reselected. Trash/restore
 clears selections by the same generation mechanism. This state is separate from private working revision numbers.
 
+Decision: exact availability maps each document, lifecycle generation and revision to its immutable publication record; migration seeds only live pointers, publication updates append within a generation, and withdrawal advances the generation atomically.
+
 Two authors may publish different analyses of the same character. They coexist with provenance; neither overwrites
 the catalogue's selected facts. Public contributions may enter the ordinary Semantic editorial workflow; publication adopts no catalogue truth.
 

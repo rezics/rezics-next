@@ -1,12 +1,19 @@
-SELECT d.route, d.document_id, d.current_publication_id,
-       p.revision_id, p.subject_id, p.body_sha256 AS publication_sha256,
+SELECT d.route, d.document_id, d.current_publication_id, d.lifecycle_generation::text AS lifecycle_generation,
+       p.publication_id, p.revision_id, p.subject_id, p.body_sha256 AS publication_sha256,
        r.title, r.language, r.canonical_bytes, r.body_sha256, r.licence, r.subject_ids, r.author_account_id, r.reference_manifest, r.copy_provenance,
        p.published_at
 FROM content.knowledge_document d
 JOIN content.knowledge_publication p
-  ON p.route=d.route AND p.document_id=d.document_id AND p.publication_id=d.current_publication_id
+  ON p.route=d.route AND p.document_id=d.document_id
+ AND p.publication_id=:publication_id AND p.lifecycle_generation=d.lifecycle_generation
 JOIN content.knowledge_revision r
   ON r.route=p.route AND r.document_id=p.document_id AND r.revision_id=p.revision_id
 WHERE d.route=:route AND d.document_id=:document_id
-  AND p.lifecycle_generation=d.lifecycle_generation
+  AND d.current_publication_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM content.knowledge_publication_selection s
+    WHERE s.route=p.route AND s.document_id=p.document_id
+      AND s.lifecycle_generation=p.lifecycle_generation AND s.revision_id=p.revision_id
+      AND (s.publication_id=p.publication_id OR p.publication_id=d.current_publication_id)
+  )
   AND content.knowledge_document_eligible(d.route,d.document_id);

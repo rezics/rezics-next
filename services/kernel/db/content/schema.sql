@@ -3499,6 +3499,24 @@ CREATE TABLE content.knowledge_publication (
 
 
 --
+-- Name: knowledge_publication_selection; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_publication_selection (
+    route integer NOT NULL,
+    document_id uuid NOT NULL,
+    lifecycle_generation bigint NOT NULL,
+    revision_id uuid NOT NULL,
+    publication_id uuid NOT NULL,
+    CONSTRAINT knowledge_publication_selection_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
+    CONSTRAINT knowledge_publication_selection_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT knowledge_publication_selection_check2 CHECK ((route = ((get_byte(uuid_send(publication_id), 10) * 256) + get_byte(uuid_send(publication_id), 11)))),
+    CONSTRAINT knowledge_publication_selection_lifecycle_generation_check CHECK ((lifecycle_generation >= 0)),
+    CONSTRAINT knowledge_publication_selection_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: knowledge_revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -5804,6 +5822,22 @@ ALTER TABLE ONLY content.knowledge_placement
 
 ALTER TABLE ONLY content.knowledge_publication
     ADD CONSTRAINT knowledge_publication_pkey PRIMARY KEY (route, document_id, publication_id);
+
+
+--
+-- Name: knowledge_publication knowledge_publication_selection_identity_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_publication
+    ADD CONSTRAINT knowledge_publication_selection_identity_key UNIQUE (route, document_id, lifecycle_generation, revision_id, publication_id);
+
+
+--
+-- Name: knowledge_publication_selection knowledge_publication_selection_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_publication_selection
+    ADD CONSTRAINT knowledge_publication_selection_pkey PRIMARY KEY (route, document_id, lifecycle_generation, revision_id);
 
 
 --
@@ -8741,6 +8775,14 @@ ALTER TABLE ONLY content.knowledge_publication
 
 ALTER TABLE ONLY content.knowledge_publication
     ADD CONSTRAINT knowledge_publication_revision_fk FOREIGN KEY (route, document_id, revision_id) REFERENCES content.knowledge_revision(route, document_id, revision_id);
+
+
+--
+-- Name: knowledge_publication_selection knowledge_publication_selection_publication_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_publication_selection
+    ADD CONSTRAINT knowledge_publication_selection_publication_fk FOREIGN KEY (route, document_id, lifecycle_generation, revision_id, publication_id) REFERENCES content.knowledge_publication(route, document_id, lifecycle_generation, revision_id, publication_id);
 
 
 --
