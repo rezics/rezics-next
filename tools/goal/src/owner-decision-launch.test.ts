@@ -94,6 +94,55 @@ function accept(
   );
 }
 
+test('accepted successor decisions require the owning session and an exact integrated task commit', () => {
+  const h = harness(captureCli);
+  try {
+    owner(h);
+    const source = h.tasks.dispatch(h.briefFile);
+    const sourceAttempt = next(h, source);
+    const successor = h.tasks.dispatch(h.briefFile);
+    const commit = 'c'.repeat(40);
+    h.store.updateTask({ taskId: successor.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+      current.integratedCommit = commit;
+      current.integratedCommits = [commit];
+    });
+
+    submitOwnerDecision(
+      h.store,
+      { taskId: source.id, attempt: sourceAttempt.attempt },
+      {
+        decisionId: `accepted-successor-${successor.id}`,
+        summary: 'The successor contains the preserved source.',
+        acceptedSuccessor: { taskId: successor.id, commit },
+      },
+      ownerEnv,
+    );
+    const accepted = h.store.ownerDecisionEvents({ taskId: source.id, attempt: sourceAttempt.attempt })[0]!;
+    expect(JSON.parse(accepted.body)).toMatchObject({
+      managerId: 'fixture',
+      taskId: source.id,
+      attempt: sourceAttempt.attempt,
+      acceptedSuccessor: { taskId: successor.id, commit },
+    });
+
+    expect(() =>
+      submitOwnerDecision(
+        h.store,
+        { taskId: source.id, attempt: sourceAttempt.attempt },
+        {
+          decisionId: 'wrong-integrated-commit',
+          summary: 'This must not suppress the stopped source.',
+          acceptedSuccessor: { taskId: successor.id, commit: 'd'.repeat(40) },
+        },
+        ownerEnv,
+      ),
+    ).toThrow('owner decision requires decisionId, summary and optional repository-relative documentRefs');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('pending attempt-two intent survives restart and ordinary retry, then partial delivery resumes without repeated context', async () => {
   const h = harness(captureCli);
   let restarted: WorkerStore | undefined;
