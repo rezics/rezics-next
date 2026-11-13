@@ -176,6 +176,26 @@ labels, exact parent identity with duplicate titles, root selection, allowed par
 checks and disabled controls. Source verification is changed-file formatting and one Web typecheck; native, browser,
 Storybook and broader suites are deferred.
 
+## Book outline language
+
+Decision: Every Book organizer label and accessible name follows the current locale through Paraglide, including
+placement, quick moves, rename, removal confirmation, pinned versions and structure details. Title-bearing names
+and labels use complete messages with arguments; authored titles, occurrence IDs and exact revision operands stay
+unchanged. Reuse existing release, direct-move, part and revision messages where their meanings match. Keep the
+shared Selects, exact selection, focus, nested moves and explicit removal confirmation unchanged.
+
+Sources read before design: this owner document, [Web Goal](../../../../docs/goals/web.md), `book-organizer.tsx`,
+the existing related messages in all eight installed catalogues, and `studio-book-placement.test.tsx` /
+`studio-book-selection.test.tsx`. The base localizes release selection and direct Move to fields; the remaining
+outline controls need message-backed labels. No producer or generated-output change is required.
+
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-book-placement.test.tsx
+ tests/studio-book-selection.test.tsx`. The mounted locale-switch case pins nested placement, complete quick-move
+and destructive-confirmation names, leaf versus subtree removal, rename, saved-version operands, retained typed
+input and unchanged authored titles. Existing English assertions remain unchanged. Source verification checks key
+and argument consistency in all eight catalogues, formats changed files and runs one Web typecheck. Acceptance,
+native, browser, Storybook and broader suites remain deferred.
+
 ## Post revision headers
 
 Decision: Book chapter and column Studio enumerate saved versions with the installed native

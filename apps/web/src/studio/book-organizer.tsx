@@ -38,23 +38,26 @@ export function BookOrganizer({
     if (!structure) return { outline: null, error: null };
     try {
       return { outline: bookTocIndex(structure), error: null };
-    } catch (error) {
-      return { outline: null, error: error instanceof Error ? error.message : 'The table of contents is unavailable.' };
+    } catch {
+      return { outline: null, error: true };
     }
   }, [structure]);
+  const locale = getLocale();
   if (!structure) return null;
-  if (adapter.error) return <p role="alert">{adapter.error}</p>;
+  if (adapter.error) return <p role="alert">{m.studio_book_outline_unavailable({}, { locale })}</p>;
   const outline = adapter.outline!;
   const selections = bookChapterSelection(outline, state.selectedOccurrences);
-  const locale = getLocale();
   const selectionDisabled = Boolean(state.busy) || controller.hasUnresolvedCommand() || !controller.input.canPublish;
   const editable = controller.canOrganize() && !state.busy && !controller.hasUnresolvedCommand();
   return (
-    <section aria-label="Book table of contents" className="studio-toc">
+    <section aria-label={m.studio_book_outline_label({}, { locale })} className="studio-toc">
       <div className="studio-section-heading">
-        <h2>Table of contents</h2>
+        <h2>{m.studio_book_outline_heading({}, { locale })}</h2>
         <span>
-          {outline.rows.length} / {structure.limits.maxPlacements}
+          {m.studio_book_outline_capacity(
+            { count: outline.rows.length, limit: structure.limits.maxPlacements },
+            { locale },
+          )}
         </span>
       </div>
       <p className="studio-help">{m.studio_book_release_help({}, { locale })}</p>
@@ -66,7 +69,9 @@ export function BookOrganizer({
         onChange={(checked) => controller.selectBookChapters(null, checked)}
       />
       <p className="studio-help">{m.studio_book_release_count(selections.get(null)!, { locale })}</p>
-      {!controller.canOrganize() ? <p className="studio-help">Organization is unavailable for this visit.</p> : null}
+      {!controller.canOrganize() ? (
+        <p className="studio-help">{m.studio_book_organization_unavailable({}, { locale })}</p>
+      ) : null}
       {outline.rows.length ? (
         <TocBranch
           parent={null}
@@ -78,7 +83,7 @@ export function BookOrganizer({
           onOpen={onOpen}
         />
       ) : (
-        <p>No parts or chapters yet. Create a draft, then place its saved version here.</p>
+        <p>{m.studio_book_outline_empty({}, { locale })}</p>
       )}
       {controller.canOrganize() ? (
         <PlacementForm
@@ -92,11 +97,11 @@ export function BookOrganizer({
       ) : null}
       {history ? <HostedHistoryDisclosure key={structure.catalogueId} binding={history} /> : null}
       <details className="studio-technical">
-        <summary>Structure version</summary>
+        <summary>{m.studio_book_structure_version({}, { locale })}</summary>
         <dl>
-          <dt>Catalogue</dt>
+          <dt>{m.studio_book_catalogue({}, { locale })}</dt>
           <dd>{structure.catalogueId}</dd>
-          <dt>Revision</dt>
+          <dt>{m.exact_revision_id({}, { locale })}</dt>
           <dd>{structure.revision}</dd>
         </dl>
       </details>
@@ -231,19 +236,44 @@ function TocEntry({
         )}
       </div>
       {target.kind === 'chapter' ? (
-        <p className="studio-help studio-break">Pinned version: {target.document.revisionId}</p>
+        <p className="studio-help studio-break">
+          {m.studio_book_pinned_version({ revision: target.document.revisionId }, { locale })}
+        </p>
       ) : (
         <p className="studio-help">{m.studio_book_release_count(selection, { locale })}</p>
       )}
       <details className="studio-toc-actions">
-        <summary>
-          Organize <span className="studio-sr-only">{placement.title}</span>
+        <summary aria-label={m.studio_book_organize_title({ title: placement.title }, { locale })}>
+          {m.studio_book_organize({}, { locale })}
         </summary>
         <div className="studio-action-row">
           <Button type="button" variant="outline" disabled={!editable} onClick={() => setMoving(true)}>
             {m.studio_book_move_to({}, { locale })}
           </Button>
-          {(['up', 'down', 'in', 'out'] as const).map((direction) => {
+          {(
+            [
+              {
+                direction: 'up',
+                label: m.studio_book_move_up({}, { locale }),
+                name: m.studio_book_move_up_title({ title: placement.title }, { locale }),
+              },
+              {
+                direction: 'down',
+                label: m.studio_book_move_down({}, { locale }),
+                name: m.studio_book_move_down_title({ title: placement.title }, { locale }),
+              },
+              {
+                direction: 'in',
+                label: m.studio_book_nest({}, { locale }),
+                name: m.studio_book_nest_title({ title: placement.title }, { locale }),
+              },
+              {
+                direction: 'out',
+                label: m.studio_book_unnest({}, { locale }),
+                name: m.studio_book_unnest_title({ title: placement.title }, { locale }),
+              },
+            ] as const
+          ).map(({ direction, label, name }) => {
             const change = moveBookOccurrence(row, direction, outline);
             return (
               <Button
@@ -251,12 +281,12 @@ function TocEntry({
                 type="button"
                 variant="outline"
                 disabled={!editable || !change}
-                aria-label={`${direction === 'in' ? 'Nest' : direction === 'out' ? 'Unnest' : `Move ${direction}`} ${placement.title}`}
+                aria-label={name}
                 onClick={() => {
                   if (change) void controller.organize(change);
                 }}
               >
-                {direction === 'in' ? 'Nest' : direction === 'out' ? 'Unnest' : `Move ${direction}`}
+                {label}
               </Button>
             );
           })}
@@ -269,7 +299,7 @@ function TocEntry({
                 void controller.organize({ kind: 'pin', occurrenceId: placement.occurrenceId, document: pin })
               }
             >
-              Use saved version
+              {m.studio_book_use_saved_version({}, { locale })}
             </Button>
           ) : null}
         </div>
@@ -290,7 +320,7 @@ function TocEntry({
               void controller.organize({ kind: 'rename', occurrenceId: placement.occurrenceId, title: title.trim() });
           }}
         >
-          <label htmlFor={renameId}>Placement title</label>
+          <label htmlFor={renameId}>{m.studio_book_placement_title({}, { locale })}</label>
           <Input
             id={renameId}
             value={title}
@@ -303,14 +333,19 @@ function TocEntry({
             variant="outline"
             disabled={!editable || !title.trim() || title.trim() === placement.title}
           >
-            Rename
+            {m.studio_book_rename({}, { locale })}
           </Button>
         </form>
         {removing ? (
-          <div className="studio-stack" role="group" aria-label={`Remove ${placement.title}`}>
+          <div
+            className="studio-stack"
+            role="group"
+            aria-label={m.studio_book_remove_title({ title: placement.title }, { locale })}
+          >
             <p>
-              Remove this placement{hasDescendants ? ' and its nested placements' : ''}? The documents and previous
-              publications remain.
+              {hasDescendants
+                ? m.studio_book_remove_nested_confirmation({}, { locale })
+                : m.studio_book_remove_confirmation({}, { locale })}
             </p>
             <div className="studio-action-row">
               <Button
@@ -319,16 +354,16 @@ function TocEntry({
                 disabled={!editable}
                 onClick={() => void controller.organize({ kind: 'remove', occurrenceId: placement.occurrenceId })}
               >
-                Remove placement
+                {m.studio_book_remove_action({}, { locale })}
               </Button>
               <Button type="button" variant="outline" onClick={() => setRemoving(false)}>
-                Keep placement
+                {m.studio_book_keep_action({}, { locale })}
               </Button>
             </div>
           </div>
         ) : (
           <Button type="button" variant="outline" disabled={!editable} onClick={() => setRemoving(true)}>
-            Remove…
+            {m.studio_book_remove({}, { locale })}
           </Button>
         )}
       </details>
@@ -338,7 +373,7 @@ function TocEntry({
 /** Numbering distinguishes repeated titles; submitted values remain exact occurrence IDs. */
 function moveRowLabel(row: BookTocRow, outline: BookTocIndex): string {
   const position = [...row.ancestors.map((id) => outline.byId.get(id)!.index + 1), row.index + 1].join('.');
-  return `${position} · ${row.placement.title}`;
+  return m.studio_book_outline_position({ position, title: row.placement.title }, { locale: getLocale() });
 }
 
 function MoveForm({
@@ -475,20 +510,21 @@ function PlacementForm({
   onChange: (change: BookStructureChange) => Promise<boolean>;
 }) {
   const id = useId();
+  const locale = getLocale();
   const [kind, setKind] = useState<'part' | 'chapter'>('chapter');
   const [title, setTitle] = useState('');
   const [parent, setParent] = useState<string | null>(null);
   const kinds = [
-    { value: 'chapter' as const, label: 'Saved document as chapter' },
-    { value: 'part' as const, label: 'Part' },
+    { value: 'chapter' as const, label: m.studio_book_saved_chapter({}, { locale }) },
+    { value: 'part' as const, label: m.book_reader_part({}, { locale }) },
   ];
   const parents = [
-    { value: null, label: 'Book root' },
+    { value: null, label: m.studio_book_move_root({}, { locale }) },
     ...rows
       .filter((row) => row.placement.target.kind === 'part' && row.depth + 1 < structure.limits.maxDepth)
       .map((row) => ({
         value: row.placement.occurrenceId,
-        label: `${'— '.repeat(row.depth)}${row.placement.title}`,
+        label: m.studio_book_indented_title({ indent: '— '.repeat(row.depth), title: row.placement.title }, { locale }),
       })),
   ];
   const selected = state.selected;
@@ -516,10 +552,10 @@ function PlacementForm({
   }
   return (
     <details className="studio-placement-form">
-      <summary>Add part or chapter</summary>
+      <summary>{m.studio_book_add_heading({}, { locale })}</summary>
       <form onSubmit={(event) => void submit(event)} className="studio-stack">
         <Field>
-          <FieldLabel htmlFor={`${id}-kind`}>Add</FieldLabel>
+          <FieldLabel htmlFor={`${id}-kind`}>{m.studio_book_add_kind({}, { locale })}</FieldLabel>
           <Select<'part' | 'chapter'>
             items={kinds}
             value={kind}
@@ -546,12 +582,12 @@ function PlacementForm({
           {kind === 'chapter' ? (
             <FieldDescription id={`${id}-document`} className="studio-help">
               {selected
-                ? `Selected document: ${selected.title}. Save all changes before placing it.`
-                : 'Open or create a draft first.'}
+                ? m.studio_book_selected_document({ title: selected.title }, { locale })
+                : m.studio_book_open_draft({}, { locale })}
             </FieldDescription>
           ) : null}
         </Field>
-        <label htmlFor={`${id}-title`}>Placement title</label>
+        <label htmlFor={`${id}-title`}>{m.studio_book_placement_title({}, { locale })}</label>
         <Input
           id={`${id}-title`}
           value={title}
@@ -560,10 +596,10 @@ function PlacementForm({
           onChange={(event) => setTitle(event.target.value)}
         />
         <Field>
-          <FieldLabel htmlFor={`${id}-parent`}>Place inside</FieldLabel>
+          <FieldLabel htmlFor={`${id}-parent`}>{m.studio_book_place_inside({}, { locale })}</FieldLabel>
           <Select<string> items={parents} value={parent} disabled={disabled} onValueChange={setParent}>
             <SelectTrigger id={`${id}-parent`} className="min-h-11 w-full">
-              <SelectValue placeholder="Book root" />
+              <SelectValue placeholder={m.studio_book_move_root({}, { locale })} />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -577,7 +613,7 @@ function PlacementForm({
           </Select>
         </Field>
         <Button type="submit" disabled={disabled || !title.trim() || (kind === 'chapter' && !canPlace)}>
-          Add {kind}
+          {kind === 'part' ? m.studio_book_add_part({}, { locale }) : m.studio_book_add_chapter({}, { locale })}
         </Button>
       </form>
     </details>
