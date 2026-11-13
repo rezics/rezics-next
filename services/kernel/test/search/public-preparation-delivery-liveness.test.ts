@@ -3,6 +3,8 @@ import { createPool } from '../../src/database/pool.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { createPublicPreparation, type PublicPreparationOptions } from '../../src/search/public-preparation.ts';
+import { subjectIndexName } from '../../src/search/indices.ts';
+import { activeRelease } from '../../src/semantic/definitions.ts';
 import {
   PUBLIC_PREPARATION_WORKFLOW,
   createPublicPreparationStore,
@@ -194,6 +196,59 @@ test('expired claims recover once and a stale claimed revision cannot overwrite 
   expect(live).not.toBeNull();
   await store.advance(live!, { ...frontier, phase: 'native' });
   expect((await read(owner, id))?.locator).toMatchObject({ phase: 'native' });
+  const current = { ...frontier, meaning: 'current-release' };
+  expect(await store.retain(current, Date.now() + 86_400_000)).toBe(id);
+  const rebound = await read(owner, id);
+  expect(rebound?.locator).toEqual(current);
+  expect(Number(rebound!.revision)).toBeGreaterThan(Number(live!.revision));
+  await store.advance(live!, { ...frontier, phase: 'replay' });
+  expect((await read(owner, id))?.locator).toEqual(current);
+  const admitted = await store.claim(id, rebound!.revision, Date.now() + 30_000);
+  await store.advance(admitted!, { ...current, publication: 'native-publication' });
+  const pinned = await read(owner, id);
+  await store.retain({ ...current, meaning: 'later-release' }, Date.now() + 86_400_000);
+  expect((await read(owner, id))?.locator).toEqual(pinned?.locator);
+});
+
+test('stale unpublished population advances to the active native release before preparation', async () => {
+  const owner = prefix();
+  const frontier = { ...population('active-release-change'), meaning: 'stale-release' };
+  const store = createPublicPreparationStore(pool, work, owner);
+  const id = track(await store.retain(frontier, Date.now() + 86_400_000));
+  const release = await activeRelease(pool);
+  expect(release).not.toBeNull();
+
+  const index = subjectIndexName(owner, frontier.generation);
+  const search = {
+    async request(_method: string, path: string) {
+      if (path.endsWith('/_mapping')) return { status: 200, body: { [index]: { mappings: { properties: {} } } } };
+      if (path.endsWith('/_settings'))
+        return { status: 200, body: { [index]: { settings: { index: { uuid: frontier.uuid } } } } };
+      throw new Error(`Unexpected Search request ${path}`);
+    },
+  } as unknown as OpenSearch;
+  const preparation = createPublicPreparation({
+    pool,
+    work,
+    prefix: owner,
+    search,
+    source: {} as PublicPreparationOptions['source'],
+    listing: {} as PublicPreparationOptions['listing'],
+    runtime: {
+      async preparePublication() {
+        throw new Error('A stale release must not register native preparation');
+      },
+    } as unknown as DefaultPublicFilterRuntime,
+  });
+
+  try {
+    await preparation.run(id, (await read(owner, id))!.revision);
+    const current = await read(owner, id);
+    expect(current?.locator).toMatchObject({ meaning: release!.digest, publication: null, phase: 'native' });
+    expect(Number(current!.revision)).toBeGreaterThan(1);
+  } finally {
+    await preparation.stop();
+  }
 });
 
 test('an expired locator is dropped on claim without repair or population work', async () => {

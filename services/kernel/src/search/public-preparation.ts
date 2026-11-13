@@ -69,9 +69,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
   ) {
     const index = subjectIndexName(options.prefix, state.generation);
     const calendarFormat = await readSubjectCalendarMappingFormat(options.search, options.prefix, state.generation);
-    const release = await activeRelease(options.pool);
-    if (!release || release.digest !== state.meaning || (await indexUuid(options.search, index)) !== state.uuid)
-      return store.advance(record, state, 5000);
+    if ((await indexUuid(options.search, index)) !== state.uuid) return store.advance(record, state, 5000);
     // Resume the original native job directly. Re-registering from today's Source definition
     // can replace its consumer and strand a retained fence or ambiguous alias intent.
     if (state.publication === null) {
@@ -86,6 +84,23 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         )
       ).rows[0];
       if (existing) return store.advance(record, { ...state, publication: existing.job, phase: 'native' });
+      const release = await activeRelease(options.pool);
+      if (!release) return store.advance(record, state, 5000);
+      if (release.digest !== state.meaning) {
+        // No native publication has been admitted for this frontier. Move its
+        // typed locator to the active release; advance fences any older delivery.
+        return store.advance(record, {
+          ...state,
+          meaning: release.digest,
+          publication: null,
+          partition: 0,
+          epoch: null,
+          through: null,
+          after: null,
+          phase: 'native',
+          pending: null,
+        });
+      }
       const prepared = await options.runtime.preparePublication(state.generation, context);
       if (prepared.status !== 'preparing') return store.advance(record, state, 1000);
       return store.advance(record, { ...state, publication: prepared.job.job, phase: 'native' });

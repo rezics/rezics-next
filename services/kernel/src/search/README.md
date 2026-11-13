@@ -2057,6 +2057,12 @@ revision; only a claim, an advance, or expired-lease recovery changes that dispa
 not allocate a public output slot or extend its native quota grant. Only the consumer producer owns current/building
 public output reservations. First-start discovery no longer aliases an empty generation in this composition.
 
+Decision: when the active release changes before a generation has an admitted native publication,
+the retained population locator advances to the current digest and fences older deliveries. Once a native
+publication job is retained, preparation keeps that original consumer and lets it reach its native outcome.
+Search readiness still requires a useful current native capture; a changed digest or completed scheduling step
+does not establish readiness.
+
 The default maintenance worker composes the sole [bounded publication port](#bounded-generation-publication).
 Its `preparePublication` adapter resolves the native full-population binding and registers native custody,
 then passes the returned consumer to `prepare`. It retains only the publication job ID between steps.

@@ -53,10 +53,41 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       return transaction(async (client) => {
         const result = await client.query<{ id: string; revision: string }>(
           `
-          INSERT INTO search.public_preparation(partition_no, prefix, id, kind, locator, due_at, expires_at)
+          INSERT INTO search.public_preparation AS stored
+            (partition_no, prefix, id, kind, locator, due_at, expires_at)
           VALUES (0, $1, $2, $3, $4, $5, $6)
           ON CONFLICT (partition_no, prefix, kind, (locator ->> 'key')) DO UPDATE
-            SET due_at = LEAST(search.public_preparation.due_at, EXCLUDED.due_at)
+            SET locator = CASE
+                  WHEN stored.kind = 'population'
+                    AND EXCLUDED.kind = 'population'
+                    AND stored.locator ->> 'publication' IS NULL
+                    AND (stored.locator ->> 'meaning') IS DISTINCT FROM (EXCLUDED.locator ->> 'meaning')
+                  THEN EXCLUDED.locator
+                  ELSE stored.locator
+                END,
+                revision = stored.revision + CASE
+                  WHEN stored.kind = 'population'
+                    AND EXCLUDED.kind = 'population'
+                    AND stored.locator ->> 'publication' IS NULL
+                    AND (stored.locator ->> 'meaning') IS DISTINCT FROM (EXCLUDED.locator ->> 'meaning')
+                  THEN 1 ELSE 0
+                END,
+                lease_until = CASE
+                  WHEN stored.kind = 'population'
+                    AND EXCLUDED.kind = 'population'
+                    AND stored.locator ->> 'publication' IS NULL
+                    AND (stored.locator ->> 'meaning') IS DISTINCT FROM (EXCLUDED.locator ->> 'meaning')
+                  THEN 0
+                  ELSE stored.lease_until
+                END,
+                due_at = CASE
+                  WHEN stored.kind = 'population'
+                    AND EXCLUDED.kind = 'population'
+                    AND stored.locator ->> 'publication' IS NULL
+                    AND (stored.locator ->> 'meaning') IS DISTINCT FROM (EXCLUDED.locator ->> 'meaning')
+                  THEN EXCLUDED.due_at
+                  ELSE LEAST(stored.due_at, EXCLUDED.due_at)
+                END
           RETURNING id, revision::text`,
           [prefix, randomUUID(), locator.kind, JSON.stringify(locator), Date.now(), expiresAt],
         );
