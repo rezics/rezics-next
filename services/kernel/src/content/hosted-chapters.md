@@ -100,7 +100,10 @@ command or persistence authority.
 
 Decision: point insertion and subtree removal resolve one expected snapshot and update the existing sibling,
 preorder and chapter indexes; removal cuts ranges by stored aggregates without visiting descendants, preserving
-historical roots and permanent occurrence identity.
+historical roots and permanent occurrence identity. Keep these writes unmounted until the store owner lands the
+native `createHostedVersionWrite` transaction producer. Bind the planner through admitted `runCommand` handling only
+against that producer's actual contract, so roots, occurrence identity, ancestor summaries, receipt and the
+identity-only revise event commit with the expected-head CAS; do not add a parallel SQL adapter or partial route.
 
 ### Evidence and migration
 
