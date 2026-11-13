@@ -2949,7 +2949,7 @@ exact result bytes and referenced Root authorization bytes/row, and its physical
 unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer compiler failure
 for matching current inputs remains authoritative. Withdrawn Web recovery uses the same exact-input failure rule.
 
-Decision: authenticated `typing-recover` may issue one replacement only when unchanged source's exact check, SIGTERM, Root authorization, local/remote terminal proof and verified cleanup receipt bind the same task, attempt, physical run and command, with no compiler result. Preserve cancellation and receipt. Fence result-bearing checks, live or unknown custody, manual task cancellation and later attempts. Never retry source or infer compiler success.
+Decision: authenticated `typing-recover` may replace one consumed compiler grant only when unchanged source's exact check, SIGTERM, Root authorization, local/remote terminal proof and verified cleanup receipt bind the same task, attempt, physical run and command, with no compiler result. A missing predecessor authorizes no new run. Preserve cancellation and receipt. Fence result-bearing checks, live or unknown custody, manual task cancellation and later attempts. Never retry source or infer compiler success.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
