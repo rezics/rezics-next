@@ -168,6 +168,8 @@ publication CAS. A stale fresh command fails without index or pointer changes.
 Decision: point publication prepares retained anonymous metadata checks for the catalogue opening and only newly
 selected exact targets; the seam stays unmounted until Content can join those final checks to the pointer transaction.
 
+Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; route mounting waits for the native version-store and exact-source-consent bindings.
+
 Copy only the affected sibling, preorder and chapter index paths and at most H explicitly selected ancestors; create
 one small version root/count summary and atomically CAS the publication pointer with receipt/identity-only event.
 Normal append or single revision replacement is O(H log N) logical index changes, independent of total
