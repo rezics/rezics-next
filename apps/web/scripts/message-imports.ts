@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Plugin } from 'vite';
 
@@ -11,6 +11,10 @@ type Syntax = {
   [key: string]: unknown;
 };
 
+const MESSAGE_INDEX_EXPORT = /export\s+\*\s+from\s+['"]\.\/([^'"]+)['"]/g;
+const MESSAGE_EXPORT_ALIAS = /^\s*export\s*\{\s*[\w$]+\s+as\s+("(?:\\.|[^"\\])*")\s*\}/gm;
+const MESSAGE_EXPORT_BINDING = /^\s*export\s+(?:const|function|class)\s+([\w$]+)/gm;
+
 function visit(node: Syntax, callback: (node: Syntax, parent?: Syntax) => void, parent?: Syntax): void {
   callback(node, parent);
   for (const value of Object.values(node)) {
@@ -20,10 +24,33 @@ function visit(node: Syntax, callback: (node: Syntax, parent?: Syntax) => void, 
   }
 }
 
+/** Public Paraglide IDs are declared by leaf exports; generated filenames may be normalized or disambiguated. */
+function generatedMessageExports(directory: string): Map<string, string> {
+  const index = readFileSync(resolve(directory, '_index.js'), 'utf8');
+  const exports = new Map<string, string>();
+  MESSAGE_INDEX_EXPORT.lastIndex = 0;
+  for (const match of index.matchAll(MESSAGE_INDEX_EXPORT)) {
+    const module = match[1]!.endsWith('.js') ? match[1]! : `${match[1]}.js`;
+    const source = readFileSync(resolve(directory, module), 'utf8');
+    MESSAGE_EXPORT_ALIAS.lastIndex = 0;
+    for (const alias of source.matchAll(MESSAGE_EXPORT_ALIAS)) {
+      const name: unknown = JSON.parse(alias[1]!);
+      if (typeof name !== 'string') throw new Error('Paraglide message export alias is not a string');
+      exports.set(name, module);
+    }
+    MESSAGE_EXPORT_BINDING.lastIndex = 0;
+    for (const binding of source.matchAll(MESSAGE_EXPORT_BINDING)) exports.set(binding[1]!, module);
+  }
+  return exports;
+}
+
 /** Dev module runners cannot tree-shake the generated namespace's thousands of re-exports. */
 export function messageImports(appRoot: string): Plugin {
   const entry = resolve(appRoot, 'src/paraglide/messages.js').replaceAll('\\', '/');
   const directory = resolve(appRoot, 'src/paraglide/messages');
+  let messageExports: Map<string, string> | undefined;
+  const getMessageExports = () => (messageExports ??= generatedMessageExports(directory));
+
   return {
     name: 'paraglide-message-imports',
     apply: 'serve',
@@ -49,6 +76,7 @@ export function messageImports(appRoot: string): Plugin {
         imports.push({ node, local: (specifier.local as Syntax).name!, source: source.replace(/\.js$/, '') });
       });
       if (!imports.length) return;
+
       const edits: { start: number; end: number; code: string }[] = [];
       for (const binding of imports) {
         const covered = new Set<number>();
@@ -62,15 +90,13 @@ export function messageImports(appRoot: string): Plugin {
           if (!node.computed && property.type === 'Identifier') keys.add(property.name!);
           else if (property.type === 'Literal' && typeof property.value === 'string') keys.add(property.value);
           else if (property.type === 'TemplateLiteral') {
-            // A template selects a finite subset of the generated IDs; retain every possible substitution.
+            // A template selects the finite public IDs matched by its literal portions.
             const quasis = property.quasis as Syntax[];
             const parts = quasis.map((quasi) => (quasi.value as { cooked: string }).cooked);
             const expression = new RegExp(
               '^' + parts.map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$',
             );
-            for (const file of readdirSync(directory)) {
-              if (file.endsWith('.js') && expression.test(file.slice(0, -3))) keys.add(file.slice(0, -3));
-            }
+            for (const name of getMessageExports().keys()) if (expression.test(name)) keys.add(name);
           } else unrestricted = true;
           covered.add(object.start);
         });
@@ -83,23 +109,30 @@ export function messageImports(appRoot: string): Plugin {
           if (parent?.type === 'MemberExpression' && parent.property === node && !parent.computed) return;
           if (!covered.has(node.start)) unrestricted = true;
         });
-        // Passing, enumerating or assigning the namespace retains normal module semantics, including shadows.
+
+        const publicExports = unrestricted ? undefined : getMessageExports();
+        if (publicExports && [...keys].some((name) => !publicExports.has(name))) unrestricted = true;
+        // Passing, enumerating, dynamically indexing or otherwise using the namespace keeps normal module semantics.
         if (unrestricted) continue;
-        const names = [...keys];
-        const declarations = names.map((name, index) => {
-          const local = `__paraglide_${binding.local}_${index}`;
-          return {
-            name,
-            local,
-            import: `import { ${name} as ${local} } from ${JSON.stringify(`${binding.source}/${name}.js`)};`,
-          };
-        });
+
+        const byModule = new Map<string, { name: string; local: string }[]>();
+        let index = 0;
+        for (const name of keys) {
+          const module = publicExports!.get(name)!;
+          const local = `__paraglide_${binding.local}_${index++}`;
+          const entries = byModule.get(module) ?? [];
+          entries.push({ name, local });
+          byModule.set(module, entries);
+        }
+        const importsByModule = [...byModule].map(
+          ([module, entries]) =>
+            `import { ${entries.map(({ name, local }) => `${JSON.stringify(name)} as ${local}`).join(', ')} } from ${JSON.stringify(`${binding.source}/${module.replace(/^\.\//, '')}`)};`,
+        );
+        const properties = [...byModule.values()].flat().map(({ name, local }) => `${JSON.stringify(name)}: ${local}`);
         edits.push({
           start: binding.node.start,
           end: binding.node.end,
-          code:
-            declarations.map((item) => item.import).join('\n') +
-            `\nconst ${binding.local} = Object.freeze({${declarations.map((item) => `${item.name}: ${item.local}`).join(',')}});`,
+          code: importsByModule.join('\n') + `\nconst ${binding.local} = Object.freeze({${properties.join(',')}});`,
         });
       }
       if (!edits.length) return;

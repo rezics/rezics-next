@@ -21,6 +21,11 @@ automatically before Vite starts, and TanStack generates routes. Producer-owned 
 `packages/client/src/kernel/` must be prepared with `bun run --cwd services/kernel client` if absent or stale;
 this is generation, not native service startup.
 
+Decision: the dev message transform resolves direct and finite-template accesses through the exports listed by
+Paraglide's generated `src/paraglide/messages/_index.js`, groups selected bindings by leaf module, and retains the
+full namespace for dynamic or unresolved access. Public message IDs therefore keep working when compiler-normalized
+leaf filenames differ from those IDs during ordinary local startup.
+
 The startup trace correlates message readiness and the Vite child with a per-launch ID. It records the effective
 test/walk/cache flags, resolved executable and package identity, Node/Vite identity, Vite config and environment
 plugin-hook entry/exit, and the actual listener event. It omits environment values and command arguments. Signals are
