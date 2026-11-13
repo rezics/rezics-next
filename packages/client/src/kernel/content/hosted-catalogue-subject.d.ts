@@ -12,4 +12,4 @@ export declare function listHostedCataloguesForSubject(deps: HostedDependencies,
     value: HostedSubjectCataloguePage;
     anchors: AnchoredPosition[];
 }>;
-export declare const HOSTED_SUBJECT_PAGE_LIMIT = 20;
+export { HOSTED_PAGE_LIMIT as HOSTED_SUBJECT_PAGE_LIMIT } from './hosted-chapters-limits.ts';

@@ -1,4 +1,10 @@
 /** Public Zone resource application, Access port and HTTP install. */
+import { pickZoneName as pickCompositionZoneName } from '@rezics/composition';
+/** Kernel Platform uses the Zone-owned public entry for localized name selection. */
+export declare function pickZoneName(...args: Parameters<typeof pickCompositionZoneName>): {
+    text: string;
+    lang?: string;
+};
 export { bindZoneResourceAccess, tryZoneResourceAccess, unbindZoneResourceAccess, zoneResourceAccess, type ZoneAccessBudget, type ZoneAccessCheck, type ZoneAccessHandle, type ZoneAccountActionState, type ZoneAccountActor, type ZoneAccountSnapshot, type ZoneActor, type ZoneAuthorizationPage, type ZoneCreationPort, type ZoneParentAnchor, type ZonePublicEligibilityPrepare, type ZonePublicEligibilityVerify, type ZoneQueryClient, type ZoneResourceAccessPort, type ZoneResourceRef, type ZoneResourceRuntimeDependencies, } from './resource-access-port.ts';
 export { bindZoneResourceApplication, createZoneResourceApplication, requireZoneResourceRuntime, tryZoneResourceApplication, unbindZoneResourceApplication, zoneResourceApplication, type ZoneResourceApplication, type ZoneResourceRuntime, } from './resource-application.ts';
 export { createZoneResourceAccess } from './adapters/index.ts';

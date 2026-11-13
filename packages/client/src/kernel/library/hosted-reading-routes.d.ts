@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import type { DefinitionRoutes } from '../semantic/index.ts';
 import { type HostedReadingPort } from './contract/hosted-reading.ts';
 export type HostedReadingRouteDependencies = {
     pool: Pool;
@@ -11,7 +11,7 @@ export type HostedReadingRouteDependencies = {
     clock?: KernelClock;
     content?: HostedReadingPort;
 };
-export declare function hostedReadingRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: HostedReadingRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies: HostedReadingRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
         error: Error;

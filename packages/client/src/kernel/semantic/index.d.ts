@@ -1,3 +1,4 @@
+import type { definitionRoutes } from './http/definitions.ts';
 export { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from './account-agents.ts';
 export { AccountAgentLabelEditError, AccountAgentScopeGrowthError, AccountAgentVerificationError, AccountAgentWriteDeniedError, accountAgentId, } from './agents.ts';
 export type { AgentSelfSource } from './subject.ts';
@@ -15,6 +16,7 @@ export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, Identit
 export { createIdentityRatingCommitParticipant, IdentityRatingCommitUnavailableError, } from './identity-rating-commit-participant.ts';
 export type { IdentityRatingCommitHeld, IdentityRatingCommitParticipant, IdentityRatingCommitPreparation, } from './identity-rating-commit-participant.ts';
 export type { IdentityRatingRepairAuthority, IdentityRatingRepairDrain, IdentityRatingRepairMapping, IdentityRatingRepairPage, IdentityRatingRepairProducer, IdentityRatingRepairVote, IdentityRatingRepairVoteKey, } from './identity-rating-repair-producer.ts';
+export type DefinitionRoutes = ReturnType<typeof definitionRoutes>;
 export type { DefinitionImportRoutes } from './definition-import.ts';
 export type { CopyWorkDisclosureObservation, CopyWorkDisclosureRequest, CopyWorkDisclosureState, CopyWorkReference, } from './copy-work-disclosure-contract.ts';
 export type { CopyWorkDisclosureDependencies, CopyWorkSearchEvidencePort, CopyWorkReaderPort, CopyWorkListPresentationDependencies, CopyWorkListPresentationOptions, CopyWorkListPresentationResult, CopyWorkListFact, CopyWorkWorkContext, } from './copy-work-reader-port.ts';
