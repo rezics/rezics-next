@@ -915,6 +915,8 @@ function boardRowFromView(board: BoardView): Row {
     deleted_at: null,
     restorable: false,
     decision_id: null,
+    revision_restriction: null,
+    revision_restriction_decision_id: null,
   };
 }
 
@@ -3549,6 +3551,7 @@ async function prepareEditionSourceAuthority(
   );
   const initial = observed.value;
   if (!live(initial) || !initial.thread.board_id) return null;
+  const selectedRevisionRestriction = initial.revision.revision_restriction;
   const boardId = initial.thread.board_id;
   const board = (await snapshot(dependencies, boardId, context, (client) => point(client, 'board', boardId))).value;
   if (!board || board.availability !== 'available' || !['published', 'protected'].includes(board.visibility))
@@ -3678,7 +3681,7 @@ async function prepareEditionSourceAuthority(
           false,
           false,
           undefined,
-          row === initial.posts[0] && initial.revision.revision_restriction === 'public',
+          row === initial.posts[0] && selectedRevisionRestriction === 'public',
         ),
         async validate(client) {
           const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);

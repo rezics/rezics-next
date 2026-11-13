@@ -68,6 +68,8 @@ function row(kind: 'board' | 'thread' | 'post', overrides: Partial<Row> = {}): R
     deleted_at: null,
     restorable: false,
     decision_id: null,
+    revision_restriction: null,
+    revision_restriction_decision_id: null,
   };
   if (kind === 'board') Object.assign(base, { title: 'Board', board_purpose: 'discussion' });
   if (kind === 'thread')

@@ -159,7 +159,8 @@ test('public-only and hard restrictions are exact, revalidated across Post histo
     expect((await readPost(readsDeps, value.threadId, value.itemId, publicRead, revisionId)).value?.body).not.toBeNull();
     expect((await readPostMetadata(readsDeps, value.threadId, value.itemId, publicRead, revisionId)).value).not.toBeNull();
   }
-  expect((await readPost(readsDeps, value.threadId, value.itemId, publicRead)).value?.revisionId).toBe(third.revisionId);
+  const defaultRead = (await readPost(readsDeps, value.threadId, value.itemId, publicRead)).value;
+  expect(defaultRead && 'revisionId' in defaultRead ? defaultRead.revisionId : null).toBe(third.revisionId);
   expect(
     (await readPostMetadata(readsDeps, value.threadId, value.itemId, readContext(buyer), second.revisionId)).value,
   ).toBeNull();

@@ -343,6 +343,7 @@ const typed = [
   'POST /v1/boards/:id/$takeDown',
   'POST /v1/threads/:id/$takeDown',
   'POST /v1/posts/:id/$takeDown',
+  'POST /v1/posts/:id/$restrictRevision',
   'POST /v1/posts/:id/$erase',
   'POST /v1/threads/:id/$erase',
   'GET /v1/openapi.json',
