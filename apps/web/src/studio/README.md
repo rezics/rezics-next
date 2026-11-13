@@ -640,7 +640,8 @@ affected Web typecheck after commit; ordinary acceptance, native, browser, Story
 Decision: keep the private author and prepublished reader journals independent; compare and preview saved revisions,
 organize and select exact draft occurrences through mounted Studio, recover and seal the selected candidate, record
 initial activation as unreached with its immutable operands, and use supplied catalogue titles with the existing
-fallback.
+fallback. Resume the author journal only after Content exposes activation through the mounted HTTP route and
+generated KernelClient operation; the point-publication control remains a separate outcome.
 
 The private author journal creates deterministic drafts through generated native setup, saves and compares exact
 Post revisions in the mounted Studio, previews the saved chapter, and creates, reorders, moves and nests chapter
