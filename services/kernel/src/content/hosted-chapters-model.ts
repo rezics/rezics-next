@@ -42,6 +42,13 @@ export type HostedDraftPointRemoveInput = Readonly<{
   expectedRevisionId: string;
   occurrenceId: string;
 }>;
+/** Change one existing point's title and pin its explicit exact target state. Parts use null. */
+export type HostedDraftPointUpdateInput = Readonly<{
+  expectedRevisionId: string;
+  occurrenceId: string;
+  title: string;
+  target: HostedChapterTarget | null;
+}>;
 /** Exactly one sealed legacy base and one immutable prefix; never a chain.
  * The base revision also identifies the append stream. Empty prefixes use -1. */
 export type HostedAppendDescriptor = Readonly<{

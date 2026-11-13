@@ -37,6 +37,7 @@ import {
   type HostedVersionDraftMoveCommandDependencies,
 } from './hosted-version-draft-edit-command.ts';
 import { createHostedVersionDraftMoveNativeAdapter } from './hosted-version-draft-native.ts';
+import { updateHostedDraftPoint } from './hosted-version-draft-update-command.ts';
 import {
   readHostedCatalogue,
   listHostedChildren,
@@ -60,6 +61,7 @@ import {
   HostedRootAppendSchema,
   HostedInsertDraftPointSchema,
   HostedRemoveDraftPointSchema,
+  HostedUpdateDraftPointSchema,
   HostedMoveDraftPointSchema,
   HostedPublishSchema,
   HostedPublishChapterSchema,
@@ -328,6 +330,27 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
         const result = await operation(() =>
           admission.run('normal', job, () =>
             removeHostedDraftPoint(deps, actor, id, body, commandContext(request, job.deadline)),
+          ),
+        );
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/hostedCatalogues/:id', 'updateDraftPoint'),
+      {
+        params: params(),
+        headers,
+        body: strictContentSchema(HostedUpdateDraftPointSchema),
+        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures() },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.update_draft_point' },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            updateHostedDraftPoint(deps, actor, id, body, commandContext(request, job.deadline)),
           ),
         );
         session.record(result);
