@@ -32,6 +32,23 @@ implementation stays in Content and Studio remains the receiving owner.
 Decision: The shared book/article Studio puts the active document first, collapses outline and drafts into a compact
 phone disclosure, and separates its wide navigation without an outer frame.
 
+## Book placement fields
+
+Decision: Book placement composes shared `Field`, `FieldLabel` and shadcn `Select` primitives, following Book catalogue
+Search. Controlled `items` supply selected labels before opening; the trigger owns the field ID and saved-document
+description. The shared widget owns keyboard navigation, opening and dismissal. Book root is an explicit `null`
+choice; every other parent value remains the exact part occurrence ID, with the existing depth filter. Kind stays
+`part | chapter`. Placement submission, saved-document checks and publication review retain their existing contracts.
+Studio uses the component styles and has no raw-select overrides.
+
+Sources read before design: this owner note, [UI form fields](../../../../packages/ui/README.md#form-fields), the shared
+Select implementation and story, and [Book catalogue Search](../books/catalogue/page.tsx).
+
+Later acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-book-placement.test.tsx` for selected
+labels, exact parent identity with duplicate titles, root selection, allowed parents/depth, dismissal, saved-document
+checks and disabled controls. Source verification is changed-file formatting and one Web typecheck; native, browser,
+Storybook and broader suites are deferred.
+
 ## Post revision headers
 
 Decision: Book chapter and column Studio enumerate saved versions with the installed native

@@ -105,7 +105,6 @@
 }
 .studio-workspace button,
 .studio-workspace input:not([type='checkbox']),
-.studio-workspace select,
 .studio-workspace textarea {
   min-block-size: 2.75rem;
 }
@@ -121,15 +120,6 @@
   flex: 0 0 auto;
   accent-color: var(--primary);
 }
-.studio-workspace select {
-  inline-size: 100%;
-  border: 1px solid var(--input);
-  border-radius: 0.5rem;
-  background: var(--background);
-  color: var(--foreground);
-  padding-inline: 0.75rem;
-  font: inherit;
-}
 .studio-workspace textarea {
   inline-size: 100%;
   min-inline-size: 0;
@@ -142,7 +132,7 @@
   line-height: 1.5;
   resize: vertical;
 }
-.studio-workspace :where(button, input, select, textarea, summary, a, [tabindex]):focus-visible {
+.studio-workspace :where(button, input, textarea, summary, a, [tabindex]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }

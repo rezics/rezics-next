@@ -1,6 +1,8 @@
 import { useId, useMemo, useState, type FormEvent } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { bookTocRows, moveBookOccurrence, type BookTocRow } from './book-toc';
 import { sameExact, type BookStructure, type BookStructureChange } from './contract';
 import { HostedHistoryDisclosure } from './hosted-history-view';
@@ -278,7 +280,20 @@ function PlacementForm({
   const id = useId();
   const [kind, setKind] = useState<'part' | 'chapter'>('chapter');
   const [title, setTitle] = useState('');
-  const [parent, setParent] = useState('');
+  const [parent, setParent] = useState<string | null>(null);
+  const kinds = [
+    { value: 'chapter' as const, label: 'Saved document as chapter' },
+    { value: 'part' as const, label: 'Part' },
+  ];
+  const parents = [
+    { value: null, label: 'Book root' },
+    ...rows
+      .filter((row) => row.placement.target.kind === 'part' && row.depth + 1 < structure.limits.maxDepth)
+      .map((row) => ({
+        value: row.placement.occurrenceId,
+        label: `${'— '.repeat(row.depth)}${row.placement.title}`,
+      })),
+  ];
   const selected = state.selected;
   const canPlace = Boolean(
     selected && !selected.dirty && !selected.snapshotPending && !selected.invalid && !selected.uploading,
@@ -295,7 +310,7 @@ function PlacementForm({
     if (!target) return;
     const saved = await onChange({
       kind: 'insert',
-      parentOccurrenceId: parent || null,
+      parentOccurrenceId: parent,
       beforeOccurrenceId: null,
       title: title.trim(),
       target,
@@ -306,23 +321,39 @@ function PlacementForm({
     <details className="studio-placement-form">
       <summary>Add part or chapter</summary>
       <form onSubmit={(event) => void submit(event)} className="studio-stack">
-        <label htmlFor={`${id}-kind`}>Add</label>
-        <select
-          id={`${id}-kind`}
-          value={kind}
-          disabled={disabled}
-          onChange={(event) => setKind(event.target.value === 'part' ? 'part' : 'chapter')}
-        >
-          <option value="chapter">Saved document as chapter</option>
-          <option value="part">Part</option>
-        </select>
-        {kind === 'chapter' ? (
-          <p className="studio-help">
-            {selected
-              ? `Selected document: ${selected.title}. Save all changes before placing it.`
-              : 'Open or create a draft first.'}
-          </p>
-        ) : null}
+        <Field>
+          <FieldLabel htmlFor={`${id}-kind`}>Add</FieldLabel>
+          <Select<'part' | 'chapter'>
+            items={kinds}
+            value={kind}
+            disabled={disabled}
+            onValueChange={(value) => setKind(value ?? 'chapter')}
+          >
+            <SelectTrigger
+              id={`${id}-kind`}
+              aria-describedby={kind === 'chapter' ? `${id}-document` : undefined}
+              className="min-h-11 w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {kinds.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          {kind === 'chapter' ? (
+            <FieldDescription id={`${id}-document`} className="studio-help">
+              {selected
+                ? `Selected document: ${selected.title}. Save all changes before placing it.`
+                : 'Open or create a draft first.'}
+            </FieldDescription>
+          ) : null}
+        </Field>
         <label htmlFor={`${id}-title`}>Placement title</label>
         <Input
           id={`${id}-title`}
@@ -331,23 +362,23 @@ function PlacementForm({
           disabled={disabled}
           onChange={(event) => setTitle(event.target.value)}
         />
-        <label htmlFor={`${id}-parent`}>Place inside</label>
-        <select
-          id={`${id}-parent`}
-          value={parent}
-          disabled={disabled}
-          onChange={(event) => setParent(event.target.value)}
-        >
-          <option value="">Book root</option>
-          {rows
-            .filter((row) => row.placement.target.kind === 'part' && row.depth + 1 < structure.limits.maxDepth)
-            .map((row) => (
-              <option
-                key={row.placement.occurrenceId}
-                value={row.placement.occurrenceId}
-              >{`${'— '.repeat(row.depth)}${row.placement.title}`}</option>
-            ))}
-        </select>
+        <Field>
+          <FieldLabel htmlFor={`${id}-parent`}>Place inside</FieldLabel>
+          <Select<string> items={parents} value={parent} disabled={disabled} onValueChange={setParent}>
+            <SelectTrigger id={`${id}-parent`} className="min-h-11 w-full">
+              <SelectValue placeholder="Book root" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {parents.map(({ value, label }) => (
+                  <SelectItem key={value ?? ''} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         <Button type="submit" disabled={disabled || !title.trim() || (kind === 'chapter' && !canPlace)}>
           Add {kind}
         </Button>
