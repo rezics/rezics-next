@@ -2,6 +2,19 @@
 
 ## Policy boundary
 
+## Fixed-home Book publication authority
+
+Content's native Book activation captures all installed home generations and epochs before checking exact target
+eligibility. Access advances the owning home epoch in the same transaction as account state/authentication-floor
+changes, the earliest erasure record and current resource grant, denial, role, initialization or principal-assignment
+changes. A committed proof includes only the homes reached by its exact source and container checks; the final
+catalogue command locks those entries in numeric order through its publication commit. Account erasure is an early
+invalidator before downstream cleanup. Partition log position is not a substitute for these authority epochs.
+Access's existing decision remains authoritative; the epoch only tells Content when to repeat that decision.
+Public resource eligibility continues through `createResourcePublicEligibility` and
+`prepareAnonymousEligibility` in the existing Access formula. Book activation adds no parallel Access evaluator;
+Content owns the exact source and container observations that bind the proof to dependency homes.
+
 Authenticated Content command admission uses the series growth rule at populations 256, 1024 and 4096.
 Its point-command admission test covers current Access, native effects, history and replay; it has no step-rule
 baseline exception. The existing point series is the acceptance test for this choice.

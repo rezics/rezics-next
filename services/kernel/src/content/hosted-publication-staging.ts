@@ -33,6 +33,8 @@ import {
   type HostedPublicationStagingState,
   type HostedPublicationStagingSourceKind,
   type HostedPublicationStagingStepResult,
+  type HostedPublicationActivationTarget,
+  type HostedPublicationTargetCursor,
   type HostedPublicationTargetObservation,
 } from './hosted-publication-staging-model.ts';
 
@@ -124,7 +126,6 @@ type StepCandidate = Readonly<{
   target: HostedChapterTarget | null;
 }>;
 type SourcePage = Readonly<{ rows: readonly SourceRow[]; exhausted: boolean }>;
-type StepPhase = 'whole' | 'selection' | 'closure';
 type OutputTargetCursor = Readonly<{
   threadId: string;
   postId: string;
@@ -1318,6 +1319,99 @@ export async function readHostedPublicationStagingTargetObservations(
   const more = rows.length > limit;
   const items: HostedPublicationTargetObservation[] = rows.slice(0, limit).map((row) => ({
     target: { threadId: row.thread_id, postId: row.post_id, revisionId: row.target_revision_id, sha256: row.sha256 },
+    authorId: row.author_account_id,
+    licence: row.licence,
+    observedAt: row.observed_at,
+  }));
+  const last = items.at(-1);
+  const next =
+    more && last
+      ? {
+          threadId: last.target.threadId,
+          postId: last.target.postId,
+          revisionId: last.target.revisionId,
+          sha256: last.target.sha256,
+        }
+      : null;
+  return { items, next };
+}
+
+/** Read exact, distinct candidate targets with one candidate-owned occurrence
+ * for consent membership. This remains private to the sealed candidate and is
+ * ordered by target identity so a Book of any size can be checked in 20-target
+ * authority pages. */
+export async function readHostedPublicationStagingActivationTargets(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+  after: HostedPublicationTargetCursor | null,
+  limit = HOSTED_PUBLICATION_STAGING_STEP_LIMIT,
+): Promise<HostedPublicationStagingPage<HostedPublicationActivationTarget, HostedPublicationTargetCursor>> {
+  const actor = accountActor(actorInput);
+  const route = validateLocator(locator);
+  if (!Number.isInteger(limit) || limit < 1 || limit > HOSTED_PUBLICATION_STAGING_STEP_LIMIT)
+    throw stagingConflict('Activation target pages are limited to 20 distinct targets');
+  if (after) {
+    const targetRoute = routeOf(after.threadId);
+    if (
+      targetRoute === null ||
+      routeOf(after.postId) !== targetRoute ||
+      routeOf(after.revisionId) !== targetRoute ||
+      !/^[0-9a-f]{64}$/.test(after.sha256)
+    )
+      throw stagingConflict('Invalid activation target cursor');
+  }
+  const stage = await lockStage(client, locator);
+  assertActorBinding(stage, actor);
+  await requireSealedStage(client, stage);
+  const rows = (
+    await client.query<
+      TargetIdentityRow & {
+        occurrence_id: string;
+        author_account_id: string;
+        licence: string;
+        observed_at: string;
+      }
+    >(
+      `SELECT t.thread_id,t.post_id,t.target_revision_id,encode(t.body_sha256,'hex') AS sha256,
+         candidate.occurrence_id,t.author_account_id,t.licence,
+         to_char(t.observed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS observed_at
+       FROM (
+         SELECT thread_id,post_id,target_revision_id,body_sha256,author_account_id,licence,observed_at
+         FROM content.hosted_publication_staging_target
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3
+           AND ($4::uuid IS NULL OR ROW(thread_id,post_id,target_revision_id,body_sha256)>
+             ROW($4::uuid,$5::uuid,$6::uuid,decode($7,'hex')))
+         ORDER BY thread_id,post_id,target_revision_id,body_sha256
+         LIMIT $8
+       ) t
+       JOIN LATERAL (
+         SELECT c.occurrence_id
+         FROM content.hosted_publication_staging_candidate c
+         WHERE c.route=$1 AND c.catalogue_id=$2 AND c.stage_id=$3 AND c.kind='chapter'
+           AND c.thread_id=t.thread_id AND c.post_id=t.post_id
+           AND c.target_revision_id=t.target_revision_id AND c.body_sha256=t.body_sha256
+         ORDER BY c.occurrence_id
+         LIMIT 1
+       ) candidate ON true
+       ORDER BY t.thread_id,t.post_id,t.target_revision_id,t.body_sha256
+       LIMIT $8`,
+      [
+        route,
+        locator.catalogueId,
+        locator.stageId,
+        after?.threadId ?? null,
+        after?.postId ?? null,
+        after?.revisionId ?? null,
+        after?.sha256 ?? null,
+        limit + 1,
+      ],
+    )
+  ).rows;
+  const more = rows.length > limit;
+  const items: HostedPublicationActivationTarget[] = rows.slice(0, limit).map((row) => ({
+    target: { threadId: row.thread_id, postId: row.post_id, revisionId: row.target_revision_id, sha256: row.sha256 },
+    occurrenceId: row.occurrence_id,
     authorId: row.author_account_id,
     licence: row.licence,
     observedAt: row.observed_at,

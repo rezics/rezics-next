@@ -23,6 +23,12 @@ consent and current native disclosure are owned in
 structure edits do not change a released revision's bytes. Releasing an empty selection withdraws the current TOC;
 explicit historical manifests still obey current catalogue and target Access.
 
+Books, Posts and fixed editions share exact-selection, retained-version, current-use and reclamation invariants.
+Content owns Book candidate storage and the immutable publication descriptor; Access and Commerce retain their
+native eligibility and benefit decisions. Activation captures per-home authority generations before target checks,
+pages at most 20 distinct targets, then locks only proved dependency homes for the final pointer CAS. It never
+rebuilds the candidate, reads target bodies or expands retained-root cleanup. Current reader checks remain separate.
+
 The mounted `/v1/hostedCatalogues` operations create and revise structures, append a root chapter, publish, read
 metadata, page children and resolve an occurrence at an explicit structure or publication revision.
 `GET /v1/subjects/{id}/hostedCatalogues`

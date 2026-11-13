@@ -4,6 +4,13 @@ A Space is the stable, routed identity for a future Realm (community) or Zone (s
 Its metadata is an append-only revision chain; the Space points to its current head.
 This module provides commands, point reads and HTTP routes.
 
+## Fixed-home Book publication authority
+
+Current Realm and Space lifecycle/revision changes and Realm ban writes advance their routed home's publication
+authority epoch in the same native transaction. Content records Realm and Space homes only when the exact target
+read traverses that ancestry, then compares and locks those recorded homes during final Book activation. This
+invalidation does not replace Community's current read decision or create a cross-home permission transaction.
+
 ## Declaration and ambient operands
 
 `createCommunityDeclaration(ambient)` exposes work, events, membership/participation and effects;

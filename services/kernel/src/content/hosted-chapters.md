@@ -368,7 +368,7 @@ Decision: materialize a sealed exact stage into one private candidate generation
 
 Decision: private staging uses a source-ordered candidate generation, 20-row replayable steps and selection batches of
 at most 512; exact target observations stay separate from current authority proof, source titles remain source-owned
-for terminal redaction, and this slice exposes no activation.
+for terminal redaction, and activation validates the sealed generation without rebuilding it.
 
 Ordered staging pins the current immutable revision, generation and sequence, pages whole sources through bounded
 preorder reads, and resolves selected points and candidate titles from that same snapshot; legacy snapshot and prefix
@@ -422,22 +422,40 @@ A stays selected through partial B, failed seal/activation, crash, cancel, expir
 activation replays B exactly after later changes only for a currently admitted author. No partial output is public;
 private progress, targets and commitments stay author-only and follow Book erasure/hold policy.
 
-**Activation-currentness gate:** the installed per-invocation attachment checks are not a durable aggregate authority
-proof for an arbitrarily large release. Rechecking all N targets in one final transaction is forbidden; permission
-checks made in earlier batches are insufficient. Before enabling staged activation, Content/Access must deliver a
-native retained validity proof binding every newly selected target/source observation to current eligibility and
-invalidation, whose final validation is bounded independently of N. It must cover cross-home revocation between the
-last step and activation, not only draft CAS, a TTL or a caller epoch. A source fence that can change without
-invalidating that proof fails the contract. No such capability is claimed installed by this decision. Build the
-control/step/seal path now; keep activation disabled until that proof and its revoked-after-last-step test exist.
-Current reader disclosure remains mandatory even after a valid activation; no distributed permission transaction is
-invented here. Point publication can launch independently because its changed-target set is depth-bounded.
+**Adopted activation currentness:** capture the installed 4,096-home generation/epoch vector before fresh source
+observations. A replayable pass checks the catalogue opening and at most 20 distinct staged targets per page through
+current public eligibility or exact Book-scoped consent, including current Board/Realm/Space ancestry, source
+incarnation, author/licence, erasure, Access state and the keyed sparse Post revision restriction. Restriction
+transitions must advance the same source-home epoch in their native transaction; the Post restriction owner supplies
+that keyed transition. Persist only the dependency homes actually proved. A changed
+epoch restarts these authority pages against a fresh vector while preserving the sealed candidate and old public
+release. The final command locks and compares only those homes in ascending order on the catalogue command client;
+it holds them through the immutable descriptor write, root selection, publication-pointer CAS, receipt, event and
+COMMIT. It performs no per-target metadata/body reads and does no foreign checkout while those locks are held.
+Ordinary partition log position is not an authority epoch; home movement changes its generation. The 4,096-home
+vector bounds topology work, not Book size. This fixed-home vector supersedes the proposed universal singleton lock.
+
+Current author admission still precedes receipt replay. A successful replay for a currently admitted author returns
+its original publication after a later target revoke without reactivating it. Current reader disclosure remains
+independent and mandatory after activation; a revoked or erased target becomes unavailable under its existing
+reader rules. Expiring native eligibility requires native next-transition evidence. Existing preparation expiry,
+Money/benefit guards, exact edition retention and retained-root reclamation stay with their current owners; this
+activation adds no common Book table, universal lock, global sweeper or cleanup path.
 
 Whole-build preparation uses a bounded committed frontier, coverage and seal, then one atomic publication pointer;
 it copies no full manifest and follows no unbounded delta chain. Point publish and whole build share the immutable
 root format, exact-target/consent contract, reader/cursor, CAS, receipt and native authority; they do not share a
 job lifecycle. A successful serial chapter during preparation makes the original expected publication stale (412);
 replacing it requires a new activation intent and key.
+
+Decision: the focused currentness fixture uses 21 distinct private draft revisions with exact catalogue consent,
+revokes one cross-home consent after candidate seal, preserves A and the same candidate, then renews consent and
+retries only authority pages. It also pins source and container takedown, Realm/Space lifecycle, earliest erasure,
+stale CAS, successful replay and current reader denial.
+
+Decision: the Post restriction owner’s sparse exact-revision state is another source-home invalidator. Its keyed
+native transition must advance the existing authority epoch so a prepared eligible observation cannot select
+blocked bytes; activation adds no per-edit consent, entitlement or pointer behavior for restrictions.
 
 Durable Book-scoped consent and a later withheld reader slot are **not** that activation proof. Consent may keep an
 already issued exact-revision intent after the issuer later loses ordinary edit role, while explicit revoke, erasure
@@ -450,11 +468,15 @@ reader denial as separate obligations.
 
 ### Release-candidate disposition and implementation handoff
 
-The specification is decided; **Book release-candidate readiness remains blocked** by missing generation/as-of
-sequence implementation, point public-snapshot publication with exact source consent, and large-batch
-activation-currentness. Root append, a design document, or raising a request cap closes none of these gates. The
-initial persistence adapter is the row-per-node PostgreSQL temporal port in the shared outline contract; a fixed-page
-alternative needs native evidence and does not reopen predecessor-versus-radix comparison. Deliver these source slices:
+The additive generation-based candidate and native activation proof are implemented as independent owner paths.
+Activation remains unmounted until the native two-pool acceptance fixture proves lock ordering, invalidator coverage,
+restart/replay, reader denial and zero final target reads. Root append, the point HTTP path and legacy baseline stay
+independent. Existing exact-selection, retention, current-use and reclamation rules remain in force. The other
+unrelated scalable-outline and Studio work remains governed by its own acceptance. The initial persistence adapter
+is the row-per-node PostgreSQL temporal port in the shared outline contract; a fixed-page alternative needs native
+evidence and does not reopen predecessor-versus-radix comparison. Existing frozen point, tree, mounted and growth
+assertions remain unchanged; the authority-currentness acceptance is in
+[`hosted-publication-activation-currentness.test.ts`](../../test/content/hosted-publication-activation-currentness.test.ts).
 
 1. **First source slice — exact point public snapshots:** in `hosted-chapters-{model,store,commands,reads}.ts` and a
    new owner `hosted-publication-point.ts`, bind the snapshot/sequence storage port; implement changed-target
@@ -472,10 +494,10 @@ alternative needs native evidence and does not reopen predecessor-versus-radix c
    [`knowledge-history.test.ts`](../../test/content/knowledge-history.test.ts) and
    `versioned-outline-order.test.ts`; retain existing cursor/title/body/publication assertions. No per-edit rebuild,
    eager migration, global key relabel or history-chain replay.
-3. **Complete Book publication:** add `hosted-publication-staging.ts` and `hosted-publication-staging.test.ts` for
-   pinned whole/selection, durable input/frontiers, seal and atomic activation/withdrawal. Preparation can start with
-   snapshot/prefix sources now; final activation depends on the native validity-proof gate above. Keep installed
-   release-selection/admission/append-release assertions; their 512 bounds describe those compatibility requests.
+3. **Complete Book publication:** `hosted-publication-staging.ts` and the candidate generation retain pinned
+   whole/selection input, frontiers and seal; the activation path retains bounded authority pages and atomically
+   selects the candidate generation. Keep installed release-selection/admission/append-release assertions; their
+   512 bounds describe those compatibility requests. The currentness fixture must pass before activation is mounted.
 4. **Declared native API and mounted consumers:** mount owner point/batch commands, generate the client, then add
    Studio source/destination/selection review and progress. One confirmation issues one bounded command with stable
    IDs and one expected version; conflict retains choices but requires fresh review. Keep Knowledge's current versus
@@ -490,7 +512,7 @@ specification-only patch. They are release gates, not claims that future tests p
 | `outline.anchor-history`      | Insert/reorder/reparent by observed ID, no-effect, wrong/deleted/self/foreign anchors, cycle/depth boundary, opposite moves, stale 412 and exact authorized replay. Historical point/children/preorder/previous-next retain old order/targets after edits and removal; current Knowledge cursor still returns 409 and titles remain current.                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `outline.scale`               | At >512 and 1k/10k/100k placements exercise the row-per-node temporal adapter. Repeat hot-gap edits beyond numeric-window exhaustion and move a large unchanged subtree; count logical probes separately from SQL/I/O, descendant rows (zero), reads/WAL/retained bytes. Denied/private siblings neither become visible nor trigger whole-list refill. Grow width/history/subtree independently; record values against the derived bounds. A fixed-page alternative needs the same native evidence.                                                                                                                                                                                                                                                                |
 | `book.serial-point`           | On thousands of chapters append one public chapter and replace exactly one selected revision without manifest rewrite, full revalidation or other draft/public changes. Unpublished catalogue refuses before pointer advance. An already-public target uses Access public eligibility with no consent row. A private opening becomes Book-readable only after exact Book-scoped consent of one selected revision under proved published membership; the direct Post, other Books and unselected revisions stay private. Revoke between observation and commit, and after success: fail or neutral unavailable under native rules, never draft/title/body leakage or newer-byte substitution. Preserve exact old cursor/link/checkpoint, stale and replay outcomes. |
-| `book.complete-batch`         | Whole and explicit ancestor-closed selection exceed 512 at 1k/10k/100k; complete publish and withdrawal, not just initial pages. Interrupt before/after committed steps and activation response; A persists until complete B. Duplicate/unknown/missing ancestor, source/publication race, expiry, forged/partial seal and authority revoked after last step fail safely. Bound each step and final activation; verify zero bodies and no rescanned prefix.                                                                                                                                                                                                                                                                                                        |
+| `book.complete-batch`         | Whole and explicit ancestor-closed selection exceed 512 at 1k/10k/100k; complete publish and withdrawal, not just initial pages. With two real pools and barriers, check 21 targets in two pages, revoke across homes after seal, preserve A, then renew eligibility and repeat only the authority pass. Interrupt a page, reverse dependency lock order, roll back, and cover early erasure/container/takedown invalidators, stale CAS, lost-response replay and current reader denial. An unrelated-home writer proceeds. Count vector rows/locks separately and assert zero final target reads for 1 and 21 targets. Bound each step and final activation; verify zero bodies and no rescanned prefix.                                                          |
 | `outline.migration-retention` | Legacy and sealed-prefix pinned baselines equal independent traversal; later appends are excluded and stale activation fails. Resume crash/expiry/erasure. Old releases, receipts/cursors/checkpoints and shared prefixes survive held-root cleanup; abandoned roots reclaim in bounded steps. Withdrawal is bounded; total cleanup is measured separately.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `outline.mounted-review`      | Native HTTP repeats admission on page/confirmation/replay; Studio and Knowledge preserve choices after 412/409 and require review. Point publication distinguishes unpublished-catalogue refusal, missing-consent refusal and Book-scoped selected-revision success; batch progress displays A until B activates. Anonymous/other-account responses expose no private siblings/progress. Session changes retire stale results.                                                                                                                                                                                                                                                                                                                                     |
 

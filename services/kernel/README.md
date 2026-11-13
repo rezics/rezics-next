@@ -6,6 +6,14 @@ exposure, action and rate metadata; domain handlers remain the owners of native 
 
 The kernel workspace owns the database records and adapters used by the service.
 
+Books, Posts and fixed editions retain their shared exact-selection, current-use, retention and reclamation rules.
+Content owns Book candidate storage and exact publication selection; current source and container eligibility still
+flows through native Content and Access reads. Activation captures the fixed 4,096-home authority vector before
+fresh observations, records only proved dependency homes and locks those homes in order on the catalogue client for
+the final descriptor/root/publication CAS, receipt and event. The vector bounds topology work, not Book size; it adds
+no common Book table, universal lock, global sweeper or reclamation path. The focused fixture revokes exact consent
+after sealing and proves that currentness can resume against the same candidate while A stays selected.
+
 ## Growth seed target identifiers
 
 Bulk growth-seed targets keep the lowercase `schema.table` grammar. The supported PostgreSQL server uses UTF-8 and a

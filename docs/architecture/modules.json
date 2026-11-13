@@ -1033,6 +1033,7 @@
         "services/kernel/src/command/execution-contract.ts",
         "services/kernel/src/command/operational.ts",
         "services/kernel/src/database/pool.ts",
+        "services/kernel/src/database/publication-authority.ts",
         "services/kernel/src/command/time.sql",
         "services/kernel/src/command/fence.sql",
         "services/kernel/src/command/no-effect-fence.sql",

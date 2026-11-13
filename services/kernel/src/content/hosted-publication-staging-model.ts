@@ -88,6 +88,13 @@ export type HostedPublicationTargetObservation = Readonly<{
   licence: string;
   observedAt: string;
 }>;
+export type HostedPublicationActivationTarget = HostedPublicationTargetObservation & Readonly<{ occurrenceId: string }>;
+export type HostedPublicationTargetCursor = Readonly<{
+  threadId: string;
+  postId: string;
+  revisionId: string;
+  sha256: string;
+}>;
 export type HostedPublicationStagingPage<T, C = string> = Readonly<{
   items: readonly T[];
   next: C | null;

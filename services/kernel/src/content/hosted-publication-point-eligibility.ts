@@ -1,17 +1,32 @@
 import type { ReadContext } from './model.ts';
 import type { AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { ContentNotFoundError, readPostMetadata, type NativePostMetadata, type RetainContentRead } from './reads.ts';
+import {
+  ContentNotFoundError,
+  readBookScopedPostMetadata,
+  readPostMetadata,
+  snapshot,
+  type NativePostMetadata,
+  type RetainContentRead,
+} from './reads.ts';
 import { hostedTargetKey } from './hosted-chapters-disclosure.ts';
 import type { HostedChapterTarget, HostedDependencies } from './hosted-chapters-model.ts';
 import {
   observeIssuedRevisionDisclosure,
+  revisionDisclosureReaderGate,
   revisionDisclosureSourceCurrent,
   revisionDisclosureStillIssued,
+  type RevisionDisclosureMembership,
   type RevisionDisclosureSource,
 } from './revision-disclosure.ts';
 
 const anonymous = Object.freeze({ kind: 'anonymous' as const });
+
+export type HostedPublicationAuthorityObservation = Readonly<{
+  authorId: string;
+  licence: string;
+  homes: readonly number[];
+}>;
 
 export type HostedPointPublicEligibility = Readonly<{
   /** Recheck the original native observations. A false result is a private refusal. */
@@ -145,6 +160,165 @@ function disclosureSource(
     creatorAccountId: source.issuerAccountId,
     incarnation: source.incarnation,
   };
+}
+
+function exactMetadata(value: NativePostMetadata | null, target: HostedChapterTarget): value is NativePostMetadata {
+  return (
+    value !== null &&
+    value.id === target.postId &&
+    value.threadId === target.threadId &&
+    value.revisionId === target.revisionId &&
+    value.sha256 === target.sha256
+  );
+}
+
+function homeOf(id: string): number | null {
+  const route = routeOf(id);
+  return route === null ? null : partitionOf(route);
+}
+
+/**
+ * Observe one exact target through current anonymous public eligibility or
+ * exact catalogue consent. It reads metadata only, then records every native
+ * home whose state can close the proof: source, account, Board, Realm and Space.
+ * The caller must have captured its fixed home vector before calling this.
+ */
+export async function observeHostedPublicationActivationTarget(
+  deps: HostedDependencies,
+  input: Readonly<{
+    catalogueId: string;
+    activationRevisionId: string;
+    target: HostedChapterTarget;
+    occurrenceId: string;
+    additionalAuthorityIds?: readonly string[];
+    expectedAuthorId?: string;
+    expectedLicence?: string;
+    opening?: boolean;
+  }>,
+  context: ReadContext,
+): Promise<HostedPublicationAuthorityObservation | null> {
+  const route = routeOf(input.target.threadId);
+  if (
+    route === null ||
+    routeOf(input.target.postId) !== route ||
+    routeOf(input.target.revisionId) !== route ||
+    routeOf(input.catalogueId) === null ||
+    routeOf(input.activationRevisionId) !== routeOf(input.catalogueId) ||
+    routeOf(input.occurrenceId) !== routeOf(input.catalogueId)
+  )
+    return null;
+
+  const anonymousContext: ReadContext = { actor: anonymous, deadline: context.deadline };
+  let metadata: NativePostMetadata | null = null;
+  try {
+    const current = await readPostMetadata(
+      deps,
+      input.target.threadId,
+      input.target.postId,
+      anonymousContext,
+      input.target.revisionId,
+    );
+    if (exactMetadata(current.value, input.target) && current.value.visibility === 'published')
+      metadata = current.value;
+  } catch (error) {
+    if (!(error instanceof ContentNotFoundError)) throw error;
+  }
+
+  if (!metadata) {
+    const observation = await observeIssuedRevisionDisclosure(
+      deps,
+      { catalogueId: input.catalogueId, target: input.target },
+      anonymousContext,
+    );
+    if (
+      !observation ||
+      observation.issuerAccountId !== (input.expectedAuthorId ?? observation.issuerAccountId) ||
+      observation.licence !== (input.expectedLicence ?? observation.licence) ||
+      observation.target.threadId !== input.target.threadId ||
+      observation.target.postId !== input.target.postId ||
+      observation.target.revisionId !== input.target.revisionId ||
+      observation.target.sha256 !== input.target.sha256
+    )
+      return null;
+    const membership: RevisionDisclosureMembership = {
+      catalogueId: input.catalogueId,
+      publicationId: input.activationRevisionId,
+      occurrenceId: input.occurrenceId,
+      sourceRevisionId: input.target.revisionId,
+    };
+    const gate = revisionDisclosureReaderGate(observation, membership);
+    if (!gate) return null;
+    try {
+      const scoped = await readBookScopedPostMetadata(deps, input.catalogueId, input.target, gate, anonymousContext);
+      if (!exactMetadata(scoped.value, input.target)) return null;
+      metadata = scoped.value;
+    } catch (error) {
+      if (error instanceof ContentNotFoundError) return null;
+      throw error;
+    }
+  }
+
+  if (
+    (input.opening && metadata.documentKind !== 'opening') ||
+    (input.expectedAuthorId !== undefined && metadata.authorId !== input.expectedAuthorId) ||
+    (input.expectedLicence !== undefined && metadata.licence !== input.expectedLicence)
+  )
+    return null;
+
+  const thread = (
+    await snapshot(deps, input.target.threadId, anonymousContext, (client) =>
+      client.query<{ board_id: string }>(`SELECT board_id FROM content.thread WHERE route=$1 AND thread_id=$2`, [
+        route,
+        input.target.threadId,
+      ]),
+    )
+  ).value.rows[0];
+  if (!thread) return null;
+  const boardRoute = routeOf(thread.board_id);
+  if (boardRoute === null) return null;
+  const board = (
+    await snapshot(deps, thread.board_id, anonymousContext, (client) =>
+      client.query<{ realm_id: string | null }>(`SELECT realm_id FROM content.board WHERE route=$1 AND board_id=$2`, [
+        boardRoute,
+        thread.board_id,
+      ]),
+    )
+  ).value.rows[0];
+  if (!board) return null;
+
+  const homes = new Set<number>();
+  for (const identity of [
+    input.catalogueId,
+    input.target.threadId,
+    input.target.postId,
+    input.target.revisionId,
+    metadata.authorId,
+    thread.board_id,
+    ...(input.additionalAuthorityIds ?? []),
+  ]) {
+    const home = homeOf(identity);
+    if (home === null) return null;
+    homes.add(home);
+  }
+  if (board.realm_id) {
+    const realmRoute = routeOf(board.realm_id);
+    if (realmRoute === null) return null;
+    const realm = (
+      await snapshot(deps, board.realm_id, anonymousContext, (client) =>
+        client.query<{ space_id: string }>(`SELECT space_id FROM community.realm WHERE route=$1 AND realm_id=$2`, [
+          realmRoute,
+          board.realm_id,
+        ]),
+      )
+    ).value.rows[0];
+    if (!realm) return null;
+    for (const identity of [board.realm_id, realm.space_id]) {
+      const home = homeOf(identity);
+      if (home === null) return null;
+      homes.add(home);
+    }
+  }
+  return { authorId: metadata.authorId, licence: metadata.licence, homes: [...homes].sort((a, b) => a - b) };
 }
 
 /**
