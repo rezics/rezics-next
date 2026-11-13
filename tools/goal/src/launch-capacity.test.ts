@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
+import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity } from './process.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -15,7 +18,8 @@ import {
 } from './launch.ts';
 import * as launchCapacity from './launch-capacity.ts';
 import { admittedMemoryMiB } from './launch-capacity.ts';
-import type { CapacityLifecycle } from './launch-capacity.ts';
+import type { CapacityLifecycle, HostCapacityStore } from './launch-capacity.ts';
+import { HEAVY_WORKER_MIB, workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -43,6 +47,95 @@ function liveTicketBody(value: Record<string, unknown>): string {
   return JSON.stringify({ ...identity, ...value });
 }
 
+function terminalRemoteCheckFixture(directory: string) {
+  const taskId = 'capacity-owner';
+  const worktree = join(directory, 'worktree');
+  const resultDirectory = join(worktree, '.temp/goal/checks/results');
+  const historyDirectory = join(worktree, '.temp/goal/checks/custody/history');
+  const sliceRoot = join(directory, 'slice');
+  const checkId = randomUUID();
+  const physicalRunId = randomUUID();
+  const historyPath = physicalHistoryPath(worktree, checkId, physicalRunId);
+  const identity = processIdentity();
+  if (!identity) throw new Error('test process identity unavailable');
+  const terminalRunner = { pid: 999_999_999, start: '1', boot: identity.boot, group: 999_999_999 };
+  mkdirSync(resultDirectory, { recursive: true });
+  mkdirSync(historyDirectory, { recursive: true });
+  mkdirSync(sliceRoot, { recursive: true });
+  const terminalScope = `rezics-worker-${taskId}-1-oldscope.scope`;
+  const unknownScope = 'rezics-worker-unrelated-1-unknown.scope';
+  const scope = (name: string, currentGiB: number, peakGiB: number) => {
+    mkdirSync(join(sliceRoot, name), { recursive: true });
+    writeFileSync(join(sliceRoot, name, 'memory.current'), String(Math.round(currentGiB * 1024 ** 3)));
+    writeFileSync(join(sliceRoot, name, 'memory.peak'), String(Math.round(peakGiB * 1024 ** 3)));
+  };
+  writeFileSync(join(sliceRoot, 'memory.max'), String(26 * 1024 ** 3));
+  writeFileSync(join(sliceRoot, 'memory.current'), String(10 * 1024 ** 3));
+  scope(terminalScope, 0.04, 3.7);
+  scope(unknownScope, 0.1, 4.5);
+  writeFileSync(
+    join(resultDirectory, `${checkId}.json`),
+    JSON.stringify({
+      id: checkId,
+      cwd: worktree,
+      argv: ['bun', 'test', 'tests/example.test.ts'],
+      status: 'finished',
+      log: join(worktree, '.temp/goal/checks/logs', `${checkId}.log`),
+      ownership: { taskId, attempt: 1 },
+      physicalRunId,
+      runnerHost: hostname(),
+      exitCode: 2,
+    }),
+  );
+  writeFileSync(
+    historyPath,
+    JSON.stringify({
+      version: 1,
+      id: checkId,
+      cwd: worktree,
+      argv: ['bun', 'test', 'tests/example.test.ts'],
+      ownership: { taskId, attempt: 1 },
+      physicalRunId,
+      runnerHost: hostname(),
+      runnerIdentity: terminalRunner,
+      log: join(worktree, '.temp/goal/checks/logs', `${checkId}.log`),
+      status: 'finished',
+      remoteExpected: true,
+      terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+      exitCode: 2,
+      createdAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+    }),
+  );
+  let attemptState: 'waiting' | 'running' = 'waiting';
+  const row: { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string } = {
+    task_id: taskId,
+    current_attempt: 1,
+    attempt_state: attemptState,
+    body: '',
+    worktree,
+  };
+  const updateAttempt = (state: 'waiting' | 'running') => {
+    attemptState = state;
+    row.attempt_state = state;
+    row.body = JSON.stringify({
+      taskId,
+      attempt: 1,
+      state,
+      process: state === 'running' ? processIdentity() : null,
+      checks: [checkId],
+    });
+  };
+  updateAttempt('waiting');
+  const store = {
+    db: { query: () => ({ all: () => [row] }) },
+    capacityAttemptsCount: () => (attemptState === 'running' ? 1 : 0),
+    attempts: () => [{ attempt: 1, state: attemptState }],
+    taskGoal: () => 'library',
+  } as unknown as HostCapacityStore;
+  return { taskId, checkId, sliceRoot, terminalScope, unknownScope, historyPath, store, updateAttempt };
+}
+
 test('launch.ts re-exports the host-capacity implementation', () => {
   expect(awaitHostCapacity).toBe(launchCapacity.awaitHostCapacity);
   expect(capacityAvailable).toBe(launchCapacity.capacityAvailable);
@@ -50,6 +143,23 @@ test('launch.ts re-exports the host-capacity implementation', () => {
   expect(hasCapacity).toBe(launchCapacity.hasCapacity);
   expect(startsFirst).toBe(launchCapacity.startsFirst);
   expect(waitersAhead).toBe(launchCapacity.waitersAhead);
+});
+
+test('legacy unkeyed tickets remain ahead in the FIFO queue', () => {
+  const directory = temporaryDirectory();
+  const queue = join(directory.path, 'capacity-queue');
+  mkdirSync(queue, { recursive: true });
+  const now = Date.now();
+  const older = `${String(now - 60_000).padStart(15, '0')}-${process.pid}-older`;
+  const mine = `${String(now).padStart(15, '0')}.00000001-${process.pid}-mine`;
+  try {
+    writeFileSync(join(queue, older), '');
+    writeFileSync(join(queue, mine), '');
+    expect(waitersAhead(queue, mine)).toBe(1);
+    expect(waitersAhead(queue, older)).toBe(0);
+  } finally {
+    directory.close();
+  }
 });
 
 test('concurrent starts respect the cap and a queued start proceeds after release', async () => {
@@ -295,6 +405,147 @@ test('a resumed attempt reserves four GiB on its ticket and transfers that charg
   }
 });
 
+test('terminal local check proof releases only its waiting generation reserve and a replacement writer keeps it', async () => {
+  const directory = temporaryDirectory();
+  const fixture = terminalRemoteCheckFixture(directory.path);
+  let release: (() => void) | undefined;
+  let pendingReplacement: Promise<() => void> | undefined;
+  let replacementStarted = false;
+  let parked = new Set<string>();
+  const capacity = { maxWorkers: 8, minAvailableMiB: 0 };
+  const headroom: typeof workerHeadroomMiB = (
+    running,
+    root = fixture.sliceRoot,
+    scopes = new Set(),
+    active = new Set(),
+  ) => {
+    parked = new Set(scopes);
+    return workerHeadroomMiB(running, root, scopes, active);
+  };
+  const options = {
+    pollIntervalMs: 5,
+    availableMiB: () => Infinity,
+    pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+    workerSliceRoot: fixture.sliceRoot,
+    memoryCurrentMiB: () => workerMemoryCurrentMiB(fixture.sliceRoot),
+    workerHeadroomMiB: headroom,
+    resume: true,
+  };
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify(capacity));
+    const memoryBefore = workerMemoryCurrentMiB(fixture.sliceRoot);
+    const before = workerHeadroomMiB(0, fixture.sliceRoot, new Set(), new Set());
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    const after = workerHeadroomMiB(0, fixture.sliceRoot, parked, new Set());
+    expect(parked).toContain(fixture.terminalScope);
+    expect(parked).not.toContain(fixture.unknownScope);
+    expect(after - before).toBeCloseTo(3.96 * 1024, 1);
+    expect(workerMemoryCurrentMiB(fixture.sliceRoot)).toBe(memoryBefore);
+    expect(readFileSync(join(fixture.sliceRoot, fixture.terminalScope, 'memory.current'), 'utf8')).toBe(
+      String(Math.round(0.04 * 1024 ** 3)),
+    );
+    release();
+    release = undefined;
+
+    fixture.updateAttempt('running');
+    pendingReplacement = awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options).then(
+      (dispose) => {
+        replacementStarted = true;
+        return dispose;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(replacementStarted).toBe(false);
+    expect(parked).not.toContain(fixture.terminalScope);
+    expect(workerHeadroomMiB(1, fixture.sliceRoot, parked, new Set())).toBeLessThan(HEAVY_WORKER_MIB);
+    rmSync(join(directory.path, 'capacity.json'), { force: true });
+    release = await pendingReplacement;
+    pendingReplacement = undefined;
+  } finally {
+    rmSync(join(directory.path, 'capacity.json'), { force: true });
+    if (pendingReplacement) release = await pendingReplacement;
+    release?.();
+    directory.close();
+  }
+});
+
+test('a legacy reclaim latch reopens once exact terminal custody proves its old scope reserve is obsolete', async () => {
+  const directory = temporaryDirectory();
+  const fixture = terminalRemoteCheckFixture(directory.path);
+  let headroom = 0;
+  let reclaimCount = 0;
+  let terminalScopes = new Set<string>();
+  let release: (() => void) | undefined;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    writeFileSync(join(directory.path, 'capacity-reclaim.json'), JSON.stringify({ blocked: true }));
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, {
+      pollIntervalMs: 5,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerSliceRoot: fixture.sliceRoot,
+      memoryCurrentMiB: () => workerMemoryCurrentMiB(fixture.sliceRoot),
+      workerHeadroomMiB: (_running, _root, parked) => {
+        terminalScopes = new Set(parked);
+        return headroom;
+      },
+      reclaim: () => {
+        reclaimCount += 1;
+        headroom = 2048;
+        return { requestedMiB: 256 };
+      },
+    });
+
+    const episode = JSON.parse(readFileSync(join(directory.path, 'capacity-reclaim.json'), 'utf8'));
+    expect(reclaimCount).toBe(1);
+    expect(terminalScopes).toContain(fixture.terminalScope);
+    expect(episode.history.at(-1)).toMatchObject({
+      outcome: 'no-progress',
+      requestedMiB: 256,
+      memoryProgressMiB: 0,
+    });
+  } finally {
+    release?.();
+    directory.close();
+  }
+});
+
+test('missing physical custody evidence keeps the scope reserve and reports the exact wait cause', async () => {
+  const directory = temporaryDirectory();
+  const fixture = terminalRemoteCheckFixture(directory.path);
+  rmSync(fixture.historyPath);
+  let release: (() => void) | undefined;
+  let parked = new Set<string>();
+  const logged: string[] = [];
+  const originalError = console.error;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    console.error = (...args) => logged.push(args.map(String).join(' '));
+    const pending = awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, {
+      pollIntervalMs: 5,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerSliceRoot: fixture.sliceRoot,
+      workerHeadroomMiB: (_running, _root, scopes) => {
+        parked = new Set(scopes);
+        return 0;
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(parked).not.toContain(fixture.terminalScope);
+    expect(logged.join('\n')).toContain(
+      `attempt ${fixture.taskId}/1 check ${fixture.checkId}: custody evidence is unavailable (ENOENT); scope reserve retained`,
+    );
+
+    rmSync(join(directory.path, 'capacity.json'));
+    release = await pending;
+  } finally {
+    console.error = originalError;
+    release?.();
+    directory.close();
+  }
+});
+
 test('an obsolete first-start ticket cannot block an independent urgent repair at width two', async () => {
   const directory = temporaryDirectory();
   const lifecycle = new Map<string, CapacityLifecycle>([
@@ -506,13 +757,34 @@ test('a bounded reclaim runs outside the admission lease and starts only after h
   }
 });
 
-test('an ineffective reclaim is coalesced until headroom recovers', async () => {
+test('legacy reclaim history ignores cache estimates and retries only after measured memory progress', async () => {
   const directory = temporaryDirectory();
   let headroom = 0;
+  let memoryCurrent = 10_000;
+  let now = 1_000;
   let reclaimCount = 0;
   let release: (() => void) | undefined;
   try {
     writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    writeFileSync(
+      join(directory.path, 'capacity-reclaim.json'),
+      JSON.stringify({
+        version: 1,
+        history: [
+          {
+            at: 900,
+            outcome: 'progress',
+            headroomBeforeMiB: 0,
+            headroomAfterMiB: 0,
+            cleanCacheBeforeMiB: 1024,
+            cleanCacheAfterMiB: 0,
+            requestedMiB: 1024,
+            headroomProgressMiB: 0,
+            cacheProgressMiB: 1024,
+          },
+        ],
+      }),
+    );
     const pending = awaitHostCapacity(
       { capacityAttemptsCount: () => 0, attempts: () => [], taskGoal: () => 'library' },
       directory.path,
@@ -521,19 +793,46 @@ test('an ineffective reclaim is coalesced until headroom recovers', async () => 
       1,
       {
         pollIntervalMs: 5,
+        now: () => now,
         availableMiB: () => Infinity,
         pressure: () => ({ memoryFull: 0, ioFull: 0 }),
         workerHeadroomMiB: () => headroom,
+        memoryCurrentMiB: () => memoryCurrent,
         reclaim: () => {
           reclaimCount += 1;
+          if (reclaimCount === 2) headroom = 2048;
+          return { requestedMiB: 1024 };
         },
       },
     );
-    await new Promise((resolve) => setTimeout(resolve, 35));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(reclaimCount).toBe(0);
+    now += 1_001;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(reclaimCount).toBe(0);
+    memoryCurrent -= 64;
+    await new Promise((resolve) => setTimeout(resolve, 30));
     expect(reclaimCount).toBe(1);
-    headroom = 2048;
+    now += 1_001;
+    memoryCurrent -= 64;
     release = await pending;
-    expect(reclaimCount).toBe(1);
+    const episode = JSON.parse(readFileSync(join(directory.path, 'capacity-reclaim.json'), 'utf8'));
+    expect(reclaimCount).toBe(2);
+    expect(episode.history[0]).toMatchObject({
+      outcome: 'legacy',
+      requestedMiB: 1024,
+      memoryCurrentAfterMiB: 10_000,
+    });
+    expect(episode.history[1]).toMatchObject({
+      outcome: 'no-progress',
+      memoryCurrentBeforeMiB: 9_936,
+      memoryCurrentAfterMiB: 9_936,
+      memoryProgressMiB: 0,
+    });
+    expect(episode.history[2]).toMatchObject({
+      memoryCurrentBeforeMiB: 9_872,
+      requestedMiB: 1024,
+    });
   } finally {
     release?.();
     directory.close();
