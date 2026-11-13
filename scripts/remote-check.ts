@@ -5790,7 +5790,7 @@ async function runPlacementProbe(host: Host, uploadedDirectory: string | undefin
 touch ${quote(`${uploadedDirectory}/.alive`)} || exit 75
 `
     : '';
-  const child = Bun.spawn(
+  const transport = spawnOwnedSshTransport(
     [sshExecutable(), ...sshOptions(host), host.address, placementHeartbeat + probeScript(host)],
     {
       stdin: 'ignore',
@@ -5798,17 +5798,27 @@ touch ${quote(`${uploadedDirectory}/.alive`)} || exit 75
       stderr: 'pipe',
     },
   );
+  const child = transport.child;
   const output = Promise.all([
     new Response(child.stdout).text(),
     child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
   ]);
   const code = await within(placementProbeTimeoutMs(), child.exited);
-  if (code === null) {
-    await stopAndReap(child);
-    const [stdout, stderr] = await output;
-    return { probe: null, error: probeErrorLine(stdout, stderr, null) };
+  const cleanup = await reapOwnedSshTransport(transport);
+  if (!cleanup.terminal) {
+    void output.catch(() => {});
+    throw new RemoteTransportError(
+      host.name,
+      'placement probe cleanup',
+      REMOTE_TRANSPORT_FAILURE,
+      false,
+      cleanup.reason,
+    );
   }
   const [stdout, stderr] = await output;
+  if (code === null) {
+    return { probe: null, error: probeErrorLine(stdout, stderr, null) };
+  }
   if (code !== 0) return { probe: null, error: probeErrorLine(stdout, stderr, code) };
   const probe = parseProbe(stdout);
   return probe ? { probe } : { probe: null, error: probeErrorLine(stdout, stderr, code) };

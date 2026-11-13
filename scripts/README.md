@@ -222,6 +222,9 @@ Decision: each per-run SSH transport has an identity-fenced process group, and i
 reaped within a short bound after preserving the SSH result; uncertainty keeps transport cleanup unverified, while
 the existing host lease continues to own shared ControlMaster recovery.
 
+Decision: auxiliary placement probes use that same identity-fenced operation group and return only after its local
+descendants are terminal; the shared host ControlMaster remains owned by the host lease.
+
 Once original supervisor and command terminal custody is established, admission cleanup accepts a verified absent
 owned scope or slice. A started run without its supervisor evidence remains retained. Systemd bus and stop failures
 keep their diagnostics; unit absence alone does not prove whole-run cleanup. Marker descriptor helpers scope stderr

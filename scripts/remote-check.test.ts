@@ -672,6 +672,12 @@ if (script.includes('REMOTE_CHECK_MEMORY_RECLAIM')) {
 }
 if (script.includes('/proc/loadavg')) {
   const probeAttempt = count('placement-probe');
+  if (config.probeProxyDescendant) {
+    const proxy = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'], {
+      stdio: 'inherit',
+    });
+    log({ kind: 'probe-proxy-descendant', pid: proxy.pid, operationPid: process.pid });
+  }
   if (probeAttempt < (config.stalledProbes ?? 0)) {
     log({ kind: 'probe', stalled: true, attempt: probeAttempt });
     process.on('SIGTERM', () => {
@@ -1326,6 +1332,7 @@ type HostConfig = {
   down?: boolean;
   probeError?: string;
   stalledProbes?: number;
+  probeProxyDescendant?: boolean;
   controlCheckFail?: boolean;
   controlCheckDead?: boolean;
   exit?: number;
@@ -4230,6 +4237,33 @@ test('a placement probe timeout recovers an affirmatively dead ControlMaster and
   expect(closeAt).toBeGreaterThan(checkAt);
   expect(recoveredAt).toBeGreaterThan(closeAt);
   expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
+});
+
+test('placement probe close and timeout reap only their proxy groups and keep the shared master and peer alive', async () => {
+  const peer = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' });
+  const peerIdentity = processIdentity(peer.pid!)!;
+  try {
+    for (const stalls of [0, 1]) {
+      const hosts = {
+        a: { available: 8e9, slots: 4, probeProxyDescendant: true, stalledProbes: stalls },
+        ...(stalls ? { b: { available: 8e9, slots: 4 } } : {}),
+      };
+      const fixture = scenario(hosts);
+      fixture.env.REMOTE_CHECK_PLACEMENT_PROBE_TIMEOUT_MS = '80';
+      expect((await remote(fixture.env, workspace(), ['true'])).code).toBe(0);
+      const probes = fixture.events().filter((event) => event.kind === 'probe-proxy-descendant');
+      expect(probes.length).toBeGreaterThan(0);
+      for (const probe of probes) expect(processGroupMembers(Number(probe.operationPid))).toEqual([]);
+      expect(fixture.events().some((event) => event.kind === 'control-close')).toBe(false);
+      expect(sameProcess(peerIdentity)).toBe(true);
+    }
+  } finally {
+    if (peer.exitCode === null && peer.signalCode === null) {
+      const exited = new Promise<void>((resolve) => peer.once('exit', () => resolve()));
+      peer.kill('SIGTERM');
+      await exited;
+    }
+  }
 });
 
 test('concurrent placement probes recover one dead master at most once per host per minute', async () => {
