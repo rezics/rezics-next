@@ -2530,6 +2530,101 @@ CREATE TABLE content.hosted_version_builder_sibling_root (
 
 
 --
+-- Name: hosted_version_draft_activation; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_draft_activation (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    source_revision_id uuid NOT NULL,
+    expected_revision_id uuid NOT NULL,
+    placement_count bigint NOT NULL,
+    chapter_count bigint NOT NULL,
+    root_count bigint NOT NULL,
+    sibling_root_id uuid,
+    preorder_root_id uuid,
+    chapter_root_id uuid,
+    phase text NOT NULL,
+    occurrence_after_ordinal bigint CONSTRAINT hosted_version_draft_activati_occurrence_after_ordinal_not_null NOT NULL,
+    node_after_kind text NOT NULL,
+    node_after_id uuid NOT NULL,
+    root_null_done boolean NOT NULL,
+    root_after_parent_id uuid NOT NULL,
+    coverage_complete boolean DEFAULT false NOT NULL,
+    status text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_version_draft_activation_check CHECK (((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11))) AND (route = ((get_byte(uuid_send(input_id), 10) * 256) + get_byte(uuid_send(input_id), 11))) AND (route = ((get_byte(uuid_send(generation_id), 10) * 256) + get_byte(uuid_send(generation_id), 11))) AND (route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11))))),
+    CONSTRAINT hosted_version_draft_activation_check1 CHECK ((source_revision_id = expected_revision_id)),
+    CONSTRAINT hosted_version_draft_activation_check2 CHECK ((((placement_count >= 1) AND (placement_count <= '9007199254740991'::bigint)) AND ((chapter_count >= 0) AND (chapter_count <= placement_count)) AND ((root_count >= 1) AND (root_count <= placement_count)))),
+    CONSTRAINT hosted_version_draft_activation_check3 CHECK (((occurrence_after_ordinal >= '-1'::integer) AND (occurrence_after_ordinal <= placement_count))),
+    CONSTRAINT hosted_version_draft_activation_check4 CHECK ((((status = 'materializing'::text) AND (phase <> 'complete'::text) AND (NOT coverage_complete)) OR ((status = ANY (ARRAY['complete'::text, 'activated'::text])) AND (phase = 'complete'::text) AND coverage_complete))),
+    CONSTRAINT hosted_version_draft_activation_check5 CHECK ((isfinite(created_at) AND isfinite(updated_at))),
+    CONSTRAINT hosted_version_draft_activation_node_after_kind_check CHECK ((node_after_kind = ANY (ARRAY[''::text, 'chapters'::text, 'preorder'::text, 'siblings'::text]))),
+    CONSTRAINT hosted_version_draft_activation_phase_check CHECK ((phase = ANY (ARRAY['occurrences'::text, 'nodes'::text, 'roots'::text, 'complete'::text]))),
+    CONSTRAINT hosted_version_draft_activation_status_check CHECK ((status = ANY (ARRAY['materializing'::text, 'complete'::text, 'activated'::text])))
+);
+
+
+--
+-- Name: hosted_version_draft_activation_page; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_draft_activation_page (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    from_phase text NOT NULL,
+    from_occurrence_after_ordinal bigint CONSTRAINT hosted_version_draft_activa_from_occurrence_after_ordi_not_null NOT NULL,
+    from_node_after_kind text CONSTRAINT hosted_version_draft_activation_p_from_node_after_kind_not_null NOT NULL,
+    from_node_after_id uuid CONSTRAINT hosted_version_draft_activation_pag_from_node_after_id_not_null NOT NULL,
+    from_root_null_done boolean CONSTRAINT hosted_version_draft_activation_pa_from_root_null_done_not_null NOT NULL,
+    from_root_after_parent_id uuid CONSTRAINT hosted_version_draft_activat_from_root_after_parent_id_not_null NOT NULL,
+    to_phase text NOT NULL,
+    to_occurrence_after_ordinal bigint CONSTRAINT hosted_version_draft_activa_to_occurrence_after_ordina_not_null NOT NULL,
+    to_node_after_kind text CONSTRAINT hosted_version_draft_activation_pag_to_node_after_kind_not_null NOT NULL,
+    to_node_after_id uuid NOT NULL,
+    to_root_null_done boolean NOT NULL,
+    to_root_after_parent_id uuid CONSTRAINT hosted_version_draft_activatio_to_root_after_parent_id_not_null NOT NULL,
+    occurrences_written integer CONSTRAINT hosted_version_draft_activation_pa_occurrences_written_not_null NOT NULL,
+    nodes_written integer NOT NULL,
+    sibling_roots_written integer CONSTRAINT hosted_version_draft_activation__sibling_roots_written_not_null NOT NULL,
+    coverage_complete boolean NOT NULL,
+    generation_sequence bigint CONSTRAINT hosted_version_draft_activation_pa_generation_sequence_not_null NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_version_draft_activation_pag_sibling_roots_written_check CHECK (((sibling_roots_written >= 0) AND (sibling_roots_written <= 20))),
+    CONSTRAINT hosted_version_draft_activation_page_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_version_draft_activation_page_from_phase_check CHECK ((from_phase = ANY (ARRAY['occurrences'::text, 'nodes'::text, 'roots'::text]))),
+    CONSTRAINT hosted_version_draft_activation_page_generation_sequence_check CHECK ((generation_sequence >= 0)),
+    CONSTRAINT hosted_version_draft_activation_page_nodes_written_check CHECK (((nodes_written >= 0) AND (nodes_written <= 20))),
+    CONSTRAINT hosted_version_draft_activation_page_occurrences_written_check CHECK (((occurrences_written >= 0) AND (occurrences_written <= 20))),
+    CONSTRAINT hosted_version_draft_activation_page_to_phase_check CHECK ((to_phase = ANY (ARRAY['occurrences'::text, 'nodes'::text, 'roots'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: hosted_version_draft_activation_subtree; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_version_draft_activation_subtree (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    input_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    subtree_size bigint NOT NULL,
+    chapter_count bigint NOT NULL,
+    subtree_height integer NOT NULL,
+    CONSTRAINT hosted_version_draft_activation_subtree_chapter_count_check CHECK ((chapter_count >= 0)),
+    CONSTRAINT hosted_version_draft_activation_subtree_check CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
+    CONSTRAINT hosted_version_draft_activation_subtree_subtree_height_check CHECK (((subtree_height >= '-1'::integer) AND (subtree_height <= 16))),
+    CONSTRAINT hosted_version_draft_activation_subtree_subtree_size_check CHECK ((subtree_size >= 0))
+);
+
+
+--
 -- Name: hosted_version_revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -4703,6 +4798,46 @@ ALTER TABLE ONLY content.hosted_version_builder_sibling_root
 
 
 --
+-- Name: hosted_version_draft_activation hosted_version_draft_activati_route_catalogue_id_generation_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation
+    ADD CONSTRAINT hosted_version_draft_activati_route_catalogue_id_generation_key UNIQUE (route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_version_draft_activation hosted_version_draft_activati_route_catalogue_id_revision_i_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation
+    ADD CONSTRAINT hosted_version_draft_activati_route_catalogue_id_revision_i_key UNIQUE (route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_draft_activation_page hosted_version_draft_activation_page_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation_page
+    ADD CONSTRAINT hosted_version_draft_activation_page_pkey PRIMARY KEY (route, catalogue_id, input_id, from_phase, from_occurrence_after_ordinal, from_node_after_kind, from_node_after_id, from_root_null_done, from_root_after_parent_id);
+
+
+--
+-- Name: hosted_version_draft_activation hosted_version_draft_activation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation
+    ADD CONSTRAINT hosted_version_draft_activation_pkey PRIMARY KEY (route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_draft_activation_subtree hosted_version_draft_activation_subtree_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation_subtree
+    ADD CONSTRAINT hosted_version_draft_activation_subtree_pkey PRIMARY KEY (route, catalogue_id, input_id, occurrence_id);
+
+
+--
 -- Name: hosted_version_revision hosted_version_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -5776,6 +5911,13 @@ CREATE INDEX hosted_version_builder_point_parent_idx ON content.hosted_version_b
 --
 
 CREATE INDEX hosted_version_builder_state_idx ON content.hosted_version_builder USING btree (route, catalogue_id, status, input_id);
+
+
+--
+-- Name: hosted_version_draft_activation_status_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_version_draft_activation_status_idx ON content.hosted_version_draft_activation USING btree (route, catalogue_id, status, input_id);
 
 
 --
@@ -7179,6 +7321,54 @@ ALTER TABLE ONLY content.hosted_version_builder_sibling_root
 
 ALTER TABLE ONLY content.hosted_version_builder_sibling_root
     ADD CONSTRAINT hosted_version_builder_sibling_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_draft_activation hosted_version_draft_activati_route_catalogue_id_expected__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation
+    ADD CONSTRAINT hosted_version_draft_activati_route_catalogue_id_expected__fkey FOREIGN KEY (route, catalogue_id, expected_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_draft_activation hosted_version_draft_activati_route_catalogue_id_generatio_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation
+    ADD CONSTRAINT hosted_version_draft_activati_route_catalogue_id_generatio_fkey FOREIGN KEY (route, catalogue_id, generation_id) REFERENCES content.hosted_tree_generation(route, catalogue_id, generation_id);
+
+
+--
+-- Name: hosted_version_draft_activation_subtree hosted_version_draft_activati_route_catalogue_id_input_id_fkey1; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation_subtree
+    ADD CONSTRAINT hosted_version_draft_activati_route_catalogue_id_input_id_fkey1 FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_draft_activation(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_draft_activation_page hosted_version_draft_activati_route_catalogue_id_input_id_fkey2; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation_page
+    ADD CONSTRAINT hosted_version_draft_activati_route_catalogue_id_input_id_fkey2 FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_draft_activation(route, catalogue_id, input_id);
+
+
+--
+-- Name: hosted_version_draft_activation hosted_version_draft_activati_route_catalogue_id_source_re_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation
+    ADD CONSTRAINT hosted_version_draft_activati_route_catalogue_id_source_re_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_version_draft_activation hosted_version_draft_activatio_route_catalogue_id_input_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_version_draft_activation
+    ADD CONSTRAINT hosted_version_draft_activatio_route_catalogue_id_input_id_fkey FOREIGN KEY (route, catalogue_id, input_id) REFERENCES content.hosted_version_builder(route, catalogue_id, input_id);
 
 
 --
