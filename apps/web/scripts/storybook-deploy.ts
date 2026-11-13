@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { restoreStorybookArchive, writeStorybookArchive } from './storybook-archive.ts';
 import {
   localStorybookPublicationRevisionEnvironment,
   routeWebCheck,
@@ -163,6 +164,8 @@ export async function validateStorybook(localPublicationCommit?: string): Promis
   const app = resolve(import.meta.dir, '..');
   const root = resolve(app, '../..');
   const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? resolve(app, 'storybook-static'));
+  const commit = getCurrentCommit();
+  const archive = resolve(root, '.temp/storybook-publication/validated-output.archive');
   const validationEnvironment = { ...process.env };
   delete validationEnvironment[localStorybookPublicationRevisionEnvironment];
   if (localPublicationCommit)
@@ -172,12 +175,14 @@ export async function validateStorybook(localPublicationCommit?: string): Promis
       root,
       cwd: app,
       command: ['bun', 'scripts/storybook-deploy.ts', '--validate-only'],
-      returns: [workspacePath(root, output)],
+      returns: [workspacePath(root, archive)],
     },
     validationEnvironment,
   );
   if (code !== null) {
     if (code !== 0) throw new WebCheckFailure(code, 'Storybook validation');
+    restoreStorybookArchive(archive, output, commit);
+    console.log(`Storybook publication archive verified and restored: ${commit}`);
     return;
   }
   for (const script of ['scripts/storybook-build.ts', 'scripts/storybook-smoke.ts']) {
@@ -191,6 +196,8 @@ export async function validateStorybook(localPublicationCommit?: string): Promis
     const status = await child.exited;
     if (status !== 0) throw new WebCheckFailure(status, script);
   }
+  writeStorybookArchive(output, archive, commit);
+  console.log(`Storybook publication archive prepared after build and six smoke scenarios: ${commit}`);
 }
 
 if (import.meta.main) {
