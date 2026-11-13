@@ -278,14 +278,14 @@ export async function readHostedVersionChapterPage<Value>(
       : (rank: bigint) => {
           if (rank >= originRank) throw new HostedVersionReadAnchorError();
         };
-  const page = await readWindow(chapters, {
+  const windowQuery: WindowQuery = {
     direction,
-    afterNodeId: query.afterNodeId,
-    startRank: query.afterNodeId === undefined ? firstRank : undefined,
     limit: query.limit,
     checkAnchorRank,
     expectedRootCount: preorderChapterCount,
-  });
+    ...(query.afterNodeId === undefined ? { startRank: firstRank } : { afterNodeId: query.afterNodeId }),
+  };
+  const page = await readWindow(chapters, windowQuery);
   return {
     ...page,
     work: combinedWork(preorderTracked.work(), page.work),

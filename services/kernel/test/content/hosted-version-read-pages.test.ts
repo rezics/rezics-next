@@ -183,14 +183,14 @@ test('pinned sibling, preorder and chapter pages retain their old roots after ed
   const chapterIds = oldOutlineEntries.filter((entry) => entry.kind === 'chapter').map((entry) => entry.occurrenceId);
   const originChapterRank = oldOutlineEntries.slice(0, 128).filter((entry) => entry.kind === 'chapter').length;
   expect(previous.candidates.map((candidate) => candidate.value.occurrenceId)).toEqual([
-    chapterIds[originChapterRank - 1],
-    chapterIds[originChapterRank - 2],
-    chapterIds[originChapterRank - 3],
+    chapterIds[originChapterRank - 1]!,
+    chapterIds[originChapterRank - 2]!,
+    chapterIds[originChapterRank - 3]!,
   ]);
   expect(next.candidates.map((candidate) => candidate.value.occurrenceId)).toEqual([
-    chapterIds[originChapterRank],
-    chapterIds[originChapterRank + 1],
-    chapterIds[originChapterRank + 2],
+    chapterIds[originChapterRank]!,
+    chapterIds[originChapterRank + 1]!,
+    chapterIds[originChapterRank + 2]!,
   ]);
   expect(previous.candidates[0]?.rank).toBe(BigInt(originChapterRank - 1));
   expect(next.candidates[0]?.value.targetRevisionId.startsWith('target-old-')).toBe(true);
@@ -212,14 +212,14 @@ test('pinned sibling, preorder and chapter pages retain their old roots after ed
     limit: 2,
   });
   expect(previousContinuation.candidates.map((candidate) => candidate.value.occurrenceId)).toEqual([
-    chapterIds[originChapterRank - 3],
-    chapterIds[originChapterRank - 4],
-    chapterIds[originChapterRank - 5],
+    chapterIds[originChapterRank - 3]!,
+    chapterIds[originChapterRank - 4]!,
+    chapterIds[originChapterRank - 5]!,
   ]);
   expect(nextContinuation.candidates.map((candidate) => candidate.value.occurrenceId)).toEqual([
-    chapterIds[originChapterRank + 2],
-    chapterIds[originChapterRank + 3],
-    chapterIds[originChapterRank + 4],
+    chapterIds[originChapterRank + 2]!,
+    chapterIds[originChapterRank + 3]!,
+    chapterIds[originChapterRank + 4]!,
   ]);
 
   await expect(
