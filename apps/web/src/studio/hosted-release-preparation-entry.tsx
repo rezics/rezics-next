@@ -7,6 +7,7 @@ import { hostedOutlineWindowNative } from './hosted-actions';
 import { hostedReleaseTransport } from './hosted-release-preparation-actions';
 import { releaseCopy } from './hosted-release-preparation-copy';
 import { HostedReleasePreparationView } from './hosted-release-preparation-view';
+import type { HostedReleaseActivationTransport } from './hosted-release-activation-contract';
 
 type Props = {
   owner: HostedOwnedBook;
@@ -15,6 +16,8 @@ type Props = {
   csrfToken: string | null;
   locale: Locale;
   stageId: string | null;
+  /** Supplied only when the owner installs its generated activation transport. */
+  activation?: HostedReleaseActivationTransport;
 };
 
 /** Synchronously hide a replaced identity before effect cleanup can abort and discard its late replies. */
@@ -52,6 +55,7 @@ export function HostedReleasePreparationEntry(props: Props) {
     mounted.props.locale === locale &&
     mounted.props.stageId === stageId
   )
-    return <HostedReleasePreparationView visit={mounted.visit} locale={locale} />;
+    return <HostedReleasePreparationView visit={mounted.visit} locale={locale}
+      activation={props.activation && source && csrfToken ? { native: props.activation, source, csrfToken } : undefined} />;
   return <p role="status">{releaseCopy[locale].review}</p>;
 }
