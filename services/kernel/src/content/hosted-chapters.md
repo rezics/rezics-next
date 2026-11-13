@@ -229,6 +229,8 @@ selected exact targets; the seam stays unmounted until Content can join those fi
 
 Decision: each point operand pins the exact draft occurrence and target against both expected heads, explicitly selects draft-only ancestors, and resolves stable anchors only in the expected public snapshot; point admission uses Content's existing exact revision-disclosure observation for private openings beside retained public eligibility, then rechecks source currentness and consent in finalization. Keep insert and replacement unmounted until the native Book-version transaction exists, and coordinate Book-link reader dispatch before changing reads.
 
+Decision: point-publication index mutation uses one operation-local overlay for each sibling, preorder and chapter index, all pinned to the exact candidate publication; insertion changes only touched index paths and selected occurrence/ancestor summaries, replacement changes only its selected occurrence, and both remain unmounted until the native `createHostedVersionWrite` transaction binding is available.
+
 Copy only the affected sibling, preorder and chapter index paths and at most H explicitly selected ancestors; create
 one small version root/count summary and atomically CAS the publication pointer with receipt/identity-only event.
 Normal append or single revision replacement is O(H log N) logical index changes, independent of total
