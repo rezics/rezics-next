@@ -162,6 +162,11 @@ retain the selected revision through later private saves and retire on withdrawa
 The fewest wire and mounted tests cover publish A, save B privately, update B, withdrawal, conflict, immutable replay
 and visit retirement; native, browser and visual proof remain with integration's seeded lane.
 
+Decision: Web pins the first-public Knowledge loop with one native mounted witness through the existing private,
+publication, public reader and reuse pages. Content native first-loop and focused Web tests remain the source
+owners. Invoke `bun apps/web/scripts/check.ts --host tests/native/knowledge-journey.host.test.ts` after
+integration.
+
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its
 children. Their placement IDs remain different. First-release reuse uses ordinary document references. A deep copy

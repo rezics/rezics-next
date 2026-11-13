@@ -61,3 +61,11 @@ refresh, large decimal counts, fresh-head reopening without republication, unsav
 expiry and visit retirement. The former subtree-refusal assertions now follow the durable restore contract; other
 assertions remain. The boundary fixture includes native `restoreProgress: null`. Tests run after landing in the dev
 verifier, including mounted/native/browser acceptance for reload, busy subtrees and no republishing.
+
+## First-public mounted journey
+
+Decision: one native mounted witness pins the complete private-to-public Knowledge loop through the existing pages
+and installed APIs. Content native first-loop and the focused private, publication and transfer tests remain the
+source owners. The fixture is `apps/web/tests/native/knowledge-journey.host.test.ts`. Invoke it after integration
+with `bun apps/web/scripts/check.ts --host tests/native/knowledge-journey.host.test.ts`. Native/browser execution
+stays with the Goal verification lane.

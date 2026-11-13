@@ -1,5 +1,24 @@
 # Native web acceptance
 
+## Knowledge first-public journey
+
+The mounted native witness is `tests/native/knowledge-journey.host.test.ts`, prepared by
+`tests/native/knowledge-journey-fixture.ts`. An author creates a private notebook with a nested
+document, saves two distinguishable revisions, publishes the exact saved revision, and later private
+edits leave public reading frozen on that selection. An anonymous reader and another native member
+see only disclosed public text. Reuse copies the selected public revision into a second owned
+notebook. Kernel readback is independent of the page. Content native first-loop and focused
+private/publication/transfer tests remain the source owners.
+
+Controller invocation after integration:
+
+```
+bun apps/web/scripts/check.ts --host tests/native/knowledge-journey.host.test.ts
+```
+
+Native/browser execution is controller-owned. This fixture does not establish full Knowledge
+lifecycle acceptance, all-locale/theme visual quality, main promotion or release.
+
 ## Publication scenarios
 
 The wrapper registered all 28 scenarios. Twenty-six currently fail during fixture setup: `settle()` cannot find three
