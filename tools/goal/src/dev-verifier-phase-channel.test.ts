@@ -3,10 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { processGroupRunner } from './merge.ts';
 import { consumeVerifierPhaseReceipt, verifierCommandSha256 } from './dev-verifier-phase.ts';
-import {
-  isPlacedKernelCheckCommand,
-  type VerifierPhaseChannelBinding,
-} from './dev-verifier-phase-channel.ts';
+import { isPlacedKernelCheckCommand, type VerifierPhaseChannelBinding } from './dev-verifier-phase-channel.ts';
 
 const roots: string[] = [];
 
@@ -87,9 +84,7 @@ async function run(script: string, timeoutMs: number) {
 
 test('FD 3 binds a matching live Kernel phase receipt and restarts only its execution timeout', async () => {
   expect(isPlacedKernelCheckCommand(command)).toBe(true);
-  expect(
-    isPlacedKernelCheckCommand(['bun', 'test', 'services/kernel/test/boot/kernel-boots.test.ts']),
-  ).toBe(false);
+  expect(isPlacedKernelCheckCommand(['bun', 'test', 'services/kernel/test/boot/kernel-boots.test.ts'])).toBe(false);
 
   const result = await run(phaseEventScript(300, 700), 500);
   expect(result).toMatchObject({ passed: true, timedOut: false });
@@ -99,9 +94,10 @@ test('FD 3 binds a matching live Kernel phase receipt and restarts only its exec
     commandSha256: verifierCommandSha256(binding.command),
     runner: { kind: 'check-host', id: 'remote-run-1', host: 'check-host-a' },
   });
-  expect(
-    consumeVerifierPhaseReceipt(result.phaseReceipt, binding).phases.execution,
-  ).toMatchObject({ status: 'measured', durationMs: 400 });
+  expect(consumeVerifierPhaseReceipt(result.phaseReceipt, binding).phases.execution).toMatchObject({
+    status: 'measured',
+    durationMs: 400,
+  });
   expect(
     consumeVerifierPhaseReceipt(result.phaseReceipt, {
       ...binding,

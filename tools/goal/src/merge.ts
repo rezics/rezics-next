@@ -6,10 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { processIdentity } from '../../../scripts/check-custody.ts';
 import { readCompilerSettlement, compilerSettlementFailure } from '../../../scripts/compiler-settlement.ts';
 import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
-import {
-  createVerifierPhaseChannel,
-  type VerifierPhaseChannelBinding,
-} from './dev-verifier-phase-channel.ts';
+import { createVerifierPhaseChannel, type VerifierPhaseChannelBinding } from './dev-verifier-phase-channel.ts';
 import type { FirstFailure } from './contracts.ts';
 import {
   checkResultKey,

@@ -66,13 +66,7 @@ export function createVerifierPhaseChannel(
 
     if (event.kind === 'execution-started') {
       const runner = parseRunner(event.runner);
-      if (
-        eventCount !== 1 ||
-        startRunner ||
-        receipt ||
-        event.authority !== 'remote-command-started-marker' ||
-        !runner
-      )
+      if (eventCount !== 1 || startRunner || receipt || event.authority !== 'remote-command-started-marker' || !runner)
         return invalidate();
       startRunner = runner;
       handlers.executionStarted();
@@ -139,10 +133,7 @@ export function isPlacedKernelCheckCommand(command: readonly string[]): boolean 
       command[offset + 4] === 'check',
   );
   return (
-    index >= 0 &&
-    command
-      .slice(index + 5)
-      .some((part) => /^(?:\.\/)?test\/.+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(part))
+    index >= 0 && command.slice(index + 5).some((part) => /^(?:\.\/)?test\/.+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(part))
   );
 }
 
@@ -151,13 +142,7 @@ function parseReceipt(value: unknown): ParsedPhaseReceipt | undefined {
   const runner = parseRunner(receipt?.runner);
   const sourcePhases = asRecord(receipt?.phases);
   const live = asRecord(receipt?.liveExecutionStart);
-  if (
-    receipt?.schema !== 1 ||
-    !runner ||
-    !sourcePhases ||
-    !live ||
-    Object.keys(sourcePhases).length !== PHASES.length
-  )
+  if (receipt?.schema !== 1 || !runner || !sourcePhases || !live || Object.keys(sourcePhases).length !== PHASES.length)
     return undefined;
 
   const phases = {} as Record<(typeof PHASES)[number], PhaseObservation>;
@@ -204,12 +189,7 @@ function parseReceipt(value: unknown): ParsedPhaseReceipt | undefined {
 
 function parseRunner(value: unknown): CheckHostRunner | undefined {
   const runner = asRecord(value);
-  if (
-    runner?.kind !== 'check-host' ||
-    !validIdentity(runner.id) ||
-    !validIdentity(runner.host)
-  )
-    return undefined;
+  if (runner?.kind !== 'check-host' || !validIdentity(runner.id) || !validIdentity(runner.host)) return undefined;
   return { kind: 'check-host', id: runner.id, host: runner.host };
 }
 
