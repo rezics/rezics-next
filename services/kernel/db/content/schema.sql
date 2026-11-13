@@ -724,6 +724,47 @@ $$;
 
 
 --
+-- Name: guard_revision_disclosure(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_revision_disclosure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Revision disclosure identity is retained for source erasure' USING ERRCODE = '23514';
+  END IF;
+  IF ROW(NEW.route, NEW.disclosure_id, NEW.operation_id, NEW.thread_id, NEW.post_id, NEW.revision_id,
+         NEW.body_sha256, NEW.licence, NEW.catalogue_id, NEW.catalogue_route,
+         NEW.source_post_transaction_id, NEW.source_thread_transaction_id,
+         NEW.source_post_security_revision, NEW.source_thread_security_revision,
+         NEW.issuer_account_id, NEW.issued_transaction_id, NEW.issued_at,
+         NEW.audience_kind, NEW.policy_version, NEW.actor_client_id, NEW.actor_scopes,
+         NEW.actor_requested_by, NEW.actor_authn_epoch, NEW.original_minimum_authn_epoch,
+         NEW.original_operator_account_id, NEW.original_delegation_transaction_id,
+         NEW.original_delegation_issued_valid, NEW.source_digest,
+         NEW.creation_idempotency_key, NEW.creation_request_digest)
+     IS DISTINCT FROM
+     ROW(OLD.route, OLD.disclosure_id, OLD.operation_id, OLD.thread_id, OLD.post_id, OLD.revision_id,
+         OLD.body_sha256, OLD.licence, OLD.catalogue_id, OLD.catalogue_route,
+         OLD.source_post_transaction_id, OLD.source_thread_transaction_id,
+         OLD.source_post_security_revision, OLD.source_thread_security_revision,
+         OLD.issuer_account_id, OLD.issued_transaction_id, OLD.issued_at,
+         OLD.audience_kind, OLD.policy_version, OLD.actor_client_id, OLD.actor_scopes,
+         OLD.actor_requested_by, OLD.actor_authn_epoch, OLD.original_minimum_authn_epoch,
+         OLD.original_operator_account_id, OLD.original_delegation_transaction_id,
+         OLD.original_delegation_issued_valid, OLD.source_digest,
+         OLD.creation_idempotency_key, OLD.creation_request_digest)
+     OR OLD.revoked_at IS NOT NULL
+     OR NEW.revoked_at IS NULL THEN
+    RAISE EXCEPTION 'Revision disclosure binding is immutable and revocation is terminal' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_source_fence(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -3299,6 +3340,87 @@ ALTER TABLE ONLY content.revision ALTER COLUMN body SET COMPRESSION lz4;
 
 
 --
+-- Name: revision_disclosure; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.revision_disclosure (
+    route integer NOT NULL,
+    disclosure_id uuid NOT NULL,
+    operation_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    post_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    body_sha256 bytea NOT NULL,
+    licence text NOT NULL,
+    catalogue_id uuid NOT NULL,
+    catalogue_route integer NOT NULL,
+    source_post_transaction_id uuid NOT NULL,
+    source_thread_transaction_id uuid NOT NULL,
+    source_post_security_revision bigint NOT NULL,
+    source_thread_security_revision bigint NOT NULL,
+    issuer_account_id uuid NOT NULL,
+    issued_transaction_id uuid NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    audience_kind text NOT NULL,
+    policy_version text NOT NULL,
+    actor_client_id text NOT NULL,
+    actor_scopes text[] NOT NULL,
+    actor_requested_by text,
+    actor_authn_epoch bigint NOT NULL,
+    original_minimum_authn_epoch text NOT NULL,
+    original_operator_account_id uuid,
+    original_delegation_transaction_id uuid,
+    original_delegation_issued_valid text,
+    source_digest text NOT NULL,
+    creation_idempotency_key text NOT NULL,
+    creation_request_digest text NOT NULL,
+    revoked_at timestamp with time zone,
+    revocation_transaction_id uuid,
+    revoker_account_id uuid,
+    CONSTRAINT revision_disclosure_actor_authn_epoch_check CHECK ((actor_authn_epoch > 0)),
+    CONSTRAINT revision_disclosure_actor_client_id_check CHECK ((actor_client_id ~ '^[!-~]{1,1024}$'::text)),
+    CONSTRAINT revision_disclosure_actor_scopes_check CHECK (content.operation_scopes_valid(actor_scopes)),
+    CONSTRAINT revision_disclosure_audience_kind_check CHECK ((audience_kind = 'book-publication'::text)),
+    CONSTRAINT revision_disclosure_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
+    CONSTRAINT revision_disclosure_catalogue_route_check CHECK (((catalogue_route >= 0) AND (catalogue_route <= 65535))),
+    CONSTRAINT revision_disclosure_check CHECK (((revoked_at IS NULL) OR (isfinite(revoked_at) AND (revoked_at >= issued_at)))),
+    CONSTRAINT revision_disclosure_check1 CHECK ((route = ((get_byte(uuid_send(disclosure_id), 10) * 256) + get_byte(uuid_send(disclosure_id), 11)))),
+    CONSTRAINT revision_disclosure_check10 CHECK ((catalogue_route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT revision_disclosure_check11 CHECK ((((actor_requested_by IS NULL) AND (original_delegation_transaction_id IS NULL) AND (original_delegation_issued_valid IS NULL)) OR ((actor_requested_by IS NOT NULL) AND (original_delegation_transaction_id IS NOT NULL) AND (original_delegation_issued_valid IS NOT NULL) AND (char_length(actor_requested_by) <= 128) AND (actor_requested_by ~ '^urn:rezics:request:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)))),
+    CONSTRAINT revision_disclosure_check12 CHECK ((((revoked_at IS NULL) = (revocation_transaction_id IS NULL)) AND ((revoked_at IS NULL) = (revoker_account_id IS NULL)))),
+    CONSTRAINT revision_disclosure_check13 CHECK (((revocation_transaction_id IS NULL) OR ((route = ((get_byte(uuid_send(revocation_transaction_id), 10) * 256) + get_byte(uuid_send(revocation_transaction_id), 11))) AND (route = ((get_byte(uuid_send(revoker_account_id), 10) * 256) + get_byte(uuid_send(revoker_account_id), 11)))))),
+    CONSTRAINT revision_disclosure_check2 CHECK ((route = ((get_byte(uuid_send(operation_id), 10) * 256) + get_byte(uuid_send(operation_id), 11)))),
+    CONSTRAINT revision_disclosure_check3 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT revision_disclosure_check4 CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT revision_disclosure_check5 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT revision_disclosure_check6 CHECK ((route = ((get_byte(uuid_send(issuer_account_id), 10) * 256) + get_byte(uuid_send(issuer_account_id), 11)))),
+    CONSTRAINT revision_disclosure_check7 CHECK ((route = ((get_byte(uuid_send(issued_transaction_id), 10) * 256) + get_byte(uuid_send(issued_transaction_id), 11)))),
+    CONSTRAINT revision_disclosure_check8 CHECK ((route = ((get_byte(uuid_send(source_post_transaction_id), 10) * 256) + get_byte(uuid_send(source_post_transaction_id), 11)))),
+    CONSTRAINT revision_disclosure_check9 CHECK ((route = ((get_byte(uuid_send(source_thread_transaction_id), 10) * 256) + get_byte(uuid_send(source_thread_transaction_id), 11)))),
+    CONSTRAINT revision_disclosure_creation_idempotency_key_check CHECK ((creation_idempotency_key ~ '^[!-~]{1,255}$'::text)),
+    CONSTRAINT revision_disclosure_creation_request_digest_check CHECK ((creation_request_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT revision_disclosure_issued_at_check CHECK (isfinite(issued_at)),
+    CONSTRAINT revision_disclosure_licence_check CHECK (((char_length(licence) >= 1) AND (char_length(licence) <= 128))),
+    CONSTRAINT revision_disclosure_original_delegation_issued_valid_check CHECK (((original_delegation_issued_valid IS NULL) OR ((char_length(original_delegation_issued_valid) >= 1) AND (char_length(original_delegation_issued_valid) <= 256)))),
+    CONSTRAINT revision_disclosure_original_delegation_transaction_id_check CHECK (((original_delegation_transaction_id IS NULL) OR content.operation_routable_uuid(original_delegation_transaction_id))),
+    CONSTRAINT revision_disclosure_original_minimum_authn_epoch_check CHECK ((original_minimum_authn_epoch ~ '^[1-9][0-9]{0,18}$'::text)),
+    CONSTRAINT revision_disclosure_original_operator_account_id_check CHECK (((original_operator_account_id IS NULL) OR content.operation_routable_uuid(original_operator_account_id))),
+    CONSTRAINT revision_disclosure_policy_version_check CHECK ((policy_version ~ '^[1-9][0-9]{0,8}$'::text)),
+    CONSTRAINT revision_disclosure_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT revision_disclosure_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT revision_disclosure_source_post_security_revision_check CHECK ((source_post_security_revision > 0)),
+    CONSTRAINT revision_disclosure_source_thread_security_revision_check CHECK ((source_thread_security_revision > 0))
+);
+
+
+--
+-- Name: TABLE revision_disclosure; Type: COMMENT; Schema: content; Owner: -
+--
+
+COMMENT ON TABLE content.revision_disclosure IS 'Exact Book-scoped source consent for one private opening revision. Consent does not grant read.';
+
+
+--
 -- Name: source_fences; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -4440,6 +4562,22 @@ ALTER TABLE ONLY content.review_discovery_work
 
 
 --
+-- Name: revision_disclosure revision_disclosure_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.revision_disclosure
+    ADD CONSTRAINT revision_disclosure_pkey PRIMARY KEY (route, disclosure_id);
+
+
+--
+-- Name: revision_disclosure revision_disclosure_route_operation_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.revision_disclosure
+    ADD CONSTRAINT revision_disclosure_route_operation_id_key UNIQUE (route, operation_id);
+
+
+--
 -- Name: revision revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -5144,6 +5282,41 @@ CREATE INDEX review_discovery_work_pending ON content.review_discovery_work USIN
 
 
 --
+-- Name: revision_disclosure_catalogue_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX revision_disclosure_catalogue_idx ON content.revision_disclosure USING btree (catalogue_route, catalogue_id, route, disclosure_id);
+
+
+--
+-- Name: revision_disclosure_issued_key; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX revision_disclosure_issued_key ON content.revision_disclosure USING btree (route, catalogue_id, thread_id, post_id, revision_id, body_sha256) WHERE (revoked_at IS NULL);
+
+
+--
+-- Name: revision_disclosure_post_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX revision_disclosure_post_idx ON content.revision_disclosure USING btree (route, post_id, disclosure_id);
+
+
+--
+-- Name: revision_disclosure_revision_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX revision_disclosure_revision_idx ON content.revision_disclosure USING btree (route, revision_id, disclosure_id);
+
+
+--
+-- Name: revision_disclosure_thread_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX revision_disclosure_thread_idx ON content.revision_disclosure USING btree (route, thread_id, disclosure_id);
+
+
+--
 -- Name: revision_post_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -5505,6 +5678,13 @@ CREATE TRIGGER review_census_thread_source AFTER INSERT OR DELETE OR UPDATE OF r
 --
 
 CREATE TRIGGER review_discovery_dependencies AFTER INSERT OR UPDATE OF board_id, review_subject_id, first_post_id, author_account_id ON content.thread FOR EACH ROW EXECUTE FUNCTION content.record_review_discovery_dependencies();
+
+
+--
+-- Name: revision_disclosure revision_disclosure_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER revision_disclosure_identity BEFORE DELETE OR UPDATE ON content.revision_disclosure FOR EACH ROW EXECUTE FUNCTION content.guard_revision_disclosure();
 
 
 --
