@@ -87,6 +87,10 @@ are `versioned-outline-order.ts`, `hosted-chapters-{model,store,commands,reads,a
 `readPostMetadata`/`readPost`, and Access [`public-eligibility.ts`](../access/public-eligibility.ts). Knowledge keeps
 `knowledge-order.ts`. No Collection tables, no second permission engine, no new architecture module.
 
+Decision: a cross-parent move cuts the stable occurrence subtree's contiguous preorder and chapter ranges and
+splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
+ancestor summaries, without visiting descendants.
+
 ### Evidence and migration
 
 Sources checked before this decision: this document; Knowledge's
