@@ -84,6 +84,16 @@ type NativeOccurrence = {
 };
 type NativeRevision = { catalogueId: string; revisionId: string; kind: string; sourceRevisionId: string | null };
 type NativePage = NativeRevision & { items: NativeOccurrence[]; nextCursor: string | null };
+type PrivateActivationOperands = Readonly<{
+  catalogueId: string;
+  ownerAccountId: string;
+  authnEpoch: number;
+  expectedDraftHeadRevisionId: string;
+  expectedPublicationId: null;
+  stageId: string;
+  selectedOccurrenceId: string;
+  target: Readonly<Pick<JourneyPost, 'postId' | 'threadId' | 'revisionId' | 'sha256'>>;
+}>;
 
 function errorText(cause: unknown): string {
   if (cause instanceof Error) return `${cause.name}: ${cause.message}`;
@@ -327,6 +337,7 @@ nativeTest(
     let chapterTwoOccurrence: string | undefined;
     let stageId: string | undefined;
     let preparationOperands: string | undefined;
+    let activationOperands: PrivateActivationOperands | undefined;
     let candidateSealed = false;
     const ownerJourney = await auth.signIn('alice');
     const page = pageFrom(ownerJourney);
@@ -721,31 +732,33 @@ nativeTest(
               timeout: 120_000,
             });
             const sourceHead = owner.item.headRevisionId;
+            activationOperands = {
+              catalogueId: catalogueId!,
+              ownerAccountId: owner.viewer.accountId,
+              authnEpoch: owner.viewer.authnEpoch,
+              expectedDraftHeadRevisionId: sourceHead,
+              expectedPublicationId: null,
+              stageId: stageId!,
+              selectedOccurrenceId: chapterOneOccurrence!,
+              target: {
+                postId: chapterOne!.postId,
+                threadId: chapterOne!.threadId,
+                revisionId: chapterOne!.revisionId,
+                sha256: chapterOne!.sha256,
+              },
+            };
             preparationOperands =
-              'catalogue=' +
-              catalogueId +
-              ' owner=' +
-              owner.viewer.accountId +
-              '@' +
-              owner.viewer.authnEpoch +
-              ' expectedHeadRevisionId=' +
-              sourceHead +
-              ' expectedPublicationId=null mode=selection stageId=' +
-              stageId +
-              ' selectedOccurrence=' +
-              chapterOneOccurrence +
-              ' targetPost=' +
-              chapterOne!.id +
-              ' targetThread=' +
-              chapterOne!.threadId +
-              ' targetRevision=' +
-              chapterOne!.revisionId +
-              ' targetSha256=' +
-              chapterOne!.sha256 +
-              ' unselectedOccurrence=' +
-              (chapterTwoOccurrence ?? 'unavailable') +
-              ' unselectedRevision=' +
-              (chapterTwo?.revisionId ?? 'unavailable');
+              `catalogue=${activationOperands.catalogueId}` +
+              ` owner=${activationOperands.ownerAccountId}@${activationOperands.authnEpoch}` +
+              ` expectedHeadRevisionId=${activationOperands.expectedDraftHeadRevisionId}` +
+              ` expectedPublicationId=null mode=selection stageId=${activationOperands.stageId}` +
+              ` selectedOccurrence=${activationOperands.selectedOccurrenceId}` +
+              ` targetPost=${activationOperands.target.postId}` +
+              ` targetThread=${activationOperands.target.threadId}` +
+              ` targetRevision=${activationOperands.target.revisionId}` +
+              ` targetSha256=${activationOperands.target.sha256}` +
+              ` unselectedOccurrence=${chapterTwoOccurrence ?? 'unavailable'}` +
+              ` unselectedRevision=${chapterTwo?.revisionId ?? 'unavailable'}`;
             await page.getByRole('button', { name: 'Seal private candidate', exact: true }).click();
             await page
               .getByText('Private candidate sealed. It has not been published. The existing release stays current.', {
@@ -829,9 +842,7 @@ nativeTest(
                 sha256: chapterOne!.sha256,
               });
               expect(currentPost.revisionId).toBe(changed.revisionId);
-              expect(owner.item.headRevisionId).not.toBe(
-                preparationOperands!.match(/expectedHeadRevisionId=([^ ]+)/u)?.[1],
-              );
+              expect(owner.item.headRevisionId).not.toBe(activationOperands!.expectedDraftHeadRevisionId);
               expect(owner.item.publicationId).toBeNull();
               return {
                 value: moved,
