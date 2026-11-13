@@ -108,7 +108,11 @@ test('document availability is refreshed between prompts after a prior delivery'
 
 test('accepted successor task and commit travel as structured owner decision context', () => {
   const body = {
-    ...decision('accepted-successor-task-b', 'Retain this source through the accepted successor.', '2026-11-03T09:00:00.000Z'),
+    ...decision(
+      'accepted-successor-task-b',
+      'Retain this source through the accepted successor.',
+      '2026-11-03T09:00:00.000Z',
+    ),
     acceptedSuccessor: { taskId: 'task-b', commit: 'b'.repeat(40) },
   };
   const result = prepareOwnerDecisionPrompt(

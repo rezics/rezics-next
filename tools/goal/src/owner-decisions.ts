@@ -103,7 +103,9 @@ function safeAcceptedSuccessor(value: unknown): AcceptedSuccessor | undefined {
 /** Structured acceptance is usable only while its exact commit remains in the named task's integration record. */
 function integratedSuccessorMatches(store: WorkerStore, task: Task, accepted: AcceptedSuccessor): boolean {
   if (accepted.taskId === task.id) return false;
-  const row = store.db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get(accepted.taskId);
+  const row = store.db
+    .query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?')
+    .get(accepted.taskId);
   if (!row) return false;
   let candidate: Record<string, unknown> | undefined;
   try {
@@ -134,7 +136,8 @@ export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: 
       throw new Error('owner decisions require the authenticated owning manager session');
     if (ref.attempt < 1) throw new Error('owner decisions require a current worker attempt');
     const body = record(input);
-    const acceptedSuccessor = body?.acceptedSuccessor === undefined ? undefined : safeAcceptedSuccessor(body.acceptedSuccessor);
+    const acceptedSuccessor =
+      body?.acceptedSuccessor === undefined ? undefined : safeAcceptedSuccessor(body.acceptedSuccessor);
     if (
       !body ||
       Object.keys(body).some((key) => !['decisionId', 'summary', 'documentRefs', 'acceptedSuccessor'].includes(key)) ||
@@ -354,11 +357,7 @@ export function acceptedSuccessorDisposition(
   ref: AttemptRef,
   policy: ControlPolicy,
 ): AcceptedSuccessor | undefined {
-  if (
-    task.id !== ref.taskId ||
-    task.currentAttempt !== ref.attempt ||
-    task.brief.kind === 'verification'
-  )
+  if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt || task.brief.kind === 'verification')
     return undefined;
   return projectOwnerDecision(events, task, ref, policy).decisions.findLast(
     (decision) =>
@@ -399,7 +398,9 @@ export function prepareOwnerDecisionPrompt(
   const summary = [
     `Decision: ${decision.summary}`,
     ...(decision.acceptedSuccessor
-      ? [`Accepted successor: task ${decision.acceptedSuccessor.taskId}, integrated commit ${decision.acceptedSuccessor.commit}.`]
+      ? [
+          `Accepted successor: task ${decision.acceptedSuccessor.taskId}, integrated commit ${decision.acceptedSuccessor.commit}.`,
+        ]
       : []),
   ].join('\n');
   // A summary that does not fit becomes a pointer to the decision file, so no decision refuses a launch.
@@ -464,7 +465,10 @@ function decisionFileContent(decision: OwnerDecision): string {
     '',
     decision.summary,
     ...(decision.acceptedSuccessor
-      ? ['', `Accepted successor: task ${decision.acceptedSuccessor.taskId}, integrated commit ${decision.acceptedSuccessor.commit}.`]
+      ? [
+          '',
+          `Accepted successor: task ${decision.acceptedSuccessor.taskId}, integrated commit ${decision.acceptedSuccessor.commit}.`,
+        ]
       : []),
     ...(references.length ? ['', 'Document references:', ...references] : []),
     '',

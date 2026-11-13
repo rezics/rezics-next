@@ -9,7 +9,11 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 import { brief, temporaryDirectory } from './test-support.ts';
 import { proofFingerprint } from './verification.ts';
-import { grantWorkerTypingRecovery, workerCheckBudgetDirectory, workerCheckHostContentTree } from './worker-check-budget.ts';
+import {
+  grantWorkerTypingRecovery,
+  workerCheckBudgetDirectory,
+  workerCheckHostContentTree,
+} from './worker-check-budget.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
 
 const webCompiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
@@ -108,10 +112,7 @@ function prepareTypingRecovery(
         typingRecovery: { token: grant.token, checkId: grant.checkId, physicalRunId: grant.physicalRunId },
       }),
     );
-    writeFileSync(
-      join(budget, 'typing-recovery', `${grant.token}.json`),
-      JSON.stringify({ ...grant, stamp: '1' }),
-    );
+    writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp: '1' }));
     if (terminal) {
       mkdirSync(join(checkRoot, 'custody/history'), { recursive: true });
       writeFileSync(
@@ -354,11 +355,7 @@ test('consumed owner and operations typing grants stay quiet until custody resol
       worktree: join(temp.path, 'failed-source'),
       brief: { ...brief(), goal: 'failed-source-goal', manager: 'failed-source-goal' },
     };
-    db.query('INSERT INTO worker_tasks VALUES (?, ?, 1, ?)').run(
-      'failed-source',
-      4,
-      JSON.stringify(failedSource),
-    );
+    db.query('INSERT INTO worker_tasks VALUES (?, ?, 1, ?)').run('failed-source', 4, JSON.stringify(failedSource));
     db.query('INSERT INTO worker_attempts VALUES (?, 1, ?)').run(
       'failed-source',
       JSON.stringify({

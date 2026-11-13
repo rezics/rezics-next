@@ -1631,8 +1631,7 @@ export function workerCheckHostConsumedTypingRecovery(input: {
       (request.physicalRunId === grant.physicalRunId &&
         JSON.stringify(request.command) === JSON.stringify(grant.command));
     const exactRecovery = exactStamp && exactRequest;
-    const checkIds =
-      input.token === undefined ? [...new Set([...input.checkIds, grant.checkId])] : [grant.checkId];
+    const checkIds = input.token === undefined ? [...new Set([...input.checkIds, grant.checkId])] : [grant.checkId];
     return {
       checkId: grant.checkId,
       physicalRunId: grant.physicalRunId,

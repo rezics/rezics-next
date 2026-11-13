@@ -94,10 +94,10 @@ function hasIntegratedSuccessor(
     (Array.isArray(linked.integratedCommits) && linked.integratedCommits.includes(accepted.commit));
   return Boolean(
     linked.id === accepted.taskId &&
-      linked.brief?.goal === task.brief.goal &&
-      linked.brief?.manager === task.brief.manager &&
-      linked.brief?.kind !== 'verification' &&
-      exactCommit,
+    linked.brief?.goal === task.brief.goal &&
+    linked.brief?.manager === task.brief.manager &&
+    linked.brief?.kind !== 'verification' &&
+    exactCommit,
   );
 }
 
@@ -240,7 +240,8 @@ export function isActionableStop(
       return true;
 
     const events = taskEvents(db, taskId, attempt);
-    if (successfulSourceAttempt(currentAttempt) && hasIntegratedSuccessor(db, task, events, attempt, policy)) return false;
+    if (successfulSourceAttempt(currentAttempt) && hasIntegratedSuccessor(db, task, events, attempt, policy))
+      return false;
     if (hint === 'typing-recovery') return !hasUnresolvedConsumedRecovery(db, task, attempt, currentAttempt);
     if (task.brief.kind !== 'verification' || !row.checks) return true;
     if (!preservesTerminalProof(events, task, { taskId, attempt }, policy)) return true;
