@@ -280,6 +280,62 @@ test('an infrastructure exit 75 before the check command ran gives its budget st
   }
 });
 
+test('an exact terminal setup candidate retains only a known compiler migration-header defect', () => {
+  const controller = temporaryDirectory();
+  const worktree = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    mkdirSync(join(worktree.path, 'services/kernel/scripts'), { recursive: true });
+    mkdirSync(join(worktree.path, 'services/kernel/db/commerce/migrations'), { recursive: true });
+    writeFileSync(
+      join(worktree.path, 'services/kernel/package.json'),
+      JSON.stringify({ name: '@rezics/kernel', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+    );
+    writeFileSync(join(worktree.path, 'services/kernel/scripts/typecheck.ts'), 'export {};\n');
+    writeFileSync(
+      join(worktree.path, 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql'),
+      '-- migrate:down\nselect 1;\n',
+    );
+    const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+    const physicalRunId = randomUUID();
+    const budget = workerCheckBudgetDirectory(controller.path, 'task', 1);
+    const admitted = admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path });
+    expect(admitted).toMatchObject({ ok: true, stamp: '1' });
+    if (!admitted.ok || !('stamp' in admitted)) throw new Error('Expected a compiler setup stamp');
+    const env: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+      GOAL_WORKER_CHECK_BUDGET_STAMP: admitted.stamp,
+    };
+    recordWorkerCheckTypingInputs(env, worktree.path, physicalRunId, command);
+    mkdirSync(join(worktree.path, '.temp/goal/checks'), { recursive: true });
+    const log = join(worktree.path, '.temp/goal/checks/setup.log');
+    writeFileSync(
+      log,
+      'Migration version check failed:\n- db/commerce/migrations/20261113195649_post_benefit.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL\nName migrations with `date -u +%Y%m%d%H%M%S`.\n',
+    );
+
+    settleWorkerCheckHostBudget(env, WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT, false, {
+      argv: command,
+      log,
+      worktree: worktree.path,
+      physicalRunId,
+    });
+
+    expect(workerCheckHostRunsUsed(budget)).toBe(1);
+    expect(readWorkerCheckHostStamp(budget, '1').setupFailure).toMatchObject({
+      kind: 'missing-kernel-migration-up-marker',
+      commandReached: false,
+      physicalRunId,
+      command,
+      path: 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql',
+    });
+  } finally {
+    controller.close();
+    worktree.close();
+  }
+});
+
 test('runs that reached the check command keep counting, whatever their exit code', () => {
   const directory = temporaryDirectory();
   try {

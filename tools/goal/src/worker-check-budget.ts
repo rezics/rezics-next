@@ -38,6 +38,7 @@ import {
   isRetainedKernelTypingCompiler,
   readTypingInputReceipt,
   qualifyTypingInputs,
+  retainedKernelMigrationHeaderDefect,
   typingFailureInputsMatch,
   type TypingInput,
   type TypingInputReceipt,
@@ -101,6 +102,15 @@ export type WorkerCheckHostStampRecord = {
   };
   typingInputs?: TypingInputReceipt;
   typingInputsUnavailable?: string;
+  setupFailure?: {
+    kind: 'missing-kernel-migration-up-marker';
+    commandReached: false;
+    physicalRunId: string;
+    command: string[];
+    path: string;
+    diagnostic: string;
+    logDigest: string;
+  };
   typingRecovery?: { token: string; checkId: string; physicalRunId: string };
 };
 
@@ -301,6 +311,7 @@ type CheckEvidence = {
     exitCode?: unknown;
     resources?: { commandStartedMonoMs?: unknown } | null;
   };
+  log?: unknown;
   binding?: {
     checkId?: unknown;
     ownership?: { taskId?: unknown; attempt?: unknown };
@@ -2134,6 +2145,44 @@ export type WorkerCheckHostSettle = {
   physicalRunId?: string;
 };
 
+function migrationSetupFailureCandidate(
+  current: WorkerCheckHostStampRecord,
+  exitCode: number,
+  commandReached: boolean,
+  details: WorkerCheckHostSettle,
+): NonNullable<WorkerCheckHostStampRecord['setupFailure']> | undefined {
+  const request = current.typingRequest;
+  if (
+    exitCode !== WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT ||
+    commandReached ||
+    !details.log ||
+    !details.argv ||
+    !details.worktree ||
+    !details.physicalRunId ||
+    !request ||
+    request.physicalRunId !== details.physicalRunId ||
+    JSON.stringify(request.command) !== JSON.stringify(details.argv) ||
+    !current.content ||
+    workerCheckHostContentTree(details.worktree) !== current.content ||
+    !isRetainedKernelTypingCompiler(details.worktree, request.command)
+  )
+    return;
+  const logRelative = relative(resolve(details.worktree), resolve(details.log));
+  if (!logRelative || logRelative === '..' || logRelative.startsWith(`..${sep}`) || isAbsolute(logRelative)) return;
+  const log = boundedLog(details.log);
+  const defect = retainedKernelMigrationHeaderDefect(details.worktree, log);
+  if (!defect) return;
+  return {
+    kind: 'missing-kernel-migration-up-marker',
+    commandReached: false,
+    physicalRunId: request.physicalRunId,
+    command: [...request.command],
+    path: defect.path,
+    diagnostic: defect.line,
+    logDigest: createHash('sha256').update(log).digest('hex'),
+  };
+}
+
 /** Called before handoff. It records the caller's generated inputs without changing admission or source custody. */
 export function recordWorkerCheckTypingInputs(
   env: NodeJS.ProcessEnv,
@@ -2163,11 +2212,7 @@ export function recordWorkerCheckTypingInputs(
   });
 }
 
-/**
- * Give this wrapper run's stamp back when it died with infrastructure exit 75 before the check command ran.
- * Otherwise record the run's exit and whether its typecheck failed, so admission and settlement can see it.
- * The wrapper calls this where it records the run's final exit code.
- */
+/** Retain a proven migration setup defect; give back generic pre-command exit-75 stamps and settle other runs. */
 export function settleWorkerCheckHostBudget(
   env: NodeJS.ProcessEnv,
   exitCode: number,
@@ -2177,20 +2222,21 @@ export function settleWorkerCheckHostBudget(
   const directory = env.GOAL_WORKER_CHECK_BUDGET_DIR?.trim();
   const stamp = env.GOAL_WORKER_CHECK_BUDGET_STAMP?.trim();
   if (!directory || !stamp || !STAMP_NAME.test(stamp)) return;
-  if (exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT && !commandReached) {
-    try {
-      unlinkSync(join(directory, stamp));
-    } catch (error) {
-      if ((error as { code?: string }).code !== 'ENOENT') throw error;
-    }
-    return;
-  }
   let current: WorkerCheckHostStampRecord = {};
   try {
     current = readWorkerCheckHostStamp(directory, stamp);
   } catch (error) {
     if ((error as { code?: string }).code === 'ENOENT') return;
     throw error;
+  }
+  const setupFailure = migrationSetupFailureCandidate(current, exitCode, commandReached, details);
+  if (exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT && !commandReached && !setupFailure) {
+    try {
+      unlinkSync(join(directory, stamp));
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'ENOENT') throw error;
+    }
+    return;
   }
   const log = details.log ? boundedLog(details.log) : '';
   let typingInputs: TypingInputReceipt | undefined;
@@ -2209,6 +2255,7 @@ export function settleWorkerCheckHostBudget(
   }
   delete current.typingInputs;
   delete current.typingInputsUnavailable;
+  delete current.setupFailure;
   writeStamp(directory, stamp, {
     ...current,
     exitCode,
@@ -2217,6 +2264,7 @@ export function settleWorkerCheckHostBudget(
     ...(details.log ? { log: details.log } : {}),
     ...(typingInputs ? { typingInputs } : {}),
     ...(typingInputsUnavailable ? { typingInputsUnavailable } : {}),
+    ...(setupFailure ? { setupFailure } : {}),
   });
 }
 
@@ -2244,6 +2292,144 @@ export function workerCheckHostTerminalTypingFailure(input: {
   )
     return;
   return settled;
+}
+
+/** Admit only the exact retained migration preflight defect, without treating setup as a compiler result. */
+function terminalMigrationSetupDefect(
+  input: {
+    directory?: string;
+    worktree: string;
+    limit?: string | number | null;
+    taskId: string;
+    attempt: number;
+    checkIds: readonly string[];
+    pendingCommand?: readonly string[];
+  },
+  settled: WorkerCheckHostTypingSettlement,
+): boolean {
+  if (
+    settled.ok ||
+    settled.kind !== 'evidence-unavailable' ||
+    !input.pendingCommand ||
+    workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) !== 'terminal'
+  )
+    return false;
+  const directory = input.directory?.trim();
+  if (!directory || input.limit === 'off' || input.limit === null) return false;
+  const stamped = stampNames(directory).map((name) => readWorkerCheckHostStamp(directory, name));
+  let matches = 0;
+  for (const checkId of new Set(input.checkIds)) {
+    const result = readCheckEvidence(join(input.worktree, '.temp', 'goal', 'checks', 'results', `${checkId}.json`));
+    if (
+      !isCheckId(checkId) ||
+      !result ||
+      result.id !== checkId ||
+      result.cwd !== input.worktree ||
+      result.ownership?.taskId !== input.taskId ||
+      result.ownership.attempt !== input.attempt ||
+      result.status !== 'finished' ||
+      result.exitCode !== WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT ||
+      !checkEvidenceArgv(result.argv) ||
+      !isPhysicalRunId(result.physicalRunId)
+    )
+      continue;
+    const candidates = stamped.filter((record) => {
+      const failure = record.setupFailure;
+      const request = record.typingRequest;
+      return Boolean(
+        failure &&
+          request &&
+          record.exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT &&
+          record.includedTypecheck === true &&
+          record.typecheckFailed === false &&
+          record.typingInputs === undefined &&
+          failure.kind === 'missing-kernel-migration-up-marker' &&
+          failure.commandReached === false &&
+          failure.physicalRunId === result.physicalRunId &&
+          request.physicalRunId === result.physicalRunId &&
+          JSON.stringify(failure.command) === JSON.stringify(input.pendingCommand) &&
+          JSON.stringify(request.command) === JSON.stringify(input.pendingCommand) &&
+          JSON.stringify(result.argv) === JSON.stringify(input.pendingCommand),
+      );
+    });
+    if (candidates.length !== 1) continue;
+    const record = candidates[0]!;
+    const failure = record.setupFailure!;
+    const request = record.typingRequest!;
+    const logPath = typeof result.log === 'string' ? resolve(input.worktree, result.log) : '';
+    const stampLogPath = record.log ? resolve(record.log) : '';
+    const relativeLog = logPath ? relative(resolve(input.worktree), logPath) : '';
+    if (
+      !record.content ||
+      workerCheckHostContentTree(input.worktree) !== record.content ||
+      !record.log ||
+      !logPath ||
+      stampLogPath !== logPath ||
+      !relativeLog ||
+      relativeLog === '..' ||
+      relativeLog.startsWith(`..${sep}`) ||
+      isAbsolute(relativeLog) ||
+      !isRetainedKernelTypingCompiler(input.worktree, request.command)
+    )
+      continue;
+    const log = boundedLog(record.log);
+    const defect = retainedKernelMigrationHeaderDefect(input.worktree, log);
+    if (
+      !defect ||
+      defect.path !== failure.path ||
+      defect.line !== failure.diagnostic ||
+      failure.logDigest !== createHash('sha256').update(log).digest('hex')
+    )
+      continue;
+    const history = readCheckEvidence(
+      join(
+        input.worktree,
+        '.temp',
+        'goal',
+        'checks',
+        'custody',
+        'history',
+        `${checkId}.${result.physicalRunId}.json`,
+      ),
+    );
+    if (
+      !history ||
+      history.id !== checkId ||
+      history.cwd !== input.worktree ||
+      history.physicalRunId !== result.physicalRunId ||
+      history.status !== 'finished' ||
+      history.exitCode !== WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT ||
+      history.log !== result.log ||
+      !checkEvidenceArgv(history.argv) ||
+      !isDeepStrictEqual(history.argv, result.argv) ||
+      history.ownership?.taskId !== input.taskId ||
+      history.ownership.attempt !== input.attempt ||
+      !terminalPhysicalHistory(input.worktree, checkId, result.physicalRunId, WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT)
+    )
+      continue;
+    matches += 1;
+  }
+  return matches === 1;
+}
+
+/** Preserve strict compiler-failure admission and add only the exact retained setup defect. */
+export function workerCheckHostTerminalSourceRepair(input: {
+  directory?: string;
+  worktree: string;
+  limit?: string | number | null;
+  taskId: string;
+  attempt: number;
+  checkIds: readonly string[];
+  pendingCommand?: readonly string[];
+}): boolean {
+  const settled = workerCheckHostTypingSettlement(input);
+  if (settled.ok) return false;
+  if (settled.kind === 'typing-failure')
+    return (
+      (input.pendingCommand === undefined || JSON.stringify(input.pendingCommand) === JSON.stringify(settled.command)) &&
+      workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) === 'terminal'
+    );
+  return terminalMigrationSetupDefect(input, settled);
 }
 
 const TYPING_SETTLEMENT_FAILED = 'Last check-host run failed its typecheck.';
