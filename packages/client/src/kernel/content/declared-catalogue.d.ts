@@ -347,4 +347,12 @@ export declare function contentDeclaredEvents(): Readonly<{
     'com.rezics.content.report.evidence-erased.v1': import("typebox").TObject<{
         reportId: import("typebox").TString;
     }>;
+    'com.rezics.content.revision-disclosure.issued.v1': import("typebox").TObject<{
+        disclosureId: import("typebox").TString;
+        catalogueId: import("typebox").TString;
+    }>;
+    'com.rezics.content.revision-disclosure.revoked.v1': import("typebox").TObject<{
+        disclosureId: import("typebox").TString;
+        catalogueId: import("typebox").TString;
+    }>;
 }>;

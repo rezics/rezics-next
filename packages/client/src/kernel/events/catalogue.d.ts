@@ -1275,6 +1275,14 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly 'com.rezics.content.report.evidence-erased.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
+    readonly 'com.rezics.content.revision-disclosure.issued.v1': Type.TObject<{
+        disclosureId: Type.TString;
+        catalogueId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.revision-disclosure.revoked.v1': Type.TObject<{
+        disclosureId: Type.TString;
+        catalogueId: Type.TString;
+    }>;
     readonly 'com.rezics.library.bangumi.changed.v1': Type.TObject<{
         operation: Type.TString;
     }>;
