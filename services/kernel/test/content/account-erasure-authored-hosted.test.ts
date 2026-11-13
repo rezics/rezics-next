@@ -62,7 +62,14 @@ test('account erasure clears private hosted titles before locator acknowledgemen
       'SELECT head_revision_id::text FROM content.post WHERE route=$1 AND post_id=$2',
       [catalogueRoute, f.catalogueId],
     );
-    await f.native.revise({ id: f.catalogueId, revisionId: beforeRevision.rows[0]!.head_revision_id }, {});
+    expect(
+      (
+        await f.native.revise(
+          { id: f.catalogueId, revisionId: beforeRevision.rows[0]!.head_revision_id, visibility: 'published' },
+          {},
+        )
+      ).status,
+    ).toBe(200);
     const current = await pool.query<{ head_revision_id: string }>(
       'SELECT head_revision_id::text FROM content.post WHERE route=$1 AND post_id=$2',
       [catalogueRoute, f.catalogueId],

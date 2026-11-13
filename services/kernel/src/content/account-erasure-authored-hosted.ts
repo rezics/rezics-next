@@ -9,6 +9,9 @@ import {
   redactHostedLifecycleStream,
   type HostedLifecycleAnchor,
   type HostedLifecycleContext,
+  type HostedLifecyclePlacementCursor,
+  type HostedLifecycleRevisionCursor,
+  type HostedLifecycleStreamCursor,
 } from './hosted-append-lifecycle.ts';
 
 export type HostedDispositionStep = <T>(name: string, action: () => Promise<T>) => Promise<T>;
@@ -65,9 +68,11 @@ export async function disposeHostedTitles(
 
   let afterRevision: string | null = null;
   for (;;) {
-    const cursor = { afterRevision };
-    const inventory = await page('revisions', cursor, (context) =>
-      pageHostedLifecycleRevisions(pool, anchor, cursor, context),
+    const cursor: HostedLifecycleRevisionCursor = { afterRevision };
+    const inventory: Awaited<ReturnType<typeof pageHostedLifecycleRevisions>> = await page(
+      'revisions',
+      cursor,
+      (context) => pageHostedLifecycleRevisions(pool, anchor, cursor, context),
     );
 
     for (const revision of inventory.value.items) {
@@ -75,9 +80,11 @@ export async function disposeHostedTitles(
       if (revision.kind === 'structure' && (revision.descriptor === null || selfBase)) {
         let afterOccurrence: string | null = null;
         for (;;) {
-          const placementCursor = { revisionId: revision.revisionId, afterOccurrence };
-          const result = await page('placements', placementCursor, (context) =>
-            redactHostedLifecyclePlacements(pool, anchor, placementCursor, context),
+          const placementCursor: HostedLifecyclePlacementCursor = { revisionId: revision.revisionId, afterOccurrence };
+          const result: Awaited<ReturnType<typeof redactHostedLifecyclePlacements>> = await page(
+            'placements',
+            placementCursor,
+            (context) => redactHostedLifecyclePlacements(pool, anchor, placementCursor, context),
           );
           if (!result.value.next) break;
           afterOccurrence = result.value.next.afterOccurrence;
@@ -87,13 +94,15 @@ export async function disposeHostedTitles(
       if (revision.streamHighWater !== null && revision.streamHighWater !== '-1') {
         let afterOffset = '-1';
         for (;;) {
-          const streamCursor = {
+          const streamCursor: HostedLifecycleStreamCursor = {
             streamId: revision.revisionId,
             highWater: revision.streamHighWater,
             afterOffset,
           };
-          const result = await page('stream', streamCursor, (context) =>
-            redactHostedLifecycleStream(pool, anchor, streamCursor, context),
+          const result: Awaited<ReturnType<typeof redactHostedLifecycleStream>> = await page(
+            'stream',
+            streamCursor,
+            (context) => redactHostedLifecycleStream(pool, anchor, streamCursor, context),
           );
           if (!result.value.next) break;
           afterOffset = result.value.next.afterOffset;
