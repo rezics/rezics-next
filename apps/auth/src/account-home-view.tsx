@@ -41,55 +41,71 @@ export function AccountHomeView({
   return (
     <AuthPage heading={m.auth_home_heading()}>
       <div className="auth-account-home">
-        <p className="auth-account-home-intro">{m.auth_home_intro()}</p>
+        <section
+          className="auth-account-identity"
+          data-state={state.kind}
+          aria-labelledby="auth-home-identity-heading"
+        >
+          <div className="auth-home-identity-copy">
+            <h2 id="auth-home-identity-heading">{m.auth_home_identity_heading()}</h2>
+            <p ref={status} className="auth-account-home-status" role="status" tabIndex={-1}>
+              {identityMessage}
+            </p>
+            <p className="auth-home-identity-note">{m.auth_home_identity_note()}</p>
+            {state.kind === 'unavailable' ? (
+              <AuthButton type="button" variant="outline" onClick={retry}>
+                {m.auth_home_identity_retry()}
+              </AuthButton>
+            ) : null}
+          </div>
+          {state.kind === 'ready' ? (
+            <div className="auth-home-identity-private">
+              <dl className="auth-account-home-email">
+                <div>
+                  <dt>{m.auth_home_email()}</dt>
+                  <dd>
+                    {state.email ? <bdi dir="auto">{state.email}</bdi> : m.auth_home_identity_missing_email()}
+                  </dd>
+                </div>
+              </dl>
+              <details>
+                <summary>{m.auth_home_account_id()}</summary>
+                <p>
+                  <code dir="ltr">{state.accountId}</code>
+                </p>
+              </details>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="auth-home-next-actions" aria-label={m.auth_home_navigation_label()}>
+          <p className="auth-home-next-actions-intro">{m.auth_home_intro()}</p>
+          {state.kind === 'signed-out' || state.kind === 'unavailable' ? (
+            <section className="auth-home-entries" aria-labelledby="auth-home-signed-out-heading">
+              <h2 id="auth-home-signed-out-heading">{m.auth_home_signed_out_heading()}</h2>
+              <p>{m.auth_home_signed_out_description()}</p>
+              <nav aria-label={m.auth_home_signed_out_heading()}>
+                <a className="auth-home-entry-link" href="/login">
+                  {m.auth_home_sign_in()}
+                </a>
+                <a className="auth-home-entry-link" href="/signup">
+                  {m.auth_home_sign_up()}
+                </a>
+                <a className="auth-home-entry-link" href="/recovery">
+                  {m.auth_home_recovery()}
+                </a>
+              </nav>
+            </section>
+          ) : null}
+
+          <AccountHomeGuide />
+        </section>
+
         <nav className="auth-home-location" aria-label={m.auth_home_heading()}>
           <a href="/" aria-current="page">
             {m.auth_home_heading()} · {m.auth_home_current()}
           </a>
         </nav>
-
-        <section className="auth-account-identity" aria-labelledby="auth-home-identity-heading">
-          <h2 id="auth-home-identity-heading">{m.auth_home_identity_heading()}</h2>
-          <p ref={status} className="auth-account-home-status" role="status" tabIndex={-1}>
-            {identityMessage}
-          </p>
-          <p className="auth-home-identity-note">{m.auth_home_identity_note()}</p>
-          {state.kind === 'ready' ? (
-            <dl className="auth-account-home-email">
-              <div>
-                <dt>{m.auth_home_email()}</dt>
-                <dd>{state.email ? <bdi dir="auto">{state.email}</bdi> : m.auth_home_identity_missing_email()}</dd>
-              </div>
-            </dl>
-          ) : null}
-          {state.kind === 'ready' ? (
-            <details>
-              <summary>{m.auth_home_account_id()}</summary>
-              <p>
-                <code dir="ltr">{state.accountId}</code>
-              </p>
-            </details>
-          ) : null}
-          {state.kind === 'unavailable' ? (
-            <AuthButton type="button" variant="outline" onClick={retry}>
-              {m.auth_home_identity_retry()}
-            </AuthButton>
-          ) : null}
-        </section>
-
-        {state.kind === 'signed-out' || state.kind === 'unavailable' ? (
-          <section className="auth-home-entries" aria-labelledby="auth-home-signed-out-heading">
-            <h2 id="auth-home-signed-out-heading">{m.auth_home_signed_out_heading()}</h2>
-            <p>{m.auth_home_signed_out_description()}</p>
-            <nav aria-label={m.auth_home_signed_out_heading()}>
-              <a href="/login">{m.auth_home_sign_in()}</a>
-              <a href="/signup">{m.auth_home_sign_up()}</a>
-              <a href="/recovery">{m.auth_home_recovery()}</a>
-            </nav>
-          </section>
-        ) : null}
-
-        <AccountHomeGuide />
       </div>
     </AuthPage>
   );
