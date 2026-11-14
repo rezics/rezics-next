@@ -69,11 +69,12 @@ async function openLiteraryReader(page: Page, subject: BookCatalogueIdentity): P
     waitUntil: 'domcontentloaded',
   });
   await pageReady(page, `reader ${subject.type}`);
-  const reader = page.locator('[data-slot="literary-reader"]');
-  await browserExpect(reader).toBeVisible();
-  await browserExpect(reader.locator(`[data-type="${subject.type}"]`)).toBeVisible();
-  await browserExpect(reader.getByText(subject.label, { exact: true })).toBeVisible();
+  const reader = page.getByRole('main');
+  await browserExpect(reader.locator('[data-slot="literary-overview-destinations"]')).toBeVisible();
+  await browserExpect(reader.getByRole('heading', { level: 1, name: subject.label, exact: true })).toBeVisible();
   await browserExpect(reader.getByText(subject.text, { exact: true })).toBeVisible();
+  const shelf = reader.locator('[data-slot="literary-overview-destinations"] a[href*="/library?"]');
+  expect(exactType(new URL((await shelf.getAttribute('href'))!, fixture.stack.web).href)).toBe(subject.type);
   return page.url();
 }
 
@@ -243,7 +244,9 @@ nativeTest(
     const readerShelfPages = new Map<BookCatalogueType, Page>();
     for (const type of types) {
       const readerPage = searchPages.get(type)!;
-      const shelfLink = readerPage.locator('[data-slot="literary-reader"] a[target="_blank"][href*="/library?"]');
+      const shelfLink = readerPage.locator(
+        '[data-slot="literary-overview-destinations"] a[target="_blank"][href*="/library?"]',
+      );
       await browserExpect(shelfLink).toBeVisible();
       const href = await shelfLink.getAttribute('href');
       expect(href).toBeTruthy();
@@ -307,8 +310,12 @@ nativeTest(
       waitUntil: 'domcontentloaded',
     });
     await pageReady(bookShelf, 'Library return to Book detail');
-    await browserExpect(bookShelf.locator('[data-slot="literary-reader"] [data-type="schema:Book"]')).toBeVisible();
-    const updatedShelfLink = bookShelf.locator('[data-slot="literary-reader"] a[target="_blank"][href*="/library?"]');
+    await browserExpect(
+      bookShelf.getByRole('heading', { level: 1, name: subjects.book.label, exact: true }),
+    ).toBeVisible();
+    const updatedShelfLink = bookShelf.locator(
+      '[data-slot="literary-overview-destinations"] a[target="_blank"][href*="/library?"]',
+    );
     const currentShelf = await openNewTabFromLink(bookShelf, updatedShelfLink, 'return to current Book shelf');
     await assertShelfPage(currentShelf, 'schema:Book');
     await browserExpect(currentShelf.getByRole('main')).toContainText(subjects.book.label);
@@ -329,7 +336,9 @@ nativeTest(
     if (publicResponse?.status() !== 200)
       throw new Error(`anonymous public Book detail expected HTTP 200, received ${publicResponse?.status() ?? 'none'}`);
     await pageReady(anonymousPage, 'anonymous public Book detail');
-    await browserExpect(anonymousPage.locator('[data-slot="literary-reader"] [data-type="schema:Book"]')).toBeVisible();
+    await browserExpect(
+      anonymousPage.getByRole('heading', { level: 1, name: subjects.book.label, exact: true }),
+    ).toBeVisible();
     const publicText = await anonymousPage.getByRole('main').innerText();
     expect(publicText).not.toContain(states.bookCompleted.label);
     expect(publicText).not.toContain(states.bookPlanned.label);

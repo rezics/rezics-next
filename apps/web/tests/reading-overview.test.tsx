@@ -10,6 +10,7 @@ import {
 } from '../src/kernel/fake/reading-overview';
 import { ratingsFixtures } from '../src/kernel/fake/ratings';
 import { BookShelfLink } from '../src/books/catalogue/shelf-link';
+import { hostedBookSubjectHref } from '../src/books/reader/address';
 import { LiteraryReader } from '../src/features/catalogue/literary-reader/view';
 import { LiteraryOverviewDestinations } from '../src/features/catalogue/literary-reader/overview';
 import { literaryWorkIdentity } from '../src/features/catalogue/literary-reader/model';
@@ -134,6 +135,8 @@ for (const domain of ['book', 'game', 'anime'] as const) {
         expect.arrayContaining(['contents', 'editions']),
       );
       expect(html).toContain('data-slot="literary-overview-destinations"');
+      expect(html).toContain(`href="${hostedBookSubjectHref(fixture.identity.id, 'en')}"`);
+      expect(html).toContain('href="/en/library?type=schema%3ABook"');
     }
   });
 
