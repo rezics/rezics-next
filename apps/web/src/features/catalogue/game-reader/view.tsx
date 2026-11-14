@@ -372,6 +372,7 @@ function GameWindow({
                                       related={page.public.related}
                                       locale={locale}
                                       date={field.date}
+                                      compact={compact}
                                       link={Link}
                                     />
                                   </div>,

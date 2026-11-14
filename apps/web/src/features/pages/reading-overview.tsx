@@ -60,15 +60,22 @@ export function projectReadingDocument(
         const children = props[slot] as PageDocument['content'] | undefined;
         if (children) props[slot] = project(children);
       }
-      if (slots.length && slots.every((slot) => !(props[slot] as PageDocument['content'] | undefined)?.length))
+      if (
+        node.type !== 'Slot' &&
+        slots.length &&
+        slots.every((slot) => !(props[slot] as PageDocument['content'] | undefined)?.length)
+      )
         return [];
       return [{ ...node, props }];
     });
   return { ...document, content: project(document.content) };
 }
 
-export function readingOverviewDocument(document: PageDocument): PageDocument {
-  return projectReadingDocument(document, (node) => destinationNodes.has(node.type));
+export function readingOverviewDocument(document: PageDocument, domain: ReadingDomain = 'book'): PageDocument {
+  return projectReadingDocument(
+    document,
+    (node) => destinationNodes.has(node.type) || (domain !== 'book' && node.type === 'Statements'),
+  );
 }
 
 /** Split at leaves, retaining nested layout and exact node identities in each reading region. */

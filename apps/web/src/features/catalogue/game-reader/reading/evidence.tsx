@@ -15,7 +15,7 @@ type FactProps = {
   link: WorkReadingLink;
 };
 
-export function GameFact(props: FactProps & { date: boolean }) {
+export function GameFact(props: FactProps & { date: boolean; compact?: boolean }) {
   const { statement, page, related, locale, link: Link } = props;
   const reading = useWorkReading();
   const o = { locale: locale as never };
@@ -26,7 +26,24 @@ export function GameFact(props: FactProps & { date: boolean }) {
     <div className="space-y-2">
       {date ? (
         <p data-date-kind={date.kind}>
-          {date.structuredDate ? <time dateTime={date.structuredDate}>{date.text}</time> : date.text}
+          {props.compact && date.structuredDate ? (
+            reading.renderValue({
+              snak: {
+                ...statement,
+                value: {
+                  type: 'value',
+                  content: { ...(content as object), calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+                },
+              },
+              related,
+              locale,
+              link: Link,
+            })
+          ) : date.structuredDate ? (
+            <time dateTime={date.structuredDate}>{date.text}</time>
+          ) : (
+            date.text
+          )}
         </p>
       ) : statement.property.data_type === 'wikibase-item' &&
         typeof content === 'string' &&
@@ -52,7 +69,7 @@ export function GameEvidence({ statement, page, related, locale, link: Link }: F
           {statement.qualifiers.map((part, index) => (
             <div key={index}>
               <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
-                {page.labels[part.property.id]?.text || part.property.id}
+                {page.labels[part.property.id]?.text || m.subject_value_unlabelled({}, o)}
               </dt>
               <dd>{value(part)}</dd>
             </div>

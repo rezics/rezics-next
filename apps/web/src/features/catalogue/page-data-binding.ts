@@ -20,5 +20,4 @@ export const pageDataBinding: SemanticDataPort = {
   },
 };
 
-export { literaryDetailedNodes } from './literary-reader/presentation';
 export { literaryWindows } from './literary-reader/model';

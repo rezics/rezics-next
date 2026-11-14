@@ -37,7 +37,10 @@ with its media or evidence. Loading, absent, denied and retry states keep their 
 Supplied display labels and language tags are preserved. A missing shelf Type label uses localized shelf guidance,
 never a compact Type identifier or an invented name; the exact Type stays in its existing destination address and
 inspectable evidence. This adds no label read or per-row hydration. Complete-page examples use contract-shaped
-synthetic responses and do not establish provider, native or published acceptance.
+synthetic responses and do not establish provider, native or published acceptance. Overview renders supported
+Gregorian dates in natural language at their supplied year, month or day precision. The shared time reader still
+owns validation, calendar, uncertainty and structured-date admission; the full native form remains inspectable.
+Unsupported calendars, uncertain times and long signed years retain that native presentation.
 
 ## Reader Type display
 

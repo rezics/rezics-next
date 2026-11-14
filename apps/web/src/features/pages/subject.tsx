@@ -1080,13 +1080,13 @@ export function SubjectPage({
   const header = placesSlot(page.document.content, 'header');
   const selectedDocument = selectedStreamDocument(page.document, page.streams);
   const renderedDocument = useMemo(() => {
-    if (readingOverview) return readingOverviewDocument(selectedDocument);
+    if (readingOverview) return readingOverviewDocument(selectedDocument, readingDomain);
     if (literarySubject && (view === 'contents' || view === 'editions') && page.catalogue?.definitions) {
       const owned = literaryWindows(profileRelationWindows(page, { includeAliases: true }), page.catalogue.definitions);
       return literaryDetailDocument(selectedDocument, new Set(owned.map(({ node }) => node)));
     }
     return selectedDocument;
-  }, [readingOverview, selectedDocument, literarySubject, view, page]);
+  }, [readingOverview, readingDomain, selectedDocument, literarySubject, view, page]);
   const CompositionRoot = readingOverview ? BookOverviewRoot : PageRoot;
   const composition = overview && !framed ? splitHeaderDocument(renderedDocument) : { remaining: renderedDocument };
   const readingParts = useMemo(() => readingOverviewParts(composition.remaining), [composition.remaining]);

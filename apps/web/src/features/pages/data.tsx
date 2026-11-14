@@ -1,4 +1,6 @@
 import { BookOverviewContext } from './book-overview';
+import { ReadingDomainContext } from './reading-overview';
+import { ReadingDate } from './reading-date';
 import { Members } from './member-list';
 import { ReactionSummary } from './reaction-summary';
 import type { MemberPageTarget } from './member-list-query';
@@ -115,6 +117,7 @@ type Options = {
   frame: Frame;
   labels: ValueLabels;
   overview?: boolean;
+  naturalDates?: boolean;
   headerActions?: ReactNode;
 };
 type SubjectRead = {
@@ -265,7 +268,7 @@ function BookIdentityRating({ subject, locale }: { subject: string; locale: stri
   return useContext(BookOverviewContext) ? <overview.BookOverviewRating subject={subject} locale={locale} /> : null;
 }
 
-function subjectHeader(read: SubjectRead, creators: Creator[], date: string | null, options: Options) {
+function subjectHeader(read: SubjectRead, creators: Creator[], date: ReactNode, options: Options) {
   const { subject, summary } = read;
   const original = originalLanguage(subject);
   const label = pageText(subject.labels, options.locale, original);
@@ -305,7 +308,7 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
       {...(size === 'lg' ? { priority: true } : { decorative: true })}
     />
   );
-  const facts = [options.frame.typeLabel, date].filter((fact): fact is string => !!fact);
+  const facts = [options.frame.typeLabel, date].filter(Boolean);
   return (
     <div
       id="subject-identity"
@@ -408,7 +411,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   })();
   const identifiers: Sources['identifiers'] = [];
   const named: Record<string, Creator[]> = {};
-  const dates: Record<string, string> = {};
+  const dates: Record<string, ReactNode> = {};
 
   const presentable = (statement: Stmt): ReactNode => {
     const { value, property } = statement;
@@ -502,7 +505,8 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
         }
         if (DATE_PROPERTIES.includes(property) && isRecord(content) && !(property in dates)) {
           const date = timeText(content, options.locale);
-          if (date) dates[property] = date;
+          if (date)
+            dates[property] = options.naturalDates ? <ReadingDate value={content} locale={options.locale} /> : date;
         }
       }
       const qualifiers = statement.qualifiers.flatMap((qualifier) => {
@@ -826,6 +830,7 @@ export function PageData({
   artworkSource?: object;
   children?: ReactNode;
 }) {
+  const readingDomain = useContext(ReadingDomainContext);
   // Page documents have already passed the composition contract at the kernel boundary.
   const composition = document as CompositionDocument;
   const plan = planReads(platformRegistry, composition, {
@@ -856,6 +861,7 @@ export function PageData({
     frame: { ...(typeLabel ? { typeLabel } : {}), ...(ratio ? { ratio } : {}) },
     labels,
     overview: readingView === 'overview',
+    naturalDates: readingDomain !== undefined,
     ...(headerActions ? { headerActions } : {}),
   };
   const prepared = new Map<string, PreparedRead>();
@@ -922,7 +928,9 @@ export function PageData({
   const firstStatements = nodesOfType(composition.content, 'Statements')[0];
   const aboutRead = firstStatements ? nodes.get(firstStatements.id) : undefined;
   const about =
-    firstStatements && nodesOfType(composition.content, 'Summary').length > 0
+    (!readingDomain || readingDomain === 'book') &&
+    firstStatements &&
+    nodesOfType(composition.content, 'Summary').length > 0
       ? {
           statements: firstStatements.id,
           facts: statementList(
@@ -932,7 +940,7 @@ export function PageData({
               : firstStatements.props.properties,
             'subject-facts',
           ),
-          tags: aboutRead?.tags ?? null,
+          tags: readingDomain ? null : (aboutRead?.tags ?? null),
         }
       : undefined;
   const overviewValue: overview.OverviewValue = {

@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
+import { ReadingOverviewContext } from './reading-overview';
+import { ReadingDate } from './reading-date';
 import type { StatementReadingValueProps } from '../catalogue/statement-reading';
 import { m } from '../../paraglide/messages.js';
 import { LANGUAGE_PROPERTY, languageName } from '../../subject/language';
@@ -10,6 +12,7 @@ import { DocumentValue } from './values';
 import { ExternalValue, isRecord, linkClass, linkColor, pageText, PlainLink, type PageLink, type Snak } from './shared';
 
 export type ScalarValueOptions = {
+  naturalDates?: boolean;
   locale: string;
   messages: { unknown: string; none: string; unlabelled: string };
   link: PageLink;
@@ -70,7 +73,12 @@ export function inlineValue(
       </span>
     );
   }
-  if (property.data_type === 'time') return <span>{timeText(content, options.locale)}</span>;
+  if (property.data_type === 'time')
+    return options.naturalDates ? (
+      <ReadingDate value={content} locale={options.locale} />
+    ) : (
+      <span>{timeText(content, options.locale)}</span>
+    );
   if (property.data_type === 'monolingualtext' && isRecord(content) && typeof content.language === 'string') {
     const text = pageText({ [content.language]: content.text }, options.locale);
     return <span lang={text.lang}>{text.text}</span>;
@@ -105,6 +113,7 @@ export function CandidateValue({
   documentUnavailable?: ReactNode;
   link?: PageLink;
 }) {
+  const naturalDates = useContext(ReadingOverviewContext);
   const messages = {
     unknown: m.subject_value_unknown({}, { locale: locale as never }),
     none: m.subject_value_none({}, { locale: locale as never }),
@@ -155,6 +164,7 @@ export function CandidateValue({
       locale,
       messages,
       link,
+      naturalDates,
     }) ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>
   );
 }

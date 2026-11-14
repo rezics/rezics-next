@@ -1,17 +1,5 @@
 import type { LiteraryWindowKind } from './model';
 
-/** Long bibliography belongs to a destination, not to the first reading viewport. */
-export const literaryDetailedNodes = new Set([
-  'SubjectList',
-  'RelationGroups',
-  'OutgoingRelations',
-  'Appearances',
-  'Credits',
-  'CollectionList',
-  'ThreadList',
-  'RatingSummary',
-]);
-
 export type LiteraryView = 'overview' | 'contents' | 'editions';
 
 export function literaryView(view: string): LiteraryView {
