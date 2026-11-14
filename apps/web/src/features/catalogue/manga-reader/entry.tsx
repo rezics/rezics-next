@@ -78,7 +78,6 @@ export function MangaReaderEntry({
         view,
         window: continuation ? `${continuation.node}\u0000${continuation.cursor}` : null,
         realm,
-        reader: JSON.stringify(reader),
         admission,
         address: mangaSelectedAddress(currentAddress),
       }}

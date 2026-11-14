@@ -9,6 +9,7 @@ import { WorkReadingProvider, useWorkReading, type WorkReadingPort } from '../wo
 import type { ProfileRelationWindow } from '../../pages/views';
 import {
   mangaReaderMeasures,
+  mangaReaderPreferences,
   mangaReaderRetired,
   mangaReaderRows,
   mangaReaderWindowScope,
@@ -84,7 +85,7 @@ export function MangaReader({
   link?: PageLink;
   reading?: WorkReadingPort;
 }) {
-  const currentObservation = { ...observation, reader: JSON.stringify(reader) };
+  const currentObservation = { ...observation, reader: mangaReaderPreferences(reader) };
   const captured = useRef<MangaReaderObservation | null>(currentObservation);
   const retiredVisit = useRef(false);
   const [selected, select] = useState<string | null>(null);
@@ -94,6 +95,9 @@ export function MangaReader({
   if (captured.current && mangaReaderRetired(captured.current, currentObservation)) {
     retiredVisit.current = true;
     captured.current = null;
+  } else if (captured.current?.reader === undefined && !retiredVisit.current) {
+    // Bind once, including actual default-valued preferences, before comparing later observations.
+    captured.current = currentObservation;
   }
   const retired = retiredVisit.current;
   useEffect(() => {
@@ -113,18 +117,6 @@ export function MangaReader({
       window.removeEventListener('pageshow', restore);
     };
   }, []);
-  useLayoutEffect(() => {
-    if (!retired) return;
-    const target = focused.current;
-    focused.current = null;
-    if (
-      target instanceof Element &&
-      target.closest('[data-selected="true"]') &&
-      !target.isConnected &&
-      document.activeElement === document.body
-    )
-      heading.current?.focus();
-  }, [retired]);
   const current = mangaReaderWindowScope(windows, definitions, view);
   const states = current.length
     ? current.map((window) => ({
@@ -147,13 +139,32 @@ export function MangaReader({
   const [missingOrigin, setMissingOrigin] = useState(false);
   const active = rows.find((row) => row.key === selected);
   useLayoutEffect(() => {
+    if (!retired && (!selected || active)) return;
+    if (selected) select(null);
+    const target = focused.current;
+    focused.current = null;
+    // Removed evidence cannot retain selection or steal focus from another control.
+    if (
+      target instanceof Element &&
+      target.closest('[data-selected="true"]') &&
+      !target.isConnected &&
+      document.activeElement === document.body
+    )
+      heading.current?.focus();
+  }, [retired, selected, active]);
+  useLayoutEffect(() => {
     if (retired || originHandled.current) return;
-    originHandled.current = true;
     const fragment = new URL(currentHref ?? recoveryHref, 'https://rezics.invalid').hash;
     const occurrence = mangaOccurrenceFromFragment(fragment);
-    if (!occurrence) return;
+    if (!occurrence) {
+      originHandled.current = true;
+      return;
+    }
     const key = mangaOccurrenceKey(occurrence);
     const row = rows.find((candidate) => candidate.key === key);
+    // Safe defaults may conceal a pending return. Resolve it against the first actual disclosure.
+    if (!row && currentObservation.reader === undefined) return;
+    originHandled.current = true;
     if (row) select(key);
     else setMissingOrigin(true);
     // Only an explicit occurrence return may move focus, and only while focus is still unclaimed.
@@ -161,10 +172,9 @@ export function MangaReader({
       if (row) rowControls.current.get(key)?.focus();
       else heading.current?.focus();
     }
-  }, [retired, currentHref, recoveryHref, rows]);
+  }, [retired, currentHref, recoveryHref, rows, currentObservation.reader]);
   useEffect(() => {
     if (!retired) return;
-    select(null);
     rowControls.current.clear();
   }, [retired]);
   const measures = retired ? [] : mangaReaderMeasures(current, definitions, reader, subject.id);
@@ -384,6 +394,7 @@ export function MangaReader({
                               className="ms-2 inline-flex min-h-11 min-w-11 items-center rounded-sm px-2 text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                               onClick={() => {
                                 if (retiredVisit.current) return;
+                                originHandled.current = true;
                                 select(selectedRow ? null : row.key);
                                 setMissingOrigin(false);
                               }}

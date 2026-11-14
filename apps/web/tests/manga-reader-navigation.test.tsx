@@ -135,6 +135,7 @@ test('the mounted Entry re-admits an exact return and recovery never revives a r
     Element: browser.Element,
     Node: browser.Node,
     MutationObserver: browser.MutationObserver,
+    fetch: mock(() => Promise.reject(new Error('Manga preparation must use supplied evidence'))),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -200,14 +201,18 @@ test('the mounted Entry re-admits an exact return and recovery never revives a r
         complete: true,
       },
     ],
-    reader: defaultReader,
+    reader: { ...defaultReader, spoilerLevel: 2 as const, suitability: 'show' as const },
     currentHref: origin,
     reading: isolatedWorkReading,
   };
   try {
+    await act(async () => root.render(createElement(MangaReaderEntry, { ...props, reader: defaultReader })));
+    const selectedControl = host.querySelector('button');
     await act(async () => root.render(createElement(MangaReaderEntry, props)));
     expect(host.querySelector('[data-selected="true"]')?.getAttribute('data-statement-id')).toBe('original-assertion');
-    expect(browser.document.activeElement).toBe(host.querySelector('button'));
+    expect(browser.document.activeElement).toBe(selectedControl);
+    expect(host.querySelector('button')).toBe(selectedControl);
+    expect(globals.fetch).not.toHaveBeenCalled();
     const part = host.querySelector(`a[href*="${volumeId}"]`)!;
     const partUrl = new URL(part.getAttribute('href')!, 'https://rezics.test');
     expect(partUrl.searchParams.get('via')).toBe(origin);
@@ -265,6 +270,40 @@ test('the mounted Entry re-admits an exact return and recovery never revives a r
       root.render(createElement(MangaReaderEntry, { ...props, key: 'unselected-focus', source: {} })),
     );
     expect(browser.document.activeElement).not.toBe(host.querySelector('h2'));
+
+    const spoiler = {
+      ...nativeRow,
+      assertion: {
+        ...nativeRow.assertion,
+        qualifiers: [
+          {
+            property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+            value: { type: 'value', content: { amount: '2', unit: '1' } },
+          },
+        ],
+      },
+    };
+    for (const [index, reader] of [{ ...defaultReader }, props.reader, props.reader].entries()) {
+      const pending = {
+        ...props,
+        key: `pending-${index}`,
+        reader: defaultReader,
+        windows: [{ ...props.windows[0]!, rows: [spoiler] }],
+      };
+      await act(async () => root.render(createElement(MangaReaderEntry, pending)));
+      expect(host.querySelector('[data-slot="manga-occurrence-evidence"]')).toBeNull();
+      const claimed = browser.document.createElement('button');
+      if (index === 2) {
+        browser.document.body.append(claimed);
+        claimed.focus();
+      }
+      await act(async () => root.render(createElement(MangaReaderEntry, { ...pending, reader })));
+      expect(host.querySelectorAll('[data-selected="true"]')).toHaveLength(index ? 1 : 0);
+      expect(host.querySelectorAll('[data-slot="manga-occurrence-evidence"]')).toHaveLength(index ? 1 : 0);
+      expect(browser.document.activeElement).toBe(index === 2 ? claimed : host.querySelector(index ? 'button' : 'h2'));
+      claimed.remove();
+    }
+    expect(globals.fetch).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous)

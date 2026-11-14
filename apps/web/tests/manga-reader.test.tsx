@@ -8,6 +8,7 @@ import type { Subject } from '../src/subject/types';
 import { dateText } from '../src/features/pages/overview';
 import {
   mangaReaderMeasures,
+  mangaReaderPreferences,
   mangaReaderRetired,
   mangaReaderRows,
   mangaReaderWindowStatus,
@@ -253,7 +254,7 @@ test('unsupported, withheld, failed, empty and continued windows stay distinct a
 });
 
 test('replacement of the current source, release, viewer, context, locale, view or opaque window retires the visit', () => {
-  const captured = observation();
+  const captured = observation({ reader: mangaReaderPreferences({ ...defaultReader }) });
   for (const replacement of [
     { source: {} },
     { release: {} },
@@ -272,7 +273,7 @@ test('replacement of the current source, release, viewer, context, locale, view 
   expect(mangaReaderRetired(captured, { ...captured })).toBe(false);
 });
 
-test('a changed viewer or source hides old links and returning to the prior observation does not revive them', async () => {
+test('first actual default preferences bind; later preference or authority replacements never revive old links', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -309,21 +310,43 @@ test('a changed viewer or source hides old links and returning to the prior obse
     reading: isolatedWorkReading,
   };
   try {
-    await act(async () => root.render(createElement(MangaReader, props)));
-    expect(host.querySelector(`a[href*="${volumeOneId}"]`)).not.toBeNull();
-    await act(async () =>
-      root.render(
-        createElement(MangaReader, {
-          ...props,
-          observation: observation({ source: {}, viewer: 'same-account-new-credential' }),
-        }),
-      ),
-    );
-    expect(host.querySelector('[data-state="stale"]')).not.toBeNull();
-    expect(host.querySelector(`a[href*="${volumeOneId}"]`)).toBeNull();
-    await act(async () => root.render(createElement(MangaReader, props)));
-    expect(host.querySelector('[data-state="stale"]')).not.toBeNull();
-    expect(host.querySelector(`a[href*="${volumeOneId}"]`)).toBeNull();
+    const replacements: Partial<typeof props>[] = [
+      { reader: { ...defaultReader, spoilerLevel: 1 } },
+      { reader: { ...defaultReader, suitability: 'show' } },
+      { reader: defaultReader },
+      ...Object.entries({
+        source: {},
+        release: {},
+        subject: volumeTwoId,
+        context: 'other',
+        locale: 'ja',
+        viewer: 'new-credential',
+        view: 'contents',
+        window: 'parts\u0000next',
+        realm: 'other',
+        admission: 'rotated',
+        address: 'other',
+      }).map(([field, value]) => ({
+        observation: { ...props.observation, [field]: value },
+      })),
+    ];
+    for (const [key, replacement] of replacements.entries()) {
+      const prepared = { ...props, key, reader: { ...defaultReader } };
+      const render = async (overrides: Partial<typeof props> = {}) =>
+        act(async () => root.render(createElement(MangaReader, { ...prepared, ...overrides })));
+      await render(key < 3 ? { reader: defaultReader } : {});
+      expect(host.querySelector(`a[href*="${volumeOneId}"]`)).not.toBeNull();
+      await act(async () => host.querySelector('button')!.click());
+      await render();
+      await render({ reader: { suitability: 'blur', spoilerLevel: 0 } });
+      expect(host.querySelector('[data-selected="true"]')).not.toBeNull();
+      await render(replacement);
+      expect(host.querySelector('[data-state="stale"]')).not.toBeNull();
+      expect(host.querySelector(`a[href*="${volumeOneId}"]`)).toBeNull();
+      await render();
+      expect(host.querySelector('[data-state="stale"]')).not.toBeNull();
+      expect(host.querySelector('[data-slot="manga-occurrence-evidence"]')).toBeNull();
+    }
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous)
@@ -400,6 +423,14 @@ test('one selected occurrence keeps its original inverse holder, qualifiers and 
     const buttons = [...host.querySelectorAll('button')];
     expect(buttons).toHaveLength(3);
     await act(async () => buttons[1]!.click());
+    await act(async () =>
+      root.render(
+        createElement(MangaReader, {
+          ...props,
+          reader: { spoilerLevel: 2, suitability: 'show' },
+        }),
+      ),
+    );
     expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['false', 'true', 'false']);
     const evidence = host.querySelector('[data-slot="manga-occurrence-evidence"]')!;
     expect(evidence.textContent).toContain('Inverse to this subject');

@@ -25,9 +25,17 @@ stream discovery, franchise grouping and outer Connections returns keep their ex
 identified by native node, direction, property, original holder, assertion ID and target. Repeated targets and
 separate composition nodes remain separate choices. Selection retains one locator, never a copy of the evidence
 or a previous page. A replaced read collapses inspection and permanently retires the preceding callbacks, including
-equal successful replacement, account/credential, reader, release, Subject, Context, Realm, locale, address and A/B/A
-changes. The two ordinary Subject composition query options disable structural sharing so an equal successful
-response still establishes a new source incarnation. Browser pagehide also retires it; BFCache cannot revive the old reading.
+equal successful replacement, account/credential, release, Subject, Context, Realm, locale, address and A/B/A changes.
+Reader changes retire the visit after preferences bind. The two ordinary Subject composition query options disable
+structural sharing so an equal successful response still establishes a new source incarnation. Browser pagehide also
+retires it; BFCache cannot revive the old reading.
+
+Decision: only the shared `defaultReader` object means unresolved preferences. The first actual Reader, including
+equal default values, binds both spoiler level and suitability within the unchanged admitted reading. It applies
+current native disclosure without replacing the window or an admitted exact selection. A concealed selected occurrence
+loses its presentation; a pending explicit occurrence return resolves once actual preferences arrive, without taking
+claimed focus. Equal actual values preserve the visit; later changes to either field, or a return to unresolved
+preferences, retire it permanently. First preparation never excuses a source or authority replacement.
 
 The inspector renders only the supplied native assertion using the ordinary value surface. Qualifiers retain native
 order. Each native reference remains a separate group, including empty groups; no references means none were disclosed

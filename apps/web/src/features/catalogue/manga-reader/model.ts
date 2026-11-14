@@ -66,6 +66,7 @@ export type MangaReaderObservation = {
   view: string;
   window: string | null;
   realm?: string | undefined;
+  /** Undefined only until the ordinary route supplies actual preferences. */
   reader?: string | undefined;
   /** Existing mount's session/credential identity, used only to retire this reading. */
   admission?: string | undefined;
@@ -76,7 +77,12 @@ export function isMangaReaderType(type: string): type is MangaReaderType {
   return (mangaReaderTypes as readonly string[]).includes(type);
 }
 
-/** A source, release, locale, context or already-supplied reader replacement retires the captured visit. */
+/** The default object is the route's unresolved sentinel; equal-valued actual preferences still bind. */
+export function mangaReaderPreferences(reader: Reader): string | undefined {
+  return reader === defaultReader ? undefined : JSON.stringify([reader.spoilerLevel, reader.suitability]);
+}
+
+/** First preference preparation is allowed only within the unchanged admitted reading. */
 export function mangaReaderRetired(captured: MangaReaderObservation, current: MangaReaderObservation): boolean {
   return (
     captured.source !== current.source ||
@@ -88,7 +94,7 @@ export function mangaReaderRetired(captured: MangaReaderObservation, current: Ma
     captured.view !== current.view ||
     captured.window !== current.window ||
     captured.realm !== current.realm ||
-    captured.reader !== current.reader ||
+    (captured.reader !== undefined && captured.reader !== current.reader) ||
     captured.admission !== current.admission ||
     captured.address !== current.address
   );
