@@ -409,6 +409,11 @@ current author admission still precedes exact committed receipt replay, which re
 and never moves the publication pointer again. The current public edition remains selected and readable under its
 ordinary disclosure rules; expired unpublished candidates remain private.
 
+Decision: fresh whole-source advance replays its exact step receipt before checking expiry, then locks the exact
+catalogue row after the stage row and compares both pinned draft and publication IDs before reading source or
+writing candidates. A stale pointer returns the existing 412 conflict without changing retained progress; selection
+settlement and retained observations stay unchanged.
+
 Decision: every fresh activation body takes the existing stage row fence before activation/candidate locks,
 authority-home comparison and the final catalogue CAS, retaining it through final authorization, receipt and commit.
 Build and reclaim already fence the stage before candidate work. A cancellation committed first prevents selection;

@@ -231,6 +231,24 @@ async function lockStage(client: AccessClient, locator: HostedPublicationStaging
   return row;
 }
 
+async function requireCurrentPinnedSource(client: AccessClient, stage: StageRow): Promise<void> {
+  const current = (
+    await client.query<QueryResultRow & { head_revision_id: string; publication_id: string | null }>(
+      `SELECT head_revision_id,publication_id
+       FROM content.hosted_catalogue
+       WHERE route=$1 AND catalogue_id=$2
+       FOR SHARE`,
+      [stage.route, stage.catalogue_id],
+    )
+  ).rows[0];
+  if (
+    !current ||
+    current.head_revision_id !== stage.expected_head_revision_id ||
+    !sameOptional(current.publication_id, stage.expected_publication_id)
+  )
+    throw stagingConflict('Pinned draft or publication changed before source traversal');
+}
+
 /** Join activation to the existing cancellation/build/reclaim fence. Acquire it
  * before activation or candidate locks and retain it through the command's final
  * authorization, receipt and COMMIT. Lifecycle admission stays with activation:
@@ -579,8 +597,10 @@ export async function advanceHostedPublicationStaging(
     };
   const live = await requireLiveStage(client, row);
   let result: HostedPublicationStagingStepResult;
-  if (live.mode === 'whole') result = await advanceWhole(deps, client, actor, live, deadline);
-  else if (live.status === 'building') result = await advanceSelection(deps, client, actor, live, deadline);
+  if (live.mode === 'whole') {
+    if (live.status === 'building') await requireCurrentPinnedSource(client, live);
+    result = await advanceWhole(deps, client, actor, live, deadline);
+  } else if (live.status === 'building') result = await advanceSelection(deps, client, actor, live, deadline);
   else if (live.status === 'closing') result = await advanceClosure(client, live);
   else throw stagingConflict('Staging is not ready for another step');
   await client.query(

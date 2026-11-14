@@ -15,7 +15,7 @@ afterAll(async () => {
   await f?.close();
 });
 
-async function newBook() {
+async function newBook(additionalRootChapters = 0) {
   const thread = await f.native.thread();
   const route = routeOf(thread.firstPost.id);
   if (route === null) throw new Error('Preparation fixture has no catalogue route');
@@ -48,6 +48,14 @@ async function newBook() {
       kind: 'chapter',
       target,
     },
+    ...Array.from({ length: additionalRootChapters }, (_, index) => ({
+      occurrenceId: book.newId(),
+      parentId: null,
+      position: index + 2,
+      title: `Additional chapter ${index + 1}`,
+      kind: 'chapter' as const,
+      target,
+    })),
   ];
   const path = `/v1/hostedCatalogues/${book.catalogueId}`;
   const created = await f.native.command('/v1/hostedCatalogues', {
@@ -321,6 +329,89 @@ test('selection progress exposes only its pinned binding and rejects new batches
     expectedHeadRevisionId: releaseBook.created.revisionId,
     expectedPublicationId: releaseBook.published.revisionId,
   });
+});
+
+test('whole-source advance replays retained steps and rejects stale draft or publication pointers', async () => {
+  const book = await newBook(22);
+  const candidateCount = async (stageId: string) =>
+    Number(
+      (
+        await f.native.pool.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM content.hosted_publication_staging_candidate WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3',
+          [routeOf(book.catalogueId), book.catalogueId, stageId],
+        )
+      ).rows[0]?.count ?? '0',
+    );
+
+  const firstStageId = book.newId();
+  const firstStagePath = prepPath(book.path, firstStageId);
+  const firstStart = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    stageId: firstStageId,
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'whole',
+  });
+  expect(firstStart.status).toBe(202);
+  const firstStepId = book.newId();
+  const firstStep = await f.native.call(
+    'POST',
+    `${firstStagePath}:advance`,
+    { stepId: firstStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(firstStep.status).toBe(200);
+  expect(firstStep.value.stage).toMatchObject({ state: 'building', sourceFrontier: '19', candidateCount: '20' });
+
+  const revised = await f.native.call('POST', `${book.path}:appendRootChapter`, {
+    expectedRevisionId: book.created.revisionId,
+    occurrenceId: book.newId(),
+    title: 'A later draft edit',
+    target: book.target,
+  });
+  expect(revised.status).toBe(200);
+  const firstReplay = await f.native.call(
+    'POST',
+    `${firstStagePath}:advance`,
+    { stepId: firstStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(firstReplay.status).toBe(200);
+  expect(firstReplay.value).toEqual(firstStep.value);
+  expect((await f.native.call('POST', `${firstStagePath}:advance`, { stepId: book.newId() })).status).toBe(412);
+  expect((await f.native.call('POST', `${firstStagePath}:progress`, {})).value.stage).toMatchObject({
+    state: 'building',
+    sourceFrontier: '19',
+    candidateCount: '20',
+  });
+  expect(await candidateCount(firstStageId)).toBe(20);
+  expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
+
+  const secondStageId = book.newId();
+  const secondStagePath = prepPath(book.path, secondStageId);
+  const secondStart = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    stageId: secondStageId,
+    expectedRevisionId: revised.value.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'whole',
+  });
+  expect(secondStart.status).toBe(202);
+  const secondStep = await f.native.call('POST', `${secondStagePath}:advance`, { stepId: book.newId() });
+  expect(secondStep.status).toBe(200);
+  expect(secondStep.value.stage).toMatchObject({ state: 'building', sourceFrontier: '19', candidateCount: '20' });
+  const movedRelease = await f.native.call('POST', `${book.path}:publish`, {
+    expectedRevisionId: revised.value.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    occurrenceIds: [book.nestedChapter],
+  });
+  expect(movedRelease.status).toBe(200);
+  expect((await f.native.call('POST', `${secondStagePath}:advance`, { stepId: book.newId() })).status).toBe(412);
+  expect((await f.native.call('POST', `${secondStagePath}:progress`, {})).value.stage).toMatchObject({
+    state: 'building',
+    sourceFrontier: '19',
+    candidateCount: '20',
+  });
+  expect(await candidateCount(secondStageId)).toBe(20);
+  expect(await selectedRelease(book.catalogueId)).toBe(movedRelease.value.revisionId);
 });
 
 test('mounted boundary rejects malformed batches and non-authors; cancel and stale intents keep A selected', async () => {
