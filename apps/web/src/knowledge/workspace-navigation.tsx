@@ -7,8 +7,9 @@ import type { KnowledgePrivateAddress } from './private-knowledge';
 import type { KnowledgeNavigationRequest } from './navigation-read';
 import { KnowledgeNavigationEntry, type KnowledgeNavigationOperations } from './navigation-page';
 import { knowledgeControl, knowledgeLink } from './workspace';
+import { ShellContextNavigation } from '../shell/contextual-navigation';
 
-/** The editor reuses the replacing native outline reader, opened deliberately and never prefetched. */
+/** Declare the editor's outline in the shell's existing sidebar or phone Menu. */
 export function KnowledgeWorkspaceNavigation({
   address,
   title,
@@ -56,11 +57,8 @@ export function KnowledgeWorkspaceNavigation({
     [operations, binding],
   );
   return (
-    <aside
-      className="min-w-0 space-y-4 lg:sticky lg:top-6 lg:self-start"
-      aria-label={m.knowledge_workspace_documents({}, options)}
-    >
-      <h2 className="text-base font-semibold">{m.knowledge_workspace_documents({}, options)}</h2>
+    <ShellContextNavigation label={m.knowledge_workspace_documents({}, options)}>
+      <div className="min-w-0 space-y-4">
       {!open && (
         <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
           {title}
@@ -104,6 +102,7 @@ export function KnowledgeWorkspaceNavigation({
           />
         )}
       </div>
-    </aside>
+      </div>
+    </ShellContextNavigation>
   );
 }

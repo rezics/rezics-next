@@ -484,12 +484,8 @@ function PrivatePageFrame({
         <PageHeading>{title}</PageHeading>
         {status}
       </header>
-      <div
-        className={
-          navigation ? 'grid min-w-0 gap-8 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12' : 'mx-auto min-w-0 max-w-3xl'
-        }
-      >
-        {navigation}
+      {navigation}
+      <div className="mx-auto min-w-0 max-w-3xl">
         <div className="min-w-0 space-y-8">{children}</div>
       </div>
     </main>

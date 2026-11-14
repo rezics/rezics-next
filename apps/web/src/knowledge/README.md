@@ -1,8 +1,8 @@
 # Knowledge interface
 
 The document workspace composes the existing private editor, native outline reader, revision comparison
-and saved-head publication controls. Browsing is explicit and independent of the writing body. One outline page
-retains native order and at most twenty rows; it never hydrates sibling bodies or infers a child count. A denied
+and saved-head publication controls. Browsing is explicit and independent of the writing body. Each explicit outline request
+reads at most twenty native rows; browsing retains only revealed placements and never hydrates sibling bodies or infers a child count. A denied
 outline affects that reading while the editor retains its independently admitted document and local draft.
 
 Routine identity and revision metadata use labelled details. Reviewed destructive operands and uncertain-command
@@ -174,3 +174,38 @@ return assertion now includes its selected document identity; the frontier, expi
 KeyboardCompletion and KeyboardRetry stories use the actual entry component with illustrative native DTOs admitted
 through the existing adapter; they are not native acceptance recordings. The extra changed paths are the shared
 `navigation-focus.ts`, existing return seam/link, organization caller, and wire return test.
+
+## In-place notebook outline
+
+Decision: all `KnowledgeNavigationEntry` outline readers share an in-place nested outline with independent
+parent-placement pages, More and exact failed-cursor Retry; the private editor declares that outline through
+[Shell contextual navigation](../shell/README.md#current-workspace-navigation), retaining one central draft canvas.
+Organization commands and structure history remain an explicitly opened secondary panel with their existing
+bounded destination reader and immutable command intents. The owned-notebook directory remains replacing.
+
+This migrates routed notebook reading, plain and organization-enabled entries, embedded private editing and their
+workspace stories. Knowledge owns native outline and document-return coordinates. Shell owns placement and responsive
+hosting; [Book reading](../books/reader/README.md) owns its in-place reading convention and transport. Neither Book
+transport nor its occurrence state is imported here. No route-navigation outline consumer remains to migrate;
+organization destination selection and explicit historical/compare readers are independent secondary journeys.
+
+A branch keeps supplied order and native placement identity, including repeated document IDs. Expand reads only
+that placement's first page. More appends only its parent's supplied page, including sparse continuation; an
+unavailable read retains revealed siblings and its exact attempted cursor. Collapse retains revealed state and
+reopen makes no duplicate read. A pending explicit read may finish while collapsed, without moving focus. Storage
+is O(revealed rows), with no prefetch, refill, body read or reconstructed whole notebook. Structure replacement
+conceals the outline and requires explicit Restart; permission or lifetime retirement removes all branches.
+Document return stores one supplying frontier and selected document, never rows, and freshly admits that page.
+Disclosure, continuation and retry do not replace or remount the editor; document links retain its existing dirty
+and uncertain-command departure protection. Account, credential, exposure, locale and source replacement retire
+all old branch callbacks and pending responses.
+
+Sources read before design: `workspace-navigation.tsx`, `private-page.tsx`, `navigation-page.tsx`, this README,
+`navigation-read.ts`, `navigation-model.ts`, return/focus seams and their tests, the installed private outline DTO in
+`packages/client/src/kernel/content/knowledge-routes.d.ts`, the organization consumer/model, Shell's installed
+contextual-navigation seam and pattern, Book reader's owner document and the main checkout's read-only reference
+index. `navigation-reading.ts` is introduced by this migration; it was absent on the base.
+
+Authored interactions cover independent branches, sparse More, exact retry, collapse/reopen, selected return,
+retirement and one-canvas private editing. Source-only delivery leaves compiler, tests, build, native, mounted
+phone/desktop/keyboard and eight-locale acceptance unverified for the separate verifier.
