@@ -63,7 +63,6 @@ export function captureCheckpointIntent(input: {
 /** Acknowledgement and independently observed current value are separate facts. */
 export function checkpointConfirmsIntent(intent: CheckpointIntent, value: CheckpointView): boolean {
   const command = intent.request.data.command;
-  if (value.subjectId !== command.subjectId) return false;
   if (command.kind === 'clear') return value.state === 'none';
   return (
     value.state === 'saved' &&

@@ -110,8 +110,8 @@ Decision: occurrence, contents/navigation and checkpoint metadata receivers acce
 positions through `Number.MAX_SAFE_INTEGER`, including 512. Each owner uses Valibot's `safeInteger` without a new
 cross-owner codec. Studio's 0–511 full-replacement input bound and the reader's page, occurrence-title, body, exact-selector,
 viewer/target, retirement and document-offset bounds stay unchanged. Focused decoder fixtures establish Web
-compatibility only; native acceptance runs in the dev verifier. Library's server metadata schema still caps positions
-at 511 and requires a separate Library-owned change.
+compatibility only; native acceptance runs in the dev verifier. Library's server metadata response uses the same
+safe-integer ceiling, independently of Studio's bounded replacement input.
 
 The route supplies a fresh `NativeHostedBookAdmissionSource` for every loader observation; synchronous replacement
 retires the former reader. Other hosts must likewise replace their snapshot and notify on publication, current
@@ -206,6 +206,11 @@ conflict/changed recovery requires a fresh visit. These choices add no read, pol
 Reading retirement aborts private requests and fences completion and controls. Ordinary Library
 Progress, page units and Continue remain independent, as owned by [Library](../../../../../services/kernel/src/library/README.md).
 
+Keyboard checkpoint actions focus their result only while the initiating control still owns focus; moving focus or
+choosing another control cancels the transfer. Pointer actions retain pointer focus. Read retry preserves the original
+observation operands and the existing once-only position restoration. Clearing affects only the native checkpoint;
+Library progress and membership remain unchanged.
+
 The independent `renderProgress(page, isCurrent)` extension remains available for an admitted Commerce region;
 rendering failure cannot remove the chapter. It does not supply or replace the Library checkpoint.
 
@@ -250,6 +255,11 @@ same presentation used by the native owner, with explicitly local illustrative s
 manual and stable; set the Storybook `readerJourney` parameter to `true` to run the retained interaction assertions.
 Only their destination selectors change from buttons to canonical links; their outcome assertions stay unchanged.
 
+`book-checkpoint-recovery.stories.tsx` mounts the actual checkpoint component inside the shared Book reader with
+installed native response shapes. Its named states are `saved`, `unknown-save`, `unknown-clear`, `failed-read` and
+`replaced-visit`; all use locale globals and wrapping 44px controls. These fixtures and interaction sources do not
+claim native save/Continue, keyboard, phone/desktop visual or retirement acceptance; those remain verifier-owned.
+
 `tests/hosted-book-reader.test.tsx` retains original bounds, exact operands, reuse, sparse retry, move, focus,
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native
 host observations, public-only selectors, canonical links in eight locales, the actual default file route and
@@ -263,8 +273,14 @@ scoping, every exact coordinate, null/missing anchors, withheld targets, viewer 
 restoration and the unchanged public resume URL. Assertions use explicitly illustrative native-format responses;
 source assertions do not establish native admission or growth acceptance.
 
+`tests/hosted-book-checkpoint.test.tsx` adds original-envelope/sender replay, exact CAS/body/position preservation,
+separate read and changed-reading recovery, independent observed values, clear scope, focus and late read/write
+retirement cases, including equal-value replacement and Strict Mode setup. The retained code-only reader regression
+uses the action-specific save replay label; its original exact-anchor and native result assertions remain intact.
+
 Worker source review is formatting/diff inspection. Web typing and runtime acceptance are deferred in this
-source-only window. The dev verifier executes Web typing and the owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`. Mounted acceptance remains
+source-only window. The dev verifier executes Web typing and the owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`.
+The checkpoint recovery source has its separate focused command: `bun run --cwd apps/web test tests/hosted-book-checkpoint.test.tsx`. Mounted acceptance remains
 deferred for explicit block save, reload and Library/Resume reopening in the exact
 chapter, stale revision/digest/publication/occurrence, missing anchor and old null positions, a changed viewer during
 the private read or restore frame, a withheld target, and scrolling while that read is pending. Verify that the

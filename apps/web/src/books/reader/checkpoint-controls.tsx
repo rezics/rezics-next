@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import { useEffect, useId, useRef, type MouseEvent, type Ref } from 'react';
 import { Bookmark, ChevronDown } from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -15,14 +15,19 @@ export type HostedBookCheckpointControlsProps = {
   busy: boolean;
   blocked: boolean;
   isCurrent: () => boolean;
+  originalAction?: string | null;
+  observed?: string | null;
   save?: () => void;
   clear?: () => void;
+  /** Retry only the failed body-free checkpoint observation. */
   retry?: () => void;
+  replay?: { kind: 'save' | 'clear'; run: () => void };
+  recoverCurrent?: () => void;
 };
 
-const control = 'min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
-/** Shared presentation for native checkpoints and explicitly illustrative review stories. */
+/** Shared 44px controls; recovery announces a result without taking focus from another task. */
 export function HostedBookCheckpointControls({
   locale,
   chapter,
@@ -34,11 +39,48 @@ export function HostedBookCheckpointControls({
   busy,
   blocked,
   isCurrent,
+  originalAction,
+  observed,
   save,
   clear,
   retry,
+  replay,
+  recoverCurrent,
 }: HostedBookCheckpointControlsProps) {
   const options = { locale };
+  const resultId = useId();
+  const status = useRef<HTMLDivElement>(null);
+  const focus = useRef<HTMLButtonElement | null>(null);
+  const activate = (run: () => void) => (event: MouseEvent<HTMLButtonElement>) => {
+    if (!isCurrent()) return;
+    // Pointer activation leaves focus alone. Keyboard activation owns only its original control.
+    focus.current = event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget
+      ? event.currentTarget : null;
+    run();
+  };
+  useEffect(() => {
+    const document = status.current!.ownerDocument;
+    const cancel = (event: Event) => {
+      if (focus.current && event.target !== focus.current) focus.current = null;
+    };
+    document.addEventListener('focusin', cancel);
+    document.addEventListener('pointerdown', cancel, true);
+    return () => {
+      document.removeEventListener('focusin', cancel);
+      document.removeEventListener('pointerdown', cancel, true);
+    };
+  }, []);
+  useEffect(() => {
+    if (busy || !focus.current) return;
+    const origin = focus.current;
+    focus.current = null;
+    const document = origin.ownerDocument;
+    if (isCurrent() && (document.activeElement === origin ||
+      (!origin.isConnected && document.activeElement === document.body))) {
+      status.current?.focus({ preventScroll: true });
+    }
+  }, [busy, message, originalAction, observed]);
+
   return (
     <section
       ref={controlsRef}
@@ -59,7 +101,7 @@ export function HostedBookCheckpointControls({
           </a>
         ) : null}
         {save ? (
-          <Button variant="outline" className={`${control} gap-2`} disabled={blocked} onClick={save}>
+          <Button variant="outline" className={`${control} gap-2`} disabled={blocked} onClick={activate(save)}>
             <Bookmark aria-hidden="true" className="size-4 shrink-0" />
             {m.book_reader_checkpoint_save({}, options)}
           </Button>
@@ -67,46 +109,61 @@ export function HostedBookCheckpointControls({
         {saved ? (
           <details className="group min-w-0 max-w-full text-sm">
             <summary
-              className={`inline-flex min-h-11 max-w-full cursor-pointer list-none items-center gap-2 rounded-md px-2 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${control}`}
+              className={`inline-flex cursor-pointer list-none items-center gap-2 rounded-md px-2 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden ${control}`}
             >
               {m.book_reader_checkpoint_details({}, options)}
               <ChevronDown aria-hidden="true" className="size-4 shrink-0 group-open:rotate-180" />
             </summary>
             <div className="grid min-w-0 justify-items-start gap-2 border-s ps-3 pb-2 [overflow-wrap:anywhere]">
-              {resume ? (
-                <p className="max-w-prose leading-relaxed">
-                  <bdi>{resume.title}</bdi>
-                </p>
-              ) : null}
+              {resume ? <p className="max-w-prose leading-relaxed"><bdi>{resume.title}</bdi></p> : null}
               {clear ? (
-                <Button
-                  variant="ghost"
-                  className={`${control} text-muted-foreground`}
-                  disabled={blocked}
-                  onClick={clear}
-                >
-                  {m.book_reader_checkpoint_clear({}, options)}
-                </Button>
+                <>
+                  <Button
+                    variant="ghost"
+                    className={`${control} text-muted-foreground`}
+                    disabled={blocked}
+                    onClick={activate(clear)}
+                  >
+                    {m.book_reader_checkpoint_clear({}, options)}
+                  </Button>
+                  <p className="max-w-prose text-muted-foreground leading-relaxed">
+                    {m.book_reader_checkpoint_clear_scope({}, options)}
+                  </p>
+                </>
               ) : null}
             </div>
           </details>
         ) : null}
+        {replay ? (
+          <Button
+            variant="outline" className={control} disabled={busy}
+            aria-describedby={resultId} onClick={activate(replay.run)}
+          >
+            {replay.kind === 'save'
+              ? m.book_reader_checkpoint_retry_save({}, options)
+              : m.book_reader_checkpoint_retry_clear({}, options)}
+          </Button>
+        ) : null}
         {retry ? (
-          <Button variant="outline" className={control} disabled={busy} onClick={retry}>
-            {m.book_reader_retry({}, options)}
+          <Button variant="outline" className={control} disabled={busy} onClick={activate(retry)}>
+            {m.book_reader_checkpoint_retry_read({}, options)}
+          </Button>
+        ) : null}
+        {recoverCurrent ? (
+          <Button variant="outline" className={control} disabled={busy} onClick={activate(recoverCurrent)}>
+            {m.book_reader_checkpoint_recover_current({}, options)}
           </Button>
         ) : null}
       </div>
-      {message ? (
-        <p role="status" className="max-w-prose px-2 py-1 text-sm leading-relaxed text-muted-foreground">
-          {message}
-        </p>
-      ) : null}
-      {withheld ? (
-        <p role="status" className="max-w-prose px-2 py-1 text-sm leading-relaxed text-muted-foreground">
-          {m.book_reader_checkpoint_withheld({}, options)}
-        </p>
-      ) : null}
+      <div
+        ref={status} id={resultId} role="status" aria-atomic="true" tabIndex={-1}
+        className="max-w-prose rounded-md px-2 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {message ? <p className="py-1">{message}</p> : null}
+        {originalAction ? <p className="py-1"><bdi>{originalAction}</bdi></p> : null}
+        {observed ? <p className="py-1"><bdi>{observed}</bdi></p> : null}
+        {withheld ? <p className="py-1">{m.book_reader_checkpoint_withheld({}, options)}</p> : null}
+      </div>
     </section>
   );
 }

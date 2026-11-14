@@ -20,7 +20,10 @@ import {
 import type { BookPage } from './source';
 import type { CheckpointPosition } from './checkpoint-position';
 
-const nativeTransport: CheckpointTransport = { read: readNativeHostedCheckpoint, write: writeNativeHostedCheckpoint };
+const nativeTransport: CheckpointTransport = {
+  read: (request) => readNativeHostedCheckpoint(request),
+  write: (request) => writeNativeHostedCheckpoint(request),
+};
 type Outcome = {
   intent: CheckpointIntent;
   state: 'sending' | 'saved' | 'cleared' | 'uncertain' | 'conflict' | 'changed';
@@ -101,11 +104,20 @@ export function HostedBookCheckpoint({
   }, [visit]);
 
   const current = () => reading?.owner.current() === true;
-  // Remove old private controls before the replacement effect runs, including equal-value A/B/A visits.
-  if (!reading || !current()) return null;
+  // Remove private controls before replacement setup, including equal-value A/B/A visits.
+  // A public loading shell keeps the control inset available to the existing initial position restore.
+  if (!reading || !current()) {
+    if (!isCurrent()) return null;
+    return <section ref={controls} aria-label={m.book_reader_checkpoint_title({}, options)}
+      className={`${page.kind === 'chapter' ? 'sticky top-0 z-20' : ''} min-w-0 border-y bg-background/95 px-1 py-2`}>
+      <p role="status" className="max-w-prose px-2 py-1 text-sm text-muted-foreground">
+        {m.book_reader_loading({}, options)}
+      </p>
+    </section>;
+  }
   const { owner, observation, outcome } = reading;
   const value = observation?.state === 'ready' ? observation.value : null;
-  const busy = outcome?.state === 'sending';
+  const busy = outcome?.state === 'sending' || observation === null;
   const needsRecovery = outcome?.state === 'conflict' || outcome?.state === 'changed';
   const blocked = busy || !observation?.csrfToken || owner.intent !== null || needsRecovery;
 
@@ -180,23 +192,44 @@ export function HostedBookCheckpoint({
         occurrence: value.address.occurrenceId, view: 'chapter',
       }), title: value.resume.title }
     : null;
-  const message = outcome?.state === 'saved' ? m.book_reader_checkpoint_saved({}, options)
+  const message = outcome?.state === 'sending'
+    ? outcome.intent.context.kind === 'save'
+      ? m.book_reader_checkpoint_saving({}, options) : m.book_reader_checkpoint_clearing({}, options)
+    : outcome?.state === 'saved' ? m.book_reader_checkpoint_saved({}, options)
     : outcome?.state === 'cleared' ? m.book_reader_checkpoint_cleared({}, options)
     : outcome?.state === 'uncertain' ? m.book_reader_checkpoint_uncertain({}, options)
     : needsRecovery ? m.book_reader_changed({}, options)
     : observation === null ? m.book_reader_loading({}, options)
     : observation.state !== 'ready' ? m.book_reader_progress_unavailable({}, options)
     : value?.state === 'none' ? m.book_reader_checkpoint_none({}, options) : null;
-  const retry = outcome?.state === 'uncertain' ? () => void send(outcome.intent)
-    : needsRecovery ? () => { if (owner.current()) reload(); }
-    : observation && observation.state !== 'ready' ? () => void read(owner, false) : undefined;
+  const context = outcome && (outcome.state === 'sending' || outcome.state === 'uncertain' || needsRecovery)
+    ? outcome.intent.context : null;
+  const originalAction = context?.kind === 'save'
+    ? m.book_reader_checkpoint_intent_save({ chapter: context.title }, options)
+    : context?.kind === 'clear'
+      ? context.title === null ? m.book_reader_checkpoint_intent_clear_withheld({}, options)
+        : m.book_reader_checkpoint_intent_clear({ chapter: context.title }, options)
+      : null;
+  const observed = value?.state === 'saved' && value.resume.availability === 'available'
+    ? m.book_reader_checkpoint_observed_saved({ chapter: value.resume.title }, options)
+    : outcome && value?.state === 'none' ? m.book_reader_checkpoint_observed_none({}, options) : null;
+  const replay = owner.intent ? {
+    kind: owner.intent.request.data.command.kind,
+    run: () => { if (owner.intent) void send(owner.intent); },
+  } : undefined;
+  const retry = observation && observation.state !== 'ready' && !owner.intent
+    ? () => void read(owner, true) : undefined;
+  const recoverCurrent = needsRecovery ? () => { if (owner.current()) reload(); } : undefined;
 
   return <HostedBookCheckpointControls
     controlsRef={controls} locale={locale} chapter={page.kind === 'chapter'} message={message}
     saved={value?.state === 'saved'} withheld={value?.state === 'saved' && value.resume.availability === 'unavailable'}
     resume={resume} busy={busy} blocked={blocked} isCurrent={current}
+    originalAction={originalAction} observed={observed}
     {...(value && page.kind === 'chapter' ? { save } : {})}
     {...(value?.state === 'saved' ? { clear } : {})}
+    {...(replay ? { replay } : {})}
     {...(retry ? { retry } : {})}
+    {...(recoverCurrent ? { recoverCurrent } : {})}
   />;
 }

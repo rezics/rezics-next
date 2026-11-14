@@ -1359,7 +1359,7 @@ test('checkpoint save and restore use the authored anchor in a code-only chapter
     });
     visible.getBoundingClientRect = () => new window.DOMRect(0, -200, 300, 80) as DOMRect;
     expect(host.textContent).toContain(m.book_reader_checkpoint_uncertain());
-    await click(button(m.book_reader_retry()));
+    await click(button(m.book_reader_checkpoint_retry_save()));
     expect(writes.mock.calls[1]![0].data).toEqual(writes.mock.calls[0]![0].data);
     expect(writes.mock.calls[1]![0].headers).toEqual({ 'X-CSRF-Token': 'csrf' });
     expect(host.textContent).toContain(m.book_reader_checkpoint_saved());
