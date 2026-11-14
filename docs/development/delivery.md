@@ -31,6 +31,11 @@ unless the maintainer specifically requires them. Preserve existing tests for th
 unverified behavior honestly, and repair reported failures in the owning module. This does not relax money movement
 or authorization rules, nor turn source delivery into release acceptance.
 
+Design for correctness before coding. State the invariant, who owns it, which state transitions preserve it, how partial
+failure or retries behave, and what the cost does as data grows. Use the existing shared contract and keep the change
+coherent. Tests provide evidence of behavior; they do not supply the missing design. In a code-only window,
+write and review against those invariants and leave deferred verification visible.
+
 Keep enough independent, ready source work for available workers. A brief names one coherent outcome,
 the installed interfaces, the write boundary, and what the worker can complete if one seam is blocked.
 Use the [sizing target](efficiency.md#output-and-flow) to avoid both fragments and oversized assignments.
@@ -146,8 +151,9 @@ state, owner links, blockers and next actions. Resume only when authorized.
 The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns delivery to resident managers
 and implementation to workers. The manager owns a continuously workable queue: prioritize outcomes, assign each
 ready worker a clear next result and write boundary, change assignments or width as work and capacity change,
-and replace stalled or spent work promptly. The controller executes admission, retries and landings. It does
-not replace the manager's scheduling judgment.
+and replace stalled or spent work promptly. Managers own [starts through first source](../../tools/goal/prompts/manager.md):
+dispatch through Goal, verify the current worker and its first source checkpoint, and resolve or replace a failed
+start. The controller executes admission, retries and landings; it does not replace the manager's scheduling judgment.
 
 Workers can find defects, define a repair within the accepted scope, and ask for or propose their next assignment.
 They may continue evidenced work inside their assigned boundary and coordinate before taking another boundary.
