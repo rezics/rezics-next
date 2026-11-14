@@ -50,8 +50,8 @@ export function zonePublic(row: ZoneHead): ZonePublic {
     id: row.id,
     revision: row.revision,
     labels,
-    ...(configuration.primaryLanguage && !zoneWithheld(row, '/primaryLanguage')
-      ? { primaryLanguage: configuration.primaryLanguage }
+    ...(configuration.primaryLanguage
+      ? { primaryLanguage: zoneWithheld(row, '/primaryLanguage') ? null : configuration.primaryLanguage }
       : {}),
     visibility: row.visibility,
     appearance,

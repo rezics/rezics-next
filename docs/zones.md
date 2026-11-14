@@ -146,7 +146,7 @@ type ZonePublic = {
   id: UUID;
   revision: Revision;
   labels: PublicLabels;
-  primaryLanguage?: ZoneLanguage;
+  primaryLanguage?: ZoneLanguage | null;
   visibility: Visibility;
   appearance: Appearance;
   navigation: Navigation;
@@ -197,8 +197,12 @@ names; selecting a missing primary presents a blank required field without addin
 removed. Optional translations are progressively disclosed and must be authored, never synthesized. The form
 explains the primary-name fallback. Name validation identifies the affected input with localized correction
 text associated through `aria-describedby`; invalid translations open their optional section.
-Public output remains a closed partial label map, including the empty map after withholding, with optional
-primary-language metadata subject to the same field withholding. A configured
+Public output remains a closed partial label map, including the empty map after withholding. In every
+public shell (metadata, page and owned responses), `primaryLanguage` is the readable explicit language,
+`null` when an explicit language is withheld, or omitted only for genuine legacy configuration. The null
+marker discloses neither the withheld language nor its name and prevents legacy fallback; readable
+requested translations still win. This marker is public output only; saved configuration and command
+inputs still accept only a supported language or omission. A configured
 route has no `view`; a subject has no `route`; account targets are not Zone targets. Bodies with extra keys,
 invalid targets or reserved configured routes fail with 400 `invalid_request` and existing RFC 6901 field
 errors. Shared validation violations map `limit` to `out_of_range`, and the remaining composition violations
