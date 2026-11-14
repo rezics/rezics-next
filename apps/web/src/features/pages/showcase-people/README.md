@@ -26,3 +26,20 @@ inverse credit window as the visit locator. Focused child cwd is apps/web, so Pe
 credit visit, mounted Person credit return and relation-public-origin run as
 `src/stories/person-credit-visit.test.ts`, `tests/person-credit-visit.test.tsx` and
 `tests/relation-public-origin.test.tsx` in separate focused invocations.
+
+## Reading priority
+
+Character, Person and Organization overview slots follow identity and supplied portrait, selected description,
+admitted biography and key facts, native work/relationship windows, then discussion. The existing Subject
+projection helper partitions installed nodes without changing read plans, stream order, Context, qualifiers,
+counts or continuation. Book, Game and Screen keep their own selectors and extensions.
+
+Person leads with biography, occupations and working languages; Character keeps admitted identity and traits
+separate from appearances and qualified cast credits; Organization leads with authored history and partial dates
+before its directed organizational relations. Measurements, identifiers, supplied names, editorial destinations
+and provenance remain mounted in Details. Missing or withheld biographies never borrow supplied prose from
+another record. Sparse optional Character groups do not create repeated empty headings.
+
+The profile refinement uses the source-only delivery window: focused regression sources and routed synthetic
+stories are authored here; test, typing, build, browser and capture verification run in the dev verifier.
+The existing reading components are the local design fallback when Impeccable references or its CLI are absent.

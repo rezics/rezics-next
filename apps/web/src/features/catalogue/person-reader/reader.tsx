@@ -22,6 +22,7 @@ import {
 import { PeopleFactField } from '../people-facts/field';
 import { FactInspectionEntry, PeopleFacts, useFactVisit } from '../people-facts/visit';
 import { SuppliedNames } from '../../pages/showcase-people/names';
+import { ProfileDetails } from '../../pages/shared';
 import { peopleOccupationConcept } from '../people-biography';
 
 export const personReaderAnchor = 'person-biography';
@@ -195,7 +196,6 @@ function PersonFacts(reading: Reading) {
   if (!groups.length) return null;
   return (
     <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]" data-slot="person-reader-facts">
-      <SuppliedNames reading={reading} />
       {personCrossSourceIdentity(read) !== 'current' && (
         <p role="status">
           {personCrossSourceIdentity(read) === 'conflicting'
@@ -203,15 +203,6 @@ function PersonFacts(reading: Reading) {
             : m.person_identity_unconfirmed({}, o)}
         </p>
       )}
-      <ProfileFields
-        reading={reading}
-        fields={profileFields(release, read, personScalarFields(release, read), locale).filter(
-          (field) => field.facts.length > 0,
-        )}
-      />
-      <Link className={control} href="#connections">
-        {m.showcase_people_credits({}, o)}
-      </Link>
       {groups.map((group) => (
         <section key={group.kind} className="min-w-0 space-y-3" data-slot={`person-reader-${group.kind}`}>
           <h3 className="text-xl font-semibold">{title(group.kind, locale)}</h3>
@@ -233,9 +224,29 @@ function PersonFacts(reading: Reading) {
           )}
         </section>
       ))}
-      <Link className={control} href={catalogueEntries.people({ id: read.subject.id, label, locale }).href}>
-        {m.person_reader_correct({}, o)}
+      <ProfileFields
+        reading={reading}
+        fields={profileFields(release, read, personScalarFields(release, read), locale).filter(
+          (field) =>
+            field.facts.length > 0 && ['schema:birthDate', 'schema:deathDate', 'schema:gender'].includes(field.id),
+        )}
+      />
+      <Link className={control} href="#connections">
+        {m.showcase_people_credits({}, o)}
       </Link>
+      <ProfileDetails locale={locale}>
+        <ProfileFields
+          reading={reading}
+          fields={profileFields(release, read, personScalarFields(release, read), locale).filter(
+            (field) =>
+              field.facts.length > 0 && !['schema:birthDate', 'schema:deathDate', 'schema:gender'].includes(field.id),
+          )}
+        />
+        <SuppliedNames reading={reading} />
+        <Link className={control} href={catalogueEntries.people({ id: read.subject.id, label, locale }).href}>
+          {m.person_reader_correct({}, o)}
+        </Link>
+      </ProfileDetails>
     </div>
   );
 }

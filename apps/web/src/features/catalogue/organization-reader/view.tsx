@@ -20,6 +20,7 @@ import {
   replaceOrganizationHistoryAddress,
 } from './reading/visit';
 import { OrganizationValue, organizationControl as control } from './reading/value';
+import { ProfileDetails } from '../../pages/shared';
 
 type Selection = {
   episode: number;
@@ -540,144 +541,117 @@ function OrganizationFacts({
   const sources = profileSourceRecords(subject);
   return (
     <>
-      <p lang={model.grain.lang ?? undefined} className="font-medium">
-        {model.grain.text}
-      </p>
-      <p className="text-muted-foreground">{m.organization_reader_intro({}, o)}</p>
-      {Object.entries(subject.descriptions).map(([lang, description]) => (
-        <p key={lang} lang={lang}>
-          {description}
-        </p>
-      ))}
-      {model.authoredUnsupported && (
-        <p role="status">
-          {m.people_biography_title({}, o)}: {m.people_biography_unsupported({}, o)}
-        </p>
-      )}
-      {!model.fields.some((field) => field.kind === 'dates') && (
-        <p role="status">
-          {m.producer_history_dates({}, o)}: {m.people_biography_unsupported({}, o)}
-        </p>
-      )}
-      {!!model.unreleased.length && (
-        <p role="status">
-          {m.producer_history_unreleased({}, o)}{' '}
-          {model.unreleased
-            .map((field) =>
-              field.meaning === 'parent'
-                ? m.producer_history_parent({}, o)
-                : field.meaning === 'predecessor'
-                  ? m.producer_history_predecessor({}, o)
-                  : m.producer_history_successor({}, o),
-            )
-            .join(' · ')}
-        </p>
-      )}
-      {model.fields.map((field) => (
-        <section key={field.id} className="min-w-0 space-y-2">
-          <h3
-            ref={(node) => {
-              if (node) fieldHeadings.current.set(field.id, node);
-              else fieldHeadings.current.delete(field.id);
-            }}
-            data-organization-field={field.id}
-            tabIndex={-1}
-            lang={field.label.lang ?? undefined}
-            className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            {field.label.text || m.candidate_value_unavailable({}, o)}
-          </h3>
-          {field.kind === 'relations' && (
-            <p className="text-sm text-muted-foreground">{m.organization_reader_direction({}, o)}</p>
-          )}
-          {!field.facts.length && (
-            <p>
-              {field.unavailable
-                ? m.candidate_value_unavailable({}, o)
-                : subject.resolution[field.id] === 'suppressed'
-                  ? m.people_facts_suppressed({}, o)
-                  : subject.resolution[field.id] === 'unresolved'
-                    ? m.people_facts_unresolved({}, o)
-                    : m.people_biography_absent({}, o)}
-            </p>
-          )}
-          <ul className="space-y-3">
-            {field.facts.map((fact) => {
-              const inspecting =
-                selected?.episode === episode.key && selected.id === fact.id && selected.property === field.id;
-              const content = (
-                <div className="min-w-0 space-y-2">
-                  <OrganizationValue part={fact} {...presentation} />
-                  <button
-                    type="button"
-                    className={control + ' block text-sm'}
-                    onClick={(event) => open(fact, event)}
-                    aria-expanded={inspecting}
-                    data-organization-property={field.id}
-                    data-organization-candidate={fact.id}
-                  >
-                    {m.organization_reader_inspect({}, o)}
-                  </button>
-                  {inspecting && (
-                    <Inspection
-                      fact={fact}
-                      selected={selected}
-                      presentation={presentation}
-                      correction={organizationHistoryDestinationHref(
-                        `${catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}?${new URLSearchParams({ property: fact.property.id, statement: fact.id })}`,
-                        subject.context,
-                        realm,
-                        organizationHistoryAddress(
-                          currentHref,
-                          fallbackHref,
-                          locale,
-                          subject.id,
+      {[...model.fields]
+        .sort((left, right) => {
+          const order = (field: (typeof model.fields)[number]) =>
+            read.release.properties[field.id]?.datatype === 'document'
+              ? 0
+              : field.kind === 'dates'
+                ? 1
+                : field.kind === 'relations'
+                  ? 3
+                  : 2;
+          return order(left) - order(right);
+        })
+        .map((field) => (
+          <section key={field.id} className="min-w-0 space-y-2">
+            <h3
+              ref={(node) => {
+                if (node) fieldHeadings.current.set(field.id, node);
+                else fieldHeadings.current.delete(field.id);
+              }}
+              data-organization-field={field.id}
+              tabIndex={-1}
+              lang={field.label.lang ?? undefined}
+              className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {field.label.text || m.candidate_value_unavailable({}, o)}
+            </h3>
+            {field.kind === 'relations' && (
+              <p className="text-sm text-muted-foreground">{m.organization_reader_direction({}, o)}</p>
+            )}
+            {!field.facts.length && (
+              <p>
+                {field.unavailable
+                  ? m.candidate_value_unavailable({}, o)
+                  : subject.resolution[field.id] === 'suppressed'
+                    ? m.people_facts_suppressed({}, o)
+                    : subject.resolution[field.id] === 'unresolved'
+                      ? m.people_facts_unresolved({}, o)
+                      : m.people_biography_absent({}, o)}
+              </p>
+            )}
+            <ul className="space-y-3">
+              {field.facts.map((fact) => {
+                const inspecting =
+                  selected?.episode === episode.key && selected.id === fact.id && selected.property === field.id;
+                const content = (
+                  <div className="min-w-0 space-y-2">
+                    <OrganizationValue part={fact} {...presentation} />
+                    <button
+                      type="button"
+                      className={control + ' block text-sm'}
+                      onClick={(event) => open(fact, event)}
+                      aria-expanded={inspecting}
+                      data-organization-property={field.id}
+                      data-organization-candidate={fact.id}
+                    >
+                      {m.organization_reader_inspect({}, o)}
+                    </button>
+                    {inspecting && (
+                      <Inspection
+                        fact={fact}
+                        selected={selected}
+                        presentation={presentation}
+                        correction={organizationHistoryDestinationHref(
+                          `${catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}?${new URLSearchParams({ property: fact.property.id, statement: fact.id })}`,
                           subject.context,
                           realm,
-                          organizationLocator(read, fact, selected?.keyboard ?? false, locale, realm),
-                        ),
-                        locale,
-                      )}
-                      close={close}
-                      current={episode.current}
-                    />
-                  )}
-                </div>
-              );
-              return (
-                <li key={fact.id} className="min-w-0 space-y-1">
-                  {spoilerLevel(fact) > preferences.spoilerLevel ? (
-                    <OrganizationFactDisclosure
-                      locale={locale}
-                      current={episode.current}
-                      onHide={() => {
-                        if (inspecting) {
-                          persistVisit();
-                          select(undefined);
-                        }
-                      }}
-                    >
-                      {content}
-                    </OrganizationFactDisclosure>
-                  ) : (
-                    content
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+                          organizationHistoryAddress(
+                            currentHref,
+                            fallbackHref,
+                            locale,
+                            subject.id,
+                            subject.context,
+                            realm,
+                            organizationLocator(read, fact, selected?.keyboard ?? false, locale, realm),
+                          ),
+                          locale,
+                        )}
+                        close={close}
+                        current={episode.current}
+                      />
+                    )}
+                  </div>
+                );
+                return (
+                  <li key={fact.id} className="min-w-0 space-y-1">
+                    {spoilerLevel(fact) > preferences.spoilerLevel ? (
+                      <OrganizationFactDisclosure
+                        locale={locale}
+                        current={episode.current}
+                        onHide={() => {
+                          if (inspecting) {
+                            persistVisit();
+                            select(undefined);
+                          }
+                        }}
+                      >
+                        {content}
+                      </OrganizationFactDisclosure>
+                    ) : (
+                      content
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
       {!model.fields.length && <p>{m.organization_reader_no_fields({}, o)}</p>}
       {model.limited && <p role="status">{m.organization_reader_bounded({}, o)}</p>}
       <p className="text-sm text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
       <nav className="flex flex-wrap gap-4" aria-label={m.facts_title({}, o)}>
-        <CurrentLink
-          href={catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}
-          className={control}
-        >
-          {m.facts_title({}, o)}
-        </CurrentLink>
         <CurrentLink
           href={`${currentHref.split('?')[0]}/relations${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
           className={control}
@@ -691,14 +665,50 @@ function OrganizationFacts({
           {m.subject_works({}, o)}
         </CurrentLink>
       </nav>
-      <ProfileSourceList sources={sources} locale={locale} />
-      {sources
-        .filter((record) => record.licence)
-        .map((record) => (
-          <p key={`${record.name}:${record.url}`} className="text-sm">
-            {record.name}: {record.licence!.id} {record.licence!.url && <ExternalValue value={record.licence!.url} />}
+      <ProfileDetails locale={locale}>
+        <p lang={model.grain.lang ?? undefined} className="font-medium">
+          {model.grain.text}
+        </p>
+        <p className="text-muted-foreground">{m.organization_reader_intro({}, o)}</p>
+        {model.authoredUnsupported && (
+          <p role="status">
+            {m.people_biography_title({}, o)}: {m.people_biography_unsupported({}, o)}
           </p>
-        ))}
+        )}
+        {!model.fields.some((field) => field.kind === 'dates') && (
+          <p role="status">
+            {m.producer_history_dates({}, o)}: {m.people_biography_unsupported({}, o)}
+          </p>
+        )}
+        {!!model.unreleased.length && (
+          <p role="status">
+            {m.producer_history_unreleased({}, o)}{' '}
+            {model.unreleased
+              .map((field) =>
+                field.meaning === 'parent'
+                  ? m.producer_history_parent({}, o)
+                  : field.meaning === 'predecessor'
+                    ? m.producer_history_predecessor({}, o)
+                    : m.producer_history_successor({}, o),
+              )
+              .join(' · ')}
+          </p>
+        )}
+        <CurrentLink
+          href={catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}
+          className={control}
+        >
+          {m.facts_title({}, o)}
+        </CurrentLink>
+        <ProfileSourceList sources={sources} locale={locale} />
+        {sources
+          .filter((record) => record.licence)
+          .map((record) => (
+            <p key={`${record.name}:${record.url}`} className="text-sm">
+              {record.name}: {record.licence!.id} {record.licence!.url && <ExternalValue value={record.licence!.url} />}
+            </p>
+          ))}
+      </ProfileDetails>
     </>
   );
 }

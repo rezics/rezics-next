@@ -45,6 +45,7 @@ import { publicationOverlayKind, publicPublicationStatements, type PublicationDe
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
+import { peopleOverviewFamily, peopleOverviewParts } from './showcase-people/profile';
 import { OrganizationOverview } from '../catalogue/organization-reader/overview';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
@@ -700,6 +701,8 @@ export function SubjectPage({
     screen: !!read && isScreenType(read.subject.type),
   });
   const readingOverview = readingDomain !== undefined;
+  const peopleFamily = peopleOverviewFamily(read?.subject.type, view, !!page.account);
+  const readingLayout = readingOverview || peopleFamily !== undefined;
   const workAddress =
     read && !page.account
       ? subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale)
@@ -1010,7 +1013,7 @@ export function SubjectPage({
     read && !page.account && !realm ? (
       <>
         {existingActions}
-        {!readingOverview && editorialActions}
+        {!readingLayout && editorialActions}
       </>
     ) : (
       <>
@@ -1090,6 +1093,7 @@ export function SubjectPage({
   const CompositionRoot = readingOverview ? BookOverviewRoot : PageRoot;
   const composition = overview && !framed ? splitHeaderDocument(renderedDocument) : { remaining: renderedDocument };
   const readingParts = useMemo(() => readingOverviewParts(composition.remaining), [composition.remaining]);
+  const peopleParts = useMemo(() => peopleOverviewParts(composition.remaining), [composition.remaining]);
   const contextAndNames = (
     <>
       {!page.account && (
@@ -1170,10 +1174,55 @@ export function SubjectPage({
       ) : null}
     </>
   );
+  const peopleProfiles = (
+    <>
+      {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (
+        <OrganizationOverview
+          id={read.subject.id}
+          context={read.subject.context}
+          source={page}
+          locale={locale}
+          reader={page.requestedReader ?? null}
+          {...(realm !== undefined ? { realm } : {})}
+          link={ContextLink}
+          public={composedSubjectRead(read)}
+          release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+          documents={read.documents}
+          preferences={reader ?? defaultReader}
+          currentHref={workReturn}
+          returnTo={visitReturn}
+        />
+      ) : null}
+      {overview && read && !page.account && read.subject.type === 'wd:Q95074' ? (
+        <CharacterOverview
+          source={page}
+          viewer={page.requestedReader ?? null}
+          locale={locale}
+          public={composedSubjectRead(read)}
+          documents={read.documents}
+          release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+          link={ContextLink}
+          {...(reader ? { reader } : {})}
+        />
+      ) : null}
+      {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
+        <PersonOverview
+          source={page}
+          viewer={page.requestedReader ?? null}
+          locale={locale}
+          public={composedSubjectRead(read)}
+          documents={read.documents}
+          release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+          link={ContextLink}
+          {...(reader ? { reader } : {})}
+        />
+      ) : null}
+    </>
+  );
   const afterHeader = overview ? (
     <>
       {bar}
-      {!readingOverview && overviewTags}
+      {!readingLayout && overviewTags}
       {invite}
     </>
   ) : null;
@@ -1315,7 +1364,7 @@ export function SubjectPage({
                       </h1>
                     </header>
                   )}
-                  {!readingOverview && contextAndNames}
+                  {!readingLayout && contextAndNames}
                   {overview && !readingOverview && read && !page.account && showcaseWork && workReturn ? (
                     <WorkFranchiseOverview
                       subject={read.subject}
@@ -1516,29 +1565,42 @@ export function SubjectPage({
                       {...(realm !== undefined ? { realm } : {})}
                     />
                   ) : null}
-                  {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (
-                    <OrganizationOverview
-                      id={read.subject.id}
-                      context={read.subject.context}
-                      source={page}
-                      locale={locale}
-                      reader={page.requestedReader ?? null}
-                      {...(realm !== undefined ? { realm } : {})}
-                      link={ContextLink}
-                      public={composedSubjectRead(read)}
-                      release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                      documents={read.documents}
-                      preferences={reader ?? defaultReader}
-                      currentHref={workReturn}
-                      returnTo={visitReturn}
-                    />
-                  ) : null}
+
                   <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
                     <SubjectCommunityContext.Provider
                       value={page.community ? { ...page.community, queryKey: communityQueryKey } : undefined}
                     >
                       <SubjectCommunityVerificationContext.Provider value={verification}>
-                        {readingOverview ? (
+                        {peopleFamily ? (
+                          <div
+                            data-slot="people-overview"
+                            data-people-family={peopleFamily}
+                            className="min-w-0 space-y-8 sm:space-y-10"
+                          >
+                            <CompositionRender
+                              document={peopleParts.lead}
+                              definitions={pageDefinitions}
+                              components={pageComponents(framed)}
+                              root={PageRoot}
+                            />
+                            <CharacterAssociationBridge source={page}>
+                              {peopleProfiles}
+                              <CompositionRender
+                                document={peopleParts.exploration}
+                                definitions={pageDefinitions}
+                                components={pageComponents(framed)}
+                                root={PageRoot}
+                              />
+                              {connections}
+                            </CharacterAssociationBridge>
+                            <CompositionRender
+                              document={peopleParts.discussion}
+                              definitions={pageDefinitions}
+                              components={pageComponents(framed)}
+                              root={PageRoot}
+                            />
+                          </div>
+                        ) : readingOverview ? (
                           <BookOverviewSections>
                             <CompositionRender
                               document={readingParts.lead}
@@ -1591,39 +1653,15 @@ export function SubjectPage({
                       </SubjectCommunityVerificationContext.Provider>
                     </SubjectCommunityContext.Provider>
                   </SubjectCommunityRefreshContext.Provider>
-                  <CharacterAssociationBridge source={page}>
-                    {overview && read && !page.account && read.subject.type === 'wd:Q95074' ? (
-                      <CharacterOverview
-                        source={page}
-                        viewer={page.requestedReader ?? null}
-                        locale={locale}
-                        public={composedSubjectRead(read)}
-                        documents={read.documents}
-                        release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                        link={ContextLink}
-                        {...(reader ? { reader } : {})}
-                      />
-                    ) : null}
-                    {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
-                      <PersonOverview
-                        source={page}
-                        viewer={page.requestedReader ?? null}
-                        locale={locale}
-                        public={composedSubjectRead(read)}
-                        documents={read.documents}
-                        release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                        link={ContextLink}
-                        {...(reader ? { reader } : {})}
-                      />
-                    ) : null}
-                    {overview && !readingOverview && connections}
-                  </CharacterAssociationBridge>
-                  {readingOverview ? (
+                  {!peopleFamily && overview && !readingOverview && (
+                    <CharacterAssociationBridge source={page}>{connections}</CharacterAssociationBridge>
+                  )}
+                  {readingLayout ? (
                     <ReadingOverviewTools locale={locale}>
                       {overviewTags}
                       {contextAndNames}
                       {editorialActions}
-                      {overview && (readingOverview || !placesType(page.document.content, 'Sources')) && (
+                      {overview && (readingLayout || !placesType(page.document.content, 'Sources')) && (
                         <SubjectSources />
                       )}
                       {overview && <SubjectSourcesLink />}
@@ -1650,7 +1688,7 @@ export function SubjectPage({
                     </ReadingOverviewTools>
                   ) : (
                     <>
-                      {overview && (readingOverview || !placesType(page.document.content, 'Sources')) && (
+                      {overview && (readingLayout || !placesType(page.document.content, 'Sources')) && (
                         <SubjectSources />
                       )}
                       {overview && <SubjectSourcesLink />}

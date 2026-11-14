@@ -1,4 +1,5 @@
 import { pickText } from '@rezics/composition';
+import { m } from '../../paraglide/messages.js';
 import type { ComponentType, ReactNode } from 'react';
 import type { Related, Subject, Summary } from '../../subject/read-contract';
 import { SPOILER_PROPERTY } from './values';
@@ -99,4 +100,16 @@ export function spoilerLevel(statement: Stmt): number {
 export function bestRank(statements: Stmt[]): Stmt[] {
   const preferred = statements.filter((statement) => statement.rank === 'preferred');
   return preferred.length ? preferred : statements.filter((statement) => statement.rank === 'normal');
+}
+
+/** Keep the native fact/inspection owners mounted inside a secondary, keyboard-accessible disclosure. */
+export function ProfileDetails({ children, locale }: { children: ReactNode; locale: string }) {
+  return (
+    <details data-slot="people-profile-details" className="min-w-0 border-t border-border pt-4">
+      <summary className="flex min-h-11 cursor-pointer items-center py-2 font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        {m.subject_details({}, { locale: locale as never })}
+      </summary>
+      <div className="min-w-0 space-y-6 pt-4 [overflow-wrap:anywhere]">{children}</div>
+    </details>
+  );
 }
