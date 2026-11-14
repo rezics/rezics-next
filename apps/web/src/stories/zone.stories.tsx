@@ -23,10 +23,24 @@ const meta = {
   id: 'pages-community-zone',
   parameters: {
     layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Source-backed examples are gated preview/deferred demonstrations. Recorded success here does not establish public native source readiness.',
+      },
+    },
   },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const sourcePreviewDocs = {
+  docs: {
+    description: {
+      story: 'Gated preview/deferred: this recorded source success is not a released public native capability.',
+    },
+  },
+};
 
 type RecordedTextPage = { document: { content: { props: Record<string, unknown> }[] } };
 
@@ -110,8 +124,8 @@ async function unavailableReady({ canvasElement }: { canvasElement: HTMLElement 
 }
 
 export const Home: Story = {
-  parameters: { __id: 'pages-zones-home-with-mounted-collections' },
-  name: 'Static home',
+  parameters: { ...sourcePreviewDocs, __id: 'pages-zones-home-with-mounted-collections' },
+  name: 'Preview/deferred: source-backed TypeList home',
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
@@ -123,15 +137,15 @@ export const PrivateOwner: Story = {
 };
 
 export const Subject: Story = {
-  parameters: { __id: 'pages-zones-subject-page-in-a-zone' },
-  name: 'Configured static page',
+  parameters: { ...sourcePreviewDocs, __id: 'pages-zones-subject-page-in-a-zone' },
+  name: 'Preview/deferred: configured page fixture',
   play: configuredPageReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/guide`} />,
 };
 
 export const AlternateAppearance: Story = {
-  parameters: { __id: 'pages-zones-alternate-appearance-preset' },
-  name: 'Configured page appearance',
+  parameters: { ...sourcePreviewDocs, __id: 'pages-zones-alternate-appearance-preset' },
+  name: 'Preview/deferred: configured page appearance',
   play: configuredAppearanceReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/guide`} />,
 };
@@ -181,21 +195,22 @@ async function keyboardNavigationReady({ canvasElement }: { canvasElement: HTMLE
 }
 
 export const PreparedToUseful: Story = {
-  parameters: { __id: 'pages-zones-prepared-to-useful-completion' },
-  name: 'Prepared page reaches a useful route',
+  parameters: { ...sourcePreviewDocs, __id: 'pages-zones-prepared-to-useful-completion' },
+  name: 'Preview/deferred: prepared page reaches a useful route',
   play: preparedToUsefulReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${withinBudgetZone}`} />,
 };
 
 export const SubjectReturn: Story = {
-  parameters: { __id: 'pages-zones-subject-return-to-route' },
-  name: 'Direct subject returns to the Zone route',
+  parameters: { ...sourcePreviewDocs, __id: 'pages-zones-subject-return-to-route' },
+  name: 'Preview/deferred: direct subject returns to the Zone route',
   play: subjectReturnReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/subjects/${subject}`} />,
 };
 
 export const KeyboardNavigation: Story = {
-  name: 'Keyboard Zone navigation',
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: keyboard Zone navigation',
   play: keyboardNavigationReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
@@ -214,45 +229,58 @@ async function typeListFullReady({ canvasElement }: { canvasElement: HTMLElement
 }
 
 export const TypeListFull: Story = {
-  parameters: { __id: 'pages-zones-type-list-full-page-on-route' },
-  name: 'TypeList full page stays on the Zone route',
+  parameters: { ...sourcePreviewDocs, __id: 'pages-zones-type-list-full-page-on-route' },
+  name: 'Preview/deferred: TypeList full page stays on the Zone route',
   play: typeListFullReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}?list=books`} />,
 };
 
 export const HomeLocales: Story = {
-  name: 'Static home in every launch locale',
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: source-backed home in every launch locale',
   play: staticHomeReady,
   globals: { locale: 'zh-Hant' },
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 
 export const HomeDe: Story = {
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: source-backed home in German',
   globals: { locale: 'de' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeJa: Story = {
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: source-backed home in Japanese',
   globals: { locale: 'ja' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeKo: Story = {
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: source-backed home in Korean',
   globals: { locale: 'ko' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeFr: Story = {
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: source-backed home in French',
   globals: { locale: 'fr' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeEs: Story = {
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: source-backed home in Spanish',
   globals: { locale: 'es' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeZhHans: Story = {
+  parameters: sourcePreviewDocs,
+  name: 'Preview/deferred: source-backed home in Simplified Chinese',
   globals: { locale: 'zh-Hans' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,

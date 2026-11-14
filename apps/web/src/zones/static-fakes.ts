@@ -154,6 +154,137 @@ export const staticZoneGuideFake = {
   },
 } satisfies ZonePageResponse;
 
+const tideglassLabels = {
+  en: 'Tideglass Atlas',
+  'zh-Hant': '潮璃地圖集',
+  'zh-Hans': '潮璃地图集',
+  ja: '潮ガラスの地図帳',
+  ko: '물결 유리 지도책',
+  de: 'Tideglas-Atlas',
+  fr: 'Atlas de verre marin',
+  es: 'Atlas de cristal de marea',
+};
+
+/** Fictional configured pages with no planned source reads; these are not a launch roster. */
+export const configuredStaticZoneHomeFake = {
+  profile: 'sha256:configured-static-zone',
+  template: { scope: 'route', key: null },
+  document: {
+    root: { props: {} },
+    content: [
+      {
+        type: 'Heading',
+        props: { id: 'tideglass-title', level: 1, text: tideglassLabels },
+      },
+      {
+        type: 'Text',
+        props: {
+          id: 'tideglass-intro',
+          text: {
+            en: 'A pocket atlas of imagined islands, their weather, and the paths between them.',
+            'zh-Hant': '一本袖珍地圖集，描繪想像中的島嶼、天氣，以及島嶼之間的路徑。',
+            'zh-Hans': '一本袖珍地图集，描绘想象中的岛屿、天气，以及岛屿之间的路径。',
+            ja: '想像上の島々や天気、島々を結ぶ道を記した小さな地図帳です。',
+            ko: '상상 속의 섬과 날씨, 섬 사이의 길을 담은 작은 지도책입니다.',
+            de: 'Ein Taschenatlas mit erdachten Inseln, ihrem Wetter und den Wegen dazwischen.',
+            fr: 'Un atlas de poche des îles imaginaires, de leur météo et des chemins qui les relient.',
+            es: 'Un atlas de bolsillo de islas imaginarias, su clima y los caminos que las conectan.',
+          },
+        },
+      },
+    ],
+  },
+  reads: {},
+  zone: {
+    id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1b',
+    revision: '1',
+    labels: tideglassLabels,
+    visibility: 'public',
+    appearance: { density: 'comfortable', radius: 'md', surface: 'cards', cover: 'square', headingScale: 'md' },
+    navigation: [{ route: '' }, { route: 'guide' }],
+  },
+} satisfies ZonePageResponse;
+
+export const configuredStaticZoneGuideFake = {
+  ...configuredStaticZoneHomeFake,
+  template: { scope: 'route', key: 'guide' },
+  document: {
+    root: { props: {} },
+    content: [
+      {
+        type: 'Heading',
+        props: {
+          id: 'tideglass-guide-title',
+          level: 1,
+          text: {
+            en: 'Reading the atlas',
+            'zh-Hant': '閱讀地圖集',
+            'zh-Hans': '阅读地图集',
+            ja: '地図帳の読み方',
+            ko: '지도책 읽기',
+            de: 'Den Atlas lesen',
+            fr: "Lire l'atlas",
+            es: 'Cómo leer el atlas',
+          },
+        },
+      },
+      {
+        type: 'Text',
+        props: {
+          id: 'tideglass-guide-copy',
+          text: {
+            en: 'Read each island from shore inward; dotted routes mark crossings we have only sketched.',
+            'zh-Hant': '從海岸向內閱讀每座島；虛線路徑代表仍在草圖中的航線。',
+            'zh-Hans': '从海岸向内阅读每座岛；虚线路径代表仍在草图中的航线。',
+            ja: '島は海岸から内陸へ読み進めます。点線はまだ構想中の航路です。',
+            ko: '각 섬은 해안에서 안쪽으로 읽습니다. 점선은 아직 구상 중인 항로입니다.',
+            de: 'Lies jede Insel von der Küste nach innen; gestrichelte Routen sind erst skizziert.',
+            fr: "Parcourez chaque île depuis la côte; les pointillés indiquent des traversées encore esquissées.",
+            es: 'Lee cada isla desde la costa; las rutas punteadas son cruces aún esbozados.',
+          },
+        },
+      },
+    ],
+  },
+} satisfies ZonePageResponse;
+
+const quietCabinetLabels = {
+  en: 'Quiet Cabinet',
+  'zh-Hant': '靜謐收藏室',
+  'zh-Hans': '静谧收藏室',
+  ja: '静かな書架',
+  ko: '고요한 서가',
+  de: 'Stilles Kabinett',
+  fr: 'Cabinet tranquille',
+  es: 'Gabinete sereno',
+};
+
+/** A valid routed document with no blocks and no source reads. */
+export const configuredStaticEmptyFake = {
+  profile: 'sha256:configured-static-empty',
+  template: { scope: 'route', key: null },
+  document: { root: { props: {} }, content: [] },
+  reads: {},
+  zone: {
+    id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1c',
+    revision: '1',
+    labels: quietCabinetLabels,
+    visibility: 'public',
+    appearance: { density: 'comfortable', radius: 'md', surface: 'cards' },
+    navigation: [{ route: '' }],
+  },
+} satisfies ZonePageResponse;
+
+/** Private counterpart used to verify that an anonymous route keeps the missing response. */
+export const configuredStaticZonePrivateFake = {
+  ...configuredStaticZoneHomeFake,
+  zone: {
+    ...configuredStaticZoneHomeFake.zone,
+    id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1d',
+    visibility: 'private',
+  },
+} satisfies ZonePageResponse;
+
 const bookSummary = {
   id: subject.subject.id,
   type: 'schema:Book',

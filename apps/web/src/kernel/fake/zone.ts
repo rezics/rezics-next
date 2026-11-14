@@ -9,6 +9,10 @@ import {
   composedZonePrivateMountFake as composedPrivate,
   composedZoneSparseFake as composedSparse,
   composedZoneWithheldFake as composedWithheld,
+  configuredStaticEmptyFake as configuredEmpty,
+  configuredStaticZoneGuideFake as configuredStaticGuide,
+  configuredStaticZoneHomeFake as configuredStaticHome,
+  configuredStaticZonePrivateFake as configuredStaticPrivate,
   staticZoneGuideFake as staticGuide,
   staticZoneHomeFake as staticHome,
   staticZoneOwnerFake as staticOwnerHome,
@@ -29,6 +33,10 @@ const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const recordedSubjectId = recordedSubject.subject.id;
 const staticZoneId = staticHome.zone.id;
 const staticOwnerZoneId = staticOwnerHome.zone.id;
+const configuredStaticZoneId = configuredStaticHome.zone.id;
+const configuredStaticPrivateZoneId = configuredStaticPrivate.zone.id;
+const configuredEmptyZoneId = configuredEmpty.zone.id;
+const sourceClosedZoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1e';
 const composedZoneId = composedMembers.zone.id;
 const composedPrivateZoneId = composedPrivate.zone.id;
 const composedSparseZoneId = composedSparse.zone.id;
@@ -164,9 +172,22 @@ function problem(status: number, headers?: Record<string, string>): KernelRecord
   };
 }
 
+function sourceClosedProblem(): KernelRecording {
+  return {
+    status: 403,
+    type: 'https://rezics.com/problems/platform_closed',
+    title: 'Platform Closed',
+    code: 'platform_closed',
+    retryable: false,
+    effect_status: 'not_applicable',
+    request_id: 'zone-source-closed',
+  };
+}
+
 async function response(request: Request, match: RegExpExecArray | null): Promise<KernelRecording | undefined> {
   const id = match?.[1] ? decodeURIComponent(match[1]) : undefined;
   if (!id) return undefined;
+  if (id === sourceClosedZoneId) return sourceClosedProblem();
   if (id === hiddenZoneId) return problem(404, { 'cache-control': 'no-store' });
   if (id === unavailableZoneId) return problem(503, { 'cache-control': 'no-store', 'retry-after': '1' });
 
@@ -224,9 +245,23 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     return request.headers.has('authorization') && target.route === ''
       ? { status: 200, ...staticOwnerHome }
       : problem(404, { 'cache-control': 'no-store' });
+  if (id === configuredStaticPrivateZoneId)
+    return request.headers.has('authorization') && target.route === ''
+      ? { status: 200, ...configuredStaticPrivate }
+      : problem(404, { 'cache-control': 'no-store' });
   if (id === staticZoneId) {
     const recording = target.route === '' ? staticHome : target.route === 'guide' ? staticGuide : undefined;
     return recording ? { status: 200, ...recording } : problem(404, { 'cache-control': 'no-store' });
+  }
+  if (id === configuredStaticZoneId) {
+    const recording =
+      target.route === '' ? configuredStaticHome : target.route === 'guide' ? configuredStaticGuide : undefined;
+    return recording ? { status: 200, ...recording } : problem(404, { 'cache-control': 'no-store' });
+  }
+  if (id === configuredEmptyZoneId) {
+    return target.route === ''
+      ? { status: 200, ...configuredEmpty }
+      : problem(404, { 'cache-control': 'no-store' });
   }
   if (id === composedZoneId) {
     if (target.route !== '') return problem(404, { 'cache-control': 'no-store' });
