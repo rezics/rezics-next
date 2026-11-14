@@ -64,14 +64,16 @@ function subject(id: string, title: string, type = 'edition', aliases: string[] 
 
 function currentText() {
   const analyzed: string[] = [];
-  const matcher = createCurrentTextMatcher(async (_analyzer, text) => {
-    analyzed.push(text);
-    return [...text.matchAll(/[a-z0-9]+/giu)].map((match, position) => ({
-      token: match[0]!.toLowerCase(),
-      position,
-      startOffset: match.index,
-      endOffset: match.index + match[0]!.length,
-    }));
+  const matcher = createCurrentTextMatcher(async (_analyzer, texts) => {
+    analyzed.push(...texts);
+    return texts.map((text) =>
+      [...text.matchAll(/[a-z0-9]+/giu)].map((match, position) => ({
+        token: match[0]!.toLowerCase(),
+        position,
+        startOffset: match.index,
+        endOffset: match.index + match[0]!.length,
+      })),
+    );
   });
   const check = bindReleaseSearchText(matcher, parseText('needle'), () => {
     throw new Error('Current text was not proven');
