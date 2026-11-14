@@ -6,12 +6,14 @@ import {
   releaseOperationalTime,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type AccountActor, type Actor } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';
-import { deadlineClient, within } from './deadline.ts';
+import {
+  withManagedAdviceReadConnection,
+  withManagedAdviceReadSnapshot,
+} from './managed-advice-read-connection.ts';
 import assignmentRead from './delegation-read.sql';
 import { deriveAccess } from './derived-access.ts';
 import { accessClock } from './access-clock.ts';
@@ -104,29 +106,11 @@ async function destinationAdvice(
   if (actor.clientId !== profile.client_id || actor.scopes.length !== 1 || actor.scopes[0] !== profile.scope[0])
     return { kind: 'refused' };
 
-  const time = await withConnection(deps.pool, (client) =>
-    mintReadTime(deadlineClient(client, deadline), accessClock(deps.access)),
+  const time = await withManagedAdviceReadConnection(deps.pool, deadline, (client) =>
+    mintReadTime(client, accessClock(deps.access)),
   );
   const snapshot = <T>(read: (client: AccessClient) => Promise<T>) =>
-    within(deadline, () =>
-      withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const value = await read(client);
-          requireAccessDeadline(deadline);
-          await client.query('COMMIT');
-          return value;
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(connection, rollbackError as Error);
-          }
-          throw error;
-        }
-      }),
-    );
+    withManagedAdviceReadSnapshot(deps.pool, deadline, read);
 
   const observe = async (client: AccessClient) => {
     const homes = new Map<number, readonly [string, number]>();

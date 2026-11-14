@@ -32,9 +32,9 @@ import {
 import { resourceAuthorization } from './resource-authorization.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { viewerActionReadTime } from './read-bindings.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { withManagedAdviceReadSnapshot } from './managed-advice-read-connection.ts';
 import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withConnection } from '../database/pool.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import accountRead from './agent-verification-account-read.sql';
 import insertRequest from './agent-verification-request-insert.sql';
@@ -321,7 +321,7 @@ async function authorizeRead(
   if (actor.kind !== 'account' || !access.prepare || context.pool !== pool) return { allowed: false };
   const evidence = await access.prepare(actor, action, resource, context);
   if (evidence === null || evidence === undefined) return { allowed: false };
-  return agentIdentityMaintenance().withReadTransaction(pool, async (client) => {
+  return withManagedAdviceReadSnapshot(pool, context.deadline, async (client) => {
     if (!(await validate(client))) return { allowed: false };
     if (!(await access.authorize(client, actor, action, resource, evidence))) return { allowed: false };
     return { allowed: true, value: await read(client) };
@@ -448,59 +448,42 @@ export async function readAgentVerificationStatus(
     return unreadVerificationAdvice(pool, access, context, accountId);
   }
   try {
-    return await within(context.deadline, () =>
-      withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, context.deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const readable = await authority.decide(
-            client,
-            { kind: 'verification', action: 'account:read', ids: [accountId] },
-            time,
-          );
-          if (!readable[accountId]?.allowed) throw new AgentVerificationDeniedError();
-          const row = rows<VerificationRow>(
-            await latestRequest.run(client as PoolClient, { account_id: accountId }),
-          )[0];
-          const verificationRequest = row ? asRequest(row) : null;
-          const target = (await accountRead.run(client as PoolClient, {
-            route,
-            account_id: accountId,
-          })) as VerificationAccount | null;
-          let viewerActions: AgentVerificationViewerAction[] = [];
-          let writable: Awaited<ReturnType<AccountAuthority['decide']>>;
-          try {
-            writable = await authority.decide(
-              client,
-              { kind: 'verification', action: 'account:update', ids: [accountId] },
-              time,
-            );
-          } catch (error) {
-            if (error instanceof AgentVerificationDeniedError) throw error;
-            if (!adviceUnavailable(error)) throw error;
-            throw new VerificationAdviceFallbackError('Verification update advice is unavailable');
-          }
-          const write = writable[accountId];
-          if (write?.allowed) {
-            const operations: string[] = [];
-            if (requestCommandEligible(target, verificationRequest)) operations.push(REQUEST_OPERATION);
-            if (withdrawCommandEligible(verificationRequest)) operations.push(WITHDRAW_OPERATION);
-            viewerActions = serializeVerificationActions(write.action, operations);
-          }
-          requireAccessDeadline(context.deadline);
-          await client.query('COMMIT');
-          return { verificationRequest, viewerActions };
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(connection, rollbackError as Error);
-            if (error instanceof VerificationAdviceFallbackError) throw rollbackError;
-          }
-          throw error;
-        }
-      }),
-    );
+    return await withManagedAdviceReadSnapshot(pool, context.deadline, async (client) => {
+      const readable = await authority.decide(
+        client,
+        { kind: 'verification', action: 'account:read', ids: [accountId] },
+        time,
+      );
+      if (!readable[accountId]?.allowed) throw new AgentVerificationDeniedError();
+      const row = rows<VerificationRow>(await latestRequest.run(client as PoolClient, { account_id: accountId }))[0];
+      const verificationRequest = row ? asRequest(row) : null;
+      const target = (await accountRead.run(client as PoolClient, {
+        route,
+        account_id: accountId,
+      })) as VerificationAccount | null;
+      let viewerActions: AgentVerificationViewerAction[] = [];
+      let writable: Awaited<ReturnType<AccountAuthority['decide']>>;
+      try {
+        writable = await authority.decide(
+          client,
+          { kind: 'verification', action: 'account:update', ids: [accountId] },
+          time,
+        );
+      } catch (error) {
+        if (error instanceof AgentVerificationDeniedError) throw error;
+        if (!adviceUnavailable(error)) throw error;
+        throw new VerificationAdviceFallbackError('Verification update advice is unavailable');
+      }
+      const write = writable[accountId];
+      if (write?.allowed) {
+        const operations: string[] = [];
+        if (requestCommandEligible(target, verificationRequest)) operations.push(REQUEST_OPERATION);
+        if (withdrawCommandEligible(verificationRequest)) operations.push(WITHDRAW_OPERATION);
+        viewerActions = serializeVerificationActions(write.action, operations);
+      }
+      requireAccessDeadline(context.deadline);
+      return { verificationRequest, viewerActions };
+    });
   } catch (error) {
     if (error instanceof VerificationAdviceFallbackError)
       return unreadVerificationAdvice(pool, access, context, accountId);

@@ -730,6 +730,8 @@ source delivery; generated transport/consumer regression is also UNRUN. Typing d
 
 ### Account agent verification
 
+Decision: verification status and operator-transfer destination reads bound source checkout, observations and cleanup to the caller deadline; expired native I/O discards its client, late checkout issues no SQL, and current authority, request eligibility, handoff comparison and fallback reads remain authoritative.
+
 `POST /v1/accounts/{accountId}:requestVerification` accepts `{ subject, statement, links }`. A fresh human session may
 request its own actor account; an organization's manager may request that organization through its existing
 `account:manage` authority. The catalogue subject must be a visible `schema:Person` or `schema:Organization` when the
