@@ -51,7 +51,39 @@ The anonymous catalogue reads the active native `/` composition once and renders
 
 Decision: `ReactionSummary` renders public totals from the planned reactions leaf and the recorded native counts page. Each total is one text node (`Like 42`) so the visible label and count stay together. Viewer reaction stays on the header actions slot. A mismatched producer, malformed counts or Retry-After wait makes that leaf unavailable without hiding supported siblings. Mixed configured TypeList recovery uses the same declared slots: a waiting books leaf keeps its own hint while recorded recipes and reactions stay in document order. Zone TypeList uses the same configured Search admission as the catalogue TypeList. The renderer reads `OverviewContext` from the context leaf and admits kinds locally so it does not import overview or threads.
 
-Decision: the fewest Web tests pin those states plus TypeList raw-limit admission. Members keep recorded native duplicates. No extra page stories.
+Decision: the fewest Web tests pin those states plus TypeList raw-limit admission. Recorded Members responses may contain duplicates; the renderer retains their first canonical Subject disclosure in native order.
+
+## Composed Members continuation
+
+Decision: each mounted Members node retains first-admitted rows and supplied facts in native order per canonical
+Subject ID; More/Retry appends one native page, transient failures preserve the exact cursor, and successful explicit
+restart replaces the reading.
+
+Collection and Library Members keep all explicitly revealed rows, including through duplicate-only and empty
+intermediate pages. Subject UUID comparison ignores letter case. The first disclosed row owns its label, summary
+and facts together; a duplicate never replaces or supplements them. Facts remain supplied card metadata, with no
+derived total or authority and no extra lookups. This replaces the renderer's previous one-page retention.
+
+Each explicit More/Retry makes one existing bounded native page read. No prefetch, refill or scan runs. The node
+retains only projected cards, their facts, a canonical identity set, the current cursor and the existing bounded
+cursor-cycle detector; it keeps no page bodies or traversal history and has no row/page cap. Projection and retained
+data grow with explicitly disclosed rows and canonical identities. A detected cursor cycle keeps the current
+reading while offering Start again. Failed restart repeats the cursor-free request; admitted restart establishes
+fresh rows, facts, identities and progress. Transient/invalid responses preserve the current reading and exact
+retry. Native 401/403/409 retire it before cursor-free recovery; 404 conceals the node. Reader, target, node,
+configuration, initial-section, Context or locale replacement retires all local rows, status and pending effects.
+Each node owns its reading independently. Existing dedicated full-list route links keep their supplied destination.
+
+The persistent polite status starts empty on hydration and clears completion while loading. Each admitted explicit
+page announces the actual newly visible count, including zero, with the existing eight-locale completion/end
+messages. Pending More/Retry stays focusable, ignores repeated activation, wraps, and has 44px minimum targets and
+visible focus. A surviving More keeps focus. Exhaustion moves focus to the local visible end marker only if the
+reader stayed on the requesting trigger; moved focus and retired requests cannot reclaim it.
+
+`member-list-continuation.test.tsx` pins retained order/counts, native facts, independent nodes, exact retry,
+restart/retirement and keyboard exhaustion. Continued/Exhausted stories use illustrative native-format responses
+through the default renderer. Their fixtures establish no native, visual or assistive-technology proof; source-only
+delivery defers execution and the verifier retains those acceptance checks.
 
 ## Work tag reading
 

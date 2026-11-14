@@ -5,7 +5,10 @@ import type { Section } from '../src/features/pages/overview';
 import type { MemberPageTarget } from '../src/features/pages/member-list-query';
 import type { KernelClient } from '@rezics/client';
 import type { CompositionDocument, SelectedContext } from '@rezics/composition';
+import type { Fact } from '../src/search/results';
 import recording from '../src/kernel/recorded/library-collection-members.json';
+
+type NativeMember = (typeof recording.members)[number] & { facts?: Record<string, Fact[]> };
 
 test('Default composed member recovery admits only its live reader and preserves usable continuation behavior', async () => {
   const { Window } = await import(
@@ -197,9 +200,12 @@ test('Default composed member recovery admits only its live reader and preserves
   let cacheReader: string | null = null;
   let recoverSource = true;
   let recoveryNode = 'members';
-  let initial = { members: recording.members.slice(0, 1), next: 'opaque:next/==' };
+  let initial: { members: NativeMember[]; next: string | null } = {
+    members: recording.members.slice(0, 1),
+    next: 'opaque:next/==',
+  };
   const read = Object.values(planReads(platformRegistry, document, { subject: null }).reads)[0]!;
-  const page = (members: typeof recording.members, next: string | null): Section => ({
+  const page = (members: NativeMember[], next: string | null): Section => ({
     ok: true,
     read,
     body: { members, next },
@@ -427,11 +433,15 @@ test('Default composed member recovery admits only its live reader and preserves
     locale = 'en';
     cacheReader = null;
     recoveryNode = 'members';
-    initial = { members: recording.members.slice(0, 1), next: 'opaque:next/==' };
+    initial = {
+      members: [{ ...recording.members[0]!, facts: { 'schema:isbn': [{ kind: 'code', value: 'first-fact' }] } }],
+      next: 'opaque:next/==',
+    };
     await setReader(null);
     await render();
     expect(host.querySelector('[data-slot="member-list"][data-node="members"]')).not.toBeNull();
     expect(list().textContent).toContain('Snow Country');
+    expect(status().textContent).toBe('');
     const continuationStart = nativeCalls.length;
     const trigger = button();
     expect(trigger.className).toContain('min-h-11');
@@ -450,13 +460,25 @@ test('Default composed member recovery admits only its live reader and preserves
     expect(nativeCalls.at(-1)?.input.continuation).toEqual({ node: 'members', cursor: 'opaque:next/==' });
     expect(nativeCalls.at(-1)?.authorization).toBeNull();
     await act(async () => {
-      release(page([recording.members[0]!, recording.members[1]!, recording.members[1]!], 'duplicates'));
+      release(
+        page(
+          [
+            { ...recording.members[0]!, facts: { 'schema:isbn': [{ kind: 'code', value: 'replaced-fact' }] } },
+            { ...recording.members[1]!, facts: { 'schema:isbn': [{ kind: 'code', value: 'second-fact' }] } },
+            recording.members[1]!,
+          ],
+          'duplicates',
+        ),
+      );
     });
     await flush();
     expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
     expect(status().getAttribute('aria-atomic')).toBe('true');
     expect(window.document.activeElement).toBe(trigger);
     expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(2);
+    expect(list().textContent).toContain('first-fact');
+    expect(list().textContent).toContain('second-fact');
+    expect(list().textContent).not.toContain('replaced-fact');
     expect(list().textContent!.indexOf('Snow Country')).toBeLessThan(list().textContent!.indexOf('The Tale of Genji'));
     expect(status('other-members').textContent).toBe('');
 
@@ -465,13 +487,30 @@ test('Default composed member recovery admits only its live reader and preserves
     expect(list().textContent).toContain('The Tale of Genji');
     expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
 
-    responses.push(page([recording.members[1]!], 'empty-end'));
+    const upper = (member: NativeMember): NativeMember => ({
+      ...member,
+      subjectId: member.subjectId.toUpperCase(),
+      subject: { ...member.subject, id: member.subject.id.toUpperCase() },
+    });
+    responses.push(page([upper(recording.members[0]!), recording.members[2]!], 'all-duplicates'));
+    await press();
+    expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(3);
+    expect(list().textContent!.indexOf('The Tale of Genji')).toBeLessThan(
+      list().textContent!.indexOf('The Little Prince'),
+    );
+    responses.push(page(recording.members.slice(0, 3).map(upper), 'empty-end'));
     await press();
     expect(status().textContent).toBe('New visible items in Books: 0. You can load more.');
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(3);
+    expect(list().textContent).toContain('first-fact');
+    expect(list().textContent).toContain('second-fact');
+    expect(list('other-members').querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
     expect(window.document.activeElement).toBe(trigger);
     responses.push(page([], 'other-end'));
     await press(button('other-members'));
     expect(status('other-members').textContent).toBe('New visible items in Other books: 0. You can load more.');
+    expect(list('other-members').querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
     const finish = hold();
     await press(trigger);
     const otherTrigger = button('other-members');
@@ -482,6 +521,7 @@ test('Default composed member recovery admits only its live reader and preserves
     await flush();
     expect(status().textContent).toBe('New visible items in Books: 0. End of this list.');
     expect(list().querySelector('button')).toBeNull();
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(3);
     expect(window.document.activeElement).toBe(otherTrigger);
     responses.push(page([], null));
     await press(otherTrigger);
@@ -491,6 +531,10 @@ test('Default composed member recovery admits only its live reader and preserves
       await userEvent.tab();
     });
     expect(window.document.activeElement?.textContent).toBe('After the lists');
+    (end as HTMLElement).focus();
+    (end as HTMLElement).blur();
+    await render();
+    expect(window.document.activeElement).toBe(window.document.body);
     expect(
       nativeCalls.slice(continuationStart).map(({ input }) => ({
         node: input.continuation?.node,
@@ -499,19 +543,36 @@ test('Default composed member recovery admits only its live reader and preserves
     ).toEqual([
       { node: 'members', cursor: 'opaque:next/==' },
       { node: 'members', cursor: 'duplicates' },
+      { node: 'members', cursor: 'all-duplicates' },
       { node: 'other-members', cursor: 'opaque:next/==' },
       { node: 'members', cursor: 'empty-end' },
       { node: 'other-members', cursor: 'other-end' },
     ]);
 
-    // Successful More replaces the window; sparse pages do not fill themselves. Transport retries keep it.
+    // Leaving and returning to a pending trigger does not reclaim exhaustion focus.
+    initial = { ...initial, next: 'late-focus' };
+    await render();
+    const lateFocus = hold();
+    const lateTrigger = button();
+    await press(lateTrigger);
+    (host.querySelector('a[href="#after"]') as HTMLElement).focus();
+    lateTrigger.focus();
+    await act(async () => lateFocus(page([], null)));
+    await flush();
+    expect(window.document.activeElement).not.toBe(list().querySelector('[data-slot="member-list-end"]'));
+
+    // Explicit pages accumulate without a cap; sparse pages do not fill themselves. Exact retries retain rows.
     initial = { ...initial, next: 'window-0' };
     await render();
     for (let index = 1; index <= 32; index++) {
-      responses.push(page([recording.members[2]!], `window-${index}`));
+      const id = `00000000-0000-8000-8000-${String(index).padStart(12, '0')}`;
+      const member = recording.members[2]!;
+      responses.push(
+        page([member, { ...member, subjectId: id, subject: { ...member.subject, id } }], `window-${index}`),
+      );
       await press();
-      expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
-      expect(list().textContent).not.toContain('Snow Country');
+      expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(index + 2);
+      expect(list().textContent).toContain('Snow Country');
     }
     const failWindow = holdFailure();
     await press();
@@ -522,14 +583,15 @@ test('Default composed member recovery admits only its live reader and preserves
     responses.push(page([], 'window-33'));
     await press();
     expect(nativeCalls.slice(-2).map(({ input }) => input.continuation?.cursor)).toEqual(['window-32', 'window-32']);
-    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(0);
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(34);
+    expect(status().textContent).toBe('New visible items in Books: 0. You can load more.');
     const callsBeforeSparse = nativeCalls.length;
     await flush();
     expect(nativeCalls).toHaveLength(callsBeforeSparse);
     responses.push(page([recording.members[2]!], 'window-32'));
     await press();
     expect(button().textContent).toBe('Start again');
-    expect(list().textContent).not.toContain('The Little Prince');
+    expect(list().textContent).toContain('The Little Prince');
     responses.push(new Error('Restart unavailable'));
     await press();
     expect(nativeCalls.at(-1)?.input.continuation).toBeUndefined();
@@ -538,6 +600,10 @@ test('Default composed member recovery admits only its live reader and preserves
     await press();
     expect(nativeCalls.at(-1)?.input.continuation).toBeUndefined();
     expect(list().textContent).toContain('The Little Prince');
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
+    expect(list().textContent).not.toContain('Snow Country');
+    expect(list().textContent).not.toContain('first-fact');
+    expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
     responses.push(page([recording.members[1]!], 'restarted-next'));
     await press();
     expect(button().textContent).toBe('Start again');
@@ -554,7 +620,7 @@ test('Default composed member recovery admits only its live reader and preserves
     expect(list().textContent).not.toContain('The Little Prince');
 
     // Each existing reading boundary retires status and ignores its late response, without moving focus.
-    for (const boundary of ['target', 'node', 'section', 'reader', 'viewer', 'context', 'locale']) {
+    for (const boundary of ['target', 'node', 'configuration', 'section', 'reader', 'viewer', 'context', 'locale']) {
       initial = { ...initial, next: `before-${boundary}` };
       if (boundary === 'reader') {
         cacheReader = 'reader-one';
@@ -562,6 +628,9 @@ test('Default composed member recovery admits only its live reader and preserves
       }
       if (boundary === 'viewer') cacheReader = null;
       await render();
+      responses.push(page([recording.members[1]!], `retained-${boundary}`));
+      await press();
+      expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(2);
       const late = hold();
       await press();
       const retiredSignal = nativeCalls.at(-1)!.signal;
@@ -575,6 +644,11 @@ test('Default composed member recovery admits only its live reader and preserves
           ),
         };
       if (boundary === 'section') initial = { ...initial, next: 'fresh-section' };
+      if (boundary === 'configuration')
+        document = {
+          ...document,
+          content: document.content.map((node, i) => (i ? node : { ...node, props: { ...node.props, limit: 11 } })),
+        };
       if (boundary === 'reader') {
         cacheReader = 'reader-two';
         await setReader('reader-two');
@@ -589,6 +663,7 @@ test('Default composed member recovery admits only its live reader and preserves
       await render();
       expect(retiredSignal?.aborted).toBe(true);
       expect(status().textContent).toBe('');
+      expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
       const freshTrigger = button();
       freshTrigger.focus();
       await act(async () => {
@@ -718,6 +793,8 @@ test('Default composed member recovery admits only its live reader and preserves
     for (const code of [202, 400, 422, 503, 401, 403, 404, 409]) {
       initial = { ...initial, next: `refusal-${code}` };
       await render();
+      responses.push(page([recording.members[1]!], `retained-refusal-${code}`));
+      await press();
       responses.push({ ok: false, status: code });
       await press();
       if (code === 404) {
@@ -725,11 +802,11 @@ test('Default composed member recovery admits only its live reader and preserves
         continue;
       }
       expect(status().textContent).toBe(code === 202 ? 'These results are being prepared.' : '');
-      expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength([401, 403, 409].includes(code) ? 0 : 1);
+      expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength([401, 403, 409].includes(code) ? 0 : 2);
       responses.push(page([], null));
       await press();
       expect(nativeCalls.at(-1)?.input.continuation?.cursor).toBe(
-        [401, 403, 409].includes(code) ? undefined : `refusal-${code}`,
+        [401, 403, 409].includes(code) ? undefined : `retained-refusal-${code}`,
       );
       expect(status().textContent).toContain('0. End of this list.');
     }

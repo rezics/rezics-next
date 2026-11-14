@@ -69,15 +69,18 @@ function boundSummary(row: Record<string, unknown>, id: string): SubjectSummary 
   return undefined;
 }
 
-/** Preserve native member order and fields. Common-members already canonicalizes; no per-row reads. */
+/** Project an admitted native page without any per-row reads. */
 export function memberItems(section: Section, value: OverviewValue): Item[] {
   if (!section.ok) return [];
   const body = admitMemberPage(section.read, section.body);
   if (!body) return [];
+  return projectMemberItems({ ...section, body }, value);
+}
+
+function projectMemberItems(section: Extract<Section, { ok: true }>, value: OverviewValue): Item[] {
+  const body = section.body;
   const rows = section.read.kind === 'search' ? body.subjects : body.members;
-  if (!Array.isArray(rows)) return [];
-  return rows.map((row) => {
-    const record = row as Record<string, unknown>;
+  return (rows as Record<string, unknown>[]).map((record) => {
     const id = String(section.read.kind === 'search' ? record.id : record.subjectId);
     const summary = boundSummary(record, id);
     const nativeLabel = summary?.label;
@@ -100,6 +103,49 @@ export function memberItems(section: Section, value: OverviewValue): Item[] {
       gated: false,
     };
   });
+}
+
+type MemberReading = {
+  items: Item[];
+  identities: Set<string>;
+  facts: Record<string, Record<string, Fact[]>>;
+  cursor: string | undefined;
+  failure: Extract<Section, { ok: false }> | undefined;
+};
+
+/** Retain only disclosed card data, its paired native facts and the current opaque cursor. */
+function emptyMemberReading(failure?: Extract<Section, { ok: false }>): MemberReading {
+  return { items: [], identities: new Set(), facts: {}, cursor: undefined, failure };
+}
+
+function appendMemberPage(
+  previous: MemberReading,
+  section: Extract<Section, { ok: true }>,
+  value: OverviewValue,
+): MemberReading {
+  const items = [...previous.items];
+  const identities = new Set(previous.identities);
+  const facts = { ...previous.facts };
+  const rows = (section.read.kind === 'search' ? section.body.subjects : section.body.members) as Record<
+    string,
+    unknown
+  >[];
+  const admittedItems = projectMemberItems(section, value);
+  for (const [index, item] of admittedItems.entries()) {
+    const identity = item.id.toLowerCase();
+    if (identities.has(identity)) continue;
+    identities.add(identity);
+    items.push(item);
+    // First disclosure wins as a whole: a repeated identity cannot replace its label, summary or facts.
+    const supplied = rows[index]!.facts as Record<string, Fact[]> | undefined;
+    if (supplied) facts[item.id] = supplied;
+  }
+  return { items, identities, facts, cursor: memberPageCursor(section.body), failure: undefined };
+}
+
+function initialMemberReading(section: Section, value: OverviewValue): MemberReading {
+  const admitted = admitMemberSection(section);
+  return admitted.ok ? appendMemberPage(emptyMemberReading(), admitted, value) : emptyMemberReading(admitted);
 }
 
 export function Members(props: Record<string, unknown>) {
@@ -264,7 +310,7 @@ function MemberReader({
   );
 }
 
-/** Each node retains one native page (at most its planned limit), including its native facts. */
+/** Each mounted node owns its explicitly revealed rows; every request still reads one bounded native page. */
 export function MemberList({
   value,
   section,
@@ -287,9 +333,9 @@ export function MemberList({
   paged?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(() => admitMemberSection(section));
+  const [reading, setReading] = useState(() => initialMemberReading(section, value));
   const [restart, setRestart] = useState(false);
-  const progress = useRef(createMemberPageProgress(page.ok ? memberPageCursor(page.body) : undefined));
+  const progress = useRef(createMemberPageProgress(reading.cursor));
   const [error, setError] = useState<Section>();
   const [retryAt, setRetryAt] = useState(() => (section.ok ? undefined : memberRetryAt(section.retryAfter)));
   const waiting = useSearchRetryWait(retryAt);
@@ -321,37 +367,25 @@ export function MemberList({
     };
   }, [lifetime]);
   const end = useRef<HTMLParagraphElement>(null);
+  const handledCompletion = useRef<typeof completion>(undefined);
   useLayoutEffect(() => {
-    const trigger = completion?.trigger;
+    if (!completion || handledCompletion.current === completion) return;
+    handledCompletion.current = completion;
+    const trigger = completion.trigger;
     // Replace only the requesting reader's removed trigger, after the exhausted page has rendered.
     if (
-      completion &&
       lifetime.current(completion.generation) &&
       admission.current(incarnation) &&
-      completion?.exhausted &&
+      completion.exhausted &&
       trigger &&
       (trigger.ownerDocument.activeElement === trigger ||
         trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
     )
       end.current?.focus({ preventScroll: true });
   }, [completion, lifetime, admission, incarnation]);
-  const cursor = !restart && page.ok ? memberPageCursor(page.body) : undefined;
-  const failed = error && !error.ok ? error : !page.ok ? page : undefined;
+  const cursor = !restart ? reading.cursor : undefined;
+  const failed = error && !error.ok ? error : reading.failure;
   const options = { locale: value.locale as never };
-  const items = memberItems(page, value);
-  // The native cursor is opaque; a repeated canonical row is shown once without changing the remaining order.
-  const memberFacts: Record<string, Record<string, Fact[]>> = {};
-  if (page.ok) {
-    const rows = page.read.kind === 'search' ? page.body.subjects : page.body.members;
-    for (const row of Array.isArray(rows) ? rows : []) {
-      if (!isRecord(row) || !isRecord(row.facts)) continue;
-      const id = page.read.kind === 'search' ? row.id : row.subjectId;
-      if (typeof id === 'string' && !Object.hasOwn(memberFacts, id))
-        memberFacts[id] = row.facts as Record<string, Fact[]>;
-    }
-  }
-  const unique = new Map<string, Item>();
-  for (const item of items) if (!unique.has(item.id)) unique.set(item.id, item);
   async function more(event: MouseEvent<HTMLButtonElement>) {
     if (
       !continuationEnabled ||
@@ -366,6 +400,12 @@ export function MemberList({
     const isCurrent = () => lifetime.current(generation) && admission.current(incarnation);
     if (!isCurrent()) return;
     const trigger = event.currentTarget;
+    let ownsFocus = trigger.ownerDocument.activeElement === trigger;
+    const releaseFocus = () => {
+      ownsFocus = false;
+    };
+    // Once the reader moves away, returning focus while this request is pending does not reclaim it.
+    trigger.addEventListener('blur', releaseFocus);
     active.current = true;
     setPending(true);
     setError(undefined);
@@ -404,30 +444,30 @@ export function MemberList({
         setError((previous) => (isCurrent() ? admitted : previous));
         setRetryAt((previous) => (isCurrent() ? memberRetryAt(admitted.retryAfter) : previous));
         if ([401, 403, 404, 409].includes(admitted.status ?? 0)) {
-          setPage((previous) => (isCurrent() ? admitted : previous));
+          setReading((previous) => (isCurrent() ? emptyMemberReading(admitted) : previous));
           progress.current = createMemberPageProgress();
           setRestart((previous) => (isCurrent() ? false : previous));
         }
       } else {
         // A fresh restart gets fresh progress only after native admission succeeds. A transport failure keeps
-        // the accepted window and repeats this exact request, including an absent cursor for a fresh restart.
+        // the retained reading and repeats this exact request, including an absent cursor for a fresh restart.
         const nextProgress = cursor ? progress.current : createMemberPageProgress();
         if (!nextProgress.accept(memberPageCursor(admitted.body))) {
           setRestart((previous) => (isCurrent() ? true : previous));
           return;
         }
         progress.current = nextProgress;
-        const visible = new Set(unique.keys());
-        for (const item of memberItems(admitted, value)) visible.add(item.id);
-        setPage((previous) => (isCurrent() ? admitted : previous));
+        const retained = cursor ? reading : emptyMemberReading();
+        const nextReading = appendMemberPage(retained, admitted, value);
+        setReading((previous) => (isCurrent() ? nextReading : previous));
         setRestart((previous) => (isCurrent() ? false : previous));
         setCompletion((previous) =>
           isCurrent()
             ? {
                 generation,
-                added: visible.size - unique.size,
-                exhausted: !paged || typeof admitted.body.next !== 'string' || !admitted.body.next,
-                trigger: trigger.ownerDocument.activeElement === trigger ? trigger : null,
+                added: nextReading.items.length - retained.items.length,
+                exhausted: !paged || !nextReading.cursor,
+                trigger: ownsFocus && trigger.ownerDocument.activeElement === trigger ? trigger : null,
               }
             : previous,
         );
@@ -436,6 +476,7 @@ export function MemberList({
       setError((previous) => (isCurrent() ? { ok: false as const } : previous));
       setRetryAt((previous) => (isCurrent() ? undefined : previous));
     } finally {
+      trigger.removeEventListener('blur', releaseFocus);
       if (isCurrent()) {
         if (activeQueryKey.current === queryKey) activeQueryKey.current = undefined;
         admission.releaseQuery('member-continuation', queryKey);
@@ -457,12 +498,12 @@ export function MemberList({
       <h2 id={`${instance}-title`} className="text-2xl font-semibold tracking-tight">
         {title}
       </h2>
-      {unique.size > 0 && (
+      {reading.items.length > 0 && (
         <CoverList
-          items={[...unique.values()]}
+          items={reading.items}
           value={value}
           label={title}
-          memberFacts={memberFacts}
+          memberFacts={reading.facts}
           {...(value.memberHref
             ? { itemVisit: (item: Item) => ({ href: value.memberHref!({ id: item.id, label: item.label.text }) }) }
             : {})}
@@ -479,7 +520,7 @@ export function MemberList({
       ) : (
         !failed &&
         !restart &&
-        unique.size === 0 && (
+        reading.items.length === 0 && (
           <p role="status">{cursor ? m.public_read_sparse({}, options) : m.public_read_empty({}, options)}</p>
         )
       )}

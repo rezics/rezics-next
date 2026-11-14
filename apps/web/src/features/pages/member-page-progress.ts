@@ -1,4 +1,4 @@
-/** Match the paged Members native cap; history never grows with the traversal. */
+/** Bound cursor-cycle memory independently of the number of explicitly retained member rows. */
 export const MEMBER_CURSOR_HISTORY_LIMIT = 12;
 
 export function memberPageCursor(body: Record<string, unknown>): string | undefined {

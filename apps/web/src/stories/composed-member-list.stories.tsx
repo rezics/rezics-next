@@ -128,6 +128,12 @@ async function continued(canvasElement: HTMLElement) {
       m.subject_relation_completed_more({ label: view.getByRole('heading').textContent!, count: 1 }),
     ),
   ).toBeVisible();
+  await expect(list.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(2);
+  await expect(view.getByText('Snow Country')).toBeVisible();
+  await expect(view.getByText('The Tale of Genji')).toBeVisible();
+  const other = canvasElement.querySelector<HTMLElement>('[data-slot="member-list"][data-node="other-members"]')!;
+  await expect(other.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
+  await expect(other.querySelector('[aria-live="polite"]')).toHaveTextContent('');
   await expect(trigger).toHaveFocus();
 }
 export const Continued: Story = {
@@ -135,7 +141,8 @@ export const Continued: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Illustrative page fixtures: one unique addition with remaining continuation; no native proof.',
+        story:
+          'Illustrative native-format pages: retain the initial row and one unique addition in native order; the independent node stays unchanged. No native proof.',
       },
     },
   },
@@ -147,7 +154,7 @@ export const Exhausted: Story = {
     docs: {
       description: {
         story:
-          'Illustrative page fixtures: a duplicate-only page, then an empty final page; local keyboard focus after exhaustion. No native proof.',
+          'Illustrative native-format pages: a duplicate-only page and an empty final page retain both revealed rows and announce zero additions; local keyboard focus after exhaustion. No native proof.',
       },
     },
   },
@@ -158,8 +165,12 @@ export const Exhausted: Story = {
     const title = view.getByRole('heading').textContent!;
     await userEvent.keyboard('{Enter}');
     await view.findByText(m.subject_relation_completed_more({ label: title, count: 0 }));
+    await expect(list.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(2);
+    await expect(view.getByText('Snow Country')).toBeVisible();
+    await expect(view.getByText('The Tale of Genji')).toBeVisible();
     await userEvent.keyboard('{Enter}');
     await view.findByText(m.subject_relation_completed_end({ label: title, count: 0 }));
+    await expect(list.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(2);
     await expect(view.queryByRole('button')).toBeNull();
     await expect(list.querySelector('[data-slot="member-list-end"]')).toHaveFocus();
   },
