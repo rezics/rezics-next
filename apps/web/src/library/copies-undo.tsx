@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -11,6 +11,7 @@ export function UndoNotice({
   operation,
   failure,
   restore,
+  controlRef,
 }: {
   message: string;
   deadline: number;
@@ -18,6 +19,7 @@ export function UndoNotice({
   operation: 'copy.update' | 'published_log.create';
   failure: string;
   restore: (key: string) => Promise<boolean>;
+  controlRef?: Ref<HTMLButtonElement>;
 }) {
   const [expired, setExpired] = useState(() => Date.now() >= deadline);
   const [pending, setPending] = useState(false);
@@ -48,6 +50,7 @@ export function UndoNotice({
       {available && !expired ? (
         <Exposure operation={operation}>
           <Button
+            ref={controlRef}
             variant="outline"
             disabled={pending}
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

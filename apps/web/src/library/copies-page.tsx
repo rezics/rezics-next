@@ -60,6 +60,15 @@ const quiet = `${target} inline-flex items-center justify-center rounded-lg bord
 const locale = () => getLocale();
 const blank = (value: string): string | null => (value === '' ? null : value);
 
+function connectedReturn(element: HTMLElement | null): HTMLElement | false {
+  if (!element?.isConnected || element.closest('[hidden]')) return false;
+  for (let parent: HTMLElement | null = element; parent; parent = parent.parentElement) {
+    const style = getComputedStyle(parent);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+  }
+  return element;
+}
+
 const draftOf = (copy?: CopyItem): Draft => ({
   status: copy?.status ?? '',
   location: copy?.location ?? '',
@@ -1006,6 +1015,7 @@ export function CopyRow({
                 className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted"
                 aria-label={m.library_copy_more_actions()}
                 ref={launcher}
+                data-copy-edit-id={copy.id}
               >
                 <EllipsisIcon aria-hidden="true" className="size-5" />
               </button>
@@ -1065,6 +1075,7 @@ function LoadedCopiesPage({
   windows?: CopiesWindowsControls | undefined;
   onRetryInventory?: (() => void) | undefined;
 }) {
+  const root = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(page.copies);
   const returnTo = copyInventoryReturnHref(
     {
@@ -1085,6 +1096,8 @@ function LoadedCopiesPage({
   const detailRead = useRef(0);
   const retiredInspection = useRef<number | null>(null);
   const editorLauncher = useRef<HTMLElement | null>(null);
+  const undoControl = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef<{ control: HTMLButtonElement; copyId: string } | null>(null);
   const active = useRef(true);
   const latestRemoval = useRef(removed);
   const restoreIntent = useRef<{
@@ -1104,6 +1117,21 @@ function LoadedCopiesPage({
   }, []);
   const currentPage = (operation?: GatedOperation) =>
     active.current && (!originating || originating.isCurrent(operation));
+  const headingReturn = () => connectedReturn(root.current?.querySelector<HTMLElement>('#copies-inventory-heading') ?? null);
+  // The restored row mounts as Undo leaves; only return focus if Undo still owns it.
+  useLayoutEffect(() => {
+    const intent = restoreFocus.current;
+    if (!intent || removed) return;
+    restoreFocus.current = null;
+    if (!currentPage('copy.list')) return;
+    const focused = document.activeElement;
+    if (focused !== intent.control && focused !== document.body) return;
+    const launcher = [...(root.current?.querySelectorAll<HTMLButtonElement>('[data-copy-edit-id]') ?? [])].find(
+      (control) => control.dataset.copyEditId === intent.copyId,
+    );
+    const target = connectedReturn(launcher ?? null) || headingReturn();
+    if (target) target.focus();
+  });
   const comparisonId = useId();
   const comparison = useCopyInventoryReview({
     copies,
@@ -1203,7 +1231,7 @@ function LoadedCopiesPage({
   const firstAvailable = windows?.current !== undefined ? windows.current !== null : recoverable;
   const previousAvailable = windows?.previous !== undefined;
   return (
-    <div className="max-w-4xl space-y-6 text-foreground">
+    <div ref={root} className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading id="copies-inventory-heading" tabIndex={-1}>
           {m.library_copy_heading()}
@@ -1435,7 +1463,9 @@ function LoadedCopiesPage({
           available={Boolean(removed.result.undo)}
           operation="copy.update"
           failure={m.library_copy_failure()}
+          controlRef={undoControl}
           restore={async (idempotencyKey) => {
+            const focusedUndo = document.activeElement === undoControl.current ? undoControl.current : null;
             if (
               !currentPage('copy.update') ||
               latestRemoval.current !== removed ||
@@ -1467,6 +1497,7 @@ function LoadedCopiesPage({
               }
               // A newer same-page deletion keeps its own Undo when this restore finishes later.
               if (currentPage('copy.update') && latestRemoval.current === removed) {
+                if (focusedUndo) restoreFocus.current = { control: focusedUndo, copyId: removed.copy.id };
                 latestRemoval.current = null;
                 setRemoved(null);
               }
@@ -1490,7 +1521,12 @@ function LoadedCopiesPage({
           }}
           finalFocus={() => {
             const launcher = editorLauncher.current;
-            return currentPage() && inspection.current === editorKey && launcher?.isConnected ? launcher : false;
+            if (!currentPage() || inspection.current !== editorKey) return false;
+            return (
+              connectedReturn(launcher) ||
+              (removed?.copy.id === editing?.id ? connectedReturn(undoControl.current) : false) ||
+              headingReturn()
+            );
           }}
           detailState={detailState}
           inventoryDenied={page.inventoryState === 'forbidden'}
