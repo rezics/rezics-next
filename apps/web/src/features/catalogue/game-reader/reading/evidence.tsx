@@ -62,9 +62,7 @@ export function GameEvidence({
       {statement.qualifiers.map((part, index) => (
         <div key={index}>
           <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
-            {page.labels[part.property.id]?.text || (
-              <code className="font-mono text-xs">{part.property.id}</code>
-            )}
+            {page.labels[part.property.id]?.text || <code className="font-mono text-xs">{part.property.id}</code>}
           </dt>
           <dd>{value(part)}</dd>
         </div>
@@ -77,9 +75,7 @@ export function GameEvidence({
         <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
       ) : null}
       <details data-slot="game-fact-evidence" className="min-w-0 text-sm">
-        <summary className={`${action} cursor-pointer text-primary`}>
-          {m.game_reader_evidence({}, o)}
-        </summary>
+        <summary className={`${action} cursor-pointer text-primary`}>{m.game_reader_evidence({}, o)}</summary>
         <div className="min-w-0 space-y-3 pt-2">
           {qualifiers}
           {statement.property.data_type === 'time' ? (

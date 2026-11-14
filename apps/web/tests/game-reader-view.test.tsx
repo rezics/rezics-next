@@ -71,8 +71,7 @@ async function ui() {
     for (let node = button.parentElement; node; node = node.parentElement)
       if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open)
         ancestors.unshift(node as HTMLDetailsElement);
-    for (const details of ancestors)
-      await disclose(details.querySelector('summary')!.textContent!, details);
+    for (const details of ancestors) await disclose(details.querySelector('summary')!.textContent!, details);
     button.focus();
     await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
@@ -94,7 +93,7 @@ async function ui() {
 function readingText(node: Node): string {
   if (node instanceof Element && node.tagName === 'DETAILS' && !node.hasAttribute('open'))
     return node.querySelector('summary')?.textContent ?? '';
-  return node.childNodes.length ? Array.from(node.childNodes).map(readingText).join(' ') : node.textContent ?? '';
+  return node.childNodes.length ? Array.from(node.childNodes).map(readingText).join(' ') : (node.textContent ?? '');
 }
 
 test('default Game reading exposes useful labelled facts and historical meaning before optional evidence and comparison', async () => {
@@ -537,7 +536,9 @@ test.each([false, true])(
       };
       if (!cursor) fixture.respond(broken);
       await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport });
-      expect(mounted.host.querySelector<HTMLDetailsElement>('[data-slot="game-release-destination"]')?.open).toBe(false);
+      expect(mounted.host.querySelector<HTMLDetailsElement>('[data-slot="game-release-destination"]')?.open).toBe(
+        false,
+      );
       if (!cursor) expect(readingText(mounted.host)).not.toContain(m.game_reader_compare_unavailable());
       if (cursor) {
         fixture.respond(broken);

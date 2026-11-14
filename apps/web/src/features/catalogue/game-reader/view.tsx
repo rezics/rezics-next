@@ -340,11 +340,7 @@ function GameWindow({
               {!page.groups.length ? <p>{m.game_reader_empty({}, o)}</p> : null}
               {page.groups.map((group) => {
                 const content = (
-                  <section
-                    key={`${group.id}:${window.revision}`}
-                    className="space-y-3"
-                    data-game-fact-group={group.id}
-                  >
+                  <section key={`${group.id}:${window.revision}`} className="space-y-3" data-game-fact-group={group.id}>
                     <h3 className="font-semibold">{groups[group.id]}</h3>
                     <dl className="grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2">
                       {group.fields.map((field) => (
@@ -412,10 +408,7 @@ function GameWindow({
                   content
                 );
               })}
-              <details
-                data-slot="game-release-destination"
-                className="min-w-0 border-t border-border pt-3"
-              >
+              <details data-slot="game-release-destination" className="min-w-0 border-t border-border pt-3">
                 <summary className={`${action} cursor-pointer font-medium text-primary`}>
                   {m.subject_editions({}, o)}
                 </summary>
@@ -524,12 +517,7 @@ function GameWindow({
                                 />
                               ) : null}
                               {card ? (
-                                <WorkReleaseComparison
-                                  card={card}
-                                  page={page}
-                                  locale={locale}
-                                  link={Link}
-                                />
+                                <WorkReleaseComparison card={card} page={page} locale={locale} link={Link} />
                               ) : null}
                             </>
                           );
