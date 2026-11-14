@@ -97,10 +97,20 @@ Decision: the `/library/loans` route imports Library `loans-current.tsx`, `loans
 Decision: until whole-Kernel declaration emission publishes `copy-loans`, `@rezics/client` overlays the mounted
 GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses only those official types.
 
-`/library/loans` lists open and returned history through the current-viewer reader, with first/more cursor moves,
-extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
-extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
-links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
+Decision: Web keeps one selected loan operation and one caller-owned command intent, retaining the original
+operation, exact copy/loan revision, Gregorian dates, counterparty text, idempotency key and credential across explicit
+uncertain retry. Only an acknowledged native receipt settles it; a later refusal or current read cannot settle an
+earlier uncertain attempt. A definitive first refusal permits correction. Account, credential, route or accepted
+source retirement clears the controls and prevents late effects. Closing a selected region retains its unresolved
+command for reopening; another row cannot replace it while pending or uncertain.
+
+`/library/loans` projects one native supplied page in order, with work/copy identity, direction, counterparty and
+native date state. Review opens one contextual region; extend and return fields appear only after choosing that
+operation. Results and retry stay there. Creation goes through Copies' existing selected exact-copy slot, without
+a free-form ID or guessed revision. Both consumers share controls and return keyboard focus on Back/Close. Response
+boundaries, rather than the browser clock, initialize dates. Receipts and explicit current reads remain distinct.
+
+Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
 or `date-fns`. Host-b ready evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...`
 and then nothing for 150s; later `noDiscovery` plus an explicit include still printed no Vite
 line inside the isolated network, with diagnostics showing only the storybook-dev command and no
@@ -131,8 +141,9 @@ instance directory unless a caller passes `WEB_TEST_STATE_INSTANCE_DIR`. Return 
 the same `startDevServer` ready and `/en` first-response path as Copies.
 
 Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
-page/browser cases. No extra page stories. Keep the original Copies, loan, label, signed-in-route and
-five custody suites; do not add page stories. Public contribution on LabelShelf is live id/kind/displayName,
+page/browser cases. Loan route stories mount actual consumers with contract-shaped illustrative fixtures for
+open/due/undated, returned history, concealed context, exact uncertain retry and conflict recovery. Existing native
+and browser acceptance remains with the verifier; these fixtures claim no native or visual pass. Public contribution on LabelShelf is live id/kind/displayName,
 id-free Deleted account/organization, or null unknown; loan counterparties stay loan-owned.
 
 Cross-capability receiving keeps the existing exposure parity assertion narrow: run only its operation-to-group
@@ -157,3 +168,7 @@ The [mounted native journey](../services/kernel/test/library/loan-http.test.ts) 
 receipt replay, one open loan per copy, inclusive due dates, overdue state, extension and stale revision,
 disposal and deletion refusal while a loan is open, repeated return conflict, and returned history after copy
 deletion. The date and model suites cover the calendar and lifecycle rules independently.
+
+The Web command intent source cases in `apps/web/tests/loan-intent.test.ts` cover replay, definitive refusal,
+late effects and credential/source retirement. The selected controls and route story acceptance are described in
+[the Web reading contract](../apps/web/src/library/loans-reading.md). Execution is deferred in the source-only window.
