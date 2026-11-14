@@ -96,5 +96,5 @@ missing coverage or no reduction withdraws the recommendation. Allowance savings
   [Apache-2.0 licence](https://github.com/open-telemetry/opentelemetry-specification/blob/a4e05d9704fc5218d85a4154fb5b143ea3f5340e/LICENSE);
   indexed in `.reference/INDEX.md`. No clone code was installed, built or executed.
 
-Validation: compare the committed window, counts, durations, outcomes and evidence hashes with the retained exports.
+Validation: `.temp/daily-step-audit-2026-11-13/validate.py` compares window, counts, durations, outcomes and export hashes.
 This report changes no executable code; product suites, wrapper and compiler are not required.
