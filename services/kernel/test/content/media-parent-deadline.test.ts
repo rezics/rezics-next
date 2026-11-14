@@ -19,9 +19,7 @@ function connection(run: (sql: string) => Promise<unknown> = async () => ({ rows
           return rows?.length
             ? result
             : {
-                rows: [
-                  { partitionNo: 0, node: 'local', writeState: 'active', movedTo: null, epoch: 1, position: '0' },
-                ],
+                rows: [{ partitionNo: 0, node: 'local', writeState: 'active', movedTo: null, epoch: 1, position: '0' }],
               };
         });
       }
@@ -62,9 +60,9 @@ for (const blocked of ['BEGIN', 'partition', 'parent', 'COMMIT'] as const) {
     const pool = poolFor(first, retry);
     const work = (client: AccessClient) => client.query('SELECT parent').then(() => 'current disclosure');
 
-    await expect(
-      mediaParentSnapshot(pool, 0x1234, Date.now() + 50, work),
-    ).rejects.toBeInstanceOf(AccessUnavailableError);
+    await expect(mediaParentSnapshot(pool, 0x1234, Date.now() + 50, work)).rejects.toBeInstanceOf(
+      AccessUnavailableError,
+    );
     await first.releaseWait;
     expect(first.releaseError()).toBeInstanceOf(AccessUnavailableError);
     expect(first.statements).not.toContain('ROLLBACK');
