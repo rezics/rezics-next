@@ -2333,6 +2333,21 @@ brief moves only when it parses with the ordinary
 brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies.
 Plain-Markdown continuations inherit their omitted Goal, manager, kind and target from the current structured task brief;
 other inherited values retain the existing serialized-front-matter normalization rules.
+Decision: Scope must come from a complete bare header, no-owned work uses exact `handoff: review`, and ordering comes
+only from explicit `after`/`afterSource` dependencies; ancestry and overlap add no edge.
+Decision: A continuation may replace inherited scope only with a bare YAML scope header at the first body line after
+front matter, beginning with `goal:` then `manager:` and containing only `goal`, `manager`, optional `kind`, and
+explicit nonempty `paths`; a blank line ends the header. Complete same-owner declarations use ordinary brief validation
+and overlap checks. A complete declaration for another Goal or manager routes only after ordinary brief validation
+and when its named manager is the unique running owner; it enters that Goal's `proposed/` queue for explicit review,
+subject to the destination's overlap check. Incomplete, malformed, unresolved-owner, or otherwise non-admissible
+declarations preserve their body in the source Goal's `proposed/` directory, clear inherited paths, and include a
+short correction reason and source-manager notice; the manager writes the corrected scope into front matter before
+release. Prose and fenced examples never supply scope.
+An exact leading body line `handoff: review` followed by a blank line marks an explicit no-owned-remainder or proof
+handoff. It keeps the body intact in the source manager's `proposed/` queue with `paths: []` and a review reason;
+an incomplete marker becomes a correction proposal.
+
 regular Markdown that cannot be admitted moves to `<state>/backlog/<goal>/failed/` under a task/attempt-prefixed name,
 with a `.reason` file and a manager `instruction` naming the continuation and reason; other entries are removed. The
 attempt still records `continuation-dropped`. Decision: keep rejected Markdown in the Goal's `failed/` directory, and

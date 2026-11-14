@@ -6,7 +6,7 @@ import type { GateOutcome } from './contracts.ts';
 import { completeContinuation, harvestContinuations } from './continuation.ts';
 import { readControlPolicy } from './policy.ts';
 import { WorkerJob } from './job.ts';
-import { readRiskOwnership } from './briefs.ts';
+import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { harness, markdown } from './test-support.ts';
 import { git } from './merge.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -138,7 +138,9 @@ test("a retried attempt's continuation is dropped once an earlier attempt queued
     const earlier = { taskId: task.id, attempt: attempt.attempt };
     const first = harvestContinuations(h.store, h.settings, task, earlier);
     expect(first.queued).toHaveLength(1);
-    expect(readFileSync(first.queued[0]!, 'utf8')).toContain(`after:\n  - ${task.id}\n`);
+    expect(
+      parseBrief(readFileSync(first.queued[0]!, 'utf8'), readRiskOwnership(h.settings.riskAreasFile)).after,
+    ).toEqual([]);
     writeFileSync(join(source, 'rest of shelf.md'), rest);
     writeFileSync(join(source, 'renamed rest.md'), rest);
     const later = beginAttempt(h, h.store.task(task.id));
@@ -183,6 +185,166 @@ test('an invalid Markdown continuation is kept with its reason and reported to i
     expect(notice).toContain('instruction');
     expect(notice).toContain('invalid.md');
     expect(notice).toContain(failure.reason);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an incomplete body scope stays verbatim in the current manager proposal queue', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    const remainder = markdown.replace(
+      'Write the requested result and commit it.',
+      'goal: semantic\nmanager: semantic\n\n# Semantic reference remainder\nRead the reference parser.',
+    );
+    writeFileSync(join(source, 'semantic.md'), remainder);
+
+    const result = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt });
+
+    expect(result.queued).toEqual([]);
+    expect(result.proposed).toHaveLength(1);
+    const proposed = result.proposed[0]!.file;
+    const saved = readFileSync(proposed, 'utf8');
+    const sourceFrontMatter = /^---\n[\s\S]*?\n---\n/.exec(remainder)![0];
+    const savedFrontMatter = /^---\n[\s\S]*?\n---\n/.exec(saved)![0];
+    expect(saved.slice(savedFrontMatter.length)).toBe(remainder.slice(sourceFrontMatter.length));
+    expect(saved).toContain('paths: []');
+    expect(() => parseBrief(saved, readRiskOwnership(h.settings.riskAreasFile))).toThrow(
+      'paths must be a non-empty string list',
+    );
+    expect(readFileSync(`${proposed}.reason`, 'utf8')).toContain('goal, manager and nonempty paths in front matter');
+    expect(h.store.tasks().map(({ id }) => id)).toEqual([task.id]);
+    const notice = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory).pending(task.brief.manager);
+    expect(notice.map(({ event }) => event.summary).join('\n')).toContain('Continuation proposed');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a complete cross-Goal scope reaches its resolved owner for review', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false, semantic: false } } });
+  try {
+    h.store.db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    h.store.db
+      .query('INSERT INTO manager_sessions (id, state) VALUES (?, ?)')
+      .run('semantic', JSON.stringify({ status: 'running', kind: 'managed', goal: 'semantic' }));
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      join(source, 'semantic.md'),
+      markdown.replace(
+        'Write the requested result and commit it.',
+        'goal: semantic\nmanager: semantic\nkind: implementation\npaths: [apps/web/src/semantic/reference.ts]\n\n# Semantic reference remainder\nRead the remaining parser.',
+      ),
+    );
+
+    const result = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt });
+
+    expect(result.queued).toEqual([]);
+    expect(result.proposed).toHaveLength(1);
+    const proposed = result.proposed[0]!.file;
+    expect(proposed.startsWith(join(h.settings.stateDirectory, 'backlog', 'semantic', 'proposed'))).toBe(true);
+    expect(parseBrief(readFileSync(proposed, 'utf8'), readRiskOwnership(h.settings.riskAreasFile))).toMatchObject({
+      goal: 'semantic',
+      manager: 'semantic',
+      paths: ['apps/web/src/semantic/reference.ts'],
+      after: [],
+    });
+    expect(readFileSync(proposed, 'utf8')).toContain('# Semantic reference remainder\nRead the remaining parser.');
+    expect(
+      new SqliteManagerInbox(h.store.db, h.settings.stateDirectory)
+        .pending('semantic')
+        .map(({ event }) => event.summary)
+        .join('\n'),
+    ).toContain('Continuation proposed');
+    expect(h.store.tasks().map(({ id }) => id)).toEqual([task.id]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an explicit no-owned-remainder handoff stays reviewable while same-slice prose proceeds', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    const handoff = markdown.replace(
+      'Write the requested result and commit it.',
+      'handoff: review\n\n# No owned remainder\nThe source is committed; storage and transport own the remaining work, and Root owns proof.',
+    );
+    writeFileSync(join(source, 'handoff.md'), handoff);
+    writeFileSync(
+      join(source, 'same-slice.md'),
+      '# Finish the local slice\n\nThe first result is committed; continue the local remainder.\n',
+    );
+
+    const result = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt });
+
+    expect(result.queued).toHaveLength(1);
+    expect(result.proposed).toHaveLength(1);
+    const proposal = readFileSync(result.proposed[0]!.file, 'utf8');
+    const proposalFrontMatter = /^---\n[\s\S]*?\n---\n/.exec(proposal)![0];
+    const handoffFrontMatter = /^---\n[\s\S]*?\n---\n/.exec(handoff)![0];
+    expect(proposal).toContain('paths: []');
+    expect(proposal.slice(proposalFrontMatter.length)).toBe(handoff.slice(handoffFrontMatter.length));
+    expect(readFileSync(`${result.proposed[0]!.file}.reason`, 'utf8')).toContain('no-owned-remainder handoff');
+    expect(
+      parseBrief(readFileSync(result.queued[0]!, 'utf8'), readRiskOwnership(h.settings.riskAreasFile)),
+    ).toMatchObject({
+      paths: ['result.txt'],
+      after: [],
+    });
+    expect(h.store.tasks().map(({ id }) => id)).toEqual([task.id]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a complete body scope reaches overlap review for its declared paths', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const otherBrief = join(h.settings.stateDirectory, 'other.md');
+    writeFileSync(
+      otherBrief,
+      markdown.replace('Write the requested result and commit it.', 'Existing semantic reference work'),
+    );
+    const other = h.tasks.dispatch(otherBrief);
+    h.store.updateTask({ taskId: other.id, attempt: h.store.task(other.id).currentAttempt }, (current) => {
+      current.state = 'running';
+      current.brief.paths = ['apps/web/src/semantic/reference.ts'];
+      current.brief.markdown = '# Existing semantic reference work';
+    });
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      join(source, 'semantic.md'),
+      markdown.replace(
+        'Write the requested result and commit it.',
+        'goal: fixture\nmanager: fixture\nkind: implementation\npaths:\n  - apps/web/src/semantic/reference.ts\n\n# Finish semantic reference work\nRead the remaining parser.',
+      ),
+    );
+
+    const result = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt });
+
+    expect(result.queued).toEqual([]);
+    expect(result.proposed).toHaveLength(1);
+    expect(result.proposed[0]!.reason).toContain(`overlaps task ${other.id}`);
+    expect(readFileSync(result.proposed[0]!.file, 'utf8')).toContain('paths:\n  - apps/web/src/semantic/reference.ts');
+    expect(h.store.tasks().map(({ id }) => id)).toContain(other.id);
   } finally {
     h.dispose();
   }
@@ -309,9 +471,11 @@ test('harvest attributes new files to the attempt and proposes overlapping Goal 
     expect(harvestContinuations(h.store, h.settings, task, ref).dropped[0]?.reason).toBe(
       "goal web is not the task's goal fixture",
     );
-    const other = h.tasks.dispatch(h.briefFile);
+    const ownerBrief = join(h.settings.stateDirectory, 'owner.md');
+    writeFileSync(ownerBrief, markdown.replace('Write the requested result and commit it.', '# Existing active owner'));
+    const other = h.tasks.dispatch(ownerBrief);
     for (const state of ['running', 'held', 'ready'] as const) {
-      h.store.updateTask({ taskId: other.id, attempt: 0 }, (current) => {
+      h.store.updateTask({ taskId: other.id, attempt: h.store.task(other.id).currentAttempt }, (current) => {
         current.state = state;
       });
       writeFileSync(
@@ -323,7 +487,7 @@ test('harvest attributes new files to the attempt and proposes overlapping Goal 
       expect(result.proposed[0]?.reason).toContain(`overlaps task ${other.id}`);
       expect(readFileSync(`${result.proposed[0]!.file}.reason`, 'utf8')).toContain(other.id);
     }
-    h.store.updateTask({ taskId: other.id, attempt: 0 }, (current) => {
+    h.store.updateTask({ taskId: other.id, attempt: h.store.task(other.id).currentAttempt }, (current) => {
       current.state = 'cancelled';
     });
     const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
@@ -471,8 +635,13 @@ test('a growing continuation batch reuses one inventory and incorporates publica
 
     // Existing dispatches from this source attempt are siblings, even when their scopes match the first remainder.
     for (let index = 0; index < 5; index++) {
-      const sibling = h.tasks.dispatch(h.briefFile);
-      h.store.updateTask({ taskId: sibling.id, attempt: 0 }, (current) => {
+      const siblingBrief = join(h.settings.stateDirectory, `sibling-${index}.md`);
+      writeFileSync(
+        siblingBrief,
+        markdown.replace('Write the requested result and commit it.', `# Existing owner ${index}`),
+      );
+      const sibling = h.tasks.dispatch(siblingBrief);
+      h.store.updateTask({ taskId: sibling.id, attempt: h.store.task(sibling.id).currentAttempt }, (current) => {
         current.state = 'running';
         current.brief.paths = ['apps/web/src/journeys/j1.ts'];
         current.brief.markdown = '# Journey 1';
@@ -541,8 +710,10 @@ test('title match and remaining-path coverage are still duplicates; proposed bri
   h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const other = h.tasks.dispatch(h.briefFile);
-    h.store.updateTask({ taskId: other.id, attempt: 0 }, (current) => {
+    const ownerBrief = join(h.settings.stateDirectory, 'owner.md');
+    writeFileSync(ownerBrief, markdown.replace('Write the requested result and commit it.', '# Existing active owner'));
+    const other = h.tasks.dispatch(ownerBrief);
+    h.store.updateTask({ taskId: other.id, attempt: h.store.task(other.id).currentAttempt }, (current) => {
       current.state = 'running';
     });
     const attempt = beginAttempt(h, task);

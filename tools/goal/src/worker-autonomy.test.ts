@@ -35,21 +35,16 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   const prompt = workerPrompt(promptTask('web'), undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('Check premises against your base first.');
   expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
-  expect(prompt).toContain('Decide ambiguity and product choices reversibly, following the owner documents');
   expect(prompt).toContain(
     'Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
   );
-  expect(prompt).toContain('Code another Goal has not delivered is not a blocker');
-  expect(prompt).toContain('When two requirements conflict, follow the owner documents and the delivered code');
-  expect(prompt).toContain('A blocker is only a conflict where every choice breaks an owner-document rule');
+  expect(prompt).toContain('Such a remainder is not a blocker');
   expect(prompt).not.toContain('receipt');
   expect(prompt).not.toContain('when the work needs a product decision the contract does not make');
   expect(prompt).toContain('Large surveys are `spec-conflict` blockers starting "Research needed:"');
   expect(prompt).toContain('.temp/continuation/<short-name>.md');
   expect(prompt).toContain('goal web, manager web');
-  expect(prompt).toContain('The brief and the documents it links are your orientation');
-  expect(prompt).toContain('Summary at most 120 words');
-  expect(prompt).toContain('Blocker detail at most 80 words');
+  expect(prompt).toContain('The task contract follows:');
   expect(prompt).not.toContain('goal status');
   // A control-plane release keeps manager preflight and no continuation, but shares the conduct rules.
   const release = promptTask('control-plane');
@@ -64,7 +59,6 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   expect(controlPlane).not.toContain('.temp/continuation');
   expect(controlPlane).not.toContain('inbox send');
   expect(controlPlane).toContain('Build the whole outcome in this attempt');
-  expect(controlPlane).toContain('Summary at most 120 words');
   expect(continuesItself(promptTask('web', { workspace: { module: 'apps/web', taskName: 'shared' } }))).toBe(false);
   expect(continuesItself(promptTask('web', { brief: { ...promptTask('web').brief, target: 'stabilize' } }))).toBe(
     false,
@@ -203,7 +197,7 @@ test("a dev product attempt's continuation briefs move to Goal review when the a
     );
     expect(
       parseBrief(readFileSync(join(backlog, queued[0]!), 'utf8'), readRiskOwnership(h.settings.riskAreasFile)).after,
-    ).toEqual([task.id]);
+    ).toEqual([]);
     expect(existsSync(join(h.settings.stateDirectory, 'backlog', 'web'))).toBe(false);
     expect(readdirSync(join(task.worktree, '.temp/continuation'))).toEqual([]);
     const dropped = h.store
@@ -232,7 +226,7 @@ test('a continuation missing front matter inherits it from the brief it continue
     riskAreas: ['rights'],
     criticalPath: true,
     waiting: [],
-    after: ['parent-task'],
+    after: [],
     estimate: { lines: 100, files: 4 },
   });
   expect(completed.endsWith('\n---\nShow the notice.\n')).toBe(true);
@@ -254,17 +248,45 @@ test('a plain Markdown continuation uses current parent routing after manager re
     kind: parent.brief.kind,
     paths: parent.brief.paths,
     criticalPath: false,
-    after: ['source-task', 'parent-task'],
+    after: ['source-task'],
     afterSource: ['source-task'],
   });
   expect(completed.endsWith('\n---\n# Finish the notice\n\nShow the rest.\n')).toBe(true);
   const explicit = completeContinuation(
-    '---\ngoal: fixture\nmanager: supermanager\nkind: implementation\npaths: [result.txt]\n---\n# Keep explicit ownership\n',
+    '---\ngoal: fixture\nmanager: supermanager\nkind: implementation\npaths: [result.txt]\nafter: [dependency-task]\n---\n# Keep explicit ownership\n',
     parent,
     ownership,
   );
-  expect(parseBrief(explicit, ownership).manager).toBe('supermanager');
+  expect(parseBrief(explicit, ownership)).toMatchObject({
+    manager: 'supermanager',
+    after: ['dependency-task', 'source-task'],
+    afterSource: ['source-task'],
+  });
   expect(completeContinuation(completed, parent, ownership)).toBe(completed);
+});
+
+test('only a complete bare body scope header replaces inherited scope', () => {
+  const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
+  const parent = { id: 'parent-task', brief: brief() };
+  const declared = markdown.replace(
+    'Write the requested result and commit it.',
+    'goal: fixture\nmanager: fixture\nkind: implementation\npaths:\n  - apps/web/src/rights/notice.tsx\n\n# Finish the notice\nShow the remaining notice.',
+  );
+  const completed = completeContinuation(declared, parent, ownership);
+  expect(parseBrief(completed, ownership).paths).toEqual(['apps/web/src/rights/notice.tsx']);
+  expect(completed.endsWith('\n---\n# Finish the notice\nShow the remaining notice.\n')).toBe(true);
+
+  const incomplete = markdown.replace(
+    'Write the requested result and commit it.',
+    'goal: semantic\nmanager: semantic\n\n# Semantic reference remainder\nRead the reference parser.',
+  );
+  expect(completeContinuation(incomplete, parent, ownership)).toBe(incomplete);
+
+  const fenced = markdown.replace(
+    'Write the requested result and commit it.',
+    '```yaml\ngoal: semantic\nmanager: semantic\npaths: [apps/web/src/semantic/reference.ts]\n```\n\n# Example only',
+  );
+  expect(parseBrief(completeContinuation(fenced, parent, ownership), ownership).paths).toEqual(['result.txt']);
 });
 
 const toolBlockedWorker = `#!/usr/bin/env bun

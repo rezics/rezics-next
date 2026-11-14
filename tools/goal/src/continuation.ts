@@ -32,6 +32,7 @@ import { classifyTask } from './routing.ts';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task } from './types.ts';
 import { policyGit } from './merge.ts';
+import { resolveGoalManager } from './manager-ownership.ts';
 
 /** Where a worker writes the rest of an outcome that does not fit its attempt, inside its own worktree. */
 export const CONTINUATION_DIRECTORY = '.temp/continuation';
@@ -63,6 +64,93 @@ function scope(markdown: string): { paths: string[]; title: string } {
       .replace(/[^\p{L}\p{N}]+/gu, ' ')
       .trim(),
   };
+}
+
+type ContinuationScopeHeader =
+  | { kind: 'incomplete' }
+  | { kind: 'incomplete-handoff' }
+  | { kind: 'handoff' }
+  | { kind: 'complete'; goal: string; manager: string; briefKind?: string; paths: string[]; body: string };
+
+/** Only a bare, leading scope header or exact handoff marker can distinguish routing from prose. */
+function continuationScopeHeader(body: string): ContinuationScopeHeader | undefined {
+  if (/^handoff:[^\r\n]*(?:\r?\n|$)/.test(body)) {
+    const handoff = /^handoff: review\r?\n[ \t]*\r?\n/.exec(body);
+    return handoff ? { kind: 'handoff' } : { kind: 'incomplete-handoff' };
+  }
+  if (!/^goal:[^\r\n]*\r?\nmanager:[^\r\n]*(?:\r?\n|$)/.test(body)) return undefined;
+
+  const separator = /\r?\n[ \t]*\r?\n/.exec(body);
+  if (!separator) return { kind: 'incomplete' };
+
+  const header = body.slice(0, separator.index);
+  const lines = header.split(/\r?\n/);
+  const topLevelKeys: string[] = [];
+  let currentKey = '';
+  let malformed = false;
+  for (const line of lines) {
+    if (/^[ \t]/.test(line)) {
+      if (currentKey !== 'paths' || !/^\s+-\s+\S/.test(line)) malformed = true;
+      continue;
+    }
+    const key = /^([A-Za-z][A-Za-z0-9_-]*):/.exec(line)?.[1];
+    if (!key) {
+      malformed = true;
+      continue;
+    }
+    topLevelKeys.push(key);
+    currentKey = key;
+  }
+  let parsed: unknown;
+  try {
+    parsed = Bun.YAML.parse(header);
+  } catch {
+    return { kind: 'incomplete' };
+  }
+  if (
+    malformed ||
+    topLevelKeys[0] !== 'goal' ||
+    topLevelKeys[1] !== 'manager' ||
+    new Set(topLevelKeys).size !== topLevelKeys.length ||
+    topLevelKeys.some((key) => !['goal', 'manager', 'kind', 'paths'].includes(key)) ||
+    !parsed ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed)
+  ) {
+    return { kind: 'incomplete' };
+  }
+
+  const fields = parsed as Record<string, unknown>;
+  const declaredGoal = typeof fields.goal === 'string' ? fields.goal.trim() : '';
+  const declaredManager = typeof fields.manager === 'string' ? fields.manager.trim() : '';
+  const briefKind = fields.kind;
+  const rawPaths = fields.paths;
+  let paths: string[] = [];
+  if (typeof rawPaths === 'string') {
+    paths = rawPaths
+      .split(',')
+      .map((path) => path.trim())
+      .filter(Boolean);
+  } else if (Array.isArray(rawPaths) && rawPaths.every((path) => typeof path === 'string')) {
+    paths = rawPaths.map((path) => (path as string).trim()).filter(Boolean);
+  }
+  const invalidKind =
+    briefKind !== undefined &&
+    (typeof briefKind !== 'string' || !BRIEF_KINDS.includes(briefKind as Task['brief']['kind']));
+  if (!declaredGoal || !declaredManager || invalidKind || !paths.length) return { kind: 'incomplete' };
+  return {
+    kind: 'complete',
+    goal: declaredGoal,
+    manager: declaredManager,
+    ...(typeof briefKind === 'string' ? { briefKind } : {}),
+    paths,
+    body: body.slice(separator.index + separator[0].length),
+  };
+}
+
+function scopeHeaderFromMarkdown(markdown: string): ContinuationScopeHeader | undefined {
+  const match = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(markdown);
+  return continuationScopeHeader(match ? markdown.slice(match[0].length) : markdown);
 }
 
 function directoryEntries(directory: string, ignoreErrors = false): Dirent[] {
@@ -415,17 +503,21 @@ export function continuesItself(task: Pick<Task, 'brief'> & Partial<Pick<Task, '
 /**
  * Fill the front matter a continuation leaves out from the brief it continues, and read a lone string as a one-item
  * list: on 2026-11-02, 36 of 55 continuations were dropped, most for a missing risk-area list. Declared values stay;
- * risk areas the declared paths touch are added, and the ordinary parser still judges the result. A continuation is
- * the rest of its task, so it waits for the task: started earlier, it rebuilt the unlanded slice beside the task.
+ * risk areas the declared paths touch are added, and the ordinary parser still judges the result. A continuation
+ * keeps only declared dependencies; ancestry alone does not make its source task a prerequisite.
  */
-export function completeContinuation(
+function completeContinuationInternal(
   markdown: string,
   task: Pick<Task, 'brief' | 'id'>,
   ownership: RiskOwnership | undefined,
   policy: ControlPolicy['brief'] = defaultPolicy.brief,
+  allowBodyScope = true,
 ): string {
   const frontMatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
   const match = frontMatter.exec(markdown);
+  const originalBody = match ? markdown.slice(match[0].length) : markdown;
+  const scopeHeader = allowBodyScope ? continuationScopeHeader(originalBody) : undefined;
+  if (scopeHeader && scopeHeader.kind !== 'complete') return markdown;
   let raw: unknown;
   if (match) {
     try {
@@ -472,6 +564,12 @@ export function completeContinuation(
   front.estimate ??= task.brief.estimate;
   front.criticalPath = flag(front.criticalPath);
   front.waiting = list(front.waiting, []);
+  if (scopeHeader?.kind === 'complete') {
+    front.goal = scopeHeader.goal;
+    front.manager = scopeHeader.manager;
+    if (scopeHeader.briefKind !== undefined) front.kind = scopeHeader.briefKind;
+    front.paths = scopeHeader.paths;
+  }
   const dependencyList = (field: 'after' | 'afterSource', value: unknown): string[] => {
     const dependencies = list(value, []);
     if (!Array.isArray(dependencies) || dependencies.some((dependency) => typeof dependency !== 'string'))
@@ -484,7 +582,7 @@ export function completeContinuation(
   ];
   if (afterSource.length) front.afterSource = afterSource;
   else delete front.afterSource;
-  front.after = [...new Set([...after, ...afterSource, task.id])];
+  front.after = [...new Set([...after, ...afterSource])];
   const areas = list(front.riskAreas, []);
   const paths = front.paths;
   if (ownership && Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string')) {
@@ -502,11 +600,50 @@ export function completeContinuation(
       else delete front.acceptance;
     }
   }
-  if (match && JSON.stringify(front) === JSON.stringify(raw)) return markdown;
+  if (!scopeHeader && match && JSON.stringify(front) === JSON.stringify(raw)) return markdown;
   const newline = (match?.[0] ?? markdown).includes('\r\n') ? '\r\n' : '\n';
   const yaml = Bun.YAML.stringify(front, null, 2).trimEnd().replaceAll('\n', newline);
-  const body = match ? markdown.slice(match.index + match[0].length) : markdown;
+  const body = scopeHeader?.kind === 'complete' ? scopeHeader.body : originalBody;
   return `---${newline}${yaml}${newline}---${newline}${body}`;
+}
+
+export function completeContinuation(
+  markdown: string,
+  task: Pick<Task, 'brief' | 'id'>,
+  ownership: RiskOwnership | undefined,
+  policy: ControlPolicy['brief'] = defaultPolicy.brief,
+): string {
+  return completeContinuationInternal(markdown, task, ownership, policy);
+}
+
+/** Preserve a structured draft's body while making inherited file paths impossible to dispatch after release. */
+function incompleteScopeProposal(
+  markdown: string,
+  task: Pick<Task, 'brief' | 'id'>,
+  ownership: RiskOwnership | undefined,
+  policy: ControlPolicy['brief'],
+): string {
+  const completed = completeContinuationInternal(markdown, task, ownership, policy, false);
+  const frontMatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+  const match = frontMatter.exec(completed);
+  if (!match) return completed;
+  let raw: unknown;
+  try {
+    raw = Bun.YAML.parse(match[1]!);
+  } catch {
+    return completed;
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return completed;
+  const front = { ...(raw as Record<string, unknown>) };
+  front.goal = task.brief.goal;
+  front.manager = task.brief.manager;
+  front.kind = task.brief.kind;
+  if (task.brief.target === undefined) delete front.target;
+  else front.target = task.brief.target;
+  front.paths = [];
+  const newline = match[0].includes('\r\n') ? '\r\n' : '\n';
+  const yaml = Bun.YAML.stringify(front, null, 2).trimEnd().replaceAll('\n', newline);
+  return `---${newline}${yaml}${newline}---${newline}${completed.slice(match[0].length)}`;
 }
 
 function invalidReason(
@@ -514,6 +651,7 @@ function invalidReason(
   task: Task,
   settings: Pick<Settings, 'riskAreasFile' | 'policy'>,
   known: Set<string>,
+  expectedOwner?: Pick<Task['brief'], 'goal' | 'manager'>,
 ): string | undefined {
   try {
     const brief = parseBrief(
@@ -521,9 +659,16 @@ function invalidReason(
       readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),
       settings.policy?.brief,
     );
-    if (brief.goal !== task.brief.goal) return `goal ${brief.goal} is not the task's goal ${task.brief.goal}`;
-    if (brief.manager !== task.brief.manager)
-      return `manager ${brief.manager} is not the task's manager ${task.brief.manager}`;
+    const goal = expectedOwner?.goal ?? task.brief.goal;
+    const manager = expectedOwner?.manager ?? task.brief.manager;
+    if (brief.goal !== goal)
+      return expectedOwner
+        ? `goal ${brief.goal} is not the routed Goal ${goal}`
+        : `goal ${brief.goal} is not the task's goal ${goal}`;
+    if (brief.manager !== manager)
+      return expectedOwner
+        ? `manager ${brief.manager} is not the routed manager ${manager}`
+        : `manager ${brief.manager} is not the task's manager ${manager}`;
     if (!devProductBrief(brief)) return 'a continuation must be product work on the integration branch';
     if (classifyTask(brief) === 'mechanical') return 'mechanical work is run directly, not dispatched';
     const unknown = brief.after.filter((dependency) => !known.has(dependency));
@@ -698,7 +843,7 @@ export function harvestContinuations(
       // An older event without a file name cannot establish per-file custody.
     }
   }
-  const target = backlogDirectory(settings.stateDirectory, task.brief.goal);
+  const sourceTarget = backlogDirectory(settings.stateDirectory, task.brief.goal);
   const lease = acquireDirectoryLeaseWaiting(
     join(settings.stateDirectory, 'leases', 'backlog'),
     (settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
@@ -706,7 +851,16 @@ export function harvestContinuations(
   );
   try {
     // One task's output is one admission plan. A later harvest builds a fresh projection after this lease ends.
-    const admission = continuationAdmissionProjection(settings.stateDirectory, task.brief.goal, settings.policy);
+    const admissions = new Map<string, ContinuationAdmissionProjection>();
+    const admissionFor = (goal: string) => {
+      let admission = admissions.get(goal);
+      if (!admission) {
+        admission = continuationAdmissionProjection(settings.stateDirectory, goal, settings.policy);
+        admissions.set(goal, admission);
+      }
+      return admission;
+    };
+    admissionFor(task.brief.goal);
     for (const name of names) {
       if (inheritedNames.has(name)) continue;
       const keepSource = trackedNames.has(name);
@@ -714,7 +868,7 @@ export function harvestContinuations(
       const path = join(source, name);
       const drop = (reason: string, keepMarkdown = false) => {
         const failedPath = keepMarkdown
-          ? preserveFailedContinuation(path, target, task, ref, name, reason, keepSource)
+          ? preserveFailedContinuation(path, sourceTarget, task, ref, name, reason, keepSource)
           : undefined;
         if (!keepMarkdown && !keepSource) rmSync(path, { recursive: true, force: true });
         result.dropped.push({ file: name, reason });
@@ -754,32 +908,88 @@ export function harvestContinuations(
         continue;
       }
       const written = readFileSync(path, 'utf8');
-      const markdown = completeContinuation(written, task, ownership, settings.policy?.brief);
-      const reason = invalidReason(markdown, task, settings, known);
-      if (reason) {
-        drop(reason, true);
-        continue;
+      const scopeHeader = scopeHeaderFromMarkdown(written);
+      let destinationGoal = task.brief.goal;
+      let destinationManager = task.brief.manager;
+      let forcedProposalReason: string | undefined;
+      let checkOverlap = true;
+      let markdown: string;
+      if (scopeHeader?.kind === 'handoff') {
+        markdown = incompleteScopeProposal(written, task, ownership, settings.policy?.brief ?? defaultPolicy.brief);
+        forcedProposalReason = 'explicit no-owned-remainder handoff; manager review is required before dispatch';
+        checkOverlap = false;
+      } else if (scopeHeader?.kind === 'incomplete-handoff') {
+        markdown = incompleteScopeProposal(written, task, ownership, settings.policy?.brief ?? defaultPolicy.brief);
+        forcedProposalReason = 'incomplete handoff marker; use exactly handoff: review before manager review';
+        checkOverlap = false;
+      } else if (scopeHeader?.kind === 'incomplete') {
+        markdown = incompleteScopeProposal(written, task, ownership, settings.policy?.brief ?? defaultPolicy.brief);
+        forcedProposalReason =
+          'structured scope needs complete goal, manager and nonempty paths in front matter before dispatch';
+      } else if (
+        scopeHeader?.kind === 'complete' &&
+        (scopeHeader.goal !== task.brief.goal || scopeHeader.manager !== task.brief.manager)
+      ) {
+        const routedManager = /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(scopeHeader.goal)
+          ? resolveGoalManager(store.db, scopeHeader.goal, '')
+          : '';
+        if (routedManager && routedManager === scopeHeader.manager) {
+          destinationGoal = scopeHeader.goal;
+          destinationManager = routedManager;
+          markdown = completeContinuation(written, task, ownership, settings.policy?.brief);
+          const reason = invalidReason(markdown, task, settings, known, {
+            goal: destinationGoal,
+            manager: destinationManager,
+          });
+          if (reason) {
+            forcedProposalReason = `structured scope needs correction: ${reason}`.replace(/\s+/g, ' ').slice(0, 200);
+            checkOverlap = false;
+          } else {
+            forcedProposalReason = `structured scope routes to Goal ${destinationGoal}; its manager must review before dispatch`;
+          }
+        } else {
+          markdown = incompleteScopeProposal(written, task, ownership, settings.policy?.brief ?? defaultPolicy.brief);
+          forcedProposalReason =
+            'structured scope owner is unresolved; correct the goal and manager in front matter before dispatch';
+          checkOverlap = false;
+        }
+      } else {
+        markdown = completeContinuation(written, task, ownership, settings.policy?.brief);
+        const reason = invalidReason(markdown, task, settings, known);
+        if (reason && scopeHeader) {
+          markdown = incompleteScopeProposal(written, task, ownership, settings.policy?.brief ?? defaultPolicy.brief);
+          forcedProposalReason = `structured scope needs correction: ${reason}`.replace(/\s+/g, ' ').slice(0, 200);
+          checkOverlap = false;
+        } else if (reason) {
+          drop(reason, true);
+          continue;
+        }
       }
       const basenames = continuationBacklogNames(task.id, ref.attempt, name);
+      const target = backlogDirectory(settings.stateDirectory, destinationGoal);
+      const admission = admissionFor(destinationGoal);
       const readyCandidates = basenames.map((basename) => join(target, basename));
       const proposedCandidates = basenames.map((basename) => join(target, 'proposed', basename));
-      const overlap = continuationOverlap(
-        store.db,
-        settings.stateDirectory,
-        task.brief.goal,
-        markdown,
-        task.id,
-        [...readyCandidates, ...proposedCandidates],
-        settings.policy?.brief,
-        ref.attempt,
-        admission,
-      );
+      const overlap = checkOverlap
+        ? continuationOverlap(
+            store.db,
+            settings.stateDirectory,
+            destinationGoal,
+            markdown,
+            task.id,
+            [...readyCandidates, ...proposedCandidates],
+            settings.policy?.brief,
+            ref.attempt,
+            admission,
+          )
+        : { after: [] as string[] };
       const admitted = overlap.reason ? markdown : withContinuationAfter(markdown, overlap.after);
       const proposalReason =
         overlap.reason ??
+        forcedProposalReason ??
         (continuationReview(
           settings.stateDirectory,
-          task.brief.goal,
+          destinationGoal,
           settings.policy,
           [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, admitted) === 'match')
             ? 0
@@ -811,7 +1021,7 @@ export function harvestContinuations(
       }
       if (proposalReason) {
         recordPublishedContinuation(admission, destination, admitted);
-        proposeContinuation(destination, settings.stateDirectory, task.brief.goal, proposalReason);
+        proposeContinuation(destination, settings.stateDirectory, destinationGoal, proposalReason);
         const proposed = join(target, 'proposed', basename(destination));
         if (proposed !== destination) movePublishedContinuation(admission, destination, proposed);
         if (!keepSource) rmSync(path, { force: true });
@@ -819,8 +1029,8 @@ export function harvestContinuations(
         store.event(ref, 'continuation-proposed', { file: name, path: destination, reason: proposalReason });
         handledNames.add(name);
         new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
-          managerId: task.brief.manager,
-          goalId: task.brief.goal,
+          managerId: destinationManager,
+          goalId: destinationGoal,
           kind: 'instruction',
           summary: `Continuation proposed at ${destination}: ${proposalReason}`,
         });
