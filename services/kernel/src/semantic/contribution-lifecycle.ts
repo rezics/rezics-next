@@ -5,6 +5,7 @@ import { noEffect, runCommand, type CommandAuthorization, type CommandEvent } fr
 import type { AccountActor, Resource } from '../request/access.ts';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import { expandSlot, slotView } from './slots.ts';
+import { readContextDefaults, type ContextRecord } from './context.ts';
 import { moderationLinks } from './moderation.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { readRelease } from './definition-release-read.ts';
@@ -104,17 +105,23 @@ async function changeContribution(
         input.routeKey,
       );
       const before = (await slotView(tx, input.subject, located.property, GLOBAL_CONTEXT, {}, located.slot_id)).facts;
-      const contexts = new Map<string, { before: typeof before; after: typeof before }>();
+      const contexts = new Map<
+        string,
+        { defaults: ContextRecord['defaults']; before: typeof before; after: typeof before }
+      >();
       if (located.relation)
         for (const { context_id } of await listRelationContexts.run(tx, {
           route,
           subject_id: input.subject,
           slot_id: located.slot_id,
-        }))
+        })) {
+          const defaults = await readContextDefaults(tx, context_id);
           contexts.set(context_id, {
-            before: (await slotView(tx, input.subject, located.property, context_id, {}, located.slot_id)).facts,
+            defaults,
+            before: (await slotView(tx, input.subject, located.property, context_id, defaults, located.slot_id)).facts,
             after: [],
           });
+        }
       // Physical expansion preserves each original assertion's revision, acceptance and selection.
       await expandSlot(tx, input.subject, located.property, transactionId, located.slot_id, located.relation);
       try {
@@ -142,7 +149,9 @@ async function changeContribution(
       if (!updated) throw new ContributionLifecycleConflictError();
       const after = (await slotView(tx, input.subject, located.property, GLOBAL_CONTEXT, {}, located.slot_id)).facts;
       for (const [context, facts] of contexts)
-        facts.after = (await slotView(tx, input.subject, located.property, context, {}, located.slot_id)).facts;
+        facts.after = (
+          await slotView(tx, input.subject, located.property, context, facts.defaults, located.slot_id)
+        ).facts;
       const event: CommandEvent = {
         type: input.action === 'delete' ? RECORD_DELETED : RECORD_RESTORED,
         subject: input.subject,
