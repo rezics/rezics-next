@@ -168,6 +168,9 @@ test('reconnects to one manager pane across successive endpoint changes and move
   const nextArgv = [...f.currentArgv];
   nextArgv[nextArgv.length - 1] = 'ws://127.0.0.1:10003';
   f.panes.get('%4')!.draft = 'second unsent draft';
+  // tmux renders the shell command inside double quotes and escapes its dollar signs.
+  const sticky = f.panes.get('%4')!;
+  sticky.command = '"' + sticky.command.replace(/[\\"$`]/g, (character) => '\\' + character) + '"';
   expect(await f.windows.rebindIfStale('manager', nextArgv, '/cwd')).toBe(true);
   expect(f.archived.get('%4')).toMatchObject({ draft: 'second unsent draft' });
   expect([...f.panes.keys()]).toEqual(['%5']);

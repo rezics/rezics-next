@@ -27,7 +27,7 @@ function unwrapTmuxCommand(value: string): string | undefined {
     if (character === '\\') {
       const next = command[++index];
       if (next === undefined) return undefined;
-      unwrapped += next === '"' || next === '\\' ? next : `\\${next}`;
+      unwrapped += next === '"' || next === '\\' || next === '$' || next === '`' ? next : `\\${next}`;
     } else unwrapped += character;
   }
   return unwrapped;
