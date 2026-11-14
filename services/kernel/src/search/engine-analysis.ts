@@ -132,10 +132,13 @@ async function readAnalysisTokens(
   const path = index ? `/${index}/_analyze` : '/_analyze';
   let response: { status: number; body: unknown };
   try {
-    const { text, ...options } = request;
     response = await search.request<unknown>('POST', path, {
-      ...options,
-      text: Array.isArray(text) ? [...text] : text,
+      text: Array.isArray(request.text) ? [...request.text] : request.text,
+      ...(request.analyzer === undefined ? {} : { analyzer: request.analyzer }),
+      ...(request.normalizer === undefined ? {} : { normalizer: request.normalizer }),
+      ...(request.tokenizer === undefined ? {} : { tokenizer: request.tokenizer }),
+      ...(request.char_filter === undefined ? {} : { char_filter: [...request.char_filter] }),
+      ...(request.filter === undefined ? {} : { filter: [...request.filter] }),
     });
   } catch (error) {
     if (error instanceof SearchUnavailableError) throw error;
