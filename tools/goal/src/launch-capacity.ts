@@ -19,6 +19,7 @@ import {
   readHostPressure,
   workerHeadroomMiB,
   workerReservationMiB,
+  workerScopeIncarnation,
   HEAVY_WORKER_MIB,
   WORKER_SLICE_ROOT,
   reclaimCleanFileCacheEvidence,
@@ -26,6 +27,7 @@ import {
   type CacheReclaimRequest,
   type PressureBrake,
   type PressureSample,
+  type WorkerScopeIncarnation,
 } from './host-pressure.ts';
 
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgentSlots?: number };
@@ -72,12 +74,28 @@ export type HostCapacityStore = {
 };
 
 type WorkerScopes = {
-  parked: Set<string>;
+  parked: Map<string, WorkerScopeIncarnation>;
   terminal: Set<string>;
   writers: Set<string>;
   waitCauses: string[];
-  active?: Set<string>;
+  active?: Map<string, WorkerScopeIncarnation>;
 };
+type RetiredCheckProof = {
+  id: string;
+  physicalRunId: string;
+  runnerIdentity: ProcessIdentity;
+  checkStartedAt: string;
+};
+type RetiredWorkerScope = {
+  taskId: string;
+  attempt: number;
+  worktree: string;
+  name: string;
+  incarnation: WorkerScopeIncarnation;
+  checks: RetiredCheckProof[];
+};
+type RetiredScopeLedger = { version: 1; scopes: RetiredWorkerScope[] };
+const RETIRED_SCOPE_FILE = 'capacity-retired-scopes.json';
 function custodyEvidenceFailure(error: unknown): string | undefined {
   if (error instanceof SyntaxError) return 'custody record is malformed';
   const code = (error as NodeJS.ErrnoException | undefined)?.code;
@@ -102,13 +120,19 @@ function matchingRunnerIdentity(value: unknown, expected: ProcessIdentity): bool
   );
 }
 /** A missing or changed PID incarnation proves local terminality; unreadable /proc remains unknown. */
-function recordedRunnerTerminal(identity: ProcessIdentity): boolean {
-  const current = inspectProcessSnapshot(identity.pid, '/proc');
+function recordedRunnerTerminal(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+  const current = inspectProcessSnapshot(identity.pid, procRoot);
   return !current || current.dead || !matchingRunnerIdentity(current.identity, identity);
 }
 /** Require the physical generation on the command line; legacy runners keep their conservative reserve. */
-function detachedCheckRunner(identity: ProcessIdentity, worktree: string, id: string, physicalRunId: string): boolean {
-  const args = readFileSync(`/proc/${identity.pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+function detachedCheckRunner(
+  identity: ProcessIdentity,
+  worktree: string,
+  id: string,
+  physicalRunId: string,
+  procRoot = '/proc',
+): boolean {
+  const args = readFileSync(`${procRoot}/${identity.pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
   return (
     identity.pid === identity.group &&
     args.length === 6 &&
@@ -120,14 +144,21 @@ function detachedCheckRunner(identity: ProcessIdentity, worktree: string, id: st
   );
 }
 /** Require both process identity and its exact current owned cgroup; unit-name resemblance is insufficient. */
-function ownedWorkerScope(identity: ProcessIdentity, taskId: string, attempt: number): string | undefined {
-  if (!sameProcess(identity)) return undefined;
-  const group = /^0::(.+)$/m.exec(readFileSync(`/proc/${identity.pid}/cgroup`, 'utf8'))?.[1];
+function ownedWorkerScope(
+  identity: ProcessIdentity,
+  taskId: string,
+  attempt: number,
+  root = WORKER_SLICE_ROOT,
+  procRoot = '/proc',
+  cgroupRoot = '/sys/fs/cgroup',
+): string | undefined {
+  if (!sameProcess(identity, procRoot)) return undefined;
+  const group = /^0::(.+)$/m.exec(readFileSync(`${procRoot}/${identity.pid}/cgroup`, 'utf8'))?.[1];
   const safeTask = taskId.replace(/[^A-Za-z0-9:_.-]/g, '-').replace(/^-+|-+$/g, '') || 'task';
-  if (!group || !sameProcess(identity)) return undefined;
+  if (!group || !sameProcess(identity, procRoot)) return undefined;
   const scope = basename(group);
   if (
-    join('/sys/fs/cgroup', group) !== join(WORKER_SLICE_ROOT, scope) ||
+    join(cgroupRoot, group) !== join(root, scope) ||
     !scope.startsWith(`rezics-worker-${safeTask}-${attempt}-`) ||
     !/^[a-z0-9]+\.scope$/.test(scope.slice(`rezics-worker-${safeTask}-${attempt}-`.length))
   )
@@ -153,9 +184,125 @@ function historicalWorkerScopes(root: string, taskId: string, attempt: number): 
   }
   return names.filter((name) => name.startsWith(prefix) && /^[a-z0-9]+\.scope$/.test(name.slice(prefix.length)));
 }
-function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): WorkerScopes {
+function sameScopeIncarnation(left: WorkerScopeIncarnation, right: WorkerScopeIncarnation): boolean {
+  return left.device === right.device && left.inode === right.inode && left.ctimeNs === right.ctimeNs;
+}
+function retirementKey(value: Pick<RetiredWorkerScope, 'taskId' | 'attempt' | 'name'>): string {
+  return JSON.stringify([value.taskId, value.attempt, value.name]);
+}
+function validScopeIncarnation(value: unknown): value is WorkerScopeIncarnation {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return ['device', 'inode', 'ctimeNs'].every(
+    (key) => typeof record[key] === 'string' && /^\d+$/.test(record[key] as string),
+  );
+}
+function readRetiredScopeLedger(stateDirectory: string): { scopes: RetiredWorkerScope[]; malformed: boolean } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(join(stateDirectory, RETIRED_SCOPE_FILE), 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { scopes: [], malformed: false };
+    if (error instanceof SyntaxError) return { scopes: [], malformed: true };
+    throw error;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { scopes: [], malformed: true };
+  const ledger = parsed as Record<string, unknown>;
+  if (ledger.version !== 1 || !Array.isArray(ledger.scopes)) return { scopes: [], malformed: true };
+  const scopes: RetiredWorkerScope[] = [];
+  const seen = new Set<string>();
+  for (const item of ledger.scopes) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return { scopes: [], malformed: true };
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record.taskId !== 'string' ||
+      !record.taskId ||
+      !Number.isSafeInteger(record.attempt) ||
+      Number(record.attempt) < 1 ||
+      typeof record.worktree !== 'string' ||
+      !record.worktree ||
+      typeof record.name !== 'string' ||
+      !validScopeIncarnation(record.incarnation) ||
+      !Array.isArray(record.checks) ||
+      record.checks.length === 0
+    )
+      return { scopes: [], malformed: true };
+    const attempt = Number(record.attempt);
+    const prefix = workerScopePrefix(record.taskId, attempt);
+    if (!prefix || !record.name.startsWith(prefix) || !/^[a-z0-9]+\.scope$/.test(record.name.slice(prefix.length)))
+      return { scopes: [], malformed: true };
+    const checks: RetiredCheckProof[] = [];
+    for (const check of record.checks) {
+      if (!check || typeof check !== 'object' || Array.isArray(check)) return { scopes: [], malformed: true };
+      const proof = check as Record<string, unknown>;
+      if (
+        typeof proof.id !== 'string' ||
+        !isCheckId(proof.id) ||
+        typeof proof.physicalRunId !== 'string' ||
+        !isPhysicalRunId(proof.physicalRunId) ||
+        typeof proof.checkStartedAt !== 'string' ||
+        !Number.isFinite(Date.parse(proof.checkStartedAt))
+      )
+        return { scopes: [], malformed: true };
+      let runnerIdentity: ProcessIdentity;
+      try {
+        runnerIdentity = validateRunnerIdentity(proof.runnerIdentity);
+      } catch {
+        return { scopes: [], malformed: true };
+      }
+      checks.push({
+        id: proof.id,
+        physicalRunId: proof.physicalRunId,
+        runnerIdentity,
+        checkStartedAt: proof.checkStartedAt,
+      });
+    }
+    const retired = {
+      taskId: record.taskId,
+      attempt,
+      worktree: record.worktree,
+      name: record.name,
+      incarnation: record.incarnation,
+      checks,
+    } satisfies RetiredWorkerScope;
+    const key = retirementKey(retired);
+    if (seen.has(key)) return { scopes: [], malformed: true };
+    seen.add(key);
+    scopes.push(retired);
+  }
+  return { scopes, malformed: false };
+}
+function writeRetiredScopeLedger(stateDirectory: string, scopes: Iterable<RetiredWorkerScope>): void {
+  const file = join(stateDirectory, RETIRED_SCOPE_FILE);
+  const ordered = [...scopes].sort((left, right) => left.name.localeCompare(right.name));
+  const temporary = `${file}.${process.pid}.tmp`;
+  writeFileSync(temporary, JSON.stringify({ version: 1, scopes: ordered } satisfies RetiredScopeLedger));
+  renameSync(temporary, file);
+}
+function scopePredatesChecks(incarnation: WorkerScopeIncarnation, checks: readonly RetiredCheckProof[]): boolean {
+  let earliestCheckStart = Number.POSITIVE_INFINITY;
+  for (const check of checks) {
+    const startedAt = Date.parse(check.checkStartedAt);
+    if (!Number.isFinite(startedAt)) return false;
+    earliestCheckStart = Math.min(earliestCheckStart, startedAt);
+  }
+  if (!Number.isFinite(earliestCheckStart)) return false;
+  const earliestCheckStartNs = BigInt(earliestCheckStart) * 1_000_000n;
+  return BigInt(incarnation.ctimeNs) < earliestCheckStartNs;
+}
+type WorkerScopeOptions = {
+  root?: string;
+  stateDirectory?: string;
+  procRoot?: string;
+  cgroupRoot?: string;
+  persistRetirements?: boolean;
+};
+function workerScopes(store: HostCapacityStore, options: WorkerScopeOptions = {}): WorkerScopes {
+  const root = options.root ?? WORKER_SLICE_ROOT;
+  const procRoot = options.procRoot ?? '/proc';
+  const cgroupRoot = options.cgroupRoot ?? '/sys/fs/cgroup';
   const result: WorkerScopes = {
-    parked: new Set(),
+    parked: new Map(),
     terminal: new Set(),
     writers: new Set(),
     waitCauses: [],
@@ -164,7 +311,7 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
     result.waitCauses.push('current worker/check projection is unavailable; scope reserves retained');
     return result;
   }
-  result.active = new Set();
+  result.active = new Map();
   let rows: { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string }[];
   try {
     rows = store.db
@@ -182,27 +329,52 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
     result.waitCauses.push(`current worker/check projection is unavailable (${reason}); scope reserves retained`);
     return result;
   }
+  const ledgerRead = options.stateDirectory
+    ? readRetiredScopeLedger(options.stateDirectory)
+    : { scopes: [], malformed: false };
+  const retirements = new Map(ledgerRead.scopes.map((scope) => [retirementKey(scope), scope]));
+  const initialLedger = JSON.stringify([...retirements.values()].sort((a, b) => a.name.localeCompare(b.name)));
+  if (ledgerRead.malformed) result.waitCauses.push('retired-scope evidence is malformed; scope reserves retained');
+  const unknownWriterGenerations = new Set<string>();
+  const currentWorktrees = new Map<string, string>();
   for (const row of rows) {
+    const generation = attemptKey(row.task_id, row.current_attempt);
+    if (typeof row.worktree === 'string' && row.worktree.length > 0) currentWorktrees.set(generation, row.worktree);
     try {
       const attempt = JSON.parse(row.body) as Attempt;
       if (
         attempt.taskId !== row.task_id ||
         attempt.attempt !== row.current_attempt ||
         attempt.state !== row.attempt_state
-      )
+      ) {
+        unknownWriterGenerations.add(generation);
         continue;
-      const writer = attempt.process && ownedWorkerScope(attempt.process, row.task_id, row.current_attempt);
+      }
+      const writer =
+        attempt.process &&
+        ownedWorkerScope(attempt.process, row.task_id, row.current_attempt, root, procRoot, cgroupRoot);
       if (attempt.state === 'running') {
-        if (!writer) continue;
-        result.writers.add(attemptKey(row.task_id, row.current_attempt));
-        result.active.add(writer);
-      } else if (attempt.process !== null) continue;
+        if (!writer) unknownWriterGenerations.add(generation);
+        else {
+          const incarnation = workerScopeIncarnation(root, writer);
+          if (!incarnation) unknownWriterGenerations.add(generation);
+          else {
+            result.writers.add(generation);
+            result.active.set(writer, incarnation);
+          }
+        }
+      } else if (attempt.process !== null) {
+        unknownWriterGenerations.add(generation);
+        continue;
+      }
       let allChecksTerminal =
         attempt.state === 'waiting' && attempt.process === null && (attempt.checks?.length ?? 0) > 0;
+      const terminalChecks: RetiredCheckProof[] = [];
       for (const id of attempt.checks ?? []) {
         const note = (cause: string) => {
           const detail = `attempt ${row.task_id}/${row.current_attempt} check ${id}: ${cause}`;
           if (!result.waitCauses.includes(detail)) result.waitCauses.push(detail);
+          unknownWriterGenerations.add(generation);
         };
         if (!isCheckId(id)) {
           allChecksTerminal = false;
@@ -249,9 +421,11 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
               physical.remoteExpected !== true ||
               !['finished', 'unknown'].includes(physical.status) ||
               physical.terminalProof?.local !== true ||
+              typeof physical.createdAt !== 'string' ||
+              !Number.isFinite(Date.parse(physical.createdAt)) ||
               (record.runnerHost !== undefined && record.runnerHost !== physical.runnerHost) ||
               (record.runnerIdentity !== undefined && !matchingRunnerIdentity(record.runnerIdentity, identity)) ||
-              !recordedRunnerTerminal(identity) ||
+              !recordedRunnerTerminal(identity, procRoot) ||
               !Number.isSafeInteger(record.exitCode)
             ) {
               allChecksTerminal = false;
@@ -259,6 +433,12 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
               continue;
             }
             // Remote terminality and cleanup stay independent. Local proof only retires this scope's future writer reserve.
+            terminalChecks.push({
+              id,
+              physicalRunId: record.physicalRunId,
+              runnerIdentity: identity,
+              checkStartedAt: physical.createdAt,
+            });
             continue;
           }
           allChecksTerminal = false;
@@ -286,16 +466,19 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
             physical.runnerHost !== record.runnerHost ||
             physical.remoteExpected !== true ||
             !matchingRunnerIdentity(physical.runnerIdentity, identity) ||
-            !detachedCheckRunner(identity, row.worktree, id, record.physicalRunId)
+            !detachedCheckRunner(identity, row.worktree, id, record.physicalRunId, procRoot)
           ) {
             note('live or replacement check custody is ambiguous; scope reserve retained');
             continue;
           }
-          const scope = ownedWorkerScope(identity, row.task_id, row.current_attempt);
+          const scope = ownedWorkerScope(identity, row.task_id, row.current_attempt, root, procRoot, cgroupRoot);
           // A running session can share a scope with its check. It releases no writing reserve until parked,
           // or until a resumed writer is positively identified in a different, newly launched scope.
-          if (scope && scope !== writer) result.parked.add(scope);
-          else note('live check scope ownership is unavailable; scope reserve retained');
+          if (scope && scope !== writer) {
+            const incarnation = workerScopeIncarnation(root, scope);
+            if (incarnation) result.parked.set(scope, incarnation);
+            else note('live check scope identity is unavailable; scope reserve retained');
+          } else note('live check scope ownership is unavailable; scope reserve retained');
         } catch (error) {
           const cause = custodyEvidenceFailure(error);
           if (!cause) throw error;
@@ -309,8 +492,22 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
           if (!result.waitCauses.includes(detail)) result.waitCauses.push(detail);
         } else {
           for (const scope of historicalWorkerScopes(root, row.task_id, row.current_attempt)) {
-            result.parked.add(scope);
-            result.terminal.add(scope);
+            const incarnation = workerScopeIncarnation(root, scope);
+            if (!incarnation) continue;
+            if (!scopePredatesChecks(incarnation, terminalChecks)) {
+              const detail = `attempt ${row.task_id}/${row.current_attempt}: scope ${scope} does not predate its finished checks; scope reserve retained`;
+              if (!result.waitCauses.includes(detail)) result.waitCauses.push(detail);
+              continue;
+            }
+            const retired: RetiredWorkerScope = {
+              taskId: row.task_id,
+              attempt: row.current_attempt,
+              worktree: row.worktree,
+              name: scope,
+              incarnation,
+              checks: terminalChecks,
+            };
+            retirements.set(retirementKey(retired), retired);
           }
         }
       }
@@ -320,10 +517,36 @@ function workerScopes(store: HostCapacityStore, root = WORKER_SLICE_ROOT): Worke
       // Unknown worker identity cannot release a reservation.
       const detail = `attempt ${row.task_id}/${row.current_attempt}: ${cause}; scope reserve retained`;
       if (!result.waitCauses.includes(detail)) result.waitCauses.push(detail);
+      unknownWriterGenerations.add(generation);
     }
   }
+  for (const [key, retired] of retirements) {
+    const incarnation = workerScopeIncarnation(root, retired.name);
+    if (
+      !incarnation ||
+      !sameScopeIncarnation(incarnation, retired.incarnation) ||
+      !scopePredatesChecks(retired.incarnation, retired.checks)
+    ) {
+      retirements.delete(key);
+      continue;
+    }
+    const generation = attemptKey(retired.taskId, retired.attempt);
+    const currentWorktree = currentWorktrees.get(generation);
+    if (currentWorktree !== undefined && currentWorktree !== retired.worktree) {
+      retirements.delete(key);
+      continue;
+    }
+    if (unknownWriterGenerations.has(generation)) continue;
+    result.parked.set(retired.name, incarnation);
+    result.terminal.add(retired.name);
+  }
   // Even contradictory ownership must never exempt a scope containing a positively identified current writer.
-  for (const scope of result.active) result.parked.delete(scope);
+  for (const scope of result.active.keys()) result.parked.delete(scope);
+  if (options.persistRetirements && options.stateDirectory) {
+    const nextLedger = JSON.stringify([...retirements.values()].sort((a, b) => a.name.localeCompare(b.name)));
+    if (nextLedger !== initialLedger || ledgerRead.malformed)
+      writeRetiredScopeLedger(options.stateDirectory, retirements.values());
+  }
   return result;
 }
 
@@ -351,7 +574,7 @@ export function capacityAvailable(
     /* Defaults. */
   }
   const running = store.capacityAttemptsCount(false) + store.capacityAttemptsCount(true);
-  const scopes = workerScopes(store);
+  const scopes = workerScopes(store, { stateDirectory });
   const tickets = capacityTickets(stateDirectory, store);
   return (
     hasCapacity(running + admittedTicketCount(tickets), availableMiB(), capacity) &&
@@ -400,6 +623,8 @@ export async function awaitHostCapacity(
     workerHeadroomMiB?: typeof workerHeadroomMiB;
     /** Test and host adapter seams; no persistent capacity configuration is added. */
     workerSliceRoot?: string;
+    workerProcessRoot?: string;
+    workerCgroupRoot?: string;
     memoryCurrentMiB?: () => number | undefined;
     reclaim?: (deficitMiB: number) => number | void | CacheReclaimRequest;
   } = {},
@@ -500,7 +725,13 @@ export async function awaitHostCapacity(
         const brake = pressureBrake(readPressureBrake(stateDirectory), pressure, now);
         if (hostCapacity) writeFileSync(join(stateDirectory, 'capacity-pressure.json'), JSON.stringify(brake));
         const sliceRoot = options.workerSliceRoot ?? WORKER_SLICE_ROOT;
-        const scopes = workerScopes(store, sliceRoot);
+        const scopes = workerScopes(store, {
+          root: sliceRoot,
+          stateDirectory,
+          ...(options.workerProcessRoot === undefined ? {} : { procRoot: options.workerProcessRoot }),
+          ...(options.workerCgroupRoot === undefined ? {} : { cgroupRoot: options.workerCgroupRoot }),
+          persistRetirements: true,
+        });
         const sliceHeadroom = (options.workerHeadroomMiB ?? workerHeadroomMiB)(
           running + otherRunning,
           sliceRoot,

@@ -160,7 +160,8 @@ test('reconnects to one manager pane across successive endpoint changes and move
   expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(true);
   expect(f.archived.get('%3')).toEqual(original);
   expect([...f.panes.keys()]).toEqual(['%4']);
-  expect(f.panes.get('%4')?.command).toBe(f.encode(f.currentArgv));
+  expect(f.panes.get('%4')?.command).toStartWith("'/bin/sh' '-c' ");
+  expect(f.panes.get('%4')?.command).toEndWith(f.encode(f.currentArgv));
   expect(f.calls.some((argv) => argv.includes('send-keys'))).toBe(false);
   expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
 
