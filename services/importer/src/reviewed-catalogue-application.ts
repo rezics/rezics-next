@@ -35,11 +35,49 @@ import {
 } from './reviewed-catalogue-contract.ts';
 import type { ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 import { remainingRequestFromPreparedCommand } from './seed-remaining-request.ts';
+import { currentCandidateSelection, readCurrentCandidatePages } from './showcase-current-reads.ts';
 
 type CurrentReviewedCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
 
 function isCurrentReviewedRank(rank: unknown): rank is 'normal' | 'preferred' {
   return rank === 'normal' || rank === 'preferred';
+}
+
+async function readReviewedCandidateSelection(
+  port: ReviewedCataloguePort,
+  subject: string,
+  property: string,
+  signal?: AbortSignal,
+) {
+  const first = await port.reviewedCandidates(subject, reviewedCatalogueSlot(property), signal);
+  if (first.next === null) {
+    const candidates = first.candidates.filter(
+      (candidate): candidate is CurrentReviewedCandidate => 'statement' in candidate,
+    );
+    return { candidates, complete: true, adoption: first.adoption, selection: currentCandidateSelection(candidates) };
+  }
+  let initialPage: ReviewedCandidatePage | null = first;
+  const page = await readCurrentCandidatePages(
+    {
+      async reviewedCandidates(id, query) {
+        if (initialPage) {
+          const page = initialPage;
+          initialPage = null;
+          return page;
+        }
+        return port.reviewedCandidates(id, query, signal);
+      },
+    },
+    subject,
+    property,
+  );
+  return {
+    complete: page.complete,
+    adoption: page.adoption,
+    // Complete listing preserves the native rows and removes deletion tombstones.
+    candidates: page.candidates as CurrentReviewedCandidate[],
+    selection: page.complete ? currentCandidateSelection(page.candidates) : [],
+  };
 }
 
 export type ReviewedCatalogueApplication = Readonly<{
@@ -120,8 +158,8 @@ async function select(
 ): Promise<ReviewedCatalogueReceipt> {
   assertReviewedCatalogue(proposed.value.type === 'value' && typeof proposed.value.content === 'string');
   const query = reviewedCatalogueSlot(proposed.property.id);
-  let page = await port.reviewedCandidates(subject, query, signal);
-  assertReviewedCatalogue(page.next === null, 'Reviewed catalogue candidate page exceeds its bound');
+  let page = await readReviewedCandidateSelection(port, subject, query.property, signal);
+  assertReviewedCatalogue(page.complete, 'Reviewed catalogue candidate listing exceeds its bound');
   const row = page.candidates.find((c) => c.id === candidate);
   assertReviewedCatalogue(
     row &&
@@ -132,11 +170,11 @@ async function select(
   );
   assertReviewedCatalogue(row.decision !== 'rejected' && row.rank !== 'deprecated');
   assertReviewedCatalogue(
-    !page.candidates.some((c) => 'statement' in c && c.id !== candidate && isCurrentReviewedRank(c.rank)),
+    !page.selection.some((c) => c.candidate !== candidate),
     'Existing editorial selection must not be replaced',
   );
   assertReviewedCatalogue(
-    !page.adoption || (page.adoption.mode === 'replace' && isCurrentReviewedRank(row.rank)),
+    !page.adoption || (page.adoption.mode === 'replace' && page.selection.some((c) => c.candidate === candidate)),
     'Existing editorial head requires an explicit operator decision',
   );
   const acceptance = await port.acceptReviewedCandidate(
@@ -150,15 +188,13 @@ async function select(
     signal,
   );
   assertReviewedCatalogue(acceptance.acceptance.candidate === candidate && acceptance.acceptance.decision === 'accept');
-  page = await port.reviewedCandidates(subject, query, signal);
+  page = await readReviewedCandidateSelection(port, subject, query.property, signal);
   assertReviewedCatalogue(
-    page.next === null &&
-      !page.candidates.some((c) => 'statement' in c && c.id !== candidate && isCurrentReviewedRank(c.rank)),
+    page.complete && !page.selection.some((c) => c.candidate !== candidate),
   );
   assertReviewedCatalogue(
     !page.adoption ||
-      (page.adoption.mode === 'replace' &&
-        page.candidates.some((c) => 'statement' in c && c.id === candidate && isCurrentReviewedRank(c.rank))),
+      (page.adoption.mode === 'replace' && page.selection.some((c) => c.candidate === candidate)),
   );
   const adoption = await port.adoptReviewedCandidates(
     subject,
@@ -369,8 +405,8 @@ async function inspect(
       for (const fact of seed.facts) {
         const expected = reviewedCatalogueStatement(fact, subjects);
         assertReviewedCatalogue(expected.value.type === 'value' && typeof expected.value.content === 'string');
-        const page = await port.reviewedCandidates(subjects[seed.key]!, reviewedCatalogueSlot(fact.property), signal);
-        if (page.next !== null) return { state: 'unavailable' };
+        const page = await readReviewedCandidateSelection(port, subjects[seed.key]!, fact.property, signal);
+        if (!page.complete) return { state: 'unavailable' };
         if (page.adoption?.mode !== 'replace') return { state: 'withdrawn' };
         const content = expected.value.content;
         const currentCandidates = page.candidates.filter(
@@ -389,7 +425,7 @@ async function inspect(
         if (
           selected.length !== 1 ||
           !sameStatementProvenance(selected[0]!.statement, expected) ||
-          currentCandidates.some((c) => c.id !== selected[0]!.id && isCurrentReviewedRank(c.rank)) ||
+          page.selection.some((c) => c.candidate !== selected[0]!.id) ||
           !items[seed.key]!.statements[fact.property]?.some(
             (s) => s.id === selected[0]!.id && isCurrentReviewedRank(s.rank),
           )
