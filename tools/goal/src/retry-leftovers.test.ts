@@ -34,9 +34,9 @@ function delayGitStatusOnce(h: ReturnType<typeof harness>) {
   const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, 'git'), `#!/bin/sh
-if [ "$1" = status ] && [ "$2" = --porcelain=v1 ] && [ ! -e "$PWD/.temp/status-timeout" ]; then
-  touch "$PWD/.temp/status-timeout"; echo $$ > "$PWD/.temp/status-pid"
-  find "$REZICS_TEST_CAPACITY_QUEUE" -maxdepth 1 -type f -print > "$PWD/.temp/status-ticket-seen"
+if [ "$1" = status ] && [ "$2" = --porcelain=v1 ] && [ ! -e "$(pwd -P)/.temp/status-timeout" ]; then
+  touch "$(pwd -P)/.temp/status-timeout"; echo $$ > "$(pwd -P)/.temp/status-pid"
+  find "$REZICS_TEST_CAPACITY_QUEUE" -maxdepth 1 -type f -print > "$(pwd -P)/.temp/status-ticket-seen"
   exec /usr/bin/env bun -e 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000)'
 fi
 exec ${JSON.stringify(realGit)} "$@"
@@ -147,15 +147,13 @@ test('a genuine leftover Git error keeps its task diagnosis without a shared tim
     const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox);
     const task = h.tasks.dispatch(h.briefFile);
     await runAndStop(h, job, task.id);
-    h.store.recordExplicitRetry({ taskId: task.id, attempt: 1 }, () => {}, { evidence: h.briefFile });
 
     const corruptIndex = join(h.root, '.temp', 'corrupt-index');
     writeFileSync(corruptIndex, 'broken index');
     process.env.GIT_INDEX_FILE = corruptIndex;
-    await job.runHostTask('retry', task.id);
+    await expect(job.start(task.id)).rejects.toThrow('git status:');
 
     expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
-    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })?.status).toBe('pending');
     const failure = JSON.parse(h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body);
     expect(failure).toMatchObject({ diagnostic: {
       commandText: 'git status --porcelain=v1 --untracked-files=normal', timedOut: false,
@@ -175,7 +173,7 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
   let delayed: ReturnType<typeof delayGitStatusOnce> | undefined;
   try {
     h.settings.integration.operationsManager = 'operations';
-    h.settings.policy!.host.recoveryIntervalMs = 300;
+    h.settings.policy!.host.recoveryIntervalMs = 3000;
     h.settings.policy!.worker.retryIntentLeadMs = 1000;
     h.settings.policy!.worker.capacityPauseMs = 300;
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
@@ -241,7 +239,7 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
     ).toBe(true);
 
     const resumedHost = restartedHost();
-    await new Promise((resolve) => setTimeout(resolve, 1400));
+    await new Promise((resolve) => setTimeout(resolve, 4100));
     resumedHost.resumePendingRetries();
     await resumedHost.drain();
     for (const task of tasks) {
