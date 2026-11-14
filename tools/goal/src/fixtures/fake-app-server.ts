@@ -11,6 +11,11 @@ const turns = new Map<string, any>();
 const items = new Map<string, { turnId: string; item: any }[]>();
 const delayed = new Map<number, any>();
 const send = (message: unknown) => process.stdout.write(`${JSON.stringify(message)}\n`);
+const subscribedThreads = new Set<string>();
+const emit = (notification: { method: string; params: { threadId: string; [key: string]: unknown } }) => {
+  if (process.env.FAKE_THREAD_SUBSCRIPTIONS !== '1' || subscribedThreads.has(notification.params.threadId))
+    send(notification);
+};
 
 function persistItem(threadId: string, turnId: string, item: any): void {
   const entries = items.get(threadId) ?? [];
@@ -55,10 +60,14 @@ function respond(message: any): void {
   }
   let result: any = {};
   switch (message.method) {
-    case 'thread/start':
-      result = { thread: { id: `thread-${++nextThread}` } };
+    case 'thread/start': {
+      const id = `thread-${++nextThread}`;
+      subscribedThreads.add(id);
+      result = { thread: { id } };
       break;
+    }
     case 'thread/resume':
+      subscribedThreads.add(p.threadId);
       result = { thread: { id: p.threadId, turns: turns.has(p.threadId) ? [turns.get(p.threadId)] : [] } };
       break;
     case 'thread/items/list': {
@@ -73,11 +82,11 @@ function respond(message: any): void {
       const goal = { tokensUsed: 0, timeUsedSeconds: 0, ...goals.get(p.threadId), ...p };
       goals.set(p.threadId, goal);
       result = { goal };
-      send({ method: 'thread/goal/updated', params: { threadId: p.threadId, goal } });
+      emit({ method: 'thread/goal/updated', params: { threadId: p.threadId, goal } });
       if (process.env.FAKE_GOAL_AUTO_START_ON_ACTIVE === '1' && previous?.status === 'paused' && p.status === 'active') {
         const turn = { id: `turn-${++nextTurn}`, status: 'inProgress', source: 'goal' };
         turns.set(p.threadId, turn);
-        send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
+        emit({ method: 'turn/started', params: { threadId: p.threadId, turn } });
       }
       if (
         process.env.FAKE_GOAL_LATE_START_ON_PAUSE === '1' &&
@@ -89,7 +98,7 @@ function respond(message: any): void {
         setTimeout(() => {
           const turn = { id: `turn-${++nextTurn}`, status: 'inProgress', source: 'goal' };
           turns.set(p.threadId, turn);
-          send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
+          emit({ method: 'turn/started', params: { threadId: p.threadId, turn } });
         }, 0);
       }
       break;
@@ -103,12 +112,17 @@ function respond(message: any): void {
       break;
     case 'turn/start': {
       if (turns.get(p.threadId)?.status === 'inProgress') {
+        if (process.env.FAKE_THREAD_SUBSCRIPTIONS === '1') {
+          // Codex can accept turn/start by steering the existing native turn, without subscribing the caller.
+          result = { turn: turns.get(p.threadId) };
+          break;
+        }
         send({ id: message.id, error: { code: -32600, message: 'Turn already active' } });
         return;
       }
       const turn = { id: `turn-${++nextTurn}`, status: 'inProgress' };
       turns.set(p.threadId, turn);
-      send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
+      emit({ method: 'turn/started', params: { threadId: p.threadId, turn } });
       result = { turn };
       break;
     }
@@ -122,14 +136,17 @@ function respond(message: any): void {
     case 'turn/interrupt': {
       const turn = { id: p.turnId, status: 'interrupted' };
       turns.delete(p.threadId);
-      send({ method: 'turn/completed', params: { threadId: p.threadId, turn } });
+      emit({ method: 'turn/completed', params: { threadId: p.threadId, turn } });
       break;
     }
     case 'test/notify':
       if (p.method === 'turn/completed') turns.delete(p.params.threadId);
       if (p.method === 'item/started' || p.method === 'item/completed')
         persistItem(p.params.threadId, p.params.turnId, p.params.item);
-      send(p);
+      emit(p);
+      break;
+    case 'test/drop-thread-subscriptions':
+      subscribedThreads.clear();
       break;
     case 'test/persist-item':
       persistItem(p.threadId, p.turnId, p.item);
