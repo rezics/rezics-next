@@ -3,9 +3,9 @@ import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezic
 import { RichTextEditor } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { DocumentBody } from '../document-body';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { PostReadingBody } from '../threads/post-reading-body';
 import type { NativeDraftCreate } from './contract';
 import type { StudioController } from './controller';
 import { workspaceEditorLabels } from './workspace-language';
@@ -18,9 +18,12 @@ type DraftForm = {
   subjects: string;
   media: string;
   snapshot: 'ready' | 'pending' | 'invalid';
+  snapshotGeneration: number;
   version: number;
 };
 type Submission = { version: number; title: string; boardId: string };
+// Each view entry owns a visit, so callbacks from an earlier preview cannot revive on return.
+type DraftView = { mode: 'write' | 'preview' };
 
 function emptyForm(): DraftForm {
   return {
@@ -31,6 +34,7 @@ function emptyForm(): DraftForm {
     subjects: '',
     media: '',
     snapshot: 'ready',
+    snapshotGeneration: 0,
     version: 0,
   };
 }
@@ -51,11 +55,14 @@ export function NativeDraftComposer({
   const [form, setForm] = useState(emptyForm);
   // The ref points at the same immutable form, allowing synchronous snapshot invalidation before React renders.
   const currentForm = useRef(form);
+  const currentController = useRef(controller);
+  currentController.current = controller;
   const [submission, setSubmission] = useState<Submission | null>(null);
   const submitted = useRef<Submission | null>(null);
   const [generation, setGeneration] = useState(0);
   const editorGeneration = useRef(0);
-  const [view, setView] = useState<'write' | 'preview'>('write');
+  const [view, setView] = useState<DraftView>({ mode: 'write' });
+  const currentView = useRef(view);
   const [discard, setDiscard] = useState(false);
   const [failed, setFailed] = useState(false);
   const [retained, setRetained] = useState(false);
@@ -75,6 +82,24 @@ export function NativeDraftComposer({
     !ownsCommand &&
     previewReady &&
     Boolean(form.boardId.trim() && form.title.trim() && form.licence.trim());
+  // Metadata edits keep the reader in place. Every structured snapshot lifecycle, including equal bytes,
+  // replaces it. The identity describes only this unsent visit; it makes no persisted revision claim.
+  const readerIdentity = useMemo(
+    () => ({}),
+    [controller, view, form.body, form.snapshotGeneration, generation, locale],
+  );
+  const previewVisitKey = `studio-unsent:${id}:${generation}:${form.snapshotGeneration}:${locale}`;
+  const isReaderCurrent = () => {
+    const live = currentForm.current;
+    return (
+      current() &&
+      view.mode === 'preview' &&
+      currentView.current === view &&
+      live.body === form.body &&
+      live.snapshotGeneration === form.snapshotGeneration &&
+      live.snapshot === 'ready'
+    );
+  };
 
   useEffect(() => {
     mounted.current = true;
@@ -108,11 +133,28 @@ export function NativeDraftComposer({
   }, [controller, state.operation, state.result, state.issue]);
 
   function current() {
-    return mounted.current && controller.current() && editorGeneration.current === generation;
+    return (
+      mounted.current &&
+      currentController.current === controller &&
+      controller.current() &&
+      getLocale() === locale &&
+      editorGeneration.current === generation
+    );
+  }
+  function changeView(mode: DraftView['mode']) {
+    const next = { mode };
+    currentView.current = next;
+    setView(next);
   }
   function update(patch: Partial<DraftForm>) {
     if (!current()) return;
-    const next = { ...currentForm.current, ...patch, version: currentForm.current.version + 1 };
+    const previous = currentForm.current;
+    const next = {
+      ...previous,
+      ...patch,
+      version: previous.version + 1,
+      snapshotGeneration: previous.snapshotGeneration + (patch.snapshot === undefined ? 0 : 1),
+    };
     currentForm.current = next;
     setForm(next);
   }
@@ -122,7 +164,7 @@ export function NativeDraftComposer({
     setForm(next);
     editorGeneration.current++;
     setGeneration(editorGeneration.current);
-    setView('write');
+    changeView('write');
     setDiscard(false);
     setFailed(false);
     setRetained(false);
@@ -203,19 +245,22 @@ export function NativeDraftComposer({
       <nav className="studio-action-row" aria-label={m.studio_workspace_views({}, options)}>
         <Button
           type="button"
-          variant={view === 'write' ? 'default' : 'outline'}
-          aria-pressed={view === 'write'}
-          onClick={() => setView('write')}
+          variant={view.mode === 'write' ? 'default' : 'outline'}
+          aria-pressed={view.mode === 'write'}
+          onClick={() => {
+            if (current()) changeView('write');
+          }}
         >
           {m.studio_workspace_write({}, options)}
         </Button>
         <Button
           type="button"
-          variant={view === 'preview' ? 'default' : 'outline'}
-          aria-pressed={view === 'preview'}
+          variant={view.mode === 'preview' ? 'default' : 'outline'}
+          aria-pressed={view.mode === 'preview'}
           disabled={!previewReady}
           onClick={() => {
-            if (currentForm.current.snapshot === 'ready') setView('preview');
+            const live = currentForm.current;
+            if (current() && live.snapshot === 'ready' && hasDocumentContent(live.body)) changeView('preview');
           }}
         >
           {m.studio_workspace_preview({}, options)}
@@ -223,7 +268,7 @@ export function NativeDraftComposer({
       </nav>
       {/* Keep the editor mounted across preview so undo and pending snapshot ownership survive. */}
       <section
-        hidden={view !== 'write'}
+        hidden={view.mode !== 'write'}
         className="studio-stack"
         aria-label={m.studio_workspace_write_region({}, options)}
       >
@@ -242,11 +287,18 @@ export function NativeDraftComposer({
           onSave={() => formElement.current?.requestSubmit()}
         />
       </section>
-      {view === 'preview' && previewReady ? (
+      {view.mode === 'preview' && previewReady ? (
         <section className="studio-preview studio-stack" aria-label={m.studio_workspace_preview_region({}, options)}>
           <h3>{form.title.trim() || m.own_drafts_no_title({}, options)}</h3>
           <p className="studio-preview-notice">{m.studio_workspace_preview_unsaved({}, options)}</p>
-          <DocumentBody document={form.body} locale={locale} visitKey={`${id}:${generation}:preview`} />
+          <PostReadingBody
+            document={form.body}
+            locale={locale}
+            readerIdentity={readerIdentity}
+            isReaderCurrent={isReaderCurrent}
+            visitKey={previewVisitKey}
+            wideVisitKey={previewVisitKey}
+          />
         </section>
       ) : null}
       <p className="studio-help" role="status">

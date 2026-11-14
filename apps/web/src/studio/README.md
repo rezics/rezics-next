@@ -20,6 +20,27 @@ publication requires its separate review. Before the first selection, the creati
 acknowledgement hands off to the existing document layout. Actions keep the workspace's wrapping, focus and minimum
 touch-target styles.
 
+Decision: before the first save, Book and column creation share the same composer's `PostReadingBody` preview,
+including the installed outline, structured-reference list and table/code inspector. The preview always describes
+unsaved working content. Its reader identity belongs to the unsent body, snapshot generation, editor, preview entry,
+controller, locale and caller lifetime. Body replacement, pending/invalid snapshots, Write, discard or caller retirement
+retire reference/wide callbacks synchronously; returning to Preview starts a fresh reader. Title, licence, subjects
+and media edits retain the current reading position. The editor stays mounted for undo and snapshot recovery.
+Only a ready nonempty structured snapshot reaches the reader or create command. Saving uses the current admitted
+form snapshot; sending/replay keeps the existing sealed intent, and acknowledgement preserves newer local edits.
+There is one retained working snapshot and at most one mounted reader, with no body fetch, attachment/mention
+resolution, fanout, polling or persistent private draft. Missing media and mention presentation uses the shared
+reader's existing unavailable states; media IDs do not confer a resolved image or persisted provenance.
+
+Sources read for this preview decision: `native-draft-composer.tsx`, this owner guide,
+`studio-native-drafts.test.tsx`, `studio-native-drafts.stories.tsx`, `workspace.tsx#WorkingPreview`,
+`threads/post-reading-body.tsx`, the declared module map and the read-only main checkout's `.reference/INDEX.md`.
+Focused acceptance source covers rich preview, wide/reference retirement, editor undo lifetime and acknowledgement
+preserving newer edits. Existing creation, privacy, snapshot and departure assertions remain in place. Illustrative
+stories cover ready rich preview and departure from a wide inspector; they establish no native or visual acceptance.
+Source-only review covers the diff and formatting. Test execution, compiler/build checks, Storybook/browser captures,
+native creation and eight-locale phone/desktop/theme/keyboard acceptance remain unverified with the separate verifier.
+
 The creation form contributes unsent edits to the workspace's existing departure protection. Cancel requires an
 explicit local discard choice. Sending and unknown recovery retain the controller's frozen command, credential and
 key; edits made afterwards remain local, and replay sends the original intent. An acknowledgement opens the exact
