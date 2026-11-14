@@ -919,6 +919,10 @@ Decision: drain at most 16 deterministic cleanup steps during the existing hourl
 using a pending-work index and one-hour retry time for pins or cleanup conflicts; each step still uses the existing
 100-row transaction limit and retirement authority.
 
+Decision: retention takes the existing staging-row lock with `NOWAIT` inside each per-row savepoint. SQLSTATE `55P03`
+leaves the due pending key and its availability unchanged while later keys in the bounded page can proceed; a later
+bounded pass revisits the pending key through the existing keyset cursor.
+
 The Library entry-retention worker provides the pacing reference: it runs every ten minutes, processes 100 durable
 single-key pages per segment, then enqueues a bounded maintenance continuation while its partition cursor remains.
 Content keeps its hourly `content.collection.hourly` schedule and does not add a scheduler or continuation queue. Each

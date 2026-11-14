@@ -290,7 +290,7 @@ async function runSweep(sweepId: string, cutoff: Date, first?: HostedPublication
   return results;
 }
 
-test('bounded hourly retention resumes pages, skips completed history and defers a pinned candidate', async () => {
+test('bounded hourly retention skips a locked stage, resumes pages and defers a pinned candidate', async () => {
   const route = routeOf(f.catalogueId);
   if (route === null) throw new Error('Hosted fixture catalogue has no route');
   const source = await createSource();
@@ -307,22 +307,40 @@ test('bounded hourly retention resumes pages, skips completed history and defers
   const firstSweepId = crypto.randomUUID();
   const firstPassId = `${firstSweepId}:retention:0`;
 
-  const first = await advanceHostedPublicationRetention(f.native.pool, firstPassId, cutoff);
-  expect(first).toMatchObject({
-    replayed: false,
-    adoptionScanned: HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT,
-    adopted: 0,
-    advanced: true,
-    locator: abandoned,
-    cleanup: {
-      kind: 'staging',
-      result: {
-        replayed: false,
-        deletedRows: 100,
-        progress: { phase: 'candidate', completed: false },
-      },
-    },
-  });
+  const locker = await f.native.pool.connect();
+  let first: HostedPublicationRetentionResult;
+  try {
+    await locker.query('BEGIN');
+    await locker.query(
+      `SELECT stage_id FROM content.hosted_publication_staging
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 FOR UPDATE`,
+      [route, f.catalogueId, abandoned.stageId],
+    );
+    first = await advanceHostedPublicationRetention(f.native.pool, firstPassId, cutoff);
+    expect(first).toMatchObject({
+      replayed: false,
+      adoptionScanned: HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT,
+      adopted: 0,
+      advanced: true,
+      locator: eligible.locator,
+      cleanup: { kind: 'candidate', result: { replayed: false, deletedRows: 100, progress: { completed: false } } },
+    });
+    const busyPending = await f.native.pool.query<{ available_at: Date }>(
+      `SELECT available_at FROM content.hosted_publication_retention_pending
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, abandoned.stageId],
+    );
+    expect(busyPending.rows[0]!.available_at.getTime()).toBeLessThan(cutoff.getTime());
+    const busyIssue = await f.native.pool.query(
+      `SELECT 1 FROM content.hosted_publication_retention_issue
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, abandoned.stageId],
+    );
+    expect(busyIssue.rowCount).toBe(0);
+  } finally {
+    await locker.query('ROLLBACK').catch(() => undefined);
+    locker.release();
+  }
   expect(first.examinedKeys).toBe(first.scanned + first.adoptionScanned);
   expect(first.scanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
 

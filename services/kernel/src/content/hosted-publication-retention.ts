@@ -117,6 +117,12 @@ const readAdoptionCursor = `
   WHERE singleton=true
   FOR UPDATE`;
 
+const lockStageWithoutWaiting = `
+  SELECT 1
+  FROM content.hosted_publication_staging
+  WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3
+  FOR UPDATE NOWAIT`;
+
 function cursorFrom(row: CursorRow): Cursor {
   if (row.after_available_at === null) return null;
   return {
@@ -252,6 +258,10 @@ function cleanupComplete(cleanup: CleanupStep): boolean {
   return cleanup.result.progress.completed;
 }
 
+function isRowLockUnavailable(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '55P03';
+}
+
 async function persistResult(
   client: AccessClient,
   passId: string,
@@ -335,15 +345,25 @@ export async function advanceHostedPublicationRetention(
             continue;
           }
 
+          const locator = locatorOf(row);
+          const stepId = stepIdFor(passId, row);
+          await client.query('SAVEPOINT hosted_publication_retention_step');
+          try {
+            await client.query(lockStageWithoutWaiting, [row.route, row.catalogue_id, row.stage_id]);
+          } catch (error) {
+            if (!isRowLockUnavailable(error)) throw error;
+            await client.query('ROLLBACK TO SAVEPOINT hosted_publication_retention_step');
+            await client.query('RELEASE SAVEPOINT hosted_publication_retention_step');
+            continue;
+          }
+
           if (sealed && row.candidate_generation_id === null) {
+            await client.query('RELEASE SAVEPOINT hosted_publication_retention_step');
             await rememberIssue(client, row, unsupportedCandidateState(row));
             await deferPending(client, row, cutoff);
             continue;
           }
 
-          const locator = locatorOf(row);
-          const stepId = stepIdFor(passId, row);
-          await client.query('SAVEPOINT hosted_publication_retention_step');
           try {
             let cleanup: CleanupStep;
             if (sealed) {
