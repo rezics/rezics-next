@@ -20,6 +20,8 @@ function action(id: string, version = 7n): IndexAction {
       partition: 1,
       type: 'schema:Book',
       security_revision: 3,
+      credit_search_complete: false,
+      credited_names: [],
       names: ['Full body'],
       descriptions: ['Preserve every field'],
       name_sort: 'full body',

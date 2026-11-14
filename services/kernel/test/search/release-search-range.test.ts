@@ -47,7 +47,7 @@ test('candidate overlap is same-statement and cannot run on an unprepared year-o
   expect(plan.evaluate(['not_proven', true])).toBe('not_proven');
 });
 
-test('successor projection retains precision and distinct dates while historical projection stays unchanged', () => {
+test('canonical projection retains precision and distinct dates and requires complete mapping fields', () => {
   const id = '00000000-0000-4000-8000-000000000001';
   const snapshot = {
     partition: subjectPartition(id),
@@ -72,23 +72,26 @@ test('successor projection retains precision and distinct dates while historical
       },
     ],
   };
-  const old = documentActions(snapshot, [id])[0]!;
-  const next = documentActions(snapshot, [id], undefined)[0]!;
-  if (old.op !== 'index' || next.op !== 'index') throw new Error('Expected documents');
-  expect(old.document.facts).toEqual([{ property, year: 2024, qualifiers: [] }]);
-  expect(next.document.facts).toHaveLength(3);
-  expect(next.document.facts[0]).not.toHaveProperty('month');
-  expect(next.document.facts[1]).toMatchObject({ month: 2 });
-  expect(next.document.facts[1]).not.toHaveProperty('day');
-  expect(next.document.facts[2]).toMatchObject({
+  const action = documentActions(snapshot, [id])[0]!;
+  if (action.op !== 'index') throw new Error('Expected document');
+  expect(action.document.facts).toHaveLength(3);
+  expect(action.document.facts[0]).toEqual({
+    property,
+    year: 2024,
+    time_lower: calendarInterval({ year: 2024 }).lower,
+    time_upper: calendarInterval({ year: 2024 }).upper,
+    qualifiers: [],
+  });
+  expect(action.document.facts[1]).toMatchObject({ month: 2 });
+  expect(action.document.facts[1]).not.toHaveProperty('day');
+  expect(action.document.facts[2]).toMatchObject({
     day: 29,
     time_lower: calendarInterval({ year: 2024, month: 2, day: 29 }).lower,
   });
   const base = subjectIndexDefinition();
-  const successor = calendarIndexDefinition(base);
-  expect(hasCalendarIndexFormat(base.mappings)).toBe(false);
-  expect(hasCalendarIndexFormat(successor.mappings)).toBe(true);
-  const forged = structuredClone(base) as any;
-  forged.mappings._meta.calendar_range_format = 1;
-  expect(hasCalendarIndexFormat(forged.mappings)).toBe(false);
+  expect(hasCalendarIndexFormat(base.mappings)).toBe(true);
+  expect(calendarIndexDefinition(base)).toEqual(base);
+  const incomplete = structuredClone(base) as any;
+  delete incomplete.mappings.properties.facts.properties.time_upper;
+  expect(hasCalendarIndexFormat(incomplete.mappings)).toBe(false);
 });

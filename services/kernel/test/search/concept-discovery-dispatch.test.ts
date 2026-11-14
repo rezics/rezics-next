@@ -23,7 +23,7 @@ const binding = {
   request: 'request',
 };
 const state: ConceptBrowseState = {
-  version: 2,
+  version: 1,
   selection: { property, concept: root, scheme, includeChildren: true },
   binding,
   retained: { id: 'retained', revision: '1' },

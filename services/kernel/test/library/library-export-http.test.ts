@@ -784,7 +784,7 @@ test('provider changes, expiry and completed-request replay cannot deliver a dif
 
 test('provider encoded-row limits include nested evidence and escaped UTF-8', async () => {
   const section = exportSections.indexOf('anilistEvidence');
-  const seek = { ...initialExportSeek(4), section, parent: copy };
+  const seek = { ...initialExportSeek(), section, parent: copy };
   const client = {
     query: async () => ({
       rows: [
@@ -792,7 +792,7 @@ test('provider encoded-row limits include nested evidence and escaped UTF-8', as
       ],
     }),
   };
-  const page = await readExportSourcePage(client as any, route, owner, seek, new Date(now).toISOString(), 4);
+  const page = await readExportSourcePage(client as any, route, owner, seek, new Date(now).toISOString());
   expect(page).toMatchObject({ records: [], oversized: true });
 });
 
