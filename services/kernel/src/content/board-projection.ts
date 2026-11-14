@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { runCommand, type CommandReceipt } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
+import type { AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
 import type { BoardId, ThreadId } from './model.ts';
@@ -15,6 +15,7 @@ import pinRevision from './board-pin-revision.sql';
 import page from './page-board-threads.sql';
 import readSourceActivity from './read-source-activity.sql';
 import upsert from './board-rank-upsert.sql';
+import { withBoardReadSnapshot } from './board-read-connection.ts';
 
 export type BoardCandidateKey = Readonly<{ createdAt: string; id: ThreadId }>;
 export type BoardCandidate = Readonly<{
@@ -98,20 +99,13 @@ function checkTime(value: string): void {
 async function snapshot<T>(
   pool: Pool,
   partition: number,
-  read: (client: PoolClient, anchor: Partition) => Promise<T>,
+  read: (client: AccessClient, anchor: Partition) => Promise<T>,
+  deadline?: number,
 ): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const anchor = await readPartition(client, partition);
-      if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
-      const result = await read(client, anchor);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
+  return withBoardReadSnapshot(pool, deadline, async (client) => {
+    const anchor = await readPartition(client, partition);
+    if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
+    return read(client, anchor);
   });
 }
 
@@ -174,8 +168,9 @@ export async function readBoardCandidates(
   boardId: BoardId,
   after: BoardCandidateKey | null,
   limit: number,
+  deadline?: number,
 ): Promise<BoardCandidatePage> {
-  return pageBoardCandidates(pool, boardId, after, limit, 'desc');
+  return pageBoardCandidates(pool, boardId, after, limit, 'desc', deadline);
 }
 
 /** Internal candidate traversal in either index direction, without disclosure authority. */
@@ -185,6 +180,7 @@ export async function pageBoardCandidates(
   after: BoardCandidateKey | null,
   limit: number,
   direction: 'asc' | 'desc' = 'desc',
+  deadline?: number,
 ): Promise<BoardCandidatePage> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new RangeError('Candidate limit must be 1 to 200');
   if (direction !== 'asc' && direction !== 'desc') throw new RangeError('Invalid candidate page direction');
@@ -220,7 +216,7 @@ export async function pageBoardCandidates(
       epoch: anchor.epoch,
       position: anchor.position,
     };
-  });
+  }, deadline);
 }
 
 /** Bounded active-rank traversal. Candidate identity still carries no disclosure authority. */
@@ -229,6 +225,7 @@ export async function pageActiveBoardCandidates(
   boardId: BoardId,
   after: BoardRankKey | null,
   limit: number,
+  deadline?: number,
 ): Promise<BoardRankCandidatePage> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new RangeError('Candidate limit must be 1 to 200');
   const boardRoute = route(boardId);
@@ -264,7 +261,7 @@ export async function pageActiveBoardCandidates(
       epoch: anchor.epoch,
       position: anchor.position,
     };
-  });
+  }, deadline);
 }
 
 class UnchangedCandidate extends Error {}

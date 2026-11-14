@@ -1,6 +1,5 @@
-import { deadlineClient, within, accessCheck } from './access-port.ts';
+import { accessCheck } from './access-port.ts';
 import type { AccessCheck, Actor } from '../request/access.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
@@ -33,6 +32,7 @@ import {
   type ThreadView,
 } from './reads.ts';
 import pageRealmBoardIds from './board-realm-page.sql';
+import { withBoardReadSnapshot } from './board-read-connection.ts';
 
 export type ContentBoardDependencies = ContentReadDependencies & {
   /** Trusted service configuration, independent of authentication's wall clock. */
@@ -100,22 +100,7 @@ export async function readRealmBoard(
 
   const check = await prepareRealmRead(dependencies, context.actor, realmId, context.deadline);
   if (!check) return { ...board, value: null };
-  const visible = await withConnection(dependencies.pool, async (connection) => {
-    const client = deadlineClient(connection, context.deadline);
-    try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const allowed = await check(client);
-      await client.query('COMMIT');
-      return allowed;
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(connection, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
+  const visible = await withBoardReadSnapshot(dependencies.pool, context.deadline, (client) => check(client));
   return visible ? board : { ...board, value: null };
 }
 
@@ -137,51 +122,37 @@ export async function selectRealmBoardPage(
   const now = dependencies.cursorNow();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const binding = realmBinding(realmId, context.actor);
-  const result = await within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '3000ms'");
-        const partition = await readPartition(client, partitionOf(realmRoute));
-        if (!partition || partition.writeState === 'moved') throw new Error('Content partition unavailable');
-        if (!(await check(client))) throw new ContentNotFoundError();
+  const result = await withBoardReadSnapshot(dependencies.pool, context.deadline, async (client) => {
+    await client.query("SET LOCAL statement_timeout = '3000ms'");
+    const partition = await readPartition(client, partitionOf(realmRoute));
+    if (!partition || partition.writeState === 'moved') throw new Error('Content partition unavailable');
+    if (!(await check(client))) throw new ContentNotFoundError();
 
-        let after: string | null = null;
-        if (input.cursor !== undefined) {
-          const decoded = decodeCursor(dependencies.tokens, binding, input.cursor, now);
-          if (
-            !decoded.ok ||
-            decoded.epoch !== partition.epoch ||
-            decoded.after.length !== 1 ||
-            typeof decoded.after[0] !== 'string' ||
-            routeOf(decoded.after[0]) !== realmRoute
-          )
-            throw new TypeError('Invalid content cursor');
-          after = decoded.after[0];
-        }
+    let after: string | null = null;
+    if (input.cursor !== undefined) {
+      const decoded = decodeCursor(dependencies.tokens, binding, input.cursor, now);
+      if (
+        !decoded.ok ||
+        decoded.epoch !== partition.epoch ||
+        decoded.after.length !== 1 ||
+        typeof decoded.after[0] !== 'string' ||
+        routeOf(decoded.after[0]) !== realmRoute
+      )
+        throw new TypeError('Invalid content cursor');
+      after = decoded.after[0];
+    }
 
-        const rows = await pageRealmBoardIds.run(client, {
-          route: realmRoute,
-          realm_id: realmId,
-          after_board: after,
-          limit: limit + 1,
-        });
-        await client.query('COMMIT');
-        return {
-          partition,
-          candidates: rows.map((row) => row.board_id),
-        };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+    const rows = await pageRealmBoardIds.run(client, {
+      route: realmRoute,
+      realm_id: realmId,
+      after_board: after,
+      limit: limit + 1,
+    });
+    return {
+      partition,
+      candidates: rows.map((row) => row.board_id),
+    };
+  });
 
   const selected = result.candidates.slice(0, limit);
   const after = selected.at(-1);
