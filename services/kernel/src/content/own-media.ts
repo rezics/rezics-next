@@ -1,12 +1,11 @@
 import type { Pool } from 'pg';
-import { readAccount, deadlineClient, within } from './access-port.ts';
+import { readAccount } from './access-port.ts';
 import { encodeCursor, decodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
 import { authoritativeTimeValue, mintReadTime, noEffect, runCommand } from '../command/command.ts';
 import { accessCheck, prepareReadDecisions } from './access-port.ts';
 import type { AccessCheck, Access, AccountActor, Actor, AccessClient, ReadDecisions } from '../request/access.ts';
@@ -19,6 +18,7 @@ import insertLocator from './own-media-locator.sql';
 import page from './own-media-page.sql';
 import objects from './own-media-objects.sql';
 import { lockErasureFence } from './erasure-fence.ts';
+import { withOwnMediaReadSnapshot } from './own-media-read-connection.ts';
 
 export const OWN_MEDIA_PAGE_SIZE = 20;
 const firstMediaId = '00000000-0000-0000-0000-000000000000';
@@ -118,47 +118,33 @@ async function readLocatorPage(
   viewer: AccessCheck,
   deadline: number,
 ): Promise<Readonly<{ ids: readonly string[]; epoch: number }>> {
-  return within(deadline, () =>
-    withConnection(pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      try {
-        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const home = await readPartition(bounded, partitionOf(homeRoute));
-        if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-        await verifyViewer(bounded, actor, viewer);
-        // Validate lifetime, complete request binding and the observed home before
-        // even selecting locators, and therefore before private object hydration.
-        let after = firstMediaId;
-        if (cursor !== undefined) {
-          const decoded = decodeCursor(deps.tokens, cursorBinding(actor), cursor, deps.clock().getTime());
-          if (
-            !decoded.ok ||
-            decoded.epoch !== home.epoch ||
-            decoded.after.length !== 1 ||
-            typeof decoded.after[0] !== 'string' ||
-            routeOf(decoded.after[0]) === null
-          )
-            throw new ProblemError('invalid_request');
-          after = decoded.after[0];
-        }
-        const rows = await page.run(bounded, {
-          route: homeRoute,
-          account_id: actor.accountId,
-          after,
-          limit: OWN_MEDIA_PAGE_SIZE,
-        });
-        await bounded.query('COMMIT');
-        return { ids: rows.map(({ id }) => id), epoch: home.epoch };
-      } catch (error) {
-        try {
-          await bounded.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(client, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  return withOwnMediaReadSnapshot(pool, deadline, async (bounded) => {
+    const home = await readPartition(bounded, partitionOf(homeRoute));
+    if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+    await verifyViewer(bounded, actor, viewer);
+    // Validate lifetime, complete request binding and the observed home before
+    // even selecting locators, and therefore before private object hydration.
+    let after = firstMediaId;
+    if (cursor !== undefined) {
+      const decoded = decodeCursor(deps.tokens, cursorBinding(actor), cursor, deps.clock().getTime());
+      if (
+        !decoded.ok ||
+        decoded.epoch !== home.epoch ||
+        decoded.after.length !== 1 ||
+        typeof decoded.after[0] !== 'string' ||
+        routeOf(decoded.after[0]) === null
+      )
+        throw new ProblemError('invalid_request');
+      after = decoded.after[0];
+    }
+    const rows = await page.run(bounded, {
+      route: homeRoute,
+      account_id: actor.accountId,
+      after,
+      limit: OWN_MEDIA_PAGE_SIZE,
+    });
+    return { ids: rows.map(({ id }) => id), epoch: home.epoch };
+  });
 }
 
 function homesFor(ids: readonly string[]): readonly ReadHome[] {
@@ -320,67 +306,49 @@ async function readObjectHome(
   deadline: number,
 ): Promise<readonly Candidate[]> {
   const routes = home.ids.map((id) => routeOf(id)!);
-  return within(deadline, () =>
-    withConnection(pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      try {
-        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(bounded, home.partition);
-        if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
-        const rows = (await objects.run(bounded, {
-          routes,
-          ids: [...home.ids],
-          uploader_id: actor.accountId,
-        })) as readonly MediaRow[];
-        if (rows.length === 0) {
-          await bounded.query('COMMIT');
-          return [];
-        }
-        const time = await mintReadTime(bounded, clock);
-        const ids = rows.map(({ id }) => id);
-        const [reservation, read, remove] = await Promise.all([
-          decisionsFor(decisions, bounded, 'media:read_reservation', 'content.media', ids, time),
-          decisionsFor(decisions, bounded, 'media:read', 'content.media', ids, time),
-          decisionsFor(decisions, bounded, 'media:erase', 'content.media', ids, time),
-        ]);
-        const threadIds = rows.map(({ thread_id }) => thread_id).filter((id): id is string => id !== null);
-        const postIds = rows.filter((row) => row.container_kind === 'post').map(({ context_id }) => context_id);
-        const [threads, posts] = await Promise.all([
-          threadIds.length
-            ? decisionsFor(decisions, bounded, 'thread:read', 'content.thread', [...new Set(threadIds)], time)
-            : Promise.resolve(noDecisions),
-          postIds.length
-            ? decisionsFor(decisions, bounded, 'post:read', 'content.post', [...new Set(postIds)], time)
-            : Promise.resolve(noDecisions),
-        ]);
-        const candidates = rows.flatMap((row) => {
-          if (!reservation[row.id]?.allowed) return [];
-          const containerRead =
-            row.container_kind === 'thread'
-              ? Boolean(threads[row.thread_id ?? '']?.allowed)
-              : row.container_kind === 'post'
-                ? Boolean(posts[row.context_id]?.allowed && threads[row.thread_id ?? '']?.allowed)
-                : false;
-          return [
-            baseCandidate(row, actor, Date.parse(authoritativeTimeValue(time)), partition.epoch, {
-              read: Boolean(read[row.id]?.allowed),
-              remove: Boolean(remove[row.id]?.allowed),
-              containerRead,
-            }),
-          ];
-        });
-        await bounded.query('COMMIT');
-        return candidates;
-      } catch (error) {
-        try {
-          await bounded.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(client, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  return withOwnMediaReadSnapshot(pool, deadline, async (bounded) => {
+    const partition = await readPartition(bounded, home.partition);
+    if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
+    const rows = (await objects.run(bounded, {
+      routes,
+      ids: [...home.ids],
+      uploader_id: actor.accountId,
+    })) as readonly MediaRow[];
+    if (rows.length === 0) return [];
+    const time = await mintReadTime(bounded, clock);
+    const ids = rows.map(({ id }) => id);
+    const [reservation, read, remove] = await Promise.all([
+      decisionsFor(decisions, bounded, 'media:read_reservation', 'content.media', ids, time),
+      decisionsFor(decisions, bounded, 'media:read', 'content.media', ids, time),
+      decisionsFor(decisions, bounded, 'media:erase', 'content.media', ids, time),
+    ]);
+    const threadIds = rows.map(({ thread_id }) => thread_id).filter((id): id is string => id !== null);
+    const postIds = rows.filter((row) => row.container_kind === 'post').map(({ context_id }) => context_id);
+    const [threads, posts] = await Promise.all([
+      threadIds.length
+        ? decisionsFor(decisions, bounded, 'thread:read', 'content.thread', [...new Set(threadIds)], time)
+        : Promise.resolve(noDecisions),
+      postIds.length
+        ? decisionsFor(decisions, bounded, 'post:read', 'content.post', [...new Set(postIds)], time)
+        : Promise.resolve(noDecisions),
+    ]);
+    return rows.flatMap((row) => {
+      if (!reservation[row.id]?.allowed) return [];
+      const containerRead =
+        row.container_kind === 'thread'
+          ? Boolean(threads[row.thread_id ?? '']?.allowed)
+          : row.container_kind === 'post'
+            ? Boolean(posts[row.context_id]?.allowed && threads[row.thread_id ?? '']?.allowed)
+            : false;
+      return [
+        baseCandidate(row, actor, Date.parse(authoritativeTimeValue(time)), partition.epoch, {
+          read: Boolean(read[row.id]?.allowed),
+          remove: Boolean(remove[row.id]?.allowed),
+          containerRead,
+        }),
+      ];
+    });
+  });
 }
 
 async function currentRealmActions(
@@ -588,26 +556,12 @@ export async function readOwnMediaInventory(
   if (JSON.stringify(finalCurrent) !== JSON.stringify(current)) throw new ProblemError('dependency_unavailable');
   // Empty pages receive the same final viewer and home qualification. No failed
   // authority round can return a terminal empty page or consume a raw frontier.
-  await within(deadline, () =>
-    withConnection(deps.pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      try {
-        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const home = await readPartition(bounded, partitionOf(locatorRoute));
-        if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-        if (home.epoch !== raw.epoch) throw new ProblemError('dependency_unavailable');
-        await verifyViewer(bounded, actor, viewer);
-        await bounded.query('COMMIT');
-      } catch (error) {
-        try {
-          await bounded.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(client, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  await withOwnMediaReadSnapshot(deps.pool, deadline, async (bounded) => {
+    const home = await readPartition(bounded, partitionOf(locatorRoute));
+    if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+    if (home.epoch !== raw.epoch) throw new ProblemError('dependency_unavailable');
+    await verifyViewer(bounded, actor, viewer);
+  });
   const nextCursor =
     rawIds.length === OWN_MEDIA_PAGE_SIZE
       ? encodeCursor(

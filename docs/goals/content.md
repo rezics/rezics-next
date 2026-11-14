@@ -41,6 +41,9 @@ boards, threads, posts, media, Spaces and Realms.
 - Articles and non-book hosted works stay grant-closed until polished; media retains its existing [public-scope
   policy](../scope.md). Email and account mute/block remain deferred under [public scope](../scope.md).
 
+Decision: uploader-inventory snapshots carry the original request deadline through checkout and transaction control;
+late checkouts issue no SQL, and expired or uncertain native work discards its connection without queuing rollback.
+
 Completion covers the scoped outcomes on main with recorded HTTP/API, native command/effect/relay, default-worker,
 growth, installed public-root/callable, applicable browser receiving and promoted-commit checks. Specified,
 implemented, exposed, tested and promoted remain separate stages; documentation advances none.

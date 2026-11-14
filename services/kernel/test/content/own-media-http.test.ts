@@ -338,3 +338,45 @@ test('collection during hydration fails the page and retries the same native raw
     await observer.close();
   }
 });
+
+test('an expired uploader-home read leaves the inventory available on the next authorized visit', async () => {
+  const media = await reserve();
+  const { system } = currentMediaScenario();
+  const actor = system.actors.author.actor;
+  const observer = observeSql(system.database.pool);
+  const selected = observer.hold({ statement: locatorPage.sql }, 'after');
+  const pending = readOwnMediaInventory(
+    {
+      pool: system.database.pool,
+      access: system.access,
+      tokens: system.tokenKeys,
+      clock: () => new Date(),
+    },
+    actor,
+    {},
+    Date.now() + 1_500,
+  );
+  try {
+    await selected.entered;
+    await expect(pending).rejects.toMatchObject({ reason: 'deadline' });
+    selected.release();
+    await pending.catch(() => undefined);
+    expect(observer.records.some(({ statement }) => statement === 'ROLLBACK')).toBe(false);
+    const retry = await readOwnMediaInventory(
+      {
+        pool: system.database.pool,
+        access: system.access,
+        tokens: system.tokenKeys,
+        clock: () => new Date(),
+      },
+      actor,
+      {},
+      Date.now() + 10_000,
+    );
+    expect(retry.entries.map(({ id }) => id)).toContain(media.mediaId);
+  } finally {
+    selected.release();
+    await pending.catch(() => undefined);
+    await observer.close();
+  }
+});
