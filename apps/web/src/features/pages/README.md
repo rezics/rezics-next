@@ -59,6 +59,12 @@ regions and connections. Their address descriptors and native admission remain u
 `subject-community-current-retirement.test.tsx` exercises stable preparation callbacks, private-action gating,
 credential/account/exposure retirement and non-revival; the Game view/recovery regressions exercise facts, selected
 evidence, release rows and late results. These are source regressions pending integrated execution.
+Decision: extend the existing mounted fixture and parameterize authority replacements rather than duplicate caller
+fixtures. `subject-community-current-retirement.test.tsx` imports that fixture from
+`subject-community-participation.test.tsx`; its initial-preparation case now expects obsolete bodies to disappear
+after account replacement or a fresh source still admitted for a signed-out reader. Other assertions remain intact.
+Affected caller coverage also includes `album-track-reader-recovery.test.tsx`, `music-release-reader-view.test.tsx`,
+`music-location-reading-recovery.test.tsx` and `person-reader.test.tsx`; their execution remains deferred.
 
 ## Rating presentation
 

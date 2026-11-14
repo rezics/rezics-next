@@ -57,6 +57,8 @@ async function ui() {
   const click = async (label: string) => {
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === label);
     if (!button) throw new Error(`Missing button: ${label}`);
+    for (let node = button.parentElement; node; node = node.parentElement)
+      if (node.tagName === 'DETAILS') (node as HTMLDetailsElement).open = true;
     button.focus();
     await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
@@ -228,32 +230,49 @@ test('equal-success replacement drops selection and reveal consent; tab return a
   }
 });
 
-test('retired observation needs explicit fresh current-Subject recovery; old pending data cannot join it', async () => {
+test('preparation keeps the pending read; retirement removes facts and old results require fresh-Subject recovery', async () => {
   const mounted = await ui();
   try {
     const fixture = gameExample();
+    const initial = await fixture.read();
     let deliver!: (read: GameReaderRead) => void;
     let refreshes = 0;
+    let calls = 0;
+    mounted.client.removeQueries({ queryKey: ['session'], exact: true });
     const props = {
       ...fixture.address,
       locale: 'en',
       realm: 'games',
       source: {},
-      reader: null,
-      transport: (() =>
-        new Promise((resolve) => {
+      reader: 'reader-one',
+      transport: (() => {
+        calls++;
+        return new Promise((resolve) => {
           deliver = resolve;
-        })) as GameReaderTransport,
+        });
+      }) as GameReaderTransport,
       refresh: async () => {
         refreshes++;
       },
     };
     await mounted.render(props);
     await act(async () => {
+      mounted.client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-one', csrfToken: 'initial' });
+    });
+    await mounted.render({ ...props, spoiler: 0 });
+    await act(async () => deliver(initial));
+    expect(calls).toBe(1);
+    await mounted.click(m.game_reader_inspect());
+    expect(mounted.host.querySelector('[data-slot="game-edition-inspection"]')).not.toBeNull();
+    await mounted.click(m.work_parts_more());
+    expect(mounted.host.textContent).toContain('Windows');
+    await act(async () => {
       mounted.client.setQueryData(['exposure', 'viewer'], { spoilerLevel: 2 });
     });
     expect(mounted.host.textContent).toContain(m.game_reader_retired());
     expect(mounted.host.textContent).not.toContain('Harbour');
+    expect(mounted.host.querySelector('[data-game-current-assertion]')).toBeNull();
+    expect(mounted.host.querySelector('[data-slot="game-edition-inspection"]')).toBeNull();
     expect(mounted.host.querySelector('a[href*="/edit"]')).toBeNull();
     expect(mounted.host.querySelector('a[href*="/details"]')?.getAttribute('href')).toContain('realm=games');
     await mounted.click(m.game_reader_recover());

@@ -546,7 +546,7 @@ test('community body survives initial session preparation while private advice w
     client.setQueryData(['session'], reader('reader-two'));
     await tick();
   });
-  expect(host.textContent).toContain('Visible public body');
+  expect(host.textContent).not.toContain('Visible public body');
   expect(host.querySelector('[data-slot="community-actions"]')).toBeNull();
   await act(async () => {
     client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
@@ -554,7 +554,7 @@ test('community body survives initial session preparation while private advice w
     root.render(view({ ...community, sourceKey: 'replacement-after-sign-out' }));
     await tick();
   });
-  expect(host.textContent).toContain('Visible public body');
+  expect(host.textContent).not.toContain('Visible public body');
   expect(host.querySelector('[data-slot="community-actions"]')).toBeNull();
 });
 
@@ -603,4 +603,98 @@ test('a failed or sparse region preserves its original frontier and expiry offer
   expect(restart.searchParams.has('node')).toBe(false);
   expect(restart.searchParams.get('realm')).toBe('exact-realm');
   expect(restart.hash).toBe('#exact%20region');
+});
+
+test('shared readers keep preparation callbacks, then retire in-stack on account, credential, exposure and descriptor replacement', async () => {
+  const { useSubjectCommunityReading } = await import('../src/features/pages/subject-community-lifetime');
+  const { browserObservation } = await import('../src/session');
+  type Input = Parameters<typeof useSubjectCommunityReading>[0];
+  let current!: ReturnType<typeof useSubjectCommunityReading>;
+  function Probe({ input }: { input: Input }) {
+    current = useSubjectCommunityReading(input);
+    return <p>{current.available ? 'Admitted facts' : 'Retired facts'}</p>;
+  }
+  const show = (input: Input) =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <Probe input={input} />
+        </QueryClientProvider>,
+      ),
+    );
+  const session = (subject = 'reader-one', csrfToken = 'initial') =>
+    client.setQueryData(['session'], { state: 'signed-in', subject, csrfToken });
+  const exposureKey = () => {
+    const value = browserObservation(client).getSnapshot();
+    if (value.state !== 'signed-in') throw new Error('Expected prepared reader');
+    return ['exposure', 'viewer', value.observation.subject, value.observation.id];
+  };
+  const replacements: Array<() => unknown> = [
+    () => session(), // Equal successful credentials are a new incarnation.
+    () => session('reader-one', 'renewed'),
+    () => {
+      session('reader-two');
+      session();
+    }, // A/B/A in one React batch.
+    () => client.setQueryData(['session'], { state: 'signed-out' }),
+    () => client.removeQueries({ queryKey: ['session'], exact: true }),
+    () => client.setQueryData(exposureKey(), { subject: 'reader-one', admitted: [] }),
+    () => client.invalidateQueries({ queryKey: exposureKey(), exact: true }),
+    () => client.removeQueries({ queryKey: exposureKey(), exact: true }),
+  ];
+  try {
+    for (const replace of replacements) {
+      await act(async () => client.clear());
+      const input: Input = { source: {}, descriptor: 'subject/en/context/realm/type', reader: 'reader-one' };
+      await show(input);
+      const prepared = current;
+      expect(prepared.isCurrent()).toBe(true);
+      expect(prepared.privateActionsCurrent()).toBe(false);
+      await act(async () => {
+        session();
+      });
+      await show({ ...input, spoiler: 0 });
+      await act(async () => {
+        client.setQueryData(exposureKey(), { subject: 'reader-one', admitted: ['personal_library'] });
+      });
+      expect(current.key).toBe(prepared.key);
+      expect(prepared.isCurrent()).toBe(true);
+      expect(current.privateActionsCurrent()).toBe(true);
+      await act(async () => {
+        replace();
+        expect(prepared.isCurrent()).toBe(false);
+      });
+      expect(host.textContent).toBe('Retired facts');
+      await act(async () => {
+        session();
+      });
+      await show(input);
+      expect(current.available).toBe(false);
+      await show({ ...input, source: {} });
+      expect(host.textContent).toBe('Admitted facts');
+      expect(prepared.isCurrent()).toBe(false);
+    }
+    for (const descriptor of ['route', 'locale', 'Context', 'Realm', 'Type']) {
+      const input: Input = { source: {}, descriptor: 'original', reader: 'reader-one' };
+      await show(input);
+      const old = current;
+      await show({ ...input, descriptor });
+      await show(input);
+      expect(current.available).toBe(false);
+      expect(old.isCurrent()).toBe(false);
+    }
+    await act(async () => {
+      session('reader-two');
+    });
+    const mismatched: Input = { source: {}, descriptor: 'original', reader: 'reader-one' };
+    await show(mismatched);
+    expect(current.available).toBe(false);
+    await act(async () => {
+      session();
+    });
+    await show(mismatched);
+    expect(current.available).toBe(false);
+  } finally {
+    await act(async () => root.render(null));
+  }
 });

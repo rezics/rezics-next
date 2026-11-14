@@ -96,6 +96,54 @@ function readingText(node: Node): string {
   return node.childNodes.length ? Array.from(node.childNodes).map(readingText).join(' ') : (node.textContent ?? '');
 }
 
+test('initial preparation keeps facts and deliberate inspection; later account or equal credential replacement retires both', async () => {
+  const mounted = await ui();
+  try {
+    for (const reader of [null, 'reader-one']) {
+      await act(async () => mounted.client.removeQueries({ queryKey: ['session'], exact: true }));
+      const fixture = gameExample();
+      const initial = await fixture.read();
+      const props = { ...fixture.address, locale: 'en', source: fixture, reader, transport: fixture.read, initial };
+      await mounted.render(props);
+      const fact = mounted.host.querySelector('[data-game-current-assertion]');
+      expect(readingText(mounted.host)).toContain('Windows');
+      expect(mounted.host.querySelector('details[data-slot="game-release-destination"]')?.hasAttribute('open')).toBe(
+        false,
+      );
+      const editions = await mounted.disclose(m.subject_editions());
+      await mounted.click(m.game_reader_inspect());
+      const inspection = mounted.host.querySelector('[data-slot="game-edition-inspection"]');
+      const calls = fixture.calls.length;
+      await act(async () => {
+        mounted.client.setQueryData(
+          ['session'],
+          reader ? { state: 'signed-in', subject: reader, csrfToken: 'initial' } : { state: 'signed-out' },
+        );
+      });
+      await mounted.render({ ...props, spoiler: reader ? 2 : 0 });
+      expect(mounted.host.querySelector('[data-game-current-assertion]')).toBe(fact);
+      expect(mounted.host.querySelector('[data-slot="game-edition-inspection"]')).toBe(inspection);
+      expect(editions.isConnected && editions.open).toBe(true);
+      expect(fixture.calls.length).toBe(calls);
+      await act(async () => {
+        mounted.client.setQueryData(['session'], {
+          state: 'signed-in',
+          subject: reader ?? 'other',
+          csrfToken: 'initial',
+        });
+        if (!reader) mounted.client.setQueryData(['session'], { state: 'signed-out' });
+      });
+      expect(mounted.host.querySelector('[data-game-current-assertion]')).toBeNull();
+      expect(mounted.host.querySelector('[data-slot="game-edition-inspection"]')).toBeNull();
+      await mounted.render(props);
+      expect(mounted.host.textContent).toContain(m.game_reader_retired());
+      expect(fixture.calls.length).toBe(calls);
+    }
+  } finally {
+    await mounted.close();
+  }
+});
+
 test('default Game reading exposes useful labelled facts and historical meaning before optional evidence and comparison', async () => {
   const mounted = await ui();
   try {
@@ -407,13 +455,35 @@ test('unsupported fields keep generic reading/correction and spoiler-qualified e
       property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
       value: { type: 'value', content: { amount: '2', unit: '1' } },
     });
-    await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
+    const props = {
+      ...fixture.address,
+      locale: 'en',
+      source: fixture,
+      reader: null,
+      spoiler: 0,
+      transport: fixture.read,
+    };
+    await mounted.render(props);
     expect(mounted.host.textContent).toContain(m.game_reader_platform());
     expect(mounted.host.querySelector('a[href$="/details"]')).not.toBeNull();
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
     expect(mounted.host.textContent).not.toContain('Trial 0.8');
     await mounted.click(m.thread_reveal_spoiler());
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).not.toBeNull();
+    await mounted.click(m.game_reader_inspect());
+    await mounted.click(m.subject_spoiler_hide());
+    expect(mounted.host.querySelector('[data-slot="game-edition-inspection"]')).toBeNull();
+    expect(mounted.host.textContent).not.toContain('Trial 0.8');
+    await mounted.click(m.thread_reveal_spoiler());
+    await mounted.render({ ...props, spoiler: 2 });
+    expect(mounted.host.textContent).toContain(m.game_reader_retired());
+    expect(mounted.host.querySelector('[data-game-current-assertion]')).toBeNull();
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    await mounted.render(props);
+    expect(mounted.host.textContent).toContain(m.game_reader_retired());
+    await mounted.render({ ...props, source: {} });
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    expect(mounted.host.querySelector('[data-slot="game-edition-inspection"]')).toBeNull();
   } finally {
     await mounted.close();
   }

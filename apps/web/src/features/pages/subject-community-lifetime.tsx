@@ -34,7 +34,8 @@ function observeCommunityEnvironment(
   reader: string | null = null,
 ): CommunityEnvironment {
   const observation = client ? browserObservation(client) : undefined;
-  const source = queryKey && client ? client.getQueryCache().find({ queryKey, exact: true }) : undefined;
+  const sourceHash = queryKey && client ? client.defaultQueryOptions({ queryKey }).queryHash : undefined;
+  const source = sourceHash ? client?.getQueryCache().get(sourceHash) : undefined;
   const count = source?.state.dataUpdateCount;
   let retired = false;
   let prepared: BrowserObservationSnapshot | undefined;
@@ -58,10 +59,10 @@ function observeCommunityEnvironment(
     }
     if (retired) return false;
     if (prepared?.state === 'signed-in') {
-      const current = client?.getQueryCache().find({
+      const exposureHash = client?.defaultQueryOptions({
         queryKey: ['exposure', 'viewer', prepared.observation.subject, prepared.observation.id],
-        exact: true,
-      });
+      }).queryHash;
+      const current = exposureHash ? client?.getQueryCache().get(exposureHash) : undefined;
       if (exposure) {
         if (
           current !== exposure.query ||
@@ -78,7 +79,7 @@ function observeCommunityEnvironment(
     }
     if (retired) return false;
     if (!queryKey) return true;
-    const current = client?.getQueryCache().find({ queryKey, exact: true });
+    const current = sourceHash ? client?.getQueryCache().get(sourceHash) : undefined;
     if (
       !current ||
       current !== source ||
@@ -110,9 +111,10 @@ function observeCommunityEnvironment(
     snapshot,
     subscribe: (notify: () => void) => {
       const stop = observation?.subscribe(() => invalidate(notify)) ?? noSubscribe();
-      sourceCurrent();
+      if (!sourceCurrent()) observation?.publish(() => invalidate(notify));
       // Fence every cache transition in-stack, including fetching/idle and A/B/A in one React batch.
       const stopCache = observation?.subscribeCache((event) => {
+        // Unscoped exposure changes cannot prove they belong to initial preparation.
         if (
           event.query.queryKey[0] === 'exposure' &&
           event.query.queryKey[1] === 'viewer' &&
