@@ -72,11 +72,12 @@ retirement of its state when the supplied document or reading visit changes. Its
 
 Decision: Consume footnotes unchanged through the existing private `PostReadingBody` caller after Document adopts
 and delivers its snapshot format and public reading disclosure port. Bind the consumer dependency to the implementation
-change in `packages/document` and `packages/ui`, confirmed through their public entries and a linked integration brief;
-an integrated dependency revision alone does not establish producer delivery. That implementation
-owns the Document profile schemas, editor and Markdown preservation, and shared accessible reading controls. Its
-integration brief must identify the supported representation, controls and named story states before consumer fixtures
-and stories are written; Own drafts does not invent footnote payloads or controls.
+change in `packages/document` and `packages/ui`, confirmed through their public entries and a linked integration brief
+at the actual implementation revision. Prerequisite-only or unrelated integrated changes do not establish producer
+delivery. The integration brief must identify the public snapshot representation, runtime profiles and schema artifacts,
+editor and Markdown preservation, shared accessible disclosure controls and required messages, document and reading-visit
+retirement including equal bytes, and named story states before consumer fixtures and stories are written.
+Own drafts does not invent footnote payloads or controls.
 Until that implementation arrives, preserve the existing consumer source, assertions, messages and named stories.
 The next independent outcome is the producer in `packages/document` and `packages/ui`; dispatch the consumer
 continuation after that implementation and its integration brief, rather than after prerequisite documentation.
