@@ -508,17 +508,28 @@ test('current relation labels, missing meanings and long node labels share manua
   initial.graph.edges[1]!.property = 'urn:relation:current-name-unavailable';
   initial.graph.nodes = initial.graph.nodes.filter((node) => node.id !== second);
   try {
-    await ui.show(h(ui.GraphBrowserPage, {
-      id: anchor, locale: 'en', initial,
-      transport: { read: async (query) => { calls.push(query); return reading(query); } },
-    }));
+    await ui.show(
+      h(ui.GraphBrowserPage, {
+        id: anchor,
+        locale: 'en',
+        initial,
+        transport: {
+          read: async (query) => {
+            calls.push(query);
+            return reading(query);
+          },
+        },
+      }),
+    );
     const table = ui.host.querySelector('table')!;
     expect(table.textContent).toContain(initial.relations[0]!.label.text);
     expect(table.textContent).toContain('Relation name unavailable');
     expect(table.textContent).not.toContain('urn:relation:current-name-unavailable');
     expect(table.textContent).not.toContain(property);
     expect(table.textContent).toContain(longLabel);
-    const inspect = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Selected meaning')!;
+    const inspect = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Selected meaning',
+    )!;
     await ui.click(inspect);
     expect(ui.window.document.activeElement?.tagName).toBe('H2');
     expect(ui.window.location.hash).toBe('');
@@ -532,11 +543,15 @@ test('current relation labels, missing meanings and long node labels share manua
     expect(diagram.closest('[hidden]')).toBeNull();
     expect(diagram.textContent).toContain(initial.relations[0]!.label.text);
     expect(diagram.textContent).toContain(longLabel);
-    expect(diagram.querySelectorAll('[data-graph-selection]')).toHaveLength(initial.graph.nodes.length + initial.graph.edges.length);
+    expect(diagram.querySelectorAll('[data-graph-selection]')).toHaveLength(
+      initial.graph.nodes.length + initial.graph.edges.length,
+    );
     expect(diagram.querySelector('foreignObject')).toBeNull();
     expect(calls).toHaveLength(0);
     const anchorControl = diagram.querySelector<HTMLButtonElement>(`[data-graph-selection="node:${anchor}"]`)!;
-    await act(async () => anchorControl.dispatchEvent(new ui.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    await act(async () =>
+      anchorControl.dispatchEvent(new ui.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
+    );
     await ui.flush();
     expect(calls).toHaveLength(1);
     expect(calls[0]!.node).toBe(first);
@@ -549,27 +564,49 @@ test('current relation labels, missing meanings and long node labels share manua
 
 test('the adjacent inspector distinguishes exact statements and exposes supplied qualifiers, citations and independent links', async () => {
   const ui = await mounted();
-  const route = { property, direction: 'out', depth: 2, edge: edgeFirst, from: anchor, to: first, edgeProperty: property };
+  const route = {
+    property,
+    direction: 'out',
+    depth: 2,
+    edge: edgeFirst,
+    from: anchor,
+    to: first,
+    edgeProperty: property,
+  };
   const path = `/en/subjects/${anchor}/anchor/graph`;
   const withEvidence = (query: ReadInput) => {
     const result = reading(query);
-    result.detail!.statement!.qualifiers = [{
-      property: { id: 'schema:description', data_type: 'string' },
-      value: { type: 'value', content: 'A supplied statement-specific qualifier' },
-    }];
-    result.detail!.statement!.references = [{ parts: [{
-      property: { id: 'schema:url', data_type: 'url' },
-      value: { type: 'value', content: 'https://example.org/current-citation' },
-    }] }];
+    result.detail!.statement!.qualifiers = [
+      {
+        property: { id: 'schema:description', data_type: 'string' },
+        value: { type: 'value', content: 'A supplied statement-specific qualifier' },
+      },
+    ];
+    result.detail!.statement!.references = [
+      {
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' },
+            value: { type: 'value', content: 'https://example.org/current-citation' },
+          },
+        ],
+      },
+    ];
     result.detail!.labels['schema:description'] = { text: 'Influence context', lang: 'en' };
     result.detail!.labels['schema:url'] = { text: 'Citation URL', lang: 'en' };
     return result;
   };
   try {
-    await ui.show(h(ui.RoutedVisit, {
-      id: anchor, locale: 'en', initialRoute: route, graphPath: path,
-      initial: withEvidence(route), transport: { read: async (query) => withEvidence(query) },
-    }));
+    await ui.show(
+      h(ui.RoutedVisit, {
+        id: anchor,
+        locale: 'en',
+        initialRoute: route,
+        graphPath: path,
+        initial: withEvidence(route),
+        transport: { read: async (query) => withEvidence(query) },
+      }),
+    );
     const detail = ui.host.querySelector<HTMLElement>(`[data-graph-detail="edge:${edgeFirst}"]`)!;
     const inspector = detail.closest('section[aria-labelledby]')!;
     expect(inspector.previousElementSibling?.querySelector('table')).toBeTruthy();
@@ -577,19 +614,31 @@ test('the adjacent inspector distinguishes exact statements and exposes supplied
     expect(detail.textContent).toContain('A supplied statement-specific qualifier');
     expect(detail.textContent).toContain(edgeFirst);
     expect(detail.querySelector('a[href="https://example.org/current-citation"]')).toBeTruthy();
-    const correction = [...inspector.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.textContent?.includes('Propose a correction'))!;
+    const correction = [...inspector.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
+      link.textContent?.includes('Propose a correction'),
+    )!;
     expect(correction.closest('button')).toBeNull();
     const address = new URL(correction.href);
     expect(address.searchParams.get('property')).toBe(property);
     expect(address.searchParams.get('statement')).toBe(edgeFirst);
     const returned = new URL(address.searchParams.get('returnTo')!, ui.window.location.origin);
-    expect(Object.fromEntries(returned.searchParams)).toEqual({ property, direction: 'out', depth: '2', edge: edgeFirst, from: anchor, to: first, edgeProperty: property });
+    expect(Object.fromEntries(returned.searchParams)).toEqual({
+      property,
+      direction: 'out',
+      depth: '2',
+      edge: edgeFirst,
+      from: anchor,
+      to: first,
+      edgeProperty: property,
+    });
     await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="edge:${edgeBetween}"]`));
     await ui.flush();
     const next = ui.host.querySelector<HTMLElement>(`[data-graph-detail="edge:${edgeBetween}"]`)!;
     expect(next.textContent).toContain(edgeBetween);
     expect(next.textContent).not.toContain(edgeFirst);
-    expect(ui.host.querySelector(`button[data-graph-selection="edge:${edgeBetween}"]`)?.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      ui.host.querySelector(`button[data-graph-selection="edge:${edgeBetween}"]`)?.getAttribute('aria-pressed'),
+    ).toBe('true');
   } finally {
     await ui.close();
   }
@@ -613,12 +662,16 @@ test('a sparse native branch stays explicit and retries its exact cursor before 
   try {
     await ui.show(h(ui.GraphBrowserPage, { id: anchor, locale: 'en', initial, transport }));
     expect(ui.host.textContent).toContain('The branches below still have native pages to explore.');
-    const continuation = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Continue this branch'))!;
+    const continuation = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Continue this branch'),
+    )!;
     await ui.click(continuation);
     await ui.flush();
     expect(ui.host.querySelector('[role="alert"]')).toBeTruthy();
     expect(continuation.disabled).toBe(true);
-    const retry = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Retry this exact read'))!;
+    const retry = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Retry this exact read'),
+    )!;
     await ui.click(retry);
     await ui.flush();
     expect(calls).toHaveLength(2);
@@ -627,7 +680,9 @@ test('a sparse native branch stays explicit and retries its exact cursor before 
     expect(ui.host.textContent).toContain('Second neighbour');
     expect(ui.host.querySelector('[data-graph-selection="node:' + anchor + '"]')).toBeNull();
     expect(ui.host.textContent).not.toContain('native-cursor-private');
-    expect([...ui.host.querySelectorAll('button')].some((button) => button.textContent?.includes('Continue this branch'))).toBe(false);
+    expect(
+      [...ui.host.querySelectorAll('button')].some((button) => button.textContent?.includes('Continue this branch')),
+    ).toBe(false);
   } finally {
     await ui.close();
   }

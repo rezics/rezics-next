@@ -57,25 +57,44 @@ function subject(id: string, label: string): SubjectRead {
 function reading(query: StoryQuery = {}, state: StoryState = 'relations', locale = 'en'): GraphSuccess {
   const long = state === 'long';
   const labelOf = (id: string) =>
-    id === anchor ? 'Anchor' : id === neighbour ? (long ? longLabels[locale as keyof typeof longLabels] : 'Neighbour') : 'Second neighbour';
+    id === anchor
+      ? 'Anchor'
+      : id === neighbour
+        ? long
+          ? longLabels[locale as keyof typeof longLabels]
+          : 'Neighbour'
+        : 'Second neighbour';
   const selectedEdge = query.edge
     ? { from: query.from!, property: query.edgeProperty!, to: query.to!, statement: query.edge }
     : undefined;
   const detailId = query.node ?? selectedEdge?.from;
-  const detailStatement: NonNullable<GraphSuccess['detail']>['statement'] = selectedEdge ? {
-    id: selectedEdge.statement,
-    property: { id: selectedEdge.property, data_type: 'wikibase-item' },
-    value: { type: 'value' as const, content: selectedEdge.to },
-    rank: 'normal' as const,
-    qualifiers: [{
-      property: { id: 'schema:description', data_type: 'string' },
-      value: { type: 'value' as const, content: 'Influence through correspondence, rather than a direct adaptation.' },
-    }],
-    references: [{ parts: [{
-      property: { id: 'schema:url', data_type: 'url' },
-      value: { type: 'value' as const, content: 'https://example.org/illustrative-correspondence' },
-    }] }],
-  } : undefined;
+  const detailStatement: NonNullable<GraphSuccess['detail']>['statement'] = selectedEdge
+    ? {
+        id: selectedEdge.statement,
+        property: { id: selectedEdge.property, data_type: 'wikibase-item' },
+        value: { type: 'value' as const, content: selectedEdge.to },
+        rank: 'normal' as const,
+        qualifiers: [
+          {
+            property: { id: 'schema:description', data_type: 'string' },
+            value: {
+              type: 'value' as const,
+              content: 'Influence through correspondence, rather than a direct adaptation.',
+            },
+          },
+        ],
+        references: [
+          {
+            parts: [
+              {
+                property: { id: 'schema:url', data_type: 'url' },
+                value: { type: 'value' as const, content: 'https://example.org/illustrative-correspondence' },
+              },
+            ],
+          },
+        ],
+      }
+    : undefined;
   const detailSubject = detailId ? subject(detailId, labelOf(detailId)) : undefined;
   if (detailSubject && detailStatement) detailSubject.subject.statements[property] = [detailStatement];
   const sparse = state === 'sparse' && !query.expansion;
@@ -85,7 +104,12 @@ function reading(query: StoryQuery = {}, state: StoryState = 'relations', locale
     relations: [
       {
         id: property,
-        label: { text: long ? 'Influenced by / 着想と表現に影響を与えた作品・人物との関係 / durch Briefwechsel beeinflusst' : 'Influenced by', lang: 'en' },
+        label: {
+          text: long
+            ? 'Influenced by / 着想と表現に影響を与えた作品・人物との関係 / durch Briefwechsel beeinflusst'
+            : 'Influenced by',
+          lang: 'en',
+        },
         inverse: { text: 'Influenced', lang: 'en' },
         group: 'related',
       },
@@ -98,24 +122,33 @@ function reading(query: StoryQuery = {}, state: StoryState = 'relations', locale
     },
     graph: {
       nodes: (sparse ? [anchor] : [anchor, neighbour, second]).map((id) => ({
-        id, type: 'schema:Book', label: labelOf(id), summary: { id, type: 'schema:Book', label: null },
+        id,
+        type: 'schema:Book',
+        label: labelOf(id),
+        summary: { id, type: 'schema:Book', label: null },
       })),
-      edges: sparse ? [] : [
-        { from: anchor, property, to: neighbour, statement },
-        { from: neighbour, property, to: second, statement: secondStatement },
-        { from: second, property, to: anchor, statement: '00000000-0000-4000-8000-00000000e003' },
-      ],
-      truncated: query.expansion ? [] : [{ node: anchor, property, direction: 'out', cursor: 'illustrative-native-page-cursor' }],
+      edges: sparse
+        ? []
+        : [
+            { from: anchor, property, to: neighbour, statement },
+            { from: neighbour, property, to: second, statement: secondStatement },
+            { from: second, property, to: anchor, statement: '00000000-0000-4000-8000-00000000e003' },
+          ],
+      truncated: query.expansion
+        ? []
+        : [{ node: anchor, property, direction: 'out', cursor: 'illustrative-native-page-cursor' }],
     },
-    detail: detailSubject ? {
-      subject: detailSubject,
-      ...(detailStatement ? { statement: detailStatement } : {}),
-      labels: {
-        [property]: { text: 'Influenced by', lang: 'en' },
-        'schema:description': { text: 'Relationship context', lang: 'en' },
-        'schema:url': { text: 'Source', lang: 'en' },
-      },
-    } : null,
+    detail: detailSubject
+      ? {
+          subject: detailSubject,
+          ...(detailStatement ? { statement: detailStatement } : {}),
+          labels: {
+            [property]: { text: 'Influenced by', lang: 'en' },
+            'schema:description': { text: 'Relationship context', lang: 'en' },
+            'schema:url': { text: 'Source', lang: 'en' },
+          },
+        }
+      : null,
     cost: { nativeCalls: 4, valuesProcessed: 8, bytesRetained: 256, paths: [] },
     session: 'illustrative-session-token',
   };
@@ -135,12 +168,15 @@ function GraphBrowserStory({ state }: { state: StoryState }) {
 
 function GraphBrowserFixture({ state, locale }: { state: StoryState; locale: string }) {
   const [route, setRoute] = useState(() => initialRouteFor(state));
-  const transport = useMemo<GraphBrowserTransport>(() => ({
-    read: async (query) => {
-      if (state === 'pending') return new Promise<GraphRead>(() => {});
-      return reading(query, state, locale);
-    },
-  }), [state, locale]);
+  const transport = useMemo<GraphBrowserTransport>(
+    () => ({
+      read: async (query) => {
+        if (state === 'pending') return new Promise<GraphRead>(() => {});
+        return reading(query, state, locale);
+      },
+    }),
+    [state, locale],
+  );
   const initial = useMemo(() => {
     if (state === 'pending' || state === 'returned') return undefined;
     if (state === 'failure') return { ok: false as const, reason: 'unavailable' as const };
@@ -151,7 +187,8 @@ function GraphBrowserFixture({ state, locale }: { state: StoryState; locale: str
     <PatternStory path={path}>
       <AppShell>
         <p className="mx-auto mb-4 max-w-5xl text-sm text-muted-foreground">
-          Illustrative contract-shaped fixtures. Choose list or diagram and viewport manually. Links use the native route shapes; these identities are illustrative.
+          Illustrative contract-shaped fixtures. Choose list or diagram and viewport manually. Links use the native
+          route shapes; these identities are illustrative.
         </p>
         <GraphBrowserPage
           id={anchor}
@@ -182,7 +219,8 @@ const meta = {
     },
     docs: {
       description: {
-        component: 'Illustrative contract-shaped fixtures rendered by the default GraphBrowserPage. Opening performs no scripted interaction. Manually choose a viewport, locale, list or diagram, exact statement, continuation or retry. Source assertions and fixtures establish caller rendering only; native and visual acceptance remain separate.',
+        component:
+          'Illustrative contract-shaped fixtures rendered by the default GraphBrowserPage. Opening performs no scripted interaction. Manually choose a viewport, locale, list or diagram, exact statement, continuation or retry. Source assertions and fixtures establish caller rendering only; native and visual acceptance remain separate.',
       },
     },
   },
