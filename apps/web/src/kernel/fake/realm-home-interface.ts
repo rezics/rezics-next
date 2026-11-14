@@ -34,8 +34,18 @@ const membership = {
   reservationId: id(5),
   transactionId: id(6),
 };
-const avatar = { state: 'available' as const, value: { ...image, containerId: interfaceRealmId } };
-const banner = { state: 'available' as const, value: { ...bannerImage, containerId: interfaceRealmId } };
+const avatar = {
+  state: 'available' as const,
+  value: { ...image, containerId: interfaceRealmId, variants: image.variants.map((variant) => ({ ...variant })) },
+};
+const banner = {
+  state: 'available' as const,
+  value: {
+    ...bannerImage,
+    containerId: interfaceRealmId,
+    variants: bannerImage.variants.map((variant) => ({ ...variant })),
+  },
+};
 const description = 'Read slowly, compare translations, and make room for another interpretation.';
 
 export function interfaceRealmHome(signedIn: boolean): NativeRealmHomePage {
@@ -92,7 +102,52 @@ export function interfaceRealmHome(signedIn: boolean): NativeRealmHomePage {
             complete: true,
             threads: [
               {
-                thread: { id: id(12), title: interfaceThreadTitle },
+                thread: {
+                  id: id(12),
+                  title: interfaceThreadTitle,
+                  route: 1,
+                  authorId: id(4),
+                  kind: 'discussion',
+                  licence: 'CC-BY-4.0',
+                  subjectIds: [],
+                  boardId: id(11),
+                  visibility: 'published',
+                  securityRevision: '1',
+                  availability: 'available',
+                  createdAt,
+                  firstPost: {
+                    id: id(14),
+                    threadId: id(12),
+                    route: 1,
+                    authorId: id(4),
+                    parentId: null,
+                    licence: 'CC-BY-4.0',
+                    subjectIds: [],
+                    boardId: id(11),
+                    visibility: 'published',
+                    securityRevision: '1',
+                    availability: 'available',
+                    createdAt,
+                    revisedAt: null,
+                    revisionId: id(15),
+                    mediaIds: [],
+                    voteCitation: null,
+                    body: {
+                      version: 'rezics-document-v1',
+                      profile: 'blocks',
+                      doc: {
+                        type: 'doc',
+                        content: [
+                          {
+                            type: 'paragraph',
+                            content: [{ type: 'text', text: 'Which translation would you read again?' }],
+                          },
+                        ],
+                      },
+                    },
+                    sha256: '8f5cf36621f2a2be236f95830a452a15461f692eaee59775ebea561f043a5e938',
+                  },
+                },
                 target: { kind: 'thread', id: id(12), boardId: id(11) },
                 comments: {
                   state: 'current',
