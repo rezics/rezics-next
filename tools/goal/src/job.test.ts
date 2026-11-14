@@ -132,8 +132,8 @@ async function typingRetryFixture(
   const compiler = options.setupFailure
     ? ['bun', 'run', '--cwd', 'services/kernel', 'typecheck']
     : kernelOutput
-    ? ['sh', '-c', 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck']
-    : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+      ? ['sh', '-c', 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck']
+      : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
   const checkId = randomUUID();
   const physicalRunId = randomUUID();
   const outputRun = `client-output-${physicalRunId}`;
@@ -148,7 +148,9 @@ async function typingRetryFixture(
     writeFileSync(join(worktree, 'services/kernel/scripts/typecheck.ts'), 'export {};\n');
     writeFileSync(
       join(worktree, 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql'),
-      options.setupFailure === 'spoofed' ? '-- migrate:up\nselect 1;\n-- migrate:down\n' : '-- migrate:down\nselect 1;\n',
+      options.setupFailure === 'spoofed'
+        ? '-- migrate:up\nselect 1;\n-- migrate:down\n'
+        : '-- migrate:down\nselect 1;\n',
     );
   } else if (kernelOutput) {
     mkdirSync(join(worktree, 'services/kernel'), { recursive: true });
@@ -238,7 +240,12 @@ async function typingRetryFixture(
           : 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n',
   );
   const checkExitCode = options.setupFailure ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1;
-  settleWorkerCheckHostBudget(env, checkExitCode, !options.setupFailure, { argv: compiler, log, worktree, physicalRunId });
+  settleWorkerCheckHostBudget(env, checkExitCode, !options.setupFailure, {
+    argv: compiler,
+    log,
+    worktree,
+    physicalRunId,
+  });
   if (options.stale && options.setupFailure)
     writeFileSync(
       join(worktree, 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql'),

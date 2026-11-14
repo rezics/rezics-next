@@ -2338,18 +2338,18 @@ function terminalMigrationSetupDefect(
       const request = record.typingRequest;
       return Boolean(
         failure &&
-          request &&
-          record.exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT &&
-          record.includedTypecheck === true &&
-          record.typecheckFailed === false &&
-          record.typingInputs === undefined &&
-          failure.kind === 'missing-kernel-migration-up-marker' &&
-          failure.commandReached === false &&
-          failure.physicalRunId === result.physicalRunId &&
-          request.physicalRunId === result.physicalRunId &&
-          JSON.stringify(failure.command) === JSON.stringify(input.pendingCommand) &&
-          JSON.stringify(request.command) === JSON.stringify(input.pendingCommand) &&
-          JSON.stringify(result.argv) === JSON.stringify(input.pendingCommand),
+        request &&
+        record.exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT &&
+        record.includedTypecheck === true &&
+        record.typecheckFailed === false &&
+        record.typingInputs === undefined &&
+        failure.kind === 'missing-kernel-migration-up-marker' &&
+        failure.commandReached === false &&
+        failure.physicalRunId === result.physicalRunId &&
+        request.physicalRunId === result.physicalRunId &&
+        JSON.stringify(failure.command) === JSON.stringify(input.pendingCommand) &&
+        JSON.stringify(request.command) === JSON.stringify(input.pendingCommand) &&
+        JSON.stringify(result.argv) === JSON.stringify(input.pendingCommand),
       );
     });
     if (candidates.length !== 1) continue;
@@ -2382,15 +2382,7 @@ function terminalMigrationSetupDefect(
     )
       continue;
     const history = readCheckEvidence(
-      join(
-        input.worktree,
-        '.temp',
-        'goal',
-        'checks',
-        'custody',
-        'history',
-        `${checkId}.${result.physicalRunId}.json`,
-      ),
+      join(input.worktree, '.temp', 'goal', 'checks', 'custody', 'history', `${checkId}.${result.physicalRunId}.json`),
     );
     if (
       !history ||
@@ -2426,7 +2418,8 @@ export function workerCheckHostTerminalSourceRepair(input: {
   if (settled.ok) return false;
   if (settled.kind === 'typing-failure')
     return (
-      (input.pendingCommand === undefined || JSON.stringify(input.pendingCommand) === JSON.stringify(settled.command)) &&
+      (input.pendingCommand === undefined ||
+        JSON.stringify(input.pendingCommand) === JSON.stringify(settled.command)) &&
       workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) === 'terminal'
     );
   return terminalMigrationSetupDefect(input, settled);
