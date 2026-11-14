@@ -582,6 +582,55 @@ version (revalidated with the current schema and environment) and reports the ex
 manager and the supermanager; the next valid version is adopted normally. Without a valid version on record the error
 stops the command as before.
 
+Decision: opt in with a `manager-duty:` prefix inside the existing note `text`; each sweep resolves the configured
+resident and currently active managed sessions, then journals delivery per recipient and scheduled occurrence through
+the native inbox.
+
+### Recurring manager duty
+
+A note whose `text` starts with `manager-duty:` uses the existing `text`, `remindAt` and `everyHours` fields; it adds
+no local configuration keys, so older tools/goal checkouts continue to parse it. The host reads manager sessions at
+each reminder sweep, which includes newly started managers. It sends one duty mail to the configured resident
+supermanager and each running managed manager whose native Goal is active. A manager parked automatically with
+`waitingForInbox` is also eligible: the existing native inbox wake resumes it. Messages to busy managers stay in the
+inbox until the normal manager loop can consume them. Stopped or operator-paused sessions and Goals that are paused by
+the operator, blocked, complete, usage-limited or budget-limited are skipped. A recipient failure is retried at a later
+sweep without withholding successful deliveries. The journal records the scheduled occurrence per recipient, so
+sweeps and host restarts do not repeat a successful mail; the inbox's existing dedupe also covers the delivery-to-
+journal crash window.
+
+Each manager reads its owning Goal responsibilities and the complete current work inventory using `manager status`,
+`status` and the owner documents. It sends the REZICS Telegram group a first Traditional Chinese report with all
+remaining work, results and their source evidence, which work actually started and its first source path/revision,
+spare capacity, the largest loss, and the action it is taking now. Then it performs that action, keeping independent
+source work moving while checks run. After a real result it sends a distinct second Traditional Chinese report naming
+the action, source revision, changed paths and exact result evidence. Acknowledgements, intent and unchanged counts are
+not evidence. Reports must not include credentials, tokens or private configuration. The resident's separate
+10-minute supervision checkpoint continues unchanged.
+
+After this revision is promoted, activate the duty from the main checkout's untracked `.temp/goal/local.json`. Add one
+entry to its existing `notes` array, set `remindAt` to the next intended UTC delivery time, and keep the cadence at one
+hour:
+
+```json
+{
+  "text": "manager-duty: Read your owned responsibilities and the complete work inventory; send a first Traditional Chinese REZICS Telegram report with remaining work, results and source evidence, actual starts and first source, spare capacity, largest loss, and the action you will take now. Perform that action while keeping independent source work moving during checks. After a real result, send a distinct Traditional Chinese evidence report with source revision, changed paths, and exact result. Acknowledgements, intent, and unchanged counts are not evidence. Do not include secrets.",
+  "remindAt": "<next intended UTC time, for example 2026-11-15T03:00:00Z>",
+  "everyHours": 1
+}
+```
+
+Validate the file and restart the existing resident services so the manager host reloads the note:
+
+```sh
+bun tools/goal/src/cli.ts config check <main-checkout>/.temp/goal/local.json
+go-task goal:service:restart
+```
+
+Observe delivery with `bun tools/goal/src/cli.ts manager status` and `bun tools/goal/src/cli.ts inbox read <manager>` for
+the resident and each active managed manager. The normal sweep and inbox remain the only scheduler and delivery path;
+do not add another timer or Telegram automation.
+
 The following illustrates the local schema. Replace placeholders with local values and supply the required policy
 fields listed below; the empty policy object deliberately provides no account policy.
 
@@ -3165,6 +3214,8 @@ the marker digests so the receipt retains its full-trio proof.
 Decision: authenticated `typing-recover` may replace one consumed compiler grant only when unchanged source's exact resultless check, SIGTERM, Root authorization, local/remote terminal proof and verified cleanup receipt bind the same task, attempt, physical run and command. A missing predecessor authorizes no new run. Preserve cancellation and receipt; fence checks with compiler results, live or unknown custody, manual cancellation and later attempts. Keep the exact no-command-start recovery proof. Never retry source or infer compiler success.
 
 Decision: a consumed exact Web compiler grant with unresolved physical evidence returns its check and run identity with terminal or unknown custody, and repeated queries do not re-advertise it. Permit the existing single compiler-only replacement only for that same Web run after verified resultless cleanup, unchanged installed Web inputs and existing authenticated owner or operations authority; terminal compiler receipts still settle normally.
+
+Decision: stopped-action recovery resolves a compiler-only check through its exact authenticated same-attempt native grant, current compiler input identity and owned result/custody; the parent attempt's `checks` remain the original checks and do not need to list the separately registered recovery check.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed

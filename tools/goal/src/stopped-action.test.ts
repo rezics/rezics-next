@@ -1,20 +1,24 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { sweepBacklog } from './backlog.ts';
 import { openDb } from './db.ts';
 import { briefProposalHash } from './durable-follow-up.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
-import { brief, temporaryDirectory } from './test-support.ts';
+import { brief, temporaryDirectory, writeVerifiedResultlessCleanupEvidence } from './test-support.ts';
 import { proofFingerprint } from './verification.ts';
+import { processIdentity } from './process.ts';
 import { stoppedActionProjection } from './stopped-action.ts';
 import {
   grantWorkerTypingRecovery,
   workerCheckBudgetDirectory,
   workerCheckHostContentTree,
 } from './worker-check-budget.ts';
+import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
 
 const webCompiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
@@ -33,8 +37,15 @@ function prepareTypingRecovery(
   consumed: boolean,
   sequence: number,
   at: string,
-  terminal = false,
-): { checkId: string; physicalRunId: string; worktree: string } {
+  options: {
+    terminal?: boolean;
+    distinctRecoveryCheck?: boolean;
+    replacement?: boolean;
+    active?: boolean;
+    resultless?: boolean;
+    changedInputs?: boolean;
+  } = {},
+): { checkId: string; physicalRunId: string; worktree: string; originalCheckId: string } {
   const worktree = join(stateDirectory, 'worktrees', taskId);
   mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
   mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
@@ -72,7 +83,8 @@ function prepareTypingRecovery(
     command: webCompiler,
     actor: { id: actorId, sessionId: `${actorId}-session` },
   });
-  const checks = [grant.checkId];
+  const originalCheckId = options.distinctRecoveryCheck ? randomUUID() : undefined;
+  const checks = [originalCheckId ?? grant.checkId];
   db.query('INSERT INTO worker_attempts VALUES (?, 1, ?)').run(
     taskId,
     JSON.stringify({
@@ -101,10 +113,29 @@ function prepareTypingRecovery(
     at,
     JSON.stringify(authorization),
   );
+  if (originalCheckId) recordTerminalTypingResult(worktree, taskId, 1, originalCheckId, randomUUID(), webCompiler);
+  if (options.changedInputs) {
+    writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const reader = false\n');
+    git(worktree, ['add', 'apps/web/src/reader.ts']);
+    git(worktree, ['commit', '-m', 'Change retained compiler input identity']);
+  }
   if (consumed) {
     const budget = workerCheckBudgetDirectory(stateDirectory, taskId, 1);
     const checkRoot = join(worktree, '.temp/goal/checks');
     mkdirSync(join(checkRoot, 'results'), { recursive: true });
+    if (options.active) {
+      recordActiveTypingResult(worktree, taskId, 1, grant.checkId, grant.physicalRunId, grant.command);
+    }
+    if (options.resultless)
+      writeVerifiedResultlessCleanupEvidence({
+        worktree,
+        stateDirectory,
+        taskId,
+        attempt: 1,
+        checkId: grant.checkId,
+        physicalRunId: grant.physicalRunId,
+        command: grant.command,
+      });
     writeFileSync(join(checkRoot, 'results', 'unrelated.json'), '{not a check result');
     writeFileSync(
       join(budget, '1'),
@@ -113,10 +144,26 @@ function prepareTypingRecovery(
         typingRecovery: { token: grant.token, checkId: grant.checkId, physicalRunId: grant.physicalRunId },
       }),
     );
-    writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp: '1' }));
-    if (terminal) recordTerminalTypingResult(worktree, taskId, 1, grant.checkId, grant.physicalRunId, grant.command);
+    if (options.replacement) {
+      const predecessor = { ...grant, token: randomUUID(), checkId: randomUUID(), physicalRunId: randomUUID() };
+      writeFileSync(join(budget, 'typing-recovery', `${predecessor.token}.json`), JSON.stringify(predecessor));
+      writeFileSync(
+        join(budget, 'typing-recovery', `${grant.token}.json`),
+        JSON.stringify({ ...grant, stamp: '1', replacementOf: predecessor.token }),
+      );
+    } else {
+      writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp: '1' }));
+    }
+    if (options.terminal) {
+      recordTerminalTypingResult(worktree, taskId, 1, grant.checkId, grant.physicalRunId, grant.command);
+    }
   }
-  return { checkId: grant.checkId, physicalRunId: grant.physicalRunId, worktree };
+  return {
+    checkId: grant.checkId,
+    physicalRunId: grant.physicalRunId,
+    worktree,
+    originalCheckId: originalCheckId ?? grant.checkId,
+  };
 }
 
 function recordTerminalTypingResult(
@@ -154,6 +201,51 @@ function recordTerminalTypingResult(
       exitCode,
       remoteExpected: false,
       terminalProof: { local: true, resultKnown: true, remote: null },
+    }),
+  );
+}
+
+function recordActiveTypingResult(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkId: string,
+  physicalRunId: string,
+  command: readonly string[],
+): void {
+  const runnerIdentity = processIdentity();
+  if (!runnerIdentity) throw new Error('The active recovery fixture needs the current process identity');
+  const root = join(worktree, '.temp/goal/checks');
+  const runnerHost = hostname();
+  const ownership = { taskId, attempt };
+  mkdirSync(join(root, 'results'), { recursive: true });
+  mkdirSync(join(root, 'custody/history'), { recursive: true });
+  writeFileSync(
+    join(root, 'results', `${checkId}.json`),
+    JSON.stringify({
+      id: checkId,
+      status: 'running',
+      cwd: worktree,
+      argv: command,
+      physicalRunId,
+      ownership,
+      runnerHost,
+      runnerPid: runnerIdentity.pid,
+      runnerIdentity,
+    }),
+  );
+  writeFileSync(
+    physicalHistoryPath(worktree, checkId, physicalRunId),
+    JSON.stringify({
+      version: 1,
+      id: checkId,
+      cwd: worktree,
+      argv: command,
+      physicalRunId,
+      status: 'running',
+      ownership,
+      runnerHost,
+      runnerIdentity,
     }),
   );
 }
@@ -361,7 +453,7 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
   }
 });
 
-test('completed source stays with its evidence receiver until exact evidence resolves', async () => {
+test('completed source with a separately registered recovery check stays with its evidence receiver', async () => {
   const temp = temporaryDirectory();
   const db = openDb(join(temp.path, 'goal.sqlite'));
   try {
@@ -378,6 +470,7 @@ test('completed source stays with its evidence receiver until exact evidence res
       true,
       1,
       old,
+      { distinctRecoveryCheck: true },
     );
     const originalTaskBody = db
       .query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?')
@@ -391,7 +484,9 @@ test('completed source stays with its evidence receiver until exact evidence res
       )
       .get('consumed-owner', 1)!.body;
     prepareTypingRecovery(db, temp.path, 'consumed-operations', 'quiet-operations', 'operations', true, 2, old);
-    prepareTypingRecovery(db, temp.path, 'grant-awaiting-run', 'pending-grant', 'pending-grant', false, 3, old);
+    prepareTypingRecovery(db, temp.path, 'grant-awaiting-run', 'pending-grant', 'pending-grant', false, 3, old, {
+      distinctRecoveryCheck: true,
+    });
     const failedSource = {
       id: 'failed-source',
       sequence: 4,
@@ -449,7 +544,10 @@ test('completed source stays with its evidence receiver until exact evidence res
         acceptedSuccessor: { taskId: failedSuccessor.id, commit: failedSuccessorCommit },
       }),
     );
-    prepareTypingRecovery(db, temp.path, 'consumed-terminal', 'terminal-result', 'terminal-result', true, 5, old, true);
+    prepareTypingRecovery(db, temp.path, 'consumed-terminal', 'terminal-result', 'terminal-result', true, 5, old, {
+      terminal: true,
+      distinctRecoveryCheck: true,
+    });
 
     const width = await sweepWidthGovernor(db, inbox, now);
     expect(width.snapshot.system).toMatchObject({
@@ -484,6 +582,14 @@ test('completed source stays with its evidence receiver until exact evidence res
       actionable: true,
       missingPredicate: 'the exact compiler result and verified terminal custody',
     });
+    expect(consumedOwner.originalCheckId).not.toBe(consumedOwner.checkId);
+    expect(
+      JSON.parse(
+        db
+          .query<{ body: string }, [string, number]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+          .get('consumed-owner', 1)!.body,
+      ).checks,
+    ).toEqual([consumedOwner.originalCheckId]);
     const ownerWidthNotice = inbox.pending('quiet-owner')[0]?.event.summary;
     expect(ownerWidthNotice).toContain('Completed source remains owed to its evidence receiver');
     expect(ownerWidthNotice).toContain('consumed-owner attempt 1, owner quiet-owner');
@@ -603,6 +709,75 @@ test('completed source stays with its evidence receiver until exact evidence res
       evidenceReceivingStopped: 0,
     });
     expect(later.snapshot.goals.find(({ goal }) => goal === 'later-owner')?.evidenceReceiverActions).toEqual([]);
+
+    const active = prepareTypingRecovery(
+      db,
+      temp.path,
+      'active-recovery',
+      'active-recovery',
+      'active-recovery',
+      true,
+      8,
+      old,
+      { active: true, distinctRecoveryCheck: true },
+    );
+    expect(stoppedActionProjection(db, 'active-recovery', 1, 'typing-recovery')).toMatchObject({
+      kind: 'evidence-receiver',
+      actionable: false,
+      missingPredicate: 'the terminal result and custody of the active exact compiler check',
+    });
+    expect(active.checkId).not.toBe(active.originalCheckId);
+
+    prepareTypingRecovery(
+      db,
+      temp.path,
+      'replacement-recovery',
+      'replacement-recovery',
+      'replacement-recovery',
+      true,
+      9,
+      old,
+      { replacement: true, distinctRecoveryCheck: true },
+    );
+    expect(stoppedActionProjection(db, 'replacement-recovery', 1, 'typing-recovery')).toMatchObject({
+      kind: 'evidence-receiver',
+      actionable: true,
+      missingPredicate: 'terminal result and custody for the already authorized compiler-only replacement',
+    });
+
+    prepareTypingRecovery(
+      db,
+      temp.path,
+      'resultless-recovery',
+      'resultless-recovery',
+      'resultless-recovery',
+      true,
+      10,
+      old,
+      { resultless: true, distinctRecoveryCheck: true },
+    );
+    expect(stoppedActionProjection(db, 'resultless-recovery', 1, 'typing-recovery')).toMatchObject({
+      kind: 'evidence-receiver',
+      actionable: true,
+      missingPredicate: 'authenticated owner authorization for one compiler-only replacement after verified cleanup',
+    });
+
+    prepareTypingRecovery(
+      db,
+      temp.path,
+      'changed-input-recovery',
+      'changed-input-recovery',
+      'changed-input-recovery',
+      true,
+      11,
+      old,
+      { changedInputs: true, distinctRecoveryCheck: true },
+    );
+    expect(stoppedActionProjection(db, 'changed-input-recovery', 1, 'typing-recovery')).toMatchObject({
+      kind: 'evidence-receiver',
+      actionable: true,
+      owner: 'changed-input-recovery',
+    });
   } finally {
     db.close();
     temp.close();

@@ -1,12 +1,21 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Database } from 'bun:sqlite';
 
-/**
- * A note in the local configuration. Without remindAt it only documents an arrangement; with remindAt the manager
- * host delivers it to the supermanager once that time passes, and again every everyHours when that is set, so a plan
- * such as using an allowance before its weekly reset is not forgotten.
- */
+/** A note in local configuration; `manager-duty:` in text opts into native delivery to active manager sessions. */
 export type Note = { text: string; remindAt?: string; everyHours?: number };
+
+export type ManagerDutySession = {
+  id: string;
+  status?: unknown;
+  kind?: unknown;
+  goalStatus?: unknown;
+  activeTurnId?: unknown;
+  waitingForInbox?: unknown;
+  goalPauseOrigin?: unknown;
+};
+
+const managerDutyPrefix = 'manager-duty:';
 
 const hourMs = 3_600_000;
 const minimumPeriodMs = 1;
@@ -75,19 +84,92 @@ function readDeliveryJournal(path: string): Record<string, string> {
   return delivered;
 }
 
-/** Deliver each due reminder once per occurrence; returns how many were delivered. */
+/** Read just the persisted manager fields needed to decide who should receive a recurring duty note. */
+export function readManagerDutySessions(db: Database): ManagerDutySession[] {
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return [];
+  return (db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[]).flatMap(
+    ({ id, state }) => {
+      try {
+        const parsed: unknown = JSON.parse(state);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+        const session = parsed as Record<string, unknown>;
+        const goalState = session.goalState;
+        const goalStatus =
+          goalState && typeof goalState === 'object' && !Array.isArray(goalState)
+            ? (goalState as Record<string, unknown>).status
+            : undefined;
+        return [
+          {
+            id,
+            status: session.status,
+            kind: session.kind,
+            goalStatus,
+            activeTurnId: session.activeTurnId,
+            waitingForInbox: session.waitingForInbox,
+            goalPauseOrigin: session.goalPauseOrigin,
+          },
+        ];
+      } catch {
+        return [];
+      }
+    },
+  );
+}
+
+function dutyJournalKey(text: string, recipient: string): string {
+  return `manager-duty:${JSON.stringify([recipient, text])}`;
+}
+
+function managerDutySessionIsEligible(session: ManagerDutySession): boolean {
+  if (session.status !== 'running') return false;
+  if (session.goalStatus === undefined || session.goalStatus === null || session.goalStatus === 'active') return true;
+  return session.goalStatus === 'paused' && session.waitingForInbox === true && session.goalPauseOrigin === 'automatic';
+}
+
+/** Resolve the resident and currently active managed sessions, including inbox-parked sessions. */
+export function managerDutyRecipients(supermanager: string, sessions: readonly ManagerDutySession[]): string[] {
+  const resident = sessions.find((session) => session.id === supermanager);
+  const recipients = sessions
+    .filter((session) => session.id !== supermanager && session.kind !== 'resident-supermanager')
+    .filter(managerDutySessionIsEligible)
+    .map((session) => session.id);
+  if (!resident || managerDutySessionIsEligible(resident)) recipients.push(supermanager);
+  return [...new Set(recipients)].sort((left, right) => left.localeCompare(right));
+}
+
+/** Deliver each due reminder once per occurrence; duty notes are additionally keyed by recipient. */
 export function deliverDueReminders(
   notes: readonly Note[],
   stateDirectory: string,
-  deliver: (summary: string) => void,
+  deliver: (summary: string, recipient?: string) => void,
   now = Date.now(),
+  dutyRecipients: readonly string[] = [],
 ): number {
   const path = join(stateDirectory, 'note-reminders.json');
   const delivered = existsSync(path) ? readDeliveryJournal(path) : (Object.create(null) as Record<string, string>);
   let count = 0;
   for (const note of notes) {
     const at = occurrence(note, now);
-    if (!at || delivered[note.text] === at) continue;
+    if (!at) continue;
+    if (note.text.startsWith(managerDutyPrefix)) {
+      const instructions = note.text.slice(managerDutyPrefix.length).trim();
+      for (const recipient of dutyRecipients) {
+        const key = dutyJournalKey(note.text, recipient);
+        if (delivered[key] === at) continue;
+        try {
+          deliver(
+            `Manager duty (local configuration note, due ${at}): ${instructions}`.replace(/[\r\n]+/g, ' '),
+            recipient,
+          );
+          delivered[key] = at;
+          count++;
+        } catch {
+          // A failed recipient retries on the next sweep without holding the other managers back.
+        }
+      }
+      continue;
+    }
+    if (delivered[note.text] === at) continue;
     deliver(`Reminder (local configuration note, due ${at}): ${note.text}`.replace(/[\r\n]+/g, ' '));
     delivered[note.text] = at;
     count++;
