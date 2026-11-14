@@ -69,7 +69,7 @@ function ReviewField({
       <p className="text-sm text-muted-foreground">{help}</p>
       <button
         type="button"
-        className="min-h-11 rounded-md border px-3 disabled:opacity-50"
+        className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
         disabled={disabled}
         onClick={onEdit}
       >
@@ -151,10 +151,10 @@ export function AnnotationReview({
         onEdit={() => onEdit('priority')}
       />
       <p className="text-sm text-muted-foreground">{m.library_annotation_review_exact()}</p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
-          className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+          className="min-h-11 w-full rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50 sm:w-auto"
           disabled={blocked || submitted}
           onClick={onSave}
         >
@@ -162,7 +162,7 @@ export function AnnotationReview({
         </button>
         <button
           type="button"
-          className="min-h-11 rounded-md border px-3 disabled:opacity-50"
+          className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
           disabled={submitted}
           onClick={onClose}
         >
@@ -170,7 +170,7 @@ export function AnnotationReview({
         </button>
         <button
           type="button"
-          className="min-h-11 rounded-md border px-3 disabled:opacity-50"
+          className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
           disabled={submitted}
           onClick={(event) => onDiscard(event.currentTarget)}
         >

@@ -616,7 +616,12 @@ export function SourceCorrectionEditor({
         <div className="space-y-2 rounded-md border border-amber-500/50 p-3" role="status">
           <p>{m.library_rich_entry_source_unknown_outcome()}</p>
           {pending ? (
-            <button type="button" className="min-h-11 rounded-md border px-3" disabled={disabled} onClick={onRetry}>
+            <button
+              type="button"
+              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+              disabled={disabled}
+              onClick={onRetry}
+            >
               {m.library_rich_entry_source_retry_original()}
             </button>
           ) : null}
@@ -630,7 +635,11 @@ export function SourceCorrectionEditor({
             <CurrentFacts observation={current} />
           </div>
           {current && current.revision !== conflictRevision ? (
-            <button type="button" className="min-h-11 rounded-md border px-3" onClick={onReviewLatest}>
+            <button
+              type="button"
+              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground"
+              onClick={onReviewLatest}
+            >
               {m.library_rich_entry_review_latest()}
             </button>
           ) : (
@@ -646,7 +655,11 @@ export function SourceCorrectionEditor({
           <p>{m.library_rich_entry_source_revision_changed()}</p>
           <CurrentFacts observation={current} />
           {current && basisIsCurrent ? (
-            <button type="button" className="min-h-11 rounded-md border px-3" onClick={onReviewLatest}>
+            <button
+              type="button"
+              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground"
+              onClick={onReviewLatest}
+            >
               {m.library_rich_entry_review_latest()}
             </button>
           ) : null}
@@ -721,15 +734,15 @@ export function SourceCorrectionEditor({
         </label>
       </section>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <button
           type="submit"
-          className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+          className="min-h-11 w-full rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50 sm:w-auto"
           disabled={!canSubmit}
         >
           {m.library_rich_entry_save_source_correction()}
         </button>
-        <button type="button" className="min-h-11 rounded-md border px-3" onClick={onCancel}>
+        <button type="button" className="min-h-11 w-full rounded-md border px-3 sm:w-auto" onClick={onCancel}>
           {m.library_rich_entry_cancel()}
         </button>
       </div>

@@ -15,9 +15,9 @@ import {
   type AnnotationConfirmation,
   type AnnotationField,
 } from './contract';
-import { AnnotationEditor, focusAnnotationEditor } from './annotation-editor';
-import { AnnotationReview, AnnotationSaved } from './annotation-review';
-import { AnnotationDeparture, type AnnotationDepartureIntent } from './annotation-departure';
+import { focusAnnotationEditor } from './annotation-editor';
+import type { AnnotationDepartureIntent } from './annotation-departure';
+import { EntryWorkspace } from './entry-workspace';
 import {
   readPrivateEntryForSubject,
   savePrivateAnnotations,
@@ -32,7 +32,7 @@ import type {
   PersonalEntryObservation,
   PersonalEntrySourceCorrection,
 } from '@rezics/client';
-import { SourceCorrectionEditor, type SourceCorrectionNotice } from './source-correction-editor';
+import type { SourceCorrectionNotice } from './source-correction-editor';
 
 type ReaderSession = ReturnType<typeof useSession>;
 
@@ -55,46 +55,6 @@ type SourceCorrectionCommand = {
   entryGuard: Pick<PersonalEntryGuard, 'incarnationId' | 'currentRevision'>;
   body: PersonalEntrySourceCorrection;
 };
-
-function privacyText(value: PersonalEntryObservation['privacy']) {
-  if (value.status === 'absent') return m.library_rich_source_not_supplied();
-  if (value.status === 'cleared') return m.library_rich_source_cleared();
-  if (value.status === 'unknown')
-    return value.sourceValue
-      ? m.library_rich_source_unknown_value({ value: value.sourceValue })
-      : m.library_rich_source_unknown();
-  return value.meaning === 'private' ? m.library_rich_source_private() : m.library_rich_source_visible();
-}
-
-function timestampText(value: PersonalEntryObservation['sourceCreated']) {
-  if (value.status === 'absent') return m.library_rich_source_not_supplied();
-  if (value.status === 'cleared') return m.library_rich_source_cleared();
-  if (value.status === 'unknown')
-    return value.sourceValue
-      ? m.library_rich_source_unknown_value({ value: value.sourceValue })
-      : m.library_rich_source_unknown();
-  return m.library_rich_source_timestamp({
-    value: value.value,
-    precision:
-      value.precision === 'year'
-        ? m.library_rich_entry_precision_year()
-        : value.precision === 'month'
-          ? m.library_rich_entry_precision_month()
-          : value.precision === 'day'
-            ? m.library_rich_entry_precision_day()
-            : value.precision === 'minute'
-              ? m.library_rich_entry_precision_minute()
-              : value.precision === 'second'
-                ? m.library_rich_entry_precision_second()
-                : m.library_rich_entry_precision_fraction(),
-    zone:
-      value.zone === 'utc'
-        ? m.library_rich_entry_zone_utc()
-        : value.zone === 'offset'
-          ? m.library_rich_entry_zone_offset()
-          : m.library_rich_entry_zone_unknown(),
-  });
-}
 
 type PrivateEntryTransport = {
   read: (input: { data: { subjectId: string } }) => Promise<PrivateEntryReadResult>;
@@ -229,6 +189,7 @@ function PrivateEntryReview({
   const [retirementKind, setRetirementKind] = useState<'account' | 'entry' | 'exposure' | null>(null);
   const sourceBusy = useRef(false);
   const sourceOpener = useRef<HTMLButtonElement | null>(null);
+  const sourceHeading = useRef<HTMLHeadingElement>(null);
   const sourceOwnerKey = JSON.stringify([subject.id, viewer, origin.lifetime, entryGuard]);
   useEffect(() => {
     mounted.current = true;
@@ -638,6 +599,18 @@ function PrivateEntryReview({
     setConflictRefreshed(false);
   }
 
+  function refreshConflict() {
+    if (!currentResult() || annotationRefreshing) return;
+    setAnnotationRefreshing(true);
+    void Promise.all([query.refetch(), origin.refreshEntry()])
+      .then(([fresh, currentEntry]) => {
+        if (currentResult()) setConflictRefreshed(!fresh.isError && fresh.data?.kind === 'ready' && currentEntry);
+      })
+      .finally(() => {
+        if (currentResult()) setAnnotationRefreshing(false);
+      });
+  }
+
   function openSource(observation: PersonalEntryObservation, event: MouseEvent<HTMLButtonElement>) {
     if (!currentResult() || !writeAllowed || sourceCommand || annotationCommand || annotationBusy.current) return;
     sourceOpener.current = event.currentTarget;
@@ -801,7 +774,8 @@ function PrivateEntryReview({
   function closeSource() {
     if (!currentResult()) return;
     clearSourceFlow();
-    sourceOpener.current?.focus();
+    if (sourceOpener.current?.isConnected) sourceOpener.current.focus();
+    else sourceHeading.current?.focus();
   }
 
   const displayedSource = entry?.sourceObservations.find(
@@ -857,243 +831,78 @@ function PrivateEntryReview({
   }
 
   return (
-    <section aria-labelledby="rich-private-entry-heading" className="mt-5 space-y-4 rounded-lg border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="rich-private-entry-heading" className="text-lg font-semibold">
-            {m.library_rich_entry_heading()}
-          </h2>
-          <p className="text-sm font-medium">{subject.label}</p>
-          <p className="text-sm text-muted-foreground">{m.library_rich_entry_private_help()}</p>
-        </div>
-        <a
-          className="inline-flex min-h-11 items-center rounded-md border px-3 text-sm"
-          href={diaryHref}
-          onClick={followDiary}
-        >
-          {m.library_rich_entry_diary_link()}
-        </a>
-      </div>
-
-      <div hidden={confirmation !== null}>
-        <AnnotationEditor
-          draft={workingDraft}
-          issues={issues}
-          disabled={!annotationEditable}
-          reviewDisabled={conflictWaiting}
-          canDiscard={unsentDraft}
-          refs={editorRefs}
-          onChange={editDraft}
-          onReview={openAnnotationReview}
-          onDiscard={askDiscard}
-        />
-      </div>
-      {confirmation ? (
-        <AnnotationReview
-          subject={subject}
-          confirmation={confirmation}
-          submitted={annotationCommand !== null}
-          blocked={!annotationEditable || conflictWaiting}
-          onEdit={returnToAnnotation}
-          onSave={submitAnnotation}
-          onClose={() => returnToAnnotation('review')}
-          onDiscard={askDiscard}
-        />
-      ) : null}
-      {savedAnnotation ? <AnnotationSaved entry={savedAnnotation} /> : null}
-      {localOutcome ? (
-        <p role="status" className="rounded-md border p-3 text-sm">
-          {localOutcome === 'unchanged' ? m.library_annotation_no_change() : m.library_annotation_discarded()}
-        </p>
-      ) : null}
-      {annotationCommand ? (
-        <div className="space-y-2 rounded-md border p-3" role="status" aria-live="polite">
-          <p>{annotationNotice === 'uncertain' ? m.library_rich_entry_uncertain() : m.library_annotation_saving()}</p>
-          <p className="text-sm text-muted-foreground">{m.library_annotation_pending_help()}</p>
-          {annotationNotice === 'uncertain' ? (
-            <button
-              type="button"
-              className="min-h-11 rounded-md border px-3"
-              onClick={() => void sendAnnotation(annotationCommand)}
-            >
-              {m.library_rich_entry_retry()}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {annotationNotice === 'denied' ? <p role="status">{m.library_rich_entry_denied()}</p> : null}
-      {annotationNotice === 'missing' ? <p role="status">{m.library_rich_entry_missing()}</p> : null}
-      <AnnotationDeparture
-        intent={departure}
-        unresolved={annotationCommand !== null || sourceCommand !== null}
-        sourceOpen={sourceEditor !== null}
-        diaryHref={diaryHref}
-        onStay={stayWithAnnotation}
-        onDiscard={discardAnnotation}
-        returnFocus={departureTrigger.current}
-      />
-
-      {conflictWaiting ? (
-        <div
-          role="group"
-          aria-label={m.library_rich_entry_conflict()}
-          className="space-y-2 rounded-md border border-amber-600 p-3"
-        >
-          <p>{m.library_rich_entry_conflict()}</p>
-          <dl className="grid gap-2 break-words sm:grid-cols-2">
-            <div>
-              <dt>{m.library_rich_entry_note()}</dt>
-              <dd className="whitespace-pre-wrap">{entry.note ?? ''}</dd>
-            </div>
-            <div>
-              <dt>{m.library_rich_entry_priority()}</dt>
-              <dd>
-                {entry.priority === null
-                  ? m.library_rich_entry_unranked()
-                  : m.library_rich_entry_priority_value({ value: entry.priority })}
-              </dd>
-            </div>
-          </dl>
-          {query.isFetching || annotationRefreshing ? (
-            <p>{m.library_rich_entry_refreshing()}</p>
-          ) : reviewAvailable ? (
-            <button type="button" className="min-h-11 rounded-md border px-3" onClick={reviewLatest}>
-              {m.library_rich_entry_review_latest()}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="min-h-11 rounded-md border px-3"
-              onClick={() => {
-                if (!currentResult()) return;
-                setAnnotationRefreshing(true);
-                void Promise.all([query.refetch(), origin.refreshEntry()])
-                  .then(([fresh, currentEntry]) => {
-                    if (currentResult())
-                      setConflictRefreshed(!fresh.isError && fresh.data?.kind === 'ready' && currentEntry);
-                  })
-                  .finally(() => {
-                    if (currentResult()) setAnnotationRefreshing(false);
-                  });
-              }}
-            >
-              {m.library_selection_retry()}
-            </button>
-          )}
-        </div>
-      ) : null}
-
-      <div className="space-y-3 border-t pt-4">
-        <div>
-          <h3 className="font-semibold">{m.library_rich_entry_sources()}</h3>
-          <p className="text-sm text-muted-foreground">{m.library_rich_entry_sources_help()}</p>
-          <p className="text-sm text-muted-foreground">{m.library_rich_entry_timestamp_is_source_evidence()}</p>
-        </div>
-        {!sourceFactsReady ? (
-          <p role="status">{m.library_rich_entry_source_retired()}</p>
-        ) : entry.sourceObservations.length === 0 ? (
-          <p>{m.library_rich_entry_no_sources()}</p>
-        ) : (
-          <ul className="grid gap-3">
-            {entry.sourceObservations.map((observation) => {
-              const open = sourceEditor === observation.provider + '\u0000' + observation.recordId;
-              return (
-                <li key={observation.provider + ':' + observation.recordId} className="rounded-md border p-3">
-                  <dl className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_rich_entry_provider()}</dt>
-                      <dd>{observation.provider}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_rich_entry_record()}</dt>
-                      <dd className="break-all">{observation.recordId}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_rich_entry_privacy()}</dt>
-                      <dd>{privacyText(observation.privacy)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_rich_entry_source_created()}</dt>
-                      <dd className="break-words">{timestampText(observation.sourceCreated)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_rich_entry_source_updated()}</dt>
-                      <dd className="break-words">{timestampText(observation.sourceUpdated)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_rich_entry_native_recorded()}</dt>
-                      <dd>{observation.recordedAt}</dd>
-                    </div>
-                  </dl>
-                  <button
-                    type="button"
-                    className="mt-3 min-h-11 rounded-md border px-3"
-                    disabled={!writeAllowed || annotationCommand !== null || sourceCommand !== null}
-                    onClick={(event) => openSource(observation, event)}
-                  >
-                    {m.library_rich_entry_edit_source_facts()}
-                  </button>
-                  {open && sourceBaseObservation ? (
-                    <SourceCorrectionEditor
-                      key={`${subject.id}:${viewer}:${origin.lifetime}:${observation.provider}:${observation.recordId}`}
-                      baseline={sourceBaseObservation}
-                      current={displayedSource ?? null}
-                      notice={sourceNotice}
-                      conflictRevision={sourceConflictRevision}
-                      pending={sourceCommand !== null}
-                      savedBody={sourceSavedBody}
-                      savedObservation={sourceSavedObservation}
-                      disabled={!writeAllowed || annotationCommand !== null || annotationBusy.current}
-                      onSubmit={submitSource}
-                      onRetry={() => sourceCommand && void sendSource(sourceCommand)}
-                      onRefresh={() => void query.refetch()}
-                      onReviewLatest={reviewLatestSource}
-                      onCancel={closeSource}
-                      onEdit={() => {
-                        setSourceNotice(null);
-                        setSourceSavedBody(null);
-                        setSourceSavedObservation(null);
-                      }}
-                    />
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {sourceFactsReady && sourceEditor && sourceBaseObservation && !displayedSource ? (
-          <SourceCorrectionEditor
-            key={`${subject.id}:${viewer}:${origin.lifetime}:${sourceBaseObservation.provider}:${sourceBaseObservation.recordId}`}
-            baseline={sourceBaseObservation}
-            current={null}
-            notice={sourceNotice}
-            conflictRevision={sourceConflictRevision}
-            pending={sourceCommand !== null}
-            savedBody={sourceSavedBody}
-            savedObservation={sourceSavedObservation}
-            disabled={!writeAllowed || annotationCommand !== null || annotationBusy.current}
-            onSubmit={submitSource}
-            onRetry={() => sourceCommand && void sendSource(sourceCommand)}
-            onRefresh={() => void query.refetch()}
-            onReviewLatest={reviewLatestSource}
-            onCancel={closeSource}
-            onEdit={() => {
-              setSourceNotice(null);
-              setSourceSavedBody(null);
-              setSourceSavedObservation(null);
-            }}
-          />
-        ) : null}
-      </div>
-
-      <div className="border-t pt-4">
-        <h3 className="font-semibold">{m.library_rich_entry_state_history()}</h3>
-        <p className="mt-1 text-sm text-muted-foreground">{m.library_rich_entry_state_history_unavailable()}</p>
-      </div>
-
-      <span className="sr-only" aria-live="polite">
-        {displayedSource && sourceNotice === 'conflict' ? m.library_rich_entry_source_conflict() : ''}
-      </span>
-    </section>
+    <EntryWorkspace
+      subject={subject}
+      entry={entry}
+      diaryHref={diaryHref}
+      onDiaryClick={followDiary}
+      annotation={{
+        draft: workingDraft,
+        issues,
+        disabled: !annotationEditable,
+        reviewDisabled: conflictWaiting,
+        canDiscard: unsentDraft,
+        refs: editorRefs,
+        confirmation,
+        submitted: annotationCommand !== null,
+        blocked: !annotationEditable || conflictWaiting,
+        savedEntry: savedAnnotation,
+        localOutcome,
+        pending: annotationCommand !== null,
+        uncertain: annotationNotice === 'uncertain',
+        denied: annotationNotice === 'denied',
+        missing: annotationNotice === 'missing',
+        conflict: conflictWaiting,
+        refreshing: query.isFetching || annotationRefreshing,
+        reviewLatestAvailable: reviewAvailable,
+        departure,
+        unresolved: annotationCommand !== null || sourceCommand !== null,
+        sourceOpen: sourceEditor !== null,
+        returnFocus: departureTrigger.current,
+        onChange: editDraft,
+        onReview: openAnnotationReview,
+        onAskDiscard: askDiscard,
+        onEdit: returnToAnnotation,
+        onSave: submitAnnotation,
+        onCloseReview: () => returnToAnnotation('review'),
+        onRetry: () => {
+          if (annotationCommand) void sendAnnotation(annotationCommand);
+        },
+        onReviewLatest: reviewLatest,
+        onRefreshConflict: refreshConflict,
+        onStay: stayWithAnnotation,
+        onDepartureDiscard: discardAnnotation,
+      }}
+      source={{
+        factsReady: sourceFactsReady,
+        editorKey: sourceEditor,
+        baseline: sourceBaseObservation,
+        displayed: displayedSource ?? null,
+        notice: sourceNotice,
+        conflictRevision: sourceConflictRevision,
+        pending: sourceCommand !== null,
+        savedBody: sourceSavedBody,
+        savedObservation: sourceSavedObservation,
+        disabled: !writeAllowed || annotationCommand !== null || annotationBusy.current,
+        writeAllowed,
+        viewer,
+        originLifetime: origin.lifetime,
+        announceConflict: !!displayedSource && sourceNotice === 'conflict',
+        headingRef: sourceHeading,
+        onOpen: openSource,
+        onSubmit: submitSource,
+        onRetry: () => {
+          if (sourceCommand) void sendSource(sourceCommand);
+        },
+        onRefresh: () => void query.refetch(),
+        onReviewLatest: reviewLatestSource,
+        onCancel: closeSource,
+        onEdit: () => {
+          setSourceNotice(null);
+          setSourceSavedBody(null);
+          setSourceSavedObservation(null);
+        },
+      }}
+    />
   );
 }
