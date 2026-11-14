@@ -20,7 +20,7 @@ import type { AccessCheck } from '../../request/access.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
-import { withConnection } from '../../database/pool.ts';
+import { withBoundedReadConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { problemSchema } from '../../http/problem.ts';
@@ -149,7 +149,12 @@ export function searchRoutes<App>(
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
         });
         return admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+          if (
+            !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
+              deadlineError: () => new ProblemError('deadline_exceeded'),
+            }))
+          )
+            throw new ProblemError('forbidden');
           const outcome = await trending.read(query.language, query.limit);
           if (outcome.status !== 'ready')
             throw new ProblemError('semantic_not_ready', {
@@ -341,7 +346,12 @@ export function searchRoutes<App>(
           set.headers['cache-control'] = 'private, no-store';
           const check = await prepare();
           return admission.run('normal', job, async () => {
-            if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+            if (
+              !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
+                deadlineError: () => new ProblemError('deadline_exceeded'),
+              }))
+            )
+              throw new ProblemError('forbidden');
             if (!discovery) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const ownerAccess: Access | undefined = routeAccess();
             if (!ownerAccess) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
@@ -385,7 +395,12 @@ export function searchRoutes<App>(
         async function catalogue(): Promise<SearchHttpResponse> {
           const check = await prepare();
           return admission.run('normal', job, async () => {
-            if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+            if (
+              !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
+                deadlineError: () => new ProblemError('deadline_exceeded'),
+              }))
+            )
+              throw new ProblemError('forbidden');
             if (body.kindPage !== undefined || body.kindCountLeaf !== undefined)
               throw new ProblemError('invalid_request', {
                 errors: [{ pointer: '/representation', code: 'invalid_format' }],
@@ -428,7 +443,12 @@ export function searchRoutes<App>(
           const check = await prepare();
           return admission.run('normal', job, async () => {
             set.headers['cache-control'] = 'private, no-store';
-            if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+            if (
+              !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
+                deadlineError: () => new ProblemError('deadline_exceeded'),
+              }))
+            )
+              throw new ProblemError('forbidden');
             const releaseGroups = search?.releaseGroups;
             if (!releaseGroups) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             if (
@@ -547,7 +567,12 @@ export function searchRoutes<App>(
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
         });
         return admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+          if (
+            !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
+              deadlineError: () => new ProblemError('deadline_exceeded'),
+            }))
+          )
+            throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           const scopeAccess = routeAccess();
           return searchHttpExecute(body, () =>
@@ -606,7 +631,12 @@ export function searchRoutes<App>(
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
         });
         return admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+          if (
+            !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
+              deadlineError: () => new ProblemError('deadline_exceeded'),
+            }))
+          )
+            throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           const scopeAccess = routeAccess();
           const suggestionWorkContext = scopeAccess

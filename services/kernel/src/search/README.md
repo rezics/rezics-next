@@ -2630,3 +2630,5 @@ contract. Helper exports and the first checkpoint alone do not establish public 
 [Semantic Source contract](../semantic/public-filter-source-contract.md) retain protocol authority. Content owns feed
 composition and Web owns the sole Home consumer; independent consumer source proceeds against settled interfaces,
 while installation and positive default-path proof remain separately owed.
+
+Decision: Search HTTP authorization checks use the original request deadline to bound connection acquisition and the current check, mapping expiry to `deadline_exceeded` while preserving false grants as forbidden.
