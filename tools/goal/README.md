@@ -2851,8 +2851,10 @@ is alerted based on confirmed live workers only; unknown process identities rema
 suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
 to recover, reshape or dispatch real work. The backlog refill notice reports unregistered runnable source supply and
 eligible width separately; low-water is an alert, not a target. Within the existing
-stopped-task hour, recover completed source waiting only for compiler typing evidence first; then handle actual stopped
-source work as before by retrying with a rewritten brief, splitting or cancelling it. Runtime metadata cannot observe unsubmitted
+stopped-task hour, completed source with structured pending compiler evidence stays visibly owed to its evidence receiver.
+The width event names the task, attempt, configured owner, unresolved evidence or authorization predicate, and existing
+`typing-recover` action; it does not present that stop as a source-writing retry. Other actionable source and proof stops
+keep the existing repair, reshape and cancellation path. Unknown owner or predicate stays explicit. Runtime metadata cannot observe unsubmitted
 work, so queued Markdown is counted by the backlog sweep rather than this runtime projection. The notice uses the
 existing manager turn
 allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
@@ -2868,12 +2870,14 @@ owner decision `preserved-terminal-native-proof` (optionally suffixed by a date 
 stop only when its exact owned original check is terminal. Neither classification claims acceptance or changes
 process identity, original results, or cancellation. An owner decision may also name an accepted successor by exact
 task ID and commit; it suppresses only a successful source stop, and only while that commit appears in the named
-task's integration record. A consumed typing-recovery grant suppresses action only while its exact result is absent
-under unresolved custody or its matching check-host runner remains live. Grants awaiting execution, terminal or
-invalid results, verified cleanup or replacement, failed source, superseded decisions and unproved successor links
-remain actionable. Stopped rows and all native proof records remain visible.
+task's integration record. A successful source stop with structured pending compiler evidence remains a distinct
+evidence-receiver obligation until the current exact result is reconciled or an actual compiler failure is recorded.
+The projection names authenticated recovery authorization, exact result, terminal custody or owner reconciliation as
+the missing predicate; an active exact check remains visible while awaiting its terminal result. Unknown owner or
+predicate is disclosed instead of inferred. Failed source, superseded decisions and unproved successor links retain
+their existing actionable outcomes. Stopped rows and all native proof records remain visible.
 
-Decision: width and expiry share this classifier; accepted successors require an authenticated current-attempt decision and exact integrated commit for a successful source stop, while consumed typing recovery is quiet only for its current unresolved exact check, leaving grants awaiting execution, terminal or invalid results, cleanup, replacement, failures and superseded events actionable.
+Decision: classify successful source attempts with structured pending compiler evidence as receiver obligations until exact evidence is reconciled or a compiler failure is recorded; keep them in stopped and receiver totals, include owner-actionable cases in actionable totals, notify the configured owner with the unresolved authorization/custody predicate, and reserve source retry or cancellation guidance for actual source failures.
 
 #### Goal backlogs
 
@@ -2969,7 +2973,14 @@ sequence markers. It excludes typed `width` events and only the low-backlog emit
 metadata remain included for compatibility with older native inbox records. An unchanged disposition suppresses
 repeated low-backlog instructions across hours and host restarts. A changed scope or
 `goal backlog disposition <goal> clear` rearms the next sweep to send if the backlog remains low; unrelated Goal and
-global development activity does not. The command accepts no free-text handoff as authority.
+global development activity does not. For scoping only, the exact running session with persisted inbox-wait intent and
+automatic pause origin projects its Goal status as active, so controller parking and resume preserve the disposition.
+Explicit pause, budget or usage limits, completion, and missing park intent retain their existing eligibility rules.
+The command accepts no free-text handoff as authority.
+
+Decision: preserve authenticated no-work evidence across controller auto-park by normalizing only the exact running,
+inbox-waiting, automatic-pause session's scoped Goal status; real brief, task, inbox or owner changes still rearm it,
+while explicit pause, budget-limited, usage-limited and complete Goals remain ineligible.
 
 From the owning manager session, record the disposition with:
 
@@ -3073,7 +3084,7 @@ check identity. Failure classification may accept replaced generated declaration
 matches that binding and the receipt's completed generated inventory. This representation check never qualifies a pass;
 pass qualification still requires its existing strict source and prepared-input match.
 
-Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt actionable event naming the authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
+Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt receiver event naming the unresolved predicate, configured owner and authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
 
 Decision: an explicit retry after a completed stop keeps the existing stop proof. For an ordinary exited attempt, a queued source repair supersedes pending typing evidence only when the exact accepted replacement brief was recorded after exit, the captured branch head remains current, the exact retained command proves a terminal nonzero failure against unchanged source inputs, any replaced Kernel client declarations match the receipt-bound published tree, all same-attempt check custody is terminal, and no successor, later worker start, landing or live capacity ticket exists. A legacy attempt with no `attempt-progress` event may recover its source identity only through the exact retained source-repair receipt matching the current content tree and terminal same-attempt custody; a present malformed or stale progress event never uses this fallback. Generated-output identity authorizes failure classification only; pass qualification stays strict. Otherwise the retry remains pending and does not enter compiler-only recovery. A same-generation `started` intent is reconciled only under that proof.
 
