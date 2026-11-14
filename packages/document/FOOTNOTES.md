@@ -84,11 +84,11 @@ authored attributes and existing URL/media safety. No reference, attachment or m
 
 The `labels` prop accepts these strings; `locale` alone does not translate controls:
 
-| Public label | English default | Web message to supply in its existing document wrapper |
-| --- | --- | --- |
-| `goToFootnote` | Go to footnote | `document_go_to_footnote` |
-| `footnote` | Footnote | `document_footnote` |
-| `footnotes` | Footnotes | `document_footnotes` |
+| Public label   | English default | Web message to supply in its existing document wrapper |
+| -------------- | --------------- | ------------------------------------------------------ |
+| `goToFootnote` | Go to footnote  | `document_go_to_footnote`                              |
+| `footnote`     | Footnote        | `document_footnote`                                    |
+| `footnotes`    | Footnotes       | `document_footnotes`                                   |
 
 The first two strings are prefixes: the renderer appends a space and the supplied label. The third names the region.
 Keep the existing spoiler/task/component/image labels. Web adds these messages in every supported locale and passes
@@ -118,14 +118,14 @@ Retain native assertions and extend native footnote acceptance where the existin
 
 Extend these existing stories in `apps/web/src/stories/own-drafts.stories.tsx`:
 
-| Named state | Footnote acceptance |
-| --- | --- |
-| `StructuredServer` | Inspect supplied server notes before choosing that body. |
-| `StructuredRecovery` | Independent server/browser notes; explicit browser choice preserves its snapshot. |
-| `BrowserUnknown` | Browser notes remain inspectable while resume stays disabled. |
-| `StructuredSaveReadback` | Submitted notes stay in acknowledgement; current read uses its own notes and visit. |
-| `StructuredPublishedReadback` | The same separation after publication. |
-| `StructuredGerman`, `StructuredSpanish`, `StructuredFrench`, `StructuredJapanese`, `StructuredKorean`, `StructuredSimplifiedChinese`, `StructuredTraditionalChinese` | Localized footnote controls preserve authored content. |
+| Named state                                                                                                                                                          | Footnote acceptance                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `StructuredServer`                                                                                                                                                   | Inspect supplied server notes before choosing that body.                            |
+| `StructuredRecovery`                                                                                                                                                 | Independent server/browser notes; explicit browser choice preserves its snapshot.   |
+| `BrowserUnknown`                                                                                                                                                     | Browser notes remain inspectable while resume stays disabled.                       |
+| `StructuredSaveReadback`                                                                                                                                             | Submitted notes stay in acknowledgement; current read uses its own notes and visit. |
+| `StructuredPublishedReadback`                                                                                                                                        | The same separation after publication.                                              |
+| `StructuredGerman`, `StructuredSpanish`, `StructuredFrench`, `StructuredJapanese`, `StructuredKorean`, `StructuredSimplifiedChinese`, `StructuredTraditionalChinese` | Localized footnote controls preserve authored content.                              |
 
 Focused producer acceptance lives in Document `document.test.ts` and `contract.test.ts`, and UI
 `document-extensions.test.ts`, `document-body.test.ts` and `document-disclosure-lifetime.test.tsx`.
