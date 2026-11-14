@@ -1044,7 +1044,7 @@ test('reviewed-tag pages separate pending acceptance from rejected rows and reti
         retracted: null,
         head: 3,
         statement: {},
-        rank: null,
+        rank: 'deprecated',
         source: { source: 'vndb', external_id: 'g88' },
       },
       {
@@ -1082,12 +1082,13 @@ const pageTwoId = '00000000-0000-4000-8000-000000000022';
 const editorialId = '00000000-0000-4000-8000-000000000023';
 const vanishedId = '00000000-0000-4000-8000-000000000024';
 const extraEditorialId = '00000000-0000-4000-8000-000000000025';
+const rejectedId = '00000000-0000-4000-8000-000000000026';
 
 function candidateRow(
   id: string,
   source: { source: string; external_id: string } | null,
   decision: 'accepted' | 'rejected' | null = null,
-  rank: 'normal' | 'preferred' | null = null,
+  rank: 'normal' | 'preferred' | 'deprecated' | null = null,
 ) {
   return { id, decision, retracted: null, head: 1, rank, source, statement: {} };
 }
@@ -1279,6 +1280,7 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
           candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }),
           candidateRow(editorialId, { source: 'editorial', external_id: 'note' }, 'accepted', 'preferred'),
           candidateRow(vanishedId, { source: 'vndb', external_id: 'g99' }, 'accepted', 'normal'),
+          candidateRow(rejectedId, { source: 'editorial', external_id: 'rejected-note' }, 'rejected', 'deprecated'),
         ],
         second: [candidateRow(pageTwoId, { source: 'vndb', external_id: 'g12' })],
         adoption: {
@@ -1344,6 +1346,9 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
     expect(
       retired.adopted[`${workId}:schema:genre`]?.selection.find((row) => row.candidate === editorialId)?.rank,
     ).toBe('preferred');
+    expect((await review.reviewedCandidates(workId, { property: 'schema:genre' })).candidates).toContainEqual(
+      expect.objectContaining({ id: rejectedId, decision: 'rejected', rank: 'deprecated' }),
+    );
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

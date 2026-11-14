@@ -87,6 +87,12 @@ test('candidate page normalization drops tombstones and builds selection only at
   };
   const preferred = { id: original, source: null, statement, head: null, rank: 'preferred' as const };
   const normal = { id: canonical, source: null, statement, head: null, rank: 'normal' as const };
+  const rejected = {
+    ...normal,
+    id: '019a1b2c-3d4e-7f00-8a00-000000000004',
+    decision: 'rejected' as const,
+    rank: 'deprecated' as const,
+  };
   const tombstone = { id: '019a1b2c-3d4e-7f00-8a00-000000000003', deleted: true };
   const continuation = safeCandidatePage({
     candidates: [preferred, tombstone],
@@ -98,7 +104,7 @@ test('candidate page normalization drops tombstones and builds selection only at
   expect(continuation.tombstones).toEqual(['019a1b2c-3d4e-7f00-8a00-000000000003']);
 
   const terminal = safeCandidatePage({
-    candidates: [preferred, normal, tombstone],
+    candidates: [preferred, normal, rejected, tombstone],
     next: null,
     adoption: { mode: 'replace', head: 7 },
   });
@@ -110,9 +116,19 @@ test('candidate page normalization drops tombstones and builds selection only at
       { candidate: canonical, rank: 'normal' },
     ],
   });
+  expect(terminal.candidates).toEqual([preferred, normal, rejected]);
+  for (const mode of ['inherit', 'suppress'] as const) {
+    const page = safeCandidatePage({
+      candidates: [preferred, normal, rejected],
+      next: null,
+      adoption: { mode, head: 7 },
+    });
+    expect(page.adoption).toEqual({ mode, head: 7, selection: [] });
+    expect(page.candidates).toEqual([preferred, normal, rejected]);
+  }
 });
 
-test('replacement selection uses every live rank from one stable terminal listing', async () => {
+test('replacement selection preserves writable ranks beside rejected rows in one stable terminal listing', async () => {
   const statement: BatchStatement = {
     property: { id: 'schema:name' },
     value: { type: 'novalue' },
@@ -120,6 +136,14 @@ test('replacement selection uses every live rank from one stable terminal listin
   };
   const second = '019a1b2c-3d4e-7f00-8a00-000000000004';
   const tombstone = '019a1b2c-3d4e-7f00-8a00-000000000005';
+  const rejected = {
+    id: '019a1b2c-3d4e-7f00-8a00-000000000007',
+    source: null,
+    statement,
+    head: 1,
+    decision: 'rejected',
+    rank: 'deprecated',
+  };
   const cursors: (string | null)[] = [];
   const review = {
     async reviewedCandidates(_id: string, query: { cursor?: string }) {
@@ -133,6 +157,7 @@ test('replacement selection uses every live rank from one stable terminal listin
         : {
             candidates: [
               { id: original, source: null, statement, head: null, rank: 'normal' },
+              rejected,
               { id: tombstone, deleted: true },
             ],
             next: 'next-page',
@@ -154,7 +179,7 @@ test('replacement selection uses every live rank from one stable terminal listin
       ],
     },
   });
-  expect(current.candidates.map((candidate) => candidate.id)).toEqual([original, second]);
+  expect(current.candidates.map((candidate) => candidate.id)).toEqual([original, rejected.id, second]);
   expect(current.tombstones).toEqual([tombstone]);
 
   let changedHeadCalls = 0;
@@ -168,7 +193,7 @@ test('replacement selection uses every live rank from one stable terminal listin
             adoption: { mode: 'replace', head: 8 },
           }
         : {
-            candidates: [{ id: original, source: null, statement, head: null, rank: 'normal' }],
+            candidates: [{ id: original, source: null, statement, head: null, rank: 'normal' }, rejected],
             next: 'next-page',
             adoption: { mode: 'replace', head: changedHeadCalls === 1 ? 7 : 8 },
           };
@@ -221,6 +246,14 @@ test('candidate listing resumes a journaled cursor after an interrupted seed run
     references: [],
   };
   const terminal = '019a1b2c-3d4e-7f00-8a00-000000000006';
+  const rejected = {
+    id: '019a1b2c-3d4e-7f00-8a00-000000000007',
+    source: null,
+    statement,
+    head: 1,
+    decision: 'rejected',
+    rank: 'deprecated',
+  };
   const cursors: (string | null)[] = [];
   let interrupt = true;
   const review = {
@@ -237,7 +270,7 @@ test('candidate listing resumes a journaled cursor after an interrupted seed run
             adoption: { mode: 'replace', head: 11 },
           }
         : {
-            candidates: [{ id: original, source: null, statement, head: null, rank: 'normal' }],
+            candidates: [{ id: original, source: null, statement, head: null, rank: 'normal' }, rejected],
             next: 'next-page',
             adoption: { mode: 'replace', head: 11 },
           };
@@ -259,6 +292,7 @@ test('candidate listing resumes a journaled cursor after an interrupted seed run
     });
 
     expect(cursors).toEqual([null, 'next-page', null, 'next-page']);
+    expect(current.candidates).toContainEqual(rejected);
     expect(current).toMatchObject({
       complete: true,
       adoption: {
