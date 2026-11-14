@@ -1,4 +1,3 @@
-import { documentText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FocusEvent as ReactFocusEvent, KeyboardEvent, MouseEvent } from 'react';
@@ -9,6 +8,7 @@ import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../authoring-
 import type { SavedWriting } from '../local-writing-draft';
 import { threadHref } from '../thread-href';
 import { OwnDraftEditor } from './editor';
+import { OwnDraftBodyPreview } from './body-preview';
 import {
   admittedOwnDraftAction,
   documentForInspection,
@@ -98,11 +98,13 @@ function OwnDraftCommandFeedback({
   id,
   locale,
   onReadback,
+  current,
 }: {
   feedback: CommandFeedback;
   id: string;
   locale: OwnDraftLocale;
   onReadback: () => void;
+  current: () => boolean;
 }) {
   const acknowledgement =
     feedback.action === 'save'
@@ -132,7 +134,14 @@ function OwnDraftCommandFeedback({
           </p>
           {feedback.readback.body ? (
             <article className="rounded-md border border-border/60 p-3 [overflow-wrap:anywhere]">
-              <pre className="whitespace-pre-wrap font-sans">{documentText(feedback.readback.body)}</pre>
+              <OwnDraftBodyPreview
+                document={feedback.readback.body}
+                source="readback"
+                visitKey={JSON.stringify([id, feedback.intentId, feedback.postId, feedback.readback.revision])}
+                documentLanguage={null}
+                locale={locale}
+                current={current}
+              />
             </article>
           ) : null}
         </>
@@ -639,7 +648,7 @@ function BoundOwnDraftsPage({
     )
       return;
     if (!admittedOwnDraftAction(readySelection.entry, identity.accountId, 'edit')) return;
-    if (source === 'browser' && (localWritingState?.state !== 'ready' || localWritingState.writing.state !== 'unsent'))
+    if (source === 'browser' && (localWritingState?.state !== 'ready' || localWritingState.writing.state !== 'unsent' || !localWritingState.writing.payload.body))
       return;
     commandController.current?.abort();
     readbackSequence.current++;
@@ -843,6 +852,7 @@ function BoundOwnDraftsPage({
         feedback={commandFeedback}
         locale={locale}
         onReadback={checkCurrent}
+        current={() => commandCurrent() && commandFeedbackSequence.current === commandFeedback.intentId}
       />
     ) : null;
 
@@ -946,9 +956,14 @@ function BoundOwnDraftsPage({
               <>
                 <article className="min-w-0 rounded-lg border border-border p-4 [overflow-wrap:anywhere]">
                   <h2 className="sr-only">{m.own_drafts_body_heading({}, { locale })}</h2>
-                  <pre className="whitespace-pre-wrap font-sans">
-                    {documentText(documentForInspection(selection.selection))}
-                  </pre>
+                  <OwnDraftBodyPreview
+                    document={documentForInspection(selection.selection)}
+                    source="server"
+                    visitKey={JSON.stringify([identityKey, selectionGeneration.current, selection.entry.id, selection.selection.revision])}
+                    documentLanguage={selection.entry.language}
+                    locale={locale}
+                    current={() => current() && editorAdmission.current.selection === selection.selection && editorAdmission.current.source === null}
+                  />
                   <section className="mt-5 space-y-2" aria-label={m.own_drafts_subjects({}, { locale })}>
                     <h3 className="font-medium">{m.own_drafts_subjects({}, { locale })}</h3>
                     {selection.entry.subjectIds.length ? (
@@ -1016,9 +1031,15 @@ function BoundOwnDraftsPage({
                         <p role="status">{m.thread_draft_unknown({}, { locale })}</p>
                       ) : (
                         <>
-                          <pre className="whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
-                            {localWriting.writing.payload.text}
-                          </pre>
+                          <OwnDraftBodyPreview
+                            document={localWriting.writing.payload.body}
+                            fallbackText={localWriting.writing.payload.text}
+                            source="browser"
+                            visitKey={JSON.stringify([localWritingKey, selectionGeneration.current, localWriting.writing.revision])}
+                            documentLanguage={null}
+                            locale={locale}
+                            current={() => current() && editorAdmission.current.selection === selection.selection && editorAdmission.current.source === null}
+                          />
                           {localWriting.writing.payload.attachmentRepair ? (
                             <p>{m.thread_draft_attachments({}, { locale })}</p>
                           ) : null}
@@ -1026,7 +1047,7 @@ function BoundOwnDraftsPage({
                             <Button
                               type="button"
                               className={control}
-                              disabled={eraseState?.state === 'uncertain' || eraseState?.state === 'sending'}
+                              disabled={!localWriting.writing.payload.body || eraseState?.state === 'uncertain' || eraseState?.state === 'sending'}
                               id={`${controlId}-browser-source`}
                               onClick={() => startEditor('browser')}
                             >

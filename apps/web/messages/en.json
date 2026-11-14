@@ -7934,6 +7934,7 @@
   "own_drafts_body_heading": "Draft body",
   "own_drafts_browser_loading": "Checking for writing saved in this browser…",
   "own_drafts_browser_source": "Saved in this browser",
+  "own_drafts_browser_text_fallback": "Text-only browser copy. A structured body is unavailable; this copy cannot be opened in the editor.",
   "own_drafts_browser_unavailable": "Browser-saved writing could not be read.",
   "own_drafts_choose_body": "Choose a body",
   "own_drafts_command_conflict": "The draft changed. Restart the inventory to inspect the current version.",

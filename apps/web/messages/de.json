@@ -7934,6 +7934,7 @@
   "own_drafts_body_heading": "Entwurfstext",
   "own_drafts_browser_loading": "Suche nach im Browser gespeichertem Text…",
   "own_drafts_browser_source": "Im Browser gespeicherter Text",
+  "own_drafts_browser_text_fallback": "Browserkopie nur als Text. Ein strukturiertes Dokument ist nicht verfügbar; diese Kopie kann nicht im Editor geöffnet werden.",
   "own_drafts_browser_unavailable": "Der im Browser gespeicherte Text konnte nicht gelesen werden.",
   "own_drafts_choose_body": "Textquelle wählen",
   "own_drafts_command_conflict": "Der Entwurf wurde geändert. Starten Sie die Liste neu, um die aktuelle Version zu prüfen.",

@@ -48,6 +48,12 @@ and deferred until executed; generated declarations and Web fixtures do not esta
 When a resumed editor is open, Return to drafts uses the same departure decision as the editor. Staying keeps the
 chosen server or browser body and its retry state; deliberate departure returns focus to the inventory opener.
 
+Decision: Render the supplied structured server, browser and readback bodies through a private `PostReadingBody`
+caller with separate source/visit identities, heading anchors, disclosure and wide-inspector lifetimes. A browser
+text fallback is explicitly labelled and cannot resume without its structured body. Supplied block language remains
+intact; unknown browser/readback document language stays unknown rather than inheriting the interface locale.
+No reference, attachment or media lookup is added.
+
 ## Cost
 
 ### Own-draft inventory and inspection

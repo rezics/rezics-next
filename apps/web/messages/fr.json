@@ -7934,6 +7934,7 @@
   "own_drafts_body_heading": "Texte du brouillon",
   "own_drafts_browser_loading": "Recherche d’un texte enregistré dans ce navigateur…",
   "own_drafts_browser_source": "Texte enregistré dans ce navigateur",
+  "own_drafts_browser_text_fallback": "Copie du navigateur en texte seul. Le document structuré est indisponible ; cette copie ne peut pas être ouverte dans l’éditeur.",
   "own_drafts_browser_unavailable": "Impossible de lire le texte enregistré dans le navigateur.",
   "own_drafts_choose_body": "Choisir un texte",
   "own_drafts_command_conflict": "Le brouillon a changé. Redémarrez l’inventaire pour examiner la version actuelle.",

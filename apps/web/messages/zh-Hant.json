@@ -7934,6 +7934,7 @@
   "own_drafts_body_heading": "草稿正文",
   "own_drafts_browser_loading": "正在尋找此瀏覽器儲存的文字…",
   "own_drafts_browser_source": "此瀏覽器儲存的正文",
+  "own_drafts_browser_text_fallback": "瀏覽器中的純文字副本。結構化內文無法使用，因此無法在編輯器中開啟此副本。",
   "own_drafts_browser_unavailable": "無法讀取瀏覽器儲存的文字。",
   "own_drafts_choose_body": "選擇正文",
   "own_drafts_command_conflict": "草稿已變更。請重新開始清單以檢查目前版本。",

@@ -7934,6 +7934,7 @@
   "own_drafts_body_heading": "Texto del borrador",
   "own_drafts_browser_loading": "Buscando texto guardado en este navegador…",
   "own_drafts_browser_source": "Texto guardado en este navegador",
+  "own_drafts_browser_text_fallback": "Copia del navegador solo en texto. No hay un documento estructurado; esta copia no se puede abrir en el editor.",
   "own_drafts_browser_unavailable": "No se pudo leer el texto guardado en el navegador.",
   "own_drafts_choose_body": "Elige un texto",
   "own_drafts_command_conflict": "El borrador cambió. Reinicia la lista para revisar la versión actual.",

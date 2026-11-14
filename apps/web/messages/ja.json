@@ -7934,6 +7934,7 @@
   "own_drafts_body_heading": "下書き本文",
   "own_drafts_browser_loading": "このブラウザーに保存された文章を確認しています…",
   "own_drafts_browser_source": "このブラウザーに保存された本文",
+  "own_drafts_browser_text_fallback": "ブラウザーに保存されたテキストのみのコピーです。構造化された本文がないため、エディターでは開けません。",
   "own_drafts_browser_unavailable": "ブラウザーに保存された文章を読み込めませんでした。",
   "own_drafts_choose_body": "本文を選択",
   "own_drafts_command_conflict": "下書きが変更されています。一覧を再開して現在の版を確認してください。",

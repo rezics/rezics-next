@@ -7934,6 +7934,7 @@
   "own_drafts_body_heading": "草稿正文",
   "own_drafts_browser_loading": "正在查找此浏览器保存的文字…",
   "own_drafts_browser_source": "此浏览器保存的正文",
+  "own_drafts_browser_text_fallback": "浏览器中的纯文本副本。结构化正文不可用，无法在编辑器中打开此副本。",
   "own_drafts_browser_unavailable": "无法读取浏览器保存的文字。",
   "own_drafts_choose_body": "选择正文",
   "own_drafts_command_conflict": "草稿已更改。请重新开始列表以检查当前版本。",
