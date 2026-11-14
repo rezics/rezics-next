@@ -249,13 +249,6 @@ async function countOf<Value>(access: VersionedOutlineSequenceReadAccess<Value>,
   return id === null ? 0n : (await requireNode(access, id)).count;
 }
 
-async function chapterCountOf<Value>(
-  access: VersionedOutlineSequenceReadAccess<Value>,
-  id: string | null,
-): Promise<bigint> {
-  return id === null ? 0n : (await requireNode(access, id)).chapterCount;
-}
-
 async function setTreeParent<Value>(
   access: VersionedOutlineSequenceReadWriteSet<Value>,
   id: string | null,
@@ -600,66 +593,26 @@ export async function setVersionedOutlineSequenceSubtreeHeight<Value>(
   }
 }
 
-/** Exact zero-based rank; null means the node is absent from this selected root. */
-async function rankInRoot<Value>(
-  access: VersionedOutlineSequenceReadAccess<Value>,
-  rootId: string | null,
-  id: string,
-  chapterOnly: boolean,
-): Promise<bigint | null> {
-  if (rootId === null) return null;
-  await sequenceCount(access, rootId);
-  const selectedNode = await access.readNode(id);
-  if (selectedNode === null) return null;
-  let node: VersionedOutlineSequenceNode<Value> = selectedNode;
-  let rank = chapterOnly ? await chapterCountOf(access, node.leftId) : await countOf(access, node.leftId);
-  const visited = new Set<string>([id]);
-
-  while (node.treeParentId !== null) {
-    const parent: VersionedOutlineSequenceNode<Value> = await requireNode(access, node.treeParentId);
-    if (visited.has(parent.id)) throw new Error('Versioned outline sequence tree-parent links contain a cycle');
-    visited.add(parent.id);
-    const isLeft = parent.leftId === node.id;
-    const isRight = parent.rightId === node.id;
-    if (isLeft === isRight) throw new Error('Versioned outline sequence tree-parent link is inconsistent');
-    if (isRight) {
-      rank += chapterOnly
-        ? (await chapterCountOf(access, parent.leftId)) + chapterWeightOf(parent)
-        : (await countOf(access, parent.leftId)) + 1n;
-    }
-    node = parent;
-  }
-
-  return node.id === rootId ? rank : null;
-}
-
-export function rankVersionedOutlineSequenceNode<Value>(
-  access: VersionedOutlineSequenceReadAccess<Value>,
-  rootId: string | null,
-  id: string,
-): Promise<bigint | null> {
-  return rankInRoot(access, rootId, id, false);
-}
-
-/** Number of chapter-weighted nodes strictly before this member of the selected root. */
-export function chapterRankVersionedOutlineSequenceNode<Value>(
-  access: VersionedOutlineSequenceReadAccess<Value>,
-  rootId: string | null,
-  id: string,
-): Promise<bigint | null> {
-  return rankInRoot(access, rootId, id, true);
-}
-
 export type VersionedOutlineSequenceNodeRankRequest = Readonly<{
   rootId: string | null;
   nodeId: string;
 }>;
 
-/** Resolve visible members across selected roots by loading shared rank paths in bounded frontiers. */
-export async function rankVersionedOutlineSequenceNodes<Value>(
+export type VersionedOutlineSequenceRanks = Readonly<{
+  rank: bigint;
+  /** Chapter weight strictly before this member, including unweighted members. */
+  chapterRank: bigint;
+}>;
+
+/**
+ * Prove selected membership and derive both ranks in one upward frontier. Roots, selected nodes,
+ * parents and left summaries are deduplicated across requests on the same pinned access. Each round
+ * depends on the previous parents; the access splits physical reads at its batch cap.
+ */
+export async function readVersionedOutlineSequenceRanks<Value>(
   access: VersionedOutlineSequenceReadAccess<Value>,
   requests: readonly VersionedOutlineSequenceNodeRankRequest[],
-): Promise<readonly (bigint | null)[]> {
+): Promise<readonly (VersionedOutlineSequenceRanks | null)[]> {
   if (requests.length === 0) return [];
 
   const loaded = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
@@ -675,10 +628,7 @@ export async function rankVersionedOutlineSequenceNodes<Value>(
     return node;
   }
 
-  await loadFrontier([
-    ...requests.flatMap(({ rootId }) => (rootId === null ? [] : [rootId])),
-    ...requests.flatMap(({ rootId, nodeId }) => (rootId === null ? [] : [nodeId])),
-  ]);
+  await loadFrontier(requests.flatMap(({ rootId, nodeId }) => (rootId === null ? [] : [rootId, nodeId])));
   for (const rootId of new Set(requests.map(({ rootId }) => rootId).filter((id): id is string => id !== null))) {
     if (requireLoaded(rootId).treeParentId !== null)
       throw new Error('Versioned outline sequence operation requires a selected root');
@@ -688,12 +638,12 @@ export async function rankVersionedOutlineSequenceNodes<Value>(
     requestIndex: number;
     rootId: string;
     current: VersionedOutlineSequenceNode<Value>;
-    parentId: string | null;
     rank: bigint;
+    chapterRank: bigint;
     visited: Set<string>;
   };
-  const ranks: (bigint | null)[] = requests.map(() => null);
-  const candidates: Candidate[] = [];
+  const ranks: (VersionedOutlineSequenceRanks | null)[] = requests.map(() => null);
+  let candidates: Candidate[] = [];
   for (let requestIndex = 0; requestIndex < requests.length; requestIndex += 1) {
     const request = requests[requestIndex]!;
     if (request.rootId === null) continue;
@@ -703,25 +653,29 @@ export async function rankVersionedOutlineSequenceNodes<Value>(
       requestIndex,
       rootId: request.rootId,
       current: node,
-      parentId: node.treeParentId,
       rank: 0n,
+      chapterRank: 0n,
       visited: new Set([node.id]),
     });
   }
 
   await loadFrontier(candidates.flatMap(({ current }) => [current.leftId, current.treeParentId]));
   for (const candidate of candidates) {
-    candidate.rank = candidate.current.leftId === null ? 0n : requireLoaded(candidate.current.leftId).count;
+    const left = candidate.current.leftId === null ? null : requireLoaded(candidate.current.leftId);
+    candidate.rank = left?.count ?? 0n;
+    candidate.chapterRank = left?.chapterCount ?? 0n;
   }
 
-  while (true) {
+  while (candidates.length > 0) {
     const steps: { candidate: Candidate; parent: VersionedOutlineSequenceNode<Value>; isRight: boolean }[] = [];
     for (const candidate of candidates) {
-      if (candidate.parentId === null) {
-        ranks[candidate.requestIndex] = candidate.current.id === candidate.rootId ? candidate.rank : null;
+      if (candidate.current.treeParentId === null) {
+        if (candidate.current.id === candidate.rootId) {
+          ranks[candidate.requestIndex] = { rank: candidate.rank, chapterRank: candidate.chapterRank };
+        }
         continue;
       }
-      const parent = requireLoaded(candidate.parentId);
+      const parent = requireLoaded(candidate.current.treeParentId);
       if (candidate.visited.has(parent.id))
         throw new Error('Versioned outline sequence tree-parent links contain a cycle');
       const isLeft = parent.leftId === candidate.current.id;
@@ -735,14 +689,52 @@ export async function rankVersionedOutlineSequenceNodes<Value>(
       steps.flatMap(({ parent, isRight }) => [parent.treeParentId, ...(isRight ? [parent.leftId] : [])]),
     );
     for (const { candidate, parent, isRight } of steps) {
-      if (isRight) candidate.rank += (parent.leftId === null ? 0n : requireLoaded(parent.leftId).count) + 1n;
+      if (isRight) {
+        const left = parent.leftId === null ? null : requireLoaded(parent.leftId);
+        candidate.rank += (left?.count ?? 0n) + 1n;
+        candidate.chapterRank += (left?.chapterCount ?? 0n) + chapterWeightOf(parent);
+      }
       candidate.visited.add(parent.id);
       candidate.current = parent;
-      candidate.parentId = parent.treeParentId;
     }
+    candidates = steps.map(({ candidate }) => candidate);
   }
 
   return ranks;
+}
+
+/** Resolve ordinary ranks across selected roots, preserving request order and duplicates. */
+export async function rankVersionedOutlineSequenceNodes<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  requests: readonly VersionedOutlineSequenceNodeRankRequest[],
+): Promise<readonly (bigint | null)[]> {
+  return (await readVersionedOutlineSequenceRanks(access, requests)).map((ranks) => ranks?.rank ?? null);
+}
+
+/** Number of chapter-weighted nodes strictly before each member of its selected root. */
+export async function chapterRankVersionedOutlineSequenceNodes<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  requests: readonly VersionedOutlineSequenceNodeRankRequest[],
+): Promise<readonly (bigint | null)[]> {
+  return (await readVersionedOutlineSequenceRanks(access, requests)).map((ranks) => ranks?.chapterRank ?? null);
+}
+
+/** Exact zero-based rank; null means the node is absent from this selected root. */
+export async function rankVersionedOutlineSequenceNode<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  rootId: string | null,
+  id: string,
+): Promise<bigint | null> {
+  return (await rankVersionedOutlineSequenceNodes(access, [{ rootId, nodeId: id }]))[0]!;
+}
+
+/** Number of chapter-weighted nodes strictly before this member of the selected root. */
+export async function chapterRankVersionedOutlineSequenceNode<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  rootId: string | null,
+  id: string,
+): Promise<bigint | null> {
+  return (await chapterRankVersionedOutlineSequenceNodes(access, [{ rootId, nodeId: id }]))[0]!;
 }
 
 export type VersionedOutlineSequenceSelectionRequest = Readonly<{

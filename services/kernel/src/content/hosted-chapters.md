@@ -124,6 +124,12 @@ their known selections on each index. Single selections use the same path. Physi
 distinct node IDs, including prefetched siblings; dependent rounds follow tree height, and work grows with the
 selected paths rather than the Book's total size. Every loaded child retains its inverse-parent and cycle checks.
 
+Decision: move preflight derives ordinary and chapter-weighted membership ranks in one snapshot-pinned upward
+frontier for all known source, destination, before-anchor and containment ancestors. It discovers the two bounded
+containment paths together, selects distinct exclusive subtree ends together, then batches their weighted ranks;
+source projection checks reuse the selected chapter rank. Empty parts retain zero weight, selected roots remain
+exact, and 512 caps each physical node batch rather than total Book membership.
+
 Decision: mount the stable-anchor move as `moveDraftPoint`; `parentId: null` selects the root sibling list, and a
 null `beforeOccurrenceId` appends to the selected sibling list. A non-null anchor must be a current sibling of the
 selected root or Part. Root moves create no synthetic occurrence or chapter destination. The existing move command

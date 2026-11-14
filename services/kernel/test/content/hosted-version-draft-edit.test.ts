@@ -14,6 +14,15 @@ import {
   type HostedVersionDraftMoveSelection,
 } from '../../src/content/hosted-version-draft-edit-model.ts';
 import { RevisionPreconditionError } from '../../src/content/commands.ts';
+import { createHostedVersionDraftMoveNativeAdapter } from '../../src/content/hosted-version-draft-native.ts';
+import type { HostedVersionDraftMoveSelectedOccurrence } from '../../src/content/hosted-version-draft-native-model.ts';
+import draftHeadSql from '../../src/content/hosted-version-draft-native-read-head.sql';
+import snapshotSql from '../../src/content/hosted-version-read-snapshot.sql';
+import versionHeadSql from '../../src/content/hosted-version-read-head.sql';
+import nodeSql from '../../src/content/hosted-version-read-node.sql';
+import nodesSql from '../../src/content/hosted-version-read-nodes.sql';
+import occurrencesSql from '../../src/content/hosted-version-read-occurrences.sql';
+import siblingRootSql from '../../src/content/hosted-version-read-sibling-root.sql';
 
 type Snapshot = Map<string, VersionedOutlineSequenceNode<string>>;
 
@@ -631,4 +640,164 @@ test('binds staged move roots to one adapter commit, skips adjacent no-ops, and 
   expect(noOp.value.revisionId).toBe(revisionId);
   expect(noOp.events).toEqual([]);
   expect(noOpCommits).toBe(0);
+});
+
+function encodePreflightValue(value: unknown): unknown {
+  if (typeof value === 'bigint') return { kind: 'bigint', value: value.toString() };
+  if (Array.isArray(value)) return { kind: 'array', value: value.map(encodePreflightValue) };
+  if (value !== null && typeof value === 'object') {
+    return { kind: 'object', value: Object.entries(value).map(([key, item]) => [key, encodePreflightValue(item)]) };
+  }
+  return { kind: 'primitive', value };
+}
+
+function nativePreflightFixture() {
+  const id = (index: number) => `00000000-0000-7000-8000-0001${index.toString(16).padStart(8, '0')}`;
+  const [catalogueId, generationId, revisionId, outer, parentA, source, parentB, empty, anchor, tail] = Array.from(
+    { length: 10 },
+    (_, index) => id(index + 1),
+  ) as [string, string, string, string, string, string, string, string, string, string];
+  const descendants = Array.from({ length: 6000 }, (_, index) => id(index + 100));
+  const weighted = new Set([...descendants.filter((_, index) => index % 2 === 1), anchor, tail]);
+  const preorder = buildSequence([outer, parentA, source, ...descendants, parentB, empty, anchor, tail], weighted);
+  const chapters = buildSequence(
+    materialize(preorder.nodes, preorder.rootId).filter((nodeId) => weighted.has(nodeId)),
+    weighted,
+  );
+  const facts = new Map<string, HostedVersionDraftMoveSelectedOccurrence>();
+  for (const [occurrenceId, parentOccurrenceId, subtreeSize, chapterCount, subtreeHeight] of [
+    [outer, null, 6007n, 3001n, 3],
+    [parentA, outer, 6002n, 3000n, 2],
+    [source, parentA, 6001n, 3000n, 1],
+    [parentB, outer, 3n, 1n, 1],
+    [empty, parentB, 1n, 0n, 0],
+    [anchor, parentB, 1n, 1n, 0],
+    [tail, null, 1n, 1n, 0],
+  ] as const) {
+    facts.set(occurrenceId, {
+      occurrenceId,
+      parentOccurrenceId,
+      subtreeSize,
+      sequence: 7n,
+      value: {
+        kind: weighted.has(occurrenceId) ? 'chapter' : 'part',
+        chapterCount,
+        subtreeHeight,
+        title: null,
+        target: null,
+      },
+    });
+  }
+  const snapshotRow = {
+    route: 1,
+    catalogue_id: catalogueId,
+    generation_id: generationId,
+    generation_kind: 'draft',
+    sequence: '7',
+    preorder_root_id: preorder.rootId,
+    chapter_root_id: chapters.rootId,
+    placement_count: '6008',
+    chapter_count: '3002',
+  };
+  const descriptor = {
+    kind: 'ordered',
+    revisionKind: 'structure',
+    revisionId,
+    sourceRevisionId: null,
+    snapshot: { route: 1, catalogueId, generationId, generationKind: 'draft', sequence: 7n },
+  } as const;
+  const batches: { index: string; ids: readonly string[] }[] = [];
+  const occurrenceBatches: string[][] = [];
+  const tx = {
+    async query(sql: string, args: readonly unknown[]) {
+      if (sql === draftHeadSql.sql) return { rows: [{ head_revision_id: revisionId }] };
+      if (sql === snapshotSql.sql || sql === versionHeadSql.sql) return { rows: [snapshotRow] };
+      if (sql === occurrencesSql.sql) {
+        expect(args[4]).toBe('7');
+        const ids = args[3] as string[];
+        occurrenceBatches.push([...ids]);
+        return {
+          rows: ids.map((nodeId) => {
+            const fact = facts.get(nodeId)!;
+            return {
+              occurrence_id: nodeId,
+              parent_occurrence_id: fact.parentOccurrenceId,
+              subtree_size: fact.subtreeSize.toString(),
+              occurrence_state: encodePreflightValue(fact.value),
+              subtree_height: fact.value.subtreeHeight,
+              sequence: '7',
+              is_deleted: false,
+            };
+          }),
+        };
+      }
+      if (sql === nodeSql.sql || sql === nodesSql.sql) {
+        expect(args[5]).toBe('7');
+        const index = args[3] as string;
+        const ids = sql === nodeSql.sql ? [args[4] as string] : (args[4] as string[]);
+        batches.push({ index, ids: [...ids] });
+        const nodes = index === 'preorder' ? preorder.nodes : chapters.nodes;
+        return {
+          rows: ids.map((nodeId) => {
+            const node = nodes.get(nodeId)!;
+            return {
+              node_id: nodeId,
+              tree_parent_id: node.treeParentId,
+              node_state: encodePreflightValue(node),
+              sequence: '7',
+              is_deleted: false,
+            };
+          }),
+        };
+      }
+      if (sql === siblingRootSql.sql) {
+        expect(args[5]).toBe('7');
+        return { rows: [] };
+      }
+      throw new Error('Unexpected preflight SQL');
+    },
+  } as unknown as CommandTransaction;
+  const input: HostedVersionDraftMoveInput = {
+    expectedRevisionId: revisionId,
+    occurrenceId: source,
+    parentId: parentB,
+    beforeOccurrenceId: empty,
+  };
+  const select = (selectedInput = input) =>
+    createHostedVersionDraftMoveNativeAdapter().selectExpectedSnapshot(tx, catalogueId, selectedInput, descriptor);
+  return { select, input, facts, batches, occurrenceBatches, outer, parentA, source, parentB, empty, tail, preorder };
+}
+
+test('native preflight shares large-Book participant and ancestor frontiers, including empty and root placements', async () => {
+  const fixture = nativePreflightFixture();
+  const { selection, indexes } = await fixture.select();
+  expect(selection.source.chapterCount).toBe(3000n);
+  expect(selection.before?.chapterCount).toBe(0n);
+  expect(selection.sourceAncestors.map(({ occurrenceId }) => occurrenceId)).toEqual([fixture.parentA, fixture.outer]);
+  expect(selection.destinationAncestors.map(({ occurrenceId }) => occurrenceId)).toEqual([fixture.outer]);
+  const participants = [fixture.source, fixture.parentB, fixture.empty, fixture.parentA, fixture.outer];
+  const preorderBatches = fixture.batches.filter(({ index }) => index === 'preorder');
+  expect(preorderBatches.some(({ ids }) => participants.every((id) => ids.includes(id)))).toBe(true);
+  expect(fixture.occurrenceBatches.flat()).toHaveLength(participants.length);
+  expect(fixture.batches.every(({ ids }) => ids.length <= 512)).toBe(true);
+  for (const index of ['preorder', 'chapter']) {
+    const ids = fixture.batches.filter((batch) => batch.index === index).flatMap((batch) => batch.ids);
+    expect(ids).toHaveLength(new Set(ids).size);
+  }
+  const height = fixture.preorder.nodes.get(fixture.preorder.rootId!)!.height;
+  expect(indexes.preorder.work().snapshotProbeCount).toBeLessThan(32 * height);
+  expect(preorderBatches.length).toBeLessThan(4 * height);
+  expect(indexes.preorder.nodeWrites.size).toBe(0);
+  const root = await fixture.select({ ...fixture.input, parentId: null, beforeOccurrenceId: fixture.tail });
+  expect(root.selection.destinationParent).toBeNull();
+  expect(root.selection.destinationAncestors).toEqual([]);
+  const empty = await fixture.select({ ...fixture.input, occurrenceId: fixture.empty, beforeOccurrenceId: null });
+  expect(empty.selection.source.chapterCount).toBe(0n);
+
+  for (const id of participants) {
+    const fact = fixture.facts.get(id)!;
+    fixture.facts.set(id, { ...fact, value: { ...fact.value, chapterCount: fact.value.chapterCount + 1n } });
+    await expect(fixture.select()).rejects.toThrow('chapter summary does not match its selected preorder');
+    fixture.facts.set(id, fact);
+  }
 });

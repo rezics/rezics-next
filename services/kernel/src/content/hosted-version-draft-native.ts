@@ -1,10 +1,9 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import {
-  chapterRankVersionedOutlineSequenceNode,
-  rankVersionedOutlineSequenceNode,
+  chapterRankVersionedOutlineSequenceNodes,
+  readVersionedOutlineSequenceRanks,
   selectVersionedOutlineSequenceChapters,
-  selectVersionedOutlineSequenceNode,
   selectVersionedOutlineSequenceNodes,
 } from './versioned-outline-sequence.ts';
 import { HOSTED_DEPTH_LIMIT } from './hosted-chapters-model.ts';
@@ -29,7 +28,7 @@ import {
   hostedVersionSequence,
   readHostedVersionHead,
   readHostedVersionMaximumChildSubtreeHeight,
-  readHostedVersionOccurrence,
+  readHostedVersionOccurrences,
   readHostedVersionSiblingRoot,
   readHostedVersionSnapshot,
   stageHostedVersionOccurrence,
@@ -39,6 +38,7 @@ import {
 import type {
   VersionedOutlineSequenceNode,
   VersionedOutlineSequenceReadWriteSet,
+  VersionedOutlineSequenceRanks,
 } from './versioned-outline-sequence.ts';
 import { HostedVersionRevisionPointerChangedError, commitHostedVersionRevision } from './hosted-version-revision.ts';
 import type {
@@ -244,81 +244,128 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
       };
       await assertRootSummary(snapshot, indexes.preorder, indexes.chapters);
 
-      const readOccurrence = async (occurrenceId: string): Promise<HostedVersionDraftMoveSelectedOccurrence> => {
-        const existing = occurrences.get(occurrenceId);
-        if (existing) return existing;
-        const occurrence = await readHostedVersionOccurrence<HostedVersionDraftMoveStoredValue>(
-          tx,
-          snapshot,
-          occurrenceId,
-        );
-        if (occurrence === null) invalidAnchor();
-        occurrences.set(occurrenceId, occurrence);
-        return occurrence;
+      const readOccurrences = async (ids: readonly string[]): Promise<void> => {
+        const missing = [...new Set(ids)].filter((id) => !occurrences.has(id));
+        if (missing.length === 0) return;
+        const selected = await readHostedVersionOccurrences<HostedVersionDraftMoveStoredValue>(tx, snapshot, missing);
+        for (const id of missing) {
+          const occurrence = selected.get(id);
+          if (occurrence === undefined) invalidAnchor();
+          occurrences.set(id, occurrence);
+        }
       };
 
-      const preorderRanks = new Map<string, bigint>();
-      const requirePreorderMember = async (occurrenceId: string): Promise<bigint> => {
-        const existing = preorderRanks.get(occurrenceId);
-        if (existing !== undefined) return existing;
-        const rank = await rankVersionedOutlineSequenceNode(indexes.preorder, snapshot.preorderRootId, occurrenceId);
-        if (rank === null) invalidAnchor();
-        preorderRanks.set(occurrenceId, rank);
-        return rank;
-      };
+      await readOccurrences([
+        input.occurrenceId,
+        ...(input.parentId === null ? [] : [input.parentId]),
+        ...(input.beforeOccurrenceId === null ? [] : [input.beforeOccurrenceId]),
+      ]);
+      const source = occurrences.get(input.occurrenceId)!;
+      const destinationParent = input.parentId === null ? null : occurrences.get(input.parentId)!;
+      const before = input.beforeOccurrenceId === null ? null : occurrences.get(input.beforeOccurrenceId)!;
+      if (source.parentOccurrenceId === null && input.occurrenceId === input.parentId) invalidAnchor();
+      if (destinationParent !== null && destinationParent.value.kind !== 'part') invalidAnchor();
+      if (before !== null && before.parentOccurrenceId !== input.parentId) invalidAnchor();
 
-      const assertChapterAggregate = async (occurrence: HostedVersionDraftMoveSelectedOccurrence): Promise<bigint> => {
-        const start = await requirePreorderMember(occurrence.occurrenceId);
-        const startChapter = await chapterRankVersionedOutlineSequenceNode(
-          indexes.preorder,
-          snapshot.preorderRootId,
-          occurrence.occurrenceId,
-        );
-        if (startChapter === null) invalidAnchor();
-        const preorderRoot =
-          snapshot.preorderRootId === null ? null : await indexes.preorder.readNode(snapshot.preorderRootId);
-        const count = preorderRoot?.count ?? 0n;
-        const end = start + occurrence.subtreeSize;
-        if (end > count) throw new Error('Hosted version occurrence exceeds its selected preorder range');
-        const endChapter =
-          end === count
-            ? (preorderRoot?.chapterCount ?? 0n)
-            : await (async () => {
-                const boundary = await selectVersionedOutlineSequenceNode(
-                  indexes.preorder,
-                  snapshot.preorderRootId,
-                  end,
-                );
-                if (boundary === null) throw new Error('Hosted version preorder boundary is missing');
-                const rank = await chapterRankVersionedOutlineSequenceNode(
-                  indexes.preorder,
-                  snapshot.preorderRootId,
-                  boundary.id,
-                );
-                if (rank === null) throw new Error('Hosted version preorder boundary left its selected root');
-                return rank;
-              })();
-        const actual = endChapter - startChapter;
-        if (actual !== occurrence.value.chapterCount) {
+      // Discover only the two containment paths. Parent identities depend on the preceding level;
+      // defer rank/aggregate work until all participants are known so shared AVL paths load together.
+      const sourcePath: HostedVersionDraftMoveSelectedOccurrence[] = [];
+      const destinationPath: HostedVersionDraftMoveSelectedOccurrence[] = [];
+      const paths = [
+        { child: source, ancestors: sourcePath },
+        ...(destinationParent === null ? [] : [{ child: destinationParent, ancestors: destinationPath }]),
+      ];
+      while (true) {
+        const active = paths.filter(({ child }) => child.parentOccurrenceId !== null);
+        if (active.length === 0) break;
+        for (const { ancestors } of active) {
+          if (ancestors.length >= HOSTED_DEPTH_LIMIT) invalidAnchor();
+        }
+        await readOccurrences(active.map(({ child }) => child.parentOccurrenceId!));
+        for (const path of active) {
+          const parent = occurrences.get(path.child.parentOccurrenceId!)!;
+          path.ancestors.push(parent);
+          path.child = parent;
+        }
+      }
+
+      const participants = [...occurrences.values()];
+      const selectedRanks = await readVersionedOutlineSequenceRanks(
+        indexes.preorder,
+        participants.map(({ occurrenceId }) => ({ rootId: snapshot.preorderRootId, nodeId: occurrenceId })),
+      );
+      const ranksByOccurrence = new Map<string, VersionedOutlineSequenceRanks>();
+      for (let index = 0; index < participants.length; index += 1) {
+        const ranks = selectedRanks[index]!;
+        if (ranks === null) invalidAnchor();
+        ranksByOccurrence.set(participants[index]!.occurrenceId, ranks);
+      }
+
+      // Each subtree's exclusive end is either the snapshot end or one selected preorder boundary.
+      // Coalesce equal ends (common on ancestor paths) before selecting and ranking those boundaries.
+      const ends = new Set<bigint>();
+      for (const occurrence of participants) {
+        const end = ranksByOccurrence.get(occurrence.occurrenceId)!.rank + occurrence.subtreeSize;
+        if (end > snapshot.placementCount) {
+          throw new Error('Hosted version occurrence exceeds its selected preorder range');
+        }
+        if (end !== snapshot.placementCount) ends.add(end);
+      }
+      const boundaryEnds = [...ends];
+      const boundaries = await selectVersionedOutlineSequenceNodes(
+        indexes.preorder,
+        boundaryEnds.map((rank) => ({ rootId: snapshot.preorderRootId, rank })),
+      );
+      const boundaryRequests = boundaries.map((boundary) => {
+        if (boundary === null) throw new Error('Hosted version preorder boundary is missing');
+        return { rootId: snapshot.preorderRootId, nodeId: boundary.id };
+      });
+      const boundaryChapterRanks = await chapterRankVersionedOutlineSequenceNodes(indexes.preorder, boundaryRequests);
+      const chapterRankByEnd = new Map<bigint, bigint>([[snapshot.placementCount, snapshot.chapterCount]]);
+      for (let index = 0; index < boundaryEnds.length; index += 1) {
+        const rank = boundaryChapterRanks[index]!;
+        if (rank === null) throw new Error('Hosted version preorder boundary left its selected root');
+        chapterRankByEnd.set(boundaryEnds[index]!, rank);
+      }
+      for (const occurrence of participants) {
+        const start = ranksByOccurrence.get(occurrence.occurrenceId)!;
+        const endChapter = chapterRankByEnd.get(start.rank + occurrence.subtreeSize)!;
+        if (endChapter - start.chapterRank !== occurrence.value.chapterCount) {
           throw new Error('Hosted version occurrence chapter summary does not match its selected preorder');
         }
-        return start;
-      };
+      }
 
-      const assertChapterProjectionRange = async (
-        occurrence: HostedVersionDraftMoveSelectedOccurrence,
-      ): Promise<void> => {
-        if (occurrence.value.chapterCount === 0n) return;
+      const assertContainedRange = (
+        child: HostedVersionDraftMoveSelectedOccurrence,
+        parent: HostedVersionDraftMoveSelectedOccurrence,
+      ): void => {
+        const childStart = ranksByOccurrence.get(child.occurrenceId)!.rank;
+        const parentStart = ranksByOccurrence.get(parent.occurrenceId)!.rank;
+        if (childStart <= parentStart || childStart + child.subtreeSize > parentStart + parent.subtreeSize) {
+          invalidAnchor();
+        }
+      };
+      if (before !== null && destinationParent !== null) assertContainedRange(before, destinationParent);
+      for (const [initial, path] of [
+        [source, sourcePath],
+        [destinationParent, destinationPath],
+      ] as const) {
+        if (initial === null) continue;
+        let child = initial;
+        for (const parent of path) {
+          assertContainedRange(child, parent);
+          child = parent;
+        }
+      }
+      const sourceAncestors = sourcePath.map((parent) => ancestorFact(descriptor.revisionId, parent));
+      const destinationAncestors = destinationPath.map((parent) => ancestorFact(descriptor.revisionId, parent));
+
+      if (source.value.chapterCount !== 0n) {
         if (snapshot.chapterRootId === null) {
           throw new Error('Hosted version occurrence has chapters without a chapter projection');
         }
-        const start = await chapterRankVersionedOutlineSequenceNode(
-          indexes.preorder,
-          snapshot.preorderRootId,
-          occurrence.occurrenceId,
-        );
-        if (start === null) invalidAnchor();
-        const lastRank = start + occurrence.value.chapterCount - 1n;
+        const start = ranksByOccurrence.get(source.occurrenceId)!.chapterRank;
+        const lastRank = start + source.value.chapterCount - 1n;
         const [preorderBoundaries, chapterBoundaries] = await Promise.all([
           selectVersionedOutlineSequenceChapters(
             indexes.preorder,
@@ -343,63 +390,7 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         ) {
           throw new Error('Hosted version chapter projection does not match its selected preorder range');
         }
-      };
-
-      const source = await readOccurrence(input.occurrenceId);
-      const destinationParent = input.parentId === null ? null : await readOccurrence(input.parentId);
-      if (source.parentOccurrenceId === null && input.occurrenceId === input.parentId) invalidAnchor();
-      if (destinationParent !== null && destinationParent.value.kind !== 'part') invalidAnchor();
-      await requirePreorderMember(source.occurrenceId);
-      await assertChapterAggregate(source);
-      await assertChapterProjectionRange(source);
-      if (destinationParent !== null) {
-        await requirePreorderMember(destinationParent.occurrenceId);
-        await assertChapterAggregate(destinationParent);
       }
-
-      const before = input.beforeOccurrenceId === null ? null : await readOccurrence(input.beforeOccurrenceId);
-      if (before !== null) {
-        if (before.parentOccurrenceId !== input.parentId) invalidAnchor();
-        await requirePreorderMember(before.occurrenceId);
-        await assertChapterAggregate(before);
-      }
-
-      const sourceAncestors: HostedVersionDraftMoveAncestor[] = [];
-      const destinationAncestors: HostedVersionDraftMoveAncestor[] = [];
-      const assertContainedRange = async (
-        child: HostedVersionDraftMoveSelectedOccurrence,
-        parent: HostedVersionDraftMoveSelectedOccurrence,
-      ): Promise<void> => {
-        const [childStart, parentStart] = await Promise.all([
-          requirePreorderMember(child.occurrenceId),
-          requirePreorderMember(parent.occurrenceId),
-        ]);
-        if (childStart <= parentStart || childStart + child.subtreeSize > parentStart + parent.subtreeSize) {
-          invalidAnchor();
-        }
-      };
-
-      if (before !== null && destinationParent !== null) await assertContainedRange(before, destinationParent);
-
-      const collectAncestors = async (
-        initial: HostedVersionDraftMoveSelectedOccurrence,
-        path: HostedVersionDraftMoveAncestor[],
-      ): Promise<void> => {
-        let child = initial;
-        let depth = 0;
-        while (child.parentOccurrenceId !== null) {
-          if (depth >= HOSTED_DEPTH_LIMIT) invalidAnchor();
-          const parent = await readOccurrence(child.parentOccurrenceId);
-          await assertContainedRange(child, parent);
-          await assertChapterAggregate(parent);
-          path.push(ancestorFact(descriptor.revisionId, parent));
-          child = parent;
-          depth += 1;
-        }
-      };
-
-      await collectAncestors(source, sourceAncestors);
-      if (destinationParent !== null) await collectAncestors(destinationParent, destinationAncestors);
 
       const rootForParent = async (parentId: string | null): Promise<string | null> => {
         const root = await readHostedVersionSiblingRoot(tx, snapshot, parentId);

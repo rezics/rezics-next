@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   chapterRankVersionedOutlineSequenceNode,
+  chapterRankVersionedOutlineSequenceNodes,
   createVersionedOutlineSequenceReadAccess,
   createVersionedOutlineSequenceReadWriteSet,
   insertVersionedOutlineSequenceNode,
@@ -9,6 +10,7 @@ import {
   moveVersionedOutlineSequenceRange,
   rankVersionedOutlineSequenceNode,
   rankVersionedOutlineSequenceNodes,
+  readVersionedOutlineSequenceRanks,
   selectVersionedOutlineSequenceChapter,
   selectVersionedOutlineSequenceChapters,
   selectVersionedOutlineSequenceNode,
@@ -214,6 +216,65 @@ test('multi-rank frontiers deduplicate shared paths across roots and stay pinned
       { rootId: moved.rootId, nodeId: first.ids[11]! },
     ]),
   ).toEqual([41n]);
+});
+
+test('ordinary and weighted ranks share bounded frontiers for wide Books, empty parts and historical roots', async () => {
+  const seeded = seedBalanced(2047, 'weighted-frontier-', 3);
+  const empty = seedBalanced(31, 'empty-frontier-');
+  const original = new Map([...seeded.nodes, ...empty.nodes]);
+  const requests = [
+    ...seeded.ids.map((nodeId) => ({ rootId: seeded.rootId, nodeId })),
+    { rootId: seeded.rootId, nodeId: seeded.ids[11]! },
+    { rootId: seeded.rootId, nodeId: empty.ids[0]! },
+    { rootId: seeded.rootId, nodeId: 'absent' },
+    { rootId: null, nodeId: seeded.ids[0]! },
+    { rootId: empty.rootId, nodeId: empty.ids[30]! },
+  ];
+  const batches: string[][] = [];
+  const ranks = await readVersionedOutlineSequenceRanks(batchWorkspace(original, batches), requests);
+  expect(ranks).toEqual([
+    ...seeded.ids.map((_, index) => ({ rank: BigInt(index), chapterRank: BigInt(Math.ceil(index / 3)) })),
+    { rank: 11n, chapterRank: 4n },
+    null,
+    null,
+    null,
+    { rank: 30n, chapterRank: 0n },
+  ]);
+  expect(await chapterRankVersionedOutlineSequenceNodes(batchWorkspace(original), requests)).toEqual(
+    ranks.map((rank) => rank?.chapterRank ?? null),
+  );
+  expect(batches.some((batch) => batch.length === 512)).toBe(true);
+  expect(batches.every((batch) => batch.length <= 512)).toBe(true);
+  expect(batches.flat()).toHaveLength(new Set(batches.flat()).size);
+
+  const edit = workspace(original);
+  const moved = await moveVersionedOutlineSequenceRange(edit, seeded.rootId, 10n, 3n, 43n);
+  const request = { rootId: seeded.rootId, nodeId: seeded.ids[11]! };
+  expect(await readVersionedOutlineSequenceRanks(batchWorkspace(original), [request])).toEqual([
+    { rank: 11n, chapterRank: 4n },
+  ]);
+  expect(
+    await readVersionedOutlineSequenceRanks(batchWorkspace(commit(original, edit)), [
+      { ...request, rootId: moved.rootId },
+    ]),
+  ).toEqual([{ rank: 41n, chapterRank: 14n }]);
+});
+
+test('rank frontiers retain selected-root, missing-parent, inverse-parent and cycle failures', async () => {
+  const seeded = seedBalanced(7, 'rank-links-', 2);
+  const request = { rootId: seeded.rootId, nodeId: seeded.ids[0]! };
+  await expect(
+    readVersionedOutlineSequenceRanks(batchWorkspace(seeded.nodes), [{ ...request, rootId: seeded.ids[1]! }]),
+  ).rejects.toThrow('requires a selected root');
+  const leaf = seeded.nodes.get(request.nodeId)!;
+  for (const [treeParentId, error] of [
+    ['missing-parent', 'references a missing node'],
+    [seeded.ids[5]!, 'tree-parent link is inconsistent'],
+    [leaf.id, 'tree-parent links contain a cycle'],
+  ] as const) {
+    const corrupt = new Map(seeded.nodes).set(leaf.id, { ...leaf, treeParentId });
+    await expect(readVersionedOutlineSequenceRanks(batchWorkspace(corrupt), [request])).rejects.toThrow(error);
+  }
 });
 
 test('ordinary and weighted selections share child frontiers without scanning large Books or empty parts', async () => {
