@@ -78,8 +78,7 @@ export async function admitPrivateFollowRead(
   return withFollowCountReadConnection(pool, deadline, async (client) => {
     await client.query('BEGIN');
     const admitted = await readCurrentOwnerHome(client, owner);
-    if (expected && admitted.epoch !== expected.epoch)
-      throw new CommandUnavailableError('fenced', admitted.partition);
+    if (expected && admitted.epoch !== expected.epoch) throw new CommandUnavailableError('fenced', admitted.partition);
     await client.query('COMMIT');
     return admitted;
   });
