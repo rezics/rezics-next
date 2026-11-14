@@ -1,31 +1,15 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { KernelDependencies } from '../../src/http/kernel.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import type { ContentShelfTitleInputs } from '../../src/library/shelf-title-content-source.ts';
 import { createSemanticTitleInputsAdapter } from '../../src/semantic/adapters/title-inputs.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
-
-const emptyShelfTitleInputs: ContentShelfTitleInputs = {
-  async observe() {
-    return { status: 'current', version: 'empty-shelf-title-test-v1', entries: [] };
-  },
-};
-
-const composeWithEmptyShelfTitleInputs: typeof createKernel = (dependencies: KernelDependencies) =>
-  createKernel({
-    ...dependencies,
-    content: { ...dependencies.content, shelfTitleInputs: emptyShelfTitleInputs } as NonNullable<
-      KernelDependencies['content']
-    >,
-  });
 
 let driver: SemanticOutcomeDriver;
 const idempotency = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
 
 beforeAll(async () => {
-  driver = await createSemanticDriver(composeWithEmptyShelfTitleInputs, { originalCapabilities: true });
+  driver = await createSemanticDriver(createKernel, { originalCapabilities: true });
 });
 
 afterAll(async () => {
@@ -269,7 +253,7 @@ test('native lifecycle and owner-tuple writes retire the complete title basis', 
   expect(await currentBasis()).toBe(beforeOwnerChange);
 });
 
-test('an unrequested Semantic visibility write retires the basis while real empty-shelf preparation preserves it', async () => {
+test('an unrequested Semantic visibility write retires the basis while empty-shelf preparation preserves it', async () => {
   await driver.fixtures.openFeatures(['personal_library']);
   const shelfOwner = await driver.fixtures.person('title-input-shelf-owner', { scopes: ['library_entry:list'] });
   const created = await driver.request(
@@ -338,4 +322,103 @@ test('an unrequested Semantic visibility write retires the basis while real empt
     ).rows[0]!.revision,
   ).not.toBe(revisionBefore);
   expect(await currentBasis()).not.toBe(before);
+});
+
+test('integrated title preparation receives more than one chunk without retiring its source basis', async () => {
+  await driver.fixtures.openFeatures(['personal_library']);
+  const shelfOwner = await driver.fixtures.person(`title-input-chunks-${randomUUID()}`, {
+    scopes: ['library_entry:list', 'library_entry:update'],
+  });
+  const subjectIds: string[] = [];
+  for (let index = 0; index < 101; index++) {
+    const subjectId = await createSubject(`Chunked title input ${index} ${randomUUID()}`);
+    subjectIds.push(subjectId);
+  }
+  const semanticBasis = await currentBasis();
+  for (const subjectId of subjectIds) {
+    const entry = await driver.fixtures.send(
+      shelfOwner,
+      'PUT',
+      `/v1/libraryEntries/${subjectId}`,
+      { state: 'planned' },
+      idempotency(),
+    );
+    expect(entry.status, JSON.stringify(entry.body)).toBe(201);
+  }
+  expect(await currentBasis()).toBe(semanticBasis);
+  const prepare = () =>
+    driver.fixtures.send(shelfOwner, 'POST', '/v1/libraryShelfTitlePreparation', undefined, {
+      'Accept-Language': 'en',
+      ...idempotency(),
+    });
+  const initial = await prepare();
+  expect(initial.status, JSON.stringify(initial.body)).toBe(200);
+  expect(initial.body).toMatchObject({ installation: 'pending', prepared: 0 });
+  const cleanup = await prepare();
+  expect(cleanup.status, JSON.stringify(cleanup.body)).toBe(200);
+  expect(cleanup.body).toMatchObject({ installation: 'pending', prepared: 0 });
+
+  const firstChunk = await prepare();
+  expect(firstChunk.status, JSON.stringify(firstChunk.body)).toBe(200);
+  expect(firstChunk.body).toMatchObject({ installation: 'pending', prepared: 100 });
+  const ownerRoute = routeOf(shelfOwner.accountId)!;
+  const afterFirstChunk = await driver.fixtures.pool.query<{
+    phase: string;
+    afterSubjectId: string | null;
+    sourceBasis: string;
+  }>(
+    `SELECT phase,after_subject_id::text AS "afterSubjectId",source_basis AS "sourceBasis"
+     FROM library.shelf_title_head WHERE route=$1 AND account_id=$2::uuid`,
+    [ownerRoute, shelfOwner.accountId],
+  );
+  expect(afterFirstChunk.rows).toHaveLength(1);
+  expect(afterFirstChunk.rows[0]!.phase).toBe('build');
+  const frontier = afterFirstChunk.rows[0]!.afterSubjectId;
+  expect(frontier).not.toBeNull();
+  expect(await currentBasis()).toBe(semanticBasis);
+
+  const finalChunk = await prepare();
+  expect(finalChunk.status, JSON.stringify(finalChunk.body)).toBe(200);
+  expect(finalChunk.body).toMatchObject({ installation: 'installed', prepared: 1 });
+  const ready = await driver.fixtures.pool.query<{
+    phase: string;
+    afterSubjectId: string | null;
+    sourceBasis: string;
+  }>(
+    `SELECT phase,after_subject_id::text AS "afterSubjectId",source_basis AS "sourceBasis"
+     FROM library.shelf_title_head WHERE route=$1 AND account_id=$2::uuid`,
+    [ownerRoute, shelfOwner.accountId],
+  );
+  expect(ready.rows).toHaveLength(1);
+  expect(ready.rows[0]!.phase).toBe('ready');
+  expect(ready.rows[0]!.afterSubjectId).not.toBe(frontier);
+  expect(ready.rows[0]!.sourceBasis).toBe(afterFirstChunk.rows[0]!.sourceBasis);
+  expect(await currentBasis()).toBe(semanticBasis);
+  const preparedKeys = await driver.fixtures.pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM library.shelf_title_key shelf_key
+     JOIN library.shelf_title_head head
+       ON head.route=shelf_key.route AND head.account_id=shelf_key.account_id
+        AND head.generation=shelf_key.generation
+     WHERE head.route=$1 AND head.account_id=$2::uuid`,
+    [ownerRoute, shelfOwner.accountId],
+  );
+  expect(preparedKeys.rows[0]!.count).toBe('101');
+  const firstSubjectId = subjectIds[0]!;
+  const firstKey = await driver.fixtures.pool.query<{
+    sourceId: string;
+    missing: boolean;
+    keyBytes: number;
+  }>(
+    `SELECT shelf_key.source_id::text AS "sourceId",shelf_key.missing,
+       octet_length(shelf_key.key) AS "keyBytes"
+     FROM library.shelf_title_key shelf_key
+     JOIN library.shelf_title_head head
+       ON head.route=shelf_key.route AND head.account_id=shelf_key.account_id
+        AND head.generation=shelf_key.generation
+     WHERE head.route=$1 AND head.account_id=$2::uuid AND shelf_key.subject_id=$3::uuid`,
+    [ownerRoute, shelfOwner.accountId, firstSubjectId],
+  );
+  expect(firstKey.rows).toHaveLength(1);
+  expect(firstKey.rows[0]).toMatchObject({ sourceId: firstSubjectId, missing: false });
+  expect(firstKey.rows[0]!.keyBytes).toBeGreaterThan(0);
 });

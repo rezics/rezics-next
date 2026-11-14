@@ -136,7 +136,7 @@ Definitions' public root owns pure `languageRanges`/`chooseLabel`, including bro
 
 ## Library whole-source title inputs
 
-Decision: keep Semantic title basis v2 as the complete source observer; dispatch Content's producer/current Access installation and Library's 101-entry receiving acceptance as separate continuations because both first edits cross Semantic's owned paths.
+Decision: use one 101-entry native acceptance to cover Content/current-Access binding and multi-chunk receiving; keep Semantic v2 unchanged and gate production wiring on the confirmed Content and root composition boundaries.
 
 Decision: Library title basis v2 hashes the active Global Definitions release and all 4,096 native owner tuples plus transactionally maintained per-home title-source revisions; Semantic source and identity writes advance those revisions, while Core commit positions and Library-only derivatives do not.
 
