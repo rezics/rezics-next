@@ -39,28 +39,36 @@ import collectionRecording from '../recorded/library-collection.json';
 
 const profile = profileJson as PresentationProfile;
 export type BookScenario = 'rich' | 'sparse' | 'failure' | 'limited' | 'long';
-let scenario: BookScenario = 'rich';
-let failed = false;
-const votes = new Map<string, { units: number; revision: number }>();
-const libraryEntries = new Map<string, { state: string; revision: number }>();
-
-/** State belongs to a mounted story; navigation does not reset it. */
-export function selectBookShowcase(next: BookScenario = 'rich') {
-  scenario = next;
-  failed = false;
-  votes.clear();
-  libraryEntries.clear();
-  if (next !== 'sparse')
+function createBookVisit(scenario: BookScenario) {
+  const votes = new Map<string, { units: number; revision: number }>();
+  const libraryEntries = new Map<string, { state: string; revision: number }>();
+  if (scenario !== 'sparse')
     for (const { id } of [book, bookLong]) {
       votes.set(id, { units: 17, revision: 1 });
       libraryEntries.set(id, { state: recordedBookState(1)!, revision: 1 });
     }
+  return { scenario, failed: false, votes, libraryEntries };
+}
+type BookVisit = ReturnType<typeof createBookVisit>;
+let selected = createBookVisit('rich');
+
+/** State belongs to a mounted story; navigation does not reset it. */
+export function selectBookShowcase(next: BookScenario = 'rich') {
+  selected = createBookVisit(next);
+}
+
+/** A retired story releases only its own selection, including after a source refresh. */
+export function prepareBookShowcase(next: BookScenario = 'rich'): () => void {
+  const visit = createBookVisit(next);
+  selected = visit;
+  return () => {
+    if (selected === visit) selectBookShowcase();
+  };
 }
 export const bookStorySubject = (state: BookScenario) =>
   state === 'sparse' ? bookSparse : state === 'long' ? bookLong : book;
 const language = (request: Request) => request.headers.get('accept-language')?.split(',')[0]?.trim() ?? 'en';
 const freshness = { consistency: 'eventual', target_seconds: 10, caught_up: true };
-selectBookShowcase();
 
 export const bookReviewTitles = [
   'A city worth getting lost in',
@@ -288,11 +296,12 @@ type PageInput = {
   continuation?: PageContinuation;
 };
 const pageAnswer: NonNullable<FakeRoute['story']> = async ({ request }) => {
+  const visit = selected;
   const input = (await request.json()) as PageInput;
   if (!isBookShowcase(input.target.subject)) return;
   const target = input.target;
-  const failEditions = scenario === 'failure' && !failed;
-  if (target.view === 'editions') failed = true;
+  const failEditions = visit.scenario === 'failure' && !visit.failed;
+  if (target.view === 'editions') visit.failed = true;
   return {
     status: 200,
     ...bookShowcasePage(target.subject!, target.view, {
@@ -305,27 +314,31 @@ const pageAnswer: NonNullable<FakeRoute['story']> = async ({ request }) => {
   };
 };
 
-function entry(id: string) {
+function entry(visit: BookVisit, id: string, locale: string) {
   return {
     subjectId: id,
-    ...libraryEntries.get(id)!,
+    ...visit.libraryEntries.get(id)!,
     createdAt: '2026-10-20T12:00:00.000Z',
     updatedAt: '2026-11-10T12:00:00.000Z',
-    subject: bookSummary(id),
+    subject: bookSummary(id, locale),
   };
 }
 const libraryAnswer: NonNullable<FakeRoute['story']> = async ({ request, match }) => {
+  const visit = selected;
+  const { libraryEntries } = visit;
   const id = match?.[1];
   if (!isBookShowcase(id)) return;
   if (!request.headers.has('authorization')) return { status: 401, code: 'unauthorized' };
-  if (scenario === 'limited' && request.method !== 'GET') return { status: 403, code: 'forbidden' };
+  if (visit.scenario === 'limited' && request.method !== 'GET') return { status: 403, code: 'forbidden' };
   if (request.method === 'GET')
-    return libraryEntries.has(id!) ? { status: 200, libraryEntry: entry(id!) } : { status: 404, code: 'not_found' };
+    return libraryEntries.has(id!)
+      ? { status: 200, libraryEntry: entry(visit, id!, language(request)) }
+      : { status: 404, code: 'not_found' };
   const revision = (libraryEntries.get(id!)?.revision ?? 0) + 1;
   if (request.method === 'PUT') {
     const body = (await request.json()) as { state: string };
     libraryEntries.set(id!, { state: body.state, revision });
-    return { status: 200, libraryEntry: entry(id!) };
+    return { status: 200, libraryEntry: entry(visit, id!, language(request)) };
   }
   libraryEntries.delete(id!);
   return {
@@ -334,10 +347,12 @@ const libraryAnswer: NonNullable<FakeRoute['story']> = async ({ request, match }
   };
 };
 const voteAnswer: NonNullable<FakeRoute['story']> = async ({ request, match }) => {
+  const visit = selected;
+  const { votes } = visit;
   const id = match?.[1];
   if (!isBookShowcase(id)) return;
   if (!request.headers.has('authorization')) return { status: 401, code: 'unauthorized' };
-  if (scenario === 'limited' && request.method !== 'GET') return { status: 403, code: 'forbidden' };
+  if (visit.scenario === 'limited' && request.method !== 'GET') return { status: 403, code: 'forbidden' };
   if (request.method === 'PUT') {
     const { units } = (await request.json()) as { units: number };
     votes.set(id!, { units, revision: (votes.get(id!)?.revision ?? 0) + 1 });

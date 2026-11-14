@@ -10,7 +10,7 @@ import {
   bookSeries,
   bookSubjectRead,
 } from '../src/kernel/fixtures/book-showcase';
-import { bookShowcasePage, selectBookShowcase } from '../src/kernel/fake/book-showcase';
+import { bookShowcasePage, prepareBookShowcase, routes, selectBookShowcase } from '../src/kernel/fake/book-showcase';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { subjectTabs } from '../src/features/pages/views';
 import { recordedBookState } from '../src/kernel/fake/library-entry-states';
@@ -112,4 +112,65 @@ test('member state and own score read back after writes, clear correctly and rej
   expect((await vote.put({ units: 20 }, { headers })).status).toBe(403);
   expect((await vote.get({ headers })).data).toMatchObject({ units: 17 });
   expect((await library.put({ state }, { headers })).status).toBe(403);
+});
+
+test('fresh Book visits reset viewer data and retired cleanup cannot release the current fixture', async () => {
+  const retireOld = prepareBookShowcase();
+  const kernel = client();
+  const vote = kernel.subjects({ id: book.id }).ratings({ questionId: QUESTION }).vote;
+  await vote.put({ units: 20 }, { headers });
+  await kernel.libraryEntries({ subjectId: book.id }).put({ state: recordedBookState(2)! }, { headers });
+  const retireCurrent = prepareBookShowcase('limited');
+  retireOld();
+  expect((await vote.put({ units: 19 }, { headers })).status).toBe(403);
+  expect((await vote.get({ headers })).data).toMatchObject({ units: 17 });
+  expect((await kernel.libraryEntries({ subjectId: book.id }).get({ headers })).data).toMatchObject({
+    libraryEntry: { state: recordedBookState(1)! },
+  });
+  retireCurrent();
+  expect((await vote.put({ units: 19 }, { headers })).status).toBe(200);
+});
+
+test('an old request finishing after a fresh selection writes only to its retired Book visit', async () => {
+  const kernel = client();
+  for (const [path, body] of [
+    [`/v1/subjects/${book.id}/ratings/${QUESTION}/vote`, { units: 20 }],
+    [`/v1/libraryEntries/${book.id}`, { state: recordedBookState(2)! }],
+  ] as const) {
+    prepareBookShowcase();
+    let finish!: (body: unknown) => void;
+    const pendingBody = new Promise<unknown>((resolve) => {
+      finish = resolve;
+    });
+    const request = new Request(`https://kernel.invalid${path}`, { method: 'PUT', headers });
+    Object.defineProperty(request, 'json', { value: () => pendingBody });
+    const route = routes.find(
+      (route) => route.method === 'PUT' && route.path instanceof RegExp && route.path.test(path),
+    )!;
+    const pending = route.story!({ request, match: (route.path as RegExp).exec(path), recordings: {} });
+    prepareBookShowcase();
+    finish(body);
+    expect(await pending).toMatchObject({ status: 200 });
+    expect(
+      (await kernel.subjects({ id: book.id }).ratings({ questionId: QUESTION }).vote.get({ headers })).data,
+    ).toMatchObject({ units: 17 });
+    expect((await kernel.libraryEntries({ subjectId: book.id }).get({ headers })).data).toMatchObject({
+      libraryEntry: { state: recordedBookState(1)! },
+    });
+  }
+});
+
+test('Book library readback uses the requested locale independently of the preceding visit', async () => {
+  const kernel = client();
+  const library = kernel.libraryEntries({ subjectId: book.id });
+  prepareBookShowcase('limited');
+  prepareBookShowcase();
+  const localizedHeaders = { ...headers, 'accept-language': 'ja' };
+  const result = await library.get({ headers: localizedHeaders });
+  expect(result.data).toMatchObject({
+    libraryEntry: { subject: { id: book.id, label: { value: '借りた日々の地図帳', language: 'ja' } } },
+  });
+  expect((await library.put({ state: recordedBookState(2)! }, { headers: localizedHeaders })).data).toMatchObject({
+    libraryEntry: { subject: { label: { language: 'ja' } }, state: recordedBookState(2)! },
+  });
 });

@@ -759,6 +759,12 @@ through navigation and return. Hosted chapter reading remains a separate destina
 theme globals cover responsive and multilingual review without duplicated or locked stories. Web's existing
 publisher owns deployment and TG delivery of these stable entries.
 
+Decision: ordinary review entries render their named initial state and stay still until the reviewer acts.
+Their `play` functions only observe readiness and state; they do not navigate, paginate, retry, write, focus or resize.
+Scripted journeys live in explicitly named **Interaction** entries tagged `interaction`, retaining their assertions.
+Theme and viewport changes preserve the current visit. Locale, entry, viewer, fixture or refreshed source changes
+start a fresh visit. Publication is independent of this source repair and the verifier's later manual checks.
+
 The composition and domain boundaries follow [Read a literary work](../../docs/subject-pages.md#read-a-literary-work)
 and [Subject pages, relations, editions and credits](../../docs/goals/web.capabilities.md#subject-pages-relations-editions-and-credits).
 
@@ -770,6 +776,10 @@ Canonical entries for the existing publisher:
 - Connected identity returns: `pages-library-books--edition-return` and `pages-library-books--series-return`.
 - Named states: `pages-library-books--sparse-data`, `--section-retry`, `--permission-limited`,
   `--long-multilingual-text` and `--member-readback` (the same prefix applies).
+- Scripted scenarios: `pages-library-books--tab-navigation-interaction`, `--signed-out-navigation-interaction`,
+  `--editions-pagination-interaction`, `--review-return-interaction`, `--edition-return-interaction`,
+  `--series-return-interaction`, `--section-retry-interaction`, `--permission-limited-interaction` and
+  `--member-readback-interaction` (the same prefix applies).
 
 The Book module answers the released read plans, including ordinary continuations; it keeps work, edition,
 series and catalogue interlude identities separate. Interlude metadata does not promise hosted chapter text.
@@ -777,9 +787,26 @@ Local illustrated covers are served from `.storybook/media/`. Personal library a
 subject for the mounted visit; the limited member receives native write denials without changing saved state.
 Book-only preview navigation keeps related-page links in the mounted application router, including links that
 normally open a new tab. Other stories retain their navigation policy.
-`src/stories/book-showcase.stories.tsx` exercises complete tab navigation, Back/Forward, continuation, identity
-returns, failed-section retry and personal readback. `tests/book-showcase.test.ts` pins the transport and released
-view contract. The dev verifier runs acceptance and browser checks after landing.
+`PageStory` prepares fixtures before mounting route consumers or loading its generated route tree. A stable
+`prepareFixture` callback may return a release function; the same visit owns that fixture, query cache, memory
+history and existing browser history bridge. Retirement detaches the bridge, aborts route/query work, clears the
+cache and releases the fixture before the next visit starts. Book requests capture their visit's mutable state
+before reading their body, so a late request from a retired story cannot write into the next story. Library
+readback summaries use the request locale, including for destinations whose fallback label remains English.
+The bridge keeps the outer Storybook URL and uses production links, GET forms and Back/Forward; it installs no
+second router. New showcase owners can use this boundary without adding a renderer.
+
+The existing Home `pages-discovery-home--signed-in` and `--partial-sources` review entries follow the same rule;
+their preserved continuation and retry assertions run in `pages-discovery-home--continuation-interaction` and
+`--partial-sources-retry-interaction`. Other action-specific Home entries retain their named workflows.
+Ordinary Library Following and Progress readiness also leaves focus, menus and pointer state alone. Following's
+keyboard menu assertions live at `pages-library-following--keyboard-menu-interaction`; its action-specific menu
+and removal examples retain their named workflows.
+`src/stories/book-showcase.stories.tsx` retains complete tab navigation, Back/Forward, continuation, identity
+returns, failed-section retry and personal readback in its interaction scenarios. `tests/book-showcase.test.ts`
+pins transport, released views, locale readback and isolation across retired visits. The dev verifier runs these
+acceptance assertions and manual keyboard, phone and desktop review after landing; source work does not run browsers,
+screenshots or a navigation/resize matrix.
 
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
 `src/kernel/fixtures/`; add no new routes or entries to `fake.ts` or `fixtures.json`. Each route module exports a
