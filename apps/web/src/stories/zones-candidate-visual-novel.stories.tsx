@@ -31,12 +31,7 @@ async function readZone(zoneId: string, route = ''): Promise<Response> {
   });
 }
 
-async function assertFailure(
-  zoneId: string,
-  status: number,
-  error: string,
-  retryAfter?: string,
-): Promise<void> {
+async function assertFailure(zoneId: string, status: number, error: string, retryAfter?: string): Promise<void> {
   const response = await readZone(zoneId);
   expect(response.status).toBe(status);
   expect(await response.json()).toEqual({ error });
@@ -99,7 +94,8 @@ export const SparseHome: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'A sparse authored preview with fictional copy. Its example is not a semantic result or a release claim.',
+        story:
+          'A sparse authored preview with fictional copy. Its example is not a semantic result or a release claim.',
       },
     },
   },
@@ -120,7 +116,8 @@ export const Releases: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'The configured releases route stays static and has no release read, publication dates, or producer roster.',
+        story:
+          'The configured releases route stays static and has no release read, publication dates, or producer roster.',
       },
     },
   },
@@ -167,7 +164,9 @@ export const SemanticUnavailable: Story = {
 export const PrivateZone: Story = {
   name: 'Concealed · private Zone (404)',
   parameters: {
-    docs: { description: { story: 'Private visibility is concealed behind the same not-found response as a missing Zone.' } },
+    docs: {
+      description: { story: 'Private visibility is concealed behind the same not-found response as a missing Zone.' },
+    },
   },
   render: () => <PageStory visitor="Signed Out" path={routePath(visualNovelZoneIds.private)} />,
   play: async ({ canvasElement }) => {
@@ -179,7 +178,9 @@ export const PrivateZone: Story = {
 export const MissingZone: Story = {
   name: 'Concealed · missing Zone (404)',
   parameters: {
-    docs: { description: { story: 'A missing Zone is concealed with the same not-found response as private visibility.' } },
+    docs: {
+      description: { story: 'A missing Zone is concealed with the same not-found response as private visibility.' },
+    },
   },
   render: () => <PageStory visitor="Signed Out" path={routePath(visualNovelZoneIds.missing)} />,
   play: async ({ canvasElement }) => {
