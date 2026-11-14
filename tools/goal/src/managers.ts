@@ -1860,7 +1860,8 @@ export class ManagerSessions {
                 (current.operatorTurnReparkId !== undefined &&
                   current.activeTurnId === current.operatorTurnReparkId &&
                   current.turnDisposition?.intent === 'work')) &&
-              current.goalState?.status !== 'blocked' &&
+              // Blocked Goals may still have an admitted inbox turn; reconcile its receipt without activating the Goal.
+              (current.goalState?.status !== 'blocked' || current.activeTurnId !== null) &&
               current.goalState?.status !== 'budgetLimited' &&
               current.goalState?.status !== 'usageLimited' &&
               current.goalState?.status !== 'complete'

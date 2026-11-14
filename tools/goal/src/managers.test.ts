@@ -989,6 +989,37 @@ test('a blocked running Goal accepts one admitted inbox turn without reactivatio
   }
 });
 
+test('recovery settles a completed explicit inbox turn while the native Goal remains blocked', async () => {
+  const s = await setup();
+  let recovered: ManagerSessions | undefined;
+  const closeTransport = s.client.close.bind(s.client);
+  try {
+    const manager = await s.managers.start(s.spec);
+    const threadId = manager.threadId!;
+    await s.notify({ method: 'turn/completed', params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } } });
+    await s.client.request('thread/goal/set', { threadId, status: 'blocked' });
+    await s.managers.flush();
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Resolve a real scheduling decision' });
+    await s.managers.wake(manager.id);
+    const turnId = s.managers.get(manager.id).activeTurnId!;
+    s.client.close = () => {};
+    await s.managers.close();
+    await s.client.request('test/notify', { method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'completed' } } });
+    const before = s.requests().length;
+    recovered = new ManagerSessions(s.db, s.inbox, s.services);
+    await recovered.recover();
+    await recovered.flush();
+    expect(recovered.get(manager.id)).toMatchObject({
+      threadId, activeTurnId: null, waitingForInbox: false, goalState: { status: 'blocked' },
+    });
+    expect(s.requests().slice(before).filter((r) => r.method === 'thread/goal/set' || r.method === 'turn/start')).toHaveLength(0);
+  } finally {
+    await recovered?.close();
+    await closeTransport();
+    await s.close();
+  }
+});
+
 test('Inbox decisions wake the existing thread once before and after host recovery, preserving Goal objective, budget, usage and worker sessions.', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
