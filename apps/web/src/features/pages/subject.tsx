@@ -1319,6 +1319,18 @@ export function SubjectPage({
                       validateAddress={validateAlbumReturnAddress}
                     />
                   )}
+                  {!overview && heading && (
+                    <header className="min-w-0 space-y-1" data-slot="view-heading">
+                      <p className="text-sm break-words">
+                        <a className={`${linkClass} ${linkColor}`} href={contextHref(heading.href, realm)}>
+                          {heading.title}
+                        </a>
+                      </p>
+                      <h1 className="font-sans text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                        {heading.label}
+                      </h1>
+                    </header>
+                  )}
                   {literarySubject && ((!bookOverview && overview) || view === 'contents' || view === 'editions') ? (
                     <LiteraryReaderEntry
                       work={literarySubject}
@@ -1360,18 +1372,6 @@ export function SubjectPage({
                       link={ContextLink}
                     />
                   ) : null}
-                  {!overview && heading && (
-                    <header className="min-w-0 space-y-1" data-slot="view-heading">
-                      <p className="text-sm break-words">
-                        <a className={`${linkClass} ${linkColor}`} href={contextHref(heading.href, realm)}>
-                          {heading.title}
-                        </a>
-                      </p>
-                      <h1 className="font-sans text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-                        {heading.label}
-                      </h1>
-                    </header>
-                  )}
                   {!readingLayout && contextAndNames}
                   {overview && !readingOverview && read && !page.account && showcaseWork && workReturn ? (
                     <WorkFranchiseOverview
