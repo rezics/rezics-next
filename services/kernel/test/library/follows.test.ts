@@ -667,9 +667,9 @@ test('an admitted owner keeps valid empty Follow reads and stale owner or home e
   const home = original.rows[0]!;
   try {
     await admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [admitted.partition]);
-    expect(
-      await refusal(() => admitPrivateFollowRead(pool, owner, deadline, admitted)),
-    ).toBeInstanceOf(CommandUnavailableError);
+    expect(await refusal(() => admitPrivateFollowRead(pool, owner, deadline, admitted))).toBeInstanceOf(
+      CommandUnavailableError,
+    );
     for (const [state, movedTo] of [
       ['fenced', null],
       ['moved', 'new-home'],
@@ -679,18 +679,18 @@ test('an admitted owner keeps valid empty Follow reads and stale owner or home e
         state,
         movedTo,
       ]);
-      expect(await refusal(() => followCommands.readFollow(owner, subjectId))).toBeInstanceOf(
-        CommandUnavailableError,
-      );
+      expect(await refusal(() => followCommands.readFollow(owner, subjectId))).toBeInstanceOf(CommandUnavailableError);
       expect(await refusal(() => followCommands.listFollows(owner, { cursor: null, limit: 10 }))).toBeInstanceOf(
         CommandUnavailableError,
       );
     }
   } finally {
-    await admin.query(
-      'UPDATE core.partition SET epoch=$2,write_state=$3,moved_to=$4 WHERE partition_no=$1',
-      [admitted.partition, home.epoch, home.write_state, home.moved_to],
-    );
+    await admin.query('UPDATE core.partition SET epoch=$2,write_state=$3,moved_to=$4 WHERE partition_no=$1', [
+      admitted.partition,
+      home.epoch,
+      home.write_state,
+      home.moved_to,
+    ]);
   }
 });
 

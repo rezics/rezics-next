@@ -30,10 +30,7 @@ function requireOwner(actor: Actor): AccountActor {
   return actor;
 }
 
-async function readCurrentOwnerHome(
-  client: QueryClient,
-  owner: AccountActor,
-): Promise<FollowReadAdmission> {
+async function readCurrentOwnerHome(client: QueryClient, owner: AccountActor): Promise<FollowReadAdmission> {
   const route = routeOf(owner.accountId)!;
   const partition = partitionOf(route);
 
@@ -53,7 +50,13 @@ async function readCurrentOwnerHome(
   const home = await readPartition(client, partition);
   if (!home || home.writeState !== 'active' || home.movedTo !== null)
     throw new CommandUnavailableError('fenced', partition);
-  return Object.freeze({ accountId: owner.accountId, authnEpoch: owner.authnEpoch, route, partition, epoch: home.epoch });
+  return Object.freeze({
+    accountId: owner.accountId,
+    authnEpoch: owner.authnEpoch,
+    route,
+    partition,
+    epoch: home.epoch,
+  });
 }
 
 /** Recheck Access and the native owner home without holding either checkout for foreign work. */

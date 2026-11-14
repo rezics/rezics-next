@@ -263,7 +263,11 @@ export function followAccountWork(accountId: string): Bound {
   return sqlWork(account.sql, [routeOf(accountId)!, accountId], point(size(accountProjection)));
 }
 export function followAccountShareWork(accountId: string): Bound {
-  return sqlWork(accountShare.sql, [routeOf(accountId)!, accountId], point(size({ state: 'suspended', fenced: false })));
+  return sqlWork(
+    accountShare.sql,
+    [routeOf(accountId)!, accountId],
+    point(size({ state: 'suspended', fenced: false })),
+  );
 }
 /** Each Library-owned literal dispatch retains its original positional binds. */
 function targetStatement(sql: string, operands: readonly unknown[]): Bound | undefined {
