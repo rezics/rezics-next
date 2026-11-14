@@ -1,5 +1,13 @@
+import type { SubjectRead } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import type { Release } from '@rezics/definitions';
 import type { ZonePageResponse, ZonePublic } from '../appearance';
+import definitions from '../../kernel/recorded/definitions-release.json';
+
+const release = definitions.release as Release;
+const characterType = 'wd:Q95074';
+const characterContext = '00000000-0000-8000-8000-000000000000';
+const fixtureTime = '2026-11-14T00:00:00.000Z';
 
 export const characterCandidateZoneIds = {
   preview: '0193c000-0003-7000-8000-000000000000',
@@ -56,11 +64,11 @@ export type CharacterCandidateHome = 'preview' | 'ready-empty' | 'sparse';
 
 export const characterCandidateCopy = {
   preview:
-    'Development preview: these fictional names and stories are authored for this Storybook example. No official roster or live public release is claimed.',
+    'Gated and deferred development preview: these fictional names and stories are authored for this Storybook example. No official roster or live public release is claimed.',
   readyEmpty:
-    'Development preview: this admitted example has no character results. It makes no claim about a live public catalogue.',
+    'Gated and deferred development preview: this admitted example has no character results. It makes no claim about a live public catalogue.',
   sparse:
-    'This sparse development preview has no supplied character facts or roster. Optional values are absent and empty Slots stay empty.',
+    'This gated and deferred sparse development preview has no supplied character facts or roster. Optional values are absent and empty Slots stay empty.',
 } as const;
 
 export const characterCandidateProfile = 'fictional-character-candidate-development-preview';
@@ -114,9 +122,10 @@ export function characterCandidateSubjectDocument(character: CharacterCandidateC
               type: 'Text',
               props: {
                 id: 'preview-note',
-                text: 'Fictional sample text for this development preview; no source roster or optional facts are implied.',
+                text: 'Fictional sample text for this gated, deferred development preview; no source roster or optional facts are implied.',
               },
             },
+            { type: 'Sources', props: { id: 'sources' } },
           ],
         },
       },
@@ -136,20 +145,63 @@ function publicZone(id: string): ZonePublic {
   };
 }
 
+function characterCandidateSummary(character: CharacterCandidateCharacter): NonNullable<SubjectRead['summary']> {
+  const types = [characterType, ...(release.types[characterType]?.bases ?? [])];
+  return {
+    id: character.id,
+    type: characterType,
+    types,
+    creativeWork: types.includes('schema:CreativeWork'),
+    label: { value: character.label, language: 'en' },
+    cover: null,
+  };
+}
+
+export function characterCandidateSubjectRead(character: CharacterCandidateCharacter): SubjectRead {
+  const subject: SubjectRead['subject'] = {
+    id: character.id,
+    type: characterType,
+    revision: 1,
+    release: definitions.digest,
+    context: characterContext,
+    resolution: {},
+    relationCounts: {},
+    labels: { en: character.label },
+    descriptions: {},
+    aliases: {},
+    statements: {},
+    sourceRecords: [],
+  };
+  return {
+    subject,
+    summary: characterCandidateSummary(character),
+    related: {},
+    account: null,
+  };
+}
+
 function listRows(state: CharacterCandidateHome) {
   if (state !== 'preview') return [];
   return characterCandidateCharacters.map((character) => ({
     id: character.id,
-    type: 'wd:Q95074',
+    type: characterType,
     labels: { en: character.label },
-    summary: null,
+    summary: characterCandidateSummary(character),
   }));
 }
 
 function pageReads(document: CompositionDocument, subject: string | null, state: CharacterCandidateHome) {
   const planned = planReads(platformRegistry, document, { subject }).reads;
-  const body = { subjects: listRows(state), next: null };
-  return Object.fromEntries(Object.keys(planned).map((key) => [key, { status: 200, body }]));
+  const reads: Record<string, { status: number; body: unknown }> = {};
+  for (const [key, read] of Object.entries(planned)) {
+    if (read.kind === 'search') {
+      reads[key] = { status: 200, body: { subjects: listRows(state), next: null, as_of: fixtureTime } };
+    } else if (read.kind === 'subject' && subject) {
+      const character = characterCandidateCharacters.find(({ id }) => id === subject);
+      if (character) reads[key] = { status: 200, body: characterCandidateSubjectRead(character) };
+    }
+  }
+  return reads;
 }
 
 /** A public-shaped Zone page fixture for the real reader; it carries no owner or mount metadata. */

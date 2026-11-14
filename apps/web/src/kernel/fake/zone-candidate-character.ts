@@ -3,8 +3,8 @@ import {
   characterCandidateCharacters,
   characterCandidatePage,
   characterCandidateProfile,
+  characterCandidateSubjectRead,
   characterCandidateZoneIds,
-  characterCandidateSubjectDocument,
   type CharacterCandidateHome,
 } from '../../zones/candidates/character';
 import type { KernelRecording } from '../fake';
@@ -37,50 +37,68 @@ function pageRecording(page: ReturnType<typeof characterCandidatePage>): KernelR
   return { status: 200, ...page };
 }
 
+function notFoundRecording(): KernelRecording {
+  return { status: 404, headers: { 'cache-control': 'no-store' }, code: 'not_found' };
+}
+
 function nativeSubjectRecording(subjectId: string): KernelRecording | undefined {
   const character = characterCandidateCharacters.find(({ id }) => id === subjectId);
   if (!character) return;
 
+  const zonePage = characterCandidatePage(characterCandidateZoneIds.preview, 'preview', character.id);
   const page = {
     subject: character.id,
     profile: characterCandidateProfile,
-    template: { scope: 'generic', key: null },
-    document: characterCandidateSubjectDocument(character),
-    reads: {},
+    template: zonePage.template,
+    document: zonePage.document,
+    reads: zonePage.reads,
   } satisfies Pick<NativePageBody, 'subject' | 'profile' | 'template' | 'document' | 'reads'>;
 
   return { status: 200, ...page };
 }
 
-function zoneRoute(zone: CharacterCandidateState): FakeRoute {
-  return {
-    method: 'POST',
-    path: `/v1/zones/${zone.id}:readPage`,
-    story: async ({ request }) => {
-      const body = await requestBody(request);
-      if (!body || !isRecord(body.target)) return;
-      const target = body.target;
+const zoneRoute: FakeRoute = {
+  method: 'POST',
+  path: /^\/v1\/zones\/([^/]+):readPage$/,
+  story: async ({ request, match }) => {
+    const zone = zones.find(({ id }) => id === match?.[1]);
+    if (!zone) return;
 
-      if ('route' in target) {
-        if (target.route !== '') return;
-      } else if (zone.kind === 'preview' && typeof target.subject === 'string') {
-        if (!characterCandidateCharacters.some(({ id }) => id === target.subject)) return;
-        return pageRecording(characterCandidatePage(zone.id, 'preview', target.subject));
-      } else {
-        return;
-      }
+    if (zone.kind === 'platform-closed')
+      return {
+        status: 403,
+        headers: { 'cache-control': 'no-store' },
+        code: 'platform_closed',
+      };
+    if (zone.kind === 'semantic-not-ready')
+      return {
+        status: 503,
+        headers: { 'cache-control': 'no-store', 'retry-after': '1' },
+        code: 'semantic_not_ready',
+      };
+    if (zone.kind === 'private' || zone.kind === 'missing') return notFoundRecording();
 
-      if (zone.kind === 'platform-closed') return { status: 403, code: 'platform_closed' };
-      if (zone.kind === 'semantic-not-ready')
-        return { status: 503, headers: { 'retry-after': '1' }, code: 'semantic_not_ready' };
-      if (zone.kind === 'private' || zone.kind === 'missing') return { status: 404, code: 'not_found' };
+    const body = await requestBody(request);
+    if (!body || !isRecord(body.target)) return notFoundRecording();
+    const target = body.target;
 
+    if (typeof target.route === 'string') {
+      if (target.route !== '') return notFoundRecording();
       return pageRecording(characterCandidatePage(zone.id, zone.kind));
-    },
-  };
-}
+    }
 
-const characterPageRoute: FakeRoute = {
+    if (typeof target.subject === 'string') {
+      if (zone.kind !== 'preview' || (target.view !== undefined && target.view !== 'overview'))
+        return notFoundRecording();
+      if (!characterCandidateCharacters.some(({ id }) => id === target.subject)) return notFoundRecording();
+      return pageRecording(characterCandidatePage(zone.id, 'preview', target.subject));
+    }
+
+    return notFoundRecording();
+  },
+};
+
+const nativePageRoute: FakeRoute = {
   method: 'POST',
   path: '/v1/pages:read',
   story: async ({ request }) => {
@@ -91,4 +109,13 @@ const characterPageRoute: FakeRoute = {
   },
 };
 
-export const routes: FakeRoute[] = [characterPageRoute, ...zones.map(zoneRoute)];
+const subjectReadRoute: FakeRoute = {
+  method: 'GET',
+  path: /^\/v1\/subjects\/([^/]+)$/,
+  story: ({ match }) => {
+    const subject = characterCandidateCharacters.find(({ id }) => id === match?.[1]);
+    return subject ? { status: 200, ...characterCandidateSubjectRead(subject) } : undefined;
+  },
+};
+
+export const routes: FakeRoute[] = [nativePageRoute, subjectReadRoute, zoneRoute];
