@@ -54,20 +54,10 @@ async function publish(
   fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
   placements: readonly Record<string, unknown>[],
 ) {
-  const path = `/v1/hostedCatalogues/${fixture.catalogueId}`;
-  const created = await fixture.native.command('/v1/hostedCatalogues', {
-    postId: fixture.catalogueId,
-    threadId: fixture.threadId,
-    placements,
-  });
-  const released = await fixture.native.command(
-    `${path}:publish`,
-    {
-      expectedRevisionId: created.revisionId,
-      expectedPublicationId: null,
-      occurrenceIds: placements.map((placement) => placement.occurrenceId),
-    },
-    200,
+  const created = await fixture.retained.structure(placements);
+  const released = await fixture.retained.publication(
+    created.revisionId,
+    placements.map((placement) => placement.occurrenceId),
   );
   return { headId: created.revisionId as string, publicationId: released.revisionId as string };
 }
@@ -110,34 +100,27 @@ test('resumes exact public ordinal pages and seals the old manifest beside a new
       },
     ]);
 
-    const revised = await fixture.native.command(
-      `/v1/hostedCatalogues/${fixture.catalogueId}:revise`,
+    const revised = await fixture.retained.structure([
+      { occurrenceId: partId, parentId: null, position: 0, title: 'Private section edit', kind: 'part' },
       {
-        expectedRevisionId: original.headId,
-        placements: [
-          { occurrenceId: partId, parentId: null, position: 0, title: 'Private section edit', kind: 'part' },
-          {
-            occurrenceId: availableId,
-            parentId: partId,
-            position: 0,
-            title: 'Private chapter edit',
-            kind: 'chapter',
-            target,
-          },
-          { occurrenceId: secondPartId, parentId: null, position: 1, title: 'Second section', kind: 'part' },
-          {
-            occurrenceId: unavailableId,
-            parentId: secondPartId,
-            position: 0,
-            title: 'Hidden chapter',
-            kind: 'chapter',
-            target: unavailableTarget,
-          },
-          { occurrenceId: privateDraftId, parentId: null, position: 2, title: 'Draft only', kind: 'part' },
-        ],
+        occurrenceId: availableId,
+        parentId: partId,
+        position: 0,
+        title: 'Private chapter edit',
+        kind: 'chapter',
+        target,
       },
-      200,
-    );
+      { occurrenceId: secondPartId, parentId: null, position: 1, title: 'Second section', kind: 'part' },
+      {
+        occurrenceId: unavailableId,
+        parentId: secondPartId,
+        position: 0,
+        title: 'Hidden chapter',
+        kind: 'chapter',
+        target: unavailableTarget,
+      },
+      { occurrenceId: privateDraftId, parentId: null, position: 2, title: 'Draft only', kind: 'part' },
+    ]);
     expect(revised.revisionId).not.toBe(original.headId);
 
     const deps = dependencies(fixture);
@@ -274,25 +257,10 @@ test('a publication changed after complete observation cannot seal the old priva
     await transaction(fixture, (tx) => applyHostedPublicBaselineBuildPage(tx, buildPage));
 
     const nextId = fixture.newOccurrenceId();
-    const revised = await fixture.native.command(
-      `/v1/hostedCatalogues/${fixture.catalogueId}:revise`,
-      {
-        expectedRevisionId: original.headId,
-        placements: [
-          { occurrenceId: nextId, parentId: null, position: 0, title: 'Replacement', kind: 'chapter', target },
-        ],
-      },
-      200,
-    );
-    const released = await fixture.native.command(
-      `/v1/hostedCatalogues/${fixture.catalogueId}:publish`,
-      {
-        expectedRevisionId: revised.revisionId,
-        expectedPublicationId: original.publicationId,
-        occurrenceIds: [nextId],
-      },
-      200,
-    );
+    const revised = await fixture.retained.structure([
+      { occurrenceId: nextId, parentId: null, position: 0, title: 'Replacement', kind: 'chapter', target },
+    ]);
+    const released = await fixture.retained.publication(revised.revisionId, [nextId]);
     expect(released.revisionId).not.toBe(original.publicationId);
 
     await expect(transaction(fixture, (tx) => sealHostedPublicBaselineBuild(tx, buildPage))).rejects.toMatchObject({
