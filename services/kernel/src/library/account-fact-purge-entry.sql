@@ -9,7 +9,8 @@ WITH input AS NOT MATERIALIZED (
        AND (input.after_id IS NULL OR fact.subject_id > input.after_id)
      ORDER BY fact.subject_id LIMIT (SELECT page_limit FROM input))
     UNION
-    (SELECT history.subject_id
+    -- Exhaustion is measured in subjects, including those with only retained history.
+    (SELECT DISTINCT history.subject_id
      FROM library.entry_state_change AS history CROSS JOIN input
      WHERE history.route = input.route AND history.account_id = input.account_id
        AND (input.after_id IS NULL OR history.subject_id > input.after_id)
