@@ -524,6 +524,14 @@ async function deleteGeneration(
   row: CleanupRow,
   mode: StageRow['mode'],
 ): Promise<number> {
+  // Earlier phases can exhaust within this step. The checkpoint guard reads the durable phase,
+  // so expose the reached frontier inside this same transaction before the fenced final deletion.
+  await client.query(
+    `UPDATE content.hosted_version_candidate_cleanup
+     SET phase='generation',cursor='null'::jsonb
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND cleanup_active`,
+    [route, locator.catalogueId, locator.stageId],
+  );
   const candidate = await client.query(
     `UPDATE content.hosted_version_release_candidate
      SET status='reclaimed',updated_at=transaction_timestamp()

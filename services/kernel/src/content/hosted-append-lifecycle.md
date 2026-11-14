@@ -166,7 +166,9 @@ The stage lock precedes the claim, candidate and generation locks. Both terminal
 source seal, owner epoch, expected revisions, frozen selection input and generation head/snapshot binding.
 Retained revisions, current public/draft pointers, other candidate checkpoints, activation/baseline checkpoints
 and active ordered receiving holds still prevent the claim. Generation retirement fences new descriptors and
-writes before any deletion. Previously activated or otherwise referenced generations remain retained.
+writes before any deletion. The cleanup transaction records its reached `generation` phase before the final
+checkpoint transition, so the database fence observes that phase even when preceding pages exhaust in the same
+step. Previously activated or otherwise referenced generations remain retained.
 
 Pending insertion and bounded legacy adoption already include cancelled stages; neither filters by terminal
 state. The existing due index seeks `(available_at, route, catalogue_id, stage_id)` and also requires the stage's
