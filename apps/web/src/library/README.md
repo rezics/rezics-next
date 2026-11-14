@@ -34,6 +34,23 @@ Ready import results can leave for browsing without cancellation commands; uncer
 departure protection. Any session, credential, browser observation, source, locale, admission or visit replacement
 retires pending reads permanently, including A/B/A and equal successful observation replacements.
 
+## Collection occurrence inspection
+
+Decision: inspection supplies one occurrence-local detail outlet, after the selected compact list row or inside
+its grid card's normal flow, and preserves the opener's focus and viewport when opening.
+
+`CollectionReadMembers` keeps selection by exact native occurrence key, never by Subject ID. Duplicate Subjects
+retain their own notes, facts and exact `via` return anchors. Filtered projections without native occurrence IDs
+keep display-only keys and a page return without a fabricated occurrence anchor. Shared layout and focus behavior
+belongs to the [member reading contract](../../../../packages/ui/src/components/list-presentation.md).
+
+Page/address, supplied members, reader/source, locale, layout and page-readiness replacement retire the selected
+projection and any focus still owned by its obsolete opener. Close and Escape are deliberate returns to the same
+opener; unmount does not restore focus. Long supplied content grows in normal flow before subsequent occurrences
+and continuation. Filters, opaque cursors, return admission and private no-store/session/exposure retirement keep
+their existing owners. The cost remains one bounded member page and one supplied selected projection, with zero
+extra reads, lookup, refill or enrichment authority.
+
 ## Saved hosted Book chapters
 
 Decision: Continue mounts one compact Books window alongside independent Entry progress, replacing at most 20 native

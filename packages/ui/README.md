@@ -325,12 +325,9 @@ Decision: a grid `MemberReadingItem` places its summary, position, action eviden
 same card content flow. The entire item contributes to its grid row, so continuation follows every item and its
 controls stay directly hittable for covered, placeholder and unavailable subjects.
 
-Use one `MemberReadingDetail` after the member list for the selected occurrence's full evidence. It is a named,
-focusable region on the page background, separated by whitespace and a section divider. Opening focuses the
-region; Close or Escape returns focus to the captured opener. Callers retire the selection on page, native
-observation, viewer, locale or layout replacement; unmount has no return-focus effect. Complete notes, metadata
-and exact reference copy/open actions belong in this region. The compact summary is never the only access to
-supplied evidence. Keep permission, unavailable and uncertain action outcomes visible beside their controls.
+The [member reading contract](src/components/list-presentation.md) owns occurrence-local Inspect detail,
+opening and closing focus, replacement retirement and supplied evidence. Render the selected detail in that
+`MemberReadingItem`'s outlet, after the compact row or inside the grid card's measured content flow.
 
 The current released hints and exact Type fallbacks all select portrait 5:7. Unknown Types retain a valid
 configured composition ratio, otherwise the same portrait default. A Collection kind may guide composition;

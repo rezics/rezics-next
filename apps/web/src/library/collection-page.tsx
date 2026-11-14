@@ -2749,7 +2749,11 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
     : -1;
   const selected = selectedIndex >= 0 ? members[selectedIndex] : undefined;
   useEffect(() => {
-    if (!selectionCurrent) setSelection(undefined);
+    if (!selectionCurrent) {
+      // Replacement retires only focus still owned by the previous inspection.
+      if (selection && selection.opener.ownerDocument.activeElement === selection.opener) selection.opener.blur();
+      setSelection(undefined);
+    }
   }, [selectionCurrent]);
 
   const items = members.map((member, index) => {
@@ -2797,9 +2801,42 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
             />
           ) : null
         }
+        detail={
+          selected && selectionCurrent && selection.key === key ? (
+            <MemberReadingDetail
+              key={`${pageKey}:${key}`}
+              id={detailId}
+              title={m.library_member_occurrence({ title, position: index + 1 })}
+              closeLabel={m.collection_reading_close()}
+              opener={selection.opener}
+              onClose={() => setSelection(undefined)}
+            >
+              {layout === 'list' && (
+                <CollectionMemberActionEvidence
+                  member={selected}
+                  viewerProjection={viewerProjection}
+                  actionHref={viewerActionHref?.(selected)}
+                  collection={collection}
+                />
+              )}
+              <CollectionMemberOccurrenceDetails
+                member={selected}
+                currentHref={currentHref}
+                listPresentations={listPresentations}
+                comparisonDefinitions={comparisonDefinitions}
+                onCopy={onCopy}
+                onReferenceNavigate={(anchor) => {
+                  admitReferenceReturn(anchor);
+                  onReferenceNavigate?.();
+                }}
+              />
+            </MemberReadingDetail>
+          ) : null
+        }
         detailId={detailId}
         expanded={Boolean(selected && selection?.key === key)}
         inspectLabel={m.collection_reading_inspect()}
+        onClose={() => setSelection(undefined)}
         onInspect={(opener) => setSelection({ key, pageKey, members, source: returnSource, locale, layout, opener })}
       />
     );
@@ -2852,43 +2889,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
           {items}
         </ul>
       )}
-      {selected && selectionCurrent ? (
-        <MemberReadingDetail
-          key={`${pageKey}:${selection.key}`}
-          id={detailId}
-          title={m.library_member_occurrence({
-            title: selected.subject
-              ? pageText(libraryTitleValue(selected.subject.label), locale).text || m.subject_value_unlabelled()
-              : m.library_subject_unavailable(),
-            position: selectedIndex + 1,
-          })}
-          closeLabel={m.collection_reading_close()}
-          opener={selection.opener}
-          onClose={() => setSelection(undefined)}
-        >
-          {layout === 'list' && (
-            <CollectionMemberActionEvidence
-              member={selected}
-              viewerProjection={viewerProjection}
-              actionHref={viewerActionHref?.(selected)}
-              collection={collection}
-            />
-          )}
-          <CollectionMemberOccurrenceDetails
-            member={selected}
-            currentHref={currentHref}
-            listPresentations={listPresentations}
-            comparisonDefinitions={comparisonDefinitions}
-            onCopy={onCopy}
-            onReferenceNavigate={(anchor) => {
-              admitReferenceReturn(anchor);
-              onReferenceNavigate?.();
-            }}
-          />
-        </MemberReadingDetail>
-      ) : (
-        <div id={detailId} hidden />
-      )}
+      {!selected && <div id={detailId} hidden />}
     </section>
   );
 }
