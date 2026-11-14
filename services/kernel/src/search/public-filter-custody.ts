@@ -31,7 +31,9 @@ import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, walkFilter } from '@rezics/filter';
 import releaseExists from '../semantic/definitions-exists.sql';
 import compositeReference from '../semantic/composite-read.sql';
-import { withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime, type NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
@@ -178,6 +180,106 @@ function cost(): CustodyCost {
   };
 }
 type Meter = { -readonly [K in keyof CustodyCost]: CustodyCost[K] };
+type Queryable = Pick<Pool, 'query'>;
+const lifetimes = new WeakMap<Meter, Readonly<{ pool: Pool; context: PublicFilterConsumerContext }>>();
+const queryCompletion = new AsyncLocalStorage<(result: QueryResult) => void>();
+
+function requestContext(context: PublicFilterConsumerContext): PublicFilterConsumerContext {
+  requireValue(Number.isFinite(context.deadline));
+  return Object.freeze({
+    deadline: Math.min(context.deadline, deadlineFor(Math.max(1, context.deadline - Date.now()))),
+  });
+}
+
+function operationCost(pool: Pool, context: PublicFilterConsumerContext): Meter {
+  const meter = cost();
+  lifetimes.set(meter, { pool, context });
+  return meter;
+}
+
+/** Keep the original Pool's checkout/release custody, including a checkout arriving after expiry. */
+function connection<T>(
+  meter: Meter,
+  work: (client: PoolClient) => Promise<T>,
+  unfinished?: () => boolean,
+): Promise<T> {
+  const { pool, context } = lifetimes.get(meter)!;
+  let physical: PoolClient | undefined;
+  return withBoundedReadLifetime(
+    (bounded) =>
+      withConnection(pool, async (raw) => {
+        physical = raw;
+        const observed = Object.create(raw) as PoolClient;
+        observed.query = ((query: NativeReadQueryConfig) => {
+          const complete = queryCompletion.getStore();
+          // Observe the physical reply even when its caller has already expired.
+          return raw.query(query).then((result) => {
+            complete?.(result);
+            return result;
+          });
+        }) as PoolClient['query'];
+        try {
+          return await bounded(observed);
+        } finally {
+          if (unfinished?.()) discardConnection(raw, new Failure('owner_unavailable'));
+        }
+      }),
+    (_client, error) => discardConnection(physical!, error),
+    context.deadline,
+    work,
+    {
+      deadlineError: () => new Failure('deadline'),
+      mapError: (error) => (Date.now() >= context.deadline ? new Failure('deadline') : error),
+      isUncertainSettledQueryError: () => true,
+    },
+  );
+}
+
+async function transaction<T>(
+  meter: Meter,
+  work: (client: PoolClient) => Promise<T>,
+  begin = 'BEGIN',
+  admit?: () => void,
+): Promise<T> {
+  let unfinished = false;
+  let client: PoolClient | undefined;
+  let cleanup: Promise<void> | undefined;
+  const rollback = () =>
+    (cleanup ??= sql(client!, meter, 'ROLLBACK').then(() => {
+      unfinished = false;
+    }));
+  try {
+    return await connection(
+      meter,
+      async (bounded) => {
+        client = bounded;
+        try {
+          admit?.();
+          unfinished = true;
+          await sql(client, meter, begin);
+          admit?.();
+          const value = await work(client);
+          admit?.();
+          await sql(client, meter, 'COMMIT');
+          unfinished = false;
+          admit?.();
+          return value;
+        } catch (error) {
+          // Cleanup spends the same meter and deadline, even after allowance exhaustion.
+          if (unfinished) await rollback().catch(() => {});
+          throw error;
+        }
+      },
+      () => unfinished,
+    );
+  } catch (error) {
+    // Expiry can precede the callback's catch. Join its one cleanup attempt before
+    // returning the cost; the retired client refuses late SQL and its owner discards it.
+    if (unfinished) await rollback().catch(() => {});
+    throw error;
+  }
+}
+
 class Failure extends Error {
   constructor(readonly reason: CustodyFailure['reason']) {
     super(reason);
@@ -202,7 +304,7 @@ function failure(error: unknown, meter: CustodyCost): CustodyFailure {
   };
 }
 async function sql(
-  db: Pool | PoolClient,
+  db: Queryable,
   meter: Meter,
   query: string,
   values: unknown[] = [],
@@ -216,27 +318,29 @@ async function sql(
     meter.resultWrites += native.writes;
   }
   meter.bytes += Buffer.byteLength(query) + Buffer.byteLength(encode(values));
-  const result = await db.query(query, values);
-  if (!native) meter.rows += result.rowCount ?? 0;
-  meter.bytes += Buffer.byteLength(encode(result.rows));
-  if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
-  return result;
+  const complete = (result: QueryResult) => {
+    if (!native) meter.rows += result.rowCount ?? 0;
+    meter.bytes += Buffer.byteLength(encode(result.rows));
+    if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
+  };
+  const dispatch = (client: Queryable) => queryCompletion.run(complete, () => client.query(query, values));
+  return db === lifetimes.get(meter)!.pool ? connection(meter, dispatch) : dispatch(db);
 }
 function isReleaseReference(
   release: CustodyRetainedDefinition['meaning']['release'],
 ): release is CustodyReleaseReference {
   return 'authority' in release && release.authority === 'semantic.readRelease';
 }
-async function requireReleaseAuthority(pool: Pool, meter: Meter, digest: string) {
+async function requireReleaseAuthority(pool: Queryable, meter: Meter, digest: string) {
   // Use the existing immutable owner lookups. Charge their actual SQL and returned metadata too.
   // Neither lookup loads a release body, joins homes, nor consults/caches permission.
-  const db = { query: (query: string, values?: unknown[]) => sql(pool, meter, query, values) } as Pool;
+  const db = { query: (query: string, values?: unknown[]) => sql(pool, meter, query, values) } as Queryable;
   if (await releaseExists.run(db, { route: 0, digest })) return;
   if (await compositeReference.run(db, { digest })) return;
   throw new Failure('definition_missing');
 }
 async function retainedDefinition(
-  pool: Pool,
+  pool: Queryable,
   meter: Meter,
   definition: CustodyDefinition<PublicCanonicalCaptureInput>,
 ) {
@@ -361,7 +465,7 @@ function validateDefinition(definition: CustodyDefinition<PublicCanonicalCapture
   }
 }
 async function read(
-  pool: Pool,
+  pool: Queryable,
   request: CustodyRead,
   context: PublicFilterConsumerContext,
   meter: Meter,
@@ -441,7 +545,8 @@ export async function readPublicFilterConsumerCustody(
   request: CustodyRead,
   context: PublicFilterConsumerContext,
 ): Promise<CustodyFound | CustodyFailure> {
-  const meter = cost();
+  context = requestContext(context);
+  const meter = operationCost(pool, context);
   try {
     return await read(pool, request, context, meter);
   } catch (error) {
@@ -467,7 +572,8 @@ export async function readPublicFilterRepairSettlement(
   }>,
   context: PublicFilterConsumerContext,
 ): Promise<PublicFilterRepairSettlementResult> {
-  const meter: Meter = cost();
+  context = requestContext(context);
+  const meter = operationCost(pool, context);
   const spent = repairAllowance.getStore() ?? cost();
   const input = structuredClone(request);
   try {
@@ -504,13 +610,13 @@ export async function readPublicFilterRepairSettlement(
         admit();
         meter.engineRequests++;
         meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
+        if (path.endsWith('/_search')) meter.engineSearches++;
         const result = await transport.request(method, path, body, {
           ...options,
           timeoutMs: Math.max(1, context.deadline - Date.now()),
         });
         meter.bytes += Buffer.byteLength(encode(result.body));
         if (path.endsWith('/_search')) {
-          meter.engineSearches++;
           const shards = (result.body as { _shards?: { total?: number } })._shards?.total;
           if (Number.isSafeInteger(shards) && shards! > 0) meter.engineIteratorSteps += shards!;
         }
@@ -531,43 +637,24 @@ export async function readPublicFilterRepairSettlement(
       observation: q.snapshot.observation,
       execution: input.execution,
     };
-    const local = async <T>(work: (db: Pool, raw: Pool) => Promise<T>): Promise<T> =>
-      withConnection(pool, async (client) => {
-        const raw = {
-          query: (statement: string, values: unknown[] = []) => {
-            admit();
-            const request: import('pg').QueryConfig & { query_timeout: number } = {
-              text: statement,
-              values,
-              query_timeout: Math.max(1, context.deadline - Date.now()),
-            };
-            return client.query(request);
-          },
-        } as Pool;
-        const db = {
-          query: async (statement: string, values: unknown[] = []) => {
-            admit();
-            const result = await sql(raw, meter, statement, values);
-            admit();
-            return result;
-          },
-        } as Pool;
-        await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-        try {
-          const result = await work(db, raw);
-          await db.query('COMMIT');
-          return result;
-        } catch (error) {
-          // Cleanup still runs when the original allowance/deadline is exhausted.
-          meter.statements++;
-          meter.bytes += Buffer.byteLength('ROLLBACK') + Buffer.byteLength(encode([]));
-          const rolledBack = await client.query('ROLLBACK');
-          meter.rows += rolledBack.rowCount ?? 0;
-          meter.bytes += Buffer.byteLength(encode(rolledBack.rows));
-          throw error;
-        }
-      });
-    const load = async (db: Pool, raw: Pool) => {
+    const local = async <T>(work: (db: Queryable, raw: Queryable) => Promise<T>): Promise<T> =>
+      transaction(
+        meter,
+        async (client) => {
+          const db = {
+            query: async (statement: string, values: unknown[] = []) => {
+              admit();
+              const result = await sql(client, meter, statement, values);
+              admit();
+              return result;
+            },
+          } as Queryable;
+          return work(db, client);
+        },
+        'BEGIN ISOLATION LEVEL REPEATABLE READ',
+        admit,
+      );
+    const load = async (db: Queryable, raw: Queryable) => {
       const stateRow = await repairState.run(db, keys);
       if (!stateRow?.repair_settlement || !stateRow.consumer_work) throw new Failure('execution_missing');
       const state = decode<RetainedRepairSettlement>(stateRow.repair_settlement);
@@ -842,17 +929,19 @@ export async function readPublicFilterRepairSettlement(
     const staged = await local(load);
     // No held Search checkout, transaction, writer lock or foreign-home lease crosses this boundary.
     for (const entry of staged.basis.pages) {
-      await verifyPublicFilterRepairSourcePage(
-        binding,
-        {
-          bootstrap: staged.state.bootstrap,
-          queried: q,
-          execution: input.execution,
-          predecessor: entry.page.predecessor,
-        },
-        entry.page,
-        context,
-        charge,
+      await withRequestDeadline(context.deadline, () =>
+        verifyPublicFilterRepairSourcePage(
+          binding,
+          {
+            bootstrap: staged.state.bootstrap,
+            queried: q,
+            execution: input.execution,
+            predecessor: entry.page.predecessor,
+          },
+          entry.page,
+          context,
+          charge,
+        ),
       );
     }
     return await local(async (db, raw) => {
@@ -922,37 +1011,25 @@ export function createPublicFilterCustody(
   let closed = false;
   function run<T>(
     context: PublicFilterConsumerContext,
-    work: (meter: Meter) => Promise<T>,
+    work: (meter: Meter, context: PublicFilterConsumerContext) => Promise<T>,
     allowClosed = false,
   ): Promise<T | CustodyFailure> {
-    const meter = cost();
-    const promise = (async () => {
+    context = requestContext(context);
+    const meter = operationCost(pool, context);
+    const promise = withRequestDeadline(context.deadline, async () => {
       try {
         check(context);
         if (closed && !allowClosed) throw new Failure('owner_unavailable');
-        const value = await work(meter);
+        const value = await work(meter, context);
         check(context);
         return value;
       } catch (error) {
         return failure(error, meter);
       }
-    })();
+    });
     pending.add(promise);
     void promise.finally(() => pending.delete(promise)).catch(() => {});
     return promise;
-  }
-  async function transaction<T>(meter: Meter, work: (client: PoolClient) => Promise<T>): Promise<T> {
-    return withConnection(pool, async (client) => {
-      await sql(client, meter, 'BEGIN');
-      try {
-        const value = await work(client);
-        await sql(client, meter, 'COMMIT');
-        return value;
-      } catch (error) {
-        await sql(client, meter, 'ROLLBACK');
-        throw error;
-      }
-    });
   }
   async function registered(value: CustodyRegistration, meter: Meter) {
     registration(value);
@@ -1043,7 +1120,7 @@ export function createPublicFilterCustody(
       text(input.consumerGeneration);
       text(input.projectionGeneration);
       const catalogue = canonicalDiscoveryCatalogue(input.catalogue ?? null);
-      return run(context, async (meter) => {
+      return run(context, async (meter, context) => {
         const incarnation = await native(search, meter, context, input.physicalTarget);
         const definition = input.definition;
         const consumer: PublicFilterConsumer = {
@@ -1083,7 +1160,7 @@ export function createPublicFilterCustody(
       const input = decode<typeof request>(encode(request));
       lifetime(input.keepAliveMs);
       text(input.covered.observation);
-      return run(context, async (meter) => {
+      return run(context, async (meter, context) => {
         const consumer = await registered(input.registration, meter);
         if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
           throw new Failure('binding_mismatch');
@@ -1538,7 +1615,7 @@ export function createPublicFilterCustody(
     acquire(q, context) {
       const input = decode<typeof q>(encode(q));
       queried(input);
-      return run(context, (meter) =>
+      return run(context, (meter, context) =>
         transaction(meter, async (client) => {
           // Serialize reader enrollment with the ordinary publication admission fence.
           await sql(client, meter, 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [
@@ -1668,7 +1745,7 @@ export function createPublicFilterCustody(
       const input = decode<typeof q>(encode(q));
       queried(input);
       lifetime(keepAliveMs);
-      return run(context, async (meter) => {
+      return run(context, async (meter, context) => {
         if (input.snapshot.kind !== 'pit') throw new Failure('binding_mismatch');
         const acquired = await api.acquire(input, context);
         addCost(meter, acquired.cost);
@@ -1753,7 +1830,7 @@ export function createPublicFilterCustody(
     closeObservation(q, search, context) {
       const input = decode<typeof q>(encode(q));
       queried(input);
-      return run(context, async (meter) => {
+      return run(context, async (meter, context) => {
         const values = [partition(input.snapshot.observation), input.snapshot.observation];
         const barrier = await sql(
           pool,
@@ -1858,7 +1935,7 @@ export function createPublicFilterCustody(
       });
     },
     read(request, context) {
-      return run(context, (meter) => read(pool, request, context, meter));
+      return run(context, (meter, context) => read(pool, request, context, meter));
     },
     async close() {
       closed = true;
@@ -1898,69 +1975,57 @@ export async function stepRetainedObservationErasure(
   search: OpenSearch | undefined,
   context: PublicFilterConsumerContext,
 ): Promise<RetainedErasureProgress> {
-  context = { deadline: Math.min(context.deadline, Date.now() + 5000) };
+  context = requestContext({ deadline: Math.min(context.deadline, Date.now() + 5000) });
   home(copy.partition);
   requireValue(partition(copy.observation) === copy.partition);
   registration({ partition: copy.partition, id: copy.registration });
   text(copy.incarnation);
-  const meter = cost();
+  const meter = operationCost(pool, context);
   const keys = [copy.partition, copy.observation];
   let q: PublicFilterQueriedObservation | undefined;
   try {
     check(context);
     // The observation lock serializes acquire, renew, execution append and final erasure.
     // Compare against the observation's original UUID; a newer public_filter_target cannot certify it.
-    const barrier = await withConnection(pool, async (tx) => {
-      await sql(tx, meter, 'BEGIN');
-      try {
-        await sql(tx, meter, "SET LOCAL statement_timeout='5000ms'");
-        const found = await sql(
-          tx,
-          meter,
-          `SELECT registration,queried FROM search.public_filter_observation
+    const barrier = await transaction(meter, async (tx) => {
+      await sql(tx, meter, "SET LOCAL statement_timeout='5000ms'");
+      const found = await sql(
+        tx,
+        meter,
+        `SELECT registration,queried FROM search.public_filter_observation
            WHERE (partition_no,observation)=($1,$2) FOR UPDATE`,
-          keys,
-        );
-        if (!found.rowCount) {
-          await sql(tx, meter, 'COMMIT');
-          return 'absent';
-        }
-        const row = found.rows[0];
-        q = decode<PublicFilterQueriedObservation>(row.queried);
-        queried(q);
-        if (
-          row.registration !== copy.registration ||
-          q.snapshot.observation !== copy.observation ||
-          q.consumer.incarnation !== copy.incarnation
-        ) {
-          await sql(tx, meter, 'ROLLBACK');
-          return 'mismatch';
-        }
+        keys,
+      );
+      if (!found.rowCount) return 'absent';
+      const row = found.rows[0];
+      q = decode<PublicFilterQueriedObservation>(row.queried);
+      queried(q);
+      if (
+        row.registration !== copy.registration ||
+        q.snapshot.observation !== copy.observation ||
+        q.consumer.incarnation !== copy.incarnation
+      )
+        return 'mismatch';
+      await sql(
+        tx,
+        meter,
+        `UPDATE search.public_filter_observation SET state=CASE WHEN state='closed' THEN state ELSE 'closing' END
+           WHERE (partition_no,observation)=($1,$2)`,
+        keys,
+      );
+      if (q.snapshot.kind === 'prepared') {
+        // The payload is shared with other retained observations. Refuse recapture of this generation
+        // before scrubbing its duplicate; their own observation payloads remain separate work items.
         await sql(
           tx,
           meter,
-          `UPDATE search.public_filter_observation SET state=CASE WHEN state='closed' THEN state ELSE 'closing' END
-           WHERE (partition_no,observation)=($1,$2)`,
-          keys,
-        );
-        if (q.snapshot.kind === 'prepared') {
-          // The payload is shared with other retained observations. Refuse recapture of this generation
-          // before scrubbing its duplicate; their own observation payloads remain separate work items.
-          await sql(
-            tx,
-            meter,
-            `UPDATE search.public_filter_prepared SET state='erasing'
+          `UPDATE search.public_filter_prepared SET state='erasing'
              ,segment_state=CASE WHEN segment_state='legacy' THEN 'legacy' ELSE 'erasing' END
              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4)`,
-            [copy.partition, copy.registration, q.snapshot.build, q.snapshot.generation.toString()],
-          );
-        }
-        await sql(tx, meter, 'COMMIT');
-        return 'found';
-      } catch (error) {
-        await sql(tx, meter, 'ROLLBACK');
-        throw error;
+          [copy.partition, copy.registration, q.snapshot.build, q.snapshot.generation.toString()],
+        );
       }
+      return 'found';
     });
     if (barrier === 'mismatch') return { state: 'pending', reason: 'binding-mismatch', cost: meter };
     if (barrier === 'absent') return { state: 'removed', cost: meter };
@@ -2151,9 +2216,10 @@ export async function stepRetainedTargetErasure(
     cost: CustodyCost;
   }>
 > {
+  context = requestContext(context);
   home(target.partition);
   text(target.physicalTarget);
-  const meter = cost();
+  const meter = operationCost(pool, context);
   try {
     check(context);
     const registrations = await sql(
@@ -2238,7 +2304,12 @@ export async function stepRetainedTargetErasure(
     return { state: 'more', after: target.after, cost: meter };
   } catch (error) {
     if (error instanceof TypeError) throw error;
-    return { state: 'pending', after: target.after, reason: 'native-ambiguous', cost: meter };
+    return {
+      state: 'pending',
+      after: target.after,
+      reason: error instanceof Failure && error.reason === 'deadline' ? 'deadline' : 'native-ambiguous',
+      cost: meter,
+    };
   }
 }
 
@@ -2260,7 +2331,8 @@ export async function readGenerationPublicationCustody(
     }>
   | CustodyFailure
 > {
-  const meter = cost();
+  context = requestContext(context);
+  const meter = operationCost(pool, context);
   try {
     check(context);
     if (sourceHome !== undefined) home(sourceHome);
