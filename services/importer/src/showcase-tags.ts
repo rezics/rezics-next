@@ -1436,7 +1436,7 @@ type ReviewedTagAdoptChoice =
   | { kind: 'acknowledged' }
   | { kind: 'fresh'; action: string; body: NonNullable<ReturnType<typeof sealedReviewedTagAdoptBody>> }
   | { kind: 'bound' }
-  | { kind: 'refused' };
+  | { kind: 'refused'; code: string };
 
 function chooseReviewedTagAdoptAction(
   journal: ShowcaseJournal,
@@ -1456,7 +1456,8 @@ function chooseReviewedTagAdoptAction(
   }
   for (const action of keys) {
     const prior = journal.action(action);
-    if (prior?.state === 'refused' && reviewedTagPermanentRefusal(prior.error_code)) return { kind: 'refused' };
+    if (prior?.state === 'refused' && reviewedTagPermanentRefusal(prior.error_code))
+      return { kind: 'refused', code: prior.error_code! };
     if (prior?.state !== 'acknowledged') continue;
     const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
     if (
@@ -1471,8 +1472,6 @@ function chooseReviewedTagAdoptAction(
     const action = showcaseAdoptGenerationKey(subjectId, property, intent, generation);
     const prior = journal.action(action);
     if (!prior) return { kind: 'fresh', action, body: planned };
-    if (prior.state === 'refused' && reviewedTagStaleHead(prior.error_code))
-      return { kind: 'fresh', action, body: planned };
   }
   const identity = showcaseAdoptIdentity(subjectId, property, intent);
   let generation = Math.max(showcaseAdoptInvocationBound, journal.adoptGeneration(identity));
@@ -1484,7 +1483,7 @@ function chooseReviewedTagAdoptAction(
       if (!sealed) throw new TypeError('Prepared reviewed-tag adopt body is invalid');
       return { kind: 'resume', action, body: sealed };
     }
-    if (!prior || (prior.state === 'refused' && reviewedTagStaleHead(prior.error_code))) {
+    if (!prior) {
       journal.advanceAdoptGeneration(identity, generation + 1);
       return { kind: 'fresh', action, body: planned };
     }
@@ -1610,8 +1609,11 @@ async function sendReviewedTagAction<T>(
   if (result.status === 'sent') return result.receipt;
   if (result.status === 'acknowledged') return 'skipped';
   if (result.status === 'stale') return 'stale';
-  if ('error' in result) throw result.error;
-  return 'skipped';
+  throw result.error ?? new ImportTransportError(Number(result.code.slice('review-http-'.length)));
+}
+
+function reviewedTagAcceptAction(subjectId: string, candidateId: string): string {
+  return showcaseReviewActionKey('accept', candidateId, showcaseDigest({ subjectId, candidate: candidateId }));
 }
 
 export async function acceptPendingReviewedTagCandidates(
@@ -1624,17 +1626,22 @@ export async function acceptPendingReviewedTagCandidates(
   let staleCandidate: string | null = null;
   for (;;) {
     const loaded = await loadReviewedTagCandidatePages(review, subjectId, property);
-    const pending = loaded.candidates.filter(
-      (candidate) =>
-        !candidate.retracted &&
-        candidate.decision !== 'accepted' &&
-        candidate.decision !== 'rejected' &&
-        !accepted.has(candidate.id),
-    );
-    const next = pending[0];
+    // A current verdict cannot settle an unknown delivery. Replay every prepared original
+    // before deriving another acceptance or handing the current listing to adoption.
+    const next =
+      loaded.candidates.find(
+        (candidate) => journal.action(reviewedTagAcceptAction(subjectId, candidate.id))?.state === 'prepared',
+      ) ??
+      loaded.candidates.find(
+        (candidate) =>
+          !candidate.retracted &&
+          candidate.decision !== 'accepted' &&
+          candidate.decision !== 'rejected' &&
+          !accepted.has(candidate.id),
+      );
     if (!next) return loaded;
     const body = { context: GLOBAL_CONTEXT, expected_head: next.head };
-    const action = showcaseReviewActionKey('accept', next.id, showcaseDigest({ subjectId, candidate: next.id }));
+    const action = reviewedTagAcceptAction(subjectId, next.id);
     const result = await sendReviewedTagAction(journal, action, body, (sealedBody, sealedKey) =>
       review.acceptReviewedCandidate(
         subjectId,
@@ -1717,9 +1724,6 @@ export async function adoptAcceptedReviewedTagSelection(
     const loaded = await loadReviewedTagCandidatePages(review, subjectId, property);
     if (!loaded.complete) return { adoption: loaded.adoption, retiredCandidateIds: [], complete: false };
     const planned = adoptSelectionBody(loaded, property, input.keepExternalIds);
-    if (!planned.body.selection.length && !planned.opened.adoption && !planned.retired.length)
-      return { adoption: planned.opened.adoption, retiredCandidateIds: [], complete: true };
-
     const choice = chooseReviewedTagAdoptAction(
       journal,
       subjectId,
@@ -1728,13 +1732,18 @@ export async function adoptAcceptedReviewedTagSelection(
       planned.body,
       planned.opened.adoption,
     );
-    if (choice.kind === 'refused' || choice.kind === 'acknowledged')
+    if (choice.kind === 'refused')
+      throw new ImportTransportError(Number(choice.code.slice('review-http-'.length)));
+    if (choice.kind === 'acknowledged')
       return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
     if (choice.kind === 'bound') throw new TypeError('Reviewed-tag adopt generation bound exceeded');
     const { action, body } = choice;
     const alreadyCurrent =
       planned.opened.adoption && sameAdoptionSelection(planned.opened.adoption.selection, planned.body.selection);
-    if (choice.kind === 'fresh' && alreadyCurrent)
+    if (
+      choice.kind === 'fresh' &&
+      (alreadyCurrent || (!planned.body.selection.length && !planned.opened.adoption && !planned.retired.length))
+    )
       return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
     journal.recordPendingAdopt(identity, action);
     const receipt = await sendReviewedTagAction(journal, action, body, (sealedBody, sealedKey) =>
@@ -1750,17 +1759,18 @@ export async function adoptAcceptedReviewedTagSelection(
         sealedKey,
       ),
     );
-    if (receipt === 'skipped') {
-      if (!sameAdoptionSelection(body.selection, planned.body.selection)) continue;
-      return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
-    }
     if (receipt === 'stale') {
       if (staleOnce) throw new ImportTransportError(409);
       staleOnce = true;
       continue;
     }
-    const adoption = readReviewedTagAdoptionReceipt(receipt) ?? planned.opened.adoption;
-    if (!sameAdoptionSelection(body.selection, planned.body.selection)) continue;
+    // A resumed receipt describes the original write, so only a new current listing can
+    // authorize a replacement after later editorial decisions or adoption-head movement.
+    if (choice.kind === 'resume' || !sameAdoptionSelection(body.selection, planned.body.selection)) continue;
+    const adoption =
+      receipt === 'skipped'
+        ? planned.opened.adoption
+        : (readReviewedTagAdoptionReceipt(receipt) ?? planned.opened.adoption);
     return { adoption, retiredCandidateIds: planned.retired, complete: true };
   }
   throw new TypeError('Reviewed-tag adopt generation bound exceeded');

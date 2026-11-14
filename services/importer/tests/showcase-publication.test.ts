@@ -327,6 +327,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     });
     const graphParentCandidateId = parentPublication.acknowledgements[0]!.candidateId!;
     const graphParentCandidate = candidates.get(graphParentCandidateId)!;
+    const staleAcceptanceHeads = new Map<string, number>([[graphParentCandidateId, 409]]);
     const graphUnrelatedId = randomUUID();
     const graphUnrelatedParentId = randomUUID();
     const graphParentStatement = graphParentCandidate.statement;
@@ -456,6 +457,12 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       },
       async acceptReviewedCandidate(_id, candidateId, body, idempotencyKey) {
         acceptanceCalls.push({ candidateId, body, idempotencyKey });
+        const staleStatus = staleAcceptanceHeads.get(candidateId);
+        if (staleStatus) {
+          staleAcceptanceHeads.delete(candidateId);
+          candidates.get(candidateId)!.head = (candidates.get(candidateId)!.head ?? 0) + 1;
+          throw Object.assign(new Error('Concurrent candidate review'), { status: staleStatus });
+        }
         if (refuseAcceptance && candidateId !== graphParentCandidateId) {
           const error = new Error('refused') as Error & { status: number };
           error.status = acceptanceRefusalStatus;
@@ -690,7 +697,25 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(subjects.get(tagConceptId)!.statements['skos:broader']).toEqual(
       expectedGraphSelection.map(({ candidate }) => candidates.get(candidate)!.statement),
     );
-    expect(acceptanceCalls.some((call) => call.candidateId === graphParentCandidateId)).toBe(true);
+    const parentAcceptances = acceptanceCalls.filter((call) => call.candidateId === graphParentCandidateId);
+    expect(parentAcceptances.map((call) => call.body)).toEqual([
+      { context: globalContext, expected_head: null },
+      { context: globalContext, expected_head: 1 },
+    ]);
+    expect(parentAcceptances[1]!.idempotencyKey).not.toBe(parentAcceptances[0]!.idempotencyKey);
+    const parentAssertion = first.manifest.vocabulary
+      .flatMap((record) => record.assertions)
+      .find((assertion) => assertion.candidateId === graphParentCandidateId)!;
+    const parentAction = `accept:${showcaseDigest({ identity: graphParentCandidateId, digest: parentAssertion.candidateDigest })}`;
+    expect(journal.action(parentAction)?.state).toBe('acknowledged');
+    expect(journal.actionDecisions(parentAction)).toEqual([
+      {
+        decision: 'changed-body',
+        refusal: 'review-http-409',
+        priorIdempotencyKey: parentAcceptances[0]!.idempotencyKey,
+        idempotencyKey: parentAcceptances[1]!.idempotencyKey,
+      },
+    ]);
     expect(publicReads.get(tagConceptId)?.subject?.statements?.['skos:broader']).toEqual(
       expect.arrayContaining(
         expectedGraphSelection.map(({ candidate, rank }) => expect.objectContaining({ id: candidate, rank })),
@@ -905,6 +930,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const publicationPhases: string[] = [];
     candidates.delete(membershipCandidateId);
     candidates.delete(interruptedSynopsis.id);
+    staleAcceptanceHeads.set(membershipCandidateId, 412);
     const resumedAcknowledgedCalls: BatchCommand[] = [];
     const resumedAcknowledgedTransport = {
       ...port,
@@ -1037,7 +1063,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       });
     }
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
-    expect(tagAcceptanceCalls.length - tagAcceptanceCallsBeforeReplay).toBe(1);
+    expect(tagAcceptanceCalls.length - tagAcceptanceCallsBeforeReplay).toBe(2);
+    const sealedMembershipAcceptance = tagAcceptanceCalls[0]!;
+    expect(tagAcceptanceCalls[tagAcceptanceCallsBeforeReplay]).toEqual(sealedMembershipAcceptance);
+    expect(tagAcceptanceCalls.at(-1)?.body).toEqual({ context: globalContext, expected_head: 1 });
+    expect(tagAcceptanceCalls.at(-1)?.idempotencyKey).not.toBe(sealedMembershipAcceptance.idempotencyKey);
     const publishedMembership = replayed.published
       .find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')
       ?.assertions.find((assertion) => assertion.candidateId === membershipCandidateId);
@@ -1861,7 +1891,7 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
       const assertion = first.manifest.records[0]!.assertions.find((item) => item.candidateId === unresolved.id)!;
       const actionKey = `accept:${showcaseDigest({ identity: unresolved.id, digest: assertion.candidateDigest })}`;
       const originalAction = journal.action(actionKey)!;
-      expect(originalAction).toMatchObject({ state: 'refused', error_code: 'review-http-503' });
+      expect(originalAction).toMatchObject({ state: 'prepared', error_code: null });
       expect(adoptionWrites.filter((body) => body.property === 'schema:name')).toEqual([
         {
           context: globalContext,
@@ -1878,8 +1908,8 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
       expectPartialPublication(reopened);
       expect(reopened.manifest.digest).toBe(first.manifest.digest);
       expect(journal.action(actionKey)).toMatchObject({
-        state: 'refused',
-        error_code: 'review-http-503',
+        state: 'prepared',
+        error_code: null,
         body_json: originalAction.body_json,
         idempotency_key: originalAction.idempotency_key,
       });
