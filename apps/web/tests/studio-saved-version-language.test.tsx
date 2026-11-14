@@ -95,7 +95,7 @@ test('saved-version catalogues have identical keys and named arguments in every 
   const keys = Object.keys(catalogues[0])
     .filter((key) => key.startsWith('studio_revision_'))
     .sort();
-  expect(keys.length).toBe(20);
+  expect(keys.length).toBe(26);
   const argumentsOf = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
   for (const catalogue of catalogues) {
     expect(
@@ -144,12 +144,12 @@ test.each(cases)(
       expect(host.textContent).toContain(m.thread_history_page_empty({}, options));
       expect(host.textContent).not.toContain(m.thread_history_empty({}, options));
       expect(f.port.revision).not.toHaveBeenCalled();
-      await click(m.thread_history_more({}, options));
+      await click(m.studio_revision_next({}, options));
       expect(f.port.versions).toHaveBeenLastCalledWith(
         { projectId: 'private-project', postId: 'private-post', cursor: 'opaque+/=' },
         expect.any(AbortSignal),
       );
-      expect(queryByRole(host, 'button', { name: m.thread_history_more({}, options) })).toBeNull();
+      expect(queryByRole(host, 'button', { name: m.studio_revision_next({}, options) })).toBeNull();
       expect(f.port.revision).not.toHaveBeenCalled();
       const compare = m.studio_revision_compare({ savedAt: f.historical.savedAt }, options);
       await click(compare);
@@ -220,7 +220,7 @@ test.each(cases)(
       expect(f.port.saveDraft).not.toHaveBeenCalled();
       expect(f.port.reviewPublication).not.toHaveBeenCalled();
       expect(f.port.publish).not.toHaveBeenCalled();
-      await click(m.studio_revision_refresh({}, options));
+      await click(m.studio_revision_first({}, options));
       expect(f.port.versions).toHaveBeenLastCalledWith(
         { projectId: 'private-project', postId: 'private-post', cursor: null },
         expect.any(AbortSignal),

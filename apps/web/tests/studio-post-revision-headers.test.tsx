@@ -180,7 +180,7 @@ test('sparse metadata pages show progress and exact comparison remains a separat
   const html = () =>
     renderToStaticMarkup(createElement(StudioVersions, { controller, state: controller.snapshot(), presentation: {} }));
   expect(html()).toContain('No revisions were added on this page.');
-  expect(html()).toContain('Load more versions');
+  expect(html()).toContain('Next versions page');
   expect(html()).not.toContain('No revisions are available.');
   expect(comparisons).toHaveLength(0);
   await controller.loadVersions(true);

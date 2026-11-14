@@ -66,10 +66,23 @@ export function StudioVersions({
       <div className="studio-section-heading">
         <h2>{m.studio_revision_heading({}, options)}</h2>
         <Button type="button" variant="outline" disabled={blocked} onClick={() => void controller.loadVersions()}>
-          {m.studio_revision_refresh({}, options)}
+          {m.studio_revision_first({}, options)}
         </Button>
       </div>
       <p className="studio-help">{m.studio_revision_intro({}, options)}</p>
+      {state.versionNavigation.staged && !state.operation ? (
+        <div role="status" className="studio-stack">
+          <p>{m.studio_revision_navigation_failed({}, options)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={blocked}
+            onClick={() => void controller.navigateVersions('retry')}
+          >
+            {m.studio_revision_retry({}, options)}
+          </Button>
+        </div>
+      ) : null}
       {state.versions ? (
         <>
           <ol className="studio-version-list">
@@ -98,16 +111,26 @@ export function StudioVersions({
                 : m.thread_history_empty({}, options)}
             </p>
           ) : null}
-          {state.versions.nextCursor ? (
+          <nav className="studio-action-row" aria-label={m.studio_revision_region({}, options)}>
             <Button
               type="button"
               variant="outline"
-              disabled={blocked}
-              onClick={() => void controller.loadVersions(true)}
+              disabled={blocked || !state.versionNavigation.predecessors.length}
+              onClick={() => void controller.navigateVersions('previous')}
             >
-              {m.thread_history_more({}, options)}
+              {m.studio_revision_previous({}, options)}
             </Button>
-          ) : null}
+            {state.versions.nextCursor !== null ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={blocked}
+                onClick={() => void controller.loadVersions(true)}
+              >
+                {m.studio_revision_next({}, options)}
+              </Button>
+            ) : null}
+          </nav>
         </>
       ) : (
         <Button type="button" variant="outline" disabled={blocked} onClick={() => void controller.loadVersions()}>

@@ -100,6 +100,18 @@ remain intact; the saved timestamp retains its semantic `time` element. Comparis
 beside the current saved draft, while unsaved working text stays in the editor. Copy remains a deliberate draft-only
 action under the existing permissions, pending/upload and unresolved-command guards; publication stays separate.
 
+Decision: saved-version navigation keeps one native metadata page of at most 20 rows, eight predecessor
+cursors and one staged address. Previous, Next and explicit First commit their coordinate only after success;
+retry reuses the failed cursor, including a null first-page cursor. Sparse pages remain continuable, and generic
+unavailability never infers cursor expiry. No page/body cache, refill, prefetch or row read is added. Comparison uses
+independent shared structured/wide-content reader visits. Copy review binds the inspected exact version and working
+document; replacement refreshes the review and requires another deliberate acknowledgement. Copy retains history
+position. Saved times use the interface locale with the exact native datetime and technical identity preserved.
+
+Sources read for bounded browsing before design: this Saved-version language section, `revisions.tsx`, controller
+versions/inspect/restore and their selection callers, `contract.ts`, `post-revision-headers.ts`,
+`threads/post-reading-body.tsx`, the existing saved-version/header tests and `publication-body.tsx`.
+
 Sources read before design: this owner document, `revisions.tsx`, `controller.ts`, `contract.ts`, the workspace caller,
 `tests/studio-post-revision-headers.test.tsx`, the existing Studio mounted fixtures, Web's
 [acceptance](../../../../docs/goals/web.md#acceptance), and Impeccable's Operate refinement and craft-floor guidance.

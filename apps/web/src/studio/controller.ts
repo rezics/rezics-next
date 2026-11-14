@@ -26,6 +26,14 @@ import {
   type NativeDraftCreate,
 } from './contract';
 
+import {
+  admitVersionAddress,
+  initialVersionNavigation,
+  versionAddress,
+  type VersionMovement,
+  type VersionNavigation,
+} from './version-navigation';
+
 export type VersionSummary = StudioRevisionHeader;
 export type WorkingDocument = Readonly<{
   source: StudioSelection;
@@ -45,6 +53,7 @@ export type StudioState = Readonly<{
   selectedOccurrences: ReadonlySet<string>;
   selected: WorkingDocument | null;
   versions: StudioPage<VersionSummary> | null;
+  versionNavigation: VersionNavigation;
   historical: StudioRevision | null;
   review: PublicationReview | null;
   published: PublicationRecord | null;
@@ -227,6 +236,7 @@ export class StudioController {
       selectedOccurrences: new Set(),
       selected: input.initialSelection ? working(input.initialSelection) : null,
       versions: null,
+      versionNavigation: initialVersionNavigation(),
       historical: null,
       review: null,
       published: null,
@@ -249,7 +259,14 @@ export class StudioController {
       this.connected = false;
       this.request?.abort();
       this.request = null;
-      this.patch({ busy: null, operation: null, review: null, historical: null });
+      this.patch({
+        busy: null,
+        operation: null,
+        review: null,
+        historical: null,
+        versions: null,
+        versionNavigation: initialVersionNavigation(),
+      });
     };
   };
   current = (): boolean => this.connected && this.port.isCurrent();
@@ -345,7 +362,13 @@ export class StudioController {
     )
       return false;
     // Never leave an old readable body beneath a new selection or a refused read.
-    this.patch({ selected: null, historical: null, versions: null, review: null });
+    this.patch({
+      selected: null,
+      historical: null,
+      versions: null,
+      versionNavigation: initialVersionNavigation(),
+      review: null,
+    });
     return this.run<StudioSelection>(
       'open',
       async (signal) => {
@@ -404,6 +427,7 @@ export class StudioController {
           selected: working(selection, ++this.editorSequence),
           documents: this.updateSummary(selection),
           versions: null,
+          versionNavigation: initialVersionNavigation(),
           historical: null,
           review: null,
         });
@@ -479,6 +503,7 @@ export class StudioController {
           },
           documents: this.updateSummary(selection),
           versions: null,
+          versionNavigation: initialVersionNavigation(),
           review: null,
         });
       },
@@ -558,6 +583,7 @@ export class StudioController {
           selected: working(selection, ++this.editorSequence),
           documents: this.updateSummary(selection),
           versions: null,
+          versionNavigation: initialVersionNavigation(),
           historical: null,
           review: null,
         });
@@ -565,23 +591,24 @@ export class StudioController {
       true,
     );
   };
-  loadVersions = async (more = false) => {
+  /** Compatibility entry for existing callers; First and Next both replace the single page. */
+  loadVersions = (more = false): Promise<boolean> => this.navigateVersions(more ? 'next' : 'first');
+  navigateVersions = async (movement: VersionMovement | 'retry'): Promise<boolean> => {
     const postId = this.state.selected?.source.revision.exact.postId;
-    if (!postId || this.hasUnresolvedCommand()) return;
-    const cursor = more ? this.state.versions?.nextCursor : null;
-    if (more && !cursor) return;
-    await this.run<StudioPage<VersionSummary>>(
+    if (!postId || !this.canMutate()) return false;
+    const navigation = this.state.versionNavigation;
+    const address = versionAddress(navigation, movement, this.state.versions?.nextCursor ?? null);
+    if (!address) return false;
+    this.patch({ versionNavigation: { ...navigation, staged: address } });
+    return this.run<StudioPage<VersionSummary>>(
       'versions',
-      async (signal) => {
-        const result = await this.port.versions(
-          { projectId: this.input.projectId, postId, cursor: cursor ?? null },
-          signal,
-        );
-        if (result.ok && result.value.items.some((row) => row.exact.postId !== postId))
-          return { ok: false, error: failure('invalid') };
-        return result;
-      },
-      (versions) => this.patch({ versions, historical: null }),
+      (signal) => this.port.versions({ projectId: this.input.projectId, postId, cursor: address.cursor }, signal),
+      (versions) =>
+        this.patch({
+          versions,
+          versionNavigation: admitVersionAddress(navigation, address),
+          historical: null,
+        }),
     );
   };
   inspectVersion = async (document: ExactDocument) => {
