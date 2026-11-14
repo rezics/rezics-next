@@ -23,7 +23,12 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
-import { withConnection } from '../database/pool.ts';
+import {
+  partitionReadClientObservation,
+  withBoundedReadConnection,
+  withBoundedReadOnlyTransaction,
+  withConnection,
+} from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -343,19 +348,21 @@ export function createEntryCommands(config: Dependencies) {
     body: (client: QueryClient, owner: AccountActor, route: number) => Promise<T>,
   ) {
     const owner = account(actor, action);
-    requireRoute(owner.accountId);
-    return withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
+    const partition = partitionOf(requireRoute(owner.accountId));
+    // putEntry also uses this snapshot to retain its normalized receipt operands.
+    // Delivery admission belongs to the read caller, after this checkout releases.
+    return withBoundedReadOnlyTransaction(
+      pool,
+      deadlineFor(WORK_STEP_DEADLINE_MS),
+      async (client) => {
         const admittedRoute = await admit(client, owner);
-        const value = await body(client, owner, admittedRoute);
-        await client.query('COMMIT');
-        return value;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
+        return body(client, owner, admittedRoute);
+      },
+      {
+        deadlineError: () => new CommandUnavailableError('deadline', partition),
+        isUncertainSettledQueryError: () => true,
+      },
+    );
   }
 
   async function historicalStateAdmitted(owner: AccountActor, subjectId: string, historicalState: string) {
@@ -1095,7 +1102,8 @@ export function createEntryCommands(config: Dependencies) {
   }
 
   async function listEntries(actor: Actor, options: ListEntryOptions = {}) {
-    account(actor, 'library_entry:list');
+    const owner = account(actor, 'library_entry:list');
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     if (typeof options !== 'object' || options === null || Array.isArray(options))
       throw new TypeError('Library entry list options must be an object');
     if (Object.keys(options).some((key) => key !== 'state' && key !== 'cursor' && key !== 'limit'))
@@ -1108,7 +1116,7 @@ export function createEntryCommands(config: Dependencies) {
       throw new ProblemError('invalid_cursor');
 
     const operationPlan = entryOperationPlan('library.entry.list', options, limit + 1);
-    return withEntryOperation(operationPlan, () =>
+    const selected = await withEntryOperation(operationPlan, () =>
       snapshot(actor, 'library_entry:list', async (client, accountOwner, route) => {
         const epoch = await partitionEpochRead.run(
           { query: client.query.bind(client) },
@@ -1144,17 +1152,38 @@ export function createEntryCommands(config: Dependencies) {
         const hasMore = rows.length > limit;
         const last = pageRows.at(-1);
         return {
-          entries: pageRows,
-          next:
-            hasMore && last && epoch
-              ? encodeCursor(tokens, cursorBinding, {
-                  epoch: epoch.epoch,
-                  after: [last.updatedAt, last.subjectId],
-                })
-              : null,
+          epoch: epoch?.epoch,
+          page: {
+            entries: pageRows,
+            next:
+              hasMore && last && epoch
+                ? encodeCursor(tokens, cursorBinding, {
+                    epoch: epoch.epoch,
+                    after: [last.updatedAt, last.subjectId],
+                  })
+                : null,
+          },
         };
       }),
     );
+    // COMMIT and release may outlive the source's owner/home observation.
+    // Admit delivery in current native state under the original request deadline.
+    const partition = partitionOf(requireRoute(owner.accountId));
+    await withBoundedReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        await admit(client, owner);
+        const { partition: home } = await partitionReadClientObservation(client, partition);
+        if (home.writeState !== 'active' || home.movedTo !== null || home.epoch !== selected.epoch)
+          throw new CommandUnavailableError('fenced', partition);
+      },
+      {
+        deadlineError: () => new CommandUnavailableError('deadline', partition),
+        isUncertainSettledQueryError: () => true,
+      },
+    );
+    return selected.page;
   }
 
   return {
@@ -1167,6 +1196,7 @@ export function createEntryCommands(config: Dependencies) {
     deleteEntry,
     restoreEntry,
     readEntry,
-    listEntries,
+    listEntries: (...args: Parameters<typeof listEntries>) =>
+      withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => listEntries(...args)),
   };
 }
