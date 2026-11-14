@@ -253,7 +253,7 @@ export function WorkbenchView({
         </Button>
       ) : null}
       {isWindowQueue ? (
-        <h2 tabIndex={-1} data-workbench-current-queue className="sr-only">
+        <h2 tabIndex={-1} data-workbench-current-queue className="text-xl font-semibold">
           {search.queue === 'resolved'
             ? m.moderation_workbench_queue_resolved()
             : m.moderation_workbench_queue_reports()}
@@ -285,52 +285,6 @@ export function WorkbenchView({
       ) : null}
       {(page.state === 'ready' || search.history) && queueScope ? (
         <section className="space-y-4" aria-label={m.moderation_workbench_heading()}>
-          {isWindowQueue ? (
-            <>
-              <nav aria-label={m.moderation_workbench_heading()} className="flex flex-wrap gap-2">
-                {windowControl('previous', m.moderation_workbench_previous(), Boolean(queueWindow?.previous))}
-                {next ? windowControl('next', m.threads_next_page(), true) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={control}
-                  disabled={!queueWindow?.refresh}
-                  onClick={(event) => {
-                    leaveFor(event, (source, keyboard) => onWindowMove?.('refresh', source, keyboard));
-                  }}
-                >
-                  {m.moderation_workbench_refresh_window()}
-                </Button>
-                {windowControl('first', m.moderation_workbench_first(), Boolean(queueWindow?.first))}
-                {queueWindow?.retry && onRetryWindow ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={control}
-                    data-workbench-retry
-                    onClick={(event) => {
-                      const source = event.currentTarget;
-                      const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
-                      departure.requestNavigation(() => onRetryWindow(source, keyboard));
-                    }}
-                  >
-                    {queueWindow.retry === 'previous'
-                      ? m.moderation_workbench_retry_previous()
-                      : queueWindow.retry === 'next'
-                        ? m.moderation_workbench_retry_next()
-                        : queueWindow.retry === 'refresh'
-                          ? m.moderation_workbench_retry_refresh()
-                          : queueWindow.retry === 'first'
-                            ? m.moderation_workbench_retry_first()
-                            : m.moderation_workbench_retry_current()}
-                  </Button>
-                ) : null}
-              </nav>
-              <p role="status" className="sr-only">
-                {m.moderation_workbench_window_loaded()}
-              </p>
-            </>
-          ) : null}
           <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
             {(['reports', 'appeals', 'resolved'] as const)
               .filter((queue) => scope.kind !== 'catalogue' || queue !== 'appeals')
@@ -503,6 +457,52 @@ export function WorkbenchView({
               </ul>
             </>
           )}
+          {isWindowQueue ? (
+            <>
+              <nav aria-label={m.moderation_workbench_heading()} className="flex flex-wrap gap-2">
+                {windowControl('previous', m.moderation_workbench_previous(), Boolean(queueWindow?.previous))}
+                {next ? windowControl('next', m.threads_next_page(), true) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={control}
+                  disabled={!queueWindow?.refresh}
+                  onClick={(event) => {
+                    leaveFor(event, (source, keyboard) => onWindowMove?.('refresh', source, keyboard));
+                  }}
+                >
+                  {m.moderation_workbench_refresh_window()}
+                </Button>
+                {windowControl('first', m.moderation_workbench_first(), Boolean(queueWindow?.first))}
+                {queueWindow?.retry && onRetryWindow ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={control}
+                    data-workbench-retry
+                    onClick={(event) => {
+                      const source = event.currentTarget;
+                      const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
+                      departure.requestNavigation(() => onRetryWindow(source, keyboard));
+                    }}
+                  >
+                    {queueWindow.retry === 'previous'
+                      ? m.moderation_workbench_retry_previous()
+                      : queueWindow.retry === 'next'
+                        ? m.moderation_workbench_retry_next()
+                        : queueWindow.retry === 'refresh'
+                          ? m.moderation_workbench_retry_refresh()
+                          : queueWindow.retry === 'first'
+                            ? m.moderation_workbench_retry_first()
+                            : m.moderation_workbench_retry_current()}
+                  </Button>
+                ) : null}
+              </nav>
+              <p role="status" className="sr-only">
+                {m.moderation_workbench_window_loaded()}
+              </p>
+            </>
+          ) : null}
           {!search.history && !search.case && next && !isWindowQueue ? (
             <Button
               type="button"

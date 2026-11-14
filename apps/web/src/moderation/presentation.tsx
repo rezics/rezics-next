@@ -90,7 +90,7 @@ export function ModerationActionTarget({
 }: {
   kind: string;
   id: string;
-  reference?: ModerationReferenceField;
+  reference?: { label: string; value: string };
 }) {
   return (
     <div className="min-w-0 space-y-2 border-l-2 border-border pl-3 text-sm">
@@ -100,7 +100,7 @@ export function ModerationActionTarget({
       </p>
       {reference ? (
         <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-          {reference.label}: <code dir="ltr" className="select-text break-all">{reference.value}</code>
+          <code dir="ltr" className="select-text break-all">{reference.label}: {reference.value}</code>
         </p>
       ) : null}
     </div>

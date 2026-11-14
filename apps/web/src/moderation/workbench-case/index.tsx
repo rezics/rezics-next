@@ -276,42 +276,46 @@ export function WorkbenchCaseDetail({
   useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   return (
     <AuthoringDepartureBoundary sessionBound={false} navigationContext={reportReviewNavigationContext}>
-      <main className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
+      <main className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
         <WorkbenchCaseReturnLink href={queueHref} {...(onReturnQueue ? { onReturnQueue } : {})}>
           {m.moderation_workbench_history_return()}
         </WorkbenchCaseReturnLink>
         <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
-        {currentState && currentState !== 'available' ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {currentState === 'taken-down'
-              ? m.moderation_target_taken_down()
-              : currentState === 'erased'
-                ? m.moderation_target_deleted()
-                : currentState === 'withheld'
-                  ? m.moderation_target_withheld()
-                  : m.moderation_target_unavailable()}
-          </p>
-        ) : null}
-        {destination ? (
-          <nav aria-label={m.moderation_current_destination()} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-            <a
-              className="min-h-11 break-all underline underline-offset-4"
-              href={localizeHref(`/boards/${encodeURIComponent(destination.boardId)}`)}
-            >
-              {m.moderation_current_board({ id: destination.boardId })}
-            </a>
-            {destination.threadId ? (
-              <a
-                className="min-h-11 break-all underline underline-offset-4"
-                href={localizeHref(`/threads/${encodeURIComponent(destination.threadId)}`)}
-              >
-                {m.moderation_current_thread({ id: destination.threadId })}
-              </a>
-            ) : null}
-          </nav>
-        ) : null}
         <ReportReviewCard
           report={report}
+          currentContext={
+            <div className="min-w-0 space-y-2">
+                {currentState && currentState !== 'available' ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {currentState === 'taken-down'
+                      ? m.moderation_target_taken_down()
+                      : currentState === 'erased'
+                        ? m.moderation_target_deleted()
+                        : currentState === 'withheld'
+                          ? m.moderation_target_withheld()
+                          : m.moderation_target_unavailable()}
+                  </p>
+                ) : null}
+                {destination ? (
+                  <nav aria-label={m.moderation_current_destination()} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                    <a
+                      className="min-h-11 break-all underline underline-offset-4"
+                      href={localizeHref(`/boards/${encodeURIComponent(destination.boardId)}`)}
+                    >
+                      {m.moderation_current_board({ id: destination.boardId })}
+                    </a>
+                    {destination.threadId ? (
+                      <a
+                        className="min-h-11 break-all underline underline-offset-4"
+                        href={localizeHref(`/threads/${encodeURIComponent(destination.threadId)}`)}
+                      >
+                        {m.moderation_current_thread({ id: destination.threadId })}
+                      </a>
+                    ) : null}
+                  </nav>
+                ) : null}
+            </div>
+          }
           target={target}
           revision={revision}
           takenDown={takenDown}

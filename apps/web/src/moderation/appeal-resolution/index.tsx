@@ -8,6 +8,7 @@ import { useSession } from '../../session/query';
 import { actionOnAppeal, type AppealResolutionResult } from '../actions';
 import { appealNavigationContext } from '../appeals-read-model';
 import { appealResolutionObservation, createAppealResolutionIntent, type ResolutionCommand } from './intent';
+import { moderationControl } from '../presentation';
 
 export type { ResolutionCommand } from './intent';
 export type ResolveAppeal = (input: ResolutionCommand) => Promise<AppealResolutionResult>;
@@ -237,7 +238,7 @@ function ResolutionForm({
 
   if (result)
     return (
-      <p ref={resultFocusTarget} role="status" tabIndex={-1} className="font-medium">
+      <p ref={resultFocusTarget} role="status" tabIndex={-1} className="space-y-2 font-medium focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {result.outcome === 'upheld' ? m.moderation_appeal_upheld() : m.moderation_appeal_reversed()}
         <span className="block whitespace-pre-wrap font-normal">{result.statement}</span>
       </p>
@@ -284,9 +285,9 @@ function ResolutionForm({
           </label>
           <p className="text-sm text-muted-foreground">{m.decision_appeal_count({ count })}</p>
           {mayResolve && !terminal ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+                className={moderationControl}
                 type="button"
                 disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
                 data-resolution-action="uphold"
@@ -302,7 +303,7 @@ function ResolutionForm({
                 {m.moderation_appeal_uphold_action()}
               </Button>
               <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+                className={moderationControl}
                 type="button"
                 variant="outline"
                 disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
@@ -327,7 +328,7 @@ function ResolutionForm({
       {message ? <p role="alert">{message}</p> : null}
       {uncertain ? (
         <Button
-          className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+          className={moderationControl}
           type="button"
           variant="outline"
           disabled={!admitted}
