@@ -3,6 +3,8 @@ import { shareAccount } from './access-port.ts';
 import { resourceAuthorization, readAccount, deadlineClient } from './access-port.ts';
 import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { CommandUnavailableError } from '../access/contract/errors.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
@@ -114,6 +116,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
       generationBinding: { generationId: string; ownerEpoch: string },
     ) => Promise<T>,
     requestDeadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+    afterRelease?: () => Promise<void>,
   ): Promise<T> {
     const account = owner(actor, progress);
     const route = routeOf(account.accountId)!;
@@ -147,11 +150,15 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
       // Release the bounded probe before an owner command and before the final RR checkout. No readiness cache.
       if (
         deps.maintenance &&
-        (await withReadTransaction(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          await admitted(client);
-          return shelfNeedsInitialization(client, shelfOwner);
-        }))
+        (await withReadTransaction(
+          deps.pool,
+          async (connection) => {
+            const client = deadlineClient(connection, deadline);
+            await admitted(client);
+            return shelfNeedsInitialization(client, shelfOwner);
+          },
+          deadline,
+        ))
       ) {
         const maintenance = deps.maintenance;
         const authorization = resourceAuthorization({
@@ -207,21 +214,48 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
           },
         );
       }
-      return withReadTransaction(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        const partition = await admitted(client);
-        if (!deps.generation)
-          throw new (ShelfReadUnavailableError())(
-            'ShelfMaintenanceOps.initialize and native RR gate/current-generation reader',
-          );
-        const state = await deps.generation(client, { route, accountId: account.accountId });
-        if (state.readiness !== 'ready' || state.activeGeneration === null || state.epoch < 0n)
-          throw new (ShelfReadUnavailableError())('native complete shelf generation');
-        return read(client, route, account.accountId, partition.epoch, {
-          generationId: state.activeGeneration,
-          ownerEpoch: state.epoch.toString(10),
-        });
-      });
+      const captured = await withReadTransaction(
+        deps.pool,
+        async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          const partition = await admitted(client);
+          if (!deps.generation)
+            throw new (ShelfReadUnavailableError())(
+              'ShelfMaintenanceOps.initialize and native RR gate/current-generation reader',
+            );
+          const state = await deps.generation(client, { route, accountId: account.accountId });
+          if (state.readiness !== 'ready' || state.activeGeneration === null || state.epoch < 0n)
+            throw new (ShelfReadUnavailableError())('native complete shelf generation');
+          const value = await read(client, route, account.accountId, partition.epoch, {
+            generationId: state.activeGeneration,
+            ownerEpoch: state.epoch.toString(10),
+          });
+          return { value, partition };
+        },
+        deadline,
+      );
+      // Foreign source checks and current admission must follow the source COMMIT and release.
+      await afterRelease?.();
+      if (progress) await admitShelfRead(deps, actor, deadline);
+      await withBoundedReadConnection(
+        deps.pool,
+        deadline,
+        async (connection) => {
+          const current = await admitted(deadlineClient(connection, deadline));
+          if (current.node !== captured.partition.node || current.epoch !== captured.partition.epoch)
+            throw new CommandUnavailableError('contention', captured.partition.partitionNo);
+        },
+        {
+          deadlineError: () => new AccessUnavailableError('deadline'),
+          mapError(error) {
+            throwAccessUnavailable(error);
+            return error;
+          },
+          isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+          isUncertainSettledQueryError: () => true,
+        },
+      );
+      return captured.value;
     });
   }
 
@@ -273,7 +307,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         value.orderBy === 'title'
           ? await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account, deadline)
           : null;
-      const pageResult = await snapshot(
+      return snapshot(
         actor,
         true,
         async (client, route, accountId, epoch, generation) => {
@@ -361,13 +395,14 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
           };
         },
         deadline,
+        async () => {
+          if (
+            titleBasis !== null &&
+            titleBasis !== (await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account, deadline))
+          )
+            throw new (ShelfReadUnavailableError())('unchanged current title/disclosure basis');
+        },
       );
-      if (
-        titleBasis !== null &&
-        titleBasis !== (await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account, deadline))
-      )
-        throw new (ShelfReadUnavailableError())('unchanged current title/disclosure basis');
-      return pageResult;
     },
     async summary(actor, raw) {
       owner(actor, false);
