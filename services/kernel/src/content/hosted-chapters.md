@@ -874,7 +874,7 @@ reads. Tokens bind the acting account/session, original selector and distinct
 outline mode, preserving the first page's revision, epoch and lifetime. The installed full-replacement outline
 retains its 512-placement and depth-16 limits; mixed-prefix outline exposure follows the prerequisites above.
 
-Decision: versioned Book pages use the selected sibling, preorder or chapter read set, prove every retained anchor in that root, and traverse one bounded in-order window; bigint ranks become numeric positions only at the existing wire projection, while route selection and disclosure remain with the hosted reader.
+Decision: versioned Book pages use the selected sibling, preorder or chapter read set, prove every retained anchor in that root, and traverse one bounded in-order window; bigint ranks become numeric positions only at the existing wire projection, while route selection and disclosure remain with the hosted reader. Outline and chapter pages hydrate only visible candidates with one temporal occurrence batch and one distinct-parent sibling-root batch, preserve exact point reads, and resolve chapter-origin membership and rank in one chapter-weighted traversal.
 
 ## Author history
 

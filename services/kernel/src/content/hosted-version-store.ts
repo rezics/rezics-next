@@ -11,7 +11,9 @@ import readHead from './hosted-version-read-head.sql';
 import readNode from './hosted-version-read-node.sql';
 import readChildDepth from './hosted-version-read-child-depth.sql';
 import readOccurrence from './hosted-version-read-occurrence.sql';
+import readOccurrences from './hosted-version-read-occurrences.sql';
 import readSiblingRoot from './hosted-version-read-sibling-root.sql';
+import readSiblingRoots from './hosted-version-read-sibling-roots.sql';
 import readSnapshot from './hosted-version-read-snapshot.sql';
 import {
   HostedVersionHeadChangedError,
@@ -263,6 +265,39 @@ export async function readHostedVersionOccurrence<Value extends object>(
   };
 }
 
+/** Reads the selected temporal occurrence rows for one bounded product page. */
+export async function readHostedVersionOccurrences<Value extends object>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  occurrenceIds: readonly string[],
+): Promise<ReadonlyMap<string, HostedVersionOccurrenceValue<Value>>> {
+  checkSnapshot(snapshot);
+  const selectedIds = [...new Set(occurrenceIds)];
+  for (const occurrenceId of selectedIds) checkOwnedId(snapshot.route, occurrenceId);
+  if (selectedIds.length === 0) return new Map();
+  const rows = (
+    await client.query<OccurrenceRow>(readOccurrences.sql, [
+      snapshot.route,
+      snapshot.catalogueId,
+      snapshot.generationId,
+      selectedIds,
+      snapshot.sequence.toString(),
+    ])
+  ).rows;
+  const occurrences = new Map<string, HostedVersionOccurrenceValue<Value>>();
+  for (const row of rows) {
+    if (row.is_deleted) continue;
+    occurrences.set(row.occurrence_id, {
+      occurrenceId: row.occurrence_id,
+      parentOccurrenceId: row.parent_occurrence_id,
+      subtreeSize: BigInt(row.subtree_size),
+      value: withStoredSubtreeHeight(decodeValue<Value>(row.occurrence_state), row.subtree_height),
+      sequence: BigInt(row.sequence),
+    });
+  }
+  return occurrences;
+}
+
 /** Finds the last root row for one exact sibling parent at or before the snapshot. */
 export async function readHostedVersionSiblingRoot(
   client: AccessClient,
@@ -284,6 +319,36 @@ export async function readHostedVersionSiblingRoot(
   return row
     ? { parentOccurrenceId: row.parent_id, rootNodeId: row.root_node_id, sequence: BigInt(row.sequence) }
     : null;
+}
+
+/** Reads the latest temporal root for each distinct parent in one bounded product page. */
+export async function readHostedVersionSiblingRoots(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  parentOccurrenceIds: readonly (string | null)[],
+): Promise<ReadonlyMap<string | null, HostedVersionSiblingRoot>> {
+  checkSnapshot(snapshot);
+  const selectedParents = [...new Set(parentOccurrenceIds)];
+  for (const parentOccurrenceId of selectedParents) checkOwnedId(snapshot.route, parentOccurrenceId);
+  if (selectedParents.length === 0) return new Map();
+  const rows = (
+    await client.query<SiblingRootRow>(readSiblingRoots.sql, [
+      snapshot.route,
+      snapshot.catalogueId,
+      snapshot.generationId,
+      selectedParents,
+      ROOT_KEY,
+      snapshot.sequence.toString(),
+    ])
+  ).rows;
+  const roots = new Map<string | null, HostedVersionSiblingRoot>();
+  for (const row of rows)
+    roots.set(row.parent_id, {
+      parentOccurrenceId: row.parent_id,
+      rootNodeId: row.root_node_id,
+      sequence: BigInt(row.sequence),
+    });
+  return roots;
 }
 
 /** Indexed fallback for a selected legacy sibling set whose AVL maximum is not retained yet. */

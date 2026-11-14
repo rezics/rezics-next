@@ -219,4 +219,19 @@ test('mounted chapter navigation pages exact nested snapshots in both directions
     chapterId(9),
   ]);
   expect(currentFirst.items.map((item) => item.occurrenceId)).toEqual([chapterId(5), chapterId(6), chapterId(7)]);
+
+  const removed = await f.native.call('POST', `${path}:removeDraftPoint`, {
+    expectedRevisionId: movedRevisionId,
+    occurrenceId: chapterId(6),
+  });
+  expect(removed.status).toBe(200);
+  const removedRevisionId = removed.value.revisionId as string;
+  const oldAfterRemoval = await navigate(originPartIds[3]!, 'next', revisionId, 3);
+  const currentAfterRemoval = await navigate(originPartIds[3]!, 'next', removedRevisionId, 3);
+  expect(oldAfterRemoval.items.map((item) => item.occurrenceId)).toEqual([chapterId(4), chapterId(5), chapterId(6)]);
+  expect(currentAfterRemoval.items.map((item) => item.occurrenceId)).toEqual([
+    chapterId(5),
+    chapterId(7),
+    chapterId(8),
+  ]);
 });
