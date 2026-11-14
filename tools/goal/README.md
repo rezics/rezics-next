@@ -3997,6 +3997,9 @@ Ordinary proof policy supersedes mandatory native binding/custody admission: aut
 runs its exact original acceptance once through the existing worker-check protocol. Native binding and custody are
 optional evidence. Product and fix tasks retain minimal verification. Native and physical lease accounting remains
 independent of logical admission. The implementation and local typing still require controller combined-release validation.
+Decision: stopped ordinary proof replay uses the latest terminal proof event and saved observation as its existing
+receipt; identical observation and source status leave task, attempt, record, reservations and events untouched, while
+changed evidence updates once and preserves all retained worker-result text.
 
 `kind: verification` is an ordinary Codex worker on the implementation route. It is a read-only proof record,
 separate from a source task: it needs no declared source paths, source estimate, edit, commit, receipt or landing.

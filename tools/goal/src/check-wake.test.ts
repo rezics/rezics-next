@@ -937,6 +937,8 @@ function writeOrdinaryProofResult(
   taskId: string,
   id: string,
   status: 'running' | 'finished',
+  exitCode?: number,
+  failureSummary?: string,
 ): { id: string; cwd: string; argv: string[]; ownership: { taskId: string; attempt: number }; status: string } {
   const results = join(root, '.temp/goal/checks/results');
   mkdirSync(results, { recursive: true });
@@ -946,7 +948,7 @@ function writeOrdinaryProofResult(
     argv: ['bun', 'test', 'fixture.test.ts'],
     ownership: { taskId, attempt: 1 },
     status,
-    ...(status === 'finished' ? { exitCode: 0 } : {}),
+    ...(status === 'finished' ? { exitCode: exitCode ?? 0, ...(failureSummary ? { failureSummary } : {}) } : {}),
     log: '.temp/goal/checks/original.log',
   };
   writeFileSync(join(results, `${id}.json`), JSON.stringify(record));
@@ -1030,6 +1032,81 @@ test('a stopped ordinary proof reconciles the same attempt after its unique owne
     });
     expect(h.store.events(taskId, 1).some((event) => event.kind === 'proof-verified')).toBe(true);
     expect(existsSync(join(h.root, '.temp/goal/resume-started'))).toBe(false);
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
+test('stopped ordinary proof reconciliation is stable until its observation or source status changes', async () => {
+  const h = harness(waitingCli);
+  try {
+    const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
+    const checkId = randomUUID();
+    const { taskId, attempt } = registeredOrdinaryProofAttempt(h, [checkId]);
+    writeOrdinaryProofResult(h.root, taskId, checkId, 'running');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue() {} });
+    h.store.updateTask(attempt, (task) => {
+      task.state = 'stopped';
+    });
+    writeOrdinaryProofResult(h.root, taskId, checkId, 'finished', 1, 'first failure');
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(true);
+
+    const outcomeEvents = () =>
+      h.store
+        .events(taskId, 1)
+        .filter((event) => ['proof-verified', 'proof-capture-not-current', 'proof-failed'].includes(event.kind));
+    const snapshot = () =>
+      JSON.stringify({
+        task: h.store.task(taskId),
+        attempt: h.store.attempt(attempt),
+        record: h.store.record(attempt),
+        events: h.store.events(taskId, 1),
+      });
+    // Retained captures may already contain the repeated text from the old reconciler.
+    h.store.updateAttempt(attempt, (value) => {
+      value.result += 'historical evidence '.repeat(10_000);
+    });
+    const unchanged = snapshot();
+    expect(h.store.attempt(attempt).result.length).toBeGreaterThan(150_000);
+    for (let repeat = 0; repeat < 2; repeat++) expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
+    expect(snapshot()).toBe(unchanged);
+    expect(outcomeEvents()).toHaveLength(1);
+    expect(h.store.attempt(attempt).checks).toEqual([checkId]);
+
+    writeOrdinaryProofResult(h.root, taskId, checkId, 'finished', 1, 'revised failure');
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(true);
+    expect(h.store.attempt(attempt).result).toContain('first failure');
+    expect(h.store.attempt(attempt).result).toContain('revised failure');
+    expect(outcomeEvents()).toHaveLength(2);
+    const changedObservation = snapshot();
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
+    expect(snapshot()).toBe(changedObservation);
+
+    const laterCommit = git(h.root, [
+      'commit-tree',
+      `${sourceCommit}^{tree}`,
+      '-p',
+      sourceCommit,
+      '-m',
+      'Advance proof integration fixture',
+    ]);
+    git(h.root, ['branch', '-f', 'dev', laterCommit]);
+    writeOrdinaryProofResult(h.root, taskId, checkId, 'finished');
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(true);
+    expect(h.store.task(taskId).state).toBe('stopped');
+    expect(h.store.record(attempt)?.proof).toMatchObject({ status: 'terminal', passed: true });
+    expect(h.store.attempt(attempt).result).toContain('capture is not current integration');
+    expect(outcomeEvents()).toHaveLength(3);
+    const historicalCapture = snapshot();
+    for (let repeat = 0; repeat < 2; repeat++) expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
+    expect(snapshot()).toBe(historicalCapture);
+
+    git(h.root, ['branch', '-f', 'dev', sourceCommit]);
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(true);
+    expect(h.store.task(taskId).state).toBe('verified');
+    expect(outcomeEvents().filter((event) => event.kind === 'proof-capture-not-current')).toHaveLength(1);
+    expect(outcomeEvents().filter((event) => event.kind === 'proof-verified')).toHaveLength(1);
+    expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
   } finally {
     h.dispose();
   }
