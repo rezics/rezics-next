@@ -1,10 +1,12 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import accountShare from '../access/account-share.sql';
 import { readAccount } from './access-port.ts';
 import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
+import { readPartition } from '../partition/partition.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 
 /** Counts are decimal strings: a long history must never lose integer precision. */
 export type ConsumptionSummary = Readonly<{
@@ -49,47 +51,73 @@ export function createConsumptionStatisticsReads(deps: { pool: Pool }) {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
       const route = routeOf(actor.accountId);
       if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
+      const partition = partitionOf(route);
       const alive = () => {
         if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       };
       alive();
       const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
-      return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
-        try {
+      const authorize = async (client: PoolClient) => {
+        const owner = await readAccount(client, route, actor.accountId);
+        if (
+          !owner ||
+          owner.kind !== 'actor' ||
+          owner.state !== 'active' ||
+          owner.fenced ||
+          !Number.isSafeInteger(actor.authnEpoch) ||
+          actor.authnEpoch < 1 ||
+          owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+        )
+          throw new ProblemError('forbidden');
+      };
+      const activeHome = async (client: PoolClient) => {
+        const home = await readPartition(client, partition);
+        if (!home || home.writeState !== 'active' || home.movedTo !== null)
+          throw new ProblemError('partition_unavailable');
+        return { node: home.node, epoch: home.epoch };
+      };
+      try {
+        const selected = await withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
           await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           alive();
-          const owner = await readAccount(client, route, actor.accountId);
-          if (
-            !owner ||
-            owner.kind !== 'actor' ||
-            owner.state !== 'active' ||
-            owner.fenced ||
-            !Number.isSafeInteger(actor.authnEpoch) ||
-            actor.authnEpoch < 1 ||
-            owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-          )
-            throw new ProblemError('forbidden');
+          await authorize(client);
+          const home = await activeHome(client);
           const result = await client.query<SummaryRow>(summarySql, [route, actor.accountId]);
           const row = result.rows[0];
           if (!row?.complete) throw new ProblemError('dependency_unavailable');
           alive();
           await client.query('COMMIT');
           alive();
-          return {
-            scope: 'retained_native_sessions',
-            completedOccurrences: row.completed,
-            distinctCompletedSubjects: row.subjects,
-            repeatOccurrences: row.repeats,
-            completedOccurrencesWithUnknownProfile: row.unknown,
-            coverage: { nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' },
-            currentness: { state: 'snapshot', revision: row.revision },
-          };
-        } catch (error) {
-          if (typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01')
-            throw new ProblemError('dependency_unavailable');
-          throw error;
-        }
-      });
+          return { row, home };
+        });
+
+        // Release the selection snapshot before observing current Access and home authority.
+        await withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
+          await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+          await accountShare.run(client, { route, account_id: actor.accountId });
+          await authorize(client);
+          const home = await activeHome(client);
+          if (home.epoch !== selected.home.epoch || home.node !== selected.home.node)
+            throw new ProblemError('partition_unavailable');
+          alive();
+          await client.query('COMMIT');
+          alive();
+        });
+        alive();
+        return {
+          scope: 'retained_native_sessions',
+          completedOccurrences: selected.row.completed,
+          distinctCompletedSubjects: selected.row.subjects,
+          repeatOccurrences: selected.row.repeats,
+          completedOccurrencesWithUnknownProfile: selected.row.unknown,
+          coverage: { nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' },
+          currentness: { state: 'snapshot', revision: selected.row.revision },
+        };
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01')
+          throw new ProblemError('dependency_unavailable');
+        throw error;
+      }
     },
   };
 }
