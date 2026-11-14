@@ -12,18 +12,34 @@ const labelIds = Array.from(
 const storyNames = ['Reading list', 'Favorites', 'Read later'];
 let subjectCount = 3;
 let shelfCount = 3;
+type ShelfStoryMode = 'default' | 'reading' | 'sparse';
+let shelfStoryMode: ShelfStoryMode = 'default';
+let nextShelfStoryMode: ShelfStoryMode = 'default';
+let nextUnassignFailure = false;
+let unassignFailure = false;
 const createdLabels = new Map<string, { id: string; name: string; revision: number }>();
 const addedAssignments = new Map<string, { id: string; labelId: string; subjectId: string; revision: number }>();
 const removedAssignments = new Set<string>();
 
 export function resetLabelAssignmentStory(): void {
+  shelfStoryMode = nextShelfStoryMode;
+  nextShelfStoryMode = 'default';
+  unassignFailure = nextUnassignFailure;
+  nextUnassignFailure = false;
   removedAssignments.clear();
   addedAssignments.clear();
   createdLabels.clear();
 }
 
 /** Story pages opt into exact populations without changing the fixture or the current fake site behavior. */
-export function setLibraryLabelStorySizes(input: { subject?: number; shelf?: number }): void {
+export function setLibraryLabelStorySizes(input: {
+  subject?: number;
+  shelf?: number;
+  scenario?: ShelfStoryMode;
+  unassignFailure?: boolean;
+}): void {
+  nextShelfStoryMode = input.scenario ?? 'default';
+  nextUnassignFailure = input.unassignFailure ?? false;
   if (input.subject !== undefined) {
     const next = Math.max(0, Math.min(32, Math.floor(input.subject)));
     if (next !== subjectCount) {
@@ -75,14 +91,22 @@ function subjectAssignments(targetSubjectId: string): KernelRecording {
   return { status: 200, assignments: values, next: null };
 }
 
+const readingTitles = ['The Left Hand of Darkness', 'A Wizard of Earthsea', '', 'Piranesi', 'The Dispossessed'];
+
 function labelShelf(labelIdValue: string, request: Request): KernelRecording | undefined {
   const label = labels().find((item) => item.id === labelIdValue);
   const empty = labelIds[31] === labelIdValue;
   if (!label && !empty) return { status: 404, code: 'not_found' };
+  const mode = shelfStoryMode;
   const size = empty ? 0 : shelfCount;
   const url = new URL(request.url);
+  const offset = url.searchParams.get('cursor') === 'label-shelf-next' ? 20 : 0;
+  // A sparse native page still owns its continuation. The next page is a replacement, not a local append.
+  const sparse = mode === 'sparse';
+  const pageSize = sparse ? (offset === 0 ? 1 : 2) : Math.min(Math.max(0, size - offset), 100);
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') ?? 100)));
-  const rows = Array.from({ length: Math.min(size, limit) }, (_, index) => {
+  const rows = Array.from({ length: Math.min(pageSize, limit) }, (_, pageIndex) => {
+    const index = offset + pageIndex;
     const rowSubjectId = `0192f3a0-6c1e-7b2a-9d4e-${String(1100 + index).padStart(12, '0')}`;
     const tombstone = index === 2;
     return {
@@ -96,12 +120,21 @@ function labelShelf(labelIdValue: string, request: Request): KernelRecording | u
             id: rowSubjectId,
             type: 'schema:Book',
             types: ['schema:Book', 'schema:CreativeWork'],
-            label: { value: `Label shelf work ${index + 1}`, language: 'en' },
+            label: {
+              value:
+                mode !== 'default'
+                  ? readingTitles[index % readingTitles.length] || 'Stories of Your Life and Others'
+                  : `Label shelf work ${index + 1}`,
+              language: 'en',
+            },
             cover: null,
           },
       libraryEntry:
         index === 0
           ? {
+              subjectId: rowSubjectId,
+              revision: 3,
+              incarnationId: '0192f3a0-6c1e-7b2a-9d4e-000000001700',
               state: recordedBookState(1),
               activeProgressSession: {
                 mode: 'scalar_amount',
@@ -115,12 +148,23 @@ function labelShelf(labelIdValue: string, request: Request): KernelRecording | u
               },
             }
           : index === 1
-            ? { state: recordedBookState(2), activeProgressSession: null }
+            ? {
+                subjectId: rowSubjectId,
+                revision: 1,
+                incarnationId: '0192f3a0-6c1e-7b2a-9d4e-000000001701',
+                state: recordedBookState(2),
+                activeProgressSession: null,
+              }
             : null,
     };
   }).filter((row) => !removedAssignments.has(row.id));
   const labelSummary = label ?? { id: labelIdValue, name: 'Empty label', revision: 1 };
-  return { status: 200, assignments: rows, label: labelSummary, next: size > limit ? 'label-shelf-next' : null };
+  return {
+    status: 200,
+    assignments: rows,
+    label: labelSummary,
+    next: (sparse ? offset === 0 : size > offset + limit) ? 'label-shelf-next' : null,
+  };
 }
 
 async function answer({ request }: { request: Request }): Promise<KernelRecording | undefined> {
@@ -181,6 +225,10 @@ async function answer({ request }: { request: Request }): Promise<KernelRecordin
       revision: number;
     }[];
     if (action[2] === 'unassign') {
+      if (unassignFailure) {
+        unassignFailure = false;
+        return { status: 503, code: 'unavailable' };
+      }
       removedAssignments.add(assignmentId);
       return {
         status: 200,

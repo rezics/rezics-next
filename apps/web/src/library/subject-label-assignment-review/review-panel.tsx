@@ -57,7 +57,7 @@ export function SubjectLabelAssignmentReview({
             : m.library_subject_label_review_proposed({ name: choiceName })
         }
       />
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+      <div className="min-w-0 space-y-4">
         <div id={effectId} className="min-w-0 space-y-2 text-sm text-muted-foreground">
           <p>{m.library_labels_assignment_effect()}</p>
           {!existing ? <p>{m.library_subject_label_review_proposal_note()}</p> : null}

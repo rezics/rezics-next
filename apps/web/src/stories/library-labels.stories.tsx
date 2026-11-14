@@ -16,6 +16,12 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     admitted: labelOperations,
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
+      },
+    },
   },
 } satisfies Meta;
 export default meta;
@@ -387,7 +393,15 @@ export const Preparing: Story = {
   },
 };
 
-function SubjectLabelStory({ count, unprofiled = false }: { count: number; unprofiled?: boolean }) {
+function SubjectLabelStory({
+  count,
+  unprofiled = false,
+  unassignFailure = false,
+}: {
+  count: number;
+  unprofiled?: boolean;
+  unassignFailure?: boolean;
+}) {
   setFakeAdmitted([
     'personal_library',
     'reading_progress',
@@ -396,7 +410,7 @@ function SubjectLabelStory({ count, unprofiled = false }: { count: number; unpro
     'library_label.assign',
     'library_label.unassign',
   ]);
-  setLibraryLabelStorySizes({ subject: count });
+  setLibraryLabelStorySizes({ subject: count, unassignFailure });
   return (
     <PageStory visitor="Signed In" path={unprofiled ? `/subjects/${unprofiledSubjectId}/person` : pagePaths.subject} />
   );
@@ -412,6 +426,7 @@ export const UnprofiledSubject: Story = {
     await userEvent.click(
       await view.findByRole('button', { name: m.library_subject_label_create({ name: 'For later' }) }),
     );
+    await userEvent.click(await view.findByRole('button', { name: m.library_subject_label_review_apply() }));
     await expect(await view.findByRole('link', { name: 'For later' })).toBeVisible();
     await expect(view.queryByText(m.library_entry_profile_unsupported())).not.toBeInTheDocument();
   },
@@ -427,6 +442,7 @@ export const Capacity: Story = {
     await userEvent.click(
       await view.findByRole('button', { name: m.library_subject_label_create({ name: 'One more label' }) }),
     );
+    await userEvent.click(await view.findByRole('button', { name: m.library_subject_label_review_apply() }));
     await view.findByText(m.library_subject_label_capacity());
     await expect(context.canvasElement.querySelectorAll('[data-subject-label-chip]')).toHaveLength(32);
   },
@@ -498,6 +514,7 @@ export const CapacityRetainsDraft: Story = {
   play: async (context) => {
     const { view, input, create } = await openLabelForm(context);
     await userEvent.click(create);
+    await userEvent.click(await view.findByRole('button', { name: m.library_subject_label_review_apply() }));
     await view.findByText(m.library_subject_label_capacity());
     await expect(context.canvasElement.querySelectorAll('[data-subject-label-chip]')).toHaveLength(32);
     await expect(input).toBeVisible();
@@ -525,5 +542,165 @@ export const DeleteConfirmation: Story = {
     await expect(dialog.getByText(m.library_label_delete_confirmation({ name: 'Winter reads' }))).toBeVisible();
     await userEvent.click(dialog.getByRole('button', { name: m.action_cancel() }));
     await expect(within(context.canvasElement).getByRole('link', { name: 'Winter reads' })).toBeVisible();
+  },
+};
+
+function LabelDirectoryStory() {
+  setFakeAdmitted([
+    ...labelOperations,
+    'personal_library',
+    'reading_progress',
+    'library_label.assignment_list',
+    'library_label.unassign',
+  ]);
+  setLibraryLabelStorySizes({ subject: 3, shelf: 3, scenario: 'reading' });
+  return <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="directory" />;
+}
+
+export const DirectoryToMembers: Story = {
+  name: 'Private directory to label members',
+  render: () => <LabelDirectoryStory />,
+  play: async (context) => {
+    await labelsReady(context);
+    const view = within(context.canvasElement);
+    await expect(view.getByText(m.library_labels_directory_count({ count: 5 }))).toBeVisible();
+    const label = view.getByRole('link', { name: 'Winter reads' });
+    await expect(label).toHaveAttribute('href', `/${getLocale()}/library?label=01a17a3b-6ef3-71cc-80d0-f4ccb5814bbf`);
+    await userEvent.click(label);
+    await view.findByRole('heading', { level: 1, name: 'Winter reads' });
+    await expect(await view.findByText('The Left Hand of Darkness')).toBeVisible();
+    await expect(view.getByText(m.library_labels_member_page_count({ count: 3 }))).toBeVisible();
+    const detail = context.canvasElement.querySelector('[data-label-detail-navigation]')!;
+    await userEvent.click(within(detail as HTMLElement).getByRole('link', { name: m.library_labels_heading() }));
+    await labelsReady(context);
+    await expect(view.getByRole('link', { name: 'Family read-alouds' })).toBeVisible();
+  },
+};
+
+export const RenamedWhileEditing: Story = {
+  name: 'Rename recovery keeps the draft beside the current name',
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="rename-recovery" />,
+  play: async (context) => {
+    const dialog = await openAction(context, 'rename');
+    const field = dialog.getByRole('textbox', { name: m.library_label_name() });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'My winter reading');
+    await userEvent.click(dialog.getByRole('button', { name: m.library_label_rename() }));
+    await expect(await dialog.findByRole('alert')).toHaveTextContent(m.library_label_stale());
+    await expect(field).toHaveValue('My winter reading');
+    await expect(
+      dialog.getByText(m.library_labels_current_name({ name: 'Winter reading · shared update' })),
+    ).toBeVisible();
+    await expect(
+      within(context.canvasElement).getByRole('link', { name: 'Winter reading · shared update' }),
+    ).toBeVisible();
+  },
+};
+
+export const UncertainRename: Story = {
+  name: 'Uncertain rename retries the original change',
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="uncertain-rename" />,
+  play: async (context) => {
+    const dialog = await openAction(context, 'rename');
+    const input = dialog.getByRole('textbox', { name: m.library_label_name() });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Long winter evenings');
+    const form = (input as HTMLInputElement).form!;
+    const original = new FormData(form);
+    await userEvent.click(dialog.getByRole('button', { name: m.library_label_rename() }));
+    await expect(await dialog.findByRole('alert')).toHaveTextContent(m.library_label_unconfirmed());
+    await expect(input).toHaveValue('Long winter evenings');
+    await expect(new FormData(form).get('idempotencyKey')).toBe(original.get('idempotencyKey'));
+    await expect(new FormData(form).get('library_label_revision')).toBe(original.get('library_label_revision'));
+    await userEvent.click(dialog.getByRole('button', { name: m.library_label_rename() }));
+    await waitFor(() =>
+      expect(within(document.body).queryByRole('dialog', { name: m.library_label_rename() })).toBeNull(),
+    );
+    await expect(within(context.canvasElement).getByRole('link', { name: 'Long winter evenings' })).toBeVisible();
+  },
+};
+
+export const UncertainDeletion: Story = {
+  name: 'Missing label keeps the original delete until its receipt returns',
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="uncertain-delete" />,
+  play: async (context) => {
+    const dialog = await openAction(context, 'delete');
+    await userEvent.click(dialog.getByRole('button', { name: m.library_label_delete() }));
+    await expect(await dialog.findByRole('alert')).toHaveTextContent(m.library_label_unconfirmed());
+    await expect(dialog.getByText(m.library_labels_recovery_off_page())).toBeVisible();
+    await expect(within(context.canvasElement).queryByRole('link', { name: 'Winter reads' })).toBeNull();
+    await userEvent.click(dialog.getByRole('button', { name: m.library_label_delete() }));
+    await waitFor(() =>
+      expect(within(document.body).queryByRole('dialog', { name: m.library_label_delete() })).toBeNull(),
+    );
+    const undo = context.canvasElement.querySelector<HTMLFormElement>('form[role="status"]')!;
+    await expect(undo).toBeVisible();
+    await expect(new FormData(undo).get('library_label_revision')).toBe('73');
+    await userEvent.click(within(undo).getByRole('button', { name: m.library_label_undo() }));
+    await expect(await within(context.canvasElement).findByRole('link', { name: 'Winter reads' })).toBeVisible();
+  },
+};
+
+export const DeliberateAssignmentAndRemoval: Story = {
+  name: 'Choose, edit, assign and deliberately remove a private label',
+  render: () => <SubjectLabelStory count={0} />,
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(context.canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.library_subject_label_add() }));
+    const input = await view.findByRole('textbox', { name: m.library_subject_label_name() });
+    await userEvent.type(input, 'Quiet weekends');
+    await userEvent.click(
+      await view.findByRole('button', { name: m.library_subject_label_create({ name: 'Quiet weekends' }) }),
+    );
+    let review = await view.findByRole('region', { name: m.library_subject_label_review_heading() });
+    await expect(within(review).getByText('Quiet weekends', { exact: true })).toBeVisible();
+    await expect(view.queryByRole('link', { name: 'Quiet weekends' })).toBeNull();
+    await userEvent.click(within(review).getByRole('button', { name: m.library_subject_label_review_edit() }));
+    await expect(await view.findByRole('textbox', { name: m.library_subject_label_name() })).toHaveValue(
+      'Quiet weekends',
+    );
+    await userEvent.click(
+      await view.findByRole('button', { name: m.library_subject_label_create({ name: 'Quiet weekends' }) }),
+    );
+    review = await view.findByRole('region', { name: m.library_subject_label_review_heading() });
+    await userEvent.click(within(review).getByRole('button', { name: m.library_subject_label_review_discard() }));
+    await expect(view.queryByRole('link', { name: 'Quiet weekends' })).toBeNull();
+    await userEvent.click(
+      await view.findByRole('button', { name: m.library_subject_label_create({ name: 'Quiet weekends' }) }),
+    );
+    await userEvent.click(await view.findByRole('button', { name: m.library_subject_label_review_apply() }));
+    await expect(await view.findByRole('link', { name: 'Quiet weekends' })).toBeVisible();
+    const remove = view.getByRole('button', { name: m.library_subject_label_remove({ name: 'Quiet weekends' }) });
+    await userEvent.click(remove);
+    let removal = context.canvasElement.querySelector<HTMLElement>('[data-subject-label-review-card]')!;
+    await expect(removal).toBeVisible();
+    await expect(within(removal).getByText('Quiet weekends', { exact: true })).toBeVisible();
+    await userEvent.click(within(removal).getByRole('button', { name: m.library_subject_label_review_keep() }));
+    await expect(view.getByRole('link', { name: 'Quiet weekends' })).toBeVisible();
+    await userEvent.click(remove);
+    removal = context.canvasElement.querySelector<HTMLElement>('[data-subject-label-review-card]')!;
+    await userEvent.click(within(removal).getByRole('button', { name: m.library_subject_label_review_remove() }));
+    await expect(await view.findByRole('button', { name: m.library_subject_label_undo() })).toBeVisible();
+    await expect(view.queryByRole('link', { name: 'Quiet weekends' })).toBeNull();
+  },
+};
+
+export const UncertainRelationshipRemoval: Story = {
+  name: 'Uncertain removal retains the relationship until the original retry succeeds',
+  render: () => <SubjectLabelStory count={3} unassignFailure />,
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(context.canvasElement);
+    await userEvent.click(
+      await view.findByRole('button', { name: m.library_subject_label_remove({ name: 'Reading list' }) }),
+    );
+    const review = context.canvasElement.querySelector<HTMLElement>('[data-subject-label-review-card]')!;
+    await userEvent.click(within(review).getByRole('button', { name: m.library_subject_label_review_remove() }));
+    await expect(await view.findByText(m.library_subject_label_unavailable())).toBeVisible();
+    await expect(view.getByRole('link', { name: 'Reading list' })).toBeVisible();
+    await userEvent.click(await view.findByRole('button', { name: m.library_subject_label_retry_original() }));
+    await expect(await view.findByRole('button', { name: m.library_subject_label_undo() })).toBeVisible();
+    await expect(view.queryByRole('link', { name: 'Reading list' })).toBeNull();
   },
 };

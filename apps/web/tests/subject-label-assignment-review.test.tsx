@@ -96,7 +96,8 @@ test('review markup keeps long names readable, identifies its region, and lays o
   );
   expect(html).toContain('role="region"');
   expect(html).toContain('aria-labelledby=');
-  expect(html).toContain('sm:grid-cols-[minmax(0,1fr)_auto]');
+  expect(html).toContain('data-label-relationship');
+  expect(html).toContain('aria-describedby=');
   expect(html).toContain('break-words');
   expect(html).toContain(longName);
   expect(html).toContain(subjectName);
@@ -116,6 +117,20 @@ test('all eight locale families provide the focused review language', async () =
     'library_subject_label_review_discard',
     'library_subject_label_review_already_assigned',
     'library_subject_label_review_stale',
+    'library_labels_directory_description',
+    'library_labels_directory_count',
+    'library_labels_member_page_count',
+    'library_labels_member_scope',
+    'library_labels_review_subject',
+    'library_labels_review_label',
+    'library_labels_assignment_effect',
+    'library_labels_reading_details',
+    'library_labels_recovery_off_page',
+    'library_labels_current_name',
+    'library_labels_delete_effect',
+    'library_labels_create_hint',
+    'library_labels_view_members',
+    'library_labels_name_guidance',
   ];
   for (const locale of locales) {
     const messages = (await Bun.file(new URL(`../messages/${locale}.json`, import.meta.url)).json()) as Record<

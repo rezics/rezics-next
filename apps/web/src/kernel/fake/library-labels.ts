@@ -34,11 +34,18 @@ const sample: Label[] = [
 
 /** Contract-shaped fixture, deliberately separate from recorded kernel evidence. Each instance owns its state. */
 export function createLibraryLabelsFake(
-  options: { labels?: Label[]; next?: string | null; deleteRevision?: number | null } = {},
+  options: {
+    labels?: Label[];
+    next?: string | null;
+    deleteRevision?: number | null;
+    externalRename?: string;
+  } = {},
 ) {
   const removed = new Map<string, Label>();
   const refusals = new Map<Operation, { code: string; detail?: string }>();
   const receipts = new Map<string, KernelRecording>();
+  const lostReplies = new Set<Operation>();
+  let externalRename = options.externalRename;
   const fake = {
     labels: structuredClone(options.labels ?? sample),
     next: options.next ?? null,
@@ -47,6 +54,9 @@ export function createLibraryLabelsFake(
     calls: [] as Call[],
     refuse(operation: Operation, code: string, detail?: string) {
       refusals.set(operation, { code, ...(detail === undefined ? {} : { detail }) });
+    },
+    loseNextReply(operation: Operation) {
+      lostReplies.add(operation);
     },
     async answer(request: Request): Promise<KernelRecording | undefined> {
       const url = new URL(request.url);
@@ -95,6 +105,12 @@ export function createLibraryLabelsFake(
       if (refused) return { status: 409, ...refused };
       const id = path.slice('/v1/libraryLabels/'.length).replace(/:restore$/, '');
       const label = fake.labels.find((item) => item.id === id);
+      if (operation === 'rename' && label && externalRename !== undefined) {
+        label.name = externalRename;
+        label.revision += 1;
+        externalRename = undefined;
+        return { status: 409, code: 'conflict' };
+      }
       let result: KernelRecording;
       if (operation === 'restore') {
         const historic = removed.get(id);
@@ -132,6 +148,7 @@ export function createLibraryLabelsFake(
         result = { status: label ? 200 : 201, label: { id: updated.id, revision: updated.revision } };
       }
       receipts.set(key, structuredClone(result));
+      if (lostReplies.delete(operation)) return { status: 503, code: 'unavailable' };
       return result;
     },
     fetch: (async (input, init) => {
@@ -155,13 +172,37 @@ export function isLabelCatalogueStory() {
   return catalogueStoryActive;
 }
 let story = createLibraryLabelsFake();
-export function selectLabelStory(state: 'catalogue' | 'empty' | 'next' | 'conflict' | 'undo') {
+export function selectLabelStory(
+  state:
+    | 'catalogue'
+    | 'empty'
+    | 'next'
+    | 'conflict'
+    | 'undo'
+    | 'directory'
+    | 'rename-recovery'
+    | 'uncertain-rename'
+    | 'uncertain-delete',
+) {
   catalogueStoryActive = true;
   story = createLibraryLabelsFake({
-    labels: state === 'empty' ? [] : sample,
+    labels:
+      state === 'empty'
+        ? []
+        : state === 'directory'
+          ? [
+              ...sample,
+              { id: '01a17a3b-6ef3-71cc-80d0-f4ccb5814bc1', name: 'Family read-alouds', revision: 2 },
+              { id: '01a17a3b-6ef3-71cc-80d0-f4ccb5814bc2', name: 'Worlds to return to', revision: 6 },
+              { id: '01a17a3b-6ef3-71cc-80d0-f4ccb5814bc3', name: 'For a quiet weekend', revision: 1 },
+            ]
+          : sample,
     next: state === 'next' ? 'next-label-page' : null,
+    ...(state === 'rename-recovery' ? { externalRename: 'Winter reading · shared update' } : {}),
   });
   if (state === 'conflict') story.refuse('rename', 'conflict');
+  if (state === 'uncertain-rename') story.loseNextReply('rename');
+  if (state === 'uncertain-delete') story.loseNextReply('delete');
 }
 // Discovered insert-only by fake-modules.ts's existing fake/*.ts registry.
 export const routes: FakeRoute[] = [

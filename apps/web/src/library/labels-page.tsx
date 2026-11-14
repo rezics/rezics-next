@@ -566,6 +566,7 @@ export function LabelsPageView({
     const failed = fallback ? failedAction(page) : null;
     const label =
       failed?.operation === operation && failed.label.id === selected.label.id ? failed.label : selected.label;
+    const currentLabel = page.labels.find((item) => item.id === label.id);
     const invalid = fieldError(operation, label.id);
     const errorId = `${operation}-error-${label.id}`;
     const helpId = `rename-help-${label.id}`;
@@ -579,15 +580,17 @@ export function LabelsPageView({
         aria-busy={busy}
       >
         {hidden(operation, operation === 'rename' ? label.renameKey : label.deleteKey, label.id, label.revision)}
-        {fieldError(operation, label.id) && !page.labels.some((item) => item.id === label.id) ? (
+        {invalid && !currentLabel ? (
           <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
             {m.library_labels_recovery_off_page()}
           </p>
         ) : null}
         {operation === 'rename' &&
-        page.labels.some((item) => item.id === label.id && item.name !== selected.label.name) ? (
+        currentLabel &&
+        (invalid || currentLabel.name !== selected.label.name) &&
+        currentLabel.name !== selected.name ? (
           <p className="min-w-0 rounded-lg bg-muted p-3 text-sm [overflow-wrap:anywhere]" data-label-current-name>
-            {m.library_labels_current_name({ name: page.labels.find((item) => item.id === label.id)!.name })}
+            {m.library_labels_current_name({ name: currentLabel.name })}
           </p>
         ) : null}
         {operation === 'delete' ? (
