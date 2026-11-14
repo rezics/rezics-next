@@ -12,7 +12,13 @@ import {
 } from './native-bindings.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import type { IdentityScopeRegistration, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { createScopePreparationStore, type ScopePreparationRecord } from './scope-preparation-store.ts';
+import {
+  createScopePreparationStore,
+  scopePreparationDeadline,
+  withScopePreparationConnection,
+  type ScopePreparationRecord,
+} from './scope-preparation-store.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { ScopeWork, scopeAllowance, zeroScopeWork } from './scope-work.ts';
 import { sameScopeObservation } from './service-scope-order.ts';
 import {
@@ -57,14 +63,16 @@ export function createScopePreparation(
     if (current.status !== 'current' || !sameScopeObservation(current.observation, observation))
       throw new ProblemError('semantic_not_ready');
     work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
-    const release = await readRelease(config.pool, definition.definition.meaning.digest);
+    const release = await withScopePreparationConnection(config.pool, deadline, (client) =>
+      readRelease(client, definition.definition.meaning.digest),
+    );
     if (!release) throw new ProblemError('semantic_not_ready');
     const nativeDefinition = { ...definition.definition, meaning: { ...definition.definition.meaning, release } };
     const native = ordered.native(nativeDefinition, record);
-    const previous = await ordered.state(record.scope_id, work);
+    const previous = await store.orderedState(record.scope_id, work, deadline);
     const capture = await native.capture(nativeDefinition.capture, previous, work, deadline);
     if (!capture.ready || !previous.queried) {
-      await ordered.save(record, frontier, capture.state, observation, [], work);
+      await store.saveOrdered(record, frontier, capture.state, observation, [], work, false, deadline);
       return;
     }
     const q = capture.state.queried!;
@@ -92,7 +100,7 @@ export function createScopePreparation(
     work.identity(final.work);
     if (final.status !== 'current' || !sameScopeObservation(final.observation, observation))
       throw new ProblemError('semantic_not_ready');
-    await ordered.save(
+    await store.saveOrdered(
       record,
       frontier,
       {
@@ -104,6 +112,7 @@ export function createScopePreparation(
       result?.hits ?? [],
       work,
       input.status === 'complete',
+      deadline,
     );
   }
   async function step(record: ScopePreparationRecord, deadline: number, work: ScopeWork): Promise<void> {
@@ -158,7 +167,7 @@ export function createScopePreparation(
       delay: number,
     ) {
       work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 20000 });
-      return store.advance(record, frontier, observation, delay);
+      return store.advance(record, frontier, observation, delay, deadline);
     }
     if (Number(record.expires_at) <= Date.now()) return advance(record.frontier, null, 0);
     if (record.definition.ordered && record.observation) {
@@ -209,7 +218,9 @@ export function createScopePreparation(
     } else {
       if (record.frontier.kind !== 'public') throw new TypeError('Scope frontier kind changed');
       work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
-      const release = await readRelease(config.pool, definition.definition.meaning.digest);
+      const release = await withScopePreparationConnection(config.pool, deadline, (client) =>
+        readRelease(client, definition.definition.meaning.digest),
+      );
       if (!release) return advance(record.frontier, null, 1000);
       const native = { ...definition.definition, meaning: { ...definition.definition.meaning, release } };
       const page = await publicCapture.capturePage({
@@ -259,51 +270,56 @@ export function createScopePreparation(
   }
   return {
     async prepare(scopeId: string, deadline: number, work: ScopeWork): Promise<void> {
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 282624 });
-      const prior = await store.read(scopeId);
-      if (!prior || prior.state === 'retained') return;
-      if (prior.state === 'ready') {
-        // An ordered build keeps its actual old observation. Repair cannot silently repin it.
-        if (prior.definition.ordered) return;
-        if (!prior.observation) return;
-        const expected = { ...prior.observation, committedRevision: BigInt(prior.observation.committedRevision) };
-        const current = await observations.revalidate({ key: expected.key, expected, deadline });
-        work.identity(current.work);
-        if (current.status === 'current' && sameScopeObservation(current.observation, expected)) return;
-        const repaired = await observations.repair({ key: expected.key, limit: 100, deadline });
-        work.identity(repaired.work);
-        if (
-          repaired.status !== 'repaired' ||
-          !repaired.observation ||
-          repaired.observation.key.scopeId !== scopeId ||
-          !sameScopeObservation(
-            {
-              ...expected,
-              captureId: repaired.observation.captureId,
-              committedRevision: repaired.observation.committedRevision,
-            },
-            repaired.observation,
+      deadline = scopePreparationDeadline(deadline);
+      return withRequestDeadline(deadline, async () => {
+        work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 282624 });
+        const prior = await store.read(scopeId, deadline);
+        if (!prior || prior.state === 'retained') return;
+        if (prior.state === 'ready') {
+          // An ordered build keeps its actual old observation. Repair cannot silently repin it.
+          if (prior.definition.ordered) return;
+          if (!prior.observation) return;
+          const expected = { ...prior.observation, committedRevision: BigInt(prior.observation.committedRevision) };
+          const current = await observations.revalidate({ key: expected.key, expected, deadline });
+          work.identity(current.work);
+          if (current.status === 'current' && sameScopeObservation(current.observation, expected)) return;
+          const repaired = await observations.repair({ key: expected.key, limit: 100, deadline });
+          work.identity(repaired.work);
+          if (
+            repaired.status !== 'repaired' ||
+            !repaired.observation ||
+            repaired.observation.key.scopeId !== scopeId ||
+            !sameScopeObservation(
+              {
+                ...expected,
+                captureId: repaired.observation.captureId,
+                committedRevision: repaired.observation.committedRevision,
+              },
+              repaired.observation,
+            )
           )
-        )
+            return;
+          const final = await observations.revalidate({ key: expected.key, expected: repaired.observation, deadline });
+          work.identity(final.work);
+          if (final.status === 'current' && sameScopeObservation(final.observation, repaired.observation)) {
+            work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 8192 });
+            await store.refreshObservation(prior, final.observation, deadline);
+          }
           return;
-        const final = await observations.revalidate({ key: expected.key, expected: repaired.observation, deadline });
-        work.identity(final.work);
-        if (final.status === 'current' && sameScopeObservation(final.observation, repaired.observation)) {
-          work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 8192 });
-          await store.refreshObservation(prior, final.observation);
         }
-        return;
-      }
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 282624 });
-      const record = await store.claim(scopeId, prior.revision, deadline);
-      if (record) await step(record, deadline, work);
+        work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 282624 });
+        const record = await store.claim(scopeId, prior.revision, deadline);
+        if (record) await step(record, deadline, work);
+      });
     },
     async run(scopeId: string, revision: string): Promise<void> {
-      const deadline = Date.now() + 30000;
-      const work = new ScopeWork(scopeAllowance(100, scopeId));
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 282624 });
-      const record = await store.claim(scopeId, revision, deadline);
-      if (record) await step(record, deadline, work);
+      const deadline = scopePreparationDeadline();
+      return withRequestDeadline(deadline, async () => {
+        const work = new ScopeWork(scopeAllowance(100, scopeId));
+        work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 282624 });
+        const record = await store.claim(scopeId, revision, deadline);
+        if (record) await step(record, deadline, work);
+      });
     },
   };
 }
@@ -312,8 +328,9 @@ export async function readPreparedScopeObservation(
   pool: Pool,
   prefix: string,
   scopeId: string,
+  deadline = scopePreparationDeadline(),
 ): Promise<IdentityScopeObservation | null> {
-  const record = await createScopePreparationStore(pool, prefix).read(scopeId);
+  const record = await createScopePreparationStore(pool, prefix).read(scopeId, deadline);
   if (!record || record.state !== 'ready' || !record.observation || Number(record.expires_at) <= Date.now())
     return null;
   const observation = record.observation;
