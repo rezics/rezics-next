@@ -2,7 +2,14 @@ import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import type { LibraryExportStatus } from '@rezics/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import {
   EXPORT_COMPLETENESS,
   EXPORT_FORMAT,
@@ -325,14 +332,25 @@ async function mount(
     component: () => (
       <QueryClientProvider client={client}>
         <LibraryExportPortContext.Provider value={port}>
-          {presentation ?? <PrivateLibraryExportPage visit={current} {...runtime} />}
+          <Outlet />
         </LibraryExportPortContext.Provider>
       </QueryClientProvider>
     ),
   });
+  const exportRoute = createRoute({
+    getParentRoute: () => tree,
+    path: '/en/library/export',
+    component: () => presentation ?? <PrivateLibraryExportPage visit={current} {...runtime} />,
+  });
+  const recoveryRoute = createRoute({
+    getParentRoute: () => tree,
+    path: '/library/recover-archive',
+    component: () => <h1>{m.library_archive_title()}</h1>,
+  });
   const router = createRouter({
-    routeTree: tree,
+    routeTree: tree.addChildren([exportRoute, recoveryRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/library/export'] }),
+    isServer: false,
   });
   await router.load();
   await act(async () => {
@@ -1246,6 +1264,8 @@ test('restore navigation uses the router and keeps the completed original archiv
   });
   await settle();
   expect(router.state.location.pathname).toBe('/library/recover-archive');
+  expect(host.textContent).toContain(m.library_archive_title());
+  expect(host.querySelector('[data-export-stage]')).toBeNull();
   expect(completedArchiveFor('alice')).toBe(original);
   expect(new TextDecoder().decode(original.bytes)).toBe(originalText);
   expect(fixture.creates).toHaveLength(1);
