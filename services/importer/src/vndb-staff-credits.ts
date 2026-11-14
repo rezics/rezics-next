@@ -66,12 +66,22 @@ function creditedSpelling(aliasName: string | undefined): { value?: string; inva
   if (aliasName.isWellFormed() && aliasName.trim() && aliasName.length <= 1500) return { value: aliasName };
   return { invalid: true };
 }
-function adoptedContent(read: unknown, property: string): string | undefined {
-  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
-    .subject?.statements?.[property];
-  if (!statements || statements.length !== 1) return undefined;
-  const content = statements[0]?.value?.content;
-  return typeof content === 'string' ? content : undefined;
+function hasAdoptedValue(read: unknown, property: string, expected: string): boolean {
+  const statements = (
+    read as {
+      subject?: {
+        statements?: Record<string, { rank?: unknown; value?: { type?: unknown; content?: unknown } }[]>;
+      };
+    }
+  ).subject?.statements?.[property];
+  return (
+    statements?.some(
+      (statement) =>
+        (statement?.rank === 'normal' || statement?.rank === 'preferred') &&
+        statement.value?.type === 'value' &&
+        statement.value.content === expected,
+    ) ?? false
+  );
 }
 function identity(id: string, type: string): NativeIdentity {
   return { id, type, releaseDigest: bundledDigest };
@@ -102,7 +112,7 @@ export async function readCreditTypeBindingsDetailed(
   const scheme = schemeRead as { subject?: { id?: string; type?: string } };
   if (scheme.subject?.id !== known.schemeId || scheme.subject.type !== 'skos:ConceptScheme')
     return { bindings: empty, unavailable };
-  if (adoptedContent(schemeRead, 'schema:url') !== creditTypeSchemeUri) return { bindings: empty, unavailable };
+  if (!hasAdoptedValue(schemeRead, 'schema:url', creditTypeSchemeUri)) return { bindings: empty, unavailable };
   if (readPublicSubject) {
     let publicScheme;
     try {
@@ -114,7 +124,7 @@ export async function readCreditTypeBindingsDetailed(
     if (
       current.subject?.id !== known.schemeId ||
       current.subject.type !== 'skos:ConceptScheme' ||
-      adoptedContent(publicScheme, 'schema:url') !== creditTypeSchemeUri
+      !hasAdoptedValue(publicScheme, 'schema:url', creditTypeSchemeUri)
     )
       return { bindings: empty, unavailable };
   }
@@ -129,8 +139,8 @@ export async function readCreditTypeBindingsDetailed(
     }
     const concept = conceptRead as { subject?: { id?: string; type?: string } };
     if (concept.subject?.id !== item.id || concept.subject.type !== 'skos:Concept') continue;
-    if (adoptedContent(conceptRead, 'schema:url') !== creditTypeConceptUri(item.code)) continue;
-    if (adoptedContent(conceptRead, 'skos:inScheme') !== known.schemeId) continue;
+    if (!hasAdoptedValue(conceptRead, 'schema:url', creditTypeConceptUri(item.code))) continue;
+    if (!hasAdoptedValue(conceptRead, 'skos:inScheme', known.schemeId)) continue;
     if (readPublicSubject) {
       let publicConcept;
       try {
@@ -143,8 +153,8 @@ export async function readCreditTypeBindingsDetailed(
       if (
         current.subject?.id !== item.id ||
         current.subject.type !== 'skos:Concept' ||
-        adoptedContent(publicConcept, 'schema:url') !== creditTypeConceptUri(item.code) ||
-        adoptedContent(publicConcept, 'skos:inScheme') !== known.schemeId
+        !hasAdoptedValue(publicConcept, 'schema:url', creditTypeConceptUri(item.code)) ||
+        !hasAdoptedValue(publicConcept, 'skos:inScheme', known.schemeId)
       )
         continue;
     }
