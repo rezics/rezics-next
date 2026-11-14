@@ -497,6 +497,7 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
     clearSourceStatistic: (input) => track(() => requireTransport().clearSourceStatistic(input, signal)),
     writeSourceStatistic: (input) => track(() => requireTransport().writeSourceStatistic(input, signal)),
     readSourceStatistics: (input) => track(() => requireTransport().readSourceStatistics(input, signal)),
+    readSourceObservationHead: (input) => track(() => requireTransport().readSourceObservationHead(input, signal)),
     readPublicFigure: (input) => track(() => requireTransport().readPublicFigure(input, signal)),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>
       readFence(() =>

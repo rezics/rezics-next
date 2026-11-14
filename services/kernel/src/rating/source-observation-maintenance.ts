@@ -4,6 +4,7 @@ import { validSourceFigures, type SourceFigures } from './source-figures.ts';
 import {
   SOURCE_OBSERVATION_PAYLOAD_VERSION,
   sourceObservation,
+  sourceProvider,
   type SourceObservation,
   type SourceProvider,
 } from './source-provider.ts';
@@ -40,16 +41,48 @@ function fail(detail: string): never {
   throw new Error(`Source observation materialization: ${detail}`);
 }
 
+/** Maintenance accepts the same facts as native publication, including a closed
+ * clear payload. A matching content hash alone does not establish a valid fact.
+ */
+export function validMaterializedSourceObservation(source: SourceProvider, value: unknown): value is SourceObservation {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  const text = (part: unknown, max: number): part is string =>
+    typeof part === 'string' && part.length > 0 && Buffer.byteLength(part, 'utf8') <= max;
+  if (
+    typeof payload.sourceAlias !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(payload.sourceAlias) ||
+    !text(payload.sourceRecordId, 1024) || /[\u0000-\u001f\u007f-\u009f]/.test(payload.sourceRecordId) ||
+    !sourceProvider(source)?.record(payload.sourceRecordId) ||
+    typeof payload.asOf !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.asOf)
+  ) return false;
+  const date = new Date(`${payload.asOf}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== payload.asOf) return false;
+  const shared = ['sourceAlias', 'sourceRecordId', 'count', 'asOf'];
+  if (payload.count === 0) return Object.keys(payload).every((key) => shared.includes(key));
+  if (!Number.isSafeInteger(payload.count) || (payload.count as number) < 1 ||
+    (payload.count as number) > 2_147_483_647 || payload.scale === null ||
+    typeof payload.scale !== 'object' || Array.isArray(payload.scale)) return false;
+  const scale = payload.scale as Record<string, unknown>;
+  if (Object.keys(scale).length !== 2 || !Number.isSafeInteger(scale.min) || !Number.isSafeInteger(scale.max) ||
+    !sourceProvider(source)!.scale(scale.min as number, scale.max as number) ||
+    typeof payload.mean !== 'number' || !Number.isFinite(payload.mean) ||
+    payload.mean < (scale.min as number) || payload.mean > (scale.max as number) ||
+    !text(payload.licence, 1024) || !text(payload.attribution, 2000)) return false;
+  const fields = [...shared, 'scale', 'mean', 'licence', 'attribution', 'figures'];
+  return Object.keys(payload).every((key) => fields.includes(key)) &&
+    (payload.figures === undefined || validSourceFigures(source, payload.figures, payload.count as number));
+}
+
 function verifyEnvelope(row: Envelope, subjectId: string, source: SourceProvider) {
   if (row.payloadVersion !== SOURCE_OBSERVATION_PAYLOAD_VERSION) fail('unsupported payload version');
+  if (!validMaterializedSourceObservation(source, row.payload)) fail('invalid observation payload');
   const observed = sourceObservation(subjectId, source, row.payload);
   if (
     observed.digest !== row.digest ||
     canonicalize(observed.payload) !== canonicalize(row.payload) ||
     row.payload.sourceAlias !== row.sourceAlias ||
     row.payload.sourceRecordId !== row.sourceRecordId ||
-    row.payload.asOf !== row.asOf ||
-    (row.payload.figures !== undefined && !validSourceFigures(source, row.payload.figures, row.payload.count))
+    row.payload.asOf !== row.asOf
   )
     fail('stored observation does not match its immutable envelope');
 }
@@ -57,7 +90,7 @@ function verifyEnvelope(row: Envelope, subjectId: string, source: SourceProvider
 function observationFromProjection(row: Projection, subjectId: string, source: SourceProvider) {
   if (row.figures !== null && !validSourceFigures(source, row.figures, Number(row.count)))
     fail('projection has invalid figures');
-  return sourceObservation(subjectId, source, {
+  const observed = sourceObservation(subjectId, source, {
     sourceAlias: row.sourceAlias,
     sourceRecordId: row.sourceRecordId,
     scale: { min: Number(row.scaleMin), max: Number(row.scaleMax) },
@@ -68,6 +101,8 @@ function observationFromProjection(row: Projection, subjectId: string, source: S
     licence: row.licence,
     attribution: row.attribution,
   });
+  if (!validMaterializedSourceObservation(source, observed.payload)) fail('invalid projection payload');
+  return observed;
 }
 
 async function currentProjection(client: PoolClient, key: readonly [number, string, SourceProvider]) {

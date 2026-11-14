@@ -6,12 +6,12 @@ import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { Importer } from '../src/importer.ts';
-import type { ImportTransport } from '../src/import-contract.ts';
+import type { ImportSourceObservationHead, ImportTransport } from '../src/import-contract.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import {
   classifyObservation,
   headFromAcknowledgedObservation,
-  headFromStatistic,
+  headFromInspection,
   intendedPayload,
   observationDigest,
   parseObservationReason,
@@ -23,7 +23,23 @@ import { parseObservationArgs, runObservationsCli } from '../src/source-observat
 const subjectId = '00000000-0000-4000-8000-000000000101';
 const registration = createSourceRegistration('vndb');
 
-test('a mutable statistic without its stored observation digest is unavailable', () => {
+function storedHead(id: string, row?: Record<string, unknown>): ImportSourceObservationHead {
+  if (!row) return { state: 'empty', digest: null, observation: null };
+  const { cleared: _cleared, expectedObservation: _expected, ...fields } = row;
+  const payload: Record<string, unknown> = { ...fields, sourceAlias: fields.sourceAlias ?? 'vndb' };
+  const digest = observationDigest(id, payload as never);
+  return {
+    state: payload.count === 0 ? 'cleared' : 'published',
+    digest,
+    observation: {
+      digest, payloadVersion: 1, sourceAlias: payload.sourceAlias,
+      sourceRecordId: payload.sourceRecordId, asOf: payload.asOf, nativeOrder: '1', legacy: false,
+      provenance: { kind: 'unversioned', digest }, payload,
+    },
+  } as ImportSourceObservationHead;
+}
+
+test('canonical current inspection keeps empty and retained clear distinct', () => {
   const intended: IntendedObservation = {
     kind: 'write',
     sourceRecordId: 'v123',
@@ -34,10 +50,13 @@ test('a mutable statistic without its stored observation digest is unavailable',
     licence: 'ODbL-1.0',
     attribution: 'VNDB',
   };
-  const row = { source: 'vndb', ...intended };
-  expect(headFromStatistic(subjectId, row)).toBeNull();
+  const current = storedHead(subjectId, intendedPayload(intended));
   const digest = observationDigest(subjectId, intended);
-  expect(headFromStatistic(subjectId, { ...row, observation: { kind: 'unversioned', digest } })?.digest).toBe(digest);
+  expect(headFromInspection(storedHead(subjectId))).toEqual({ kind: 'absent' });
+  expect(headFromInspection(current)).toMatchObject({ kind: 'head', head: { digest, cleared: false } });
+  expect(headFromInspection({ ...current, digest: null })).toMatchObject({ kind: 'unavailable' });
+  const clear = storedHead(subjectId, { sourceRecordId: 'v123', count: 0, asOf: intended.asOf });
+  expect(headFromInspection(clear)).toMatchObject({ kind: 'head', head: { count: 0, cleared: true } });
   expect(headFromAcknowledgedObservation(subjectId, intended).digest).toBe(digest);
   expect(
     headFromAcknowledgedObservation(subjectId, {
@@ -154,16 +173,8 @@ async function observationFixture() {
     async readFence() {
       return { fenced: false, securityRevision: null };
     },
-    async readSourceStatistics(input: { subjectId: string }) {
-      const row = stored.get(input.subjectId);
-      if (!row || row.cleared) return [];
-      return [
-        {
-          source: 'vndb',
-          ...row,
-          observation: { kind: 'unversioned', digest: observationDigest(input.subjectId, row as never) },
-        },
-      ];
+    async readSourceObservationHead(input: { subjectId: string }) {
+      return storedHead(input.subjectId, stored.get(input.subjectId));
     },
     async readPublicFigure(input: { subjectId: string }) {
       const row = stored.get(input.subjectId);

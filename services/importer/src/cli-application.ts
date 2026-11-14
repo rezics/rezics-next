@@ -667,6 +667,9 @@ async function executeOrdinaryImport(
     readSourceStatistics: (
       input: Parameters<ReturnType<ImportCliHost['createTransport']>['readSourceStatistics']>[0],
     ) => track(() => liveTransport().readSourceStatistics(input, signal)),
+    readSourceObservationHead: (
+      input: Parameters<ReturnType<ImportCliHost['createTransport']>['readSourceObservationHead']>[0],
+    ) => track(() => liveTransport().readSourceObservationHead(input, signal)),
     readPublicFigure: (input: Parameters<ReturnType<ImportCliHost['createTransport']>['readPublicFigure']>[0]) =>
       track(() => liveTransport().readPublicFigure(input, signal)),
     readSourceClassifications: (

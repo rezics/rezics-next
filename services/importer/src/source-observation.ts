@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { sourceObservation } from '../../kernel/src/rating/source-provider.ts';
-import type { ImportSourceStatistic, ImportSourceStatisticClear } from './import-contract.ts';
+import type { ImportSourceObservationHead, ImportSourceStatistic, ImportSourceStatisticClear } from './import-contract.ts';
 
 export const SOURCE_OBSERVATION_PROVIDER = 'vndb' as const;
 export const SOURCE_OBSERVATION_PAGE_MAX = 20;
@@ -227,40 +227,38 @@ export function safeObservationSummary(input: {
   };
 }
 
-export function headFromStatistic(
-  _subjectId: string,
-  row: {
-    source: string;
-    sourceAlias?: string;
-    sourceRecordId: string;
-    asOf: string;
-    count: number;
-    scale: { min: number; max: number };
-    mean: number;
-    licence?: string;
-    attribution?: string;
-    observation?: { kind: 'unversioned'; digest: string };
-  },
-): RetainedObservationHead | null {
-  const sourceAlias = row.sourceAlias ?? row.source;
-  const digest = row.observation?.digest;
+export function headFromInspection(head: ImportSourceObservationHead): ObservationHeadRead {
+  if (head.state === 'empty')
+    return head.digest === null && head.observation === null
+      ? { kind: 'absent' }
+      : { kind: 'unavailable', code: 'source_observation_unavailable' };
+  const observation = head.observation;
+  const digest = head.digest;
   if (
     typeof digest !== 'string' ||
     !DIGEST.test(digest) ||
-    typeof row.sourceRecordId !== 'string' ||
-    typeof row.asOf !== 'string'
+    !observation || observation.digest !== digest ||
+    (head.state !== 'published' && head.state !== 'cleared')
   )
-    return null;
+    return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  const payload = observation.payload;
+  if (
+    (head.state === 'cleared' ? payload.count !== 0 : payload.count <= 0) ||
+    (payload.count > 0 && (!('scale' in payload) || !('mean' in payload)))
+  )
+    return { kind: 'unavailable', code: 'source_observation_unavailable' };
   return {
-    provider: SOURCE_OBSERVATION_PROVIDER,
-    sourceAlias,
-    sourceRecordId: row.sourceRecordId,
-    asOf: row.asOf,
-    count: row.count,
-    scale: row.scale,
-    mean: row.mean,
-    cleared: false,
-    digest,
+    kind: 'head',
+    head: {
+      provider: SOURCE_OBSERVATION_PROVIDER,
+      sourceAlias: observation.sourceAlias,
+      sourceRecordId: observation.sourceRecordId,
+      asOf: observation.asOf,
+      count: payload.count,
+      ...('scale' in payload ? { scale: payload.scale, mean: payload.mean } : {}),
+      cleared: head.state === 'cleared',
+      digest,
+    },
   };
 }
 

@@ -19,6 +19,10 @@ type GeneratedClearValue = Readonly<Parameters<SourceStatisticsClient['$clear'][
 type GeneratedStatisticList = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['subjects']>['source-statistics']['get']>>['data']
 >;
+type GeneratedSourceObservationRead = NonNullable<
+  Awaited<ReturnType<SourceStatisticsClient['observations']['get']>>['data']
+>;
+export type ImportSourceObservationHead = GeneratedSourceObservationRead['head'];
 type GeneratedPublicFigure = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['subjects']>['figure']['get']>>['data']
 >;
@@ -84,6 +88,10 @@ export interface ImportTransport {
     input: { subjectId: string },
     signal?: AbortSignal,
   ): Promise<readonly ImportSourceStatisticFigure[]>;
+  readSourceObservationHead?(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceObservationHead>;
   readPublicFigure?(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure>;
   readSourceClassifications?(
     input: { subjectId: string; associations: readonly ClassificationAssociation[] },

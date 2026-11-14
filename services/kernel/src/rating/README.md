@@ -1030,7 +1030,10 @@ successful Bangumi import is inferred. The real typed client is regenerated thro
 Web's `apps/web/src/features/pages/subject-ratings.ts` and `subject-ratings-view.tsx` already load/render the array
 separately from native figures. Their optional provenance fields remain source-compatible. Web owns the named
 **Bangumi source-figure reader** follow-on: provider label, exact alias/record provenance, scale/asOf and UI tests.
-Imports owns **Source observation CAS refresh** using this exact positive/clear digest contract.
+Imports owns **Source observation CAS refresh** using this exact positive/clear digest contract. Its current
+head lookup consumes the protected observation inspection response, preserving empty/published/cleared states
+without deriving identity from the positive-only public statistics list. A transport missing inspection is
+unavailable; a locally retained digest cannot substitute for a current native head.
 
 #### Immutable source observation inspection
 
