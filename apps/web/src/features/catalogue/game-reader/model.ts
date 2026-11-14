@@ -178,6 +178,10 @@ export async function readGameReader(
   }
 }
 
+function responseObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /** Admit the same native inverse page whether it arrived in composition or through explicit continuation. */
 export function gameReaderEditionPage(
   common: GameReaderReady,
@@ -188,9 +192,9 @@ export function gameReaderEditionPage(
   // The links owner currently reports both stale and invalid cursors as invalid_request.
   // Neither means that the native stream is exhausted or that retrying the token will help.
   if (status === 400 && address.cursor) return { ok: false, reason: 'restart' };
-  if (status !== 200 || !body) return failure(status);
+  if (status !== 200 || !responseObject(body)) return failure(status);
   const page = body as SubjectLinksResponse;
-  if (!Array.isArray(page.links) || typeof page.freshness?.caught_up !== 'boolean')
+  if (!Array.isArray(page.links) || !responseObject(page.freshness) || typeof page.freshness.caught_up !== 'boolean')
     return { ok: false, reason: 'unavailable' };
   const { workReleaseCards, ...membershipPage } = page;
   if (
@@ -203,6 +207,8 @@ export function gameReaderEditionPage(
     return { ok: false, reason: 'unavailable' };
   const seen = new Set<string>();
   for (const row of page.links) {
+    if (!responseObject(row) || typeof row.subject !== 'string' || typeof row.statement !== 'string')
+      return { ok: false, reason: 'unavailable' };
     const key = `${row.subject}:${row.statement}`;
     if (
       encodedBytes(row) > 128 * 1024 ||
@@ -210,9 +216,12 @@ export function gameReaderEditionPage(
       !gameUuid.test(row.subject) ||
       !gameUuid.test(row.statement) ||
       row.property !== editionProperty ||
-      (row.summary && row.summary.id !== row.subject) ||
-      (row.assertion &&
-        (row.assertion.id !== row.statement ||
+      (row.summary != null && (!responseObject(row.summary) || row.summary.id !== row.subject)) ||
+      (row.assertion !== undefined &&
+        (!responseObject(row.assertion) ||
+          row.assertion.id !== row.statement ||
+          !responseObject(row.assertion.property) ||
+          !responseObject(row.assertion.value) ||
           row.assertion.property.id !== editionProperty ||
           row.assertion.value.type !== 'value' ||
           row.assertion.value.content !== address.id))

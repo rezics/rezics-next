@@ -91,7 +91,9 @@ All installed tabs remain reachable. Native references use the reserved `north-q
 
 The default Subject extension reuses its already planned inverse release window through `gameOverviewInitial`.
 Composition and deliberate continuation share `gameReaderEditionPage` and its row, byte, identity and cursor bounds.
-A malformed successful external response such as `{}` is unavailable, never an empty release catalogue.
+A malformed successful external response such as `{}`, a null row or an assertion missing its property/value
+objects is unavailable, never an empty release catalogue. The shared HTTP receiver admits row and nested assertion
+objects before reading their identities, so both composition and the dedicated reader use the existing failure mapping.
 An initially unavailable release section retains admitted work facts and retries the first native window explicitly;
 withheld or invalid admission still removes both sections. No former release destinations survive a failed retry.
 
@@ -110,6 +112,7 @@ Design sources: [reading-first Overview](../../../../../../docs/subject-pages.md
 [page composition](../../pages/README.md#reading-first-overview), this reader's admission/recovery contract and
 [Storybook ownership](../../../../README.md#storybook-and-page-recordings).
 
-Decision: add focused transport/composition regression source in `tests/game-showcase.test.ts`, defer test execution,
-mounted/browser/build/capture acceptance to the dev verifier, and submit only the changed web workspace's owner
-typecheck through `worker-check` under the final validation policy. Source completion is not a runtime pass.
+Decision: repair malformed edition data at the shared HTTP receiver and pin retained work facts and release-section
+failure through `gameOverviewInitial` in `tests/game-showcase.test.ts`. Run that focused file through the Web owner
+runner and the changed workspace's owner typecheck through `worker-check`; broader mounted/native/browser/build/capture
+acceptance remains with the dev verifier. Source completion is not a runtime pass.

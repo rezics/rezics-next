@@ -419,6 +419,9 @@ the installed read seam and do not establish native Season creation or membershi
 
 Decision: this frontend source-only delivery defers test authoring and execution, workspace typing, browser review,
 builds and captures to the dev verifier; existing current-reader and episode-return assertions remain unchanged.
+
+### Routed Game reading
+
 The Game showcase uses the same generated `PageStory` route tree and provider boundary. `game-overview.ts` admits
 the already planned inverse release response through the bounded Game reader; it starts no additional read.
 An unavailable release section retains work facts and its exact retry address, while withheld admission removes both.

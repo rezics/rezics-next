@@ -134,8 +134,23 @@ test('independent release and review failures retain siblings and recover throug
   const releaseKey = Object.entries(plan.reads).find(
     ([, read]) => read.kind === 'links' && read.property === 'schema:exampleOfWork',
   )![0];
-  broken.reads[releaseKey] = { status: 200, body: {} };
-  expect(gameOverviewInitial(broken, seed)).toMatchObject({ ok: true, editionFailure: { reason: 'unavailable' } });
+  const releasePage = broken.reads[releaseKey]!.body as SubjectLinksResponse;
+  const row = releasePage.links[0]!;
+  for (const body of [
+    {},
+    { ...releasePage, links: [null] },
+    { ...releasePage, links: [{ ...row, assertion: { id: row.statement, value: row.assertion!.value } }] },
+    { ...releasePage, links: [{ ...row, assertion: { id: row.statement, property: row.assertion!.property } }] },
+  ]) {
+    broken.reads[releaseKey] = { status: 200, body };
+    expect(gameOverviewInitial(broken, seed)).toMatchObject({
+      ok: true,
+      public: seed.public,
+      groups: seed.groups,
+      editionsAdmitted: true,
+      editionFailure: { ok: false, reason: 'unavailable' },
+    });
+  }
   broken.reads[releaseKey] = { status: 403, body: { code: 'forbidden' } };
   expect(gameOverviewInitial(broken, seed)).toEqual({ ok: false, reason: 'withheld' });
   for (const state of ['release-failure', 'review-failure'] as const) {
