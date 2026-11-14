@@ -73,9 +73,13 @@ export function studioWorkingPreviewBody(references = true, working = false): Do
             { type: 'tableRow', content: columns.map((value) => cell('tableHeader', value)) },
             {
               type: 'tableRow',
-              content: ['East harbour', '05:42', 'Flood', '1.8 m', 'A long annotation keeps its place in this row.'].map(
-                (value) => cell('tableCell', value),
-              ),
+              content: [
+                'East harbour',
+                '05:42',
+                'Flood',
+                '1.8 m',
+                'A long annotation keeps its place in this row.',
+              ].map((value) => cell('tableCell', value)),
             },
           ],
         },

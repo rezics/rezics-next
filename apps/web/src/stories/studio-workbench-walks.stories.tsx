@@ -71,7 +71,9 @@ export const WorkingPreviewReturnsToDraft: Story = {
     const canvas = within(canvasElement);
     const title = await canvas.findByRole('textbox', { name: m.studio_workspace_title(), exact: true });
     const editor = canvasElement.querySelector<HTMLElement>('.tiptap')!;
-    await waitFor(() => expect(canvas.getByRole('button', { name: m.studio_workspace_preview(), exact: true })).toBeEnabled());
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: m.studio_workspace_preview(), exact: true })).toBeEnabled(),
+    );
     await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_preview(), exact: true }));
     const preview = canvas.getByRole('region', { name: m.studio_workspace_preview_region() });
     const reading = within(preview);
@@ -91,10 +93,12 @@ export const WorkingPreviewReturnsToDraft: Story = {
     await waitFor(() => expect(page.queryByRole('dialog')).not.toBeInTheDocument());
     await userEvent.click(reading.getByRole('button', { name: m.post_references_title(), exact: true }));
     dialog = page.getByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', {
-      name: m.post_references_entry({ number: 1, label: 'field source' }),
-      exact: true,
-    }));
+    await userEvent.click(
+      within(dialog).getByRole('button', {
+        name: m.post_references_entry({ number: 1, label: 'field source' }),
+        exact: true,
+      }),
+    );
     await expect(within(dialog).getByRole('textbox', { name: m.post_references_destination() })).toHaveValue(
       'https://example.org/harbour?edition=1#notes',
     );

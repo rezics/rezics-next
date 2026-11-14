@@ -697,9 +697,7 @@ function WorkingPreview({
       </div>
       {invalid || snapshotPending ? (
         <p role="status">
-          {invalid
-            ? m.studio_workspace_snapshot_error({}, options)
-            : m.studio_workspace_snapshot_pending({}, options)}
+          {invalid ? m.studio_workspace_snapshot_error({}, options) : m.studio_workspace_snapshot_pending({}, options)}
         </p>
       ) : (
         <PostReadingBody

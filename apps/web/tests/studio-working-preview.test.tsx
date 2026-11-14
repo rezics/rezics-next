@@ -14,7 +14,8 @@ afterAll(async () => {
   setLocale('en', { reload: false });
   await dom.restore();
 });
-const button = (root: HTMLElement, name: string) => getByRole(root, 'button', { name, exact: true }) as HTMLButtonElement;
+const button = (root: HTMLElement, name: string) =>
+  getByRole(root, 'button', { name, exact: true }) as HTMLButtonElement;
 async function click(root: HTMLElement, name: string) {
   await act(async () => button(root, name).click());
 }
@@ -44,48 +45,51 @@ async function mount(profile: 'book' | 'column' = 'book', missing = false) {
   };
 }
 
-test.each(['book', 'column'] as const)('%s working preview reads structured unsaved content and preserves the editor owner', async (profile) => {
-  const v = await mount(profile);
-  const reader = mock(v.props.presentation!.reader!);
-  v.props.presentation = { reader };
-  await v.render();
-  const opens = spyOn(v.props.port, 'open');
-  try {
-    const editor = v.host.querySelector('.tiptap');
-    const saved = v.controller.snapshot().selected!.source.revision;
-    const working = studioWorkingPreviewBody(true, true);
-    await act(async () => v.controller.changeBody(working));
-    await click(v.host, m.studio_workspace_preview());
-    const preview = v.preview();
-    expect(getByRole(preview, 'heading', { name: 'Harbour observations' })).toBeTruthy();
-    expect(button(preview, m.post_sections_title())).toBeTruthy();
-    expect(preview.textContent).toContain('A new observation still in the working draft.');
-    expect(preview.textContent).not.toContain('The notebook opens beside the harbour wall.');
-    expect(preview.querySelector('ul li')?.textContent).toBe('Watch the tide');
-    expect(preview.querySelector('blockquote')?.textContent).toBe('The harbour is a place of small returns.');
-    expect(preview.querySelector('th[scope="col"]')?.textContent).toBe('Station');
-    expect(getByRole(preview, 'link', { name: 'field source' }).getAttribute('href')).toContain('edition=1#notes');
-    expect(getByRole(preview, 'link', { name: '@harbour-keeper' })).toBeTruthy();
-    expect(preview.querySelector('[data-slot="document-footnotes"] details')?.hasAttribute('open')).toBe(false);
-    expect(preview.querySelector('img, video, iframe')).toBeNull();
-    expect(preview.textContent).toContain(m.content_edition_image_unavailable());
-    expect(preview.textContent).toContain(m.studio_workspace_preview_unsaved());
-    expect(preview.textContent).not.toContain(m.studio_workspace_preview_saved());
-    const provenance = getByRole(preview, 'group', { name: m.studio_revision_current() });
-    expect(provenance.textContent).toContain(saved.exact.revisionId);
-    expect(provenance.textContent).toContain(saved.exact.sha256);
-    expect(provenance.querySelector('time')?.getAttribute('datetime')).toBe(saved.savedAt);
-    expect(reader.mock.calls.at(-1)?.[0]).toBe(saved.exact);
-    await act(async () => v.controller.uploadState(true));
-    await click(v.host, m.studio_workspace_write());
-    expect(v.host.querySelector('.tiptap')).toBe(editor);
-    expect(v.controller.snapshot().selected).toMatchObject({ body: working, dirty: true, uploading: true });
-    expect(opens).not.toHaveBeenCalled();
-  } finally {
-    opens.mockRestore();
-    await v.close();
-  }
-});
+test.each(['book', 'column'] as const)(
+  '%s working preview reads structured unsaved content and preserves the editor owner',
+  async (profile) => {
+    const v = await mount(profile);
+    const reader = mock(v.props.presentation!.reader!);
+    v.props.presentation = { reader };
+    await v.render();
+    const opens = spyOn(v.props.port, 'open');
+    try {
+      const editor = v.host.querySelector('.tiptap');
+      const saved = v.controller.snapshot().selected!.source.revision;
+      const working = studioWorkingPreviewBody(true, true);
+      await act(async () => v.controller.changeBody(working));
+      await click(v.host, m.studio_workspace_preview());
+      const preview = v.preview();
+      expect(getByRole(preview, 'heading', { name: 'Harbour observations' })).toBeTruthy();
+      expect(button(preview, m.post_sections_title())).toBeTruthy();
+      expect(preview.textContent).toContain('A new observation still in the working draft.');
+      expect(preview.textContent).not.toContain('The notebook opens beside the harbour wall.');
+      expect(preview.querySelector('ul li')?.textContent).toBe('Watch the tide');
+      expect(preview.querySelector('blockquote')?.textContent).toBe('The harbour is a place of small returns.');
+      expect(preview.querySelector('th[scope="col"]')?.textContent).toBe('Station');
+      expect(getByRole(preview, 'link', { name: 'field source' }).getAttribute('href')).toContain('edition=1#notes');
+      expect(getByRole(preview, 'link', { name: '@harbour-keeper' })).toBeTruthy();
+      expect(preview.querySelector('[data-slot="document-footnotes"] details')?.hasAttribute('open')).toBe(false);
+      expect(preview.querySelector('img, video, iframe')).toBeNull();
+      expect(preview.textContent).toContain(m.content_edition_image_unavailable());
+      expect(preview.textContent).toContain(m.studio_workspace_preview_unsaved());
+      expect(preview.textContent).not.toContain(m.studio_workspace_preview_saved());
+      const provenance = getByRole(preview, 'group', { name: m.studio_revision_current() });
+      expect(provenance.textContent).toContain(saved.exact.revisionId);
+      expect(provenance.textContent).toContain(saved.exact.sha256);
+      expect(provenance.querySelector('time')?.getAttribute('datetime')).toBe(saved.savedAt);
+      expect(reader.mock.calls.at(-1)?.[0]).toBe(saved.exact);
+      await act(async () => v.controller.uploadState(true));
+      await click(v.host, m.studio_workspace_write());
+      expect(v.host.querySelector('.tiptap')).toBe(editor);
+      expect(v.controller.snapshot().selected).toMatchObject({ body: working, dirty: true, uploading: true });
+      expect(opens).not.toHaveBeenCalled();
+    } finally {
+      opens.mockRestore();
+      await v.close();
+    }
+  },
+);
 
 test('wide and reference inspection recover to the working reader, and Write starts a fresh disclosure visit', async () => {
   const v = await mount('column');
@@ -111,9 +115,9 @@ test('wide and reference inspection recover to the working reader, and Write sta
     await click(preview, m.post_references_title());
     dialog = getByRole(document.body, 'dialog');
     await click(dialog, m.post_references_entry({ number: 1, label: 'field source' }));
-    expect(
-      (getByRole(dialog, 'textbox', { name: m.post_references_destination() }) as HTMLTextAreaElement).value,
-    ).toBe('https://example.org/harbour?edition=1#notes');
+    expect((getByRole(dialog, 'textbox', { name: m.post_references_destination() }) as HTMLTextAreaElement).value).toBe(
+      'https://example.org/harbour?edition=1#notes',
+    );
     await click(dialog, m.post_references_return());
     await finishClose(dialog);
     expect(document.activeElement).toBe(getByRole(preview, 'link', { name: 'field source' }));
@@ -178,9 +182,10 @@ test.each(['body', 'reload', 'post', 'save', 'locale', 'source', 'write'] as con
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
-        writeText: () => new Promise<void>((resolve) => {
-          finishCopy = resolve;
-        }),
+        writeText: () =>
+          new Promise<void>((resolve) => {
+            finishCopy = resolve;
+          }),
       },
     });
     const outside = document.createElement('button');
