@@ -288,12 +288,9 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(expiryReplay.value.stage.state).toBe('expired');
   expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeExpiryReplay + 1);
 
-  const retainedExpiryReplay = await f.native.call(
-    'POST',
-    `${selectedStage}:appendSelectionBatch`,
-    firstBatchBody,
-    { key: crypto.randomUUID() },
-  );
+  const retainedExpiryReplay = await f.native.call('POST', `${selectedStage}:appendSelectionBatch`, firstBatchBody, {
+    key: crypto.randomUUID(),
+  });
   expect(retainedExpiryReplay.value.stage.state).toBe('expired');
   expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeExpiryReplay + 1);
 
@@ -380,12 +377,9 @@ test('selection progress exposes only its pinned binding and rejects new batches
     occurrenceIds: [releaseBook.nestedChapter],
   });
   expect(changedRelease.status).toBe(200);
-  const replayedReleaseBatch = await f.native.call(
-    'POST',
-    `${releaseStage}:appendSelectionBatch`,
-    releaseBatchBody,
-    { key: crypto.randomUUID() },
-  );
+  const replayedReleaseBatch = await f.native.call('POST', `${releaseStage}:appendSelectionBatch`, releaseBatchBody, {
+    key: crypto.randomUUID(),
+  });
   expect(replayedReleaseBatch.status).toBe(200);
   expect(replayedReleaseBatch.value.batch.replayed).toBe(true);
   expect(replayedReleaseBatch.value.stage.inputCount).toBe('1');
