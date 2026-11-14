@@ -18,6 +18,7 @@ import { runCommand, noEffect } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { requestDigest } from '../http/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
+import type { AccessClient } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import {
@@ -260,13 +261,13 @@ function freshAccountAuthorization(
     anchor: {
       resource,
       async validate(client) {
-        const target = await accountRead.run(client as PoolClient, { route, account_id: accountId });
+        const target = await accountRead.run(client, { route, account_id: accountId });
         const actingRoute = routeOf(actor.accountId);
         if (actingRoute === null) return false;
         const acting =
           actor.accountId === accountId
             ? (target as VerificationAccount | null)
-            : ((await accountRead.run(client as PoolClient, {
+            : ((await accountRead.run(client, {
                 route: actingRoute,
                 account_id: actor.accountId,
               })) as VerificationAccount | null);
@@ -297,7 +298,7 @@ function globalCommandAuthorization(access: Access, actor: Actor, context: Verif
     anchor: {
       resource: PLATFORM_RESOURCE,
       async validate(client) {
-        const row = await globalRead.run(client as PoolClient, {
+        const row = await globalRead.run(client, {
           route: PLATFORM_RESOURCE.route,
           resource_id: PLATFORM_RESOURCE.id,
         });
@@ -315,8 +316,8 @@ async function authorizeRead(
   action: string,
   resource: Resource,
   context: VerificationContext,
-  validate: (client: PoolClient) => Promise<boolean>,
-  read: (client: PoolClient) => Promise<unknown>,
+  validate: (client: AccessClient) => Promise<boolean>,
+  read: (client: AccessClient) => Promise<unknown>,
 ): Promise<{ allowed: boolean; value?: unknown }> {
   if (actor.kind !== 'account' || !access.prepare || context.pool !== pool) return { allowed: false };
   const evidence = await access.prepare(actor, action, resource, context);
@@ -455,9 +456,9 @@ export async function readAgentVerificationStatus(
         time,
       );
       if (!readable[accountId]?.allowed) throw new AgentVerificationDeniedError();
-      const row = rows<VerificationRow>(await latestRequest.run(client as PoolClient, { account_id: accountId }))[0];
+      const row = rows<VerificationRow>(await latestRequest.run(client, { account_id: accountId }))[0];
       const verificationRequest = row ? asRequest(row) : null;
-      const target = (await accountRead.run(client as PoolClient, {
+      const target = (await accountRead.run(client, {
         route,
         account_id: accountId,
       })) as VerificationAccount | null;

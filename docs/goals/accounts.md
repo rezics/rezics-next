@@ -11,6 +11,8 @@ exercise only the permissions they hold. Operators can open product capabilities
 - The shared permission formula is exercised with each operand independently denying; anonymous, ordinary,
   automated, organization, suspended and revoked callers have the outcomes specified by the owner contracts.
 - Public profiles and agent identity are available without exposing private account data.
+- Private verification status returns the latest request and current advice to the actor or an authorized organization
+  manager through one deadline-bound read snapshot using the admitted query-only client.
 - Platform exposure declarations, grant/revoke and public opening work without a parallel flag service. Generated
   operation discovery matches the viewer's available operations.
 - Membership and ban changes protect every affected read immediately while bounded cleanup proceeds.
