@@ -1,4 +1,13 @@
 import {
+  createHostedVersionDepthChanges,
+  deriveHostedVersionSubtreeHeight,
+  recomputeHostedVersionAncestorHeights,
+  recordHostedVersionDepthChange,
+  repairHostedVersionOccurrenceHeight,
+  type HostedVersionDepthIndexes,
+  type HostedVersionDepthUpdate,
+} from './hosted-version-depth-aggregate.ts';
+import {
   chapterRankVersionedOutlineSequenceNode,
   moveVersionedOutlineSequenceRange,
   rankVersionedOutlineSequenceNode,
@@ -146,7 +155,15 @@ export async function prepareHostedVersionDraftMovePlan(
   }
   assertAncestorChain(source.parentId, selection.sourceAncestors);
   assertAncestorChain(destinationParentId, selection.destinationAncestors);
-  if (selection.destinationAncestors.length + source.subtreeHeight > HOSTED_DEPTH_LIMIT) invalidAnchor();
+  const depthIndexes: HostedVersionDepthIndexes = {
+    siblings: indexes.siblings,
+    preorder: indexes.preorder,
+    siblingRootByParent: selection.siblingRootByParent,
+    preorderRootId: selection.preorderRootId,
+    readLegacyMaximum: indexes.readLegacyMaximum,
+  };
+  const sourceSubtreeHeight = await deriveHostedVersionSubtreeHeight(depthIndexes, source.occurrenceId, source.kind);
+  if (selection.destinationAncestors.length + 1 + sourceSubtreeHeight > HOSTED_DEPTH_LIMIT) invalidAnchor();
   if (source.parentId === destinationParentId && selection.sourceSiblingRootId !== selection.destinationSiblingRootId) {
     throw new Error('Hosted version draft selection returned different sibling roots for one parent');
   }
@@ -297,6 +314,41 @@ export async function prepareHostedVersionDraftMovePlan(
     }
   }
 
+  const subtreeHeightUpdates = new Map<string, HostedVersionDepthUpdate>();
+  if (!samePosition) {
+    const depthChanges = createHostedVersionDepthChanges();
+    recordHostedVersionDepthChange(depthChanges, source.parentId, source.occurrenceId, null);
+    recordHostedVersionDepthChange(depthChanges, destinationParentId, source.occurrenceId, sourceSubtreeHeight);
+    const updatedDepthIndexes: HostedVersionDepthIndexes = {
+      ...depthIndexes,
+      preorderRootId,
+    };
+    const sourceRepair = await repairHostedVersionOccurrenceHeight(
+      updatedDepthIndexes,
+      source,
+      sourceSubtreeHeight,
+      destinationParentId,
+      destinationSiblingRootId,
+      depthChanges,
+    );
+    if (sourceRepair) subtreeHeightUpdates.set(sourceRepair.occurrenceId, sourceRepair);
+
+    const sourcePath = await recomputeHostedVersionAncestorHeights(
+      updatedDepthIndexes,
+      selection.sourceAncestors,
+      new Map([[source.parentId, sourceSiblingRootId]]),
+      depthChanges,
+    );
+    for (const update of sourcePath) subtreeHeightUpdates.set(update.occurrenceId, update);
+    const destinationPath = await recomputeHostedVersionAncestorHeights(
+      updatedDepthIndexes,
+      selection.destinationAncestors,
+      new Map([[destinationParentId, destinationSiblingRootId]]),
+      depthChanges,
+    );
+    for (const update of destinationPath) subtreeHeightUpdates.set(update.occurrenceId, update);
+  }
+
   return {
     result: samePosition ? 'no-op' : 'moved',
     expectedRevisionId: input.expectedRevisionId,
@@ -314,6 +366,7 @@ export async function prepareHostedVersionDraftMovePlan(
     chapterCount: source.chapterCount,
     chapterDestination,
     ancestorDeltas: ancestorUpdates,
+    subtreeHeightUpdates: [...subtreeHeightUpdates.values()],
     work: {
       siblings: indexes.siblings.work(),
       preorder: indexes.preorder.work(),

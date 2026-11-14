@@ -143,6 +143,13 @@ drafts stay on replacement until the ordered-generation builder activates them. 
 remain for unmapped revisions. Mapped structure revisions fork GET children, outline, navigation and resolve onto the
 versioned indexes so advancing the catalogue head never serves an empty legacy page. Do not add a parallel SQL adapter.
 
+Decision: `subtreeHeight` counts containment edges below an occurrence: chapters and empty parts are zero, and a part
+is one plus its deepest child's height. Admission uses `ancestorCount + 1 + movedHeight <= 16`, including root
+placements. Each ordered sequence node retains the maximum measure in its AVL subtree, so a parent derives its
+deepest remaining child from one sibling-root summary after insert, move or removal. Recompute changed source and
+destination ancestor paths bottom-up, including shrinking maxima; old snapshots keep their original facts, and a
+missing legacy aggregate is derived from the selected snapshot's indexed child-height facts before admission.
+
 Decision: `updateDraftPoint` requires the new title and resulting exact target state (`null` for a part, the
 complete thread/Post/revision/digest tuple for a chapter); the occurrence kind and bound chapter Thread/Post cannot
 change. After ordinary catalogue author admission it validates the exact target through the existing attachment

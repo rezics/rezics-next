@@ -27,13 +27,13 @@ export type HostedVersionDraftPointAncestor = Readonly<{
   parentId: string | null;
   subtreeSize: bigint;
   chapterCount: bigint;
+  subtreeHeight: number;
 }>;
 
 /** Selected placement facts include aggregate ranges; they do not contain descendant rows. */
 export type HostedVersionDraftPointOccurrence = HostedVersionDraftPointAncestor &
   Readonly<{
     kind: 'part' | 'chapter';
-    subtreeHeight: number;
   }>;
 
 type HostedVersionDraftPointSelectionBase = Readonly<{
@@ -43,6 +43,8 @@ type HostedVersionDraftPointSelectionBase = Readonly<{
   siblingRootId: string | null;
   preorderRootId: string | null;
   chapterRootId: string | null;
+  /** Exact sibling roots for selected parents and ancestors in this snapshot. */
+  siblingRootByParent: ReadonlyMap<string | null, string | null>;
 }>;
 
 export type HostedVersionDraftPointInsertSelection = HostedVersionDraftPointSelectionBase &
@@ -71,6 +73,10 @@ export type HostedVersionDraftPointIndexes = Readonly<{
   siblings: VersionedOutlineSequenceReadWriteSet<string>;
   preorder: VersionedOutlineSequenceReadWriteSet<string>;
   chapters: VersionedOutlineSequenceReadWriteSet<string>;
+  readLegacyMaximum: (
+    parentId: string | null,
+    excludedOccurrenceIds: readonly string[],
+  ) => Promise<Readonly<{ occurrenceId: string; subtreeHeight: number }> | null>;
 }>;
 
 export type HostedVersionDraftPointAncestorDelta = Readonly<{
@@ -100,6 +106,7 @@ export type HostedVersionDraftPointPlan = Readonly<{
   chapterCount: bigint;
   chapterRootId: string | null;
   ancestorDeltas: readonly HostedVersionDraftPointAncestorDelta[];
+  subtreeHeightUpdates: readonly Readonly<{ occurrenceId: string; subtreeHeight: number }>[];
   work: Readonly<{
     siblings: VersionedOutlineSequenceWork;
     preorder: VersionedOutlineSequenceWork;
