@@ -13,6 +13,7 @@ import {
   parseDocument,
   parseStoredDocument,
   serializeDocument,
+  schemaForProfile,
   withDocumentIds,
   type DocumentNode,
   type DocumentSnapshot,
@@ -114,6 +115,39 @@ test('footnote references resolve to editable definitions in both snapshot profi
       ]),
     ),
   ).toBe(false);
+});
+
+test('footnote definition DOM attributes and formatted body survive both schemas', () => {
+  for (const profile of ['text', 'blocks'] as const) {
+    const schema = schemaForProfile(profile);
+    const domAttrs: Record<string, string> = {
+      'data-block-id': 'definition',
+      'data-footnote-definition': 'Source:1',
+      lang: 'zh-Hant',
+      dir: 'rtl',
+    };
+    const attrs = schema.nodes.footnoteDefinition.spec.parseDOM![0]!.getAttrs!({
+      getAttribute: (name: string) => domAttrs[name] ?? null,
+    } as unknown as HTMLElement);
+    const body = schema.nodes.paragraph.create(
+      { id: 'body' },
+      schema.text('Formatted body', [schema.marks.bold.create()]),
+    );
+    const definition = schema.nodes.footnoteDefinition
+      .create(attrs === false ? null : attrs, body)
+      .toJSON() as DocumentNode;
+    const document = normalizeDocument(snapshot([definition], profile));
+    const preserved = document.doc.content?.[0];
+
+    expect(preserved?.attrs).toMatchObject({
+      id: 'definition',
+      label: 'Source:1',
+      lang: 'zh-Hant',
+      dir: 'rtl',
+    });
+    expect(preserved?.content?.[0]?.content?.[0]?.marks?.[0]?.type).toBe('bold');
+    expect(parseDocument(JSON.parse(serializeDocument(document)))).toEqual(document);
+  }
 });
 
 test('plain text import preserves paragraphs, trailing newline and empty draft', () => {
@@ -384,20 +418,29 @@ test('CommonMark import retains marks, ordered list starts and promotes images w
 });
 
 test('Markdown footnotes keep formatted definitions in both profiles and leave fenced examples untouched', () => {
-  const markdown =
-    'Read this[^Source-1].\n\n[^Source-1]: **Published findings**\n    Continued detail.\n\n```md\n[^literal]: example\n```';
+  const label = 'Source:Release-1';
+  const markdown = [
+    `Read this[^${label}]. See it again[^${label}].`,
+    '',
+    `[^${label}]: **Published findings**`,
+    '    Continued detail.',
+    '',
+    '```md',
+    '[^literal]: example',
+    '```',
+  ].join('\n');
   for (const profile of ['text', 'blocks'] as const) {
     const imported = fromMarkdown(markdown, profile);
     const definition = imported.doc.content?.find((node) => node.type === 'footnoteDefinition');
-    const reference = imported.doc.content
+    const references = imported.doc.content
       ?.find((node) => node.type === 'paragraph')
-      ?.content?.find((node) => node.type === 'footnoteReference');
+      ?.content?.filter((node) => node.type === 'footnoteReference');
     const emphasized = definition?.content?.[0]?.content?.find((node) => node.text === 'Published findings');
     const example = imported.doc.content?.find((node) => node.type === 'codeBlock');
 
     expect(checkDocument(imported)).toBe(true);
-    expect(reference?.attrs?.label).toBe('Source-1');
-    expect(definition?.attrs?.label).toBe('Source-1');
+    expect(references?.map((node) => node.attrs?.label)).toEqual([label, label]);
+    expect(definition?.attrs?.label).toBe(label);
     expect(
       definition?.content?.[0]?.content
         ?.map((node) => node.text)
@@ -406,6 +449,7 @@ test('Markdown footnotes keep formatted definitions in both profiles and leave f
     ).toContain('Continued detail.');
     expect(emphasized?.marks?.map((mark) => mark.type)).toContain('bold');
     expect(example?.content?.[0]?.text).toContain('[^literal]: example');
+    expect(parseDocument(JSON.parse(serializeDocument(imported)))).toEqual(imported);
   }
   expect(() => fromMarkdown('Read this[^missing].')).toThrow(TypeError);
 });

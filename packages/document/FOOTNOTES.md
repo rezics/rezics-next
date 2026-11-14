@@ -73,6 +73,9 @@ reference. `withDocumentIds` assigns absent IDs while preserving unique existing
 serialization retain the footnote structure; `documentText` writes reference markers and includes definition text,
 but is a projection, never a submission or editing format.
 
+Decision: Markdown reference tokens carry typed `{ label }` metadata; definition DOM import reads IDs, language and
+direction from the same `data-block-id`, `lang` and `dir` attributes emitted by the schema.
+
 ## Shared reading controls and messages
 
 Import `DocumentBody` from `@rezics/ui/document-body`. Pass the full snapshot as `document`. Each reference is a local

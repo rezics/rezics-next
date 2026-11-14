@@ -22,6 +22,10 @@ const nodeNames: Record<string, string> = {
 };
 const markNames: Record<string, string> = { strong: 'bold', em: 'italic' };
 
+interface FootnoteReferenceTokenMetadata {
+  label: string;
+}
+
 const tokenizer = new MarkdownIt('commonmark', { html: false });
 // Obtain the built-in rule through the public parser API; package internals are not exported by markdown-it 15.
 const quoteRules = new MarkdownIt.ParserBlock().ruler;
@@ -46,7 +50,7 @@ tokenizer.inline.ruler.before('text', 'rezics_footnote_reference', (state, silen
   if (!match) return false;
   if (!silent) {
     const token = state.push('footnote_reference', '', 0);
-    token.meta = match[1];
+    token.meta = { label: match[1]! } satisfies FootnoteReferenceTokenMetadata;
   }
   state.pos += match[0].length;
   return true;
@@ -93,7 +97,10 @@ const markdownParser = new MarkdownParser(
     ...defaultMarkdownParser.tokens,
     footnote_reference: {
       node: 'footnoteReference',
-      getAttrs: (token) => ({ label: token.meta }),
+      getAttrs: (token) => {
+        const metadata: FootnoteReferenceTokenMetadata = token.meta;
+        return metadata;
+      },
     },
     spoiler: { mark: 'spoiler' },
   },

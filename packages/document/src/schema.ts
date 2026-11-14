@@ -28,6 +28,16 @@ const footnoteLabel = Type.String({ minLength: 1, maxLength: 128, pattern: '^[A-
 const align = Type.Optional(Type.Union([choice(['left', 'right', 'center', 'justify']), Type.Null()]));
 const commonAttrs = { id: { default: null }, lang: { default: null }, dir: { default: null } };
 
+function readCommonDOMAttrs(
+  element: HTMLElement,
+): { id: string | null; lang: string | null; dir: string | null } {
+  return {
+    id: element.getAttribute('data-block-id'),
+    lang: element.getAttribute('lang'),
+    dir: element.getAttribute('dir'),
+  };
+}
+
 /** Attributes are shared by wire validation and the reference ProseMirror schema. */
 export const nodeAttributes: Record<string, Record<string, TSchema>> = {
   paragraph: { ...common, textAlign: align },
@@ -234,7 +244,7 @@ function createSchema(profile: DocumentProfile): Schema {
           tag: 'aside[data-footnote-definition]',
           getAttrs: (dom) => {
             const element = dom as HTMLElement;
-            return { ...commonAttrs(element), label: element.getAttribute('data-footnote-definition') ?? '' };
+            return { ...readCommonDOMAttrs(element), label: element.getAttribute('data-footnote-definition') ?? '' };
           },
         },
       ],
