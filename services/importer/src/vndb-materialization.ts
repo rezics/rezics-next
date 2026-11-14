@@ -59,13 +59,6 @@ export class VndbMaterialization {
     this.source = registration.source;
     const db = importer.session.store.database;
     this.tables = new VndbTablesStore(db, options);
-    const columns = db.query('PRAGMA table_info(vndb_table_runs)').all() as { name: string }[];
-    if (!columns.some((column) => column.name === 'materialized_generation'))
-      db.exec('ALTER TABLE vndb_table_runs ADD COLUMN materialized_generation TEXT');
-    if (!columns.some((column) => column.name === 'snapshot_json'))
-      db.exec('ALTER TABLE vndb_table_runs ADD COLUMN snapshot_json TEXT');
-    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS vndb_materialized_generation
-      ON vndb_table_runs(source,materialized_generation) WHERE materialized_generation IS NOT NULL`);
   }
 
   begin(): string {
@@ -86,10 +79,11 @@ export class VndbMaterialization {
       .query(`SELECT materialized_generation AS generation, snapshot_json FROM vndb_table_runs
         WHERE source=? AND run_id=?`)
       .get(this.source, run) as { generation: string | null; snapshot_json: string | null } | null;
+    if (!row) throw new VndbInputError();
     return {
       ...inspect,
-      materializedGeneration: row?.generation ?? null,
-      sourceSnapshot: row?.snapshot_json ? (JSON.parse(row.snapshot_json) as VndbTableSnapshot) : null,
+      materializedGeneration: row.generation,
+      sourceSnapshot: row.snapshot_json === null ? null : (JSON.parse(row.snapshot_json) as VndbTableSnapshot | null),
       checkpoint: this.tables.checkpoint(this.source, run),
     };
   }
