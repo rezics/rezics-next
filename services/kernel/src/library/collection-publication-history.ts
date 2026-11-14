@@ -29,9 +29,7 @@ export function collectionPublicationHistoryScopes(
   ).accounts;
   return Object.freeze({
     response: unionHistoryScope('command-receipt/v1', accounts),
-    events: Object.freeze(
-      Array.from({ length: eventCount }, () => unionHistoryScope('outbox-event/v1', accounts)),
-    ),
+    events: Object.freeze(Array.from({ length: eventCount }, () => unionHistoryScope('outbox-event/v1', accounts))),
   });
 }
 

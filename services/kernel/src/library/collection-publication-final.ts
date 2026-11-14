@@ -327,12 +327,7 @@ export function createCollectionPublicationFinalCommand(
         throw error;
       }
       await authorizeCollectionRule(tx, attempt, prepared.checks);
-      await guardCollectionPublicationHistory(
-        tx,
-        partition,
-        { accountRoute: route, accountId: ownerAccountId },
-        2,
-      );
+      await guardCollectionPublicationHistory(tx, partition, { accountRoute: route, accountId: ownerAccountId }, 2);
       return 'execute';
     },
   });

@@ -465,12 +465,7 @@ export function createCollectionPublications(deps: Dependencies) {
         async (tx, command) => {
           const prepared = attempts.get(command.time);
           if (!prepared) throw unavailable();
-          await declareCollectionPublicationHistory(
-            tx,
-            kind,
-            { accountRoute: route, accountId: actor.accountId },
-            2,
-          );
+          await declareCollectionPublicationHistory(tx, kind, { accountRoute: route, accountId: actor.accountId }, 2);
           if (prepared.header.revision !== input.revision) throw conflict();
           prepared.output.dispatch();
           try {
