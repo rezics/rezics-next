@@ -4,10 +4,9 @@ import {
   type ReleasedRelationDirectionResolver,
 } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type AccessClient } from '../request/access.ts';
@@ -101,26 +100,29 @@ async function snapshot<T>(
   home: number,
   work: (client: AccessClient, position: bigint, epoch: number) => Promise<T>,
 ) {
-  return within(deps.deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deps.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, home);
-        if (!partition || partition.writeState !== 'active') unready();
-        const value = await work(client, partition.position, partition.epoch);
-        requireAccessDeadline(deps.deadline);
-        await client.query('COMMIT');
-        return value;
-      } catch (error) {
+  return withBoundedReadOnlyTransaction(
+    deps.pool,
+    deps.deadline,
+    async (client) => {
+      const partition = await readPartition(client, home);
+      if (!partition || partition.writeState !== 'active') unready();
+      const value = await work(client, partition.position, partition.epoch);
+      requireAccessDeadline(deps.deadline);
+      return value;
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error) {
         try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
+          throwAccessUnavailable(error);
+        } catch (mapped) {
+          return mapped;
         }
-        throw error;
-      }
-    }),
+        return error;
+      },
+      // The primitive exempts settled server errors; other native failures leave reuse uncertain.
+      isUncertainSettledQueryError: () => true,
+    },
   );
 }
 
@@ -421,8 +423,9 @@ export async function readNativeListPresentationFacts(
   const result: CopyWorkListPresentationResult = new Map(input.map((id) => [id, null]));
   requireAccessDeadline(deps.deadline);
   if (!input.length) return result;
-  return withRequestDeadline(deps.deadline, () =>
-    within(deps.deadline, () =>
+  return withRequestDeadline(
+    deps.deadline,
+    () =>
       withPublicStatementReader(async () => {
         try {
           const valid = input.filter((id) => routeOf(id) !== null);
@@ -668,11 +671,10 @@ export async function readNativeListPresentationFacts(
           requireAccessDeadline(deps.deadline);
           return result;
         } catch (error) {
-          throwAccessUnavailable(error, deps.deadline);
+          throwAccessUnavailable(error);
           throw error;
         }
       }),
-    ),
   );
 }
 
