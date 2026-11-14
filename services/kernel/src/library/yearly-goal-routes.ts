@@ -18,7 +18,6 @@ import {
   YEARLY_COMPLETION_GOAL_METRIC,
   type YearlyCompletionGoalTargetRead,
 } from './yearly-goal.ts';
-import { createReportedYearSummaryReads, type ReportedYearSummary } from './reported-year-summary.ts';
 
 const closed = { additionalProperties: false } as const;
 const decimal = t.String({ pattern: '^[0-9]{1,19}$' });
@@ -181,10 +180,6 @@ function targetActions(value: YearlyCompletionGoalTargetRead) {
   };
 }
 
-function unavailableSummary(error: unknown): boolean {
-  return error instanceof ProblemError && error.code === 'dependency_unavailable';
-}
-
 function mapCommandError(error: unknown): never {
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   throw error;
@@ -204,7 +199,6 @@ export function yearlyCompletionGoalRoutes(
   dependencies: YearlyCompletionGoalRouteDependencies,
 ) {
   const reads = createYearlyCompletionGoalReads(dependencies);
-  const summaryReads = createReportedYearSummaryReads(dependencies);
   const commands = () =>
     createYearlyCompletionGoalCommands({
       pool: dependencies.pool,
@@ -237,37 +231,26 @@ export function yearlyCompletionGoalRoutes(
       },
       async ({ actor, admission, job, query, request }) => {
         const owner = requireAccount(actor);
-        return admission.run('normal', job, async () => {
-          const currentTarget = await reads.target(owner, query.year, job.deadline, request.signal);
-          let progress:
-            | { state: 'available'; summary: ReportedYearSummary }
-            | { state: 'unavailable'; reason: 'summary_unavailable' };
-          try {
-            progress = {
-              state: 'available',
-              summary: await summaryReads.summary(owner, query.year, job.deadline, request.signal),
+        return admission.run('normal', job, () =>
+          reads.read(owner, query.year, job.deadline, request.signal, ({ target: currentTarget, progress }) => {
+            const result = {
+              year: query.year,
+              metric: YEARLY_COMPLETION_GOAL_METRIC,
+              viewer: {
+                state: 'owner' as const,
+                actions: { ...targetActions(currentTarget), navigateYear: { allowed: true as const } },
+              },
+              target: currentTarget,
+              progress,
             };
-          } catch (error) {
-            if (!unavailableSummary(error)) throw error;
-            progress = { state: 'unavailable', reason: 'summary_unavailable' };
-          }
-          const result = {
-            year: query.year,
-            metric: YEARLY_COMPLETION_GOAL_METRIC,
-            viewer: {
-              state: 'owner' as const,
-              actions: { ...targetActions(currentTarget), navigateYear: { allowed: true as const } },
-            },
-            target: currentTarget,
-            progress,
-          };
-          const encoded = JSON.stringify(result);
-          if (new TextEncoder().encode(encoded).byteLength > MAX_YEARLY_COMPLETION_GOAL_RESPONSE_BYTES)
-            throw new ProblemError('dependency_unavailable');
-          return new Response(encoded, {
-            headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
-          });
-        });
+            const encoded = JSON.stringify(result);
+            if (new TextEncoder().encode(encoded).byteLength > MAX_YEARLY_COMPLETION_GOAL_RESPONSE_BYTES)
+              throw new ProblemError('dependency_unavailable');
+            return new Response(encoded, {
+              headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+            });
+          }),
+        );
       },
     )
     .put(
