@@ -89,6 +89,17 @@ function prepPath(path: string, stageId: string): string {
   return `${path}/publicationPreparations/${stageId}`;
 }
 
+async function preparationEventCount(catalogueId: string): Promise<number> {
+  return Number(
+    (
+      await f.native.pool.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type=$2',
+        [catalogueId, PREPARATION_CHANGED_EVENT],
+      )
+    ).rows[0]?.count ?? '0',
+  );
+}
+
 test('progress emits only for a persisted expiry transition and authorized receipt replay emits no duplicate', async () => {
   const book = await newBook();
   const started = await f.native.call('POST', `${book.path}:prepareRelease`, {
@@ -100,16 +111,7 @@ test('progress emits only for a persisted expiry transition and authorized recei
   expect(started.status).toBe(202);
   const stageId = started.value.stageId as string,
     stagePath = prepPath(book.path, stageId);
-  const eventCount = async () =>
-    Number(
-      (
-        await f.native.pool.query<{ count: string }>(
-          'SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type=$2',
-          [book.catalogueId, PREPARATION_CHANGED_EVENT],
-        )
-      ).rows[0]?.count ?? '0',
-    );
-  const eventsBeforeProgress = await eventCount();
+  const eventsBeforeProgress = await preparationEventCount(book.catalogueId);
   expect(eventsBeforeProgress).toBeGreaterThan(0);
 
   const liveKey = crypto.randomUUID(),
@@ -117,7 +119,7 @@ test('progress emits only for a persisted expiry transition and authorized recei
   expect(liveProgress.status).toBe(200);
   const liveReplay = await f.native.call('POST', `${stagePath}:progress`, {}, { key: liveKey });
   expect(liveReplay.value).toEqual(liveProgress.value);
-  expect(await eventCount()).toBe(eventsBeforeProgress);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeProgress);
 
   await f.native.pool.query(
     `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
@@ -128,12 +130,12 @@ test('progress emits only for a persisted expiry transition and authorized recei
     expired = await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey });
   expect(expired.status).toBe(200);
   expect(expired.value.stage.state).toBe('expired');
-  expect(await eventCount()).toBe(eventsBeforeProgress + 1);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeProgress + 1);
   expect((await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey })).value).toEqual(expired.value);
   expect(
     (await f.native.call('POST', `${stagePath}:progress`, {}, { key: crypto.randomUUID() })).value.stage.state,
   ).toBe('expired');
-  expect(await eventCount()).toBe(eventsBeforeProgress + 1);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeProgress + 1);
 });
 
 test('mounted whole and nested selection builds complete private candidates with exact retry and resume', async () => {
@@ -209,11 +211,35 @@ test('mounted whole and nested selection builds complete private candidates with
   const selectedStage = prepPath(book.path, selectedStart.value.stageId as string);
   const firstBatchBody = { batchId: book.newId(), occurrenceIds: [book.rootPart, book.childPart] };
   const firstBatchKey = crypto.randomUUID();
+  const eventsBeforeBatch = await preparationEventCount(book.catalogueId);
   const firstBatch = await f.native.call('POST', `${selectedStage}:appendSelectionBatch`, firstBatchBody, {
     key: firstBatchKey,
   });
   expect(firstBatch.status).toBe(200);
   expect(firstBatch.value.batch).toMatchObject({ itemCount: 2, firstInputPosition: '0' });
+  const eventsAfterBatch = await preparationEventCount(book.catalogueId);
+  expect(eventsAfterBatch).toBe(eventsBeforeBatch + 1);
+
+  const replayedBatchWithFreshReceipt = await f.native.call(
+    'POST',
+    `${selectedStage}:appendSelectionBatch`,
+    firstBatchBody,
+    { key: crypto.randomUUID() },
+  );
+  expect(replayedBatchWithFreshReceipt.status).toBe(200);
+  expect(replayedBatchWithFreshReceipt.value.batch.replayed).toBe(true);
+  expect(replayedBatchWithFreshReceipt.value.stage.inputCount).toBe(firstBatch.value.stage.inputCount);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsAfterBatch);
+
+  const mismatchedBatchReplay = await f.native.call(
+    'POST',
+    `${selectedStage}:appendSelectionBatch`,
+    { ...firstBatchBody, occurrenceIds: [book.rootPart] },
+    { key: crypto.randomUUID() },
+  );
+  expect(mismatchedBatchReplay.status).toBe(412);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsAfterBatch);
+
   const secondBatch = await f.native.call('POST', `${selectedStage}:appendSelectionBatch`, {
     batchId: book.newId(),
     occurrenceIds: [book.nestedChapter],
@@ -249,11 +275,34 @@ test('mounted whole and nested selection builds complete private candidates with
     candidateReady: true,
   });
 
+  const eventsBeforeExpiryReplay = await preparationEventCount(book.catalogueId);
+  await f.native.pool.query(
+    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
+     WHERE catalogue_id=$1 AND stage_id=$2`,
+    [book.catalogueId, selectedStart.value.stageId],
+  );
+  const expiryReplay = await f.native.call('POST', `${selectedStage}:appendSelectionBatch`, firstBatchBody, {
+    key: crypto.randomUUID(),
+  });
+  expect(expiryReplay.status).toBe(200);
+  expect(expiryReplay.value.stage.state).toBe('expired');
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeExpiryReplay + 1);
+
+  const retainedExpiryReplay = await f.native.call(
+    'POST',
+    `${selectedStage}:appendSelectionBatch`,
+    firstBatchBody,
+    { key: crypto.randomUUID() },
+  );
+  expect(retainedExpiryReplay.value.stage.state).toBe('expired');
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeExpiryReplay + 1);
+
   const replayedBatch = await f.native.call('POST', `${selectedStage}:appendSelectionBatch`, firstBatchBody, {
     key: firstBatchKey,
   });
   expect(replayedBatch.status).toBe(200);
   expect(replayedBatch.value).toEqual(firstBatch.value);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeExpiryReplay + 1);
   expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
 });
 

@@ -257,12 +257,15 @@ export function appendHostedPublicationPreparationBatch(
         ...locator(catalogueId, stageId),
         ...input,
       });
-      const stage = await readHostedPublicationStagingProgress(
+      const stageRead = await readHostedPublicationStagingProgressWithExpiry(
         tx as AccessClient,
         actor,
         locator(catalogueId, stageId),
       );
-      return progress(catalogueId, stage, null, batch);
+      return {
+        value: progress(catalogueId, stageRead.progress, null, batch),
+        changed: !batch.replayed || stageRead.expired,
+      };
     },
     { stageId, allowMissing: false },
   );

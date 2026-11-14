@@ -400,6 +400,9 @@ Decision: a fresh progress read is a no-effect command when its locked stage obs
 observation persists the retained stage's expiry transition, the existing preparation-changed event records it once;
 an exact authorized receipt replay keeps the original reply without emitting another event.
 
+Decision: selection append emits preparation-changed when it adds a retained batch or its locked progress read persists
+expiry; an exact retained batch replay under a fresh authorized command receipt adds no input and emits no change event.
+
 Decision: fresh activation start, authority advancement and candidate selection require the exact candidate's stage
 to remain sealed and its `expires_at` to be strictly later than native command time. The indexed candidate/stage
 point read compares timestamps in PostgreSQL inside the owning command transaction, preserving timestamp precision
