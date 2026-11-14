@@ -39,6 +39,7 @@ import {
   type ClassificationAssociationResolution,
 } from './source-classification-semantic.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
+import { currentReadSnapshot } from '../semantic/read.ts';
 
 import {
   classificationEvidence,
@@ -118,17 +119,43 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       group.set(tupleKey(value), value);
       groups.set(partition, group);
     }
+    const batches = [...groups];
+    const rows: (readonly SourceFence[])[] = [];
+    let next = 0;
+    let failed = false;
+    let failure: unknown;
+    async function readGroups() {
+      while (!failed) {
+        const index = next++;
+        const batch = batches[index];
+        if (!batch) return;
+        const [partition, group] = batch;
+        try {
+          rows[index] = await withReadTransaction(
+            config.pool,
+            async (client) => {
+              await partitionReadClient(client, partition);
+              return readFences(client, [...group.values()]);
+            },
+            deadline,
+          );
+        } catch (error) {
+          if (!failed) {
+            failed = true;
+            failure = error;
+          }
+          return;
+        }
+      }
+    }
+    // An inherited snapshot has one client whose partition binding must stay serial.
+    const concurrency = currentReadSnapshot(config.pool) ? 1 : 2;
+    // Workers catch failures so all started transactions settle before the first error is rethrown.
+    await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, () => readGroups()));
+    if (failed) throw failure;
     const result = new Map<string, SourceFence>();
-    for (const [partition, group] of groups) {
-      const rows = await withReadTransaction(
-        config.pool,
-        async (client) => {
-          await partitionReadClient(client, partition);
-          return readFences(client, [...group.values()]);
-        },
-        deadline,
-      );
-      for (const fence of rows) result.set(tupleKey(fence), fence);
+    for (const batch of rows) {
+      for (const fence of batch) result.set(tupleKey(fence), fence);
     }
     return result;
   }
