@@ -292,9 +292,13 @@ export const CrossPageComparisonReturn: Story = {
     await expect(canvas.getByRole('button', { name: m.knowledge_history_compare() })).toHaveFocus();
     await expect(canvas.getByRole('radio', { name: `${m.knowledge_history_right()}: ${revisionA}` })).toBeChecked();
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_previous() }));
-    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` })).toBeChecked();
+    await expect(
+      await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` }),
+    ).toBeChecked();
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_more() }));
-    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_right()}: ${revisionA}` })).toBeChecked();
+    await expect(
+      await canvas.findByRole('radio', { name: `${m.knowledge_history_right()}: ${revisionA}` }),
+    ).toBeChecked();
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_return() }));
     await expect(title).toHaveValue('My retained cross-page draft');
   },
@@ -307,9 +311,13 @@ export const FailedExactRetry: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_more() }));
     await expect(await canvas.findByText(m.knowledge_history_unavailable())).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_private_retry() }));
-    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionA}` })).toBeVisible();
+    await expect(
+      await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionA}` }),
+    ).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_previous() }));
-    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` })).toBeVisible();
+    await expect(
+      await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` }),
+    ).toBeVisible();
   },
 };
 export const WindowEdge: Story = {
