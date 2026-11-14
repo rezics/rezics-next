@@ -22,6 +22,25 @@ Target 20,000 landed product lines per hour, aiming for 40,000, alongside accept
 additions under `apps/`, `services/` and `packages/` excluding tests, stories, fixtures, recordings, JSON, snapshots
 and generated files, including emitted declarations. Never pad output or subtract deletions.
 
+During the Web reconstruction campaign, the hourly delivery target is at least 50,000 landed product lines,
+alongside useful, published frontend outcomes. This is a target, not a claim about measured output. Apply the
+same exclusions above; duplicated implementations, unnecessary abstractions, formatting churn and artificial
+expansion do not qualify. Prefer removing bad code when that produces the better product, even when it lowers
+the measured additions. Report the actual shortfall instead of weakening quality or changing the denominator.
+
+The Web manager owns assignment, priority, independent refill, actual worker starts and integration follow-through
+without waiting for another maintainer prompt. Use up to the authorized 32 concurrent Web workers when independent
+writable outcomes and shared host capacity support them. Confirm execution from process identity and source
+checkpoints; queued tasks and a `running` label alone are not evidence of productive work. Resolve an idle queue,
+repeated setup failure or landing bottleneck in its owning module rather than repeating the same failed attempt.
+
+Every hourly delivery assessment pairs the product-line measure with changed routes, integrated revisions and
+published visual results. A six-hour reconstruction interval without useful visible delivery is a delivery failure
+requiring immediate replanning. Storybook and verification assist reconstruction; during the authorized source-only
+wave, do not insert frontend tests or typing as a prerequisite for writing or review publication. Keep the single
+publication program moving under the [review cadence](storybook.md#review-publication-cadence), preserving native
+authorization, money semantics and the separate release acceptance obligations.
+
 Size one coherent outcome for one worker, typically 1,000–2,000 product lines in about an hour. This is an
 estimate, not a quota. Split only at a real dependency; complete independent parts and hold only their receiving
 seam. Follow [source batches](delivery.md#source-batches) for progress and help. Report reverts, findings and

@@ -12,6 +12,12 @@ hierarchy, responsive layout, navigation and useful product interactions. The ma
 assigns complete independent source outcomes and uses the authorized worker capacity to deliver them. Storybook
 fixtures and tests are tools for that work, not substitutes for improving the application.
 
+The manager acts autonomously on assignment, starts, coherent follow-on work and delivery bottlenecks. Use the
+authorized capacity for independent outcomes rather than waiting for repeated instructions. The current campaign's
+32-worker ceiling, hourly 50,000 landed-product-line target and quality exclusions are governed by
+[delivery efficiency](../development/efficiency.md#output-and-flow). Record actual delivery honestly; line volume
+cannot replace useful design, working interactions or published visual results.
+
 Review delivery means published, visually inspectable and manually usable pages with coherent data and working
 routes. Publish source increments promptly under the [review cadence](../development/storybook.md#review-publication-cadence).
 During the authorized code-only window, test work must not consume the implementation queue or delay review
