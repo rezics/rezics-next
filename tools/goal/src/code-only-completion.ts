@@ -1,10 +1,18 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { openDb } from './db.ts';
-import { SqliteManagerInbox } from './inbox.ts';
-import { readManagerOwnership } from './manager-ownership.ts';
-import { loadSettings } from './settings.ts';
+import { pathToFileURL } from 'node:url';
+
+// A pinned callback may live in a sparse source worktree before publication.
+// Native state and its services still belong to the configured Main runtime.
+const nativeSource = process.env.GOAL_MAIN_CHECKOUT
+  ? resolve(process.env.GOAL_MAIN_CHECKOUT, 'tools/goal/src') : import.meta.dir;
+const [{ openDb }, { SqliteManagerInbox }, { readManagerOwnership }, { loadSettings }] = await Promise.all([
+  import(pathToFileURL(join(nativeSource, 'db.ts')).href) as Promise<typeof import('./db.ts')>,
+  import(pathToFileURL(join(nativeSource, 'inbox.ts')).href) as Promise<typeof import('./inbox.ts')>,
+  import(pathToFileURL(join(nativeSource, 'manager-ownership.ts')).href) as Promise<typeof import('./manager-ownership.ts')>,
+  import(pathToFileURL(join(nativeSource, 'settings.ts')).href) as Promise<typeof import('./settings.ts')>,
+]);
 
 type CodeOnlyCompletion = {
   id: string;
