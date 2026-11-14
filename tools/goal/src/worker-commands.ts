@@ -50,6 +50,33 @@ export type WorkerCommandOptions = {
 
 export const READ_ONLY_WORKER_COMMANDS = new Set(['status', 'attempts', 'report']);
 
+type PendingRetryStatus =
+  | NonNullable<ReturnType<typeof retryWait>>
+  | { reason: 'environment-incident'; incidentId: string; nextProbeAt: string; isProbe: boolean }
+  | {
+      reason: 'compiler-custody';
+      ownerAction: 'wait-for-retained-check-custody';
+      taskOwner: string;
+      controlPlaneOwner: string;
+    }
+  | { reason: 'start' };
+
+function isSourceAmendmentCompilerHoldEvent(event: { kind: string; body: string }): boolean {
+  if (event.kind !== 'typing-retry-unreconciled') return false;
+  try {
+    const body: unknown = JSON.parse(event.body);
+    return (
+      typeof body === 'object' &&
+      body !== null &&
+      !Array.isArray(body) &&
+      'action' in body &&
+      body.action === 'source-amendment-compiler-hold'
+    );
+  } catch {
+    return false;
+  }
+}
+
 const taskStates = new Set<TaskState>([
   'ready',
   'held',
@@ -206,6 +233,15 @@ export async function runWorkerCommand(
         const ref = { taskId: task.id, attempt: task.currentAttempt };
         references.set(task.id, { attempt: store.attempt(ref), intent: store.retryIntent(ref) });
       }
+      const managers = readManagerOperationalStatus(store.db);
+      const controlPlaneOwners = managers.filter(
+        (manager) =>
+          manager.status === 'running' &&
+          manager.kind !== 'resident-supermanager' &&
+          manager.goals.includes('control-plane'),
+      );
+      const controlPlaneOwner =
+        controlPlaneOwners.length === 1 ? controlPlaneOwners[0]!.id : settings.integration.supermanager;
       const incidentProjection = projectToolIncidentStatus(store, cohort);
       const show = (task: Task) => {
         const current = references.get(task.id);
@@ -214,7 +250,7 @@ export async function runWorkerCommand(
         const incident = current ? incidentProjection.forAttempt(task, current.attempt) : null;
         const dependencies =
           task.state === 'held' || intent?.status === 'pending' ? heldDependencies(task, tasks, store) : [];
-        const wait = incident
+        const wait: PendingRetryStatus | undefined = incident
           ? {
               reason: 'environment-incident',
               incidentId: incident.id,
@@ -222,16 +258,32 @@ export async function runWorkerCommand(
               isProbe: incident.probe.taskId === task.id && incident.probe.attempt === task.currentAttempt,
             }
           : intent?.status === 'pending'
-            ? (retryWait(
-                intent,
-                { brief: { ...task.brief, after: dependencies.map(({ id }) => id) } },
-                (id) => (dependencies.find((dependency) => dependency.id === id)?.ready ? 'merged' : undefined),
-                Date.now(),
-                settings.stateDirectory,
-                settings.policy,
-              ) ?? {
-                reason: 'start',
-              })
+            ? (() => {
+                const wait = retryWait(
+                  intent,
+                  { brief: { ...task.brief, after: dependencies.map(({ id }) => id) } },
+                  (id) => (dependencies.find((dependency) => dependency.id === id)?.ready ? 'merged' : undefined),
+                  Date.now(),
+                  settings.stateDirectory,
+                  settings.policy,
+                );
+                if (wait) return wait;
+                const compilerCustodyHold =
+                  task.state === 'ready' &&
+                  current !== undefined &&
+                  current.attempt.state === 'exited' &&
+                  store
+                    .events(task.id, current.attempt.attempt)
+                    .some(isSourceAmendmentCompilerHoldEvent);
+                return compilerCustodyHold
+                  ? {
+                      reason: 'compiler-custody',
+                      ownerAction: 'wait-for-retained-check-custody',
+                      taskOwner: task.brief.manager,
+                      controlPlaneOwner,
+                    }
+                  : { reason: 'start' };
+              })()
             : undefined;
         const liveAttempt = current?.attempt.state === 'running' || current?.attempt.state === 'waiting';
         const state = {
@@ -304,7 +356,6 @@ export async function runWorkerCommand(
       const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs, live, parked).map((pool) =>
         pool.maxConcurrent === undefined ? { ...pool, waiting: allowanceWaiting[pool.name] ?? 0 } : pool,
       );
-      const managers = readManagerOperationalStatus(store.db);
       print(
         JSON.stringify(
           arg
