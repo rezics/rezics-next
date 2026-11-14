@@ -9,6 +9,7 @@ export function PostReadingFrame({
   byline,
   actions,
   context,
+  details,
   children,
 }: {
   anchorId: string;
@@ -16,6 +17,7 @@ export function PostReadingFrame({
   byline: ReactNode;
   actions: ReactNode;
   context?: ReactNode;
+  details?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -29,14 +31,18 @@ export function PostReadingFrame({
       <ContentItemFrame
         as="article"
         data-slot="content-item-frame"
-        className="min-w-0 rounded-xl px-4 py-5 sm:px-6 sm:py-6"
+        className="min-w-0 rounded-xl border border-border/60 bg-card px-4 py-5 sm:px-6 sm:py-6"
       >
-        <header className="post-reading-header mb-5 flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-2">
-          {byline}
-          <div className="min-w-0 max-w-full">{actions}</div>
-        </header>
+        <header className="post-reading-header mb-5 min-w-0">{byline}</header>
         {context}
         {children}
+        <div
+          data-slot="post-conversation-actions"
+          className="mt-5 min-w-0 max-w-full border-t border-border/60 pt-3 [&_[data-slot=feed-action-bar]]:justify-start"
+        >
+          {actions}
+        </div>
+        {details}
       </ContentItemFrame>
     </li>
   );

@@ -473,6 +473,7 @@ export function ThreadReading({
               <ConversationBranches
                 model={branches}
                 thread={{ id: thread.id, title: displayTitle }}
+                openingPostId={thread.firstPost.id}
                 scope={branchScope}
                 current={pageCurrent}
                 boardReturn={boardReturn}
