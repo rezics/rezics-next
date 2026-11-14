@@ -16,7 +16,7 @@ import {
   type ProofReservation,
 } from './verification.ts';
 import { acceptanceRequirements, devProductBrief } from './briefs.ts';
-import { workerCheckHostBudgetLimit } from './worker-check-budget.ts';
+import { isMoneyPath, workerCheckHostBudgetLimit } from './worker-check-budget.ts';
 import type { AttemptRef } from './contracts.ts';
 import type {
   AcceptanceRequirement,
@@ -30,6 +30,7 @@ import type {
 
 export const DEFAULT_PROMPT_DIRECTORY = join(import.meta.dir, '../prompts');
 export const CONDITION_IDS = [
+  'source-only',
   'minimal-verification',
   'proof-run',
   'registered-proof',
@@ -60,6 +61,7 @@ const OWNED_ONCE =
   'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.';
 const SCARCE_ONCE = 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
 const CHECK_CONDITIONS = new Set<ConditionId>([
+  'source-only',
   'minimal-verification',
   'proof-run',
   'registered-proof',
@@ -192,6 +194,16 @@ function namedWorkerCheck(contractText: string): string | undefined {
   return path.startsWith('/') && path.endsWith('/scripts/worker-check.ts') ? path : undefined;
 }
 
+/** An explicit source window is selected before budget-driven minimal verification. */
+export function sourceOnlyVerification(stateDirectory: string | undefined): boolean {
+  if (!stateDirectory) return false;
+  try {
+    return readFileSync(join(stateDirectory, 'verification-mode'), 'utf8').trim() === 'source-only';
+  } catch {
+    return false;
+  }
+}
+
 export function minimalVerification(stateDirectory: string | undefined): boolean {
   if (!stateDirectory) return false;
   try {
@@ -253,6 +265,7 @@ export function selectConditions(input: {
   stateDirectory?: string | undefined;
   proofRun?: ProofReservation | undefined;
   authorization?: ProofAuthorization | undefined;
+  policy?: ControlPolicy | undefined;
 }): ConditionId[] {
   const { task } = input;
   const selected: ConditionId[] = [];
@@ -262,6 +275,16 @@ export function selectConditions(input: {
   const authorization = input.authorization ?? task.proofAuthorization;
   if (proofProtocolAuthorized(brief, proofRun)) selected.push('proof-run');
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
+  else if (
+    sourceOnlyVerification(input.stateDirectory) &&
+    devProductBrief(brief) &&
+    brief.kind !== 'research' &&
+    brief.goal !== 'control-plane' &&
+    !brief.acceptance?.requires?.length &&
+    !(brief.paths ?? []).some(isMoneyPath) &&
+    !branchChangedPaths(task, input.policy ?? defaultPolicy).some(isMoneyPath)
+  )
+    selected.push('source-only');
   // A governed attempt must see the same typing-only boundary that its check wrapper enforces. Exempt briefs
   // keep their original acceptance; the local minimal setting still applies to otherwise unqualified work.
   else if (
@@ -275,11 +298,11 @@ export function selectConditions(input: {
     else selected.push(runner ? 'wrapper' : 'no-wrapper');
   }
   if (task.workspace) selected.push('shared-workspace');
-  if (input.evidence) selected.push('retry');
+  if (input.evidence && !selected.includes('source-only')) selected.push('retry');
   if (input.resolutionFiles?.length) selected.push('rebase');
-  if (storybookServers(task.worktree, brief).length) selected.push('storybook');
+  if (!selected.includes('source-only') && storybookServers(task.worktree, brief).length) selected.push('storybook');
   if (brief.kind === 'bulk-text') selected.push('bulk-text');
-  if (continuesItself(task)) selected.push('continuation');
+  if (continuesItself(task) && !selected.includes('source-only')) selected.push('continuation');
   return selected;
 }
 
@@ -297,7 +320,7 @@ function deferredSentence(items: AcceptanceRequirement[]): string {
   return `${names} ${items.length === 1 ? 'is' : 'are'} deferred to the verifier.`;
 }
 
-function promptView(input: WorkerPromptInput, deferOrdinaryTests = false): PromptView {
+function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, sourceOnly = false): PromptView {
   const policy = input.policy ?? defaultPolicy;
   const { task, mainCheckout } = input;
   const brief = task.brief;
@@ -356,9 +379,10 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false): Promp
         ? ', record it in one line in your summary, and continue.'
         : 'Record it in one summary line and continue.',
     toolFailureRetries: RETRY_WORDS[policy.guidance.toolFailureRetries] ?? String(policy.guidance.toolFailureRetries),
-    devInfrastructure: product
-      ? "On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge."
-      : '',
+    devInfrastructure:
+      product && !sourceOnly
+        ? "On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge."
+        : '',
     wrapperFailureRule,
     minimalInfrastructureException: product
       ? ', except when the wrapper reports that the only missing passes are shared transport or infrastructure failures after its own rerun, as described by the dev product source-success rule above'
@@ -374,6 +398,12 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false): Promp
       ? ''
       : 'Build the whole outcome in this attempt. Only a part that needs undelivered work from elsewhere may remain: commit a coherent part and return success with that part listed as follow-up.',
     continuationBriefPath: `${CONTINUATION_DIRECTORY}/<short-name>.md`,
+    checkFailureFollowThrough: sourceOnly
+      ? 'Repair source defects established by existing results. Keep deferred checks unverified.'
+      : 'Fix tests that passed on base but fail now.',
+    sourceOnlyContinuation: continuesItself(task)
+      ? `Complete owned source in this attempt. Only undelivered work from another Goal may remain: checkpoint the coherent source and write that remainder at ${CONTINUATION_DIRECTORY}/<short-name>.md (goal ${brief.goal}, manager ${manager}); name it in the result.`
+      : '',
     waitSeconds: String(policy.guidance.longCommandWaitMs / 1000),
     waitMs: String(policy.guidance.longCommandWaitMs),
     checkOnce: owned ? OWNED_ONCE : SCARCE_ONCE,
@@ -433,7 +463,8 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
   const directory = input.promptDirectory ?? DEFAULT_PROMPT_DIRECTORY;
   const { task, mainCheckout } = input;
   const selected = selectConditions(input);
-  const view = promptView(input, selected.includes('minimal-verification'));
+  const sourceOnly = selected.includes('source-only');
+  const view = promptView(input, sourceOnly || selected.includes('minimal-verification'), sourceOnly);
   const research = task.brief.kind === 'research';
   const verification = task.brief.kind === 'verification';
   const roleName = research ? 'research.md' : 'worker.md';
@@ -569,18 +600,15 @@ export function renderCheckProtocol(
     proofRun,
     proofAuthorization: authorization,
   } as Task;
-  const selected = selectConditions({ task, stateDirectory, proofRun, authorization });
+  const selected = selectConditions({ task, stateDirectory, proofRun, authorization, policy });
   const check = selected.find((id) => CHECK_CONDITIONS.has(id));
   if (!check) return '';
-  const view = promptView({
-    task,
-    mainCheckout: worktree,
-    stateDirectory,
-    policy,
-    promptDirectory,
-    proofRun,
-    authorization,
-  });
+  const sourceOnly = selected.includes('source-only');
+  const view = promptView(
+    { task, mainCheckout: worktree, stateDirectory, policy, promptDirectory, proofRun, authorization },
+    sourceOnly || selected.includes('minimal-verification'),
+    sourceOnly,
+  );
   return loadCondition(promptDirectory, check, view, policy).text;
 }
 
