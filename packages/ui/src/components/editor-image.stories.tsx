@@ -143,6 +143,38 @@ export const AltText: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
     await canvas.findByRole('img', { name: 'A ridge above the clouds' });
     await waitFor(() => expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds'));
+    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+
+    await userEvent.keyboard('{Enter}');
+    const reopened = canvas.getByRole('textbox', { name: 'Alt text' });
+    expect(reopened).toHaveValue('A ridge above the clouds');
+    await userEvent.clear(reopened);
+    await userEvent.type(reopened, 'A ridge above the clouds at dawn');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn'));
+    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+
+    await userEvent.keyboard('{Enter}');
+    const cancelDraft = canvas.getByRole('textbox', { name: 'Alt text' });
+    expect(cancelDraft).toHaveValue('A ridge above the clouds at dawn');
+    await userEvent.clear(cancelDraft);
+    await userEvent.type(cancelDraft, 'Discard this draft');
+    await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+    expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
+
+    await userEvent.keyboard('{Enter}');
+    const escapeDraft = canvas.getByRole('textbox', { name: 'Alt text' });
+    expect(escapeDraft).toHaveValue('A ridge above the clouds at dawn');
+    await userEvent.clear(escapeDraft);
+    await userEvent.type(escapeDraft, 'Discard with Escape');
+    await userEvent.keyboard('{Escape}');
+    expect(canvas.getByRole('button', { name: 'Edit alt text' })).toHaveFocus();
+    expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
+
+    await userEvent.keyboard('{Enter}');
+    await userEvent.click(canvas.getByRole('button', { name: 'Remove editor' }));
+    expect(canvas.getByRole('button', { name: 'Remove editor' })).toHaveFocus();
     expect(altText.calls).toHaveLength(1);
   },
 };
