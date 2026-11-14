@@ -1,3 +1,5 @@
+import { KnowledgeDetails, KnowledgeValue } from './workspace';
+import { BookOpen, FileText } from 'lucide-react';
 import { KnowledgeOrganizationOwner } from './organization-page';
 import type { OrganizationOperations } from './organization-read';
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -38,25 +40,32 @@ function NavigationFrame({
   locale,
   children,
   outline,
+  notebookId,
 }: {
   locale: string;
   children: React.ReactNode;
   outline: boolean;
+  notebookId?: string | undefined;
 }) {
   const options = { locale: locale as never };
   return (
     <main
-      className="mx-auto w-full min-w-0 max-w-3xl space-y-8 px-4 py-6 text-foreground selection:bg-primary/20 [overflow-wrap:anywhere] sm:px-6 sm:py-8"
+      className="mx-auto w-full min-w-0 max-w-6xl space-y-8 px-4 py-6 text-foreground selection:bg-primary/20 [overflow-wrap:anywhere] sm:px-6 sm:py-8"
       data-private-knowledge-navigation
     >
       <header className="min-w-0 space-y-3">
         <PageHeading>
           {outline ? m.knowledge_navigation_outline({}, options) : m.knowledge_navigation_heading({}, options)}
         </PageHeading>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-          {m.knowledge_navigation_intro({}, options)}
-        </p>
+        <p className="text-sm text-muted-foreground">{m.knowledge_workspace_only_you({}, options)}</p>
       </header>
+      {notebookId && (
+        <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+          <dl>
+            <KnowledgeValue label={m.knowledge_private_notebook_id({}, options)} value={notebookId} exact />
+          </dl>
+        </KnowledgeDetails>
+      )}
       {children}
     </main>
   );
@@ -71,6 +80,8 @@ export function KnowledgeNavigationEntry({
   operations,
   returning,
   retryAccess,
+  embedded = false,
+  selectedDocumentId,
 }: {
   address: KnowledgeNavigationAddress;
   locale: string;
@@ -79,50 +90,62 @@ export function KnowledgeNavigationEntry({
   operations: KnowledgeNavigationOperations;
   returning?: KnowledgeNavigationReturn | undefined;
   retryAccess?: () => void;
+  embedded?: boolean;
+  selectedDocumentId?: string | undefined;
 }) {
   const options = { locale: locale as never };
   const owner = JSON.stringify([address, locale, binding, access, sourceId(operations)]);
-  return (
-    <NavigationFrame locale={locale} outline={address.kind === 'outline'}>
-      {access === 'available' ? (
-        <KnowledgeNavigationOwner
-          key={owner}
-          address={address}
-          locale={locale}
-          binding={binding}
-          operations={operations}
-          returning={returning}
-        />
-      ) : (
-        <div className="space-y-4" role={access === 'denied' || access === 'unavailable' ? 'alert' : 'status'}>
-          <p>
-            {access === 'signed-out'
-              ? m.knowledge_navigation_signed_out({}, options)
-              : access === 'denied'
-                ? m.knowledge_navigation_denied({}, options)
-                : access === 'unavailable'
-                  ? m.knowledge_navigation_unavailable({}, options)
-                  : m.knowledge_navigation_preparing({}, options)}
-          </p>
-          {access === 'signed-out' && (
-            <a
-              className={knowledgeNavigationLink}
-              href={sessionRecoverySignInHref(
-                address.kind === 'owned'
-                  ? `/${locale}/knowledge`
-                  : `/${locale}/knowledge/notebooks/${address.notebookId}`,
-              )}
-            >
-              {m.knowledge_private_sign_in({}, options)}
-            </a>
-          )}
-          {access === 'unavailable' && retryAccess && (
-            <Button className={knowledgeNavigationControl} onClick={retryAccess}>
-              {m.knowledge_navigation_retry({}, options)}
-            </Button>
-          )}
-        </div>
-      )}
+  const content =
+    access === 'available' ? (
+      <KnowledgeNavigationOwner
+        key={owner}
+        address={address}
+        locale={locale}
+        binding={binding}
+        operations={operations}
+        returning={returning}
+        selectedDocumentId={selectedDocumentId}
+        embedded={embedded}
+      />
+    ) : (
+      <div className="space-y-4" role={access === 'denied' || access === 'unavailable' ? 'alert' : 'status'}>
+        <p>
+          {access === 'signed-out'
+            ? m.knowledge_navigation_signed_out({}, options)
+            : access === 'denied'
+              ? m.knowledge_navigation_denied({}, options)
+              : access === 'unavailable'
+                ? m.knowledge_navigation_unavailable({}, options)
+                : m.knowledge_navigation_preparing({}, options)}
+        </p>
+        {access === 'signed-out' && (
+          <a
+            className={knowledgeNavigationLink}
+            href={sessionRecoverySignInHref(
+              address.kind === 'owned'
+                ? `/${locale}/knowledge`
+                : `/${locale}/knowledge/notebooks/${address.notebookId}`,
+            )}
+          >
+            {m.knowledge_private_sign_in({}, options)}
+          </a>
+        )}
+        {access === 'unavailable' && retryAccess && (
+          <Button className={knowledgeNavigationControl} onClick={retryAccess}>
+            {m.knowledge_navigation_retry({}, options)}
+          </Button>
+        )}
+      </div>
+    );
+  return embedded ? (
+    content
+  ) : (
+    <NavigationFrame
+      locale={locale}
+      outline={address.kind === 'outline'}
+      notebookId={address.kind === 'outline' ? address.notebookId : undefined}
+    >
+      {content}
     </NavigationFrame>
   );
 }
@@ -133,7 +156,11 @@ function KnowledgeNavigationOwner({
   binding,
   operations,
   returning,
+  selectedDocumentId,
+  embedded,
 }: {
+  selectedDocumentId?: string | undefined;
+  embedded?: boolean | undefined;
   address: KnowledgeNavigationAddress;
   locale: string;
   binding: string;
@@ -184,7 +211,16 @@ function KnowledgeNavigationOwner({
       />
     );
   if (!reading) return <p role="status">{m.knowledge_navigation_preparing({}, { locale: locale as never })}</p>;
-  return <KnowledgeNavigationRows reading={reading} locale={locale} binding={binding} returning={returning} />;
+  return (
+    <KnowledgeNavigationRows
+      reading={reading}
+      locale={locale}
+      binding={binding}
+      returning={returning}
+      selectedDocumentId={selectedDocumentId}
+      embedded={embedded}
+    />
+  );
 }
 
 function KnowledgeNavigationRows({
@@ -192,7 +228,11 @@ function KnowledgeNavigationRows({
   locale,
   binding,
   returning,
+  selectedDocumentId,
+  embedded,
 }: {
+  selectedDocumentId?: string | undefined;
+  embedded?: boolean | undefined;
   reading: KnowledgeNavigationReading;
   locale: string;
   binding: string;
@@ -202,11 +242,13 @@ function KnowledgeNavigationRows({
   const options = { locale: locale as never };
   const focus = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
-    if (snapshot.state !== 'preparing' && snapshot.state !== 'retired') focus.current?.focus({ preventScroll: true });
-  }, [snapshot]);
+    if (!embedded && snapshot.state !== 'preparing' && snapshot.state !== 'retired')
+      focus.current?.focus({ preventScroll: true });
+  }, [snapshot, embedded]);
   const actions = reading.actions(snapshot);
   const { page, frontier } = snapshot;
   const outline = frontier.request.kind === 'outline';
+  const RowHeading = embedded ? 'h3' : 'h2';
   const remember = (documentId: string) => {
     if (snapshot !== reading.getSnapshot() || page?.kind !== 'outline') return;
     returning?.save(binding, { notebookId: page.notebookId, documentId }, frontier);
@@ -224,9 +266,11 @@ function KnowledgeNavigationRows({
           aria-label={m.knowledge_navigation_breadcrumbs({}, options)}
           className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1"
         >
-          <Link to="/knowledge" preload={false} className={knowledgeNavigationLink}>
-            {m.knowledge_navigation_heading({}, options)}
-          </Link>
+          {!embedded && (
+            <Link to="/knowledge" preload={false} className={knowledgeNavigationLink}>
+              {m.knowledge_navigation_heading({}, options)}
+            </Link>
+          )}
           <Button
             variant="ghost"
             className={knowledgeNavigationControl}
@@ -265,48 +309,59 @@ function KnowledgeNavigationRows({
           <ul className="min-w-0 divide-y divide-border">
             {page.kind === 'owned'
               ? page.notebooks.map((row) => (
-                  <li
-                    key={row.notebookId}
-                    className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-4"
-                  >
-                    <h2 className="min-w-0 basis-full text-base font-medium sm:basis-auto sm:flex-1">{row.title}</h2>
-                    <Link
-                      to="/knowledge/notebooks/$notebookId"
-                      params={{ notebookId: row.notebookId }}
-                      preload={false}
-                      className={knowledgeNavigationLink}
-                    >
-                      {m.knowledge_navigation_open_notebook({}, options)}
-                      <span className="sr-only">{`: ${row.title}`}</span>
-                    </Link>
+                  <li key={row.notebookId} className="flex min-w-0 items-start gap-4 py-5 sm:gap-6">
+                    <BookOpen aria-hidden="true" className="mt-3 size-5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <h2 aria-label={row.title} className="text-lg font-semibold leading-snug">
+                        <Link
+                          to="/knowledge/notebooks/$notebookId"
+                          params={{ notebookId: row.notebookId }}
+                          preload={false}
+                          className={knowledgeNavigationLink}
+                        >
+                          <span className="sr-only">{m.knowledge_navigation_open_notebook({}, options)}: </span>
+                          {row.title}
+                        </Link>
+                      </h2>
+                    </div>
                   </li>
                 ))
               : page.placements.map((row) => (
-                  <li key={row.placementId} className="min-w-0 space-y-2 py-4">
-                    <h2 className="text-base font-medium">{row.title}</h2>
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
-                      <Link
-                        to="/knowledge/notebooks/$notebookId/documents/$documentId"
-                        params={{ notebookId: page.notebookId, documentId: row.documentId }}
-                        preload={false}
-                        className={knowledgeNavigationLink}
-                        onClick={(event) => {
-                          if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
-                            remember(row.documentId);
-                        }}
-                      >
-                        {m.knowledge_navigation_open_document({}, options)}
-                        <span className="sr-only">{`: ${row.title}`}</span>
-                      </Link>
-                      <Button
-                        variant="outline"
-                        className={knowledgeNavigationControl}
-                        disabled={frontier.breadcrumbs.length >= 32}
-                        onClick={() => actions.children(row)}
-                      >
-                        {m.knowledge_navigation_children({}, options)}
-                        <span className="sr-only">{`: ${row.title}`}</span>
-                      </Button>
+                  <li
+                    key={row.placementId}
+                    className={`min-w-0 py-4 ${row.documentId === selectedDocumentId ? 'border-l-2 border-l-primary pl-3' : ''}`}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      {!embedded && (
+                        <FileText aria-hidden="true" className="mt-3 size-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <RowHeading className="text-base font-medium leading-snug">
+                          <Link
+                            to="/knowledge/notebooks/$notebookId/documents/$documentId"
+                            params={{ notebookId: page.notebookId, documentId: row.documentId }}
+                            preload={false}
+                            className={knowledgeNavigationLink}
+                            aria-current={row.documentId === selectedDocumentId ? 'page' : undefined}
+                            onClick={(event) => {
+                              if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
+                                remember(row.documentId);
+                            }}
+                          >
+                            <span className="sr-only">{m.knowledge_navigation_open_document({}, options)}: </span>
+                            {row.title}
+                          </Link>
+                        </RowHeading>
+                        <Button
+                          variant="ghost"
+                          className={knowledgeNavigationControl}
+                          disabled={frontier.breadcrumbs.length >= 32}
+                          onClick={() => actions.children(row)}
+                        >
+                          {m.knowledge_navigation_children({}, options)}
+                          <span className="sr-only">: {row.title}</span>
+                        </Button>
+                      </div>
                     </div>
                   </li>
                 ))}

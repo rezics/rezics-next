@@ -19935,7 +19935,7 @@ export declare function revisionDisclosureRoutes(app: ReturnType<typeof hostedDr
                         body: {
                             expectedRevisionId: string;
                             occurrenceId: string;
-                            parentId: string;
+                            parentId: string | null;
                             beforeOccurrenceId: string | null;
                         };
                         params: {

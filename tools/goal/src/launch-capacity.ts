@@ -28,6 +28,7 @@ import {
   type PressureBrake,
   type PressureSample,
   type WorkerScopeIncarnation,
+  type WorkerScopeReservation,
 } from './host-pressure.ts';
 
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgentSlots?: number };
@@ -78,7 +79,7 @@ type WorkerScopes = {
   terminal: Set<string>;
   writers: Set<string>;
   waitCauses: string[];
-  active?: Map<string, WorkerScopeIncarnation>;
+  active?: Map<string, WorkerScopeReservation>;
 };
 type RetiredCheckProof = {
   id: string;
@@ -312,11 +313,19 @@ function workerScopes(store: HostCapacityStore, options: WorkerScopeOptions = {}
     return result;
   }
   result.active = new Map();
-  let rows: { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string }[];
+  let rows: {
+    task_id: string;
+    current_attempt: number;
+    attempt_state: string;
+    body: string;
+    worktree: string;
+    goal: string | null;
+  }[];
   try {
     rows = store.db
       .query(`
-    SELECT c.task_id, c.current_attempt, c.attempt_state, a.body, json_extract(t.body, '$.worktree') AS worktree
+    SELECT c.task_id, c.current_attempt, c.attempt_state, a.body, json_extract(t.body, '$.worktree') AS worktree,
+      json_extract(t.body, '$.brief.goal') AS goal
     FROM worker_current_attempts AS c INDEXED BY worker_current_attempts_state
     JOIN worker_attempts AS a ON a.task_id=c.task_id AND a.attempt=c.current_attempt
     JOIN worker_tasks AS t ON t.id=c.task_id AND t.current_attempt=c.current_attempt
@@ -360,7 +369,10 @@ function workerScopes(store: HostCapacityStore, options: WorkerScopeOptions = {}
           if (!incarnation) unknownWriterGenerations.add(generation);
           else {
             result.writers.add(generation);
-            result.active.set(writer, incarnation);
+            result.active.set(writer, {
+              ...incarnation,
+              reservationMiB: workerReservationMiB(typeof row.goal === 'string' ? row.goal : undefined),
+            });
           }
         }
       } else if (attempt.process !== null) {

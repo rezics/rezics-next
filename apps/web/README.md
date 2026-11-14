@@ -770,16 +770,73 @@ Canonical entries for the existing publisher:
 - Connected identity returns: `pages-library-books--edition-return` and `pages-library-books--series-return`.
 - Named states: `pages-library-books--sparse-data`, `--section-retry`, `--permission-limited`,
   `--long-multilingual-text` and `--member-readback` (the same prefix applies).
+- Complete lists: `pages-books-catalogue--complete-book-list`, `pages-collections-showcase--books` and
+  `pages-collections-showcase--mixed-media`. These use the installed Search/Collection readers and matching Subject
+  destinations, with empty, sparse continuation and unavailable/retry entries. See the
+  [Book catalogue owner](src/books/catalogue/README.md) and [Collection presentation owner](src/library/showcase-collection/README.md)
+  for stable IDs, fixture provenance and the source-only verification decision.
 
 The Book module answers the released read plans, including ordinary continuations; it keeps work, edition,
 series and catalogue interlude identities separate. Interlude metadata does not promise hosted chapter text.
 Local illustrated covers are served from `.storybook/media/`. Personal library and vote writes read back per
 subject for the mounted visit; the limited member receives native write denials without changing saved state.
-Book-only preview navigation keeps related-page links in the mounted application router, including links that
-normally open a new tab. Other stories retain their navigation policy.
+Opt-in preview navigation keeps related-page links and GET forms in the mounted application router, including
+destinations that normally open a new tab. Other stories retain their navigation policy.
 `src/stories/book-showcase.stories.tsx` exercises complete tab navigation, Back/Forward, continuation, identity
 returns, failed-section retry and personal readback. `tests/book-showcase.test.ts` pins the transport and released
 view contract. The dev verifier runs acceptance and browser checks after landing.
+
+The canonical Anime showcase lives at **Library/Anime**, with stable `pages-library-anime--*` IDs.
+Its invented production, The Last Observatory, has three exact Season identities, 28 exact Episode identities,
+a companion film, people, characters, original local vector/WebP art and synthetic community writing. All fixtures
+illustrate installed contracts; none is a provider recording or native API acceptance. Every entry shares canonical
+IDs across locale, theme and viewport globals. The common Subject shell and released composition serve all tabs.
+The main story has no play sequence: navigation and tab changes are deliberate reader actions.
+
+Canonical Anime entries for the existing Web publisher:
+
+- `pages-library-anime--series` is the main member page; `--signed-out` is its public visit.
+- Direct tabs: `--contents`, `--characters`, `--credits`, `--relations`, `--reviews`, `--discussion`, `--lists`
+  and `--details`, all with the same `pages-library-anime` prefix.
+- `--season`, `--later-episode-window` and `--episode` enter the same Season One membership graph. Episode
+  starts at the exact episode in its later parent window; Return restores that frontier and selected assertion.
+- `--sparse-season`, `--failed-page-retry` and `--member-progress` expose missing facts, deliberate retry and
+  the existing private scalar progress destination. A page retry consumes the single authored failure; no timer
+  makes it succeed. Library state and public membership remain independent.
+
+`src/kernel/fixtures/anime-showcase.ts` owns the shared identities and asserted graph;
+`src/kernel/fake/anime-showcase.ts` answers the released page/read contracts and native continuation shapes.
+The [page owner](src/features/pages/README.md#routed-anime-reading) owns reading composition and disclosure.
+Artwork is authored SVG with local 320/640 WebP variants, exact dimensions and CC0 credit in cover summaries;
+there is no external image dependency or CSS cover overlay. Publication remains with the existing Web publisher.
+Decision: the authorized source-only window defers test writing/runs, typecheck, builds, browser/cover decode,
+keyboard and phone/desktop acceptance and capture sweeps to the dev verifier. Existing tests are retained unchanged.
+
+#### Game product review
+
+The canonical Game product visit is `pages-library-games--main` in `src/stories/game-showcase.stories.tsx`.
+Harbour Lights is a synthetic CC0 catalogue with original local covers, six distinct software releases, native
+exact/partial/TBA dates, creators, characters, story acts, related games, community reviews and collections.
+Every installed tab uses the released composition and ordinary application loaders. The existing `PageStory`
+router also handles preview new-tab links; personal library and score changes read back per Subject.
+Fixtures live independently in `kernel/fixtures/game-showcase.ts` and `kernel/fake/game-showcase.ts`.
+
+Canonical Game entries for the existing publisher:
+
+- `pages-library-games--main` starts on the populated work overview.
+- `pages-library-games--exact-release-return` starts on the Switch release companion; follow its work, Editions and
+  the exact release again, or use Back/Forward manually.
+- `pages-library-games--sparse` starts on a title-only work with native missing data.
+- `pages-library-games--release-section-failure` keeps work facts while the release window fails; Retry reacquires it.
+- `pages-library-games--reviews-section-failure` isolates a review read failure from facts and releases.
+
+Entries have no automatic tab/history traversal and do not pin viewport, theme or locale. Separate Game interaction
+examples are linked in their story documentation. The existing publisher owns deployment; these IDs are stable.
+See the [Game reader contract](src/features/catalogue/game-reader/README.md#routed-product-visit) for fixture ownership
+and [review publication cadence](../../docs/development/storybook.md#review-publication-cadence) for publishing and
+deferred verification. Source completion does not claim mounted or deployed acceptance.
+
+#### Fixture and recording workflow
 
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
 `src/kernel/fixtures/`; add no new routes or entries to `fake.ts` or `fixtures.json`. Each route module exports a
@@ -832,8 +889,23 @@ board's threads, the thread and its posts. Name all five to write only them.
 Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
 The tool uses Storybook's test build, which has no docs pages.
 The run captures every job, then lists the stories that failed and exits non-zero.
-The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
-full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS pixels.
+Decision: screenshot builds reuse an immutable Storybook test artifact keyed by effective source, recordings,
+configuration, toolchain and build mode; retain at most two completed artifacts and one in-progress build.
+
+The command builds Storybook when that identity is absent, serves the matching completed artifact on a free port,
+and writes a full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS
+pixels. A capture reports its artifact identity, whether it built or reused it, recursive site payload bytes, and nested
+build and reuse counts; reported bytes exclude publication metadata, cache metadata and lease files. The full static
+build carries the identity into `build.json` while refreshing its publication commit independently of the cache key.
+Identity examines `apps/web/.storybook`,
+`apps/web/src` (including recorded responses), `apps/web/public`, `apps/auth/src`, reachable `packages/*/src` and their
+build configs, Web/Auth/root manifests, `bun.lock`, `bunfig.toml`, the screenshot/build scripts, relevant Storybook
+environment values, Bun and Node versions, and the explicit build mode. Commit history and screenshot count do not
+enter the key. The cache holds at most two completed site trees and one in-progress build workspace; construction is
+serialized, and a changed key waits up to ten minutes for an idle lease before reporting a full cache. A failed build
+publishes no partial site. If a child cannot be proved settled, its workspace keeps the one build slot until its
+process owner exits, after which a later request can recover it. Browser cleanup releases only its own lease, so a
+valid shared artifact survives an individual capture failure.
 Files are named `<story id>.<locale>.<theme>.png` and land in `.temp/screenshots/` at the repository root.
 A page that fits the viewport, such as the missing-subject page, is captured at 1280×720 pixels; a longer page is
 captured whole. Choose a story id or glob, and repeat locale and theme, with:
@@ -2693,8 +2765,9 @@ shared automatic cover label and native metadata revision/idempotency commands r
 
 Member images use their own actual Type and the exact fallback in
 [Collection presentation](../../docs/collection-presentation.md), then existing valid release `coverRatio` hints.
-No new release fields are cast into existence. Current FULL summaries lack creator and other key facts, so rows show
-only the real localized Type and any real note. Public and private disclosure, hidden subject concealment, cursor
+No new release fields are cast into existence. Rows consume supplied member facts through the released Type's
+key-fact configuration; absent or unavailable context remains explicit. Supplied notes have a bounded inline preview
+and a complete independent Inspect view. Public and private disclosure, hidden subject concealment, cursor
 bounds, session credentials and private no-store responses retain their existing authorities. Visitor totals stay
 unknown on filtered or partial pages; an unfiltered complete page can disclose its admitted visible size. Owner and
 browse totals retain the native total rather than the preview/page length.

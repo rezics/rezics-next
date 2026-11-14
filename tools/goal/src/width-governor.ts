@@ -78,7 +78,7 @@ type WidthRow = {
   manager: string | null;
   attempt_state: string | null;
   pid: number | null;
-  process_start: string | null;
+  process_start: string | number | null;
   process_boot: string | null;
   process_group: number | null;
   cli: string | null;
@@ -108,12 +108,17 @@ function emptyCounts(): MutableCounts {
 }
 
 function isProcessIdentity(value: WidthRow): ProcessIdentity | undefined {
+  // Older non-STRICT ANY projections coerce decimal start strings to integers. Never round an unsafe value.
+  const start =
+    typeof value.process_start === 'number' && Number.isSafeInteger(value.process_start) && value.process_start >= 0
+      ? String(value.process_start)
+      : value.process_start;
   if (
     typeof value.pid !== 'number' ||
     !Number.isSafeInteger(value.pid) ||
     value.pid <= 0 ||
-    typeof value.process_start !== 'string' ||
-    !value.process_start ||
+    typeof start !== 'string' ||
+    !/^\d+$/.test(start) ||
     typeof value.process_boot !== 'string' ||
     !value.process_boot ||
     typeof value.process_group !== 'number' ||
@@ -121,7 +126,7 @@ function isProcessIdentity(value: WidthRow): ProcessIdentity | undefined {
     value.process_group <= 0
   )
     return undefined;
-  return { pid: value.pid, start: value.process_start, boot: value.process_boot, group: value.process_group };
+  return { pid: value.pid, start, boot: value.process_boot, group: value.process_group };
 }
 
 function tableExists(db: Database, name: string): boolean {

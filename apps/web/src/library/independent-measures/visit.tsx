@@ -19,7 +19,7 @@ import {
 } from './controller';
 import { recordProgressSession } from '../progress-server';
 import { bindMeasureCommand, outcomeFromResult, retryOriginal, type MeasureSender } from './commands';
-import { IndependentMeasuresEditor, IndependentMeasuresReadout } from './editor';
+import { IndependentMeasuresEditor } from './editor';
 import { IndependentMeasuresReview } from './review';
 import { IndependentMeasuresResult } from './result';
 import { IndependentMeasuresRecovery, independentActionClass } from './recovery';
@@ -238,7 +238,6 @@ export function IndependentMeasuresVisit({
   const busy = visit.kind === 'submitting';
   return (
     <div className="space-y-6">
-      <IndependentMeasuresReadout measures={visit.measures} revision={visit.revision} />
       {visit.kind === 'stale' ? <IndependentMeasuresRecovery kind="stale" onRetry={() => void refresh()} /> : null}
       {visit.kind === 'review' || visit.kind === 'submitting' ? (
         <IndependentMeasuresReview

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { hostedBookHref } from './address';
+import { HostedBookCheckpointControls } from './checkpoint-controls';
 import {
   readNativeHostedCheckpoint,
   writeNativeHostedCheckpoint,
@@ -160,79 +160,42 @@ export function HostedBookCheckpoint({
               ? m.book_reader_loading({}, options)
               : observation.state !== 'ready'
                 ? m.book_reader_progress_unavailable({}, options)
-                : value?.state === 'saved' && value.resume.availability === 'unavailable'
-                  ? m.book_reader_checkpoint_withheld({}, options)
-                  : value?.state === 'none'
-                    ? m.book_reader_checkpoint_none({}, options)
-                    : null;
-  return (
-    <section
-      ref={controls}
-      className={`grid gap-3 rounded-xl border bg-background p-4 ${page.kind === 'chapter' ? 'sticky top-0 z-20' : ''}`}
-      aria-label={m.book_reader_checkpoint_title({}, options)}
-    >
-      <h2 className="font-semibold">{m.book_reader_checkpoint_title({}, options)}</h2>
-      {message ? <p role="status">{message}</p> : null}
-      {notice && value?.state === 'saved' && value.resume.availability === 'unavailable' ? (
-        <p>{m.book_reader_checkpoint_withheld({}, options)}</p>
-      ) : null}
-      <div className="flex flex-wrap gap-2" aria-busy={busy}>
-        {resume ? (
-          <a
-            href={resume}
-            className={buttonVariants({ variant: 'outline', className: 'min-h-11 whitespace-normal' })}
-            onClick={(event) => {
-              if (!current()) event.preventDefault();
-            }}
-          >
-            {m.book_reader_checkpoint_resume({}, options)}
-          </a>
-        ) : null}
-        {value && page.kind === 'chapter' ? (
-          <Button variant="outline" className="min-h-11 whitespace-normal" disabled={blocked} onClick={save}>
-            {m.book_reader_checkpoint_save({}, options)}
-          </Button>
-        ) : null}
-        {value?.state === 'saved' ? (
-          <Button variant="outline" className="min-h-11 whitespace-normal" disabled={blocked} onClick={clear}>
-            {m.book_reader_checkpoint_clear({}, options)}
-          </Button>
-        ) : null}
-        {notice === 'uncertain' ? (
-          <Button
-            variant="outline"
-            className="min-h-11"
-            disabled={busy}
-            onClick={() => {
-              if (pending.current) void send(pending.current);
-            }}
-          >
-            {m.book_reader_retry({}, options)}
-          </Button>
-        ) : null}
-        {notice === 'conflict' || notice === 'changed' ? (
-          <Button
-            variant="outline"
-            className="min-h-11"
-            onClick={() => {
-              if (current()) reload();
-            }}
-          >
-            {m.book_reader_retry({}, options)}
-          </Button>
-        ) : null}
-        {observation && observation.state !== 'ready' ? (
-          <Button
-            variant="outline"
-            className="min-h-11"
-            onClick={() => {
+                : value?.state === 'none'
+                  ? m.book_reader_checkpoint_none({}, options)
+                  : null;
+  const retryCommand =
+    notice === 'uncertain'
+      ? () => {
+          if (pending.current) void send(pending.current);
+        }
+      : notice === 'conflict' || notice === 'changed'
+        ? () => {
+            if (current()) reload();
+          }
+        : observation && observation.state !== 'ready'
+          ? () => {
               if (current()) setRetry((value) => value + 1);
-            }}
-          >
-            {m.book_reader_retry({}, options)}
-          </Button>
-        ) : null}
-      </div>
-    </section>
+            }
+          : undefined;
+  return (
+    <HostedBookCheckpointControls
+      controlsRef={controls}
+      locale={locale}
+      chapter={page.kind === 'chapter'}
+      message={message}
+      saved={value?.state === 'saved'}
+      withheld={value?.state === 'saved' && value.resume.availability === 'unavailable'}
+      resume={
+        resume && value?.state === 'saved' && value.resume.availability === 'available'
+          ? { href: resume, title: value.resume.title }
+          : null
+      }
+      busy={busy}
+      blocked={blocked}
+      isCurrent={current}
+      {...(value && page.kind === 'chapter' ? { save } : {})}
+      {...(value?.state === 'saved' ? { clear } : {})}
+      {...(retryCommand ? { retry: retryCommand } : {})}
+    />
   );
 }

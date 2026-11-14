@@ -25,6 +25,17 @@ the current critical path. Archived scope and historical task counts do not meas
 
 ## Source batches
 
+During a maintainer-authorized frontend code-only window, assign complete source outcomes and use the available
+worker capacity for implementation. Do not spend that window writing or running tests, typing or browser matrices
+unless the maintainer specifically requires them. Preserve existing tests for the asynchronous verifier, record
+unverified behavior honestly, and repair reported failures in the owning module. This does not relax money movement
+or authorization rules, nor turn source delivery into release acceptance.
+
+Design for correctness before coding. State the invariant, who owns it, which state transitions preserve it, how partial
+failure or retries behave, and what the cost does as data grows. Use the existing shared contract and keep the change
+coherent. Tests provide evidence of behavior; they do not supply the missing design. In a code-only window,
+write and review against those invariants and leave deferred verification visible.
+
 Keep enough independent, ready source work for available workers. A brief names one coherent outcome,
 the installed interfaces, the write boundary, and what the worker can complete if one seam is blocked.
 Use the [sizing target](efficiency.md#output-and-flow) to avoid both fragments and oversized assignments.
@@ -55,6 +66,7 @@ than assumed. Check:
 
 - required exports, fixtures and dependencies exist on the recorded base;
 - the acceptance agrees with current contracts;
+- skill instructions distinguish reference reads from executable commands ([skill instructions](#skill-instructions));
 - declared risk areas cover the paths;
 - the target is recorded in parsed metadata;
 - dependencies are real code dependencies;
@@ -75,6 +87,23 @@ lists the file and the reason, and continues.
 
 Declared paths guide scope. A minimal adjacent correction must respect risk ownership, include its affected checks
 and notify its owner. Agree shared interfaces before consuming them; include consumers and fixtures in the change.
+
+## Skill instructions
+
+When a brief uses a skill, link its installed `SKILL.md` and name reference files as reads. Run only commands the
+skill documents, resolving its launcher from the installed skill directory rather than assuming a bare command
+exists on PATH. In Impeccable, `reference/craft-floor.md` is a document to read before UI edits, not a `craft-floor`
+CLI verb. Use the documented launcher for `context` or `detect`, within the task's authorized scope.
+
+If the launcher fails, follow the skill's documented fallback. Impeccable permits reading existing project context
+and the applicable references directly and continuing the repair; a launcher failure alone does not require another
+source attempt, installation, a PATH change or repetition of passed checks on unchanged inputs. Preserve the source
+and valid evidence, and fix any actual product defect found during that review.
+
+When an instruction caused the failure, correct its owning document and the affected active brief in the same
+turn; a temporary decision or retry message alone does not repair future instructions. Keep archived attempts as
+evidence and link subsequent briefs to the corrected owner. Verify the replacement wording against the installed
+skill and state separately whether the document change has landed and reached existing workers.
 
 ## Checkout and landing discipline
 
@@ -122,8 +151,9 @@ state, owner links, blockers and next actions. Resume only when authorized.
 The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns delivery to resident managers
 and implementation to workers. The manager owns a continuously workable queue: prioritize outcomes, assign each
 ready worker a clear next result and write boundary, change assignments or width as work and capacity change,
-and replace stalled or spent work promptly. The controller executes admission, retries and landings. It does
-not replace the manager's scheduling judgment.
+and replace stalled or spent work promptly. Managers own [starts through first source](../../tools/goal/prompts/manager.md):
+dispatch through Goal, verify the current worker and its first source checkpoint, and resolve or replace a failed
+start. The controller executes admission, retries and landings; it does not replace the manager's scheduling judgment.
 
 Workers can find defects, define a repair within the accepted scope, and ask for or propose their next assignment.
 They may continue evidenced work inside their assigned boundary and coordinate before taking another boundary.

@@ -8,7 +8,8 @@ import type { HostedVersionRevisionResolution } from './hosted-version-revision.
 export type HostedVersionDraftMoveInput = Readonly<{
   expectedRevisionId: string;
   occurrenceId: string;
-  parentId: string;
+  /** Null selects the Book root sibling list. */
+  parentId: string | null;
   beforeOccurrenceId: string | null;
 }>;
 
@@ -35,7 +36,8 @@ export type HostedVersionDraftMoveSelection = Readonly<{
   snapshotId: string;
   headRevisionId: string;
   source: HostedVersionDraftMoveOccurrence;
-  destinationParent: HostedVersionDraftMoveOccurrence & Readonly<{ kind: 'part' }>;
+  /** Null selects the root sibling list, which has no occurrence or ancestor fact. */
+  destinationParent: (HostedVersionDraftMoveOccurrence & Readonly<{ kind: 'part' }>) | null;
   before: HostedVersionDraftMoveOccurrence | null;
   /** Immediate parent first, ending at the root occurrence. */
   sourceAncestors: readonly HostedVersionDraftMoveAncestor[];
@@ -100,7 +102,7 @@ export type HostedVersionDraftMovePlan = Readonly<{
   expectedRevisionId: string;
   occurrenceId: string;
   fromParentId: string | null;
-  toParentId: string;
+  toParentId: string | null;
   sourceSiblingRootId: string | null;
   destinationSiblingRootId: string | null;
   preorderRootId: string | null;

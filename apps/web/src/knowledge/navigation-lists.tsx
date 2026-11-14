@@ -1,3 +1,4 @@
+import { KnowledgeDetails, knowledgeControl } from './workspace';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type {
@@ -8,8 +9,7 @@ import type {
   KnowledgeOwnedNotebooksPage,
 } from './navigation.ts';
 
-const controlClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const controlClass = knowledgeControl;
 
 function localeOptions(locale: string) {
   return { locale: locale as never };
@@ -136,7 +136,9 @@ export function KnowledgeOwnedNotebookList({
               >
                 <div className="min-w-0 space-y-1">
                   <p className="min-w-0 break-words font-medium">{row.title}</p>
-                  <p className="min-w-0 break-all font-mono text-sm text-muted-foreground">{row.notebookId}</p>
+                  <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+                    <p className="text-sm [overflow-wrap:anywhere]">{row.notebookId}</p>
+                  </KnowledgeDetails>
                 </div>
                 <Button
                   type="button"

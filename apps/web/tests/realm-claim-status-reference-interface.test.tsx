@@ -164,7 +164,7 @@ test('Own Realm claim status keeps human outcome and episode dates primary with 
     expect(details.open).toBe(false);
     expect(summary.hasAttribute('tabindex')).toBe(false);
     expect(summary.hasAttribute('role')).toBe(false);
-    const reference = details.querySelector('dd')!;
+    const reference = details.querySelector('dd span')!;
     expect(reference.textContent).toBe(receipt.requestId);
     expect(reference.classList.contains('select-all')).toBe(true);
     expect(reference.classList.contains('break-all')).toBe(true);

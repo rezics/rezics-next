@@ -42,6 +42,7 @@ export function ProgressDecimalInput({
     <>
       <Input
         {...props}
+        className={`min-h-11 ${props.className ?? ''}`}
         min={rules.min}
         max={rules.max}
         step={rules.step}

@@ -117,8 +117,8 @@ function AssociationStatement({
         );
       })}
       {descriptorFailed && <p role="status">{m.character_relationships_descriptor_unavailable({}, o)}</p>}
-      <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
-        <h3 className="font-medium">{m.sources_citations({}, o)}</h3>
+      <details className="space-y-2">
+        <summary className={characterRelationshipsSummaryClass}>{m.sources_citations({}, o)}</summary>
         {row.statement.references.length ? (
           row.statement.references.map((reference, index) => (
             <div key={index} className="space-y-2 border-s-2 border-border ps-3">
@@ -139,7 +139,7 @@ function AssociationStatement({
         ) : (
           <p>{m.sources_no_citations({}, o)}</p>
         )}
-      </section>
+      </details>
       {onCorrect && (
         <Button
           className={characterRelationshipsActionClass}

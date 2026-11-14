@@ -97,6 +97,12 @@ const THREAD_ITEM_TYPES = new Set([
 /** Provider-facing manager sessions: connection cache, concrete Codex/Claude requests and viewer argv. */
 export class ManagerSessionTransport {
   private pools = new Map<string, Promise<AppServer>>();
+  private readonly observedThreads = new WeakMap<AppServer, Map<string, string>>();
+  private observeThread(client: AppServer, manager: string, threadId: string): void {
+    const observed = this.observedThreads.get(client) ?? new Map<string, string>();
+    observed.set(manager, threadId);
+    this.observedThreads.set(client, observed);
+  }
   private unsubscribers: (() => void)[] = [];
   constructor(
     private readonly services: ManagerServices,
@@ -135,6 +141,11 @@ export class ManagerSessionTransport {
     void client.catch(() => this.pools.delete(key));
     return client;
   }
+  async applyModelOverride(client: AppServer, spec: CodexTurnSpec, threadId: string): Promise<void> {
+    const model = this.services.codexManagerModel?.(spec.id) ?? spec.model;
+    if (model === undefined) return;
+    await client.request('thread/settings/update', { threadId, model, effort: spec.effort });
+  }
   async startThread(client: AppServer, spec: CodexThreadSpec & Pick<ManagerSpec, 'cwd'>): Promise<string> {
     const started = await client.request('thread/start', {
       ...FULL_ACCESS,
@@ -142,7 +153,9 @@ export class ManagerSessionTransport {
       model: this.model(spec),
       config: codexThreadConfig(spec),
     });
-    return started.thread.id as string;
+    const threadId = started.thread.id as string;
+    this.observeThread(client, spec.id, threadId);
+    return threadId;
   }
   async setActiveGoal(
     client: AppServer,
@@ -179,6 +192,11 @@ export class ManagerSessionTransport {
     });
     return turn.turn.id;
   }
+  /** A viewer or preceding host can have loaded the thread without subscribing this connection. */
+  async rejoinForDelivery(client: AppServer, spec: CodexThreadSpec, threadId: string) {
+    if (this.observedThreads.get(client)?.get(spec.id) === threadId) return;
+    return this.resumeThread(client, spec, threadId);
+  }
   async resumeThread(
     client: AppServer,
     spec: CodexThreadSpec,
@@ -188,6 +206,7 @@ export class ManagerSessionTransport {
     latestTurn?: { id: string; status: ManagerTurnDisposition['status'] };
   }> {
     const resumed = await client.request('thread/resume', threadAccess(spec, threadId, this.model(spec)));
+    this.observeThread(client, spec.id, threadId);
     const latest = resumed.thread.turns?.at(-1);
     const status = latest?.status;
     const latestTurn =

@@ -5,7 +5,7 @@ import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { ProgressChoice } from './progress-actions';
 import { Input } from '@rezics/ui/shadcn/input';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import type { CoverRatio } from '@rezics/ui/cover';
@@ -20,7 +20,6 @@ import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import {
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -808,8 +807,6 @@ function ProgressIndexPageContent({
   const [key, setKey] = useState(page.idempotencyKey);
   const [alert, setAlert] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const filterKindId = useId();
-  const filterValueId = useId();
 
   const discoveryAddress = {
     ...(filterSubject[0] ? { subjectId: filterSubject[0].id } : {}),
@@ -1134,7 +1131,7 @@ function ProgressIndexPageContent({
       </article>
     );
   const viewerState = page.viewerState ?? (page.signedIn ? 'signed_in' : 'signed_out');
-  if (viewerState !== 'signed_in')
+  if (viewerState !== 'signed_in' && !(viewerState === 'unavailable' && page.signedIn))
     return (
       <article className="max-w-4xl space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
@@ -1162,18 +1159,18 @@ function ProgressIndexPageContent({
     { value: 'profile', label: m.library_progress_discovery_profile_filter() },
   ];
   const discoveryStateOptions = [
-    { value: null, label: m.library_progress_discovery_any_filter() },
+    { value: '', label: m.library_progress_discovery_any_filter() },
     { value: 'active', label: m.library_progress_state_active() },
     { value: 'completed', label: m.library_progress_state_completed() },
     { value: 'abandoned', label: m.library_progress_state_abandoned() },
   ];
   const discoveryModeOptions = [
-    { value: null, label: m.library_progress_discovery_any_filter() },
+    { value: '', label: m.library_progress_discovery_any_filter() },
     ...modeChoices.map((choice) => ({ value: choice.value, label: choice.label() })),
   ];
   const progressUnitOptions = units.map((choice) => ({ value: choice.id, label: choice.label }));
   return (
-    <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
+    <article className="max-w-4xl space-y-8 text-foreground" onClickCapture={protectNavigation}>
       <PageHeading>{m.library_progress_heading()}</PageHeading>
       {missingReturnRow && returnSelection ? (
         <ProgressReturnRecovery
@@ -1209,130 +1206,84 @@ function ProgressIndexPageContent({
       ) : null}
 
       <>
-        <section aria-labelledby="progress-discovery-heading" className="space-y-4">
-          <h2 id="progress-discovery-heading" className="text-xl font-semibold">
+        <section
+          aria-labelledby="progress-discovery-heading"
+          className="space-y-4 rounded-xl border border-border p-4 sm:p-5"
+        >
+          <h2 id="progress-discovery-heading" className="font-semibold">
             {m.library_progress_discovery_search()}
           </h2>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-0 flex-1 basis-72">
-              <ProgressPicker
-                value={filterSubject}
-                label={m.library_progress_discovery_exact_subject()}
-                isCurrent={current}
-                onValueChange={setFilterSubject}
-              />
-            </div>
-            {filterSubject.length ? (
-              <Button type="button" variant="outline" className="min-h-11" onClick={() => setFilterSubject([])}>
-                {m.library_progress_address_clear()}
-              </Button>
-            ) : null}
-            <div className="min-w-48 flex-1">
-              <Field className="min-w-48 flex-1 gap-1">
-                <FieldLabel id={`${filterKindId}-label`} htmlFor={filterKindId} className="text-sm font-medium">
-                  {m.library_progress_discovery_filter_by()}
-                </FieldLabel>
-                <Select<string, false>
-                  items={discoveryFilterOptions}
-                  value={filterKind}
-                  onValueChange={(value) => {
-                    if (value === 'none' || value === 'state' || value === 'mode' || value === 'profile') {
-                      setFilterKind(value);
-                      setFilterValue('');
-                    }
-                  }}
-                >
-                  <SelectTrigger id={filterKindId} aria-labelledby={`${filterKindId}-label`} className="min-h-11">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent alignItemWithTrigger={false}>
-                    <SelectGroup>
-                      {discoveryFilterOptions.map(({ value, label, ...itemProps }) => (
-                        <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            {filterKind === 'state' ? (
-              <div className="min-w-48 flex-1">
-                <Field className="min-w-48 flex-1 gap-1">
-                  <FieldLabel id={`${filterValueId}-label`} htmlFor={filterValueId} className="text-sm font-medium">
-                    {m.library_progress_discovery_filter_value()}
-                  </FieldLabel>
-                  <Select<string, false>
-                    items={discoveryStateOptions}
-                    value={filterValue || null}
-                    onValueChange={(value) => setFilterValue(value ?? '')}
-                  >
-                    <SelectTrigger id={filterValueId} aria-labelledby={`${filterValueId}-label`} className="min-h-11">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {discoveryStateOptions.map(({ value, label, ...itemProps }) => (
-                          <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-            ) : null}
-            {filterKind === 'mode' ? (
-              <div className="min-w-48 flex-1">
-                <Field className="min-w-48 flex-1 gap-1">
-                  <FieldLabel id={`${filterValueId}-label`} htmlFor={filterValueId} className="text-sm font-medium">
-                    {m.library_progress_discovery_filter_value()}
-                  </FieldLabel>
-                  <Select<string, false>
-                    items={discoveryModeOptions}
-                    value={filterValue || null}
-                    onValueChange={(value) => setFilterValue(value ?? '')}
-                  >
-                    <SelectTrigger id={filterValueId} aria-labelledby={`${filterValueId}-label`} className="min-h-11">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {discoveryModeOptions.map(({ value, label, ...itemProps }) => (
-                          <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-            ) : null}
-            {filterKind === 'profile' ? (
-              <div className="min-w-48 flex-1">
-                <label htmlFor={filterValueId} className="text-sm font-medium">
-                  {m.library_progress_discovery_profile_filter()}
-                </label>
-                <Input
-                  id={filterValueId}
-                  className="min-h-11"
-                  value={filterValue}
-                  onChange={(event) => setFilterValue(event.currentTarget.value)}
-                />
-              </div>
-            ) : null}
-            <Link to="/library/progress" search={discoveryAddress} state={{} as never} className={buttonClass}>
-              {m.library_progress_address_apply()}
-            </Link>
-            {page.subjectId || page.state || page.mode || page.profileId ? (
-              <Link to="/library/progress" search={{}} state={{} as never} className={buttonClass}>
-                {m.library_progress_discovery_reset()}
+          <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <ProgressPicker
+              value={filterSubject}
+              label={m.library_progress_discovery_exact_subject()}
+              isCurrent={authority?.isCurrent}
+              onValueChange={setFilterSubject}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Link to="/library/progress" search={discoveryAddress} state={{} as never} className={buttonClass}>
+                {m.library_progress_address_apply()}
               </Link>
-            ) : null}
+              {filterSubject.length ? (
+                <Button type="button" variant="ghost" className="min-h-11" onClick={() => setFilterSubject([])}>
+                  {m.library_progress_address_clear()}
+                </Button>
+              ) : null}
+            </div>
           </div>
+          <details open={filterKind !== 'none' || undefined} className="group border-t border-border pt-3">
+            <summary className="min-h-11 cursor-pointer content-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {m.library_progress_discovery_filter_by()}
+            </summary>
+            <div className="grid gap-4 pt-3 sm:grid-cols-2">
+              <ProgressChoice
+                label={m.library_progress_discovery_filter_by()}
+                value={filterKind}
+                options={discoveryFilterOptions}
+                onValueChange={(value) => {
+                  if (value === 'none' || value === 'state' || value === 'mode' || value === 'profile') {
+                    setFilterKind(value);
+                    setFilterValue('');
+                  }
+                }}
+              />
+              {filterKind === 'state' || filterKind === 'mode' ? (
+                <ProgressChoice
+                  label={
+                    filterKind === 'state'
+                      ? m.library_progress_discovery_state_filter()
+                      : m.library_progress_discovery_mode_filter()
+                  }
+                  value={filterValue}
+                  options={filterKind === 'state' ? discoveryStateOptions : discoveryModeOptions}
+                  onValueChange={setFilterValue}
+                />
+              ) : null}
+              {filterKind === 'profile' ? (
+                <Field className="gap-2">
+                  <FieldLabel htmlFor="progress-profile-filter">
+                    {m.library_progress_discovery_profile_filter()}
+                  </FieldLabel>
+                  <Input
+                    id="progress-profile-filter"
+                    className="min-h-11"
+                    value={filterValue}
+                    onChange={(event) => setFilterValue(event.currentTarget.value)}
+                  />
+                </Field>
+              ) : null}
+            </div>
+          </details>
+          {page.subjectId || page.state || page.mode || page.profileId ? (
+            <Link
+              to="/library/progress"
+              search={{}}
+              state={{} as never}
+              className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+            >
+              {m.library_progress_discovery_reset()}
+            </Link>
+          ) : null}
         </section>
         <h2
           id="progress-index-sessions-heading"
@@ -1342,8 +1293,17 @@ function ProgressIndexPageContent({
         >
           {m.library_progress_index_list_heading()}
         </h2>
-        {sessions.length ? (
-          <ol className="space-y-3">
+        {viewerState === 'unavailable' ? (
+          <div className="space-y-3 rounded-xl border border-border p-4">
+            <p role="status">{m.library_progress_unavailable()}</p>
+            {retry ? (
+              <Button variant="outline" className="min-h-11" disabled={loading} onClick={retry}>
+                {m.library_progress_retry()}
+              </Button>
+            ) : null}
+          </div>
+        ) : sessions.length ? (
+          <ol className="divide-y divide-border">
             {sessions.map((session) => (
               <SessionRow
                 key={authority ? session.id : `${session.id}:${session.revision}`}
@@ -1440,192 +1400,154 @@ function ProgressIndexPageContent({
           </Exposure>
         ) : null}
         <Exposure operation="progress_session.create">
-          <section aria-labelledby="start-progress-heading" className="space-y-5">
-            <h2 id="start-progress-heading" className="text-xl font-semibold">
+          <details
+            data-progress-start=""
+            open={!sessions.length || undefined}
+            className="rounded-xl border border-border p-4 sm:p-5"
+          >
+            <summary
+              id="start-progress-heading"
+              className="min-h-11 cursor-pointer content-center font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
               {m.library_progress_start_heading()}
-            </h2>
-            <Field>
-              <FieldLabel>{m.library_progress_subject()}</FieldLabel>
-              <ProgressPicker
-                key={episode.generation}
-                isCurrent={draftCurrent}
-                disabled={draftLocked}
-                value={chosen}
-                onValueChange={async (value) => {
-                  if (!draftCurrent() || episode.pending || (!!authority && intent.current !== null)) return;
-                  draftRef.current = { scope: draftScope, token: {} };
-                  renderDraft((value) => value + 1);
-                  const request = ++choiceRequest.current;
-                  const latest = () => current() && request === choiceRequest.current;
-                  setChosen(value);
-                  setVersion([]);
-                  setTotal('');
-                  setChoices(undefined);
-                  setChoicesUnavailable(false);
-                  setChoosing(true);
-                  setAlert(null);
-                  try {
-                    if (!latest()) return;
-                    const next = value[0]
-                      ? await readProgressChoices({ data: value[0].type ?? value[0].types[0] ?? '' })
-                      : undefined;
-                    if (!latest()) return;
-                    setChoices(next);
-                    setMode(next?.[0]?.mode);
-                    setUnit('');
+            </summary>
+            <div className="space-y-5 pt-4">
+              <Field>
+                <ProgressPicker
+                  key={episode.generation}
+                  isCurrent={draftCurrent}
+                  disabled={draftLocked}
+                  value={chosen}
+                  onValueChange={async (value) => {
+                    if (!draftCurrent() || episode.pending || (!!authority && intent.current !== null)) return;
+                    draftRef.current = { scope: draftScope, token: {} };
+                    renderDraft((value) => value + 1);
+                    const request = ++choiceRequest.current;
+                    const latest = () => current() && request === choiceRequest.current;
+                    setChosen(value);
+                    setVersion([]);
                     setTotal('');
-                  } catch {
-                    if (latest()) {
-                      setChoicesUnavailable(true);
-                      setAlert(m.library_progress_unavailable());
+                    setChoices(undefined);
+                    setChoicesUnavailable(false);
+                    setChoosing(true);
+                    setAlert(null);
+                    try {
+                      if (!latest()) return;
+                      const next = value[0]
+                        ? await readProgressChoices({ data: value[0].type ?? value[0].types[0] ?? '' })
+                        : undefined;
+                      if (!latest()) return;
+                      setChoices(next);
+                      setMode(next?.[0]?.mode);
+                      setUnit('');
+                      setTotal('');
+                    } catch {
+                      if (latest()) {
+                        setChoicesUnavailable(true);
+                        setAlert(m.library_progress_unavailable());
+                      }
+                    } finally {
+                      if (latest()) setChoosing(false);
                     }
-                  } finally {
-                    if (latest()) setChoosing(false);
-                  }
-                }}
-              />
-            </Field>
-            {alert && !choices?.length ? <p role="alert">{alert}</p> : null}
-            {choicesUnavailable ? <p role="status">{m.library_progress_unavailable()}</p> : null}
-            {chosen.length > 0 && !choosing && !choices?.length && !alert && !choicesUnavailable ? (
-              <p role="status" className="text-muted-foreground">
-                {m.library_progress_unsupported()}
-              </p>
-            ) : null}
-            {choices?.length && !choosing ? (
-              <form className="max-w-xl space-y-5" noValidate onSubmit={onStart}>
-                <input type="hidden" name="idempotencyKey" value={key} />
-                <input type="hidden" name="subjectId" value={subject} />
-                <Field>
-                  <FieldLabel>{m.library_progress_version()}</FieldLabel>
-                  <ProgressPicker
-                    key={episode.generation}
-                    isCurrent={draftCurrent}
-                    disabled={draftLocked}
-                    label={m.library_progress_version()}
-                    value={version}
-                    onValueChange={(value) => {
-                      changeDraft(() => setVersion(value));
-                    }}
-                  />
-                  <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
-                </Field>
-                <dl className="space-y-2 rounded-lg border border-border p-4 text-sm">
-                  <div>
-                    <dt className="text-muted-foreground">{m.library_progress_subject()}</dt>
-                    <dd className="break-words">
-                      <SelectedProgressSubject subject={chosen[0]} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">{m.library_progress_version()}</dt>
-                    <dd className="break-words">
-                      {version[0] ? <SelectedProgressSubject subject={version[0]} /> : m.library_progress_no_version()}
-                    </dd>
-                  </div>
-                </dl>
-                <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
-                <fieldset className="space-y-3">
-                  <FieldLegend variant="label">{m.library_current_choices()}</FieldLegend>
-                  <RadioGroup
-                    name="progress-mode"
-                    disabled={draftLocked}
-                    value={mode}
-                    onValueChange={(value) => {
-                      changeDraft(() => setMode(value as ProgressMode));
-                    }}
-                    className="flex flex-wrap gap-x-6 gap-y-3"
-                  >
-                    {choices
-                      ?.map((allowed) => modeChoices.find((choice) => choice.value === allowed.mode)!)
-                      .map((choice) => (
-                        <label key={choice.value} className="flex items-center gap-2 text-sm">
-                          <RadioGroupItem value={choice.value} />
-                          {choice.label()}
-                        </label>
-                      ))}
-                  </RadioGroup>
-                </fieldset>
-                <div className="grid grid-cols-2 gap-4">
+                  }}
+                />
+              </Field>
+              {alert && !choices?.length ? <p role="alert">{alert}</p> : null}
+              {choicesUnavailable ? <p role="status">{m.library_progress_unavailable()}</p> : null}
+              {chosen.length > 0 && !choosing && !choices?.length && !alert && !choicesUnavailable ? (
+                <p role="status" className="text-muted-foreground">
+                  {m.library_progress_unsupported()}
+                </p>
+              ) : null}
+              {choices?.length && !choosing ? (
+                <form className="max-w-xl space-y-5" noValidate onSubmit={onStart}>
+                  <input type="hidden" name="idempotencyKey" value={key} />
+                  <input type="hidden" name="subjectId" value={subject} />
                   <Field>
-                    <FieldLabel id="progress-unit-label" htmlFor="progress-unit">
-                      {m.library_progress_unit()}
-                    </FieldLabel>
-                    <Select<string, false>
-                      items={progressUnitOptions}
-                      name="unit"
+                    <ProgressPicker
+                      key={episode.generation}
+                      isCurrent={draftCurrent}
                       disabled={draftLocked}
-                      value={unit}
+                      label={m.library_progress_version()}
+                      value={version}
                       onValueChange={(value) => {
-                        if (value !== null) changeDraft(() => setUnit(value));
+                        changeDraft(() => setVersion(value));
                       }}
-                    >
-                      <SelectTrigger
-                        id="progress-unit"
-                        aria-labelledby="progress-unit-label"
-                        className="min-h-11 w-full"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectGroup>
-                          {progressUnitOptions.map(({ value, label, ...itemProps }) => (
-                            <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                    />
+                    <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
+                    {!version[0] ? (
+                      <p className="text-sm text-muted-foreground">{m.library_progress_no_version()}</p>
+                    ) : null}
                   </Field>
-                  {acceptsTotal ? (
-                    <Field>
-                      <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
-                      <ProgressDecimalInput
-                        id="progress-total"
-                        name="total"
-                        disabled={draftLocked}
-                        rules={pair}
-                        issue={validateTotal ? progressDecimalIssue(total, pair, pair?.total === 'required') : null}
-                        required={pair?.total === 'required'}
-                        value={total}
-                        onChange={(event) => {
-                          const value = event.currentTarget.value;
-                          changeDraft(() => setTotal(value));
-                        }}
-                      />
-                    </Field>
+                  <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
+                  <fieldset className="space-y-3">
+                    <FieldLegend variant="label">{m.library_progress_mode()}</FieldLegend>
+                    <RadioGroup
+                      name="progress-mode"
+                      disabled={draftLocked}
+                      value={mode}
+                      onValueChange={(value) => {
+                        changeDraft(() => setMode(value as ProgressMode));
+                      }}
+                      className="flex flex-wrap gap-x-6 gap-y-3"
+                    >
+                      {choices
+                        ?.map((allowed) => modeChoices.find((choice) => choice.value === allowed.mode)!)
+                        .map((choice) => (
+                          <label key={choice.value} className="flex items-center gap-2 text-sm">
+                            <RadioGroupItem value={choice.value} />
+                            {choice.label()}
+                          </label>
+                        ))}
+                    </RadioGroup>
+                  </fieldset>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <ProgressChoice
+                      id="progress-unit"
+                      name="unit"
+                      label={m.library_progress_unit()}
+                      value={unit}
+                      options={progressUnitOptions}
+                      disabled={draftLocked}
+                      onValueChange={(value) => changeDraft(() => setUnit(value))}
+                    />
+                    {acceptsTotal ? (
+                      <Field className="gap-2">
+                        <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
+                        <ProgressDecimalInput
+                          id="progress-total"
+                          name="total"
+                          disabled={draftLocked}
+                          rules={pair}
+                          issue={validateTotal ? progressDecimalIssue(total, pair, pair?.total === 'required') : null}
+                          required={pair?.total === 'required'}
+                          value={total}
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            changeDraft(() => setTotal(value));
+                          }}
+                        />
+                      </Field>
+                    ) : null}
+                  </div>
+                  {alert ? (
+                    <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                      {alert}
+                    </p>
                   ) : null}
-                </div>
-                {alert ? (
-                  <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                    {alert}
-                  </p>
-                ) : null}
-                <Button
-                  type="submit"
-                  disabled={pending || (!!authority && !authority.permits('progress_session.create', creatable))}
-                >
-                  {m.library_progress_start()}
-                </Button>
-              </form>
-            ) : null}
-          </section>
+                  <Button
+                    type="submit"
+                    disabled={pending || (!!authority && !authority.permits('progress_session.create', creatable))}
+                  >
+                    {m.library_progress_start()}
+                  </Button>
+                </form>
+              ) : null}
+            </div>
+          </details>
         </Exposure>
       </>
     </article>
-  );
-}
-
-function SelectedProgressSubject({ subject }: { subject: ProgressPickerSubject | undefined }) {
-  if (!subject) return null;
-  return (
-    <>
-      <a href={subjectHref({ id: subject.id, label: subject.title }, getLocale()).href} className="underline">
-        {subject.title}
-      </a>
-      {subject.typeLabel ? <span className="ml-2 text-muted-foreground">{subject.typeLabel}</span> : null}
-    </>
   );
 }
 
@@ -1925,7 +1847,7 @@ function SessionRow({
     : { text: m.library_subject_unavailable(), lang: undefined };
   const meaning =
     session.meaning === 'known'
-      ? m.library_progress_discovery_meaning_known()
+      ? null
       : session.meaning === 'unknown'
         ? m.library_progress_discovery_meaning_unknown()
         : session.meaning === 'unavailable'
@@ -1985,28 +1907,26 @@ function SessionRow({
             />
           </ListRowControl>
           {meaning ? <p className="text-sm text-muted-foreground">{meaning}</p> : null}
-          {!session.unitLabel ? (
-            <>
-              <details className="text-sm text-muted-foreground">
-                <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                  {m.library_progress_details()}
-                </summary>
-                <div className="mt-2 flex flex-col gap-2">
-                  <p>{m.library_progress_unit_unspecified()}</p>
-                  <dl>
-                    <dt>
-                      {m.library_progress_mode()} / {m.library_progress_unit()}
-                    </dt>
-                    <dd>
-                      <code className="break-all">
-                        {session.mode} / {session.unit}
-                      </code>
-                    </dd>
-                  </dl>
-                </div>
-              </details>
-            </>
-          ) : null}
+          {
+            <details className="text-sm text-muted-foreground">
+              <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.library_progress_details()}
+              </summary>
+              <div className="mt-2 flex flex-col gap-2">
+                {!session.unitLabel ? <p>{m.library_progress_unit_unspecified()}</p> : null}
+                <dl>
+                  <dt>
+                    {m.library_progress_mode()} / {m.library_progress_unit()}
+                  </dt>
+                  <dd>
+                    <code className="break-all">
+                      {session.mode} / {session.unit}
+                    </code>
+                  </dd>
+                </dl>
+              </div>
+            </details>
+          }
           {actionStates ? (
             <details className="text-sm text-muted-foreground">
               <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">

@@ -1,4 +1,47 @@
-# Private document lifecycle
+# Knowledge interface
+
+The document workspace composes the existing private editor, native outline reader, revision comparison
+and saved-head publication controls. Browsing is explicit and independent of the writing body. One outline page
+retains native order and at most twenty rows; it never hydrates sibling bodies or infers a child count. A denied
+outline affects that reading while the editor retains its independently admitted document and local draft.
+
+Routine identity and revision metadata use labelled details. Reviewed destructive operands and uncertain-command
+warnings remain visible at their action. Shared controls keep keyboard focus, wrapping labels and touch targets
+consistent across the eight launch locales. The private document title and body lead the page; comparison and
+publication keep their saved-source identity distinct from unsaved writing.
+
+Publication reading links retain one ephemeral return coordinate in the current QueryClient lifetime. Ordinary
+clicks use the installed public route; modified clicks carry no private origin. Session or exposure replacement,
+locale change and departure to unrelated routes clear the coordinate. The return never enters a URL parameter,
+query result, persistent storage or SSR. Returning opens the original private route and requires fresh admission;
+it supplies neither public permission nor a saved draft. A direct notebook return reads the installed notebook route.
+A link callback captured before session/exposure retirement cannot reinstall the old return coordinate. Existing
+notebook-frontier return semantics stay separate.
+
+The routed `knowledge-workspace.stories.tsx` examples provide a three-document notebook, a long scene study, public
+reading and independent outline/history recovery. Notebook, Writing, LongDocument and PublicReading are manual
+review entries. PublicationReturn and IndependentRecovery pin the new navigation outcomes for the later verifier.
+Existing History and Publication examples retain saved comparison, local draft review, explicit confirmation and
+original command replay. The reader fixture now contains a long body. The private-story interactions open details
+before asserting exact identities; the asserted identity values are unchanged. These are contract-shaped examples,
+not native recordings or a new publisher.
+
+Sources read before this composition: [the product owner](../../../../docs/knowledge-workspaces.md),
+`private-page.tsx`, `navigation-page.tsx`, `page.tsx`, `history-panel.tsx`, `publication-panel.tsx`, their native
+operation types, source-lifetime callers and existing routed stories, plus the read-only main reference index.
+Installed Impeccable documents were absent from the permitted skill and reference directories; no launcher or
+installation is required for this source composition.
+
+Remaining API limits: exact private heads and outline pages do not supply a notebook title or unvisited ancestor
+labels. The interface uses document identity and visited breadcrumbs rather than inventing those labels. The
+private publication observation supplies a publication identity, not the selected public revision body; exact
+reading links therefore follow the existing acknowledged selection receipt. Each public read admits its result
+independently. Native authorization and all command contracts remain with their existing owners.
+
+This frontend source-only window defers typing, tests, builds, browser, visual and native acceptance to the dev
+verifier. Formatting source is independent of those acceptance claims.
+
+## Private document lifecycle
 
 The private document URL reads native lifecycle metadata before opening the existing editor. The signed-in viewer
 supplies the account coordinate; a document ID supplies neither ownership nor publication authority. Lifecycle

@@ -23,6 +23,7 @@ import { completedHostedLegacyPublicBaseline } from './hosted-legacy-public-base
 import { snapshot } from './reads.ts';
 import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
 import { insertHostedRootAppend } from './hosted-chapters-append.ts';
+import { appendHostedOrderedRootChapter, hostedOrderedReleasePlacements } from './hosted-ordered-compatibility.ts';
 import { orderHostedPlacements, selectHostedRelease } from './hosted-chapters-tree.ts';
 import {
   hostedCatalogue,
@@ -310,8 +311,15 @@ async function mutate(
                 const selected = mutation.input;
                 const revision = await hostedRevision(client, catalogueId, selected.expectedRevisionId);
                 if (revision?.kind !== 'structure') throw new ContentNotFoundError();
+                const ordered = await hostedOrderedReleasePlacements(
+                  client,
+                  catalogueId,
+                  revision.revision_id,
+                  selected.occurrenceIds,
+                );
                 return selectHostedRelease(
-                  await hostedReleasePlacements(client, catalogueId, revision.revision_id, selected.occurrenceIds),
+                  ordered ??
+                    (await hostedReleasePlacements(client, catalogueId, revision.revision_id, selected.occurrenceIds)),
                   selected.occurrenceIds,
                 );
               })
@@ -354,36 +362,56 @@ async function mutate(
         )
           throw new RevisionPreconditionError();
       }
-      await tx.query(
-        `INSERT INTO content.hosted_structure_revision
+      const orderedAppend =
+        mutation.kind === 'append'
+          ? await appendHostedOrderedRootChapter(
+              tx,
+              catalogueId,
+              mutation.input.expectedRevisionId,
+              {
+                revisionId,
+                recordedTransactionId: transactionId,
+                recordedAt: authoritativeTimeValue(time),
+              },
+              prepared.get(time)![0] as Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
+            )
+          : false;
+      if (!orderedAppend) {
+        await tx.query(
+          `INSERT INTO content.hosted_structure_revision
        (route,catalogue_id,revision_id,kind,source_revision_id,recorded_transaction_id,created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          route,
-          catalogueId,
-          revisionId,
-          mutation.kind === 'publish' ? 'publication' : 'structure',
-          mutation.kind === 'publish' ? mutation.input.expectedRevisionId : null,
-          transactionId,
-          authoritativeTimeValue(time),
-        ],
-      );
-      if (mutation.kind === 'append') {
-        await insertHostedRootAppend(
-          tx,
-          catalogueId,
-          mutation.input.expectedRevisionId,
-          revisionId,
-          prepared.get(time)![0] as Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
+          [
+            route,
+            catalogueId,
+            revisionId,
+            mutation.kind === 'publish' ? 'publication' : 'structure',
+            mutation.kind === 'publish' ? mutation.input.expectedRevisionId : null,
+            transactionId,
+            authoritativeTimeValue(time),
+          ],
         );
+      }
+      if (mutation.kind === 'append') {
+        if (!orderedAppend) {
+          await insertHostedRootAppend(
+            tx,
+            catalogueId,
+            mutation.input.expectedRevisionId,
+            revisionId,
+            prepared.get(time)![0] as Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
+          );
+        }
       } else {
         await insertHostedPlacements(tx, catalogueId, revisionId, prepared.get(time)!);
       }
-      await tx.query(
-        `UPDATE content.hosted_catalogue SET ${mutation.kind === 'publish' ? 'publication_id' : 'head_revision_id'}=$3
+      if (!orderedAppend) {
+        await tx.query(
+          `UPDATE content.hosted_catalogue SET ${mutation.kind === 'publish' ? 'publication_id' : 'head_revision_id'}=$3
        WHERE route=$1 AND catalogue_id=$2`,
-        [route, catalogueId, revisionId],
-      );
+          [route, catalogueId, revisionId],
+        );
+      }
       const value = { catalogueId, revisionId };
       return {
         value,

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useSyncExternalStore } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
+import { ManagementField, ManagementReference, ManagementReferences } from './members/management-ui';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { createRealmClaimStatus, type RealmClaimStatusAdapter, type RealmClaimStatusRead } from './realm-claim-status';
 import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
@@ -102,39 +103,24 @@ export function RealmClaimStatusView({
             {!receipt.currentEpisode ? (
               <p className="text-sm text-muted-foreground">{m.realm_claim_status_old_episode()}</p>
             ) : null}
-            <dl className="space-y-4 border-t pt-5 text-sm">
-              <div className="space-y-1">
-                <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
-                <dd>
-                  <NativeDate value={receipt.orphanedAt} />
-                </dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-muted-foreground">{m.realm_claim_requested_at()}</dt>
-                <dd>
-                  <NativeDate value={receipt.requestedAt} />
-                </dd>
-              </div>
+            <dl className="grid min-w-0 gap-5 border-t pt-5 text-sm sm:grid-cols-2">
+              <ManagementField label={m.realm_claim_orphaned_at()}>
+                <NativeDate value={receipt.orphanedAt} />
+              </ManagementField>
+              <ManagementField label={m.realm_claim_requested_at()}>
+                <NativeDate value={receipt.requestedAt} />
+              </ManagementField>
               {receipt.approvedAt ? (
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">{m.realm_claim_status_approved_at()}</dt>
-                  <dd>
-                    <NativeDate value={receipt.approvedAt} />
-                  </dd>
-                </div>
+                <ManagementField label={m.realm_claim_status_approved_at()}>
+                  <NativeDate value={receipt.approvedAt} />
+                </ManagementField>
               ) : null}
             </dl>
-            <details className="min-w-0 border-t pt-2 text-sm">
-              <summary className="min-h-11 cursor-pointer rounded-sm py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
-                {m.realm_status_details_reference()}
-              </summary>
-              <dl className="min-w-0 space-y-1 pb-2 pt-3">
-                <dt className="text-muted-foreground">{m.realm_claim_reference()}</dt>
-                <dd dir="ltr" className="select-all break-all font-mono">
-                  {receipt.requestId}
-                </dd>
-              </dl>
-            </details>
+            <ManagementReferences label={m.realm_status_details_reference()}>
+              <ManagementField label={m.realm_claim_reference()}>
+                <ManagementReference>{receipt.requestId}</ManagementReference>
+              </ManagementField>
+            </ManagementReferences>
           </ContentItemFrame>
         ) : (
           <p role="status" className="text-sm leading-7">
@@ -151,7 +137,7 @@ export function RealmClaimStatusView({
         )}
         <Button
           variant="outline"
-          className="min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
           disabled={!active || state.busy}
           onClick={() => void control.refresh()}
         >

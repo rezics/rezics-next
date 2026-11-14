@@ -32,6 +32,40 @@ implementation stays in Content and Studio remains the receiving owner.
 Shared Studio puts the document first, with compact phone navigation and unframed wide navigation.
 [Editing language](workspace-language.md) owns localized feedback and evidence.
 
+## Writing workbench
+
+Decision: one installed Book/column workbench presents the recognizable work title, ordered draft outline and
+predominant document canvas. The compact document toolbar owns Save, Write, Preview and Versions. Draft maintenance,
+exact identity, workspace help and publication occupy labelled secondary regions. Navigation precedes the canvas
+on phones and sits beside it on wide screens. Column series context stays distinct from independent articles;
+Book parts retain their nested native order. Missing document titles use existing localized untitled or unavailable
+wording, while the editable title remains empty. Exact Post, revision and digest identity stays in labelled details.
+
+Disclosure changes visibility, never controller or form lifetime. Editor undo/uploads, selected comparison and
+replacement confirmation survive view changes. Dirty text and discard confirmation keep draft actions visible;
+active publication review and receipt keep publication visible. Session failures, unknown results, same-intent retry,
+read-only access and publication unavailability remain visible outside collapsed secondary content. Book-start
+recovery stays outside the disabled document fieldset so its frozen same-intent retry remains actionable. Preparation and
+legacy readiness links belong in the publication region, not above the work heading. Generated producer binding,
+held activation consumer, exact operands, source permission and money rules retain their existing owners.
+
+Source-first choice: implement and commit the workbench and focused regression sources; run the final brief's required
+Web typecheck only. Acceptance execution, native/browser/keyboard/visual review, Storybook builds and captures are
+deferred to the dev verifier. Existing standalone review IDs and scripted walks stay intact. Manual routed workbench
+reviews use the same component and controller; they cover populated Book/column, dirty switching, selected comparison
+and independently unavailable publication preparation without claiming native publication.
+
+Sources read before design: this guide and [editing language](workspace-language.md), `workspace.tsx`, `contract.ts`,
+controller entry points, workspace callers, `hosted-draft-picker-view.tsx`, `hosted-history-view.tsx`, `revisions.tsx`,
+`hosted-release-preparation-view.tsx`, the existing preparation/native-draft stories and focused language regressions,
+and the read-only main checkout's reference index. Installed Impeccable documents were absent from the permitted
+skill/reference locations; no launcher, installation or PATH change is required for this local hierarchy repair.
+
+Deferred acceptance: `bun run --cwd apps/web test tests/studio-workspace-language.test.tsx
+ tests/studio-saved-version-language.test.tsx src/studio/workbench-region.test.tsx`. Existing autosave, frozen replay,
+dirty-switch and publication-lock assertions stay in the shared language regression. Manual stories are review
+fixtures; their supplied successful saves and unavailable publication do not establish native or promoted acceptance.
+
 ## Saved-version language
 
 Decision: Book and column version comparison uses complete `studio_revision_*` messages in all eight launch locales,

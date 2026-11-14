@@ -8,7 +8,7 @@
  */
 import { readScriptPolicy, scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
 import { type ControlPolicy } from '../src/policy.ts';
-import { RESIDENT_CODE_UNITS, VERIFIER_UNIT } from '../src/service.ts';
+import { HOST_UNIT, RESIDENT_CODE_UNITS, VERIFIER_UNIT } from '../src/service.ts';
 import { hasCpSyncAncestry } from './cp-sync-ancestry.ts';
 import {
   planCpSyncRefs,
@@ -407,7 +407,7 @@ export type ResidentHealth = {
   passedGates: number;
   /** Landings merged in the window. */
   landings: number;
-  /** A sample saw an undelivered landing request whose task is in the landing state. */
+  /** A sample saw pending ordinary product landing work. Main proof is a separate lane. */
   landingsRequested?: boolean;
 };
 /** Samples `sampleMs` apart; a single sample is an instant reading with no wait. */
@@ -446,7 +446,9 @@ export async function observeResident(
         landingsRequested ||= !!db
           .query(`SELECT 1 FROM landing_queue q JOIN worker_tasks t
           ON t.id = q.task AND t.current_attempt = q.attempt
-          WHERE q.delivered = 0 AND q.outcome IS NULL AND json_extract(t.body, '$.state') = 'landing' LIMIT 1`)
+          WHERE q.delivered = 0 AND q.outcome IS NULL AND json_extract(t.body, '$.state') = 'landing'
+            AND COALESCE(json_extract(t.body, '$.brief.target'), 'dev') = 'dev'
+            AND COALESCE(json_extract(t.body, '$.brief.goal'), '') <> 'control-plane' LIMIT 1`)
           .get();
       const rows = db
         .query(`SELECT a.body FROM worker_attempts a JOIN worker_tasks t ON t.id = a.task_id
@@ -573,6 +575,7 @@ export async function restartResident(
   checkout: string,
   run: ResidentCommand = residentCommand,
   install = false,
+  wait: (ms: number) => Promise<unknown> = (ms) => Bun.sleep(ms),
 ): Promise<void> {
   const status = await residentStatus(checkout, run);
   const installServices = residentInstallRequired(checkout, status, install);
@@ -583,13 +586,23 @@ export async function restartResident(
   for (const unit of RESIDENT_CODE_UNITS) {
     if (unit === VERIFIER_UNIT && status.verifierPaused) continue;
     const restarted = await run(['systemctl', '--user', 'restart', unit], checkout);
-    if (restarted.code !== 0)
+    const readReadiness = () =>
+      run(['systemctl', '--user', 'show', unit, '--property=ActiveState,ExecMainStartTimestamp', '--timestamp=unix'], checkout);
+    let shown = await readReadiness();
+    let startedAtSec = Number(/^ExecMainStartTimestamp=@(\d+)$/m.exec(shown.output)?.[1]);
+    const ready = () => shown.code === 0 && /^ActiveState=active$/m.test(shown.output);
+    // The old host can already be retiring for the new code when systemctl restart races it.
+    // systemd owns retries; observe a bounded in-flight successor without issuing a second restart.
+    if (restarted.code !== 0 && unit === HOST_UNIT) {
+      const attempts = Math.ceil(scriptPolicy().host.startupTimeoutMs / scriptPolicy().host.pollMs);
+      for (let attempt = 0; attempt < attempts && /^ActiveState=activating$/m.test(shown.output); attempt++) {
+        await wait(scriptPolicy().host.pollMs);
+        shown = await readReadiness();
+        startedAtSec = Number(/^ExecMainStartTimestamp=@(\d+)$/m.exec(shown.output)?.[1]);
+      }
+    }
+    if (restarted.code !== 0 && (unit !== HOST_UNIT || !ready() || !(startedAtSec >= publishedAtSec)))
       throw new Refusal(`${unit} failed to restart: ${restarted.output.trim() || `exit ${restarted.code}`}`);
-    const shown = await run(
-      ['systemctl', '--user', 'show', unit, '--property=ActiveState,ExecMainStartTimestamp', '--timestamp=unix'],
-      checkout,
-    );
-    const startedAtSec = Number(/^ExecMainStartTimestamp=@(\d+)$/m.exec(shown.output)?.[1]);
     if (shown.code !== 0 || !/^ActiveState=active$/m.test(shown.output))
       throw new Refusal(`${unit} did not become ready.`);
     if (!Number.isSafeInteger(startedAtSec) || startedAtSec < publishedAtSec)
@@ -598,7 +611,7 @@ export async function restartResident(
 }
 
 /**
- * A release rolls back only on a real signal: live workers fell by more than half, or landings already in flight before
+ * A release rolls back only on a real signal: live workers fell by more than half, or ordinary product landings already in flight before
  * publication merged none in the window. Lower counts within half, and quiet windows, are normal.
  */
 export function residentRegression(before: ResidentHealth, after: ResidentHealth): boolean {
@@ -922,7 +935,7 @@ export async function sync(options: Options = {}): Promise<number> {
           print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
           if (residentRegression(before, after))
             throw new Refusal(
-              'Resident lost more than half of its live workers, or landings running before publication merged none.',
+              'Resident lost more than half of its live workers, or ordinary product landings pending before publication merged none.',
             );
         } catch (error) {
           print(`cp-sync: ${error instanceof Error ? error.message : String(error)}; rolling back.`);

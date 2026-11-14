@@ -77,6 +77,10 @@ Decision: strict Content schema adapters expose their declared shape during cata
 TypeBox validator only on the first HTTP validation. A supplied custom validator owns validation directly. This
 keeps worker authorization free of transport compilation while preserving closed input and response contracts.
 
+Decision: hosted conversion, preparation and exact-disclosure schemas memoize shared IDs, targets and staging limits
+when requested; route parameters and rate metadata are built at mount, and candidate cleanup resolves its phase SQL
+table on first use, preserving the published bounds and HTTP contracts.
+
 Feed's mounted list operation consumes the shared immutable declaration catalogue through the
 Kernel transport adapter. Content retains the Feed query/result schemas and current disclosure
 composition; this route adds no publisher or generated-tree writer.

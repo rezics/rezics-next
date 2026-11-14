@@ -183,16 +183,14 @@ function listedAccount(expected: string) {
   const list = [...host.querySelectorAll('ul')].find(
     (node) => node.getAttribute('aria-label') === m.realm_bans_current(),
   );
-  const item = [...(list?.children ?? [])].find((node) =>
-    [...node.querySelectorAll('dt')].some(
-      (label) =>
-        label.textContent === m.realm_bans_details_account() && label.nextElementSibling?.textContent === expected,
-    ),
-  );
+  const item = [...(list?.children ?? [])].find((node) => node.querySelector('h4')?.textContent?.includes(expected));
   if (!item) throw new Error('The exact account must identify its own supplied ban row.');
   expect(item.tagName).toBe('LI');
-  expect(item.querySelector('h4')?.textContent).toBe(m.realm_bans_details_banned_heading());
-  disclosedAccount(item, expected);
+  const heading = item.querySelector('h4')!;
+  expect(heading.textContent).toBe(`${m.realm_bans_details_account()} ${expected}`);
+  const reference = heading.querySelector('[dir="ltr"]')!;
+  expect(reference.textContent).toBe(expected);
+  expect(reference.closest('details, [hidden], [aria-hidden="true"]')).toBeNull();
   return item;
 }
 function confirmation(label: string) {
@@ -337,7 +335,7 @@ test('all locales retain human row headings, exact account labels and supplied f
         const item = listedAccount(id(String(90 + index)));
         expect(item.textContent).toContain(fullReason);
         preciseDate(item, at);
-        expect(item.querySelector('dd')?.className).toContain('wrap-anywhere');
+        expect(item.querySelector('dd')?.className).toContain('[overflow-wrap:anywhere]');
       }
       expect(source.reads).toEqual([]);
       expect(source.lookups).toEqual([]);

@@ -15,6 +15,8 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import type { ReactNode } from 'react';
 import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
+import { MetaLine } from '@rezics/ui/meta-line';
+import { fullDateTime } from '../threads/byline-time';
 import { Button } from '@rezics/ui/shadcn/button';
 import { isNotFound, Link, useLocation, useRouter } from '@tanstack/react-router';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -48,7 +50,7 @@ import {
   applyProgressSnapshot,
 } from './progress-reads';
 import { finishProgressSession, recordProgressSession, readProgressSession } from './progress-server';
-import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
+import { rowRatio, SubjectCover } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressFailureMessage, progressView } from './progress-label';
 import { scalarRecordingValue } from './progress-view';
@@ -1485,7 +1487,7 @@ function SessionEditor({
         session.mode !== 'completed_units' &&
         !sessionHasIndependentMeasures(session) ? (
           <form
-            className="max-w-xl space-y-4"
+            className="space-y-4 rounded-xl border border-border p-4"
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
@@ -1556,7 +1558,16 @@ function SessionEditor({
                 </div>
               </>
             )}
-            <Button type="submit">{m.library_progress_record()}</Button>
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+              <Button type="submit" className="min-h-11">
+                {m.library_progress_record()}
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                {session.mode === 'scalar_amount'
+                  ? m.library_progress_scalar_meaning()
+                  : m.library_progress_cursor_meaning()}
+              </p>
+            </div>
           </form>
         ) : null}
         {offered && session.state === 'active' && session.mode === 'completed_units' ? (
@@ -1635,8 +1646,7 @@ function SessionEditor({
         </fieldset>
       ) : null}
       {review && review.kind !== 'finish' ? (
-        <section className="space-y-4">
-          <ProgressSessionReturnControls session={session} returnContext={returnContext} />
+        <section className="mt-5 space-y-4">
           <ProgressCorrectionReview
             data={review.data}
             busy={busy}
@@ -1658,7 +1668,7 @@ function SessionEditor({
   );
 
   return (
-    <article className="max-w-4xl space-y-10 text-foreground">
+    <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
         <ProgressSessionReturnControls session={session} returnContext={returnContext} />
@@ -1691,8 +1701,46 @@ function SessionEditor({
                   m.library_subject_unavailable()
                 )}
               </p>
-              {session.subject?.typeLabel ? (
-                <p className="text-sm text-muted-foreground">{session.subject.typeLabel}</p>
+              <MetaLine
+                items={[
+                  session.subject?.typeLabel,
+                  <span>
+                    {m.library_progress_started()}:{' '}
+                    <time dateTime={session.startedAt}>{fullDateTime(session.startedAt, getLocale())}</time>
+                  </span>,
+                ]}
+              />
+              {session.versionSubjectId ? (
+                <div className="space-y-1 border-l-2 border-border pl-4 text-sm">
+                  <p className="text-muted-foreground">{m.library_progress_version()}</p>
+                  {session.versionSubject ? (
+                    <Link
+                      to={
+                        subjectHref(
+                          {
+                            id: session.versionSubject.id,
+                            label: displayLibraryTitle(session.versionSubject.label, getLocale()).text,
+                          },
+                          getLocale(),
+                        ).to
+                      }
+                      params={
+                        subjectHref(
+                          {
+                            id: session.versionSubject.id,
+                            label: displayLibraryTitle(session.versionSubject.label, getLocale()).text,
+                          },
+                          getLocale(),
+                        ).params
+                      }
+                      className="font-medium underline-offset-4 hover:underline"
+                    >
+                      <LibraryTitle label={session.versionSubject.label} locale={getLocale()} />
+                    </Link>
+                  ) : (
+                    <p>{m.library_subject_unavailable()}</p>
+                  )}
+                </div>
               ) : null}
             </div>
             <p className="text-sm font-medium">
@@ -1726,28 +1774,9 @@ function SessionEditor({
                 {m.library_progress_total()}: {session.total}
               </p>
             ) : null}
-            <details className="space-y-2 text-sm text-muted-foreground">
-              <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                {m.library_progress_details()}
-              </summary>
-              <dl className="space-y-2">
-                <div>
-                  <dt>{m.library_progress_mode()}</dt>
-                  <dd>
-                    <code className="break-all">{session.mode}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>{m.library_progress_unit()}</dt>
-                  <dd>
-                    <code className="break-all">{session.unit}</code>
-                  </dd>
-                </div>
-              </dl>
-            </details>
+            <ProgressRecordingMeaning session={session} />
           </div>
         </div>
-        {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
       <PrivateOccurrenceControls
         session={session}
@@ -1774,7 +1803,7 @@ function SessionEditor({
       ) : null}
       {alert && !editing ? <p role="alert">{alert}</p> : null}
       {session.state === 'active' ? (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 p-4">
           {offered || sessionHasIndependentMeasures(session) ? (
             <Button onClick={openUpdate}>{m.library_progress_update()}</Button>
           ) : null}
@@ -1812,6 +1841,21 @@ function SessionEditor({
               ]}
             />
           ) : null}
+          {!sessionHasIndependentMeasures(session) ? (
+            <Exposure operation="progress_session.record">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  stage({
+                    kind: 'record',
+                    data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, clear: true },
+                  })
+                }
+              >
+                {m.library_progress_clear()}
+              </Button>
+            </Exposure>
+          ) : null}
         </div>
       ) : null}
       {session.state === 'active' && confirming && !editing ? (
@@ -1824,21 +1868,23 @@ function SessionEditor({
           </Button>
         </div>
       ) : null}
-      <Exposure operation="progress_session.record">
-        <Button
-          variant="outline"
-          onClick={() =>
-            stage({
-              kind: 'record',
-              data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, clear: true },
-            })
-          }
-        >
-          {m.library_progress_clear()}
-        </Button>
-      </Exposure>
+      {session.state !== 'active' ? (
+        <Exposure operation="progress_session.record">
+          <Button
+            variant="outline"
+            onClick={() =>
+              stage({
+                kind: 'record',
+                data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, clear: true },
+              })
+            }
+          >
+            {m.library_progress_clear()}
+          </Button>
+        </Exposure>
+      ) : null}
       <Exposure operation="progress_session.create">
-        <section className="space-y-3">
+        <section className="space-y-2 text-sm">
           <Link
             to="/library/progress"
             search={progressRestartSearch(returnContext, session.subjectId)}
@@ -1853,7 +1899,7 @@ function SessionEditor({
                   ) as never,
                 }
               : {})}
-            className={buttonClass}
+            className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4"
           >
             {m.library_progress_new_session()}
           </Link>
@@ -1877,7 +1923,7 @@ function SessionEditor({
           </BottomSheet>
         ) : (
           <Dialog open={editing} onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}>
-            <DialogContent className="max-h-[85dvh] overflow-y-auto">
+            <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
               <DialogTitle>{m.library_progress_update()}</DialogTitle>
               <input type="hidden" name="idempotencyKey" value={key} />
               {alert ? (
@@ -2025,11 +2071,25 @@ function ProgressRecordingMeaning({ session }: { session: ProgressSessionView })
         ? m.library_progress_cursor_meaning()
         : m.library_progress_units_meaning();
   return (
-    <details className="space-y-3 rounded-lg border p-3">
-      <summary className="min-h-10 cursor-pointer content-center font-medium">
+    <details className="space-y-3 text-sm text-muted-foreground">
+      <summary className="min-h-11 cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.library_progress_profile_rules()}
       </summary>
-      <p className="text-sm">{meaning}</p>
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <dt>{m.library_progress_mode()}</dt>
+          <dd>
+            <code className="break-all">{session.mode}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>{m.library_progress_unit()}</dt>
+          <dd>
+            <code className="whitespace-pre-wrap break-all">{session.unit}</code>
+          </dd>
+        </div>
+      </dl>
+      <p>{meaning}</p>
       {session.mode === 'scalar_amount' && measures.length > 1 ? (
         <p className="text-sm">{m.library_progress_independent_meaning()}</p>
       ) : null}

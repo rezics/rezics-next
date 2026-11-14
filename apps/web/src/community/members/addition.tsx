@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { ManagementField, ManagementReference, ManagementReview } from './management-ui';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import type {
   MemberAdditionIntent,
@@ -34,6 +35,7 @@ export function MemberAddition({
   addMember?: RealmMembersSource['addMember'];
   refreshSelected: () => Promise<MemberSelectionRead | null>;
 }) {
+  const id = useId();
   const [state, setState] = useState<State>({ kind: 'idle' });
   const stateNow = useRef<State>(state);
   stateNow.current = state;
@@ -158,25 +160,28 @@ export function MemberAddition({
 
   const intent = 'intent' in state ? state.intent : null;
   return (
-    <section aria-labelledby="realm-member-add-heading" className="space-y-3 rounded-lg border p-4">
-      <h3 id="realm-member-add-heading" className="font-semibold">
+    <section aria-labelledby={`${id}-add`} className="space-y-3 rounded-lg border p-4">
+      <h3 id={`${id}-add`} className="font-semibold">
         {m.realm_members_add_member()}
       </h3>
       {state.kind === 'review' && intent ? (
-        <div role="group" aria-label={m.realm_members_add_member()} className="space-y-3">
+        <ManagementReview title={m.realm_members_add_member()}>
           <p>{m.realm_members_add_review({ account: selected.identity.label, realm: realmLabel })}</p>
-          <p className="text-sm text-muted-foreground">
-            <bdi>{selected.identity.reference}</bdi>
-            {' · '}
-            <bdi>{selected.identity.accountId}</bdi>
-            {' · '}
-            <bdi>{intent.realmId}</bdi>
-          </p>
+          <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <ManagementField label={m.realm_bans_details_account()}>
+              <ManagementReference>{selected.identity.accountId}</ManagementReference>
+            </ManagementField>
+            <ManagementField label={m.realm_review_realm()}>
+              <bdi>{realmLabel}</bdi>
+              <br />
+              <ManagementReference>{intent.realmId}</ManagementReference>
+            </ManagementField>
+          </dl>
           <div className="flex flex-wrap gap-2">
             <Button
               ref={confirm}
               type="button"
-              className="min-h-11 whitespace-normal"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
               disabled={!current()}
               onClick={() => {
                 focusResult.current = true;
@@ -188,26 +193,28 @@ export function MemberAddition({
             <Button
               type="button"
               variant="ghost"
-              className="min-h-11 whitespace-normal"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
               disabled={!current()}
               onClick={() => {
                 if (!current()) return;
                 intentNow.current = null;
                 setState({ kind: 'idle' });
-                queueMicrotask(() => trigger.current?.focus());
+                queueMicrotask(() => {
+                  if (current() && trigger.current?.isConnected) trigger.current.focus();
+                });
               }}
             >
               {m.realm_bans_cancel()}
             </Button>
           </div>
-        </div>
+        </ManagementReview>
       ) : null}
       {state.kind === 'idle' || state.kind === 'rejected' ? (
         <Button
           ref={trigger}
           type="button"
           variant="outline"
-          className="min-h-11 whitespace-normal"
+          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
           disabled={!current()}
           onClick={startReview}
         >
@@ -223,7 +230,7 @@ export function MemberAddition({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
             disabled={!current()}
             onClick={() => void submit(intent)}
           >
@@ -239,7 +246,7 @@ export function MemberAddition({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
             disabled={state.kind === 'checking' || !current()}
             onClick={() => void checkStatus(intent)}
           >

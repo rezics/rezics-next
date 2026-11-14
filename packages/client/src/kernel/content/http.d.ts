@@ -19953,7 +19953,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                             body: {
                                 expectedRevisionId: string;
                                 occurrenceId: string;
-                                parentId: string;
+                                parentId: string | null;
                                 beforeOccurrenceId: string | null;
                             };
                             params: {

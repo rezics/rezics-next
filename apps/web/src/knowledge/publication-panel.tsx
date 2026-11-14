@@ -1,3 +1,5 @@
+import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } from './workspace';
+import { KnowledgePublicationReaderLink } from './publication-return';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { KnowledgeReferenceBody } from './reference-view';
@@ -6,7 +8,6 @@ import { subjectHref } from '../subject/subject-href';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
 import type { KnowledgePrivateHead } from './private-knowledge';
 import type { KnowledgePrivateVisitRead } from './private-server';
-import { knowledgeExactHref, knowledgeLiveHref } from './public-read';
 import {
   knowledgePublicationObservation,
   reviewKnowledgePublication,
@@ -25,10 +26,8 @@ export type KnowledgePublicationOperations = Readonly<{
   selectPublication: (intent: KnowledgePublicationIntent) => Promise<KnowledgePublicationResult>;
 }>;
 
-const control =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const link =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal break-words py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = knowledgeControl;
+const link = knowledgeLink;
 
 /** This panel receives saved observations only; the editor draft is deliberately absent from its interface. */
 export function KnowledgePublicationPanel({
@@ -236,8 +235,12 @@ export function KnowledgePublicationPanel({
   const canReview = admission === 'available' && !blocked && !unresolved && !reading && !needsRead;
   const failure = !['idle', 'pending', 'acknowledged'].includes(state);
   return (
-    <section className="min-w-0 space-y-5 border-t border-border pt-6" aria-labelledby={headingId}>
-      <h2 id={headingId} className="text-xl font-semibold leading-snug text-balance">
+    <section
+      id="knowledge-publication"
+      className="min-w-0 scroll-mt-6 space-y-5 border-t border-border pt-6"
+      aria-labelledby={headingId}
+    >
+      <h2 id={headingId} className="text-lg font-semibold leading-snug">
         {m.knowledge_publication_heading({}, options)}
       </h2>
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
@@ -253,14 +256,20 @@ export function KnowledgePublicationPanel({
           </p>
           {currentReceipt.publicationId !== null && currentReceipt.revisionId !== null ? (
             <>
-              <PublicationIdentity
-                label={m.knowledge_publication_identity({}, options)}
-                value={currentReceipt.publicationId}
-              />
-              <PublicationIdentity
-                label={m.knowledge_private_revision({}, options)}
-                value={currentReceipt.revisionId}
-              />
+              <KnowledgeDetails label={m.knowledge_workspace_saved({}, options)}>
+                <dl className="grid gap-4 sm:grid-cols-2">
+                  <KnowledgeValue
+                    label={m.knowledge_publication_identity({}, options)}
+                    value={currentReceipt.publicationId}
+                    exact
+                  />
+                  <KnowledgeValue
+                    label={m.knowledge_private_revision({}, options)}
+                    value={currentReceipt.revisionId}
+                    exact
+                  />
+                </dl>
+              </KnowledgeDetails>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {m.knowledge_publication_public_admission({}, options)}
               </p>
@@ -268,15 +277,19 @@ export function KnowledgePublicationPanel({
                 className="flex min-w-0 flex-wrap gap-x-6 gap-y-2"
                 aria-label={m.knowledge_publication_links({}, options)}
               >
-                <a
-                  className={link}
-                  href={knowledgeExactHref(locale, currentReceipt.documentId, currentReceipt.revisionId)}
+                <KnowledgePublicationReaderLink
+                  address={{ notebookId: head.notebookId, documentId: currentReceipt.documentId }}
+                  locale={locale}
+                  revisionId={currentReceipt.revisionId}
                 >
                   {m.knowledge_publication_exact({}, options)}
-                </a>
-                <a className={link} href={knowledgeLiveHref(locale, currentReceipt.documentId)}>
+                </KnowledgePublicationReaderLink>
+                <KnowledgePublicationReaderLink
+                  address={{ notebookId: head.notebookId, documentId: currentReceipt.documentId }}
+                  locale={locale}
+                >
                   {m.knowledge_publication_live({}, options)}
-                </a>
+                </KnowledgePublicationReaderLink>
               </nav>
               {head.revisionId !== currentReceipt.revisionId ? (
                 <p role="status">{m.knowledge_publication_new_draft({}, options)}</p>
@@ -286,7 +299,12 @@ export function KnowledgePublicationPanel({
         </div>
       ) : null}
       {head.publicationId !== null && !currentReceipt ? (
-        <PublicationIdentity label={m.knowledge_publication_identity({}, options)} value={head.publicationId} />
+        <p className="text-sm font-medium">{m.knowledge_workspace_publication_selected({}, options)}</p>
+      ) : null}
+      {head.publicationId !== null && !currentReceipt ? (
+        <KnowledgeDetails label={m.knowledge_workspace_saved({}, options)}>
+          <PublicationIdentity label={m.knowledge_publication_identity({}, options)} value={head.publicationId} />
+        </KnowledgeDetails>
       ) : null}
       {failure ? <p role="alert">{failureText(state)}</p> : null}
       {state === 'pending' ? <p role="status">{m.knowledge_publication_pending({}, options)}</p> : null}
@@ -364,14 +382,11 @@ export function KnowledgePublicationPanel({
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
             {m.knowledge_publication_private_review({}, options)}
           </p>
+          <p className="text-xl font-semibold leading-snug">{currentReview.head.title}</p>
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <PublicationIdentity
               label={m.knowledge_private_document_id({}, options)}
               value={currentReview.head.documentId}
-            />
-            <PublicationIdentity
-              label={m.knowledge_private_document_title({}, options)}
-              value={currentReview.head.title}
             />
             <PublicationIdentity
               label={m.knowledge_private_language({}, options)}

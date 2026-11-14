@@ -12,14 +12,34 @@ import type {
 import { reviewExample, reviewRequest } from './patterns/realm-claim-review/example';
 import { m } from '../paraglide/messages.js';
 
-function CurrentReview({ count = 1, concealed = false, context = true, long = false, uncertain = false }) {
+function CurrentReview({
+  count = 1,
+  concealed = false,
+  context = true,
+  long = false,
+  uncertain = false,
+  inspectionUnavailable = false,
+  readbackUnavailable = false,
+}) {
   const example = useMemo(() => {
     if (uncertain) return reviewExample('uncertain');
+    if (readbackUnavailable) {
+      const success = reviewExample('success');
+      return {
+        ...success,
+        adapter: {
+          ...success.adapter,
+          read: async (input) =>
+            input.inspectRequestId ? success.adapter.read(input) : { kind: 'unavailable' as const },
+        },
+      };
+    }
     const rows = Array.from({ length: count }, (_, index) => {
       const requestId = `01a1a000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`;
       return {
         ...reviewRequest,
         requestId,
+        claimantAccountId: `01a1a000-0000-7000-8000-${String(index + 101).padStart(12, '0')}`,
         claimant: concealed
           ? { label: 'Claimant', href: null }
           : { label: long ? 'River Chen 長い表示名 '.repeat(180) : 'River Chen', href: '/@river' },
@@ -45,6 +65,7 @@ function CurrentReview({ count = 1, concealed = false, context = true, long = fa
     const adapter: RealmClaimReviewAdapter = {
       read: async (input) => {
         if (input.inspectRequestId) {
+          if (inspectionUnavailable) return { kind: 'unavailable' };
           const { realmId: _realm, ...row } = rows.find((row) => row.requestId === input.inspectRequestId)!;
           return { kind: 'ready', page: { ...page, selectedRequest: { ...row, currentEpisode: true } } };
         }
@@ -53,7 +74,7 @@ function CurrentReview({ count = 1, concealed = false, context = true, long = fa
       approve: async () => ({ kind: 'conflict' }),
     };
     return { initial, adapter };
-  }, [count, concealed, context, long, uncertain]);
+  }, [count, concealed, context, long, uncertain, inspectionUnavailable, readbackUnavailable]);
   return (
     <PatternStory visitor="Signed In" path={`/realms/${reviewRequest.realmId}/claims`}>
       <AppShell>
@@ -115,5 +136,39 @@ export const InspectThenRecover: Story = {
     await expect(view.queryByText(m.realm_review_success())).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.realm_review_retry() }));
     await expect(await view.findByText(m.realm_review_success())).toBeVisible();
+  },
+};
+
+export const SparseCurrentQueue: Story = {
+  args: { count: 0 },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.realm_review_sparse())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.realm_review_next() })).toBeEnabled();
+    await expect(canvas.queryByText(m.realm_review_empty())).toBeNull();
+  },
+};
+
+export const UnavailableCurrentInspection: Story = {
+  args: { inspectionUnavailable: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_review_review() }));
+    await expect(await canvas.findByText(m.realm_review_unavailable())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.realm_review_confirm() })).toBeNull();
+  },
+};
+
+export const AcceptedApprovalWithUnavailableQueue: Story = {
+  args: { readbackUnavailable: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_review_review() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_review_confirm() }));
+    const receipt = await canvas.findByRole('status', { name: m.realm_review_success() });
+    await expect(receipt).toBeVisible();
+    await expect(canvas.getByText(m.realm_review_refresh_after_approval())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.realm_review_retry_page() })).toBeEnabled();
+    await expect(canvas.queryByRole('button', { name: m.realm_review_retry() })).toBeNull();
   },
 };

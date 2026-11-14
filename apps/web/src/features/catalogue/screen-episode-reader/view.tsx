@@ -119,6 +119,7 @@ export function ScreenEpisodeList({
   retry,
   visit,
   origin,
+  parentType,
   readerSpoilerLevel = 0,
   visitKey = '',
   link: Link = PlainLink,
@@ -130,18 +131,22 @@ export function ScreenEpisodeList({
   retry?: () => void;
   visit?: ScreenEpisodeVisit;
   origin: ScreenEpisodeOrigin;
+  parentType?: string;
   readerSpoilerLevel?: number;
   visitKey?: string;
   link?: PageLink;
 }) {
   const { SpoilerGate, subjectHref, visitReturn } = useScreenReadingApplication();
   const o = options(locale);
+  const title =
+    parentType === 'schema:TVSeason'
+      ? m.screen_episode_reader_episodes_title({}, o)
+      : m.screen_episode_reader_title({}, o);
   const failed = read && !read.ok ? read : undefined;
   const returnedSelection = screenEpisodeSelection(origin.searchStr);
   const [selectionState, setSelectionState] = useState<{ visitKey: string; membershipId?: string }>({ visitKey });
   if (selectionState.visitKey !== visitKey) setSelectionState({ visitKey });
-  const selectedMembershipId = selectionState.membershipId;
-  const selected = returnedSelection ?? selectedMembershipId;
+  const selected = returnedSelection ?? selectionState.membershipId;
   const selectionMissing =
     !!returnedSelection && read?.ok && !read.entries.some((entry) => entry.membershipId === returnedSelection);
   const startHref =
@@ -151,25 +156,41 @@ export function ScreenEpisodeList({
       ? screenEpisodeRestartHref(origin)
       : undefined);
   const hrefs = { subjectHref, visitReturn };
+  const nextHref =
+    read?.ok && read.next && visit?.canContinue !== false
+      ? screenEpisodeContinuationHref(origin, read.next)
+      : undefined;
 
+  function windowLink(href: string, kind: 'continue' | 'previous' | 'start', label: string) {
+    return (
+      <span
+        onClickCapture={(event) => visit?.onNavigate(kind, href, event as unknown as MouseEvent<HTMLAnchorElement>)}
+      >
+        <Link href={href} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
+          {label}
+        </Link>
+      </span>
+    );
+  }
   return (
     <section
       id="screen-episode-list"
       tabIndex={-1}
       aria-labelledby="screen-episode-list-title"
       data-screen-episode-list
-      className="min-w-0 space-y-3 rounded-lg border border-border p-4"
+      data-screen-parent-type={parentType}
+      className="min-w-0 space-y-4 border-t border-border pt-5"
     >
-      <header className="space-y-1">
+      <header className="min-w-0 space-y-1">
         <ContentItemHeading id="screen-episode-list-title" level={3} className="font-sans text-lg font-semibold">
-          {m.screen_episode_reader_title({}, o)}
+          {title}
         </ContentItemHeading>
-        <p className="text-sm text-muted-foreground">{m.screen_episode_position_help({}, o)}</p>
+        <p className="max-w-prose text-sm text-muted-foreground">{m.screen_episode_position_help({}, o)}</p>
       </header>
       {loading ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
       {selectionMissing ? <p role="status">{m.screen_episode_reader_selection_missing({}, o)}</p> : null}
       {failed ? (
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <p role="alert">
             {failed.reason === 'stale'
               ? m.screen_reader_stale({}, o)
@@ -190,24 +211,13 @@ export function ScreenEpisodeList({
               {m.correction_retry({}, o)}
             </button>
           ) : null}
-          {visit?.previousHref ? (
-            <span
-              onClickCapture={(event) =>
-                visit.onNavigate('previous', visit.previousHref!, event as unknown as MouseEvent<HTMLAnchorElement>)
-              }
-            >
-              <Link href={visit.previousHref} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
-                {m.screen_episode_reader_previous({}, o)}
-              </Link>
-            </span>
-          ) : null}
         </div>
       ) : null}
       {!loading && !read ? <p role="alert">{m.screen_reader_unavailable({}, o)}</p> : null}
       {read?.ok && read.state === 'empty' ? <p role="status">{m.screen_reader_empty({}, o)}</p> : null}
       {read?.ok && read.state === 'withheld' ? <p role="status">{m.screen_episode_reader_withheld({}, o)}</p> : null}
       {read?.ok && read.entries.some((entry) => entry.statement) ? (
-        <ul aria-label={m.screen_episode_reader_title({}, o)} className="grid min-w-0 gap-2">
+        <ul aria-label={title} className="grid min-w-0 divide-y divide-border rounded-lg border border-border">
           {read.entries.map((entry) => {
             const statement = entry.statement;
             if (!statement) return null;
@@ -220,40 +230,49 @@ export function ScreenEpisodeList({
             const elementId = screenEpisodeEntryElementId(entry.membershipId);
             const expanded = selected === entry.membershipId;
             const content = (
-              <div className="min-w-0 rounded-md bg-muted/40 p-3">
-                <div
-                  className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1"
-                  onClickCapture={(event) =>
-                    visit?.onEntryNavigate(href, event as unknown as MouseEvent<HTMLAnchorElement>)
-                  }
-                >
-                  <Link
-                    href={href}
-                    {...(entry.language ? { lang: entry.language } : {})}
-                    className={`${actionClass} text-primary underline underline-offset-4`}
+              <div className="min-w-0 p-3 sm:p-4">
+                <div className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-2 sm:flex-nowrap">
+                  {entry.position !== undefined ? (
+                    <p className="min-w-0 max-w-full shrink-0 rounded-md bg-muted px-2 py-1 text-sm text-muted-foreground sm:max-w-24">
+                      <span className="sr-only">{m.screen_episode_position({}, o)}: </span>
+                      <span dir="auto" className="[overflow-wrap:anywhere]">
+                        {entry.position}
+                      </span>
+                    </p>
+                  ) : null}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div
+                      onClickCapture={(event) =>
+                        visit?.onEntryNavigate(href, event as unknown as MouseEvent<HTMLAnchorElement>)
+                      }
+                    >
+                      <Link
+                        href={href}
+                        {...(entry.language ? { lang: entry.language } : {})}
+                        className={`${actionClass} inline-flex items-center font-medium text-primary underline-offset-4 hover:underline`}
+                      >
+                        {label}
+                      </Link>
+                    </div>
+                    <p
+                      lang={entry.typeLabel.lang ?? undefined}
+                      className="text-sm text-muted-foreground [overflow-wrap:anywhere]"
+                    >
+                      {entry.typeLabel.text || fallback}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`${buttonVariants({ variant: 'ghost' })} ${actionClass} shrink-0 text-sm`}
+                    aria-expanded={expanded}
+                    {...(expanded ? { 'aria-controls': `screen-episode-evidence-${entry.membershipId}` } : {})}
+                    onClick={() =>
+                      setSelectionState({ visitKey, ...(expanded ? {} : { membershipId: entry.membershipId }) })
+                    }
                   >
-                    {label}
-                  </Link>
-                  <span lang={entry.typeLabel.lang ?? undefined} className="text-sm text-muted-foreground">
-                    {entry.typeLabel.text || fallback}
-                  </span>
+                    {expanded ? m.screen_episode_reader_hide_evidence({}, o) : m.screen_episode_reader_inspect({}, o)}
+                  </button>
                 </div>
-                {entry.position !== undefined ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {m.screen_episode_position({}, o)}: <span dir="auto">{entry.position}</span>
-                  </p>
-                ) : null}
-                <button
-                  type="button"
-                  className={`${buttonVariants({ variant: 'ghost' })} ${actionClass} mt-2`}
-                  aria-expanded={expanded}
-                  {...(expanded ? { 'aria-controls': `screen-episode-evidence-${entry.membershipId}` } : {})}
-                  onClick={() =>
-                    setSelectionState({ visitKey, ...(expanded ? {} : { membershipId: entry.membershipId }) })
-                  }
-                >
-                  {expanded ? m.screen_episode_reader_hide_evidence({}, o) : m.screen_episode_reader_inspect({}, o)}
-                </button>
                 {expanded ? <MembershipEvidence entry={entry} release={release} locale={locale} link={Link} /> : null}
               </div>
             );
@@ -263,10 +282,15 @@ export function ScreenEpisodeList({
                 {...(elementId ? { id: elementId } : {})}
                 tabIndex={-1}
                 aria-current={expanded ? 'true' : undefined}
-                className="min-w-0"
+                data-screen-member-type={entry.type}
+                className="min-w-0 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 {spoilerLevel(statement as unknown as Stmt) > readerSpoilerLevel ? (
-                  <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+                  <SpoilerGate
+                    label={m.subject_spoiler_show({}, o)}
+                    hideLabel={m.subject_spoiler_hide({}, o)}
+                    unmountOnHide
+                  >
                     {content}
                   </SpoilerGate>
                 ) : (
@@ -277,66 +301,24 @@ export function ScreenEpisodeList({
           })}
         </ul>
       ) : null}
-      {read?.ok ? (
-        <div className="flex min-w-0 flex-wrap gap-3">
-          {visit?.previousHref ? (
-            <span
-              onClickCapture={(event) =>
-                visit.onNavigate('previous', visit.previousHref!, event as unknown as MouseEvent<HTMLAnchorElement>)
-              }
-            >
-              <Link href={visit.previousHref} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
-                {m.screen_episode_reader_previous({}, o)}
-              </Link>
+      {visit?.previousHref || nextHref || startHref ? (
+        <nav aria-label={title} className="flex min-w-0 flex-wrap items-center gap-3">
+          {visit?.previousHref
+            ? windowLink(visit.previousHref, 'previous', m.screen_episode_reader_previous({}, o))
+            : null}
+          {nextHref ? windowLink(nextHref, 'continue', m.screen_episode_reader_continue({}, o)) : null}
+          {startHref ? (
+            <span data-screen-episode-recovery tabIndex={-1}>
+              {windowLink(startHref, 'start', m.screen_episode_reader_start({}, o))}
             </span>
           ) : null}
-          {read.next && visit?.canContinue !== false ? (
-            <span
-              onClickCapture={(event) =>
-                visit?.onNavigate(
-                  'continue',
-                  screenEpisodeContinuationHref(origin, read.next!),
-                  event as unknown as MouseEvent<HTMLAnchorElement>,
-                )
-              }
-            >
-              <Link
-                href={screenEpisodeContinuationHref(origin, read.next)}
-                className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
-              >
-                {m.screen_episode_reader_continue({}, o)}
-              </Link>
-            </span>
-          ) : null}
-          {read.next && visit?.stopped === 'limit' ? <p role="status">{m.screen_episode_reader_limit({}, o)}</p> : null}
-          {read.next && visit?.stopped === 'cycle' ? <p role="status">{m.screen_episode_reader_cycle({}, o)}</p> : null}
-        </div>
+        </nav>
       ) : null}
-      {startHref ? (
-        <div className="flex min-w-0 flex-wrap gap-3">
-          {visit?.previousHref ? (
-            <span
-              onClickCapture={(event) =>
-                visit.onNavigate('previous', visit.previousHref!, event as unknown as MouseEvent<HTMLAnchorElement>)
-              }
-            >
-              <Link href={visit.previousHref} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
-                {m.screen_episode_reader_previous({}, o)}
-              </Link>
-            </span>
-          ) : null}
-          <span
-            data-screen-episode-recovery
-            tabIndex={-1}
-            onClickCapture={(event) =>
-              visit?.onNavigate('start', startHref, event as unknown as MouseEvent<HTMLAnchorElement>)
-            }
-          >
-            <Link href={startHref} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
-              {m.screen_episode_reader_start({}, o)}
-            </Link>
-          </span>
-        </div>
+      {read?.ok && read.next && visit?.stopped === 'limit' ? (
+        <p role="status">{m.screen_episode_reader_limit({}, o)}</p>
+      ) : null}
+      {read?.ok && read.next && visit?.stopped === 'cycle' ? (
+        <p role="status">{m.screen_episode_reader_cycle({}, o)}</p>
       ) : null}
     </section>
   );

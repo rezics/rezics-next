@@ -102,6 +102,12 @@ test('Person and Character windows preserve duplicate assertions, evidence and k
       const { host, fixture, click, button, window } = page;
       requests.length = 0;
       const field = host.querySelector(`[id="profile-fact-${encodeURIComponent(fixture.property)}"]`)!.parentElement!;
+      const disclosure = field.closest('details');
+      if (disclosure)
+        await act(async () => {
+          disclosure.open = true;
+          disclosure.dispatchEvent(new window.Event('toggle'));
+        });
       expect(field.querySelectorAll('li[data-statement]')).toHaveLength(20);
       expect(field.textContent).toContain('Condition 2');
       expect(field.textContent).toContain('最初 العربية');
@@ -146,12 +152,18 @@ test('Person and Character windows preserve duplicate assertions, evidence and k
       expect(host.querySelector('h1')).toBeNull();
       expect(host.textContent).toContain(m.value_denied());
       expect(window.document.activeElement?.getAttribute('data-slot')).toBe('people-fact-visit');
+      if (disclosure)
+        await act(async () => {
+          disclosure.open = false;
+          disclosure.dispatchEvent(new window.Event('toggle'));
+        });
       await act(async () => {
         window.document.activeElement!.dispatchEvent(
           new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
         );
       });
       expect(window.document.activeElement).toBe(origin);
+      if (disclosure) expect(disclosure.open).toBe(true);
       expect(field.textContent).toContain('Condition 21');
       expect(field.querySelector('input')?.value).toBe('');
     } finally {

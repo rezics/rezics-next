@@ -8,6 +8,7 @@ import type {
   StudioResult,
   StudioSelection,
 } from '../src/studio/contract';
+import type { HostedBookStartBinding } from '../src/studio/hosted-book-start';
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
@@ -16,6 +17,7 @@ const { getByRole, queryByRole, waitFor } = await import('@testing-library/dom')
 const { fromPlainText } = await import('@rezics/document');
 const { editionDocumentDigest } = await import('../src/content-editions/edition-model');
 const { StudioWorkspace } = await import('../src/studio/workspace');
+const { workbenchCopy } = await import('../src/studio/workbench-copy');
 const language = await import('../src/studio/workspace-language');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale, locales } = await import('../src/paraglide/runtime.js');
@@ -177,11 +179,11 @@ async function fixture(kind: StudioInput['profile']['kind'] = 'articles', editab
   };
 }
 
-async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input) {
+async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input, bookStart?: HostedBookStartBinding) {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  await act(async () => root.render(<StudioWorkspace input={input} port={f.port} />));
+  await act(async () => root.render(<StudioWorkspace input={input} port={f.port} bookStart={bookStart} />));
   const button = (name: string) => getByRole(host, 'button', { name, exact: true }) as HTMLButtonElement;
   return {
     host,
@@ -211,6 +213,56 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input) {
     },
   };
 }
+
+test('uncertain Book-start retry remains reachable while document controls are locked', async () => {
+  setLocale('en', { reload: false });
+  const f = await fixture();
+  const attempts: Array<Parameters<HostedBookStartBinding['native']['create']>> = [];
+  const observation = {
+    sourceId: 'studio-session',
+    generation: 1,
+    dataUpdateCount: 1,
+    dataUpdatedAt: 1,
+    state: 'signed-in',
+    subject: 'author',
+    credentialMode: 'session',
+    healthy: true,
+    csrfReady: true,
+  } as const;
+  const bookStart: HostedBookStartBinding = {
+    native: {
+      create: mock(async (...args: Parameters<HostedBookStartBinding['native']['create']>) => {
+        attempts.push(args);
+        return failed('uncertain');
+      }),
+      readOwn: f.unused,
+    },
+    source: {
+      id: observation.sourceId,
+      read: () => observation,
+      revision: () => observation.generation,
+      subscribe: () => () => {},
+    },
+    viewer: { accountId: observation.subject, authnEpoch: 1 },
+    isCurrent: () => true,
+    navigate: () => {},
+  };
+  const v = await mount(f, f.input, bookStart);
+  try {
+    await v.click(m.studio_book_start_label());
+    expect(v.host.querySelector('fieldset')!.disabled).toBe(true);
+    const retry = v.button(m.studio_book_start_retry());
+    expect(retry.closest('fieldset:disabled')).toBeNull();
+    expect(retry.disabled).toBe(false);
+    expect(getByRole(v.host, 'alert').textContent).toContain(m.studio_book_start_uncertain());
+    await v.click(m.studio_book_start_retry());
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]!.slice(0, 2)).toEqual(attempts[0]!.slice(0, 2));
+    expect(f.unused).not.toHaveBeenCalled();
+  } finally {
+    await v.close();
+  }
+});
 
 test('workspace keys and named arguments match in all eight launch catalogues', async () => {
   const catalogues = await Promise.all(
@@ -301,16 +353,22 @@ test.each(cases)(
       expect(v.title().value).toBe('Switch me');
       expect(queryByRole(v.host, 'button', { name: m.studio_workspace_retry(), exact: true })).toBeNull();
       f.saveFailure(null);
-      await v.open('post-二');
+      await v.open(m.own_drafts_no_title());
       expect(getByRole(v.host, 'region', { name: m.studio_workspace_switch_region() })).toBeTruthy();
       expect(f.port.open).not.toHaveBeenCalled();
       await v.click(m.studio_workspace_keep_editing());
       expect(v.title().value).toBe('Switch me');
-      await v.open('post-二');
+      await v.open(m.own_drafts_no_title());
       await v.click(m.studio_workspace_save_switch());
       await waitFor(() => expect(v.title().value).toBe(''));
-      expect(getByRole(v.host, 'heading', { name: 'post-二', exact: true })).toBeTruthy();
-      expect(document.activeElement?.textContent).toBe('post-二');
+      expect(getByRole(v.host, 'heading', { name: m.own_drafts_no_title(), exact: true })).toBeTruthy();
+      expect(queryByRole(v.host, 'heading', { name: 'post-二', exact: true })).toBeNull();
+      expect(document.activeElement?.textContent).toBe(m.own_drafts_no_title());
+      await v.click(workbenchCopy[locale].draftActions);
+      const identity = v.host.querySelector<HTMLDetailsElement>('.studio-document .studio-technical')!;
+      expect(identity.textContent).toContain('post-二');
+      expect(identity.textContent).toContain(f.second.revision.exact.revisionId);
+      expect(identity.textContent).toContain(f.second.revision.exact.sha256);
       await v.change(v.title(), 'Local only');
       await v.click(m.studio_workspace_discard_review());
       expect(v.host.textContent).toContain(m.studio_workspace_discard_prompt());
@@ -345,7 +403,7 @@ test.each(locales)(
       expect(v.host.textContent).toContain(m.studio_workspace_preview_saved());
       for (const kind of ['denied', 'withdrawn', 'invalid', 'stale', 'unavailable', 'transport'] as const) {
         f.openFailure(kind);
-        await v.open('post-二');
+        await v.open(m.own_drafts_no_title());
         await waitFor(() =>
           expect(getByRole(v.host, 'alert').textContent).toContain(
             language.workspaceFailureMessage(kind === 'transport' ? 'unavailable' : kind),
@@ -386,6 +444,7 @@ test('German publication progress locks the default editor independently of its 
   const release = f.holdPublish();
   const v = await mount(f);
   try {
+    await v.click(workbenchCopy.de.publication);
     await v.click(m.studio_release_review());
     await waitFor(() => expect(getByRole(v.host, 'checkbox', { name: m.studio_account_confirm() })).toBeTruthy());
     await act(async () => getByRole(v.host, 'checkbox', { name: m.studio_account_confirm() }).click());

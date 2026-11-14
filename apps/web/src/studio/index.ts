@@ -1,4 +1,5 @@
-export { HostedBookInventory, StudioWorkspace, type StudioWorkspaceProps } from './workspace';
+export { StudioController } from './controller';
+export { HostedBookInventory, StudioWorkspace, StudioWorkbench, type StudioWorkspaceProps } from './workspace';
 export { createStudioAccountPort } from './account-port';
 export { createPostDocumentPort } from './post-document-port';
 export { listHostedBooks, readOwnedHostedBook } from './hosted-actions';
@@ -74,3 +75,5 @@ export { HostedDraftPointEntry } from './hosted-draft-point-entry';
 
 export { HostedReleasePreparationEntry } from './hosted-release-preparation-entry';
 export { releaseCopy } from './hosted-release-preparation-copy';
+export { HostedLegacyBaselineEntry } from './hosted-legacy-baseline-entry';
+export { baselineCopy } from './hosted-legacy-baseline-copy';

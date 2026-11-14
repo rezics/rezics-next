@@ -1332,8 +1332,9 @@ if [ "$(jq '.alerts | length' <<<"$duty")" -gt 0 ]; then
 fi
 ```
 
-The native call sends the frozen report through the same `.temp/goal/telegram.ts text` path and returns its delivery
-state and report reference. Keep the inbox fallback above, remove the bridge's final direct `telegram.ts text "$msg"`
+The native call passes the frozen report to `.temp/goal/telegram.ts hourly-text` and returns its delivery state
+and report reference. The private notifier projects one bounded Telegram chat message from the report; the complete
+frozen report remains in Goal and is also available to the native inbox bridge. Keep the inbox fallback above, remove the bridge's final direct `telegram.ts text "$msg"`
 send to avoid a second sender, and restart the one existing bridge process after its current boundary send. Do not add
 a second timer or watcher. Delivery remains first-write and at-most-once across that restart.
 
@@ -1386,7 +1387,9 @@ Decision: host-capacity tickets, waiters, memory/cap policy and `releaseWhenStar
 identity, width snapshots and launch evidence stay with their current owners.
 The existing admission lease also serializes both lanes' working-set reservations and pressure brake. A finite
 operator worker slice enables aggregate memory admission: product code starts reserve 2 GiB initially, control-plane
-and unknown starts 4 GiB. Existing worker scopes reserve at least 4 GiB or their measured peak, whichever is larger;
+and unknown starts 4 GiB. A current product writer with exact process ownership of the same cgroup incarnation
+retains its 2 GiB reservation; control-plane, unclassified, stale and foreign scopes retain 4 GiB. Every scope
+reserves at least its measured peak, and aggregate actual use remains charged;
 support services' current memory and admitted reservations are included. The 12 GiB per-worker hard limit remains a
 burst safety ceiling, not an expected working set. Support growth can still compete within the hard aggregate.
 Decision: positive terminal proof retires only the writing reserve of its exact task, attempt and scope incarnation.
@@ -1401,6 +1404,9 @@ Linux memory-full PSI at 1% or I/O-full at 10% pauses new starts. Recovery requi
 0.2% and 2% respectively, sampled in the existing admission loop without another watcher or model turn.
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
 projection; admission counts only each task's current attempt, while width retains its process-identity classification.
+Legacy SQLite numeric process-start values are read as decimal strings only when they are exact safe integers;
+unsafe or malformed values remain unknown. Decimal strings retain their exact value, and PID, boot and process-group
+identity checks still determine liveness. These observations never rewrite attempt evidence or restart writers.
 
 Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count current
 running attempts through the `worker_current_attempts_state` index. An admitted start keeps its queue ticket in an
@@ -2393,12 +2399,9 @@ The supermanager sets direction and the managers own the work. This applies to e
   It may change any file its outcome needs outside risk areas, merges or cherry-picks only branches its brief names,
   lands committed, type-checking increments, and writes the rest of a larger outcome as a continuation brief. Workers
   build on their brief and the owner READMEs and do not read other workers' tasks.
-- **Managers keep the outcomes and drop the ceremony.** A manager keeps the ordered list of outcomes for its Goal and
-  short outcome briefs in its backlog, cross-Goal contracts and their frozen acceptance, answers to escalations, and a
-  review of a sample of about two landings an hour whose defects become briefs. It synthesizes what its workers report,
-  including conflicts and duplicated or missing work across tasks, into decisions and the next briefs. It does not
-  dispatch, approve retries, preflight briefs, write per-task acceptance, receive results, track custody, review
-  evidence per task or send status messages and receipts.
+- **Managers own delivery.** Follow the [manager role](prompts/manager.md) and
+  [delivery ownership](../../docs/development/delivery.md#delivery-ownership). A manager is responsible for real worker
+  starts and follow-through; the controller executes admission, retries and landings.
 - **Managers talk to each other first.** Any manager may message any other with
   `bun tools/goal/src/cli.ts inbox send <manager> instruction "<message>"`. A question about another Goal's contract goes
   to that Goal's manager. The producer decides its interface and the consumer adapts; the two settle it within one
@@ -2483,6 +2486,11 @@ the stored summary without inferring links. `--json` prints the complete page ob
 the page limit, continuation cursor and `hasMore`. The exported `SharedInboxQueries` API provides the same `log`,
 `thread` and `digest` reads to operations reports after they have actually been delivered; it does not schedule or send
 an hourly report.
+
+Worktree dependency setup failures store full diagnostics on the attempt's `launch-failed` event. The task owner's
+inbox history retains a short task reference. Only the operations owner receives a waking notice; repeats are
+folded by shared cause without path or task ID in the wake. Offloaded starts do not emit a second background error
+for an attempt already settled and reported by the child.
 
 A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
 `delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
@@ -2807,7 +2815,7 @@ Decision: width and expiry share this classifier; accepted successors require an
 
 #### Goal backlogs
 
-A manager's output is ready briefs; the controller dispatches them. Each Goal has a backlog directory,
+Managers keep work ready and own getting it started. The controller dispatches the next eligible briefs. Each Goal has a backlog directory,
 `<state>/backlog/<goal>/`. Every minute the manager host starts one backlog run, `goal backlog dispatch`, as a child
 process, like promotion: dispatch runs Git and dependency installation synchronously, which must never block the
 host's socket. The host skips the minute while the previous child is still running, and the run holds the
@@ -3182,11 +3190,11 @@ shared group, so only its process is stopped. Recovery and actionable inbox wake
 semantically only when its command proves the same manager role, `CODEX_HOME`, thread, executable and remaining
 arguments, and its current pane path matches the manager's working directory; only the `--remote` endpoint may differ.
 Tmux's supported quoting wrappers are parsed as literal argv without executing the recorded command. Endpoint repair
-opens a sibling pane at the authoritative pool endpoint and retains the original pane, so visible unsent drafts remain
-in place. The Codex transport cannot export and restore a draft as editable input; drafts are not migrated to the new
-pane. An exited stale pane is repaired only when the native Goal is active or an inbox wake explicitly activates it.
-Current-endpoint viewers, missing viewers, and command or path mismatches are left alone, and an existing current
-endpoint sibling prevents repeat launches after an immediate exit. Recovery keeps an inbox-parked thread paused
+reuses a single pane with a proven empty composer at the authoritative pool endpoint. When empty input cannot be
+proven, repair keeps an original pane with possible unsent input in a separate draft window. The transport cannot
+migrate its editable draft. An exited stale pane is repaired only when the native Goal is active or an inbox wake
+explicitly activates it. An existing current-endpoint viewer is reused and a same-endpoint failure prevents repeated
+launches. Missing viewers and command or path mismatches are left alone. Recovery keeps an inbox-parked thread paused
 without resuming it; a later wake reuses that thread. Explicit manager stop still closes its owned window.
 The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
 uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
@@ -3356,8 +3364,10 @@ briefs written or moved back since the turn began count as decisions and reset t
 
 For Codex managers, matched work completion persists inbox-wait intent and pauses native Goal autonomy. The manager
 remains running on the same thread with its objective, budget and usage. Real mail waits unread during pool or allowance
-holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. Activation can
-start the turn first; the host rejoins and steers it. User pauses and native budget, usage, blocked and complete states
+holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. The first
+delivery on a new host connection rejoins the original thread before activation. A viewer can already have loaded the
+thread, and steering it does not subscribe the controller to completion events; without the rejoin, native autonomy
+can keep running after work finishes. Activation may start the turn first; the subscribed host steers it. User pauses and native budget, usage, blocked and complete states
 retain their meaning. Blocked Goals accept admitted explicit inbox turns without reactivation. Empty wakeups and
 recovery leave idle threads parked. See the
 [OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
@@ -3531,7 +3541,8 @@ observation window before publication: cp-sync reads one instant of live-worker 
 requests on tasks in the landing state, then publishes. After the restart it verifies that each resident unit started
 after publication, then takes four readings a minute apart (`policy.cpSync.residentSamples` and
 `policy.cpSync.residentSampleMs`). It rolls back only on a real regression: live workers fell by more than half, or no
-landing merged in that window while landings already in flight before publication were requested. A quiet window with
+landing merged in that window while ordinary dev product landings were already pending before publication. A queued
+or running main control-plane proof does not establish demand on the ordinary dev lane. A quiet window with
 no landing in flight never rolls back. A stale train started from the previous `tools/goal` lets its running command
 finish, stops at the next command boundary, releases its lanes and exits; its successor runs the published code. The
 resident host, which runs attempt supervision, is restarted by systemd: it finishes its active requests on SIGTERM, and
@@ -3541,8 +3552,9 @@ A resident host also notices a publication that cp-sync did not make, such as a 
 `main`. It polls `main:tools/goal` every `policy.host.codePollMs`. Once it has run for `policy.host.restartIntervalMs`
 and `main` names another revision, it starts no new attempt, finishes its active requests, and exits; systemd starts it
 on the published code, and its successor adopts the running attempts. A host restarts this way at most once per
-interval. cp-sync restarts the host after its own publication whatever the interval, and a host that cannot read `main`
-keeps its revision.
+interval. cp-sync restarts the host after its own publication whatever the interval. If that restart races an
+automatic systemd handoff, it waits within the host startup budget for a ready successor started after publication.
+A host that cannot read `main` keeps its revision.
 
 cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
 moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
@@ -3797,8 +3809,9 @@ once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
 Decision: Reconnect only a proven Goal-owned Codex viewer for the same role, account, thread and cwd. Keep the current
-viewer in the manager window. Close obsolete viewers with a visible empty composer; move others to separate draft
-windows. On viewer attachment or recovery, bounded asynchronous startup probes may select Leave paused in the exact Codex
+viewer in the manager window. Identify empty input by the live cursor row and Codex's dim placeholder, not a
+historical prompt. Reuse the empty pane in place across endpoint changes and close empty duplicates, including
+previously archived viewers of that same thread. Preserve uncertain input in separate draft windows. On viewer attachment or recovery, bounded asynchronous startup probes may select Leave paused in the exact Codex
 resume menu. They do not block manager recovery, submit a prompt or resume the Goal. Unknown panes and unrelated dialogs
 remain untouched.
 Decision: A Goal-owned Codex viewer runs under a terminal shell. Ctrl+C still reaches Codex; exiting the viewer

@@ -5,6 +5,26 @@
 People can discover, contribute, discuss, collect and buy through accessible, localized interfaces, using the same
 capabilities and disclosure rules on every page and device.
 
+## Frontend reconstruction priority
+
+Web's primary implementation priority is rebuilding the actual frontend experience: common components, page
+hierarchy, responsive layout, navigation and useful product interactions. The manager discovers shared causes,
+assigns complete independent source outcomes and uses the authorized worker capacity to deliver them. Storybook
+fixtures and tests are tools for that work, not substitutes for improving the application.
+
+The manager acts autonomously on assignment, starts, coherent follow-on work and delivery bottlenecks. Use the
+authorized capacity for independent outcomes rather than waiting for repeated instructions. The current campaign's
+32-worker ceiling, hourly 50,000 landed-product-line target and quality exclusions are governed by
+[delivery efficiency](../development/efficiency.md#output-and-flow). Record actual delivery honestly; line volume
+cannot replace useful design, working interactions or published visual results.
+
+Review delivery means published, visually inspectable and manually usable pages with coherent data and working
+routes. Publish source increments promptly under the [review cadence](../development/storybook.md#review-publication-cadence).
+During the authorized code-only window, test work must not consume the implementation queue or delay review
+publication. Subsequent checks identify repairs; their results remain distinct from source and visual delivery.
+Preserve native authorization and money semantics. The complete release obligations below remain independent of
+the current reconstruction and review cycle.
+
 ## Done when
 
 - The site and Auth applications run locally through documented commands. Routing, navigation, localization and
@@ -655,8 +675,9 @@ VNDB field limits and native admission live in [Personal VNDB list import](../li
 
 Web owns Storybook publication and publisher/capture custody, including reconciliation of retained handles.
 A retained handle without its original live process is dead. The paused control-plane manager has no publication role.
-Publish one clean current-dev snapshot through the existing build and six smoke scenarios, then verify the public
-build revision and story index. Metadata clients identify themselves with a descriptive application User-Agent.
+Follow the [review publication cadence](../development/storybook.md#review-publication-cadence): publish the committed
+development snapshot, verify its public revision and index, and run the retained checks asynchronously.
+Metadata clients identify themselves with a descriptive application User-Agent.
 Publication does not establish native journey, visual or main-promotion acceptance.
 
 Owns `apps/web/**`, `apps/auth/**`, `packages/ui/**` and `packages/document/**`.

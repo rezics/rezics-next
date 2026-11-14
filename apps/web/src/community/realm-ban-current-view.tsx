@@ -3,6 +3,7 @@ import { localizeHref } from '../paraglide/runtime.js';
 import { normalizeRealmBanTargetHandle } from './realm-ban-target';
 import { realmBanEpisodeAdvice } from './realm-ban-current';
 import type { InstalledRealmBanPage, RealmBanRow } from './realm-bans';
+import { ManagementField, ManagementReference } from './members/management-ui';
 
 type Identity = InstalledRealmBanPage['items'][number]['account'];
 
@@ -10,14 +11,17 @@ type Identity = InstalledRealmBanPage['items'][number]['account'];
 export function RealmBanIdentity({
   accountId,
   identity,
+  fallbackLabel = true,
 }: {
   accountId: string;
   identity?: Identity | null | undefined;
+  fallbackLabel?: boolean;
 }) {
   if (!identity || identity.accountId !== accountId || identity.state !== 'available')
     return (
-      <span>
-        {m.realm_bans_details_account()} <bdi>{accountId}</bdi>
+      <span className="min-w-0 [overflow-wrap:anywhere]">
+        {fallbackLabel ? <>{m.realm_bans_details_account()} </> : null}
+        <ManagementReference>{accountId}</ManagementReference>
       </span>
     );
   const destination =
@@ -25,63 +29,59 @@ export function RealmBanIdentity({
       ? identity.destination
       : null;
   return (
-    <span className="min-w-0 wrap-anywhere">
+    <span className="inline-flex min-w-0 max-w-full flex-wrap items-baseline gap-x-2 gap-y-1 [overflow-wrap:anywhere]">
       {destination ? (
-        <a className="text-primary underline" href={localizeHref(destination)}>
+        <a
+          className="max-w-full rounded-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          href={localizeHref(destination)}
+        >
           <bdi>{identity.label}</bdi>
         </a>
       ) : (
-        <bdi>{identity.label}</bdi>
+        <bdi className="font-medium">{identity.label}</bdi>
       )}
-      {identity.handle ? (
-        <>
-          {' '}
-          <bdi>@{identity.handle}</bdi>
-        </>
-      ) : null}{' '}
-      <bdi>{accountId}</bdi>
+      {identity.handle ? <bdi className="text-sm text-muted-foreground">@{identity.handle}</bdi> : null}
+      <ManagementReference>{accountId}</ManagementReference>
     </span>
   );
 }
 
-export function RealmBanEpisodeView({ ban }: { ban: Readonly<RealmBanRow> }) {
+export function RealmBanEpisodeView({
+  ban,
+  includeAccount = true,
+}: {
+  ban: Readonly<RealmBanRow>;
+  includeAccount?: boolean;
+}) {
   return (
-    <dl className="min-w-0 space-y-3">
-      <div>
-        <dt className="font-medium">{m.realm_bans_details_account()}</dt>
-        <dd className="wrap-anywhere">
-          <RealmBanIdentity accountId={ban.accountId} identity={ban.account} />
-        </dd>
-      </div>
-      <div>
-        <dt className="font-medium">{m.realm_bans_details_moderator()}</dt>
-        <dd className="wrap-anywhere">
-          {ban.actor ? (
-            <RealmBanIdentity accountId={ban.actor} identity={ban.moderator} />
-          ) : (
-            m.realm_bans_moderator_erased()
-          )}
-        </dd>
-      </div>
-      <div>
-        <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
-        <dd className="whitespace-pre-wrap wrap-anywhere">{ban.reason || m.realm_bans_no_reason()}</dd>
-      </div>
-      <div>
-        <dt className="font-medium">{m.realm_bans_details_at()}</dt>
-        <dd>
-          <time dateTime={ban.at} dir="ltr" className="wrap-anywhere">
-            {ban.at.replace('T', ' ').replace(/Z$/, '')} UTC
-          </time>
-        </dd>
-      </div>
+    <dl className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2">
+      {includeAccount ? (
+        <ManagementField label={m.realm_bans_details_account()}>
+          <RealmBanIdentity accountId={ban.accountId} identity={ban.account} fallbackLabel={false} />
+        </ManagementField>
+      ) : null}
+      <ManagementField label={m.realm_bans_details_moderator()}>
+        {ban.actor ? (
+          <RealmBanIdentity accountId={ban.actor} identity={ban.moderator} fallbackLabel={false} />
+        ) : (
+          m.realm_bans_moderator_erased()
+        )}
+      </ManagementField>
+      <ManagementField label={m.realm_bans_details_reason()} className="sm:col-span-2">
+        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{ban.reason || m.realm_bans_no_reason()}</p>
+      </ManagementField>
+      <ManagementField label={m.realm_bans_details_at()}>
+        <time dateTime={ban.at} dir="ltr" className="[overflow-wrap:anywhere]">
+          {ban.at.replace('T', ' ').replace(/Z$/, '')} UTC
+        </time>
+      </ManagementField>
     </dl>
   );
 }
 
 export function RealmBanNativeAdvice({ ban, realmId }: { ban: Readonly<RealmBanRow>; realmId: string }) {
   return realmBanEpisodeAdvice(ban, realmId) ? (
-    <div className="space-y-2 text-sm text-muted-foreground">
+    <div className="space-y-2 border-s-2 ps-3 text-sm text-muted-foreground">
       <p>{m.realm_bans_native_advice()}</p>
       <p>{m.realm_bans_unban_confirm()}</p>
     </div>

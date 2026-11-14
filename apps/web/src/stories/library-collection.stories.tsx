@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageStory, PatternStory, libraryCollectionReady, pagePaths, pageReady } from './page';
@@ -13,6 +14,7 @@ import { collectionStoryMembers, collectionStoryPaths } from '../kernel/fake/col
 import { collectionLongNotesSparse, setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { collectionReadStoryIds } from '../kernel/fake/collection-read-stories';
 import { m } from '../paraglide/messages.js';
+import { collectionReviewPath, resetCollectionReview } from '../kernel/fake/a-collection-review';
 
 const meta = {
   title: 'Library/Collection',
@@ -748,4 +750,17 @@ export const RestartAfterEpochChange: Story = {
     const view = await detailReady(context);
     await view.findByRole('link', { name: 'Snow Country' });
   },
+};
+
+/** Complete reviews extend this page composition; supporting recorded IDs above retain their assertions. */
+function CompleteCollectionVisit({ books = false }: { books?: boolean }) {
+  const locale = getLocale();
+  useMemo(() => resetCollectionReview(), [books, locale]);
+  return <PageStory previewNewTabs visitor="Signed Out" path={collectionReviewPath(books ? 'books' : 'media')} />;
+}
+export const CompleteBookList: Story = {
+  render: () => <CompleteCollectionVisit key={getLocale()} books />,
+};
+export const CompleteMixedMedia: Story = {
+  render: () => <CompleteCollectionVisit key={getLocale()} />,
 };

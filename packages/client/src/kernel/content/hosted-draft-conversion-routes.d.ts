@@ -19935,7 +19935,7 @@ export declare function hostedDraftConversionRoutes(app: ReturnType<typeof knowl
                         body: {
                             expectedRevisionId: string;
                             occurrenceId: string;
-                            parentId: string;
+                            parentId: string | null;
                             beforeOccurrenceId: string | null;
                         };
                         params: {
@@ -25669,10 +25669,10 @@ export declare function hostedDraftConversionRoutes(app: ReturnType<typeof knowl
         'x-resource-types': string[];
         'x-action': string;
         'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-        operationId: string;
         security: {
             bearerAuth: never[];
         }[];
+        operationId: string;
     };
 }, {}, "/v1/hostedCatalogues/:id/$convertDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id }, body, request, admission, job, session, set }: {
     server: import("elysia").Server | null;
@@ -26434,10 +26434,10 @@ export declare function hostedDraftConversionRoutes(app: ReturnType<typeof knowl
             'x-resource-types': string[];
             'x-action': string;
             'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-            operationId: string;
             security: {
                 bearerAuth: never[];
             }[];
+            operationId: string;
         };
     }, {}, "/v1/hostedCatalogues/:id/$convertDraft">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
@@ -27018,9 +27018,9 @@ export declare function hostedDraftConversionRoutes(app: ReturnType<typeof knowl
         'x-resource-types': string[];
         'x-action': string;
         'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-        operationId: string;
         security: {
             bearerAuth: never[];
         }[];
+        operationId: string;
     };
 }>;

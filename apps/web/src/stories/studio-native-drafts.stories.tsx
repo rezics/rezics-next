@@ -17,6 +17,7 @@ import type {
 } from '../studio/contract';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { workbenchCopy } from '../studio/workbench-copy';
 
 type Scenario =
   | 'populated'
@@ -281,6 +282,12 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function openDraftNavigation(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const summary = await canvas.findByText(m.studio_workspace_article_navigation());
+  if (!summary.closest('details')!.open) await userEvent.click(summary);
+}
+
 export const Populated: Story = { args: { scenario: 'populated' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 
@@ -289,6 +296,7 @@ export const CreationAndReview: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const locale = getLocale();
+    await openDraftNavigation(canvasElement);
     await userEvent.type(
       await canvas.findByRole('textbox', { name: m.studio_account_board({}, { locale }) }),
       'community/fiction',
@@ -302,8 +310,9 @@ export const CreationAndReview: Story = {
       'A complete private opening body.',
     );
     await userEvent.click(canvas.getByRole('button', { name: m.studio_account_create({}, { locale }) }));
-    await canvas.findByRole('textbox', { name: 'Article document' });
-    await userEvent.click(canvas.getByRole('button', { name: /Review publication/ }));
+    await canvas.findByRole('textbox', { name: m.studio_workspace_article_document() });
+    await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[getLocale()].publication }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_release_review() }));
     await canvas.findByRole('checkbox');
     await expect(canvas.getByText('The first page', { exact: true })).toBeVisible();
   },
@@ -313,11 +322,12 @@ export const AcknowledgedPublication: Story = {
   args: { scenario: 'acknowledged-publication' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: /Review publication/ }));
+    await userEvent.click(await canvas.findByRole('button', { name: workbenchCopy[getLocale()].publication }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_release_review() }));
     const confirmation = await canvas.findByRole('checkbox');
     await userEvent.click(confirmation);
-    await userEvent.click(canvas.getByRole('button', { name: /Publish reviewed article/ }));
-    await waitFor(() => expect(canvas.getByRole('status').textContent).toContain('Published snapshot'));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_release_publish_article() }));
+    await expect(await canvas.findByText(m.studio_release_receipt({ revision: publishedRevisionId }))).toBeVisible();
   },
 };
 
@@ -325,14 +335,15 @@ export const UnavailableRetry: Story = {
   args: { scenario: 'unavailable-retry' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: 'Next drafts' }));
+    await openDraftNavigation(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.studio_workspace_next() }));
     const retry = (
       await canvas.findAllByRole('button', {
         name: m.own_drafts_retry({}, { locale: getLocale() }),
       })
     )[0]!;
     await userEvent.click(retry);
-    await waitFor(() => expect(canvas.getByText('No drafts on this page.')).toBeVisible());
+    await waitFor(() => expect(canvas.getByText(m.studio_workspace_empty_page())).toBeVisible());
   },
 };
 
@@ -341,6 +352,7 @@ export const UncertainIntent: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const locale = getLocale();
+    await openDraftNavigation(canvasElement);
     await userEvent.type(
       await canvas.findByRole('textbox', { name: m.studio_account_board({}, { locale }) }),
       'community/fiction',
@@ -354,8 +366,8 @@ export const UncertainIntent: Story = {
       'Retry must send the same private create intent.',
     );
     await userEvent.click(canvas.getByRole('button', { name: m.studio_account_create({}, { locale }) }));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Retry the same operation' }));
-    await canvas.findByRole('textbox', { name: 'Article document' });
+    await userEvent.click(await canvas.findByRole('button', { name: m.studio_workspace_retry() }));
+    await canvas.findByRole('textbox', { name: m.studio_workspace_article_document() });
   },
 };
 
@@ -364,7 +376,7 @@ export const PhoneKeyboardRecovery: Story = {
   globals: { locale: 'ja', viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const navigation = canvas.getByText('Documents and articles');
+    const navigation = await canvas.findByText(m.studio_workspace_article_navigation());
     await expect(navigation.closest('details')?.open).toBe(false);
     navigation.focus();
     await expect(navigation).toHaveFocus();
@@ -373,7 +385,7 @@ export const PhoneKeyboardRecovery: Story = {
     const draft = canvas.getByRole('button', { name: 'A private opening' });
     await expect(draft).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await canvas.findByRole('textbox', { name: 'Article document' });
+    await canvas.findByRole('textbox', { name: m.studio_workspace_article_document() });
     await expect(canvas.getByRole('heading', { name: 'A private opening' })).toHaveFocus();
     await expect(draft).not.toBeVisible();
   },
@@ -384,19 +396,19 @@ export const DesktopKeyboardRecovery: Story = {
   globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await openDraftNavigation(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'A private opening' }));
-    await canvas.findByRole('textbox', { name: 'Article document' });
-    await userEvent.type(canvas.getByRole('textbox', { name: 'Document title' }), '!');
-    canvas.getByRole('link', { name: 'Skip to document' }).focus();
+    await canvas.findByRole('textbox', { name: m.studio_workspace_article_document() });
+    await userEvent.type(canvas.getByRole('textbox', { name: m.studio_workspace_title() }), '!');
+    canvas.getByRole('link', { name: m.studio_workspace_skip() }).focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.tab();
-    await expect(canvas.getByText('Exact document version')).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: m.studio_workspace_write() })).toHaveFocus();
     await userEvent.tab();
     await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: m.studio_workspace_versions() })).toHaveFocus();
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'Versions' })).toHaveFocus();
-    await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'Save draft' })).toHaveFocus();
-    await expect(canvas.getByRole('button', { name: /Review publication/ })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.studio_workspace_save() })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: workbenchCopy[getLocale()].publication })).toBeVisible();
   },
 };

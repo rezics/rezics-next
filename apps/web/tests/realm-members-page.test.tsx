@@ -740,3 +740,42 @@ test('unrelated public queries leave the exact member visit and return focus cur
   await click(m.realm_members_back());
   expect(document.activeElement?.textContent).toBe(m.realm_members_inspect());
 });
+
+test('selected denial, unavailable and failed reads stay distinct without borrowing row identity or moving the roster', async () => {
+  for (const [kind, message] of [
+    ['denied', m.realm_members_denied()],
+    ['unavailable', m.realm_members_selected_unavailable()],
+    ['failed', m.realm_members_selected_failed()],
+  ] as const) {
+    const base = source();
+    const pages: (string | null)[] = [];
+    const selections: unknown[] = [];
+    const fixture: RealmMembersSource = {
+      ...base,
+      readPage: async (address) => {
+        pages.push(address.cursor);
+        return base.readPage(address);
+      },
+      readSelected: async (address) => {
+        selections.push(address);
+        return { kind };
+      },
+    };
+    await render(fixture);
+    await click(m.realm_members_inspect());
+    expect(host.textContent).toContain(message);
+    expect(host.textContent).not.toContain('Similar name');
+    expect(host.textContent).not.toContain('account-a');
+    expect(host.querySelector('details')).toBeNull();
+    expect(host.textContent).not.toContain(m.realm_members_add_member());
+    if (kind === 'denied') {
+      expect(host.querySelectorAll('button, li')).toHaveLength(0);
+    } else {
+      await click(m.realm_members_retry_selected());
+      expect(selections[1]).toEqual(selections[0]);
+      await click(m.realm_members_back());
+      expect(document.activeElement?.textContent).toBe(m.realm_members_inspect());
+    }
+    expect(pages).toEqual([null]);
+  }
+});

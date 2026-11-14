@@ -14,7 +14,7 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.insert_draft_point`               | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
 | `hosted_catalogue.remove_draft_point`               | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`                                                                 |
 | `hosted_catalogue.update_draft_point`               | `POST /v1/hostedCatalogues/{id}:updateDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`, `title`, explicit nullable `target`                            |
-| `hosted_catalogue.move_draft_point`                 | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`                                         | `expectedRevisionId`, `occurrenceId`, `parentId`, nullable `beforeOccurrenceId`                      |
+| `hosted_catalogue.move_draft_point`                 | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`                                         | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`                       |
 | `hosted_catalogue.convert_draft`                    | `POST /v1/hostedCatalogues/{id}:convertDraft`                                           | `expectedRevisionId`, bounded `step`, retained `inputId` and native page cursor when paging          |
 | `hosted_catalogue.publish`                          | `POST /v1/hostedCatalogues/{id}:publish`                                                | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
 | `hosted_catalogue.prepare_release`                  | `POST /v1/hostedCatalogues/{id}:prepareRelease`                                         | caller-generated `stageId`, `expectedRevisionId`, nullable `expectedPublicationId`, `mode`           |
@@ -112,11 +112,12 @@ Decision: a cross-parent move cuts the stable occurrence subtree's contiguous pr
 splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
 ancestor summaries, without visiting descendants.
 
-Decision: mount the stable-anchor move as `moveDraftPoint`; require an existing part `parentId`, and interpret a
-null `beforeOccurrenceId` as the end of that parent's sibling list. The existing move command retains author
-admission, receipt, idempotent replay and the identity-only revise event. The native move adapter selects and writes
-the expected ordered snapshot in the same transaction as its head CAS. An adjacent move returns the current
-revision without writing a new revision or event.
+Decision: mount the stable-anchor move as `moveDraftPoint`; `parentId: null` selects the root sibling list, and a
+null `beforeOccurrenceId` appends to the selected sibling list. A non-null anchor must be a current sibling of the
+selected root or Part. Root moves create no synthetic occurrence or chapter destination. The existing move command
+retains author admission, receipt, idempotent replay and the identity-only revise event. The native move adapter
+selects and writes the expected ordered snapshot in the same transaction as its head CAS. An adjacent move returns
+the current revision without writing a new revision or event.
 
 Decision: the retained binder resolves the expected immutable structure descriptor after author admission; the
 native adapter proves selected membership and bounded containment paths in that draft snapshot, then commits all
@@ -147,6 +148,11 @@ chapter payloads through one final-per-key overlay. The immutable descriptor and
 same catalogue-home transaction; counts, containment, order, descendants and public selection stay unchanged.
 Receipt replay remains after authorization and before draft-head comparison. The logical work follows only the
 selected index paths; physical SQL probes are reported separately from logical probes.
+
+Decision: root append resolves its exact expected revision in the command transaction. Ordered drafts use the
+existing versioned insertion at the root end, which writes the immutable revision and advances the head once;
+compatibility revisions retain the sealed append stream. Nonempty publish resolves the same exact ordered snapshot
+and reads only requested member paths before applying the shared ancestor-closure and dense-manifest validator.
 
 Decision: focused command and HTTP tests pin insert/remove admission, receipt replay before head CAS, stale-head
 412, reused occurrence identity, nested insert, subtree removal that preserves historical snapshots, and GET
@@ -860,9 +866,10 @@ and candidate cleanup, page replay, the per-segment key/write caps and an empty 
 
 Compatibility complete replacement/release validate at most 512 placements; mounted root append validates one.
 Distinct exact targets use initial/final retained native metadata, zero bodies. Replacement writes one bounded
-snapshot and placement/identity inserts under the catalogue home transaction; append writes one occurrence, one
-append row and one descriptor, lazily installing its empty sealed-base descriptor. Publication reads only selected
-source rows and processes their attachments. Legacy reads use exact catalogue/revision probes, at most one
+snapshot and placement/identity inserts under the catalogue home transaction; compatibility append writes one
+occurrence, one append row and one descriptor, lazily installing its empty sealed-base descriptor. Ordered append
+uses the existing point-write index paths and revision CAS without a legacy snapshot or append stream. Publication
+reads only selected source rows and processes their attachments. Legacy reads use exact catalogue/revision probes, at most one
 parent/origin probe and one indexed page query of at most 21 rows; mixed-prefix bounds are defined above.
 Subject discovery examines at most 21 indexed `subject_thread`/same-route catalogue-Post candidates and discloses
 at most 20, with initial/final target disclosure and catalogue disclosure repeated at completion.

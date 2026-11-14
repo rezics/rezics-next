@@ -56,6 +56,30 @@ bun test apps/web/tests/library-page-smoke.test.ts
 The Web landing integration check selects this command for changes under `apps/web`, `packages/ui`, and
 `packages/document`.
 
+## Review publication cadence
+
+Publish a buildable, committed development snapshot promptly so reviewers can use it. The publisher owns one build
+and deployment at a time, returns the complete static artifact, and checks the public build revision and canonical
+story index after deployment. Report the deployed revision, changed canonical links and known missing or broken
+paths. A successful build alone is not a published result.
+
+Run the six smoke scenarios, interaction, accessibility, visual and native journey checks asynchronously against
+their exact source or deployed revision. Retain their existing owners and report failures into the next repair;
+do not wait for the complete browser matrix, all fixtures or native activation to publish a useful review snapshot.
+Unfinished verification remains explicit. Development Storybook publication is not product release approval or
+completion of the Goal's acceptance. Private data and money authorization retain their existing boundaries.
+
+For complete-page review, mount the application's actual route tree, shell and providers with fixed, coherent data
+at existing request or provider seams. Tab links, nested destinations, query state and return navigation use the
+application router; do not replace them with decorative tabs or a second story-only routing implementation.
+Populate each reachable fixture destination, including covers and domain relationships. Contract-shaped synthetic
+fixtures are allowed and labelled; recorded responses and native execution remain different evidence.
+
+Ordinary review entries open in their named state and leave navigation, viewport and theme to the reviewer.
+Keep automated multi-tab, history and viewport walks in separately named interaction stories or the verifier;
+loading a review entry must not run through other pages before settling. The same canonical review URL supports
+manual phone/desktop and theme changes.
+
 ## Publication transport
 
 The publication program builds one committed snapshot without waiting for review tests, then returns one
@@ -71,6 +95,7 @@ from the selected clean snapshot; it builds, returns the archive, deploys and ch
 assigns source repair only when the program fails or its behavior must change. Keep one publication process at a
 time and retain its terminal result. Smoke, interaction and visual checks run independently after deployment;
 `bun apps/web/scripts/storybook-smoke.ts` runs the retained smoke scenarios. Tests do not block review publication.
+
 
 ## Agent access
 

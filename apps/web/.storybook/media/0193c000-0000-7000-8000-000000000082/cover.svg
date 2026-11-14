@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="840" viewBox="0 0 600 840">
+ <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#413b64"/><stop offset="1" stop-color="#729996"/></linearGradient><linearGradient id="sea" x2="0" y2="1"><stop stop-color="#354667"/><stop offset="1" stop-color="#102d3d"/></linearGradient></defs>
+ <path fill="url(#sky)" d="M0 0h600v840H0z"/>
+ <circle cx="430" cy="258" r="67" fill="#f2d9a2"/><circle cx="408" cy="245" r="64" fill="#413b64" opacity=".25"/>
+ <path fill="#e9d9af" opacity=".36" d="M205 352L600 213v167L205 367z"/>
+ <path fill="#37636a" d="M0 386l58-32 63 39 62-20 63 36 91-43 79 32 80-28 104 46v424H0z"/>
+ <path fill="url(#sea)" d="M0 452q150-30 300 0t300 0v388H0z"/>
+ <path fill="#122e37" d="M0 506l83-47 100-17 91 59 45 98L0 680z"/>
+ <path fill="#1c4148" d="M0 532l104-53 90 3 70 54 30 71-109-41L0 694z"/>
+ <path fill="#f1dfb5" d="M165 464l14-135h39l18 135z"/>
+ <path fill="#cebe9e" d="M203 329h15l18 135h-20z"/>
+ <path fill="#12303b" d="M174 324h49v-9h-49zM181 294h35v-16h-35z"/>
+ <path fill="#f9d592" d="M182 299h33v15h-33z"/>
+ <path fill="#12303b" d="M177 278l22-19 23 19z"/>
+ <path fill="#f2b968" d="M193 414h12v28h-12z"/>
+ <path fill="#b3ccba" opacity=".32" d="M331 476h109v3H331zM367 503h187v2H367zM302 541h114v3H302zM335 589h209v2H335zM48 728h326v2H48zM266 765h255v3H266z"/>
+ <path fill="#0c2835" d="M358 563h112l-17 18h-77zM406 532h3v34h-3z"/>
+ <path fill="#f3d8a1" d="M410 535l35 25h-35z"/>
+ <path fill="#f4d9a4" d="M77 454h33v17H77zM120 444h24v20h-24z" opacity=".85"/>
+ <path fill="#223c40" d="M70 452l24-18 25 18zM113 442l19-14 19 14z"/>
+ <path fill="none" stroke="#ebddbd" stroke-width="1" opacity=".5" d="M27 27h546v786H27z"/>
+ <text x="300" y="88" fill="#e7dcbf" text-anchor="middle" font-family="DejaVu Sans,sans-serif" font-size="12" letter-spacing="4">THE LAST FERRY</text>
+ <text x="300" y="151" fill="#fff1cc" text-anchor="middle" font-family="DejaVu Serif,serif" font-size="52" letter-spacing="2">HARBOUR</text>
+ <text x="300" y="207" fill="#fff1cc" text-anchor="middle" font-family="DejaVu Serif,serif" font-size="52" letter-spacing="5">LIGHTS</text>
+ <text x="300" y="780" fill="#e7dcbf" text-anchor="middle" font-family="DejaVu Sans,sans-serif" font-size="11" letter-spacing="3">NORTH QUAY STUDIO</text>
+ </svg>

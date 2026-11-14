@@ -62,7 +62,7 @@ export function CollectionMemberSummary({
           ? 'unavailable'
           : 'empty';
   return (
-    <div className="min-w-0 space-y-1 text-sm text-muted-foreground">
+    <div className="min-w-0 space-y-1.5 text-sm leading-relaxed text-muted-foreground">
       <p data-collection-type-state={member.subject.typeLabel ? 'available' : 'unavailable'}>
         {member.subject.typeLabel || m.library_collection_type_unavailable()}
       </p>
@@ -87,7 +87,12 @@ export function CollectionMemberSummary({
         )}
         {facts.length && comparisonDefinitions === undefined ? <p>{m.catalogue_context_unavailable()}</p> : null}
       </div>
-      {member.note ? <p data-collection-note-available>{m.collection_reading_note_available()}</p> : null}
+      {member.note ? (
+        <p data-collection-note-available className="line-clamp-2 whitespace-pre-line [overflow-wrap:anywhere]">
+          <span className="sr-only">{m.collection_reading_note_available()} </span>
+          {member.note}
+        </p>
+      ) : null}
     </div>
   );
 }

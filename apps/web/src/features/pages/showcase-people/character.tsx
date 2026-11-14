@@ -19,75 +19,85 @@ import { SuppliedNames } from './names';
 import { CharacterPublicReading, type CharacterAssociations } from '../../catalogue/character-public-reading/view';
 import { CharacterReadingBinding } from '../character-reading-binding';
 import { OverviewContext } from '../overview-context';
+import { ProfileDetails } from '../shared';
 
-/** Public composition of supplied character facts. Appearances remain in the producer's bounded reader. */
+/** Supplied facts and the existing bounded associations share one native fact visit. */
 export function CharacterReader(input: ProfileReading & { associations?: CharacterAssociations }) {
   const reading = { ...input, documents: input.documents ?? input.public.documents };
   const groups = characterGroups(reading.release);
-  const fields = [
-    ...Object.values(groups).flat(),
-    ...(reading.release.types[reading.public.subject.type]?.properties ?? []).filter(
-      (id) => reading.release.properties[id]?.datatype === 'document',
-    ),
-  ];
+  const documents = (reading.release.types[reading.public.subject.type]?.properties ?? []).filter(
+    (id) => reading.release.properties[id]?.datatype === 'document',
+  );
+  const fields = [...new Set([...Object.values(groups).flat(), ...documents])];
+  const label = pickText(reading.public.subject.labels, reading.locale);
+  const Link = reading.link ?? PlainLink;
+  const o = { locale: reading.locale as never };
   return (
     <CharacterReadingBinding>
       <PeopleFacts reading={reading} fields={fields}>
-        <CharacterFacts {...reading} />
-        {input.associations && <CharacterPublicReading {...input.associations} />}
+        <div className="min-w-0 space-y-8 [overflow-wrap:anywhere]" data-slot="character-reader-facts">
+          <CharacterFacts reading={reading} kind="identity" fields={[...new Set([...documents, ...groups.identity])]} />
+          <CharacterFacts reading={reading} kind="traits" fields={groups.traits} />
+          <nav className="flex min-w-0 flex-wrap gap-x-5 gap-y-2" data-slot="character-reader-destinations">
+            <CharacterRelationshipsEntry
+              id={reading.public.subject.id}
+              label={label.text}
+              locale={reading.locale}
+              link={Link}
+            />
+            <a className="inline-flex min-h-11 items-center underline" href="#connections">
+              {m.character_identity_visit_open({}, o)}
+            </a>
+          </nav>
+          {input.associations && <CharacterPublicReading {...input.associations} />}
+          <ProfileDetails locale={reading.locale}>
+            <CharacterFacts reading={reading} kind="measurements" fields={groups.measurements} />
+            <CharacterFacts reading={reading} kind="identifiers" fields={groups.identifiers} />
+            <SuppliedNames reading={reading} />
+            <CharacterProfileEntry
+              id={reading.public.subject.id}
+              label={label.text}
+              locale={reading.locale}
+              link={Link}
+            />
+          </ProfileDetails>
+        </div>
       </PeopleFacts>
     </CharacterReadingBinding>
   );
 }
 
-function CharacterFacts(reading: ProfileReading) {
-  const { public: read, release, locale } = reading;
-  if (read.subject.type !== 'wd:Q95074') return null;
-  const o = { locale: locale as never };
-  const label = pickText(read.subject.labels, locale);
-  const groups = characterGroups(release);
+function CharacterFacts({
+  reading,
+  kind,
+  fields,
+}: {
+  reading: ProfileReading;
+  kind: keyof ReturnType<typeof characterGroups>;
+  fields: string[];
+}) {
+  if (reading.public.subject.type !== 'wd:Q95074') return null;
+  const o = { locale: reading.locale as never };
   const titles = {
     identity: m.character_identity({}, o),
     traits: m.character_traits({}, o),
     measurements: m.character_measurements({}, o),
     identifiers: m.character_identifiers({}, o),
   };
-  // Other admitted authored fields keep their native document selection and hydration.
-  groups.identity = [
-    ...new Set([
-      ...groups.identity,
-      ...(release.types[read.subject.type]?.properties ?? []).filter(
-        (id) => release.properties[id]?.datatype === 'document',
-      ),
-    ]),
-  ];
-  const Link = reading.link ?? PlainLink;
+  const selected = profileFields(reading.release, reading.public, fields, reading.locale);
+  // Sparse profiles keep one useful identity state; optional empty groups stay in their native editors.
+  if (kind !== 'identity' && !selected.some((field) => field.facts.length)) return null;
   return (
-    <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]" data-slot="character-reader-facts">
-      <SuppliedNames reading={reading} />
-      <div className="flex min-w-0 flex-wrap gap-3" data-slot="character-reader-destinations">
-        <CharacterRelationshipsEntry id={read.subject.id} label={label.text} locale={locale} link={Link} />
-        <a className="inline-flex min-h-11 items-center underline" href="#connections">
-          {m.character_identity_visit_open({}, o)}
-        </a>
-      </div>
-      {(Object.keys(groups) as (keyof typeof groups)[]).map((kind) => {
-        const fields = profileFields(release, read, groups[kind], locale);
-        return (
-          <section key={kind} className="min-w-0 space-y-4" data-slot={`character-reader-${kind}`}>
-            <h3 className="text-xl font-semibold">{titles[kind]}</h3>
-            {fields.length ? (
-              <ProfileFields fields={fields} reading={reading} />
-            ) : (
-              <p className="text-muted-foreground" role="status">
-                {groups[kind].length ? m.people_biography_absent({}, o) : m.people_biography_unsupported({}, o)}
-              </p>
-            )}
-          </section>
-        );
-      })}
-      <CharacterProfileEntry id={read.subject.id} label={label.text} locale={locale} link={Link} />
-    </div>
+    <section className="min-w-0 space-y-4" data-slot={`character-reader-${kind}`}>
+      <h3 className="text-xl font-semibold tracking-tight">{titles[kind]}</h3>
+      {selected.length ? (
+        <ProfileFields fields={selected} reading={reading} />
+      ) : (
+        <p className="text-muted-foreground" role="status">
+          {fields.length ? m.people_biography_absent({}, o) : m.people_biography_unsupported({}, o)}
+        </p>
+      )}
+    </section>
   );
 }
 

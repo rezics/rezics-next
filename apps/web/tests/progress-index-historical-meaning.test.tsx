@@ -218,11 +218,14 @@ test('Missing historical unit meaning is readable before exact, labelled native 
 });
 
 test('Known unit labels, accepted totals and explicit progress semantics stay unchanged', async () => {
-  const h = await mount([session(2, { amount: '3', total: '12', unitLabel: 'chapters' })]);
+  const saved = session(2, { amount: '3', total: '12', unitLabel: 'chapters' });
+  const h = await mount([saved]);
   try {
     expect(h.host.textContent).toContain('3 / 12 chapters');
     expect(h.host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('25');
-    expect(h.host.querySelector('details')).toBeNull();
+    const details = h.host.querySelector('ol > li details')!;
+    expect(details.open).toBe(false);
+    expect(details.querySelector('code')?.textContent).toBe(`${saved.mode} / ${saved.unit}`);
     expect(h.host.textContent).not.toContain(m.library_progress_index_reader_history_unavailable());
     expect(request).not.toHaveBeenCalled();
   } finally {

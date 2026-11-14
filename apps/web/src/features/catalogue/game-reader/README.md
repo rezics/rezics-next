@@ -80,3 +80,36 @@ disclosed rows. Browser retention is private to the mounted visit; the server re
 
 Examples use the actual bundled vocabulary and typed native response shapes, independently of native acceptance.
 The wrapping, theme-token layout and existing controls apply at phone390/desktop1280, both themes and all locales.
+
+## Routed product visit
+
+`pages-library-games--main` is the canonical Game review entry. It mounts `PageStory`'s generated application
+route tree and existing providers, with a signed-in reader and ordinary native loaders. Harbour Lights, its people,
+six software releases, story acts, characters, related games, reviews and collections are explicitly synthetic.
+Original CC0 cover illustrations and their WebP variants live in `.storybook/media/`; no provider recording is claimed.
+All installed tabs remain reachable. Native references use the reserved `north-quay.example` catalogue address.
+
+The default Subject extension reuses its already planned inverse release window through `gameOverviewInitial`.
+Composition and deliberate continuation share `gameReaderEditionPage` and its row, byte, identity and cursor bounds.
+A malformed successful external response such as `{}` is unavailable, never an empty release catalogue.
+An initially unavailable release section retains admitted work facts and retries the first native window explicitly;
+withheld or invalid admission still removes both sections. No former release destinations survive a failed retry.
+
+Compact work facts use a two-column rhythm where space permits. Qualifiers and references remain available in each
+fact's evidence disclosure; native date values retain calendar, signed time, precision, timezone and uncertainty.
+Comparison groups with an available value omit redundant missing/unsupported alternative properties in compact mode;
+withheld and unavailable alternatives remain explicit. The standalone reader retains its full comparison states.
+
+Named entries are `pages-library-games--exact-release-return`, `--sparse`, `--release-section-failure` and
+`--reviews-section-failure` (each uses the same prefix). They stay at their named state, without automatic tab or
+history traversal. Theme, viewport and locale remain Storybook globals. Interaction examples remain separately linked
+from the canonical story documentation. Preview navigation uses the existing application router for new-tab links,
+so an exact Switch release, its work and the same release can be followed manually with Back/Forward.
+
+Design sources: [reading-first Overview](../../../../../../docs/subject-pages.md#reading-first-overview),
+[page composition](../../pages/README.md#reading-first-overview), this reader's admission/recovery contract and
+[Storybook ownership](../../../../README.md#storybook-and-page-recordings).
+
+Decision: add focused transport/composition regression source in `tests/game-showcase.test.ts`, defer test execution,
+mounted/browser/build/capture acceptance to the dev verifier, and submit only the changed web workspace's owner
+typecheck through `worker-check` under the final validation policy. Source completion is not a runtime pass.

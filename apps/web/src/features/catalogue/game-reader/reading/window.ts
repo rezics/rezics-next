@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameReaderAddress, GameReaderRead, GameReaderReady, GameReaderTransport } from '../model';
 
-type Intent = 'next' | 'previous' | 'start';
+type Intent = 'next' | 'previous' | 'start' | 'section';
 type Request = { address: GameReaderAddress; intent: Intent };
 
 /** Only addresses survive a successful replacement; no former response or row is retained. */
@@ -15,7 +15,7 @@ export function useEditionWindow(input: {
   const { address, initial, transport, current, replaced } = input;
   const [page, setPage] = useState<GameReaderReady | undefined>(initial?.ok ? initial : undefined);
   const [failure, setFailure] = useState<Exclude<GameReaderRead, GameReaderReady> | undefined>(
-    initial && !initial.ok ? initial : undefined,
+    initial?.ok ? initial.editionFailure : initial,
   );
   const [busy, setBusy] = useState(!initial);
   const [revision, setRevision] = useState(0);
@@ -23,11 +23,11 @@ export function useEditionWindow(input: {
   const mounted = useRef(false);
   const flight = useRef(false);
   const turn = useRef(0);
-  const pending = useRef<Request>({ address, intent: 'start' });
-  const accepted = useRef<GameReaderAddress | undefined>(initial?.ok ? address : undefined);
+  const pending = useRef<Request>({ address, intent: initial?.ok && initial.editionFailure ? 'section' : 'start' });
+  const accepted = useRef<GameReaderAddress | undefined>(initial?.ok && !initial.editionFailure ? address : undefined);
   const history = useRef<GameReaderAddress[]>([]);
   const cursors = useRef(new Set<string>());
-  const successes = useRef(initial?.ok ? 1 : 0);
+  const successes = useRef(initial?.ok && !initial.editionFailure ? 1 : 0);
 
   const read = async (request: Request) => {
     if (!mounted.current || !current() || flight.current) return false;
@@ -76,7 +76,7 @@ export function useEditionWindow(input: {
         successes.current = 0;
       } else if (intent === 'previous') {
         history.current.pop();
-      } else if (accepted.current) {
+      } else if (intent === 'next' && accepted.current) {
         history.current = [...history.current, accepted.current].slice(-8);
       }
       successes.current++;

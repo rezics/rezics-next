@@ -60,7 +60,7 @@ function scopeIdentityMap(scopes: ReadonlyMap<string, WorkerScopeIncarnation>): 
   return new Map(scopes);
 }
 
-function terminalRemoteCheckFixture(directory: string) {
+function terminalRemoteCheckFixture(directory: string, goal?: string) {
   const taskId = 'capacity-owner';
   const worktree = join(directory, 'worktree');
   const resultDirectory = join(worktree, '.temp/goal/checks/results');
@@ -146,10 +146,18 @@ function terminalRemoteCheckFixture(directory: string) {
     }),
   );
   let attemptState: 'waiting' | 'running' = 'waiting';
-  const row: { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string } = {
+  const row: {
+    task_id: string;
+    current_attempt: number;
+    attempt_state: string;
+    body: string;
+    worktree: string;
+    goal?: string;
+  } = {
     task_id: taskId,
     current_attempt: 1,
     attempt_state: attemptState,
+    ...(goal === undefined ? {} : { goal }),
     body: '',
     worktree,
   };
@@ -1202,6 +1210,49 @@ test('PSI pressure prevents cache reclaim even when the finite slice is the only
     rmSync(join(directory.path, 'capacity.json'));
     (await pending)();
   } finally {
+    directory.close();
+  }
+});
+
+test('a fitting source start uses the exact current product writer working set without changing custody', async () => {
+  const directory = temporaryDirectory();
+  const fixture = terminalRemoteCheckFixture(directory.path, 'library');
+  let release: (() => void) | undefined;
+  try {
+    fixture.updateAttempt('running', []);
+    rmSync(join(fixture.sliceRoot, fixture.unknownScope), { recursive: true });
+    writeFileSync(join(fixture.sliceRoot, 'memory.max'), String(5 * 1024 ** 3));
+    writeFileSync(join(fixture.sliceRoot, 'memory.current'), String(0.25 * 1024 ** 3));
+    writeFileSync(join(fixture.sliceRoot, fixture.terminalScope, 'memory.current'), String(0.25 * 1024 ** 3));
+    writeFileSync(join(fixture.sliceRoot, fixture.terminalScope, 'memory.peak'), String(0.5 * 1024 ** 3));
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    const originalCheck = readFileSync(fixture.historyPath, 'utf8');
+    const attempts = fixture.store.attempts.bind(fixture.store);
+    const store: HostCapacityStore = {
+      ...fixture.store,
+      capacityAttemptsCount: (urgent) => (urgent ? 0 : 1),
+      attempts: (taskId) => (taskId === fixture.taskId ? attempts(taskId) : []),
+    };
+    let reservation: number | undefined;
+    release = await awaitHostCapacity(store, directory.path, false, 'independent-source', 1, {
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerSliceRoot: fixture.sliceRoot,
+      workerProcessRoot: fixture.procRoot,
+      workerCgroupRoot: fixture.cgroupRoot,
+      workerHeadroomMiB: (running, root, parked, active) => {
+        reservation = active?.get(fixture.terminalScope)?.reservationMiB;
+        const measured = workerHeadroomMiB(running, root, parked, active);
+        expect(measured).toBe(3 * 1024);
+        return measured;
+      },
+    });
+    expect(reservation).toBe(2048);
+    expect(admittedMemoryMiB(directory.path, new Set())).toBe(2048);
+    expect(readFileSync(fixture.historyPath, 'utf8')).toBe(originalCheck);
+    expect(readFileSync(join(fixture.sliceRoot, 'memory.max'), 'utf8')).toBe(String(5 * 1024 ** 3));
+  } finally {
+    release?.();
     directory.close();
   }
 });

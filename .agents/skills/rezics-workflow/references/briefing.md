@@ -18,6 +18,8 @@ Managers:
 - [ ] Apply [checkout and landing discipline](../../../../docs/development/delivery.md#checkout-and-landing-discipline)
       when splitting control-plane and companion work or assigning a shared module workspace.
 - [ ] Use the configured route, not a model selection copied from old memory. Keep private settings outside Git.
+- [ ] Apply [skill instructions](../../../../docs/development/delivery.md#skill-instructions) when a brief uses a
+      skill; preserve its reference reads, executable paths and documented failure recovery.
 
 These commands run only in the controller's authorized checkout and state, not as a worker workaround:
 

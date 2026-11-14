@@ -2,19 +2,155 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { HostedBookReader } from '../books/reader/hosted-book-reader';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { HostedBookReader, type HostedBookReaderProps } from '../books/reader/hosted-book-reader';
+import { HostedBookCheckpointControls } from '../books/reader/checkpoint-controls';
+import { hostedBookAddressHref } from '../books/reader/address';
 import {
   createIllustrativeHostedBook,
   illustrativeBookIds,
   type IllustrativeBookState,
 } from '../books/reader/illustrative-source';
-import type { BookAddress } from '../books/reader/source';
+import type { BookAddress, BookChapterAddress, BookChapterPage, BookPage } from '../books/reader/source';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 
-function BookJourney({ state = 'nested', chapter = false }: { state?: IllustrativeBookState; chapter?: boolean }) {
+type SavedReading = { address: BookChapterAddress; title: string };
+type CheckpointState = 'none' | 'saved' | 'unavailable';
+type JourneyProps = {
+  state?: IllustrativeBookState;
+  chapter?: boolean;
+  direct?: 'first' | 'night';
+  checkpoint?: CheckpointState;
+};
+
+function IllustrativeCheckpoint({
+  page,
+  current,
+  initialState,
+  saved,
+  setSaved,
+  open,
+}: {
+  page: BookPage;
+  current: () => boolean;
+  initialState: CheckpointState;
+  saved: SavedReading | null;
+  setSaved: (value: SavedReading | null) => void;
+  open: (address: BookChapterAddress) => void;
+}) {
+  const [unavailable, setUnavailable] = useState(initialState === 'unavailable');
+  const [notice, setNotice] = useState<'saved' | 'cleared' | null>(null);
+  const locale = getLocale();
+  const options = { locale };
+  const href = saved ? hostedBookAddressHref(saved.address, locale) : null;
+  return (
+    <div
+      className="contents"
+      onClickCapture={(event) => {
+        // The story supplies only the Router seam. Modified activation keeps the exact public link.
+        const link = (event.target as Element).closest('a');
+        if (
+          !saved ||
+          link?.getAttribute('href') !== href ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        if (current()) open(saved.address);
+      }}
+    >
+      <HostedBookCheckpointControls
+        locale={locale}
+        chapter={page.kind === 'chapter'}
+        saved={!unavailable && saved !== null}
+        withheld={false}
+        resume={!unavailable && saved && href ? { href, title: saved.title } : null}
+        message={
+          unavailable
+            ? m.book_reader_progress_unavailable({}, options)
+            : notice === 'saved'
+              ? m.book_reader_checkpoint_saved({}, options)
+              : notice === 'cleared'
+                ? m.book_reader_checkpoint_cleared({}, options)
+                : saved
+                  ? null
+                  : m.book_reader_checkpoint_none({}, options)
+        }
+        busy={false}
+        blocked={false}
+        isCurrent={current}
+        {...(!unavailable && page.kind === 'chapter'
+          ? {
+              save: () => {
+                if (!current()) return;
+                setSaved({ address: page.address, title: page.title });
+                setNotice('saved');
+              },
+            }
+          : {})}
+        {...(!unavailable && saved
+          ? {
+              clear: () => {
+                if (!current()) return;
+                setSaved(null);
+                setNotice('cleared');
+              },
+            }
+          : {})}
+        {...(unavailable
+          ? {
+              retry: () => {
+                if (current()) setUnavailable(false);
+              },
+            }
+          : {})}
+      />
+    </div>
+  );
+}
+
+/** A deliberately unsaved extension: checkpoint recovery must leave this local edit alone. */
+function IllustrativeProgress({ current }: { current: () => boolean }) {
+  const [amount, setAmount] = useState('4');
+  return (
+    <section aria-label={m.library_progress_measures_heading()} className="grid min-w-0 justify-items-start gap-3">
+      {amount !== '3' ? (
+        <p role="status" className="text-sm">
+          {m.library_progress_draft_navigation_title()}
+        </p>
+      ) : null}
+      <label className="grid gap-2 text-sm">
+        {m.library_progress_amount()}
+        <Input
+          className="max-w-40"
+          value={amount}
+          onChange={(event) => {
+            if (current()) setAmount(event.target.value);
+          }}
+        />
+      </label>
+      <Button
+        variant="outline"
+        className="min-h-11 whitespace-normal"
+        onClick={() => {
+          if (current()) setAmount('3');
+        }}
+      >
+        {m.library_progress_draft_navigation_discard()}
+      </Button>
+    </section>
+  );
+}
+
+function BookJourney({ state = 'nested', chapter = false, direct = 'first', checkpoint = 'none' }: JourneyProps) {
   const [runtime] = useState(() => {
-    const book = createIllustrativeHostedBook(state);
+    const book = createIllustrativeHostedBook(state, true);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
     return { book, client };
@@ -22,28 +158,39 @@ function BookJourney({ state = 'nested', chapter = false }: { state?: Illustrati
   const [address, setAddress] = useState<BookAddress | null>(() =>
     chapter ? null : runtime.book.contents(state === 'nested' ? null : illustrativeBookIds.nested),
   );
+  const [saved, setSaved] = useState<SavedReading | null>(null);
+  const [focusOnRead, setFocusOnRead] = useState<HostedBookReaderProps['focusOnRead']>();
   useEffect(() => {
     let current = true;
-    if (chapter)
-      void runtime.book.chapter().then((value) => {
-        if (current) setAddress(value);
-      });
+    void Promise.all([
+      chapter ? (direct === 'night' ? runtime.book.nightChapter() : runtime.book.chapter()) : null,
+      checkpoint === 'saved' ? runtime.book.chapter(true) : null,
+    ]).then(([opening, savedChapter]) => {
+      if (!current) return;
+      if (opening) setAddress(opening);
+      if (savedChapter) setSaved({ address: savedChapter, title: 'Dawn, an echo / 再読' });
+    });
     return () => {
       current = false;
     };
-  }, [runtime, chapter]);
+  }, [runtime, chapter, direct, checkpoint]);
   useEffect(() => () => runtime.client.clear(), [runtime]);
   return (
     <QueryClientProvider client={runtime.client}>
       <main className="min-w-0">
-        <aside className="mx-auto grid max-w-5xl gap-3 px-4 pt-4 text-sm">
+        <aside className="mx-auto grid max-w-[52rem] gap-2 px-4 pt-4 text-xs text-muted-foreground sm:px-8">
           <p role="note">
-            Illustrative native-format Content responses through the actual native mapper and reader. These are authored
-            examples, not API recordings or native admission evidence.
+            Illustrative native-format Content responses through the actual mapper and shared reader. Checkpoint
+            controls use local examples of the installed contract. These are not native publication or save acceptance.
+            Review manually; set the readerJourney story parameter to run the retained interaction assertions.
           </p>
-          <button className="min-h-11 justify-self-start rounded border px-3" onClick={() => runtime.book.replace()}>
+          <Button
+            className="min-h-11 justify-self-start text-xs"
+            variant="ghost"
+            onClick={() => runtime.book.replace()}
+          >
             Replace publication / target / viewer admission
-          </button>
+          </Button>
         </aside>
         {address ? (
           <HostedBookReader
@@ -51,9 +198,31 @@ function BookJourney({ state = 'nested', chapter = false }: { state?: Illustrati
             source={runtime.book.source}
             readingIdentity={runtime.book}
             locale={getLocale()}
+            hrefForAddress={(target) => hostedBookAddressHref(target, getLocale())}
+            {...(focusOnRead ? { focusOnRead } : {})}
+            {...(checkpoint === 'unavailable'
+              ? {
+                  renderProgress: (_page: BookChapterPage, current: () => boolean) => (
+                    <IllustrativeProgress current={current} />
+                  ),
+                }
+              : {})}
+            renderCheckpoint={(page, current) => (
+              <IllustrativeCheckpoint
+                page={page}
+                current={current}
+                initialState={checkpoint}
+                saved={saved}
+                setSaved={setSaved}
+                open={(target) => {
+                  setFocusOnRead({ owner: document.activeElement, focus: { kind: 'heading' } });
+                  setAddress(target);
+                }}
+              />
+            )}
           />
         ) : (
-          <p role="status">Preparing illustrative responses…</p>
+          <p role="status">{m.book_reader_loading()}</p>
         )}
       </main>
     </QueryClientProvider>
@@ -64,30 +233,45 @@ const meta = {
   title: 'Books/Hosted Book reader',
   id: 'interfaces-hosted-book-reader',
   component: BookJourney,
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'fullscreen', readerJourney: false },
+  render: (args) => <BookJourney key={`${args.state}:${args.chapter}:${args.direct}:${args.checkpoint}`} {...args} />,
   args: { state: 'nested', chapter: false },
 } satisfies Meta<typeof BookJourney>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function nestedJourney({ canvasElement }: { canvasElement: HTMLElement }) {
+async function nestedJourney({
+  canvasElement,
+  parameters,
+}: {
+  canvasElement: HTMLElement;
+  parameters: Record<string, unknown>;
+}) {
+  if (!parameters.readerJourney) return;
   const canvas = within(canvasElement);
   await canvas.findByText('Part I · The journey');
-  await userEvent.click(canvas.getByRole('button', { name: `${m.book_reader_contents()} · Part I · The journey` }));
-  await userEvent.click(await canvas.findByRole('button', { name: `${m.book_reader_contents()} · The observatory` }));
-  const first = await canvas.findByRole('button', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` });
+  await userEvent.click(canvas.getByRole('link', { name: `${m.book_reader_contents()} · Part I · The journey` }));
+  await userEvent.click(await canvas.findByRole('link', { name: `${m.book_reader_contents()} · The observatory` }));
+  const first = await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` });
   await userEvent.click(first);
   await canvas.findByRole('heading', { level: 1, name: 'Dawn / 黎明' });
   await expect(canvas.getByRole('article')).toHaveTextContent('The keeper opened the eastern shutters.');
   await userEvent.click(canvas.getAllByRole('button', { name: m.book_reader_contents() })[0]!);
   await expect(
-    await canvas.findByRole('button', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` }),
+    await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` }),
   ).toHaveAttribute('aria-current', 'location');
 }
 
-async function failedPage({ canvasElement }: { canvasElement: HTMLElement }) {
+async function failedPage({
+  canvasElement,
+  parameters,
+}: {
+  canvasElement: HTMLElement;
+  parameters: Record<string, unknown>;
+}) {
+  if (!parameters.readerJourney) return;
   const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('button', { name: m.book_reader_more() }));
+  await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
   await canvas.findByText(m.book_reader_unavailable());
   await userEvent.click(canvas.getByRole('button', { name: m.book_reader_retry() }));
   await canvas.findByText('Dawn, an echo / 再読');
@@ -96,14 +280,17 @@ async function failedPage({ canvasElement }: { canvasElement: HTMLElement }) {
 
 // The same named behavior states use the locale/theme globals and both screenshot widths (390 / 1280).
 export const NestedContents: Story = { play: nestedJourney };
-export const ExactChapter: Story = { args: { chapter: true } };
+export const ExactChapter: Story = { args: { chapter: true, direct: 'night' } };
+export const SavedContinue: Story = { args: { checkpoint: 'saved' } };
+export const IndependentCheckpointFailure: Story = { args: { chapter: true, checkpoint: 'unavailable' } };
 export const SparseContinuation: Story = { args: { state: 'sparse' } };
 export const FailedPageRecovery: Story = { args: { state: 'failed-page' }, play: failedPage };
 export const MovedOccurrence: Story = { args: { state: 'moved', chapter: true } };
 export const UnavailableNavigation: Story = { args: { state: 'unavailable-navigation', chapter: true } };
 export const RetiredReading: Story = {
   args: { chapter: true },
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
     const canvas = within(canvasElement);
     await canvas.findByRole('article');
     await userEvent.click(canvas.getByRole('button', { name: 'Replace publication / target / viewer admission' }));

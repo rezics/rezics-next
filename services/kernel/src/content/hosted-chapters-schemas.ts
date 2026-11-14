@@ -73,7 +73,7 @@ export const HostedMoveDraftPointSchema = t.Object(
   {
     expectedRevisionId: HostedIdSchema,
     occurrenceId: HostedIdSchema,
-    parentId: HostedIdSchema,
+    parentId: nullableId,
     beforeOccurrenceId: nullableId,
   },
   closed,

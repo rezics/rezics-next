@@ -235,17 +235,18 @@ function TocEntry({
           <strong className="studio-part-title">{placement.title}</strong>
         )}
       </div>
-      {target.kind === 'chapter' ? (
-        <p className="studio-help studio-break">
-          {m.studio_book_pinned_version({ revision: target.document.revisionId }, { locale })}
-        </p>
-      ) : (
-        <p className="studio-help">{m.studio_book_release_count(selection, { locale })}</p>
-      )}
       <details className="studio-toc-actions">
         <summary aria-label={m.studio_book_organize_title({ title: placement.title }, { locale })}>
           {m.studio_book_organize({}, { locale })}
         </summary>
+        {target.kind === 'chapter' ? (
+          <p className="studio-help studio-break">
+            {m.studio_book_pinned_version({ revision: target.document.revisionId }, { locale })}
+          </p>
+        ) : (
+          <p className="studio-help">{m.studio_book_release_count(selection, { locale })}</p>
+        )}
+
         <div className="studio-action-row">
           <Button type="button" variant="outline" disabled={!editable} onClick={() => setMoving(true)}>
             {m.studio_book_move_to({}, { locale })}

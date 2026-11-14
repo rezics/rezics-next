@@ -1,3 +1,4 @@
+import { KnowledgeDetails, knowledgeControl, knowledgeLink } from './workspace';
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { KnowledgeReferenceBody } from './reference-view';
@@ -50,7 +51,7 @@ function citationUrl(origin: string | undefined, href: string): string {
 }
 
 function controlClass(extra = '') {
-  return `h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] ${extra}`.trim();
+  return `${knowledgeControl} ${extra}`.trim();
 }
 
 function KnowledgeCitation({
@@ -170,42 +171,22 @@ export function KnowledgeDocumentPage({
 
   return (
     <article
-      className="mx-auto w-full min-w-0 max-w-3xl space-y-8 text-foreground [overflow-wrap:anywhere]"
+      className="mx-auto w-full min-w-0 max-w-3xl space-y-8 px-4 py-8 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-12"
       aria-busy={preparing}
     >
-      <header className="space-y-3">
+      <header className="space-y-4 border-b border-border pb-6">
         <p className="text-sm font-medium text-muted-foreground">
           {exact ? m.knowledge_exact_kind() : m.knowledge_live_kind()}
         </p>
         <PageHeading>{document?.title ?? m.knowledge_heading()}</PageHeading>
         {document ? <p className="text-sm text-muted-foreground">{m.knowledge_unattributed()}</p> : null}
         {document ? (
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="font-medium text-foreground">{m.knowledge_published()}</dt>
-              <dd>
-                <time dateTime={document.publishedAt}>{publicationTime(document.publishedAt, locale)}</time>
-              </dd>
-            </div>
-            {document.language ? (
-              <div>
-                <dt className="font-medium text-foreground">{m.knowledge_language()}</dt>
-                <dd>
-                  <bdi dir="ltr">{document.language}</bdi>
-                </dd>
-              </div>
-            ) : null}
-            <div className={document.language ? 'sm:col-span-2' : undefined}>
-              <dt className="font-medium text-foreground">{m.knowledge_licence()}</dt>
-              <dd>{document.licence}</dd>
-            </div>
-          </dl>
+          <p className="text-sm text-muted-foreground">
+            <time dateTime={document.publishedAt}>{publicationTime(document.publishedAt, locale)}</time>
+          </p>
         ) : null}
         {subject ? (
-          <a
-            href={subject.href}
-            className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
+          <a href={subject.href} className={knowledgeLink}>
             {m.knowledge_subject()}
           </a>
         ) : null}
@@ -247,13 +228,36 @@ export function KnowledgeDocumentPage({
             references={document.references}
             locale={locale}
           />
-          <KnowledgeCitation href={exactHref} origin={origin} clipboard={clipboard} />
+          <KnowledgeDetails label={m.knowledge_workspace_details()}>
+            {document ? (
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="font-medium text-foreground">{m.knowledge_published()}</dt>
+                  <dd>
+                    <time dateTime={document.publishedAt}>{publicationTime(document.publishedAt, locale)}</time>
+                  </dd>
+                </div>
+                {document.language ? (
+                  <div>
+                    <dt className="font-medium text-foreground">{m.knowledge_language()}</dt>
+                    <dd>
+                      <bdi dir="ltr">{document.language}</bdi>
+                    </dd>
+                  </div>
+                ) : null}
+                <div className={document.language ? 'sm:col-span-2' : undefined}>
+                  <dt className="font-medium text-foreground">{m.knowledge_licence()}</dt>
+                  <dd>{document.licence}</dd>
+                </div>
+              </dl>
+            ) : null}
+          </KnowledgeDetails>
+          <div className="min-w-0 border-t border-border pt-6">
+            <KnowledgeCitation href={exactHref} origin={origin} clipboard={clipboard} />
+          </div>
           {transfer?.(document, () => setLostPage(page))}
           {exact ? (
-            <a
-              href={liveHref}
-              className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
+            <a href={liveHref} className={knowledgeLink}>
               {m.knowledge_current_open()}
             </a>
           ) : null}

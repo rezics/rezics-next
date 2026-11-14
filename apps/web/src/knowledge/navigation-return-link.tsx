@@ -1,3 +1,4 @@
+import { knowledgeControl, knowledgeLink } from './workspace';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLayoutEffect } from 'react';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -38,24 +39,24 @@ export function useKnowledgeNavigationReturn() {
   return returning;
 }
 
-export const knowledgeNavigationControl =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-snug [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-export const knowledgeNavigationLink =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+export const knowledgeNavigationControl = knowledgeControl;
+export const knowledgeNavigationLink = knowledgeLink;
 
 export function KnowledgeNavigationReturnLink({
   address,
   binding,
   locale,
+  embedded = false,
 }: {
   address: KnowledgePrivateAddress;
   binding: string;
   locale: string;
+  embedded?: boolean;
 }) {
   const returning = useKnowledgeNavigationReturn();
   returning.retireForAddress(binding, address);
   return (
-    <div className="mx-auto w-full min-w-0 max-w-3xl px-4 pt-4 sm:px-6">
+    <div className={embedded ? 'min-w-0' : 'mx-auto w-full min-w-0 max-w-6xl px-4 pt-4 sm:px-6'}>
       <Link
         to="/knowledge/notebooks/$notebookId"
         params={{ notebookId: address.notebookId }}

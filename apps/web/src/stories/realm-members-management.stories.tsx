@@ -5,15 +5,19 @@ import { expect, userEvent, within } from 'storybook/test';
 import { RealmMembersPage, type MembersCaller } from '../community/members/page';
 import type { MemberPageRead, RealmMembersSource } from '../community/members/source';
 import { m } from '../paraglide/messages.js';
+import { PatternStory } from './page';
+import { AppShell } from '../shell/shell';
 import { requestRealmMemberAddition } from '../community/space';
 
-const realmId = 'illustrative-realm';
-const rows = ['account-01', 'account-02'].map((accountId, index) => ({
-  kind: 'disclosed' as const,
-  identity: { accountId, reference: accountId, label: 'Alex Chen' },
-  membershipInterval: index === 0 ? 'producer-interval-one' : 'producer-interval-two',
-  membership: 'current' as const,
-}));
+const realmId = '01a1a000-0000-7000-8000-000000000021';
+const rows = ['01a1a000-0000-7000-8000-000000000031', '01a1a000-0000-7000-8000-000000000032'].map(
+  (accountId, index) => ({
+    kind: 'disclosed' as const,
+    identity: { accountId, reference: `account-0${index + 1}`, label: 'Alex Chen' },
+    membershipInterval: index === 0 ? 'producer-interval-one' : 'producer-interval-two',
+    membership: 'current' as const,
+  }),
+);
 function fixture(
   state:
     | 'ready'
@@ -21,6 +25,7 @@ function fixture(
     | 'sparse'
     | 'denied'
     | 'selected-unavailable'
+    | 'selected-denied'
     | 'pending'
     | 'addition-rejected'
     | 'addition-unknown'
@@ -67,21 +72,23 @@ function fixture(
     readSelected: async (address) =>
       state === 'selected-unavailable'
         ? { kind: 'unavailable' }
-        : {
-            kind: 'ready',
-            ...address,
-            identity: rows.find((row) => row.identity.accountId === address.accountId)?.identity ?? {
-              accountId: address.accountId,
-              reference: 'selected-account-reference',
-              label: 'Alex Chen',
+        : state === 'selected-denied'
+          ? { kind: 'denied' }
+          : {
+              kind: 'ready',
+              ...address,
+              identity: rows.find((row) => row.identity.accountId === address.accountId)?.identity ?? {
+                accountId: address.accountId,
+                reference: 'selected-account-reference',
+                label: 'Alex Chen',
+              },
+              membershipInterval: address.membershipInterval ?? null,
+              membershipEpisode: address.membershipInterval ?? 'selected-absence-episode',
+              membership: state === 'pending' ? 'pending' : state.startsWith('addition-') ? 'none' : 'current',
+              advice: state.startsWith('addition-')
+                ? { add: 'available', ban: 'unavailable', unban: 'unavailable' }
+                : { add: 'unavailable', ban: 'available', unban: 'unavailable' },
             },
-            membershipInterval: address.membershipInterval ?? null,
-            membershipEpisode: address.membershipInterval ?? 'selected-absence-episode',
-            membership: state === 'pending' ? 'pending' : state.startsWith('addition-') ? 'none' : 'current',
-            advice: state.startsWith('addition-')
-              ? { add: 'available', ban: 'unavailable', unban: 'unavailable' }
-              : { add: 'unavailable', ban: 'available', unban: 'available' },
-          },
     ...(state.startsWith('addition-')
       ? {
           addMember: (intent) => {
@@ -141,8 +148,18 @@ const meta = {
   title: 'Community/Realm members management',
   id: 'patterns-community-realm-members-management',
   component: RealmMembersPage,
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path={`/realms/${realmId}/members`}>
+        <AppShell>
+          <Story />
+        </AppShell>
+      </PatternStory>
+    ),
+  ],
   args: { realmId, source: ready },
   parameters: {
+    layout: 'fullscreen',
     docs: {
       description: {
         component:
@@ -266,5 +283,44 @@ export const RevokedWhileOpen: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Revoke illustrative authority' }));
     await expect(await canvas.findByText(m.realm_members_retired())).toBeVisible();
     await expect(canvas.queryByText('account-01', { exact: true })).toBeNull();
+  },
+};
+
+export const SelectedDenied: Story = {
+  args: { source: fixture('selected-denied') },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click((await canvas.findAllByRole('button', { name: /account-01/ }))[0]!);
+    await expect(await canvas.findByText(m.realm_members_denied())).toBeVisible();
+    await expect(canvas.queryByText('account-01', { exact: true })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.realm_members_add_member() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.realm_members_back() })).toBeNull();
+  },
+};
+
+function AdditionReadbackUnavailable() {
+  const source = useMemo<RealmMembersSource>(() => {
+    const base = fixture('addition-pending');
+    let reads = 0;
+    return {
+      ...base,
+      readSelected: async (address) => (++reads === 1 ? base.readSelected(address) : { kind: 'unavailable' }),
+    };
+  }, []);
+  return <RealmMembersPage realmId={realmId} source={source} />;
+}
+export const AcceptedAdditionWithUnavailableReadback: Story = {
+  render: () => <AdditionReadbackUnavailable />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await inspectEnteredAccount(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_add_member() }));
+    const review = canvas.getByRole('group', { name: m.realm_members_add_member() });
+    await expect(within(review).getByText(realmId, { exact: true })).toBeVisible();
+    await userEvent.click(within(review).getByRole('button', { name: m.realm_bans_confirm() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_check_status() }));
+    await expect(await canvas.findByText(m.realm_members_selected_unavailable())).toBeVisible();
+    await expect(canvas.getByText(m.realm_members_add_pending())).toBeVisible();
+    await expect(canvas.queryByText('selected-account-reference')).toBeNull();
   },
 };

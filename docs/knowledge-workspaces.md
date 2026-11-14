@@ -172,6 +172,8 @@ contracts after that source is admitted. They do not become the content or permi
 
 ## Writer and reader experience
 
+Decision: Knowledge uses a document-first workspace: a bounded, explicitly opened native document navigation region, a focused writing or reading body, and contextual history/publication actions. Routine exact identifiers live in labelled details; destructive operands and uncertain-command warnings stay at their action. Public reading offers an ephemeral session-bound return to the originating private editor without private URL parameters or public notebook ancestry. This frontend source-only window defers typing, tests, builds, browser and capture acceptance to the dev verifier; existing regression sources remain.
+
 On a readable subject, the signed-in user can see public contributions and their authorized personal material in the
 same page. A private area is labelled Only you; public contributions identify their author and publication state.
 Creating a document defaults to private. Templates supply editable starting titles and structure; Inspiration,

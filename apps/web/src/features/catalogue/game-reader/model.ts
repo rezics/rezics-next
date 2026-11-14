@@ -31,6 +31,7 @@ export type GameReaderRead =
       workReleaseCards?: WorkReleaseCards;
       editionTypes: string[];
       editionsAdmitted: boolean;
+      editionFailure?: { ok: false; reason: 'unavailable' | 'withheld' | 'invalid' | 'restart' };
       next: string | null;
       caughtUp: boolean;
       labels: Record<string, ReturnType<typeof pickText>>;
@@ -171,47 +172,59 @@ export async function readGameReader(
         ...(address.cursor ? { cursor: address.cursor } : {}),
       },
     });
-    // The links owner currently reports both stale and invalid cursors as invalid_request.
-    // Neither means that the native stream is exhausted or that retrying the token will help.
-    if (response.status === 400 && address.cursor) return { ok: false, reason: 'restart' };
-    if (response.status !== 200 || !response.data) return failure(response.status);
-    const page = response.data as SubjectLinksResponse;
-    const { workReleaseCards, ...membershipPage } = page;
-    if (
-      page.links.length > gameReaderLimit ||
-      encodedBytes(membershipPage) > gameReaderLimit * 128 * 1024 + 64 * 1024 ||
-      (workReleaseCards !== undefined && encodedBytes(workReleaseCards) > 2 * 1024 * 1024) ||
-      (page.next !== null &&
-        (typeof page.next !== 'string' || !page.next.length || page.next.length > 4096 || page.next === address.cursor))
-    )
-      return { ok: false, reason: 'unavailable' };
-    const seen = new Set<string>();
-    for (const row of page.links) {
-      const key = `${row.subject}:${row.statement}`;
-      if (
-        encodedBytes(row) > 128 * 1024 ||
-        seen.has(key) ||
-        !gameUuid.test(row.subject) ||
-        !gameUuid.test(row.statement) ||
-        row.property !== editionProperty ||
-        (row.summary && row.summary.id !== row.subject) ||
-        (row.assertion &&
-          (row.assertion.id !== row.statement ||
-            row.assertion.property.id !== editionProperty ||
-            row.assertion.value.type !== 'value' ||
-            row.assertion.value.content !== address.id))
-      )
-        return { ok: false, reason: 'unavailable' };
-      seen.add(key);
-    }
-    return {
-      ...common,
-      editions: page.links,
-      workReleaseCards: workReleaseCards ?? { state: 'unavailable' },
-      next: page.next,
-      caughtUp: page.freshness.caught_up,
-    };
+    return gameReaderEditionPage(common, address, response.status, response.data);
   } catch {
     return { ok: false, reason: 'unavailable' };
   }
+}
+
+/** Admit the same native inverse page whether it arrived in composition or through explicit continuation. */
+export function gameReaderEditionPage(
+  common: GameReaderReady,
+  address: GameReaderAddress,
+  status: number,
+  body: unknown,
+): GameReaderRead {
+  // The links owner currently reports both stale and invalid cursors as invalid_request.
+  // Neither means that the native stream is exhausted or that retrying the token will help.
+  if (status === 400 && address.cursor) return { ok: false, reason: 'restart' };
+  if (status !== 200 || !body) return failure(status);
+  const page = body as SubjectLinksResponse;
+  if (!Array.isArray(page.links) || typeof page.freshness?.caught_up !== 'boolean')
+    return { ok: false, reason: 'unavailable' };
+  const { workReleaseCards, ...membershipPage } = page;
+  if (
+    page.links.length > gameReaderLimit ||
+    encodedBytes(membershipPage) > gameReaderLimit * 128 * 1024 + 64 * 1024 ||
+    (workReleaseCards !== undefined && encodedBytes(workReleaseCards) > 2 * 1024 * 1024) ||
+    (page.next !== null &&
+      (typeof page.next !== 'string' || !page.next.length || page.next.length > 4096 || page.next === address.cursor))
+  )
+    return { ok: false, reason: 'unavailable' };
+  const seen = new Set<string>();
+  for (const row of page.links) {
+    const key = `${row.subject}:${row.statement}`;
+    if (
+      encodedBytes(row) > 128 * 1024 ||
+      seen.has(key) ||
+      !gameUuid.test(row.subject) ||
+      !gameUuid.test(row.statement) ||
+      row.property !== editionProperty ||
+      (row.summary && row.summary.id !== row.subject) ||
+      (row.assertion &&
+        (row.assertion.id !== row.statement ||
+          row.assertion.property.id !== editionProperty ||
+          row.assertion.value.type !== 'value' ||
+          row.assertion.value.content !== address.id))
+    )
+      return { ok: false, reason: 'unavailable' };
+    seen.add(key);
+  }
+  return {
+    ...common,
+    editions: page.links,
+    workReleaseCards: workReleaseCards ?? { state: 'unavailable' },
+    next: page.next,
+    caughtUp: page.freshness.caught_up,
+  };
 }

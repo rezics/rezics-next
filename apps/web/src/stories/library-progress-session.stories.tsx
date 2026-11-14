@@ -1,3 +1,8 @@
+import {
+  progressInterfaceSessionId,
+  setProgressInterfaceScenario,
+  type ProgressInterfaceScenario,
+} from '../kernel/fake/library-progress-interface';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { profileSession, profileSessionId, retiredSessionId } from '../kernel/fake/progress-profiles';
@@ -102,7 +107,7 @@ export const ProfileUnits: Story = {
     await libraryProgressSessionReady(context);
     await userEvent.click(within(context.canvasElement).getByRole('button', { name: m.library_progress_update() }));
     const dialog = await within(document.body).findByRole('dialog');
-    const amount = within(dialog).getByRole('spinbutton', { name: m.library_progress_amount() });
+    const amount = within(dialog).getByRole('textbox', { name: m.library_progress_amount() });
     expect(amount).toHaveAttribute('min', '0.25');
     expect(amount).toHaveAttribute('max', '98.5');
     expect(amount).toHaveAttribute('step', '0.01');
@@ -159,7 +164,7 @@ export const DeclaredRecordingRefused: Story = {
     const canvas = within(context.canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.library_progress_update() }));
     const dialog = within(await within(document.body).findByRole('dialog'));
-    const amount = dialog.getByRole('spinbutton', { name: m.library_progress_amount() });
+    const amount = dialog.getByRole('textbox', { name: m.library_progress_amount() });
     await userEvent.clear(amount);
     await userEvent.type(amount, '3');
     await userEvent.click(dialog.getByRole('button', { name: m.library_progress_record() }));
@@ -605,4 +610,61 @@ export const StaleUnitsRecovery: Story = {
     expect(linkSearch(next).get('units')).toBe(originalHistoryCursors.units);
     expect(linkSearch(next).get('changes')).toBe(originalHistoryCursors.changes);
   },
+};
+
+function nativeProgressReview(scenario: ProgressInterfaceScenario, description: string): Story {
+  return {
+    beforeEach() {
+      setProgressInterfaceScenario(scenario);
+      return () => setProgressInterfaceScenario();
+    },
+    parameters: {
+      docs: {
+        description: {
+          story: `${description} Constructed native responses use the actual session route, reader, editor, history and recovery controls. These consumer scenarios do not establish native API authorization or acceptance. No play function runs on review entry.`,
+        },
+      },
+    },
+    render: () => <PageStory visitor="Signed In" path={`/library/progress/${progressInterfaceSessionId}`} />,
+  };
+}
+
+export const NativeUnits: Story = {
+  ...nativeProgressReview(
+    'units',
+    'Work, English edition and started time lead. Saved chapters and volumes retain their own totals. Choose Update progress to replace an amount, inspect its native rules and review the exact changes before confirming. The earlier observation of eight chapters remains in Changes while the current amount is ten.',
+  ),
+  name: 'Review · populated native units',
+};
+
+export const DeliberateClear: Story = {
+  ...nativeProgressReview(
+    'clear',
+    'Choose Update progress, then Clear this unit beside volumes. The saved two volumes stay visible and the local clear is explicit. Cancel restores that unit draft. Review changes, then confirm to clear only volumes; chapters, the supplied totals and historical observations remain.',
+  ),
+  name: 'Review · deliberate clear of one unit',
+};
+
+export const UntouchedUnitRefresh: Story = {
+  ...nativeProgressReview(
+    'refresh',
+    'Choose Update progress. Change volumes from two to five, then Refresh saved progress: untouched chapters adopt the saved eleven while the local five volumes remain. Alternatively choose Clear this unit for volumes before refreshing: the clear survives and the newer saved three volumes remain visible until confirmation. Refresh is a deliberate read; no timer runs.',
+  ),
+  name: 'Review · refresh untouched units and retain local intent',
+};
+
+export const UnknownNativeUnit: Story = {
+  ...nativeProgressReview(
+    'unknown',
+    'The historical unit historic-leaf-x retains its exact 12.250001 amount and unknown meaning. It is not relabelled from current definitions, converted or made editable as a known unit. Its supplied identity is inspectable. Known chapters and volumes still have their own controls; clearing the historical unit requires a deliberate review.',
+  ),
+  name: 'Review · unknown historical unit unchanged',
+};
+
+export const NativeFailureRecovery: Story = {
+  ...nativeProgressReview(
+    'failure',
+    'Choose Update progress, change one amount, review and confirm. The constructed producer saves the value but loses the first response. The result remains uncertain and the exact request is retained. Retry original request returns its recorded acknowledgement without applying it twice; opening history or refreshing does not authorize a replacement intent.',
+  ),
+  name: 'Review · uncertain save and exact retry',
 };

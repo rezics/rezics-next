@@ -1,3 +1,4 @@
+import { KnowledgeDetails } from './workspace';
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -102,7 +103,7 @@ export function KnowledgeOrganizationPage({
     >
       <nav
         aria-label={m.knowledge_navigation_breadcrumbs({}, options)}
-        className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2"
+        className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border pb-4"
       >
         <Link to="/knowledge" preload={false} className={link}>
           {m.knowledge_navigation_heading({}, options)}
@@ -213,9 +214,11 @@ export function KnowledgeOrganizationPage({
       {snapshot.receipt && (
         <div className="space-y-3" role="status">
           <h2 className="text-lg font-semibold">{copy.moved}</h2>
-          <p className="text-sm">
-            {copy.receipt}: <span className="tabular-nums">{snapshot.receipt.structureRevisionId}</span>
-          </p>
+          <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+            <p className="text-sm">
+              {copy.receipt}: <span className="tabular-nums">{snapshot.receipt.structureRevisionId}</span>
+            </p>
+          </KnowledgeDetails>
           <p className="max-w-prose text-sm text-muted-foreground">{copy.readback_note}</p>
           {command === 'acknowledged' && (
             <div className="flex flex-wrap gap-2">
@@ -290,23 +293,25 @@ export function KnowledgeOrganizationPage({
                       )}
                     </time>
                   </p>
-                  {row.changes.map((change) => (
-                    <dl
-                      key={change.placementId}
-                      className="grid min-w-0 gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"
-                    >
-                      <dt className="text-muted-foreground">{copy.source}</dt>
-                      <dd>{change.placementId}</dd>
-                      <dt className="text-muted-foreground">{copy.parent}</dt>
-                      <dd>{change.previousParentPlacementId ?? root}</dd>
-                      <dt className="text-muted-foreground">{copy.destination}</dt>
-                      <dd>{change.parentPlacementId ?? root}</dd>
-                      <dt className="text-muted-foreground">{copy.order}</dt>
-                      <dd className="tabular-nums">
-                        {change.previousPosition ?? '—'} / {change.position}
-                      </dd>
-                    </dl>
-                  ))}
+                  <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+                    {row.changes.map((change) => (
+                      <dl
+                        key={change.placementId}
+                        className="grid min-w-0 gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"
+                      >
+                        <dt className="text-muted-foreground">{copy.source}</dt>
+                        <dd>{change.placementId}</dd>
+                        <dt className="text-muted-foreground">{copy.parent}</dt>
+                        <dd>{change.previousParentPlacementId ?? root}</dd>
+                        <dt className="text-muted-foreground">{copy.destination}</dt>
+                        <dd>{change.parentPlacementId ?? root}</dd>
+                        <dt className="text-muted-foreground">{copy.order}</dt>
+                        <dd className="tabular-nums">
+                          {change.previousPosition ?? '—'} / {change.position}
+                        </dd>
+                      </dl>
+                    ))}
+                  </KnowledgeDetails>
                   {row.historyAvailable ? (
                     <Button
                       variant="outline"
@@ -325,28 +330,35 @@ export function KnowledgeOrganizationPage({
             <ul className="min-w-0 divide-y divide-border">
               {page.placements.map((row) => (
                 <li key={row.placementId} className="min-w-0 space-y-3 py-4">
-                  <h3 className="font-semibold leading-snug">{row.title}</h3>
-                  <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2">
+                  <h3 className="text-base font-medium leading-snug">
                     <Link
                       to="/knowledge/notebooks/$notebookId/documents/$documentId"
                       params={{ notebookId: page.notebookId, documentId: row.documentId }}
                       preload={false}
                       className={link}
-                      onClick={() => remember(row.documentId)}
+                      onClick={(event) => {
+                        if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
+                          remember(row.documentId);
+                      }}
                     >
-                      {m.knowledge_navigation_open_document({}, options)}: {row.title}
+                      <span className="sr-only">{m.knowledge_navigation_open_document({}, options)}: </span>
+                      {row.title}
                     </Link>
+                  </h3>
+                  <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2">
                     <Button
                       variant="outline"
                       className={control}
                       disabled={frontier.breadcrumbs.length >= 32}
                       onClick={() => actions.children(row)}
                     >
-                      {m.knowledge_navigation_children({}, options)}: {row.title}
+                      {m.knowledge_navigation_children({}, options)}
+                      <span className="sr-only">: {row.title}</span>
                     </Button>
                     {page.kind === 'outline' && !snapshot.source && (
                       <Button variant="outline" className={control} onClick={() => actions.source(row)}>
-                        {copy.choose}: {row.title}
+                        {copy.choose}
+                        <span className="sr-only">: {row.title}</span>
                       </Button>
                     )}
                     {page.kind === 'outline' && snapshot.source && (
@@ -356,7 +368,8 @@ export function KnowledgeOrganizationPage({
                         disabled={snapshot.source.row.placementId === row.placementId}
                         onClick={() => actions.review(row)}
                       >
-                        {copy.before}: {row.title}
+                        {copy.before}
+                        <span className="sr-only">: {row.title}</span>
                       </Button>
                     )}
                   </div>

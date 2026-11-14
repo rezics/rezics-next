@@ -1,6 +1,7 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '@rezics/operations/protocol';
+import { memoizedValue } from '../memoized.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -10,6 +11,7 @@ import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { contentRequestId } from './adapters/bind.ts';
 import type { knowledgeRoutes } from './knowledge-routes.ts';
 import { strictContentSchema } from './schema-validation.ts';
+import { HostedIdSchema } from './hosted-chapters-schemas.ts';
 import {
   ContentNotFoundError as CommandNotFoundError,
   ContentForbiddenError,
@@ -29,14 +31,20 @@ import type { HostedCommandDependencies } from './hosted-chapters-commands.ts';
 
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const responseHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const params = t.Object(
-  {
-    id: t.String({
-      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-    }),
-  },
-  { additionalProperties: false },
-);
+
+function params() {
+  return memoizedValue(params, () => t.Object({ id: HostedIdSchema }, { additionalProperties: false }));
+}
+
+function detail() {
+  return memoizedValue(detail, () => ({
+    'x-exposure': 'public',
+    'x-resource-types': ['content.post'],
+    'x-action': 'post:revise',
+    'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+    security: [{ bearerAuth: [] }],
+  }));
+}
 
 function failures() {
   return {
@@ -102,21 +110,14 @@ export function hostedDraftConversionRoutes(
   return app.post(
     customMethod('/v1/hostedCatalogues/:id', 'convertDraft'),
     {
-      params,
+      params: params(),
       headers,
-      body: strictContentSchema(HostedDraftConversionSchema),
+      body: strictContentSchema(HostedDraftConversionSchema()),
       response: {
-        200: withHeaders(strictContentSchema(HostedDraftConversionProgressSchema), responseHeaders),
+        200: withHeaders(strictContentSchema(HostedDraftConversionProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: {
-        'x-exposure': 'public',
-        'x-resource-types': ['content.post'],
-        'x-action': 'post:revise',
-        'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
-        operationId: 'hosted_catalogue.convert_draft',
-        security: [{ bearerAuth: [] }],
-      },
+      detail: { ...detail(), operationId: 'hosted_catalogue.convert_draft' },
     },
     async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
