@@ -14,6 +14,37 @@ or adding a native endpoint. Content remains the shared publisher.
 Decision: keep assessment presence and source-observation fields independent. Missing assessment never means zero
 or clear; privacy and source timestamps use only the exact observation branch, never another branch.
 
+## Working area
+
+Decision: derive the current working area from native upload, immutable review and observed results; retain mapping
+forms while hidden, and keep locked original retry and cancellation together. Navigation changes presentation only.
+
+Before admission, the original-file upload is primary; an uncertain upload keeps that file's retry and disables
+replacement. After admission, a compact row/byte count and expiry precede the work. Capture coverage, empty sections,
+unsupported treatment, complete metadata and explicit status read remain in an expandable inventory. Scope explanations
+and replacement use separate disclosures. Choosing a replacement explicitly ends this visit's drafts; acknowledged
+effects remain. Restart and reuse of the original file retain their existing native meaning.
+
+Mapping, selected review/confirmation and results share one visible working area. Navigation exposes already retained
+content and submits nothing. A newly admitted native review leads to confirmation; a newly observed result page leads
+to results, including sparse pages. Result reads and continuation remain explicit and independent of preview paging.
+The disclosure state holds only upload identity, review ordinal/revision text and native result generation, never another
+page, private row cache or workflow phase. Native visit/controller state remains authoritative.
+
+The current page's Entry, label, assignment, annotation, journal/assessment and observation forms remain mounted when
+switching areas, preserving unsent text and field choices through review and return. Actual page replacement still
+replaces its bounded page. Selections from other pages remain in the native twenty-row selection with exact choices;
+unavailable titles/values stay unavailable rather than triggering hydration. Selected effects show supplied archive
+values, independent preserve/set/clear choices, current review and warnings; exact review operands remain inspectable.
+Returning to edit alone preserves confirmation. Changing selection or refreshing review withdraws it through the native
+review identity. Returning after results explicitly explains that acknowledged changes are not rolled back.
+
+Locked operations retain their exact reviewed items, original retry and cancellation consequences beside each other,
+even when viewing records or results. Cancellation cannot release an uncertain started command. Partial acknowledgement,
+unread results, an empty selected result page, failure and expiry remain distinct. Expiry removes editable private
+evidence while retaining accepted destinations; viewer replacement and retirement remove private content and callbacks.
+Area changes focus the visible heading; controls wrap, retain visible focus and use at least 44px targets in every locale.
+
 ## Upload and inventory
 
 The signed-in route prepares exposure, sets `private, no-store`, keeps no private loader cache and uses noindex metadata.
@@ -125,3 +156,11 @@ summarizes only the addressed native response. The original retry custody, twent
 and retirement boundaries remain unchanged. The named route stories include populated review, unsupported
 evidence, sparse continuation, unknown application recovery and acknowledged result. Their presentation assertions
 are source acceptance for the verifier; execution, native export-to-restore, keyboard and visual checks are deferred.
+The existing upload, populated-review, sparse-continuation, unknown-application and completed-result story IDs now
+author disclosure, later-page mapping, draft return, explicit confirmation, original retry/cancellation and results return.
+The locale/file regressions add stage labels, collapsed initial composition and uncertain original-file retry without
+exposing bytes or enabling replacement. The mounted journey regression adds
+request-free navigation, retained form nodes/drafts, unchanged confirmation on return, withdrawal after edits,
+uncertain result inspection, exact original retry after cancellation, evidence expiry and retirement. Existing native
+reader/selection/retry assertions remain unchanged. Source delivery runs formatting and `git diff --check` only;
+compiler, test execution, build, browser and native acceptance remain unverified until the separate verifier runs them.

@@ -31,6 +31,12 @@ export const UploadReady: Story = {
     await expect(main.getByText(m.library_archive_entry_upload_help())).toBeVisible();
     await expect(main.getByRole('link', { name: m.library_archive_return() })).toBeVisible();
     await expect(main.getByRole('link', { name: m.library_archive_export() })).toBeVisible();
+    await expect(main.getByRole('button', { name: `2. ${m.library_archive_entry_map_step()}` })).toBeDisabled();
+    const scope = main.getByText(m.library_archive_scope_title());
+    await userEvent.click(scope);
+    await expect(main.getByText(m.library_archive_deliberate())).toBeVisible();
+    await userEvent.click(scope);
+    await expect(main.getByLabelText(m.library_archive_choose_file())).toBeVisible();
   },
 };
 
@@ -243,6 +249,10 @@ export const PopulatedReview: Story = {
     await expect(canvas.getByText(m.library_archive_present_clear_warning())).toBeVisible();
     await userEvent.click(canvas.getByRole('checkbox', { name: m.library_archive_entry_confirm() }));
     await expect(apply).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_edit() }));
+    await expect(canvas.getByRole('heading', { name: m.library_archive_entry_records() })).toHaveFocus();
+    await userEvent.click(canvas.getByRole('button', { name: `3. ${m.library_archive_review_step()}` }));
+    await expect(apply).toBeEnabled();
     await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_review() }));
     await expect(canvas.getByRole('button', { name: m.library_archive_entry_apply() })).toBeDisabled();
   },
@@ -265,6 +275,23 @@ export const SparseContinuation: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText(m.library_archive_entry_empty())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.library_archive_entry_next() })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_next() }));
+    const select = await canvas.findByRole('button', { name: m.library_archive_entry_select({ ordinal: 5 }) });
+    const mapping = within(select.closest('article')!);
+    const subject = mapping.getByLabelText(m.library_archive_entry_subject_id());
+    const incarnation = mapping.getByLabelText(m.library_archive_personal_incarnation());
+    await userEvent.type(subject, subjectId);
+    await userEvent.type(incarnation, labelId);
+    await userEvent.click(canvas.getByRole('button', { name: `3. ${m.library_archive_review_step()}` }));
+    await expect(subject).not.toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_edit() }));
+    await expect(subject).toBeVisible();
+    await expect(subject).toHaveValue(subjectId);
+    await expect(incarnation).toHaveValue(labelId);
+    await userEvent.click(select);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_selected({ count: 1 }) }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_review() }));
+    await expect(await canvas.findByRole('button', { name: m.library_archive_entry_apply() })).toBeDisabled();
   },
 };
 export const UnknownApplicationRecovery: Story = {
@@ -275,6 +302,15 @@ export const UnknownApplicationRecovery: Story = {
       await canvas.findByRole('button', { name: m.library_archive_recovery_retry_original() }),
     ).toBeEnabled();
     await expect(canvas.queryByRole('link', { name: m.library_archive_entry_subject() })).toBeNull();
+    await expect(canvas.getByText(m.library_archive_entry_cancel_help())).toBeVisible();
+    await expect(canvas.getByLabelText(m.library_archive_choose_file())).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: `4. ${m.library_archive_results_step()}` }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_results_refresh() }));
+    await expect(await canvas.findByText(m.library_archive_entry_results_empty())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_cancel() }));
+    await expect(canvas.getByRole('button', { name: m.library_archive_recovery_retry_original() })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_recovery_retry_original() }));
+    await expect(await canvas.findByText(m.library_archive_entry_cancelled())).toBeVisible();
   },
 };
 export const CompletedResult: Story = {
@@ -286,5 +322,10 @@ export const CompletedResult: Story = {
       'href',
       expect.stringContaining(labelId),
     );
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_entry_edit() }));
+    const records = within(canvas.getByRole('region', { name: m.library_archive_entry_records() }));
+    await expect(records.getByText(m.library_archive_entry_edit_help())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: `4. ${m.library_archive_results_step()}` }));
+    await expect(canvas.getByRole('link', { name: m.library_archive_progress_open_session() })).toBeVisible();
   },
 };

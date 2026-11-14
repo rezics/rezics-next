@@ -12925,5 +12925,15 @@
   "library_import_cleanup_retry": "Reintentar eliminación original",
   "library_import_cleanup_withdraw": "Continuar eliminación sin reemplazo",
   "library_import_cleanup_receipts": "Se conservan {count} resultados confirmados. Eliminar una carga no deshace cambios en la Biblioteca ni en las puntuaciones.",
-  "library_import_replace": "Reemplazar carga"
+  "library_import_replace": "Reemplazar carga",
+  "library_archive_entry_map_step": "Asignar registros",
+  "library_archive_entry_edit": "Volver a las opciones editables",
+  "library_archive_entry_edit_help": "Volver a las opciones no deshace los cambios reconocidos. Las opciones modificadas requieren una nueva revisión y confirmación.",
+  "library_archive_entry_replace": "Reemplazar archivo",
+  "library_archive_entry_replace_help": "Elegir otro archivo termina esta sesión de trabajo y borra sus borradores. Los cambios reconocidos se mantienen.",
+  "library_archive_entry_results_unread": "Aún no se han leído los resultados de esta selección. Consúltalos expresamente; esto no aplica cambios.",
+  "library_archive_entry_results_empty": "No hay resultados reconocidos para esta selección en esta página. Continúa si hay otra página disponible.",
+  "library_archive_entry_cancel_help": "Cancelar detiene los cambios que no han empezado. Los cambios reconocidos se mantienen; un comando iniciado conserva su reintento original hasta recibir confirmación.",
+  "library_archive_entry_confirmation_help": "Examina los efectos seleccionados y los elementos revisados exactos antes de confirmar. Aplicar envía solo esta selección confirmada.",
+  "library_archive_entry_cancelled": "Recuperación cancelada. Los cambios ya reconocidos se mantienen."
 }

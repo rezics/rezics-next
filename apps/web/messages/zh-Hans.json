@@ -12925,5 +12925,15 @@
   "library_import_cleanup_retry": "重试原来的移除请求",
   "library_import_cleanup_withdraw": "继续移除，不再替换",
   "library_import_cleanup_receipts": "已保留 {count} 项已确认的结果。移除上传不会撤销书库或评分的更改。",
-  "library_import_replace": "替换上传"
+  "library_import_replace": "替换上传",
+  "library_archive_entry_map_step": "映射记录",
+  "library_archive_entry_edit": "返回可编辑的选择",
+  "library_archive_entry_edit_help": "返回选择不会撤销已确认的更改。修改选择后，需要重新审阅并确认。",
+  "library_archive_entry_replace": "替换归档",
+  "library_archive_entry_replace_help": "选择其他文件会结束当前工作并清除草稿。已确认的更改会保留。",
+  "library_archive_entry_results_unread": "尚未读取此选择的结果。请主动读取；读取不会应用更改。",
+  "library_archive_entry_results_empty": "本页没有此选择的已确认结果。如有下一页，可继续查看。",
+  "library_archive_entry_cancel_help": "取消会停止尚未开始的更改。已确认的更改会保留；已开始的命令在收到确认前仍使用原命令重试。",
+  "library_archive_entry_confirmation_help": "确认前，请检查所选更改的效果和已审阅项目的精确内容。应用只会提交本次确认的选择。",
+  "library_archive_entry_cancelled": "恢复已取消。已确认的更改会保留。"
 }

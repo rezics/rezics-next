@@ -12925,5 +12925,15 @@
   "library_import_cleanup_retry": "重試原來的移除請求",
   "library_import_cleanup_withdraw": "繼續移除，不再替換",
   "library_import_cleanup_receipts": "已保留 {count} 項已確認的結果。移除上傳不會撤銷書庫或評分的變更。",
-  "library_import_replace": "替換上傳"
+  "library_import_replace": "替換上傳",
+  "library_archive_entry_map_step": "對應記錄",
+  "library_archive_entry_edit": "返回可編輯的選擇",
+  "library_archive_entry_edit_help": "返回選擇不會撤銷已確認的變更。修改選擇後，需要重新審閱並確認。",
+  "library_archive_entry_replace": "替換封存檔",
+  "library_archive_entry_replace_help": "選擇其他檔案會結束目前作業並清除草稿。已確認的變更會保留。",
+  "library_archive_entry_results_unread": "尚未讀取此選擇的結果。請主動讀取；讀取不會套用變更。",
+  "library_archive_entry_results_empty": "本頁沒有此選擇的已確認結果。如有下一頁，可繼續查看。",
+  "library_archive_entry_cancel_help": "取消會停止尚未開始的變更。已確認的變更會保留；已開始的命令在收到確認前仍使用原命令重試。",
+  "library_archive_entry_confirmation_help": "確認前，請檢查所選變更的效果和已審閱項目的精確內容。套用只會提交本次確認的選擇。",
+  "library_archive_entry_cancelled": "復原已取消。已確認的變更會保留。"
 }

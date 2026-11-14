@@ -12932,5 +12932,15 @@
   "library_import_cleanup_retry": "Retry original removal",
   "library_import_cleanup_withdraw": "Continue removal without replacement",
   "library_import_cleanup_receipts": "{count} acknowledged results are preserved. Removing an upload does not undo Library or score changes.",
-  "library_import_replace": "Replace upload"
+  "library_import_replace": "Replace upload",
+  "library_archive_entry_map_step": "Map records",
+  "library_archive_entry_edit": "Return to editable choices",
+  "library_archive_entry_edit_help": "Returning to choices does not undo acknowledged changes. Changed choices need a fresh review and confirmation.",
+  "library_archive_entry_replace": "Replace archive",
+  "library_archive_entry_replace_help": "Choosing another file ends this working visit and clears its drafts. Acknowledged changes remain.",
+  "library_archive_entry_results_unread": "Results have not been read for this selection. Read them explicitly; this does not apply changes.",
+  "library_archive_entry_results_empty": "No acknowledged results for this selection on this page. Continue if another page is available.",
+  "library_archive_entry_cancel_help": "Cancellation stops unstarted changes. Acknowledged changes remain; a started command keeps its original retry until acknowledged.",
+  "library_archive_entry_confirmation_help": "Inspect the selected effects and exact reviewed items before confirming. Apply sends only this confirmed selection.",
+  "library_archive_entry_cancelled": "Recovery cancelled. Already acknowledged changes remain."
 }

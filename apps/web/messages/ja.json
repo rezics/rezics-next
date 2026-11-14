@@ -12925,5 +12925,15 @@
   "library_import_cleanup_retry": "元の削除操作を再試行",
   "library_import_cleanup_withdraw": "差し替えずに削除を続行",
   "library_import_cleanup_receipts": "確認済みの結果 {count} 件は保持されます。アップロードを削除しても、ライブラリや評価への変更は取り消されません。",
-  "library_import_replace": "アップロードを差し替え"
+  "library_import_replace": "アップロードを差し替え",
+  "library_archive_entry_map_step": "レコードを対応付ける",
+  "library_archive_entry_edit": "編集できる選択内容に戻る",
+  "library_archive_entry_edit_help": "選択内容に戻っても、確認済みの変更は元に戻りません。選択内容を変更した場合は、再度レビューして確認する必要があります。",
+  "library_archive_entry_replace": "アーカイブを置き換える",
+  "library_archive_entry_replace_help": "別のファイルを選ぶと、この作業を終了して下書きを消去します。確認済みの変更は残ります。",
+  "library_archive_entry_results_unread": "この選択の結果はまだ読み込まれていません。明示的に読み込んでください。変更は適用されません。",
+  "library_archive_entry_results_empty": "このページには、この選択の確認済み結果はありません。次のページがあれば続けてください。",
+  "library_archive_entry_cancel_help": "キャンセルすると未開始の変更を停止します。確認済みの変更は残り、開始済みのコマンドは確認されるまで元のコマンドで再試行します。",
+  "library_archive_entry_confirmation_help": "確認する前に、選択した変更の効果とレビュー済み項目の正確な内容を確認してください。適用すると、この確認済みの選択だけを送信します。",
+  "library_archive_entry_cancelled": "復元をキャンセルしました。確認済みの変更は残ります。"
 }

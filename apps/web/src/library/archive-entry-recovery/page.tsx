@@ -1,7 +1,7 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useLocation } from '@tanstack/react-router';
 import { useRecoveryLifetime } from '../recovery-lifetime';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
@@ -68,7 +68,14 @@ export function ArchiveEntryRecoveryPage() {
 
 export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRecoveryJourney | null }) {
   const [, render] = useState(0);
+  const workspace = useRef<HTMLElement>(null);
   const [confirmation, setConfirmation] = useState<unknown>(null);
+  const [opened, setOpened] = useState<{
+    uploadId: string | undefined;
+    reviewStamp: string;
+    resultsGeneration: number;
+    area: 'records' | 'review' | 'results';
+  } | null>(null);
   useEffect(() => journey?.subscribe(() => render((value) => value + 1)), [journey]);
   const snapshot = journey?.snapshot();
   const state = snapshot?.state;
@@ -82,6 +89,34 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
   const previewBusy = busy || phase === 'cancelling';
   const uploadLocked = busy || locked || snapshot?.uploadUncertain;
   const hasUpload = !!state?.upload;
+  // Disclosure follows native evidence; it owns no selection, confirmation or command lifecycle.
+  const uploadId = state?.upload?.id;
+  const reviewStamp =
+    review?.body.items.map(({ ordinal, reviewRevision }) => `${ordinal}:${reviewRevision}`).join(',') ?? '';
+  const resultsGeneration = state?.resultsNavigation.generation ?? 0;
+  const area = terminal
+    ? 'results'
+    : opened && opened.uploadId === uploadId
+      ? review && phase === 'reviewed' && opened.reviewStamp !== reviewStamp
+        ? 'review'
+        : state?.results && opened.resultsGeneration !== resultsGeneration
+          ? 'results'
+          : opened.area
+      : phase === 'reviewed'
+        ? 'review'
+        : state?.results
+          ? 'results'
+          : locked
+            ? 'review'
+            : 'records';
+  const showArea = (area: 'records' | 'review' | 'results') =>
+    setOpened({ uploadId, reviewStamp, resultsGeneration, area });
+  useEffect(() => {
+    if (uploadId || terminal) {
+      const heading = area === 'records' ? 'rows' : area === 'review' ? 'selected' : 'results';
+      workspace.current?.querySelector<HTMLElement>(`#archive-${heading}-heading`)?.focus();
+    }
+  }, [area, uploadId, terminal]);
   const live = state !== null && journey !== null;
   const owner = journey?.visit.viewer ?? null;
   if (owner) bindArchiveCustodyOwner(owner);
@@ -90,18 +125,65 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
     void action;
   };
 
+  const operation = (
+    <section aria-label={m.library_archive_entry_cancel()} className="space-y-3 rounded-lg border p-4">
+      {locked ? (
+        <>
+          <p>{statusLabel(phase)}</p>
+          {review ? <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} /> : null}
+          {snapshot?.retryOriginal ? (
+            <button type="button" className={control} disabled={busy} onClick={() => act(journey!.apply())}>
+              {m.library_archive_recovery_retry_original()}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+      <p>{m.library_archive_entry_cancel_help()}</p>
+      <button
+        type="button"
+        className={control}
+        disabled={phase === 'cancelling' && busy}
+        onClick={() => act(journey!.cancel())}
+      >
+        {m.library_archive_entry_cancel()}
+      </button>
+    </section>
+  );
+
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
+    <main ref={workspace} className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
       <header className="space-y-3">
         <PageHeading>{m.library_archive_title()}</PageHeading>
         <p>{m.library_archive_intro()}</p>
         <ArchiveRecoveryDestinations current="entries" />
       </header>
-      <ol aria-label={m.library_archive_steps()} className="flex flex-wrap gap-4 text-sm">
-        <li aria-current={!hasUpload ? 'step' : undefined}>1. {m.library_archive_upload_step()}</li>
-        <li aria-current={hasUpload && !state?.results ? 'step' : undefined}>2. {m.library_archive_review_step()}</li>
-        <li aria-current={state?.results ? 'step' : undefined}>3. {m.library_archive_results_step()}</li>
-      </ol>
+      <nav aria-label={m.library_archive_steps()}>
+        <ol className="flex flex-wrap gap-3 text-sm">
+          <li aria-current={!hasUpload && !state?.results ? 'step' : undefined} className={control}>
+            1. {m.library_archive_upload_step()}
+          </li>
+          {(
+            [
+              ['records', m.library_archive_entry_map_step(), 'archive-rows', !hasUpload || terminal],
+              ['review', m.library_archive_review_step(), 'archive-selected', !hasUpload || terminal],
+              ['results', m.library_archive_results_step(), 'archive-results', !hasUpload && !state?.results],
+            ] as const
+          ).map(([target, label, id, disabled], index) => (
+            <li key={target}>
+              <button
+                type="button"
+                className={control}
+                aria-current={(hasUpload || state?.results) && area === target ? 'step' : undefined}
+                aria-controls={disabled ? undefined : id}
+                disabled={disabled}
+                onClick={() => showArea(target)}
+              >
+                {index + 2}. {label}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
       <p role="status" aria-live="polite">
         {snapshot?.notice
           ? notice(snapshot.notice)
@@ -116,107 +198,133 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
       {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large' ? (
         <EvidenceDetails value={{ notice: snapshot.notice }} />
       ) : null}
-      <section aria-labelledby="archive-upload" className="space-y-3 rounded-lg border p-4">
-        <h2 id="archive-upload" className="text-xl font-semibold">
-          {m.library_archive_upload_step()}
-        </h2>
-        <p id="archive-file-help">{m.library_archive_entry_upload_help()}</p>
-        <label htmlFor="archive-file" className="block font-medium">
-          {m.library_archive_choose_file()}
-        </label>
-        <input
-          id="archive-file"
-          type="file"
-          accept="application/json,.json"
-          disabled={!live || uploadLocked}
-          aria-describedby="archive-file-help"
-          className={`${control} block w-full max-w-full`}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = '';
-            if (file) act(journey!.upload(file));
-          }}
-        />
-        {snapshot?.uploadUncertain && (
-          <button type="button" className={control} disabled={busy} onClick={() => act(journey!.retryUpload())}>
-            {m.library_archive_recovery_retry_original()}
-          </button>
-        )}
-        {!hasUpload && snapshot?.hasOriginalArchive ? (
-          <button
-            type="button"
-            className={control}
+      <details
+        key={state?.upload?.id ?? 'upload'}
+        open={!hasUpload && !state?.results}
+        className="rounded-lg border p-4"
+      >
+        <summary className={`${control} cursor-pointer font-medium`}>
+          {hasUpload || state?.results ? m.library_archive_entry_replace() : m.library_archive_upload_step()}
+        </summary>
+        <section aria-labelledby="archive-upload" className="space-y-3 pt-3">
+          <h2 id="archive-upload" className="text-xl font-semibold">
+            {m.library_archive_upload_step()}
+          </h2>
+          <p id="archive-file-help">{m.library_archive_entry_upload_help()}</p>
+          {hasUpload || state?.results ? <p>{m.library_archive_entry_replace_help()}</p> : null}
+          <label htmlFor="archive-file" className="block font-medium">
+            {m.library_archive_choose_file()}
+          </label>
+          <input
+            id="archive-file"
+            type="file"
+            accept="application/json,.json"
             disabled={!live || uploadLocked}
-            onClick={() => act(journey!.adoptOriginal())}
-          >
-            {m.library_archive_recovery_restart_original()}
-          </button>
-        ) : null}
-        {!hasUpload && completed && !snapshot?.hasOriginalArchive ? (
-          <button
-            type="button"
-            className={control}
-            disabled={!live || uploadLocked}
-            onClick={() => act(journey!.upload(archiveFileFromCustody(completed)))}
-          >
-            {m.library_archive_use_completed_export()}
-          </button>
-        ) : null}
-        {completed || snapshot?.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
-      </section>
-      <section aria-labelledby="archive-scope" className="space-y-3">
-        <h2 id="archive-scope" className="text-xl font-semibold">
+            aria-describedby="archive-file-help"
+            className={`${control} block w-full max-w-full`}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = '';
+              if (file) act(journey!.upload(file));
+            }}
+          />
+          {snapshot?.uploadUncertain && (
+            <button type="button" className={control} disabled={busy} onClick={() => act(journey!.retryUpload())}>
+              {m.library_archive_recovery_retry_original()}
+            </button>
+          )}
+          {!hasUpload && snapshot?.hasOriginalArchive ? (
+            <button
+              type="button"
+              className={control}
+              disabled={!live || uploadLocked}
+              onClick={() => act(journey!.adoptOriginal())}
+            >
+              {m.library_archive_recovery_restart_original()}
+            </button>
+          ) : null}
+          {!hasUpload && completed && !snapshot?.hasOriginalArchive ? (
+            <button
+              type="button"
+              className={control}
+              disabled={!live || uploadLocked}
+              onClick={() => act(journey!.upload(archiveFileFromCustody(completed)))}
+            >
+              {m.library_archive_use_completed_export()}
+            </button>
+          ) : null}
+          {completed || snapshot?.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
+        </section>
+      </details>
+      <details className="space-y-3 rounded-lg border p-4">
+        <summary id="archive-scope" className={`${control} cursor-pointer font-semibold`}>
           {m.library_archive_scope_title()}
-        </h2>
+        </summary>
         <p>{m.library_archive_entry_scope()}</p>
         <p>{m.library_archive_personal_help()}</p>
         <p>{m.library_archive_deliberate()}</p>
         <p>{m.library_archive_history()}</p>
-      </section>
+      </details>
       {(hasUpload || state?.results) && (
         <>
           {hasUpload && (
             <section aria-labelledby="archive-inventory" className="space-y-3">
-              <h2 id="archive-inventory" className="text-xl font-semibold">
-                {m.library_archive_entry_inventory()}
-              </h2>
               <p>
                 {m.library_archive_entry_counts({
                   rows: state.upload!.metadata.rows,
                   bytes: state.upload!.metadata.recordBytes,
                 })}
               </p>
-              <p>{m.library_archive_entry_count_help()}</p>
               <p>{m.library_archive_entry_expiry({ date: state.upload!.metadata.expiresAt })}</p>
-              <dl className="grid gap-2 sm:grid-cols-2">
-                {state.upload!.metadata.coverage.map((item) => (
-                  <div key={item.section} className="rounded border p-3">
-                    <dt className="font-semibold">{sectionLabel(item.section)}</dt>
-                    <dd>
-                      {item.capture === 'empty'
-                        ? m.library_archive_recovery_coverage_empty()
-                        : !supportedRecoverySection(item.section) || item.treatment === 'retained-unsupported'
-                          ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
-                          : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <EvidenceDetails value={state.upload!.metadata} />
-              <button type="button" className={control} disabled={busy} onClick={() => act(journey!.status())}>
-                {m.library_archive_entry_status()}
-              </button>
+              <details className="rounded-lg border p-3">
+                <summary id="archive-inventory" className={`${control} cursor-pointer font-semibold`}>
+                  {m.library_archive_entry_inventory()}
+                </summary>
+                <p>{m.library_archive_entry_count_help()}</p>
+                <dl className="grid gap-2 sm:grid-cols-2">
+                  {state.upload!.metadata.coverage.map((item) => (
+                    <div key={item.section} className="rounded border p-3">
+                      <dt className="font-semibold">{sectionLabel(item.section)}</dt>
+                      <dd>
+                        {item.capture === 'empty'
+                          ? m.library_archive_recovery_coverage_empty()
+                          : !supportedRecoverySection(item.section) || item.treatment === 'retained-unsupported'
+                            ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
+                            : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <EvidenceDetails value={state.upload!.metadata} />
+                <button type="button" className={control} disabled={busy} onClick={() => act(journey!.status())}>
+                  {m.library_archive_entry_status()}
+                </button>
+              </details>
             </section>
           )}
+          {!terminal && locked ? operation : null}
           {!terminal && (
-            <section aria-labelledby="archive-rows" className="space-y-4">
-              <h2 id="archive-rows" className="text-xl font-semibold">
+            <section
+              id="archive-rows"
+              hidden={area !== 'records'}
+              aria-labelledby="archive-rows-heading"
+              className="space-y-4"
+            >
+              <h2
+                id="archive-rows-heading"
+                tabIndex={-1}
+                className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 {m.library_archive_entry_records()}
               </h2>
               <p>{m.library_archive_entry_mapping_help()}</p>
+              {state.results ? <p>{m.library_archive_entry_edit_help()}</p> : null}
               {state.page?.rows.length === 0 && <p>{m.library_archive_entry_empty()}</p>}
               {state.page?.rows.map((row) => (
-                <article key={row.ordinal} className="space-y-3 rounded-lg border p-4">
+                <article
+                  key={`${owner}:${state.upload!.id}:${row.ordinal}`}
+                  className="space-y-3 rounded-lg border p-4"
+                >
                   <h3 className="font-semibold">{recordTitle(row)}</h3>
                   <p className="text-sm">
                     {sectionLabel(row.section)} · {statusLabel(row.status)}
@@ -324,17 +432,33 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   </button>
                 )}
               </div>
+              <button type="button" className={control} onClick={() => showArea('review')}>
+                {m.library_archive_entry_selected({ count: state.choices.length })}
+              </button>
             </section>
           )}
           {!terminal && (
-            <section aria-labelledby="archive-selected" className="space-y-3">
-              <h2 id="archive-selected" className="text-xl font-semibold">
+            <section
+              id="archive-selected"
+              hidden={area !== 'review'}
+              aria-labelledby="archive-selected-heading"
+              className="space-y-3"
+            >
+              <h2
+                id="archive-selected-heading"
+                tabIndex={-1}
+                className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 {m.library_archive_entry_selected({ count: state.choices.length })}
               </h2>
               <p>{m.library_archive_entry_assignment_help()}</p>
+              <p>{m.library_archive_entry_confirmation_help()}</p>
               {state.choices.map((choice) => (
                 <div key={choice.ordinal} className="space-y-2 rounded border p-3">
                   <ArchiveChoiceSummary choice={choice.choice} row={displayedRows.get(choice.ordinal)} />
+                  {displayedRows.has(choice.ordinal) ? (
+                    <ArchiveNativeReviewSummary row={displayedRows.get(choice.ordinal)!} />
+                  ) : null}
                   <button
                     type="button"
                     className={control}
@@ -387,31 +511,24 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   </button>
                 </div>
               )}
-              {locked && (
-                <>
-                  <p>{m.library_archive_recovery_uncertain()}</p>
-                  {snapshot?.retryOriginal && (
-                    <button type="button" className={control} disabled={busy} onClick={() => act(journey!.apply())}>
-                      {m.library_archive_recovery_retry_original()}
-                    </button>
-                  )}
-                  {!state.results && (
-                    <button
-                      type="button"
-                      className={control}
-                      disabled={busy}
-                      onClick={() => act(journey!.results('refresh'))}
-                    >
-                      {m.library_archive_entry_results_refresh()}
-                    </button>
-                  )}
-                </>
-              )}
+              <button type="button" className={control} disabled={locked} onClick={() => showArea('records')}>
+                {m.library_archive_entry_edit()}
+              </button>
+              <p>{m.library_archive_entry_edit_help()}</p>
             </section>
           )}
-          {state.results && (
-            <section aria-labelledby="archive-results" className="space-y-3">
-              <h2 id="archive-results" className="text-xl font-semibold">
+          {(hasUpload || state.results) && (
+            <section
+              id="archive-results"
+              hidden={area !== 'results'}
+              aria-labelledby="archive-results-heading"
+              className="space-y-3"
+            >
+              <h2
+                id="archive-results-heading"
+                tabIndex={-1}
+                className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 {m.library_archive_results_step()}
               </h2>
               {phase === 'complete' ? (
@@ -420,7 +537,9 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 </p>
               ) : null}
               <p>{m.library_archive_entry_result_help()}</p>
-              {state.results.rows.map((row) => (
+              {!state.results ? <p>{m.library_archive_entry_results_unread()}</p> : null}
+              {state.results?.rows.length === 0 ? <p>{m.library_archive_entry_results_empty()}</p> : null}
+              {state.results?.rows.map((row) => (
                 <div key={row.ordinal} className="space-y-2 rounded border p-3">
                   <h3 className="font-semibold">
                     {displayedRows.has(row.ordinal)
@@ -486,7 +605,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   <button
                     type="button"
                     className={control}
-                    disabled={busy || state.results.context.next == null}
+                    disabled={busy || state.results?.context.next == null}
                     onClick={() => act(journey!.results('next'))}
                   >
                     {m.library_archive_entry_next()}
@@ -494,7 +613,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   <button
                     type="button"
                     className={control}
-                    disabled={busy || state.resultsNavigation.current === null}
+                    disabled={busy}
                     onClick={() => act(journey!.results('refresh'))}
                   >
                     {m.library_archive_entry_results_refresh()}
@@ -511,18 +630,17 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   )}
                 </div>
               )}
+              {!terminal && (
+                <>
+                  <button type="button" className={control} disabled={locked} onClick={() => showArea('records')}>
+                    {m.library_archive_entry_edit()}
+                  </button>
+                  <p>{m.library_archive_entry_edit_help()}</p>
+                </>
+              )}
             </section>
           )}
-          {!terminal && (
-            <button
-              type="button"
-              className={control}
-              disabled={phase === 'cancelling' && busy}
-              onClick={() => act(journey!.cancel())}
-            >
-              {m.library_archive_entry_cancel()}
-            </button>
-          )}
+          {!terminal && !locked ? operation : null}
         </>
       )}
       {phase === 'expired' && (

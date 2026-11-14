@@ -12925,5 +12925,15 @@
   "library_import_cleanup_retry": "Ursprüngliche Entfernung wiederholen",
   "library_import_cleanup_withdraw": "Ohne Ersatzdatei weiter entfernen",
   "library_import_cleanup_receipts": "{count} bestätigte Ergebnisse bleiben erhalten. Das Entfernen eines Uploads macht Änderungen an Bibliothek oder Bewertungen nicht rückgängig.",
-  "library_import_replace": "Upload ersetzen"
+  "library_import_replace": "Upload ersetzen",
+  "library_archive_entry_map_step": "Datensätze zuordnen",
+  "library_archive_entry_edit": "Zurück zu bearbeitbaren Angaben",
+  "library_archive_entry_edit_help": "Die Rückkehr macht bestätigte Änderungen nicht rückgängig. Geänderte Angaben müssen erneut geprüft und bestätigt werden.",
+  "library_archive_entry_replace": "Archiv ersetzen",
+  "library_archive_entry_replace_help": "Eine andere Datei beendet diesen Arbeitsvorgang und verwirft seine Entwürfe. Bestätigte Änderungen bleiben erhalten.",
+  "library_archive_entry_results_unread": "Ergebnisse für diese Auswahl wurden noch nicht gelesen. Rufen Sie sie ausdrücklich ab; dabei werden keine Änderungen angewendet.",
+  "library_archive_entry_results_empty": "Auf dieser Seite gibt es keine bestätigten Ergebnisse für diese Auswahl. Fahren Sie fort, falls eine weitere Seite verfügbar ist.",
+  "library_archive_entry_cancel_help": "Ein Abbruch stoppt noch nicht begonnene Änderungen. Bestätigte Änderungen bleiben erhalten; ein begonnener Befehl behält bis zur Bestätigung seine ursprüngliche Wiederholung.",
+  "library_archive_entry_confirmation_help": "Prüfen Sie die ausgewählten Auswirkungen und die genauen geprüften Elemente vor der Bestätigung. Anwenden sendet nur diese bestätigte Auswahl.",
+  "library_archive_entry_cancelled": "Wiederherstellung abgebrochen. Bereits bestätigte Änderungen bleiben erhalten."
 }

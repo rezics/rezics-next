@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act } from 'react';
 import { createKernelClient } from '@rezics/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ArchiveEntryRecoveryJourney } from '../src/library/archive-entry-recovery/controller';
@@ -11,6 +13,7 @@ import {
   type NativeArchiveStatus,
 } from '../src/library/archive-entry-recovery/native';
 import { ArchiveEntryRecoveryView } from '../src/library/archive-entry-recovery/page';
+import { m } from '../src/paraglide/messages.js';
 
 const id = '019a1b2c-3d4e-7f00-8a00-000000000001';
 const subjectId = '019a1b2c-3d4e-7f00-8a00-000000000002';
@@ -55,7 +58,7 @@ const resultPage = (results: NativeArchiveResults['results'], next: number | nul
   next,
 });
 
-function fixture() {
+function fixture(now = Date.now, deadline = Date.now() + 60_000) {
   const calls: {
     path: string;
     method: string;
@@ -294,7 +297,8 @@ function fixture() {
   const journey = new ArchiveEntryRecoveryJourney(
     archiveRecoveryNative(client, 'Bearer original-sender'),
     () => current,
-    Date.now() + 60_000,
+    deadline,
+    now,
   );
   return {
     journey,
@@ -754,5 +758,130 @@ test('reviewable provenance uses observation identity and preserve fields, never
     expect(f.journey.snapshot().state!.choices).toEqual([]);
   } finally {
     f.journey.retire();
+  }
+});
+
+test('Working areas retain drafts and native confirmation, original retry, results and retirement authority', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library/recover-archive' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('div') as unknown as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let now = Date.now();
+  const f = fixture(() => now, now + 86_400_000);
+  const area = (name: string) => host.querySelector<HTMLElement>(`#archive-${name}`)!;
+  const navigate = async (name: string) =>
+    act(async () => host.querySelector<HTMLButtonElement>(`button[aria-controls="archive-${name}"]`)!.click());
+  try {
+    await f.journey.upload(new File(['original archive bytes'], 'completed.json'));
+    await act(async () => root.render(<ArchiveEntryRecoveryView journey={f.journey} />));
+    expect(area('rows').hidden).toBe(false);
+    expect(area('inventory').closest('details')!.open).toBe(false);
+    const drafts = [...area('rows').querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')];
+    expect(drafts.length).toBeGreaterThan(6);
+    drafts.forEach((input, index) => {
+      input.value = `unsent-${index}`;
+    });
+    const beforeNavigation = f.calls.length;
+    await navigate('selected');
+    expect(area('rows').hidden).toBe(true);
+    await navigate('results');
+    expect(area('results').textContent).toContain(m.library_archive_entry_results_unread());
+    await navigate('rows');
+    expect(f.calls.length).toBe(beforeNavigation);
+    drafts.forEach((input, index) => {
+      expect(input.isConnected).toBe(true);
+      expect(input.value).toBe(`unsent-${index}`);
+    });
+    expect(window.document.activeElement?.id).toBe('archive-rows-heading');
+    await act(async () => {
+      f.journey.choose({ ordinal: 0, kind: 'entry', subjectId, stateId: 'planned', action: 'update' });
+      await f.journey.review();
+    });
+    expect(area('selected').hidden).toBe(false);
+    drafts.forEach((input, index) => {
+      expect(input.isConnected).toBe(true);
+      expect(input.value).toBe(`unsent-${index}`);
+    });
+    const checkbox = () => area('selected').querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const apply = () =>
+      [...area('selected').querySelectorAll('button')].find(
+        (button) => button.textContent === m.library_archive_entry_apply(),
+      )!;
+    expect(apply().disabled).toBe(true);
+    await act(async () => checkbox().click());
+    const exactReview = f.journey.snapshot().state!.review;
+    await navigate('rows');
+    await navigate('selected');
+    expect(checkbox().checked).toBe(true);
+    expect(f.journey.snapshot().state!.review).toBe(exactReview);
+    await act(async () => f.journey.choose({ ordinal: 1, kind: 'label', target: { mode: 'create' } }));
+    expect(f.journey.snapshot().state!.review).toBeNull();
+    expect(area('selected').querySelector('input[type="checkbox"]')).toBeNull();
+    await act(async () => f.journey.review());
+    expect(checkbox().checked).toBe(false);
+    expect(apply().disabled).toBe(true);
+    await act(async () => {
+      checkbox().click();
+      await f.journey.apply();
+    });
+    const original = f.calls.find((call) => call.path.endsWith('/apply'))!;
+    expect(f.journey.snapshot().state!.phase).toBe('uncertain');
+    await navigate('results');
+    await act(async () => f.journey.results('refresh'));
+    expect(area('results').hidden).toBe(false);
+    expect(host.textContent).toContain(m.library_archive_entry_cancel_help());
+    expect(
+      [...host.querySelectorAll('button')].find(
+        (button) => button.textContent === m.library_archive_recovery_retry_original(),
+      )!.disabled,
+    ).toBe(false);
+    await act(async () => {
+      await f.journey.cancel();
+      f.acknowledge();
+      await f.journey.apply();
+    });
+    expect(f.calls.filter((call) => call.path.endsWith('/apply')).at(-1)).toEqual(original);
+    expect(area('results').querySelector(`a[href$="/subjects/${subjectId}"]`)).not.toBeNull();
+    now = Date.parse(status.expiresAt) + 1;
+    await act(async () => root.render(<ArchiveEntryRecoveryView journey={f.journey} />));
+    expect(area('rows')).toBeNull();
+    expect(host.querySelector('form')).toBeNull();
+    expect(area('results').querySelector(`a[href$="/subjects/${subjectId}"]`)).not.toBeNull();
+    f.retire();
+    await act(async () => root.render(<ArchiveEntryRecoveryView journey={f.journey} />));
+    expect(host.querySelector('#archive-results')).toBeNull();
+    expect(host.textContent).not.toContain('Archived note');
+    expect(drafts.every((input) => !input.isConnected)).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    f.journey.retire();
+    window.happyDOM.abort();
+    window.close();
+    for (const [key, descriptor] of previous)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
   }
 });

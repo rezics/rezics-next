@@ -12,6 +12,7 @@ const binding = {
   viewer: 'owner',
   credentialEpoch: 'epoch',
   csrfEpoch: 'epoch',
+  admission: 'admission-1',
   source: 'archive',
   route: '/library/recover-archive',
   locale: 'en',
@@ -51,12 +52,18 @@ test('Every locale mounts native file admission and explains the supported branc
         m.library_archive_entry_next(),
         m.library_archive_entry_results_refresh(),
         m.library_window_retry(),
+        m.library_archive_entry_map_step(),
+        m.library_archive_entry_edit_help(),
+        m.library_archive_entry_cancel_help(),
+        m.library_archive_entry_replace_help(),
       ])
         expect(label.length).toBeGreaterThan(0);
       expect(html).toMatch(/<input[^>]*type="file"/);
       expect(html).not.toMatch(/<input[^>]*type="file"[^>]*\sdisabled=""/);
       expect(html).toContain('aria-describedby="archive-file-help"');
       expect(html).toContain('aria-current="step"');
+      expect(html).toContain('<details open=""');
+      expect(html).not.toContain('id="archive-rows"');
       expect(html).toContain(`href="/${locale}/library"`);
       expect(html).toContain(`href="/${locale}/library/export"`);
       expect(html).toContain(`href="/${locale}/library/recover-collections"`);
@@ -66,5 +73,38 @@ test('Every locale mounts native file admission and explains the supported branc
   } finally {
     journey.retire();
     overwriteGetLocale(previous);
+  }
+});
+
+test('Uncertain upload keeps its original retry primary and disables replacement without exposing file bytes', async () => {
+  const calls: { base64: string; key: string }[] = [];
+  const native = archiveRecoveryNative(createKernelClient('https://kernel.test'), 'Bearer owner');
+  const journey = new ArchiveEntryRecoveryJourney(
+    {
+      ...native,
+      upload: async (archive, key) => {
+        calls.push({ base64: archive.base64, key });
+        return { kind: 'uncertain' };
+      },
+    },
+    () => binding,
+    Date.now() + 60_000,
+  );
+  try {
+    await journey.upload(new File(['PRIVATE ARCHIVE BYTES'], 'original.json'));
+    const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={journey} />);
+    expect(html).toContain('<details open=""');
+    expect(html).toContain(m.library_archive_recovery_retry_original());
+    expect(html).toMatch(/<input[^>]*type="file"[^>]*\sdisabled=""/);
+    expect(html).not.toContain('PRIVATE ARCHIVE BYTES');
+    await journey.retryUpload();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual(calls[0]);
+    journey.retire();
+    expect(renderToStaticMarkup(<ArchiveEntryRecoveryView journey={journey} />)).not.toContain(
+      m.library_archive_recovery_retry_original(),
+    );
+  } finally {
+    journey.retire();
   }
 });

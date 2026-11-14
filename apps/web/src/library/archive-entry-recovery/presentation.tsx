@@ -73,7 +73,7 @@ export function statusLabel(status: string): string {
     case 'failed':
       return m.library_archive_recovery_effect_failed();
     case 'cancelled':
-      return m.library_archive_recovery_cancelled_help();
+      return m.library_archive_entry_cancelled();
     case 'expired':
       return m.library_archive_entry_expired();
     case 'recoverable':
@@ -200,6 +200,7 @@ export function ArchiveChoiceSummary({ choice, row }: { choice: ArchiveReviewIte
   return (
     <div className="space-y-3">
       <p className="font-medium">{row ? recordTitle(row) : m.library_archive_present_title_unavailable()}</p>
+      {row ? <ArchiveRecordSummary row={row} /> : null}
       {choice.kind === 'entry' ? (
         <>
           <p>

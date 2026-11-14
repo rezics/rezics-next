@@ -12925,5 +12925,15 @@
   "library_import_cleanup_retry": "Réessayer la suppression initiale",
   "library_import_cleanup_withdraw": "Poursuivre la suppression sans remplacement",
   "library_import_cleanup_receipts": "{count} résultats confirmés sont conservés. Supprimer un import n’annule pas les modifications de la Bibliothèque ou des notes.",
-  "library_import_replace": "Remplacer l’import"
+  "library_import_replace": "Remplacer l’import",
+  "library_archive_entry_map_step": "Associer les enregistrements",
+  "library_archive_entry_edit": "Revenir aux choix modifiables",
+  "library_archive_entry_edit_help": "Revenir aux choix n’annule pas les modifications acquittées. Les choix modifiés nécessitent une nouvelle vérification et confirmation.",
+  "library_archive_entry_replace": "Remplacer l’archive",
+  "library_archive_entry_replace_help": "Choisir un autre fichier termine cette session de travail et efface ses brouillons. Les modifications acquittées sont conservées.",
+  "library_archive_entry_results_unread": "Les résultats de cette sélection n’ont pas encore été lus. Consultez-les explicitement ; cela n’applique aucune modification.",
+  "library_archive_entry_results_empty": "Aucun résultat acquitté pour cette sélection sur cette page. Continuez si une autre page est disponible.",
+  "library_archive_entry_cancel_help": "L’annulation arrête les modifications non commencées. Les modifications acquittées sont conservées ; une commande commencée garde sa tentative d’origine jusqu’à son acquittement.",
+  "library_archive_entry_confirmation_help": "Examinez les effets sélectionnés et les éléments vérifiés exacts avant de confirmer. Appliquer envoie uniquement cette sélection confirmée.",
+  "library_archive_entry_cancelled": "Récupération annulée. Les modifications déjà acquittées sont conservées."
 }
