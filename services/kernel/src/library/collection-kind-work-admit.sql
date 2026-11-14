@@ -1,11 +1,16 @@
 -- One bounded exact owner episode. More than one origin for the same preparation is ambiguous.
 -- Bound the indexed episode keys BEFORE eligibility joins/filters, including
 -- invalidated rows. Ambiguous retained keys cannot select a different original.
-WITH candidates AS MATERIALIZED (
-  SELECT reference_id FROM library.collection_kind_consent_consumer
-  WHERE route=:route::integer AND owner_account_id=:owner_account_id::uuid
-    AND collection_id=:collection_id::uuid AND preparation_id=:preparation_id::uuid
-  ORDER BY reference_id LIMIT 2
+WITH input AS (
+  SELECT :route::integer AS route, :owner_account_id::uuid AS owner_account_id,
+         :collection_id::uuid AS collection_id, :preparation_id::uuid AS preparation_id,
+         :deadline_at::text::bigint AS deadline_at
+), candidates AS MATERIALIZED (
+  SELECT candidate.reference_id
+  FROM library.collection_kind_consent_consumer AS candidate CROSS JOIN input
+  WHERE candidate.route=input.route AND candidate.owner_account_id=input.owner_account_id
+    AND candidate.collection_id=input.collection_id AND candidate.preparation_id=input.preparation_id
+  ORDER BY candidate.reference_id LIMIT 2
 )
 SELECT consumer.reference_id AS "referenceId",
        consumer.origin_id AS "originId",
@@ -22,9 +27,9 @@ SELECT consumer.reference_id AS "referenceId",
          AND observation.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid AS committed,
        collection.source_generation::text AS "currentSourceGeneration",
        collection.state AS "collectionState"
-FROM candidates AS episode
+FROM input CROSS JOIN candidates AS episode
 JOIN library.collection_kind_consent_consumer AS consumer
-  ON (consumer.route,consumer.reference_id)=(:route::integer,episode.reference_id)
+  ON (consumer.route,consumer.reference_id)=(input.route,episode.reference_id)
 JOIN library.collection AS collection
   ON (collection.route,collection.collection_id,collection.curator_account_id)=
      (consumer.route,consumer.collection_id,consumer.owner_account_id)
@@ -34,15 +39,15 @@ JOIN library.collection_kind_audience_origin AS original
 JOIN library.collection_kind_observation AS observation
   ON (observation.route,observation.collection_id,observation.audience)=
      (original.route,original.collection_id,original.audience)
-WHERE consumer.route=:route::integer
+WHERE consumer.route=input.route
   AND (SELECT count(*) FROM candidates)=1
-  AND consumer.owner_account_id=:owner_account_id::uuid
-  AND consumer.collection_id=:collection_id::uuid
-  AND consumer.preparation_id=:preparation_id::uuid
+  AND consumer.owner_account_id=input.owner_account_id
+  AND consumer.collection_id=input.collection_id
+  AND consumer.preparation_id=input.preparation_id
   AND consumer.invalidated=false AND NOT original.cancelled
   AND original.source_generation=consumer.source_generation
   AND original.source_capture=consumer.source_capture
-  AND original.deadline_at=:deadline_at::text::bigint
+  AND original.deadline_at=input.deadline_at
   AND original.expires_at>clock_timestamp()
   AND observation.generation=consumer.preparation_id
   AND observation.account_id=consumer.owner_account_id
