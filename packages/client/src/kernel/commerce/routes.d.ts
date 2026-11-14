@@ -8599,6 +8599,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             detail: unknown;
                             errors: unknown;
                         };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
                         404: Response | {
                             type: unknown;
                             title: unknown;
@@ -9011,6 +9022,20 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
         404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -9045,8 +9070,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         'x-exposure': "gate:purchases" | "gate:selling";
         'x-action': string;
         security: {}[];
+        'x-authority-anchor': string;
+        'x-authority-resource-types': string[];
     };
-}, {}, "/v1/entitlements/:entitlementId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, actor, admission, job }: {
+}, {}, "/v1/entitlements/:entitlementId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, actor, authorize, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -9129,6 +9156,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         };
         401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
             type: unknown;
             title: unknown;
             status: number;
@@ -9236,6 +9274,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         };
         401: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        403: {
             type: unknown;
             title: unknown;
             status: number;
@@ -9360,6 +9409,20 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
             404: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -9394,6 +9457,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             'x-exposure': "gate:purchases" | "gate:selling";
             'x-action': string;
             security: {}[];
+            'x-authority-anchor': string;
+            'x-authority-resource-types': string[];
         };
     }, {}, "/v1/entitlements/:entitlementId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
@@ -9554,6 +9619,20 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        }>;
         404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -9588,6 +9667,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         'x-exposure': "gate:purchases" | "gate:selling";
         'x-action': string;
         security: {}[];
+        'x-authority-anchor': string;
+        'x-authority-resource-types': string[];
     };
 }> & import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
