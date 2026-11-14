@@ -9,7 +9,7 @@ import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { managerOwnership, ownedGoals } from './manager-ownership.ts';
-import { ManagerSessionTransport, userMessageTurn } from './manager-session-transport.ts';
+import { ManagerSessionTransport, userMessageTurn, type GoalMutationOrigin } from './manager-session-transport.ts';
 import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
 import type { PromptBudgetManifest } from './types.ts';
@@ -31,6 +31,7 @@ export type ManagerSpec = {
   engine: 'codex' | 'claude';
   pool: CodexPool;
   budget: number;
+  model?: string;
   effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   supermanager: string;
   compactTokens?: number;
@@ -61,6 +62,8 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   turnDisposition?: ManagerTurnDisposition;
   /** Operator input accepted during a controller park; its terminal completion restores that inbox park. */
   operatorTurnReparkId?: string;
+  /** Distinguishes an explicit user pause from a controller-owned Goal pause across late turn callbacks. */
+  goalPauseOrigin?: GoalMutationOrigin;
   /** Bounded replay fence for recently retired turns in this thread; discarded on renewal. */
   retiredTurnIds?: string[];
   status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
@@ -217,6 +220,8 @@ export type CompletionEvidence = { passed: boolean; evidencePath: string; summar
 export type ManagerServices = {
   policy?: ControlPolicy;
   connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
+  /** An optional local override for a managed Codex role, read before opening or starting a turn. */
+  codexManagerModel?: (id: string) => string | undefined;
   /** Read-only admission against the current retained pool allowance before an inbox wake starts a model turn. */
   canStartTurn?: (spec: Pick<ManagerSpec, 'engine' | 'pool' | 'effort'>) => boolean;
   windows: ManagerWindows;
@@ -517,15 +522,15 @@ export class ManagerSessions {
     const turn = state.turnDisposition;
     return Boolean(
       threadId &&
-        turnId &&
-        state.status === 'running' &&
-        state.waitingForInbox &&
-        state.threadId === threadId &&
-        state.activeTurnId === turnId &&
-        turn?.threadId === threadId &&
-        turn.turnId === turnId &&
-        turn.status === 'inProgress' &&
-        turn.intent === 'controller-park',
+      turnId &&
+      state.status === 'running' &&
+      state.waitingForInbox &&
+      state.threadId === threadId &&
+      state.activeTurnId === turnId &&
+      turn?.threadId === threadId &&
+      turn.turnId === turnId &&
+      turn.status === 'inProgress' &&
+      turn.intent === 'controller-park',
     );
   }
   private turnKey(managerId: string, threadId: string, turnId: string): string {
@@ -616,7 +621,8 @@ export class ManagerSessions {
       this.save(state);
     });
     if (state.threadId !== threadId || state.status !== 'running' || !state.waitingForInbox) return;
-    state.goalState = await this.transport.setGoalStatus(client, threadId, 'paused');
+    state.goalPauseOrigin = 'automatic';
+    state.goalState = await this.transport.setGoalStatus(client, threadId, 'paused', 'automatic');
     this.save(state);
   }
   private notification(notification: Notification): void {
@@ -641,7 +647,8 @@ export class ManagerSessions {
     if (!state.threadId || params?.threadId !== state.threadId) return;
     if (method === 'turn/started') {
       if (!this.turnStarted(state, params.turn.id)) return;
-      if (state.status !== 'running') await this.pauseRemote(state);
+      if (state.status !== 'running')
+        await this.pauseRemote(state, state.goalPauseOrigin ?? (state.status === 'paused' ? 'user' : 'automatic'));
       else if (this.isParkedTurnInProgress(state, state.threadId, params.turn.id)) {
         if (this.hasUserMessageTurn(state, state.threadId, params.turn.id))
           this.admitParkedOperatorTurn(state, state.threadId, params.turn.id);
@@ -675,12 +682,17 @@ export class ManagerSessions {
       if (['blocked', 'budgetLimited', 'usageLimited', 'complete'].includes(params.goal.status)) {
         if (state.waitingForInbox) state.waitingForInbox = false;
         delete state.operatorTurnReparkId;
+        delete state.goalPauseOrigin;
       } else if (params.goal.status === 'paused' && previousStatus !== 'paused') {
         delete state.operatorTurnReparkId;
+        state.goalPauseOrigin ??= 'user';
+      } else if (params.goal.status === 'active') {
+        delete state.goalPauseOrigin;
       }
     } else if (method === 'thread/goal/cleared') {
       state.goalState = null;
       delete state.operatorTurnReparkId;
+      delete state.goalPauseOrigin;
     } else if (method === 'thread/tokenUsage/updated') state.usage = params.tokenUsage;
     else if (method === 'item/started' && params?.item?.type === 'sleep') {
       this.countSleep(state);
@@ -713,7 +725,7 @@ export class ManagerSessions {
       ) {
         // An idle Goal should stay parked. This catches provider or external reactivation before another
         // goal-generated continuation can replace the event-driven wait.
-        await this.pauseRemote(state);
+        await this.pauseRemote(state, 'automatic');
         return;
       }
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
@@ -935,7 +947,7 @@ export class ManagerSessions {
       state.status = 'paused';
       this.save(state);
       try {
-        await this.pauseRemote(state);
+        await this.pauseRemote(state, 'automatic');
       } catch (stopError) {
         this.error(stopError);
       }
@@ -972,7 +984,7 @@ export class ManagerSessions {
     assertManagedManager(current);
     const retryingFailed = current.status === 'renewal-failed';
     // Reapply the stop operation because a paused record can still have a live turn or viewer left behind.
-    await this.stopInternal(id);
+    await this.stopInternal(id, 'automatic');
     const stopped = this.get(id);
     assertManagedManager(stopped);
     const { history: _history, renewalAttempts: _attempts, nextRenewalRetryAt: _retry, ...snapshot } = stopped;
@@ -987,6 +999,7 @@ export class ManagerSessions {
       waitingForInbox: _waitingForInbox,
       turnDisposition: _turnDisposition,
       operatorTurnReparkId: _operatorTurnReparkId,
+      goalPauseOrigin: _goalPauseOrigin,
       retiredTurnIds: _retiredTurnIds,
       status: _status,
       startedAt: _startedAt,
@@ -1073,7 +1086,7 @@ export class ManagerSessions {
           });
         })
         .immediate();
-      await this.stopInternal(current.id);
+      await this.stopInternal(current.id, 'automatic');
       return true;
     }
     await this.askForContinuation(state);
@@ -1224,8 +1237,7 @@ export class ManagerSessions {
           state.turnDisposition = { threadId: state.threadId, turnId: turn, status, intent, at: this.now() };
         state.activeTurnId = null;
         if (intent !== 'work' || status !== 'completed') {
-          if (status !== 'completed' && state.operatorTurnReparkId === turn)
-            delete state.operatorTurnReparkId;
+          if (status !== 'completed' && state.operatorTurnReparkId === turn) delete state.operatorTurnReparkId;
           this.save(state);
           return;
         }
@@ -1340,7 +1352,7 @@ export class ManagerSessions {
       }
     }
     try {
-      await this.stopInternal(state.id);
+      await this.stopInternal(state.id, 'automatic');
     } catch (error) {
       this.error(error);
     }
@@ -1426,7 +1438,7 @@ export class ManagerSessions {
     const goal = await this.transport.getGoal(client, state.threadId);
     state.goalState = goal;
     if (goal?.status === 'active') {
-      await this.pauseRemote(state);
+      await this.pauseRemote(state, 'automatic');
       return;
     }
     if (goal?.status === 'paused') {
@@ -1443,9 +1455,11 @@ export class ManagerSessions {
     state.waitingForInbox = false;
     this.save(state);
   }
-  private async pauseRemote(state: ManagerState): Promise<void> {
+  private async pauseRemote(state: ManagerState, origin: GoalMutationOrigin): Promise<void> {
     assertManagedManager(state);
     if (state.engine === 'codex' && state.threadId) {
+      state.goalPauseOrigin = origin;
+      this.save(state);
       const client = await this.transport.client(state.pool);
       const threadId = state.threadId;
       const attributeInterrupt = (turnId: string) => {
@@ -1463,16 +1477,13 @@ export class ManagerSessions {
       };
       // Pausing the Goal itself can end a turn, so attribution precedes both provider operations.
       if (state.activeTurnId) attributeInterrupt(state.activeTurnId);
-      state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'paused');
+      state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'paused', origin);
       this.save(state);
-      if (
-        state.activeTurnId &&
-        !this.committedParkInterrupts.has(this.turnKey(state.id, threadId, state.activeTurnId))
-      )
+      if (state.activeTurnId && !this.committedParkInterrupts.has(this.turnKey(state.id, threadId, state.activeTurnId)))
         await this.transport.interruptTurn(client, state, threadId, state.activeTurnId, attributeInterrupt);
     }
   }
-  private async stopInternal(id: string): Promise<void> {
+  private async stopInternal(id: string, origin: GoalMutationOrigin): Promise<void> {
     const state = this.get(id);
     assertManagedManager(state);
     state.status = 'paused';
@@ -1486,13 +1497,13 @@ export class ManagerSessions {
     this.save(state);
     clearTimeout(this.timers.get(id));
     try {
-      await this.pauseRemote(state);
+      await this.pauseRemote(state, origin);
     } finally {
       await this.services.windows.unregister(id);
     }
   }
   stop(id: string): Promise<void> {
-    return this.serial(id, () => this.stopInternal(id));
+    return this.serial(id, () => this.stopInternal(id, 'user'));
   }
 
   private consumeGoalReadings(state: ManagedManagerState): string {
@@ -1524,7 +1535,7 @@ export class ManagerSessions {
     state.goalState = await this.transport.getGoal(client, state.threadId!);
     if (idleWake) {
       if (state.goalState?.status === 'paused')
-        state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active');
+        state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active', 'automatic');
       if (state.goalState?.status !== 'active') {
         this.save(state);
         return;
@@ -1581,7 +1592,7 @@ export class ManagerSessions {
       // A model-completed Codex goal must become active before the unmet event starts a new turn.
       if (state.engine === 'codex' && state.threadId && state.goalState?.status === 'complete') {
         const client = await this.transport.client(state.pool);
-        state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'active');
+        state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'active', 'automatic');
         this.save(state);
       }
       this.inbox.deliver({
@@ -1599,13 +1610,13 @@ export class ManagerSessions {
         });
       return false;
     }
-    await this.stopInternal(id);
+    await this.stopInternal(id, 'automatic');
     const completed = this.get(id);
     assertManagedManager(completed);
     completed.status = 'complete';
     if (completed.engine === 'codex' && completed.threadId) {
       const client = await this.transport.client(completed.pool);
-      completed.goalState = await this.transport.setGoalStatus(client, completed.threadId, 'complete');
+      completed.goalState = await this.transport.setGoalStatus(client, completed.threadId, 'complete', 'automatic');
     }
     this.save(completed);
     const event = {
@@ -1718,7 +1729,8 @@ export class ManagerSessions {
         });
       })
       .immediate();
-    if (lastGoal && source.status === 'running') await this.serial(source.id, () => this.stopInternal(source.id));
+    if (lastGoal && source.status === 'running')
+      await this.serial(source.id, () => this.stopInternal(source.id, 'automatic'));
     await this.serial(toId, () => this.dispatch(toId));
     const assigned = this.get(toId);
     assertManagedManager(assigned);
@@ -1792,7 +1804,10 @@ export class ManagerSessions {
               await this.markWaitingForInbox(current.id);
               current = this.get(current.id);
               assertManagedManager(current);
-              if (current.activeTurnId && this.isParkedTurnInProgress(current, current.threadId, current.activeTurnId)) {
+              if (
+                current.activeTurnId &&
+                this.isParkedTurnInProgress(current, current.threadId, current.activeTurnId)
+              ) {
                 const turnId = current.activeTurnId;
                 const hasPersistedUserMessage = await this.transport.turnHasUserMessage(
                   client,
@@ -1855,7 +1870,7 @@ export class ManagerSessions {
           if (current.status === 'starting') {
             current.status = 'paused';
             this.save(current);
-            await this.pauseRemote(current);
+            await this.pauseRemote(current, 'automatic');
             return;
           }
           this.save(current);

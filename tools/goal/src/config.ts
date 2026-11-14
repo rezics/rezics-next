@@ -286,9 +286,21 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     process.execPath,
     join(settings.mainCheckout, 'tools/goal/src/cli.ts'),
   ];
+  const localManagerSettings = (id: string) => {
+    const file = join(settings.integration.managerDirectory, `${encodeURIComponent(id)}.json`);
+    return existsSync(file) ? object(JSON.parse(readFileSync(file, 'utf8')), 'manager') : {};
+  };
+  const codexManagerModel = (id: string): string | undefined => {
+    const model = localManagerSettings(id).model;
+    if (model === undefined) return;
+    if (typeof model !== 'string' || !/^gpt-[a-z0-9.-]+$/.test(model))
+      throw new Error(`Manager ${id} has an invalid Codex model`);
+    return model;
+  };
   const managerServices: ManagerServices = {
     policy: settings.policy ?? defaults.policy,
     command,
+    codexManagerModel,
     canStartTurn: (spec) => tasks.managerTurnAllowed(spec.pool.id, spec.engine),
     backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,
@@ -302,8 +314,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     ...options.managerServices,
   };
   const manager = (goal: string, engine: 'codex' | 'claude', budget: number): ManagerSpec => {
-    const file = join(settings.integration.managerDirectory, `${encodeURIComponent(goal)}.json`);
-    const local = existsSync(file) ? object(JSON.parse(readFileSync(file, 'utf8')), 'manager') : {};
+    const local = localManagerSettings(goal);
+    const model = engine === 'codex' ? codexManagerModel(goal) : undefined;
     const pool = settings.pools.find(
       (p) => p.cli === engine && (local.pool ? p.name === local.pool : p.classes.includes('manager')),
     );
@@ -315,6 +327,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       goal,
       engine,
       budget,
+      ...(model === undefined ? {} : { model }),
       cwd: settings.mainCheckout,
       pool: { id: pool.name, codexHome: pool.configDirectory, executable: pool.command },
       objective: text(local.objective ?? `Complete Goal ${goal}`, 'manager objective'),
