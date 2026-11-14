@@ -13,6 +13,8 @@ import {
   registerArtifactDeclarations,
   restoreArtifactReturns,
   validateArtifactDeclarations,
+  captureArtifactPublicationState,
+  publishArtifactReturns,
 } from './check-artifacts.ts';
 
 import {
@@ -29,6 +31,53 @@ function workspace(): string {
   roots.push(root);
   return root;
 }
+
+test('caller publication rolls back prior outputs when a later receiver fails', () => {
+  const root = workspace(),
+    stage = workspace();
+  const paths = ['first.txt', 'second.txt'];
+  for (const path of paths) {
+    writeFileSync(join(root, path), `prior ${path}`);
+    writeFileSync(join(stage, path), `new ${path}`);
+  }
+  const expected = captureArtifactPublicationState(root, paths);
+  expect(() =>
+    publishArtifactReturns(root, stage, paths, expected, () => {
+      throw new Error('receiver failed');
+    }),
+  ).toThrow('receiver failed');
+  for (const path of paths) expect(readFileSync(join(root, path), 'utf8')).toBe(`prior ${path}`);
+});
+
+test('caller publication rejects edits since capture and retains caller edits during rollback', () => {
+  const root = workspace(),
+    stage = workspace();
+  const paths = ['result.txt'];
+  writeFileSync(join(root, paths[0]!), 'prior');
+  writeFileSync(join(stage, paths[0]!), 'new');
+  const original = captureArtifactPublicationState(root, paths);
+  writeFileSync(join(root, paths[0]!), 'caller before receive');
+  expect(() => publishArtifactReturns(root, stage, paths, original)).toThrow('caller output changed');
+  expect(readFileSync(join(root, paths[0]!), 'utf8')).toBe('caller before receive');
+  const current = captureArtifactPublicationState(root, paths);
+  expect(() =>
+    publishArtifactReturns(root, stage, paths, current, () => {
+      writeFileSync(join(root, paths[0]!), 'caller after receive');
+      throw new Error('receiver failed');
+    }),
+  ).toThrow('caller changes preserved');
+  expect(readFileSync(join(root, paths[0]!), 'utf8')).toBe('caller after receive');
+});
+
+test('caller custody shares the ordinary artifact file bound across declarations', () => {
+  const root = workspace();
+  for (const directory of ['first', 'second']) {
+    mkdirSync(join(root, directory));
+    for (let index = 0; index < 33; index++) writeFileSync(join(root, directory, `${index}.txt`), 'prior');
+  }
+  expect(() => captureArtifactPublicationState(root, ['first', 'second'])).toThrow('artifact bounds');
+  expect(readFileSync(join(root, 'first/0.txt'), 'utf8')).toBe('prior');
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });

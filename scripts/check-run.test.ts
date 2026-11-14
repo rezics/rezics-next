@@ -583,7 +583,7 @@ test('terminal status and cleanup failures remain visible without replacing a na
     expect(code).toBe(17);
     expect(messages.join('')).toContain('declared output missing: reports/result.txt');
     expect(messages.join('')).toContain('frozen source cleanup failed: mock cleanup failure');
-    expect(existsSync(outputPath)).toBe(false);
+    expect(readFileSync(outputPath, 'utf8')).toBe('stale output must not reach the host\n');
   } finally {
     process.stderr.write = originalWrite;
   }
@@ -645,6 +645,55 @@ test('transport failure and queued cancellation never start a local command and 
     removeRetainedSnapshot(fixture, retained!);
     retained = undefined;
   } finally {
+    if (retained) removeRetainedSnapshot(fixture, retained);
+  }
+});
+
+test('setup and transport failures retain prior caller outputs without treating them as fresh returns', async () => {
+  const path = 'contracts/openapi.json';
+  for (const mode of ['setup', 'transport'] as const) {
+    const fixture = candidate({ output: path });
+    let retained: CandidateSnapshot | undefined;
+    let transports = 0;
+    const args = argsFor(fixture, ['bun', 'run', 'derived'], [path]);
+    if (mode === 'setup') args.sourceRevision = 'f'.repeat(40);
+    const attempt = runCheck(args, {
+      onRetainSnapshot: (snapshot) => {
+        retained = snapshot;
+      },
+      transport: async () => {
+        transports++;
+        throw new Error('fixture transport failure');
+      },
+    });
+    if (mode === 'setup') await expect(attempt).rejects.toThrow('source revision mismatch');
+    else expect(await attempt).not.toBe(0);
+    expect(transports).toBe(mode === 'setup' ? 0 : 1);
+    expect(readFileSync(join(fixture.root, path), 'utf8')).toBe('stale output must not reach the host\n');
+    if (retained) removeRetainedSnapshot(fixture, retained);
+  }
+});
+
+test('accepted setup and transport failures invalidate prior transient proof while preserving source outputs', async () => {
+  const proof = '.temp/checks/pass-looking.txt';
+  const source = 'contracts/openapi.json';
+  for (const mode of ['setup', 'transport'] as const) {
+    const fixture = candidate({ output: source });
+    mkdirSync(dirname(join(fixture.root, proof)), { recursive: true });
+    writeFileSync(join(fixture.root, proof), 'old pass-looking evidence');
+    if (mode === 'setup') rmSync(join(fixture.root, 'node_modules/bun'), { recursive: true });
+    let retained: CandidateSnapshot | undefined;
+    const code = await runCheck(argsFor(fixture, ['bun', 'run', 'derived'], [source, proof]), {
+      onRetainSnapshot: (snapshot) => {
+        retained = snapshot;
+      },
+      transport: async () => {
+        throw new Error('fixture transport failure');
+      },
+    });
+    expect(code).not.toBe(0);
+    expect(existsSync(join(fixture.root, proof))).toBe(false);
+    expect(readFileSync(join(fixture.root, source), 'utf8')).toBe('stale output must not reach the host\n');
     if (retained) removeRetainedSnapshot(fixture, retained);
   }
 });
@@ -1261,12 +1310,23 @@ test('changed candidate inputs and cancellation cannot spawn late or replace the
   expect(existsSync(abandonedSnapshot!)).toBe(false);
 });
 
-test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'incomplete', 'failed'] as const)(
+test.each([
+  'complete',
+  'wrong-source',
+  'wrong-run',
+  'corrupt',
+  'incomplete',
+  'missing-tree',
+  'caller-edit',
+  'failed',
+] as const)(
   'original check-run terminal receiving validates the entire named tree and mixed schema return: %s',
   async (mode) => {
     const fixture = candidate({ tmpfs: true, output: `${PROFILE.root}/obsolete.d.ts` });
     writeFileSync(join(fixture.root, 'packages/client/src/sibling.ts'), 'untouched');
     const schema = 'services/kernel/db/semantic/schema.sql';
+    mkdirSync(dirname(join(fixture.root, schema)), { recursive: true });
+    writeFileSync(join(fixture.root, schema), 'prior caller schema\n');
     const returns = [PROFILE.transport, schema];
     const finals: string[] = [];
     let allocations = 0;
@@ -1309,23 +1369,27 @@ test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'incomplete', 'fa
             [PROFILE.transport, bytes],
             [schema, Buffer.from('CREATE TABLE proof(id int);\n')],
           ] as const) {
+            if (mode === 'missing-tree' && path === PROFILE.transport) continue;
             const file = join(options.workspace, path);
             mkdirSync(dirname(file), { recursive: true });
             writeFileSync(file, content);
           }
-          const entries = returns.map((path) => {
-            const content = readFileSync(join(options.workspace, path));
-            return { path, size: content.length, sha256: outputTreeDigest(content), kind: 'file' as const };
-          });
+          const entries = returns
+            .filter((path) => existsSync(join(options.workspace, path)))
+            .map((path) => {
+              const content = readFileSync(join(options.workspace, path));
+              return { path, size: content.length, sha256: outputTreeDigest(content), kind: 'file' as const };
+            });
+          if (mode === 'caller-edit') writeFileSync(join(fixture.root, schema), 'caller edit during transport\n');
           options.completed?.(native);
           options.settled?.(
             remoteSettlement(options, native, {
               returns: {
                 schema: 1,
-                status: mode === 'incomplete' ? 'missing' : 'complete',
+                status: mode === 'incomplete' || mode === 'missing-tree' ? 'missing' : 'complete',
                 entries: mode === 'incomplete' ? entries.slice(0, 1) : entries,
                 failures: [],
-                missing: mode === 'incomplete' ? [schema] : [],
+                missing: mode === 'incomplete' ? [schema] : mode === 'missing-tree' ? [PROFILE.transport] : [],
               },
             }),
           );
@@ -1367,6 +1431,9 @@ test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'incomplete', 'fa
           'stale output must not reach the host\n',
         );
         expect(collectOutputTree(fixture.root).members).toHaveLength(1);
+        expect(readFileSync(join(fixture.root, schema), 'utf8')).toBe(
+          mode === 'caller-edit' ? 'caller edit during transport\n' : 'prior caller schema\n',
+        );
       }
       expect(readFileSync(join(fixture.root, 'packages/client/src/sibling.ts'), 'utf8')).toBe('untouched');
     } finally {
