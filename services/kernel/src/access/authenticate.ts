@@ -22,6 +22,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import { approvedIdentityClaims, type ApprovedIdentity } from './approved-identity.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { readAssignment } from './delegation-read.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { bindAccountRateIdentity, stageDurableRateIdentity } from './write-rate-identity.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import {
@@ -407,11 +408,22 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         throw invalid();
       claims(payload, config, at, scopeClaimLimit);
       const accountId = payload.sub!;
-      const client = deadlineClient(context.pool, context.deadline);
       // Authentication keeps its single actor point read on the account anchor.
       const observedAt = Date.now();
       const account = await accessCheckout(context.work, () =>
-        readAccount(client, routeOf(accountId), accountId, context.work),
+        withBoundedReadConnection(
+          context.pool,
+          context.deadline,
+          (client) => readAccount(client, routeOf(accountId), accountId, context.work),
+          {
+            deadlineError: () => new AccessUnavailableError('deadline'),
+            mapError: (error) => {
+              throwAccessUnavailable(error, context.deadline);
+              return new AccessUnavailableError('overloaded');
+            },
+            isUncertainSettledQueryError: () => true,
+          },
+        ),
       );
       if (
         !account ||
@@ -428,7 +440,19 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         const request = typeof payload.requested_by === 'string' ? requestedByPattern.exec(payload.requested_by) : null;
         if (!request || request[0] !== payload.requested_by) throw invalid();
         const assignment = await accessCheckout(context.work, () =>
-          readAssignment(client, payload.requested_by as string, accountId, clock, context.work),
+          withBoundedReadConnection(
+            context.pool,
+            context.deadline,
+            (client) => readAssignment(client, payload.requested_by as string, accountId, clock, context.work),
+            {
+              deadlineError: () => new AccessUnavailableError('deadline'),
+              mapError: (error) => {
+                throwAccessUnavailable(error, context.deadline);
+                return new AccessUnavailableError('overloaded');
+              },
+              isUncertainSettledQueryError: () => true,
+            },
+          ),
         );
         if (assignment.kind !== 'resolved') throw invalid();
         requestedBy = payload.requested_by as string;
@@ -577,9 +601,20 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         const { actor, expires } = facts;
         remaining(context.deadline);
         if (clock().getTime() >= expires) throw invalid();
-        const client = deadlineClient(context.pool, context.deadline);
         const observedAt = Date.now();
-        const account = await readAccount(client, routeOf(actor.accountId), actor.accountId);
+        const account = await withBoundedReadConnection(
+          context.pool,
+          context.deadline,
+          (client) => readAccount(client, routeOf(actor.accountId), actor.accountId),
+          {
+            deadlineError: () => new AccessUnavailableError('deadline'),
+            mapError: (error) => {
+              throwAccessUnavailable(error, context.deadline);
+              return new AccessUnavailableError('overloaded');
+            },
+            isUncertainSettledQueryError: () => true,
+          },
+        );
         if (
           !account ||
           account.kind !== 'actor' ||
@@ -590,11 +625,22 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
           BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
         )
           throw invalid();
-        if (
-          actor.requestedBy !== null &&
-          (await readAssignment(client, actor.requestedBy, actor.accountId, clock)).kind !== 'resolved'
-        )
-          throw invalid();
+        if (actor.requestedBy !== null) {
+          const assignment = await withBoundedReadConnection(
+            context.pool,
+            context.deadline,
+            (client) => readAssignment(client, actor.requestedBy, actor.accountId, clock),
+            {
+              deadlineError: () => new AccessUnavailableError('deadline'),
+              mapError: (error) => {
+                throwAccessUnavailable(error, context.deadline);
+                return new AccessUnavailableError('overloaded');
+              },
+              isUncertainSettledQueryError: () => true,
+            },
+          );
+          if (assignment.kind !== 'resolved') throw invalid();
+        }
         remaining(context.deadline);
         if (clock().getTime() >= expires) throw invalid();
         identities.set(actor, {
