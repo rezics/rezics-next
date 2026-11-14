@@ -435,8 +435,8 @@ export function completeContinuation(
     }
   } else {
     // Workers often write the remainder as plain Markdown: on 2026-11-05, 34 of 43 dropped continuations had no front
-    // matter. Its contract is the parent's, so it inherits the parent's front matter; ordering and critical-path flags
-    // belong to the parent alone.
+    // matter. Its contract is the parent's, so it inherits the parent's front matter; current ownership and routing
+    // come from the structured task brief, while ordering and critical-path flags belong to the parent alone.
     const parent = frontMatter.exec(task.brief.markdown);
     let inherited: unknown;
     try {
@@ -445,7 +445,13 @@ export function completeContinuation(
       inherited = {};
     }
     raw = inherited && typeof inherited === 'object' && !Array.isArray(inherited) ? { ...inherited } : {};
-    for (const key of ['after', 'waiting', 'criticalPath']) delete (raw as Record<string, unknown>)[key];
+    const inheritedFront = raw as Record<string, unknown>;
+    inheritedFront.goal = task.brief.goal;
+    inheritedFront.manager = task.brief.manager;
+    inheritedFront.kind = task.brief.kind;
+    if (task.brief.target === undefined) delete inheritedFront.target;
+    else inheritedFront.target = task.brief.target;
+    for (const key of ['after', 'waiting', 'criticalPath']) delete inheritedFront[key];
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return markdown;
   const front: Record<string, unknown> = { ...(raw as Record<string, unknown>) };

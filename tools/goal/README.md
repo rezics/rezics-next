@@ -2290,7 +2290,9 @@ already holding the same brief is left in place. A different brief is published 
 untracked source is removed only after publication, while a newly tracked source remains unchanged after its copy is
 published. When every distinct name is occupied the source stays and a `continuation-retained` event is recorded. A
 brief moves only when it parses with the ordinary
-brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
+brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies.
+Plain-Markdown continuations inherit their omitted Goal, manager, kind and target from the current structured task brief;
+other inherited values retain the existing serialized-front-matter normalization rules.
 regular Markdown that cannot be admitted moves to `<state>/backlog/<goal>/failed/` under a task/attempt-prefixed name,
 with a `.reason` file and a manager `instruction` naming the continuation and reason; other entries are removed. The
 attempt still records `continuation-dropped`. Decision: keep rejected Markdown in the Goal's `failed/` directory, and
