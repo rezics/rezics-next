@@ -4,7 +4,15 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { loadSettings } from './config.ts';
-import { deliverDueReminders, occurrence, parseNotes } from './notes.ts';
+import { openDb } from './db.ts';
+import { SqliteManagerInbox } from './inbox.ts';
+import {
+  deliverDueReminders,
+  managerDutyRecipients,
+  occurrence,
+  parseNotes,
+  readManagerDutySessions,
+} from './notes.ts';
 
 test('notes are validated: text is required, everyHours needs remindAt, unknown keys are refused', () => {
   expect(parseNotes([{ text: 'documents a plan' }])).toEqual([{ text: 'documents a plan' }]);
@@ -46,6 +54,93 @@ test('each due reminder reaches the supermanager once per occurrence', () => {
     expect(sent).toHaveLength(2);
     expect(sent[0]).toContain('check the Claude weekly pace');
   } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
+});
+
+test('manager-duty notes fan out through active inbox recipients and recover per recipient after restart', () => {
+  const state = mkdtempSync(join(tmpdir(), 'notes-duty-'));
+  const due = '2026-10-27T03:00:00.000Z';
+  const notes = parseNotes([
+    { text: 'manager-duty: review owned work and report evidence', remindAt: due, everyHours: 1 },
+  ]);
+  let db = openDb(join(state, 'goal.sqlite'));
+  db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  const addSession = (id: string, session: Record<string, unknown>) =>
+    db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run(id, JSON.stringify(session));
+  addSession('resident', { kind: 'resident-supermanager', status: 'running' });
+  addSession('busy-owner', { status: 'running', goalState: { status: 'active' }, activeTurnId: 'turn-1' });
+  addSession('idle-owner', { status: 'running', goalState: { status: 'active' } });
+  addSession('parked-owner', {
+    status: 'running',
+    goalState: { status: 'paused' },
+    waitingForInbox: true,
+    goalPauseOrigin: 'automatic',
+  });
+  addSession('user-paused', { status: 'running', goalState: { status: 'paused' }, goalPauseOrigin: 'user' });
+  addSession('operator-stopped', { status: 'paused', goalState: { status: 'active' } });
+  addSession('budget-limited', { status: 'running', goalState: { status: 'budgetLimited' } });
+  addSession('complete', { status: 'running', goalState: { status: 'complete' } });
+  let inbox = new SqliteManagerInbox(db, state);
+  const now = Date.parse(due);
+  try {
+    const recipients = managerDutyRecipients('resident', readManagerDutySessions(db));
+    expect(recipients).toEqual(['busy-owner', 'idle-owner', 'parked-owner', 'resident']);
+    expect(
+      deliverDueReminders(
+        notes,
+        state,
+        (summary, recipient) => {
+          if (recipient === 'idle-owner') throw new Error('recipient unavailable');
+          inbox.deliver({ managerId: recipient!, kind: 'instruction', summary } as never);
+        },
+        now,
+        recipients,
+      ),
+    ).toBe(3);
+    for (const recipient of ['busy-owner', 'parked-owner', 'resident'])
+      expect(inbox.pending(recipient)).toHaveLength(1);
+
+    addSession('new-manager', { status: 'running', goalState: { status: 'active' } });
+    db.close();
+    db = openDb(join(state, 'goal.sqlite'));
+    inbox = new SqliteManagerInbox(db, state);
+    const afterRestart = managerDutyRecipients('resident', readManagerDutySessions(db));
+    expect(
+      deliverDueReminders(
+        notes,
+        state,
+        (summary, recipient) => inbox.deliver({ managerId: recipient!, kind: 'instruction', summary } as never),
+        now + 1,
+        afterRestart,
+      ),
+    ).toBe(2);
+    for (const recipient of ['busy-owner', 'parked-owner', 'resident'])
+      expect(inbox.pending(recipient)).toHaveLength(1);
+    expect(inbox.pending('idle-owner')).toHaveLength(1);
+    expect(inbox.pending('new-manager')).toHaveLength(1);
+    expect(
+      deliverDueReminders(
+        notes,
+        state,
+        (summary, recipient) => inbox.deliver({ managerId: recipient!, kind: 'instruction', summary } as never),
+        now + 2,
+        afterRestart,
+      ),
+    ).toBe(0);
+    expect(
+      deliverDueReminders(
+        notes,
+        state,
+        (summary, recipient) => inbox.deliver({ managerId: recipient!, kind: 'instruction', summary } as never),
+        now + 3_600_000,
+        afterRestart,
+      ),
+    ).toBe(5);
+    for (const recipient of ['busy-owner', 'parked-owner', 'resident', 'idle-owner', 'new-manager'])
+      expect(inbox.pending(recipient)).toHaveLength(2);
+  } finally {
+    db.close();
     rmSync(state, { recursive: true, force: true });
   }
 });

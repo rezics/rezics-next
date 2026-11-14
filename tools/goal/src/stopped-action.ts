@@ -225,7 +225,6 @@ function currentTypingRecoveryNeed(
     !body.actor.id ||
     typeof body.actor.sessionId !== 'string' ||
     !body.actor.sessionId ||
-    !attemptBody.checks.includes(body.checkId) ||
     JSON.stringify(body.command) !== JSON.stringify(pendingCommand)
   )
     return {
