@@ -1,11 +1,11 @@
-import { throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { authoritativeTimeValue } from '../command/command.ts';
 import type { AccessContext, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { accessCommandAttempt, admittedCommandAccount } from './command-admission.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import type { DurableInitiatorRecord } from './durable-initiator.ts';
 import delegationRead from './durable-initiator-capture-delegation.sql';
 
@@ -39,14 +39,30 @@ export async function captureDurableInitiator(
       const route = locator && routeOf(locator[1]!);
       if (!locator || route === null || routeOf(locator[2]!) === null)
         throw new DurableInitiatorCaptureUnavailableError();
-      const row = await within(context.deadline, () =>
-        delegationRead.run(deadlineClient(context.pool, context.deadline), {
-          route,
-          principal_id: locator[1]!,
-          request_id: locator[2]!,
-          actor_id: actor.accountId,
-          at: authoritativeTimeValue(attempt.time),
-        }),
+      const row = await withBoundedReadConnection(
+        context.pool,
+        context.deadline,
+        (client) =>
+          delegationRead.run(client, {
+            route,
+            principal_id: locator[1]!,
+            request_id: locator[2]!,
+            actor_id: actor.accountId,
+            at: authoritativeTimeValue(attempt.time),
+          }),
+        {
+          deadlineError: () => new AccessUnavailableError('deadline'),
+          mapError(error: unknown) {
+            try {
+              throwAccessUnavailable(error);
+            } catch (mapped) {
+              if (mapped instanceof Error && mapped !== error) mapped.cause = error;
+              return mapped;
+            }
+            return error;
+          },
+          isUncertainSettledQueryError: () => true,
+        },
       );
       if (!row) throw new DurableInitiatorCaptureUnavailableError();
       originalDelegation = Object.freeze({ transactionId: row.transactionId, issuedValid: row.issuedValid });
