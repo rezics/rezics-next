@@ -23,7 +23,8 @@ import { acquireDirectoryLease, acquireDirectoryLeaseWaiting } from '../tools/go
 
 const MANIFEST_FILE = 'manifest.json';
 const PACK_FILE = 'snapshot.pack';
-const FORMAT = 'rezics-native-git-snapshot-v2';
+// One current owned envelope; native Git object and pack formats retain their external identities.
+const FORMAT = 'rezics-native-git-snapshot-v1';
 const OBJECT_FORMATS = ['sha1', 'sha256'] as const;
 // Dozens of workers pack concurrently on a loaded host; two minutes was too short at load 70.
 const GIT_OPERATION_TIMEOUT_MS = 600_000;
@@ -57,6 +58,7 @@ export function fetchCheckGitScript(
 ): string {
   const { head, indexTree, dev, shallow, objectFormat, remote } = publication;
   if (
+    publication.format !== FORMAT ||
     !(OBJECT_FORMATS as readonly string[]).includes(objectFormat) ||
     !/^refs\/checks\/[a-zA-Z0-9-]+$/.test(remote.ref) ||
     ![head, indexTree, shallow, remote.commit, ...(dev ? [dev] : [])].every((id) => validObjectId(id, objectFormat))
@@ -687,7 +689,8 @@ function reusableCacheRoot(source: string): string | undefined {
     stderr: 'ignore',
     timeout: GIT_OPERATION_TIMEOUT_MS,
   });
-  return ignored.exitCode === 0 ? join(scratch, 'remote-check-git-cache') : undefined;
+  // A new envelope gets a fresh namespace; immutable earlier manifests are never rewritten or reused.
+  return ignored.exitCode === 0 ? join(scratch, 'remote-check-git-cache', FORMAT) : undefined;
 }
 
 async function readReusableSnapshot(
