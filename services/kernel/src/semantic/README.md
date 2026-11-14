@@ -2758,6 +2758,8 @@ together. Building another root leaves the old head usable; old immutable pins r
 readable after activation. The bounded Release1 publication, activation, historical
 read and construction paths retain their own original head and meaning. Kind resolution
 uses the canonical catalogue; immutable historical releases and their digests remain readable.
+Native head, Kind and build-status reads require the stored canonical build pin; a superseded pin remains
+historical evidence and is unavailable until the coordinated catalogue rebuild, never relabelled in a response.
 
 `createNativeDefinitionCatalogue({pool,access})` is the actual mounted request reader.
 It imports the native Actor and Access accounting port. Native Access preparation,

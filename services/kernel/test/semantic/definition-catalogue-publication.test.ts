@@ -277,6 +277,20 @@ test('An authorized publisher uploads bounded catalogue artifacts spanning more 
     });
     expect(active.status).toBe(200);
     expect(active.session).not.toBeNull();
+    await pool.query('UPDATE semantic.definition_catalogue_build SET pin=$2::jsonb WHERE route=0 AND root_digest=$1', [
+      pin.rootDigest,
+      JSON.stringify({ ...pin, format: 'https://rezics.com/definitions/catalogue/2' }),
+    ]);
+    expect((await call('GET', '/v1/definitions/catalogue')).status).toBe(503);
+    expect((await call('GET', `/v1/definitions/catalogues/${pin.rootDigest}/build`)).status).toBe(503);
+    expect(
+      (await call('POST', `/v1/definitions/catalogues/${pin.rootDigest}/kinds:resolve`, { ids: ['scale:T1151'] }))
+        .status,
+    ).toBe(503);
+    await pool.query('UPDATE semantic.definition_catalogue_build SET pin=$2::jsonb WHERE route=0 AND root_digest=$1', [
+      pin.rootDigest,
+      JSON.stringify(pin),
+    ]);
     const first = await call('GET', `/v1/definitions/catalogues/${pin.rootDigest}/kinds?limit=20`);
     expect(first.status).toBe(200);
     expect(first.body.kinds).toHaveLength(20);
