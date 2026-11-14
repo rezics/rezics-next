@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { QueryResultRow } from 'pg';
 import type { AccessClient, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { ContentNotFoundError } from './reads.ts';
+import { ContentNotFoundError, snapshot } from './reads.ts';
 import {
   observeHostedChapterAttachments,
   type HostedChapterAttachmentObservation,
@@ -153,6 +153,32 @@ type StepCandidate = Readonly<{
   target: HostedChapterTarget | null;
 }>;
 type SourcePage = Readonly<{ rows: readonly SourceRow[]; exhausted: boolean }>;
+type SelectionSettlement = Readonly<{
+  input_position: string;
+  settlement: 'selected' | 'duplicate' | 'unknown';
+  source_order: string | null;
+}>;
+type WholeAdvancePlan = Readonly<{
+  phase: 'whole';
+  candidates: readonly StepCandidate[];
+  exhausted: boolean;
+  failure: 'source_redacted' | null;
+}>;
+type SelectionAdvancePlan = Readonly<{
+  phase: 'selection';
+  inputs: readonly InputRow[];
+  settlements: readonly SelectionSettlement[];
+  candidates: readonly StepCandidate[];
+  failure: 'source_redacted' | null;
+}>;
+type StagingAdvancePlan = WholeAdvancePlan | SelectionAdvancePlan;
+export type HostedPublicationStagingAdvancePreparation = Readonly<{
+  stageFingerprint: string;
+  pageFingerprint: string | null;
+  targetKeys: readonly string[];
+  observations: readonly HostedChapterAttachmentObservation[];
+  targetUnavailable: boolean;
+}>;
 type OutputTargetCursor = Readonly<{
   threadId: string;
   postId: string;
@@ -692,6 +718,7 @@ export async function advanceHostedPublicationStaging(
   stepId: string,
   deadline: number,
   preparationResponse?: (result: HostedPublicationStagingStepResult) => unknown,
+  preparation?: HostedPublicationStagingAdvancePreparation,
 ): Promise<HostedPublicationStagingStepResult> {
   const actor = accountActor(actorInput);
   const route = validateLocator(locator);
@@ -724,8 +751,9 @@ export async function advanceHostedPublicationStaging(
   )
     await requireCurrentPinnedSource(client, live);
   if (live.mode === 'whole') {
-    result = await advanceWhole(deps, client, actor, live, deadline);
-  } else if (live.status === 'building') result = await advanceSelection(deps, client, actor, live, deadline);
+    result = await advanceWhole(deps, client, actor, live, deadline, preparation);
+  } else if (live.status === 'building')
+    result = await advanceSelection(deps, client, actor, live, deadline, preparation);
   else if (live.status === 'closing') result = await advanceClosure(client, live);
   else throw stagingConflict('Staging is not ready for another step');
   const response = preparationResponse ? JSON.stringify(preparationResponse(result)) : null;
@@ -759,28 +787,153 @@ export async function advanceHostedPublicationStaging(
   return result;
 }
 
+/** Prepare the exact source page and new target observations before a catalogue
+ * write checkout. The snapshot connection is released before native disclosure. */
+export async function prepareHostedPublicationStagingAdvance(
+  deps: HostedDependencies,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+  deadline: number,
+): Promise<HostedPublicationStagingAdvancePreparation | null> {
+  const actor = accountActor(actorInput);
+  const route = validateLocator(locator);
+  requireRoute(stepId, route);
+  const preview = (
+    await snapshot(deps, locator.catalogueId, { deadline }, async (client) => {
+      const stage = await stageSnapshot(client, route, locator);
+      assertActorBinding(stage, actor);
+      const prior = await client.query(
+        `SELECT 1 FROM content.hosted_publication_staging_step
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND step_id=$4`,
+        [route, locator.catalogueId, locator.stageId, stepId],
+      );
+      if (prior.rowCount) return null;
+
+      const plan = stage.is_expired ? null : await readStagingAdvancePlan(client, stage);
+      const targets = plan && !plan.failure ? planTargets(plan) : [];
+      const existing = plan ? await existingTargetKeys(client, stage, targets) : new Set<string>();
+      const targetKeys = targets.filter((target) => !existing.has(targetKey(target))).map(targetKey);
+      return {
+        stageFingerprint: stagingStageFingerprint(stage),
+        pageFingerprint: plan ? stagingPlanFingerprint(plan) : null,
+        candidates: plan?.failure ? [] : plan ? plan.candidates : [],
+        targetKeys,
+      };
+    })
+  ).value;
+  if (!preview) return null;
+
+  let observations: readonly HostedChapterAttachmentObservation[] = [];
+  let targetUnavailable = false;
+  if (preview.targetKeys.length) {
+    const targets = new Set(preview.targetKeys);
+    const placements = preview.candidates
+      .filter((candidate) => candidate.target && targets.has(targetKey(candidate.target)))
+      .map(toPlacement);
+    try {
+      observations = await observeHostedChapterAttachments(deps, placements, { actor, deadline });
+    } catch (error) {
+      if (!(error instanceof ContentNotFoundError)) throw error;
+      targetUnavailable = true;
+    }
+  }
+  return Object.freeze({
+    stageFingerprint: preview.stageFingerprint,
+    pageFingerprint: preview.pageFingerprint,
+    targetKeys: Object.freeze([...preview.targetKeys]),
+    observations: Object.freeze(
+      observations.map((observation) =>
+        Object.freeze({ ...observation, target: Object.freeze({ ...observation.target }) }),
+      ),
+    ),
+    targetUnavailable,
+  });
+}
+
+/** Lock and refresh the attempt's stage before phase selection. Expiry and
+ * terminal transitions keep their established progress response. */
+export async function readHostedPublicationAdvanceProgressWithPreparation(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<Readonly<{ progress: HostedPublicationStagingCheckpoint; expired: boolean; stageFingerprint: string }>> {
+  const actor = accountActor(actorInput);
+  const stage = await lockStage(client, locator);
+  assertActorBinding(stage, actor);
+  const refreshed = await refreshExpiryWithEvidence(client, stage);
+  return {
+    progress: checkpoint(refreshed.stage),
+    expired: refreshed.expired,
+    stageFingerprint: stagingStageFingerprint(refreshed.stage),
+  };
+}
+
+function stagingStageFingerprint(stage: StageRow): string {
+  const { is_expired: _isExpired, ...stable } = stage;
+  return createHash('sha256').update(JSON.stringify(stable)).digest('hex');
+}
+
+function stagingPlanFingerprint(plan: StagingAdvancePlan): string {
+  return createHash('sha256').update(JSON.stringify(plan)).digest('hex');
+}
+
+function assertPreparedPlan(
+  stage: StageRow,
+  plan: StagingAdvancePlan,
+  preparation?: HostedPublicationStagingAdvancePreparation,
+): void {
+  if (
+    preparation &&
+    (preparation.stageFingerprint !== stagingStageFingerprint(stage) ||
+      preparation.pageFingerprint !== stagingPlanFingerprint(plan))
+  )
+    throw stagingConflict('Prepared source page changed before advance');
+}
+
+async function readStagingAdvancePlan(client: AccessClient, stage: StageRow): Promise<StagingAdvancePlan | null> {
+  if (stage.mode === 'whole' && stage.status === 'building') return readWholeAdvancePlan(client, stage);
+  if (stage.mode === 'selection' && stage.status === 'building') return readSelectionAdvancePlan(client, stage);
+  return null;
+}
+
+function planTargets(plan: StagingAdvancePlan): HostedChapterTarget[] {
+  return distinctTargets(plan.candidates);
+}
+
+function distinctTargets(candidates: readonly StepCandidate[]): HostedChapterTarget[] {
+  const targets = new Map<string, HostedChapterTarget>();
+  for (const candidate of candidates) if (candidate.target) targets.set(targetKey(candidate.target), candidate.target);
+  return [...targets.values()];
+}
+
 async function advanceWhole(
   deps: HostedDependencies,
   client: AccessClient,
   actor: AccountActor,
   stage: StageRow,
   deadline: number,
+  preparation?: HostedPublicationStagingAdvancePreparation,
 ): Promise<HostedPublicationStagingStepResult> {
   if (stage.status !== 'building') throw stagingConflict('Whole-source staging is not active');
-  const page = await readWholeSourcePage(client, stage);
-  const candidates = page.rows.map(toCandidate);
-  if (candidates.some((candidate) => candidate.title === null))
-    return failStep(client, stage, 'whole', 'source_redacted', 0);
-  let observations: readonly { target: HostedChapterTarget }[];
+  const plan = await readWholeAdvancePlan(client, stage);
+  assertPreparedPlan(stage, plan, preparation);
+  if (plan.failure) return failStep(client, stage, 'whole', plan.failure, 0);
+  const candidates = plan.candidates;
+  let observations: readonly HostedChapterAttachmentObservation[];
   try {
-    observations = await observeNewTargets(deps, client, actor, deadline, stage, candidates);
+    const prepared = preparation
+      ? await storePreparedTargetObservations(client, stage, candidates, preparation)
+      : undefined;
+    if (prepared === null) return failStep(client, stage, 'whole', 'target_unavailable', 0);
+    observations = prepared ?? (await observeNewTargets(deps, client, actor, deadline, stage, candidates));
   } catch (error) {
     if (error instanceof ContentNotFoundError) return failStep(client, stage, 'whole', 'target_unavailable', 0);
     throw error;
   }
   await insertCandidates(client, stage, candidates);
   const nextFrontier = candidates.at(-1)?.sourceOrder ?? stage.source_frontier;
-  const nextStatus = page.exhausted ? 'ready' : 'building';
+  const nextStatus = plan.exhausted ? 'ready' : 'building';
   await client.query(
     `UPDATE content.hosted_publication_staging
      SET source_frontier=$4,source_exhausted=$5,candidate_count=candidate_count+$6,
@@ -791,7 +944,7 @@ async function advanceWhole(
       stage.catalogue_id,
       stage.stage_id,
       nextFrontier,
-      page.exhausted,
+      plan.exhausted,
       candidates.length,
       observations.length,
       nextStatus,
@@ -806,6 +959,17 @@ async function advanceWhole(
     phase: 'whole',
     processed: candidates.length,
     progress: checkpoint(updated),
+  };
+}
+
+async function readWholeAdvancePlan(client: AccessClient, stage: StageRow): Promise<WholeAdvancePlan> {
+  const page = await readWholeSourcePage(client, stage);
+  const candidates = page.rows.map(toCandidate);
+  return {
+    phase: 'whole',
+    candidates,
+    exhausted: page.exhausted,
+    failure: candidates.some((candidate) => candidate.title === null) ? 'source_redacted' : null,
   };
 }
 
@@ -911,19 +1075,14 @@ async function advanceSelection(
   actor: AccountActor,
   stage: StageRow,
   deadline: number,
+  preparation?: HostedPublicationStagingAdvancePreparation,
 ): Promise<HostedPublicationStagingStepResult> {
   if (stage.mode !== 'selection' || stage.input_frozen_version === null)
     throw stagingConflict('Selection input must be frozen before processing');
-  const first = BigInt(stage.input_frontier);
-  const inputs = (
-    await client.query<InputRow>(
-      `SELECT input_position::text,occurrence_id
-       FROM content.hosted_publication_staging_input
-       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND input_position>$4
-       ORDER BY input_position LIMIT $5`,
-      [stage.route, stage.catalogue_id, stage.stage_id, first.toString(), HOSTED_PUBLICATION_STAGING_STEP_LIMIT + 1],
-    )
-  ).rows.slice(0, HOSTED_PUBLICATION_STAGING_STEP_LIMIT);
+  const plan = await readSelectionAdvancePlan(client, stage);
+  assertPreparedPlan(stage, plan, preparation);
+  if (plan.failure) return failStep(client, stage, 'selection', plan.failure, 0);
+  const { inputs, settlements, candidates } = plan;
   if (inputs.length === 0) {
     if (BigInt(stage.settled_input_count) !== BigInt(stage.input_count))
       throw stagingConflict('Selection frontier does not cover its frozen input');
@@ -939,64 +1098,13 @@ async function advanceSelection(
     return { replayed: false, phase: 'selection', processed: 0, progress: checkpoint(updated) };
   }
 
-  const inputJson = JSON.stringify(
-    inputs.map((input) => ({ input_position: input.input_position, occurrence_id: input.occurrence_id })),
-  );
-  const duplicates = new Set(
-    (
-      await client.query<QueryResultRow & { occurrence_id: string }>(
-        `WITH requested AS (
-           SELECT x.input_position,x.occurrence_id
-           FROM jsonb_to_recordset($4::jsonb) AS x(input_position bigint,occurrence_id uuid)
-         )
-         SELECT DISTINCT r.occurrence_id
-         FROM requested r
-         WHERE EXISTS (
-           SELECT 1 FROM content.hosted_publication_staging_input prior
-           WHERE prior.route=$1 AND prior.catalogue_id=$2 AND prior.stage_id=$3
-             AND prior.occurrence_id=r.occurrence_id AND prior.input_position<r.input_position
-         )`,
-        [stage.route, stage.catalogue_id, stage.stage_id, inputJson],
-      )
-    ).rows.map((row) => row.occurrence_id),
-  );
-  const uniqueIds: string[] = [];
-  for (const input of inputs)
-    if (!duplicates.has(input.occurrence_id) && !uniqueIds.includes(input.occurrence_id))
-      uniqueIds.push(input.occurrence_id);
-  const sourceRows = await readExactSourceRows(client, stage, uniqueIds);
-  const byOccurrence = new Map(sourceRows.map((source) => [source.occurrence_id, source]));
-  const settlements: Array<{
-    input_position: string;
-    settlement: 'selected' | 'duplicate' | 'unknown';
-    source_order: string | null;
-  }> = [];
-  const candidates: StepCandidate[] = [];
-  const seen = new Set<string>();
-  for (const input of inputs) {
-    if (duplicates.has(input.occurrence_id) || seen.has(input.occurrence_id)) {
-      settlements.push({ input_position: input.input_position, settlement: 'duplicate', source_order: null });
-      seen.add(input.occurrence_id);
-      continue;
-    }
-    seen.add(input.occurrence_id);
-    const source = byOccurrence.get(input.occurrence_id);
-    if (!source) {
-      settlements.push({ input_position: input.input_position, settlement: 'unknown', source_order: null });
-      continue;
-    }
-    candidates.push(toCandidate(source));
-    settlements.push({
-      input_position: input.input_position,
-      settlement: 'selected',
-      source_order: source.source_order,
-    });
-  }
-  if (candidates.some((candidate) => candidate.title === null))
-    return failStep(client, stage, 'selection', 'source_redacted', 0);
-  let observations: readonly { target: HostedChapterTarget }[];
+  let observations: readonly HostedChapterAttachmentObservation[];
   try {
-    observations = await observeNewTargets(deps, client, actor, deadline, stage, candidates);
+    const prepared = preparation
+      ? await storePreparedTargetObservations(client, stage, candidates, preparation)
+      : undefined;
+    if (prepared === null) return failStep(client, stage, 'selection', 'target_unavailable', 0);
+    observations = prepared ?? (await observeNewTargets(deps, client, actor, deadline, stage, candidates));
   } catch (error) {
     if (error instanceof ContentNotFoundError) return failStep(client, stage, 'selection', 'target_unavailable', 0);
     throw error;
@@ -1044,6 +1152,83 @@ async function advanceSelection(
     stageId: stage.stage_id,
   });
   return { replayed: false, phase: 'selection', processed: inputs.length, progress: checkpoint(updated) };
+}
+
+async function readSelectionAdvancePlan(client: AccessClient, stage: StageRow): Promise<SelectionAdvancePlan> {
+  if (stage.mode !== 'selection' || stage.input_frozen_version === null)
+    throw stagingConflict('Selection input must be frozen before processing');
+  const first = BigInt(stage.input_frontier);
+  const inputs = (
+    await client.query<InputRow>(
+      `SELECT input_position::text,occurrence_id
+       FROM content.hosted_publication_staging_input
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND input_position>$4
+       ORDER BY input_position LIMIT $5`,
+      [stage.route, stage.catalogue_id, stage.stage_id, first.toString(), HOSTED_PUBLICATION_STAGING_STEP_LIMIT + 1],
+    )
+  ).rows.slice(0, HOSTED_PUBLICATION_STAGING_STEP_LIMIT);
+  if (inputs.length === 0) {
+    if (BigInt(stage.settled_input_count) !== BigInt(stage.input_count))
+      throw stagingConflict('Selection frontier does not cover its frozen input');
+    return { phase: 'selection', inputs, settlements: [], candidates: [], failure: null };
+  }
+
+  const inputJson = JSON.stringify(
+    inputs.map((input) => ({ input_position: input.input_position, occurrence_id: input.occurrence_id })),
+  );
+  const duplicates = new Set(
+    (
+      await client.query<QueryResultRow & { occurrence_id: string }>(
+        `WITH requested AS (
+           SELECT x.input_position,x.occurrence_id
+           FROM jsonb_to_recordset($4::jsonb) AS x(input_position bigint,occurrence_id uuid)
+         )
+         SELECT DISTINCT r.occurrence_id
+         FROM requested r
+         WHERE EXISTS (
+           SELECT 1 FROM content.hosted_publication_staging_input prior
+           WHERE prior.route=$1 AND prior.catalogue_id=$2 AND prior.stage_id=$3
+             AND prior.occurrence_id=r.occurrence_id AND prior.input_position<r.input_position
+         )`,
+        [stage.route, stage.catalogue_id, stage.stage_id, inputJson],
+      )
+    ).rows.map((row) => row.occurrence_id),
+  );
+  const uniqueIds: string[] = [];
+  for (const input of inputs)
+    if (!duplicates.has(input.occurrence_id) && !uniqueIds.includes(input.occurrence_id))
+      uniqueIds.push(input.occurrence_id);
+  const sourceRows = await readExactSourceRows(client, stage, uniqueIds);
+  const byOccurrence = new Map(sourceRows.map((source) => [source.occurrence_id, source]));
+  const settlements: SelectionSettlement[] = [];
+  const candidates: StepCandidate[] = [];
+  const seen = new Set<string>();
+  for (const input of inputs) {
+    if (duplicates.has(input.occurrence_id) || seen.has(input.occurrence_id)) {
+      settlements.push({ input_position: input.input_position, settlement: 'duplicate', source_order: null });
+      seen.add(input.occurrence_id);
+      continue;
+    }
+    seen.add(input.occurrence_id);
+    const source = byOccurrence.get(input.occurrence_id);
+    if (!source) {
+      settlements.push({ input_position: input.input_position, settlement: 'unknown', source_order: null });
+      continue;
+    }
+    candidates.push(toCandidate(source));
+    settlements.push({
+      input_position: input.input_position,
+      settlement: 'selected',
+      source_order: source.source_order,
+    });
+  }
+  return {
+    phase: 'selection',
+    inputs,
+    settlements,
+    candidates,
+    failure: candidates.some((candidate) => candidate.title === null) ? 'source_redacted' : null,
+  };
 }
 
 async function readExactSourceRows(
@@ -1177,6 +1362,20 @@ async function observeNewTargets(
   const targets = new Map<string, HostedChapterTarget>();
   for (const candidate of candidates) if (candidate.target) targets.set(targetKey(candidate.target), candidate.target);
   if (!targets.size) return [];
+  const existing = await existingTargetKeys(client, stage, [...targets.values()]);
+  const newTargetKeys = [...targets.keys()].filter((key) => !existing.has(key));
+  if (!newTargetKeys.length) return [];
+  const observations = await observeTargets(deps, actor, deadline, candidates, new Set(newTargetKeys));
+  await insertTargetObservations(client, stage, observations);
+  return observations;
+}
+
+async function existingTargetKeys(
+  client: AccessClient,
+  stage: StageRow,
+  targets: readonly HostedChapterTarget[],
+): Promise<Set<string>> {
+  if (!targets.length) return new Set();
   const requested = [...targets.values()].map((target) => ({
     thread_id: target.threadId,
     post_id: target.postId,
@@ -1197,19 +1396,30 @@ async function observeNewTargets(
       [stage.route, stage.catalogue_id, stage.stage_id, JSON.stringify(requested)],
     )
   ).rows;
-  const existing = new Set(
-    found.map((target) => `${target.thread_id}/${target.post_id}/${target.target_revision_id}/${target.sha256}`),
-  );
-  const newTargets = [...targets.entries()].filter(([key]) => !existing.has(key)).map(([, target]) => target);
-  if (!newTargets.length) return [];
-  const newTargetKeys = new Set(newTargets.map(targetKey));
+  return new Set(found.map((target) => `${target.thread_id}/${target.post_id}/${target.target_revision_id}/${target.sha256}`));
+}
+
+async function observeTargets(
+  deps: HostedDependencies,
+  actor: AccountActor,
+  deadline: number,
+  candidates: readonly StepCandidate[],
+  targetKeys: ReadonlySet<string>,
+): Promise<readonly HostedChapterAttachmentObservation[]> {
   const placements = candidates
     .filter((candidate): candidate is StepCandidate & { target: HostedChapterTarget } => {
       const target = candidate.target;
-      return target !== null && newTargetKeys.has(targetKey(target));
+      return target !== null && targetKeys.has(targetKey(target));
     })
     .map(toPlacement);
-  const observations = await observeHostedChapterAttachments(deps, placements, { actor, deadline });
+  return observeHostedChapterAttachments(deps, placements, { actor, deadline });
+}
+
+async function insertTargetObservations(
+  client: AccessClient,
+  stage: StageRow,
+  observations: readonly HostedChapterAttachmentObservation[],
+): Promise<void> {
   const observationRows = observations.map(({ target, authorId, licence }) => ({
     thread_id: target.threadId,
     post_id: target.postId,
@@ -1228,7 +1438,32 @@ async function observeNewTargets(
       [stage.route, stage.catalogue_id, stage.stage_id, JSON.stringify(observationRows)],
     );
   }
-  return observations;
+}
+
+async function storePreparedTargetObservations(
+  client: AccessClient,
+  stage: StageRow,
+  candidates: readonly StepCandidate[],
+  preparation: HostedPublicationStagingAdvancePreparation,
+): Promise<readonly HostedChapterAttachmentObservation[] | null> {
+  const targets = distinctTargets(candidates);
+  const existing = await existingTargetKeys(client, stage, targets);
+  const expected = targets.map(targetKey).filter((key) => !existing.has(key));
+  if (!sameStringSet(expected, preparation.targetKeys))
+    throw stagingConflict('Prepared target set does not match the locked source page');
+  if (preparation.targetUnavailable) {
+    if (preparation.observations.length) throw stagingConflict('Unavailable target preparation retained metadata');
+    return null;
+  }
+  const observedKeys = preparation.observations.map((observation) => targetKey(observation.target));
+  if (!sameStringSet(expected, observedKeys))
+    throw stagingConflict('Prepared target observations do not match the locked source page');
+  await insertTargetObservations(client, stage, preparation.observations);
+  return preparation.observations;
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && new Set(left).size === left.length && left.every((value) => right.includes(value));
 }
 async function insertCandidates(
   client: AccessClient,

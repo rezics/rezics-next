@@ -3,7 +3,9 @@ import {
   authoritativeTimeValue,
   noEffect,
   principalCommandIdentity,
+  preflightCommandReceipt,
   runCommand,
+  type CommandAttempt,
   type AuthoritativeTime,
   type CommandAuthorization,
   type CommandOutcome,
@@ -23,10 +25,13 @@ import {
   freezeHostedPublicationSelectionWithEvidence,
   requireRoute,
   readHostedPublicationAdvanceReplay,
+  readHostedPublicationAdvanceProgressWithPreparation,
   readHostedPublicationStagingProgress,
   readHostedPublicationStagingProgressWithExpiry,
   retainHostedPublicationAdvanceReceipt,
+  prepareHostedPublicationStagingAdvance,
   sealHostedPublicationStaging,
+  type HostedPublicationStagingAdvancePreparation,
 } from './hosted-publication-staging.ts';
 import type {
   HostedPublicationAdvancePhase,
@@ -34,6 +39,7 @@ import type {
   HostedPublicationStagingCheckpoint,
   HostedPublicationStagingLocator,
 } from './hosted-publication-staging-model.ts';
+import { HostedPublicationStagingConflictError } from './hosted-publication-staging-model.ts';
 import {
   applyHostedVersionReleaseCandidatePage,
   beginHostedVersionReleaseCandidate,
@@ -69,7 +75,12 @@ type PreparationWorkResult = Readonly<{
   value: HostedPublicationPreparationProgress;
   effect: PreparationEffect;
 }>;
-type PreparationWork = (tx: CommandTransaction, time: AuthoritativeTime) => Promise<PreparationWorkResult>;
+type PreparationWork = (
+  tx: CommandTransaction,
+  time: AuthoritativeTime,
+  prepared: unknown,
+) => Promise<PreparationWorkResult>;
+type PreparationPreparation = (attempt: CommandAttempt) => Promise<unknown>;
 type StageBinding = Readonly<{ stageId: string; allowMissing: boolean }>;
 
 const PREPARATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -120,6 +131,7 @@ function preparationCommand(
   context: HostedCommandContext,
   work: PreparationWork,
   stageBinding?: StageBinding,
+  prepareWork?: PreparationPreparation,
 ): Promise<CommandOutcome<HostedPublicationPreparationProgress>> {
   const route = routeOf(catalogueId);
   if (route === null || actor.kind !== 'account') throw new ContentNotFoundError();
@@ -135,7 +147,7 @@ function preparationCommand(
       digest: requestDigest(kind, actor, { catalogueId, input: intent }),
     };
     const baseAuthorization = hostedPostAuthorization(deps, actor, initial.thread_id, catalogueId, context, receipt);
-    const authorization: CommandAuthorization = {
+    const stageBoundAuthorization: CommandAuthorization = {
       ...baseAuthorization,
       async prepare(attempt) {
         const evidence = await baseAuthorization.prepare!(attempt);
@@ -162,18 +174,37 @@ function preparationCommand(
         return evidence;
       },
     };
+    const preparedByTime = new WeakMap<AuthoritativeTime, unknown>();
+    const authorization: CommandAuthorization = {
+      ...stageBoundAuthorization,
+      async prepare(attempt) {
+        const evidence = await stageBoundAuthorization.prepare!(attempt);
+        if (prepareWork) preparedByTime.set(attempt.time, await prepareWork(attempt));
+        return evidence;
+      },
+    };
+    const commandInput = {
+      ...principalCommandIdentity(actor),
+      partition: partitionOf(route),
+      deadline: context.deadline,
+      clock: deps.clock,
+      receipt,
+    };
+    if (prepareWork) {
+      const replay = await preflightCommandReceipt<HostedPublicationPreparationProgress>(deps.pool, {
+        ...commandInput,
+        authorization: stageBoundAuthorization,
+      });
+      if (replay) return replay;
+    }
     return runCommand<HostedPublicationPreparationProgress>(
       deps.pool,
       {
-        ...principalCommandIdentity(actor),
-        partition: partitionOf(route),
-        deadline: context.deadline,
-        clock: deps.clock,
-        receipt,
+        ...commandInput,
         authorization,
       },
       async (tx, { time }) => {
-        const result = await work(tx, time);
+        const result = await work(tx, time, preparedByTime.get(time));
         if (result.effect === 'none') return noEffect(result.value);
         return {
           value: result.value,
@@ -320,7 +351,7 @@ export function advanceHostedPublicationPreparation(
     'advance',
     { stageId, stepId },
     context,
-    async (tx) => {
+    async (tx, _time, preparedValue) => {
       // runCommand authorizes and checks committed receipts before entering this body. This
       // fresh-work precondition covers candidate phases before any stage or candidate work.
       requireRoute(stepId, routeOf(catalogueId)!);
@@ -330,8 +361,22 @@ export function advanceHostedPublicationPreparation(
         return preparationResult(replay.response as HostedPublicationPreparationProgress, false);
       if (replay?.kind === 'staging') return preparationResult(progress(catalogueId, replay.progress), false);
 
-      const stageRead = await readHostedPublicationStagingProgressWithExpiry(tx as AccessClient, actor, stageLocator);
+      const preparation = preparedValue as HostedPublicationStagingAdvancePreparation | null;
+      if (!preparation) throw new HostedPublicationStagingConflictError('Advance preparation is unavailable');
+      const stageRead = await readHostedPublicationAdvanceProgressWithPreparation(
+        tx as AccessClient,
+        actor,
+        stageLocator,
+      );
       const stage = stageRead.progress;
+      if (
+        !stageRead.expired &&
+        stage.state !== 'cancelled' &&
+        stage.state !== 'expired' &&
+        stage.state !== 'failed' &&
+        stageRead.stageFingerprint !== preparation.stageFingerprint
+      )
+        throw new HostedPublicationStagingConflictError('Prepared stage changed before advance');
       let phase: HostedPublicationAdvancePhase;
       let processed = 0;
       let fromFrontier = stage.sourceFrontier;
@@ -355,6 +400,7 @@ export function advanceHostedPublicationPreparation(
             );
             return acknowledged.value;
           },
+          preparation,
         );
         // A zero-row step can still persist phase or failure progress, so native replay evidence decides the event.
         phase = advanced.phase;
@@ -418,6 +464,7 @@ export function advanceHostedPublicationPreparation(
       return result;
     },
     { stageId, allowMissing: false },
+    () => prepareHostedPublicationStagingAdvance(deps, actor, locator(catalogueId, stageId), stepId, context.deadline),
   );
 }
 

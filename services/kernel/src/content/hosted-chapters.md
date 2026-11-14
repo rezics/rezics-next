@@ -453,6 +453,12 @@ Decision: a fresh progress read is a no-effect command when its locked stage obs
 observation persists the retained stage's expiry transition, the existing preparation-changed event records it once;
 an exact authorized receipt replay keeps the original reply without emitting another event.
 
+Decision: preparation Advance reads at most one exact source page of 20 rows and its frontier before the catalogue
+write checkout, then observes each new exact target after releasing the read connection. The write transaction
+revalidates current caller and stage owner, the pinned source, stage state/frontiers and exact page before storing
+those observations. `hosted-publication-staging.ts` owns the shared page and target-observation path for mounted and
+standalone callers; `hosted-publication-preparation.ts` joins it to command authorization and receipt replay.
+
 Decision: selection append emits preparation-changed when it adds a retained batch or its locked progress read persists
 expiry; an exact retained batch replay under a fresh authorized command receipt adds no input and emits no change event.
 

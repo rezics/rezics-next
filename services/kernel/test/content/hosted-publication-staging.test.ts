@@ -12,6 +12,7 @@ import {
   readHostedPublicationStagingCandidates,
   readHostedPublicationStagingProgress,
   readHostedPublicationStagingTargetObservations,
+  prepareHostedPublicationStagingAdvance,
   sealHostedPublicationStaging,
 } from '../../src/content/hosted-publication-staging.ts';
 import {
@@ -116,6 +117,91 @@ function containsId(value: unknown, id: string): boolean {
   if (Array.isArray(value)) return value.some((item) => containsId(item, id));
   return false;
 }
+
+test('prepared whole and selection pages reject changed state before storing candidates', async () => {
+  const thread = await f.native.thread();
+  const target = f.target(thread);
+  const occurrenceId = f.newOccurrenceId();
+  const created = await f.native.command('/v1/hostedCatalogues', {
+    postId: f.catalogueId,
+    threadId: f.threadId,
+    placements: [{ occurrenceId, parentId: null, position: 0, title: 'Prepared target', kind: 'chapter', target }],
+  });
+  const actor = f.native.author.actor;
+  const whole = await begin(created.revisionId as string, null, 'whole');
+  const wholeStepId = f.newOccurrenceId();
+  const wholePreparation = await prepareHostedPublicationStagingAdvance(
+    dependencies(),
+    actor,
+    whole,
+    wholeStepId,
+    Date.now() + 120_000,
+  );
+  expect(wholePreparation).not.toBeNull();
+  await f.native.pool.query(
+    `UPDATE content.hosted_publication_staging SET source_frontier='0'
+     WHERE catalogue_id=$1 AND stage_id=$2`,
+    [whole.catalogueId, whole.stageId],
+  );
+  await expect(
+    transaction((client) =>
+      advanceHostedPublicationStaging(
+        dependencies(),
+        client,
+        actor,
+        whole,
+        wholeStepId,
+        Date.now() + 120_000,
+        undefined,
+        wholePreparation!,
+      ),
+    ),
+  ).rejects.toThrow('Prepared source page changed');
+
+  const selection = await begin(created.revisionId as string, null, 'selection');
+  await transaction((client) =>
+    appendHostedPublicationSelectionBatch(client, actor, {
+      ...selection,
+      batchId: f.newOccurrenceId(),
+      occurrenceIds: [occurrenceId],
+    }),
+  );
+  await transaction((client) => freezeHostedPublicationSelection(client, actor, selection));
+  const selectionStepId = f.newOccurrenceId();
+  const selectionPreparation = await prepareHostedPublicationStagingAdvance(
+    dependencies(),
+    actor,
+    selection,
+    selectionStepId,
+    Date.now() + 120_000,
+  );
+  expect(selectionPreparation).not.toBeNull();
+  await f.native.pool.query(
+    `UPDATE content.hosted_publication_staging SET input_frontier='0',settled_input_count='1'
+     WHERE catalogue_id=$1 AND stage_id=$2`,
+    [selection.catalogueId, selection.stageId],
+  );
+  await expect(
+    transaction((client) =>
+      advanceHostedPublicationStaging(
+        dependencies(),
+        client,
+        actor,
+        selection,
+        selectionStepId,
+        Date.now() + 120_000,
+        undefined,
+        selectionPreparation!,
+      ),
+    ),
+  ).rejects.toThrow('Prepared source page changed');
+  const candidatesAfterStalePages = await f.native.pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM content.hosted_publication_staging_candidate
+     WHERE catalogue_id=$1 AND stage_id=ANY($2::uuid[])`,
+    [f.catalogueId, [whole.stageId, selection.stageId]],
+  );
+  expect(candidatesAfterStalePages.rows[0]?.count).toBe('0');
+});
 
 test('selection streams past 512, replays a rolled-back step, and seals source-ordered exact candidates', async () => {
   const { path, target, placements, created, published } = await hostedRootAppendBase(f);
