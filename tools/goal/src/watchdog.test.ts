@@ -213,7 +213,9 @@ test('the watchdog names the compiler reconciliation hold and both owners for an
     const delivered: { summary: string; managerId: string | undefined }[] = [];
     const deliver = (summary: string, managerId?: string) => delivered.push({ summary, managerId });
     expect(watch(fixture, root, branches, root, deliver, now, undefined, undefined, policy, scheduling)).toBe(1);
-    expect(watch(fixture, root, branches, root, deliver, now + 60_000, undefined, undefined, policy, scheduling)).toBe(0);
+    expect(watch(fixture, root, branches, root, deliver, now + 60_000, undefined, undefined, policy, scheduling)).toBe(
+      0,
+    );
     expect(delivered).toHaveLength(1);
     expect(delivered[0]).toMatchObject({ managerId: 'control-plane-manager' });
   } finally {

@@ -48,10 +48,7 @@ const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
  * supported setup defect, or an accepted source-only amendment with unavailable compiler evidence. Every check must
  * have terminal custody. Stopped attempts keep their stop proof; exited attempts keep their captured source head.
  */
-export type TypingRetryReconciliationOutcome =
-  | 'admitted'
-  | 'source-amendment-compiler-hold'
-  | 'unresolved';
+export type TypingRetryReconciliationOutcome = 'admitted' | 'source-amendment-compiler-hold' | 'unresolved';
 
 export function reconcileQueuedTypingFailureRetryOutcome(
   tasks: WorkerTasks,

@@ -521,8 +521,7 @@ export function violations(
       attempt.state === 'exited' &&
       retry !== undefined &&
       retryEvents.some(
-        (event) =>
-          event.kind === 'typing-retry-unreconciled' && event.body.includes('source-amendment-compiler-hold'),
+        (event) => event.kind === 'typing-retry-unreconciled' && event.body.includes('source-amendment-compiler-hold'),
       );
     const compilerReconciliationHold = typingRetryUnreconciled || sourceAmendmentCompilerHold;
     if (attempt.state !== 'exited' && !compilerReconciliationHold) continue;
@@ -539,10 +538,7 @@ export function violations(
     if (task.state === 'ready' && intent && waiting.has(task.id)) continue;
     // A retry held for dependencies, a backoff or a host outage is waiting by design, not missing its starter.
     if (retry && retryWait(retry, task, dependencyState, now, stateDirectory, policy)) continue;
-    if (
-      compilerReconciliationHold &&
-      (!retry || !scheduling.runnableSupply || !scheduling.runnableSupply(task, retry))
-    )
+    if (compilerReconciliationHold && (!retry || !scheduling.runnableSupply || !scheduling.runnableSupply(task, retry)))
       continue;
     const minutes = Math.round(idle / 60_000);
     found.push({
@@ -557,9 +553,9 @@ export function violations(
               0,
               policy.worker.summaryCharacters,
             )
-        : intent
-          ? `Task ${task.id} (${task.brief.goal}) has had a pending retry for ${minutes} min of eligible time that no process started.`
-          : `Task ${task.id} (${task.brief.goal}) is ${task.state} but its attempt ${attempt.attempt} ended ${minutes} min ago and nothing will start another.`,
+          : intent
+            ? `Task ${task.id} (${task.brief.goal}) has had a pending retry for ${minutes} min of eligible time that no process started.`
+            : `Task ${task.id} (${task.brief.goal}) is ${task.state} but its attempt ${attempt.attempt} ended ${minutes} min ago and nothing will start another.`,
       ...(compilerReconciliationHold && scheduling.schedulingOwner ? { managerId: scheduling.schedulingOwner } : {}),
     });
   }

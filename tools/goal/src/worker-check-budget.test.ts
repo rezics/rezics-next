@@ -453,11 +453,14 @@ test('a failed remote binding proves terminal custody only with its exact no-dis
 
     const custody = () => workerCheckHostAttemptCheckCustody(worktree.path, taskId, 1, [checkId]);
     expect(custody()).toBe('unknown');
-    writeFileSync(runnerReadyPath(worktree.path, checkId, physicalRunId), JSON.stringify({
-      status: 'failed',
-      physicalRunId,
-      error: 'worker-check: invalid remote custody binding',
-    }));
+    writeFileSync(
+      runnerReadyPath(worktree.path, checkId, physicalRunId),
+      JSON.stringify({
+        status: 'failed',
+        physicalRunId,
+        error: 'worker-check: invalid remote custody binding',
+      }),
+    );
     writeFileSync(join(worktree.path, log), 'worker-check: a different setup failure\n');
     expect(custody()).toBe('unknown');
 

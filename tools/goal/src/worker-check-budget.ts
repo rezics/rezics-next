@@ -460,8 +460,7 @@ function failedRemoteBindingNeverDispatched(
     !runner ||
     history.runnerHost !== hostname() ||
     !detachedGroupTerminal(runner) ||
-    (result.runnerIdentity !== undefined &&
-      !isDeepStrictEqual(ownedRunnerIdentity(result.runnerIdentity), runner)) ||
+    (result.runnerIdentity !== undefined && !isDeepStrictEqual(ownedRunnerIdentity(result.runnerIdentity), runner)) ||
     Object.keys(ready).sort().join(',') !== 'error,physicalRunId,status' ||
     ready.status !== 'failed' ||
     ready.physicalRunId !== physicalRunId ||
@@ -476,7 +475,8 @@ function failedRemoteBindingNeverDispatched(
   const root = resolve(worktree);
   const logPath = resolve(root, history.log);
   const relativeLog = relative(root, logPath);
-  if (!relativeLog || relativeLog === '..' || relativeLog.startsWith(`..${sep}`) || isAbsolute(relativeLog)) return false;
+  if (!relativeLog || relativeLog === '..' || relativeLog.startsWith(`..${sep}`) || isAbsolute(relativeLog))
+    return false;
   let log: string;
   try {
     log = readFileSync(logPath, 'utf8');

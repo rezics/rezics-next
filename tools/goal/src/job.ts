@@ -374,11 +374,12 @@ export class WorkerJob implements GateOutcomeSink {
         if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
           const reconciliation = reconcileQueuedTypingFailureRetryOutcome(this.tasks, ref);
           if (reconciliation === 'source-amendment-compiler-hold') {
-            const unreconciled = store.events(ref.taskId, ref.attempt).some(
-              (event) =>
-                event.kind === 'typing-retry-unreconciled' &&
-                event.body.includes('source-amendment-compiler-hold'),
-            );
+            const unreconciled = store
+              .events(ref.taskId, ref.attempt)
+              .some(
+                (event) =>
+                  event.kind === 'typing-retry-unreconciled' && event.body.includes('source-amendment-compiler-hold'),
+              );
             if (!unreconciled)
               store.event(ref, 'typing-retry-unreconciled', { action: 'source-amendment-compiler-hold' });
             return;

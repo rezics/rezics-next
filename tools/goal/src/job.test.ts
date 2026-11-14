@@ -465,9 +465,7 @@ test('an accepted source-only amendment waits for terminal proof, then starts it
     expect(h.store.attempt(retained.ref).state).toBe('superseded');
     expect(h.store.attempt(retained.ref).typingEvidencePending).toBeDefined();
     expect(
-      h.store
-        .events(retained.task.id)
-        .filter((event) => event.kind === 'worker-run-started' && event.attempt === 2),
+      h.store.events(retained.task.id).filter((event) => event.kind === 'worker-run-started' && event.attempt === 2),
     ).toHaveLength(1);
   } finally {
     await h.disposeAsync();
