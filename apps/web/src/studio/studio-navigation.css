@@ -113,3 +113,14 @@
   min-block-size: 2.75rem;
 }
 
+.studio-navigation-document-copy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.studio-navigation-document-state {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+

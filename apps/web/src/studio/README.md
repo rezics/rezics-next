@@ -114,6 +114,8 @@ responsive disclosure or navigation column inside the content width. The center 
 creation and Book organization canvases.
 Book parts retain their native nested order. The draft inventory lists only documents not already placed in that
 outline, avoiding repeated chapter navigation. Column series context stays distinct from independent articles.
+Both inventories use `studio-draft-navigation.tsx` for document rows, current-document highlighting and compact
+visibility descriptions; their existing opening guard remains with the workspace.
 The original `pages-studio-workbench--book` story renders this same workspace and controller in AppShell.
 
 Decision: Book and Column use an explicit document/creation canvas choice, retaining one selected editor and one
