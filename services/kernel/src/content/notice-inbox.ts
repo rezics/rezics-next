@@ -1,10 +1,11 @@
 import type { Pool } from 'pg';
-import { readAccount, accessCheck, deadlineClient, within } from './access-port.ts';
+import { readAccount, accessCheck } from './access-port.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { withNoticeInboxReadConnection } from './notice-inbox-read-connection.ts';
 import {
   discloseNoticeCandidates,
   type NoticeActor,
@@ -72,6 +73,13 @@ export type UnreadNoticeSummary = Readonly<{
 const LIST_ROUTE = 'GET /v1/accounts/{accountId}/notifications';
 export const INBOX_CANDIDATE_FACTOR = 4;
 export const INBOX_CANDIDATE_SCAN_CEILING = 200;
+const DEFAULT_INBOX_READ_MS = 3_000;
+
+type InboxReadVisit = Omit<InboxDependencies, 'deadline'> & { deadline: number };
+
+function inboxReadVisit(dependencies: InboxDependencies): InboxReadVisit {
+  return { ...dependencies, deadline: dependencies.deadline ?? Date.now() + DEFAULT_INBOX_READ_MS };
+}
 
 export function inboxCandidateScanLimit(pageSize: number): number {
   return Math.min(pageSize * INBOX_CANDIDATE_FACTOR, INBOX_CANDIDATE_SCAN_CEILING);
@@ -95,37 +103,34 @@ function readerActor(dependencies: InboxDependencies, accountId: string): Extrac
 
 /** Recheck account status, authn epoch and account:read after source hydration. */
 export async function assertCurrentInboxViewer(dependencies: InboxDependencies, accountId: string): Promise<void> {
-  const actor = readerActor(dependencies, accountId);
+  const visit = inboxReadVisit(dependencies);
+  const actor = readerActor(visit, accountId);
   const accountRoute = route(accountId);
-  const deadline = dependencies.deadline ?? Date.now() + 3_000;
   const check = await accessCheck(
-    dependencies.access,
+    visit.access,
     actor,
     'account:read',
     { route: accountRoute, id: accountId },
-    { pool: dependencies.pool, deadline },
+    { pool: visit.pool, deadline: visit.deadline },
   );
-  const current = await within(deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      const account = await readAccount(client, accountRoute, accountId);
-      return !!(
-        account &&
-        account.accountId === accountId &&
-        account.kind === 'actor' &&
-        account.state === 'active' &&
-        !account.fenced &&
-        Number.isSafeInteger(actor.authnEpoch) &&
-        actor.authnEpoch > 0 &&
-        BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch &&
-        (await check(client))
-      );
-    }),
-  );
+  const current = await withNoticeInboxReadConnection(visit.pool, visit.deadline, async (client) => {
+    const account = await readAccount(client, accountRoute, accountId);
+    return !!(
+      account &&
+      account.accountId === accountId &&
+      account.kind === 'actor' &&
+      account.state === 'active' &&
+      !account.fenced &&
+      Number.isSafeInteger(actor.authnEpoch) &&
+      actor.authnEpoch > 0 &&
+      BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch &&
+      (await check(client))
+    );
+  });
   if (!current) throw new InboxViewerUnavailableError('Current Inbox viewer is unavailable');
 }
 
-function dependenciesForDisclosure(dependencies: InboxDependencies) {
+function dependenciesForDisclosure(dependencies: InboxReadVisit) {
   return {
     pool: dependencies.pool,
     access: dependencies.access,
@@ -133,7 +138,7 @@ function dependenciesForDisclosure(dependencies: InboxDependencies) {
     routeKey: dependencies.routeKey,
     clock: dependencies.now,
     actor: dependencies.actor,
-    deadline: dependencies.deadline ?? Date.now() + 3_000,
+    deadline: dependencies.deadline,
   };
 }
 
@@ -196,11 +201,12 @@ export async function listNoticeInbox(
   accountId: string,
   input: { limit: number; cursor?: string; selection?: InboxSelection },
 ): Promise<InboxListPage> {
+  const visit = inboxReadVisit(dependencies);
   const accountRoute = route(accountId);
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50) throw new RangeError('Invalid limit');
   const selection = inboxSelection(input.selection);
-  const actor = readerActor(dependencies, accountId);
-  await assertCurrentInboxViewer(dependencies, accountId);
+  const actor = readerActor(visit, accountId);
+  await assertCurrentInboxViewer(visit, accountId);
   const binding = {
     route: LIST_ROUTE,
     viewer: accountId,
@@ -213,7 +219,7 @@ export async function listNoticeInbox(
   } as const;
   let after: [string, string] | null = null;
   if (input.cursor !== undefined) {
-    const value = await decodeListCursor(dependencies.tokens, binding, input.cursor, dependencies.now());
+    const value = await decodeListCursor(visit.tokens, binding, input.cursor, visit.now());
     if (
       !value.ok ||
       value.epoch !== LIST_CURSOR_EPOCH ||
@@ -225,7 +231,7 @@ export async function listNoticeInbox(
     after = [value.after[0], value.after[1]];
   }
   const candidateLimit = inboxCandidateScanLimit(input.limit);
-  const rows = await withConnection(dependencies.pool, async (client) => {
+  const rows = await withNoticeInboxReadConnection(visit.pool, visit.deadline, async (client) => {
     const values: unknown[] = [accountRoute, accountId];
     let seek = '';
     if (after !== null) {
@@ -247,7 +253,7 @@ export async function listNoticeInbox(
     return result.rows as NoticeCandidate[];
   });
 
-  const projections = await discloseNoticeCandidates(dependenciesForDisclosure(dependencies), accountId, rows, {
+  const projections = await discloseNoticeCandidates(dependenciesForDisclosure(visit), accountId, rows, {
     actorLimit: input.limit,
   });
   const items: InboxItem[] = [];
@@ -262,14 +268,14 @@ export async function listNoticeInbox(
       if (items.length === input.limit) break;
     }
   }
-  await assertCurrentInboxViewer(dependencies, accountId);
+  await assertCurrentInboxViewer(visit, accountId);
   const next =
     lastScanned && (scanned < rows.length || rows.length === candidateLimit)
       ? await encodeListCursor(
-          dependencies.tokens,
+          visit.tokens,
           binding,
           { epoch: LIST_CURSOR_EPOCH, after: [lastScanned.created_at_key, lastScanned.notice_id] },
-          dependencies.now(),
+          visit.now(),
         )
       : null;
   return {
@@ -287,10 +293,11 @@ export async function readNoticeInboxItem(
   accountId: string,
   noticeId: string,
 ): Promise<InboxNoticeDetail> {
+  const visit = inboxReadVisit(dependencies);
   const accountRoute = route(accountId);
   if (routeOf(noticeId) !== accountRoute) throw new RangeError('Unknown notice');
-  await assertCurrentInboxViewer(dependencies, accountId);
-  const rows = await withConnection(dependencies.pool, async (client) => {
+  await assertCurrentInboxViewer(visit, accountId);
+  const rows = await withNoticeInboxReadConnection(visit.pool, visit.deadline, async (client) => {
     const result = await client.query(
       `SELECT n.notice_id, n.kind, n.created_at, n.created_at::text AS created_at_key,
               n.source_id, n.actor_id, n.thread_id, n.post_id, n.decision_id, n.report_id,
@@ -306,9 +313,9 @@ export async function readNoticeInboxItem(
   const row = rows[0];
   if (!row) throw new RangeError('Unknown notice');
   const projection = (
-    await discloseNoticeCandidates(dependenciesForDisclosure(dependencies), accountId, [row], { actorLimit: 1 })
+    await discloseNoticeCandidates(dependenciesForDisclosure(visit), accountId, [row], { actorLimit: 1 })
   ).get(row.notice_id);
-  await assertCurrentInboxViewer(dependencies, accountId);
+  await assertCurrentInboxViewer(visit, accountId);
   if (!projection) throw new RangeError('Unknown notice');
   return { viewer: { state: 'current' }, notice: buildInboxItem(accountId, row, projection) };
 }
@@ -317,11 +324,13 @@ export async function countUnreadNotices(
   dependencies: InboxDependencies,
   accountId: string,
 ): Promise<UnreadNoticeSummary> {
+  const visit = inboxReadVisit(dependencies);
   const accountRoute = route(accountId);
-  await assertCurrentInboxViewer(dependencies, accountId);
-  const rows = await withConnection(dependencies.pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  await assertCurrentInboxViewer(visit, accountId);
+  const rows = await withNoticeInboxReadConnection(
+    visit.pool,
+    visit.deadline,
+    async (client) => {
       const frontierResult = await client.query(
         `SELECT seen_created_at, seen_notice_id
          FROM content.notice_seen WHERE route=$1 AND account_id=$2`,
@@ -353,26 +362,23 @@ export async function countUnreadNotices(
          ORDER BY n.created_at,n.notice_id`,
         values,
       );
-      await client.query('COMMIT');
       return result.rows as NoticeCandidate[];
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-  });
+    },
+    { repeatableRead: true },
+  );
   const truncated = rows.length > SUMMARY_CANDIDATE_LIMIT;
   const candidates = rows.slice(0, SUMMARY_CANDIDATE_LIMIT).filter((row) => row.unread);
-  const visible = await discloseNoticeCandidates(dependenciesForDisclosure(dependencies), accountId, candidates, {
+  const visible = await discloseNoticeCandidates(dependenciesForDisclosure(visit), accountId, candidates, {
     includeActors: false,
   });
-  await assertCurrentInboxViewer(dependencies, accountId);
+  await assertCurrentInboxViewer(visit, accountId);
   const count = Math.min(visible.size, 100);
   const capped = truncated || visible.size > 100;
   return {
     count,
     capped,
     basis: truncated ? 'current-visible-lower-bound' : 'current-visible-unread',
-    witness: { kind: 'current-disclosure', at: dependencies.now().toISOString() },
+    witness: { kind: 'current-disclosure', at: visit.now().toISOString() },
   };
 }
 

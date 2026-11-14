@@ -1267,6 +1267,8 @@ Decision: scan at most 200 unread candidates through current disclosure and retu
 
 Decision: Unread list selection seeks the recipient home index for unacknowledged notices newer than the seen frontier, with the existing `min(4×limit, 200)` candidate budget. Bulk mark-through is the displayed newest notice identity on this page and is omitted on unread continuation so later unseen notices cannot be marked from the loaded array.
 
+Decision: Each Inbox list, exact-item and unread-summary visit carries one deadline through current-viewer checks, local database phases, disclosure and final viewer verification; expired unresolved local connections are discarded and rollback is never queued after expiry.
+
 Bulk mark seen takes an owned notice id and advances the marker only forward in the same immutable inbox order.
 Items at or before the marker are read; marking an older item cannot make newer seen items unread again.
 The frontier stores the owned notice's immutable `(created_at, notice_id)` tuple in `notice_seen`, independently
