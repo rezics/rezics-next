@@ -6,14 +6,14 @@ import {
   type SessionProof,
 } from '@rezics/auth-contract';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount } from './account-data.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { within } from './deadline.ts';
+import { withManagedAdviceReadConnection } from './managed-advice-read-connection.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { deriveAccess } from './derived-access.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
@@ -58,8 +58,8 @@ export function createAccountDeletionPageAccess(deps: {
           JSON.stringify(actor.scopes) !== JSON.stringify(human.scope)
         )
           throw new AuthBindingDeniedError();
-        const time = await withConnection(deps.pool, (client) =>
-          mintReadTime(deadlineClient(client, deadline), accessClock(deps.access)),
+        const time = await withManagedAdviceReadConnection(deps.pool, deadline, (client) =>
+          mintReadTime(client, accessClock(deps.access)),
         );
         try {
           const snapshot = async (client: Parameters<typeof readAccount>[0]) => {
