@@ -63,6 +63,7 @@ import {
 } from './check-output-tree.ts';
 import { environmentCommandIsSafe, performanceHosts } from './check-placement.ts';
 import { nativeUnitContext } from '../tools/goal/src/native-unit-context.ts';
+import { observeNativeUnitContext } from '../tools/goal/src/native-units.ts';
 import {
   acceptCheckRunPhysicalCleanup,
   allocateCheckRunPhysical,
@@ -1640,8 +1641,11 @@ async function prepareFinalRun(
   snapshotAllocation?: { workspace: string; scratch: string },
 ): Promise<PreparedFinalRun> {
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
-  if (candidateRoot === trustedRoot)
-    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  if (candidateRoot === trustedRoot) {
+    const unit = observeNativeUnitContext(readEnvironmentFile(args.envFile, candidateRoot));
+    if (!unit || realpathSync(unit.worktree) !== realpathSync(candidateRoot))
+      throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  }
   if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
   const hostsFile = resolve(args.hosts);
   const hostsStats = lstatSync(hostsFile);
@@ -1761,8 +1765,11 @@ async function runCheckLegacy(
 ): Promise<number> {
   const trustedRoot = resolve(import.meta.dir, '..');
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
-  if (resolve(candidateRoot) === trustedRoot)
-    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  if (resolve(candidateRoot) === trustedRoot) {
+    const unit = observeNativeUnitContext(readEnvironmentFile(args.envFile, candidateRoot));
+    if (!unit || realpathSync(unit.worktree) !== realpathSync(candidateRoot))
+      throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  }
   if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
   const hostsFile = resolve(args.hosts);
   if (!existsSync(hostsFile) || !lstatSync(hostsFile).isFile())
@@ -2789,7 +2796,7 @@ async function validatePreparedAuthorities(
   if (
     !isAbsolute(state.hostsFile) ||
     !isAbsolute(state.args.envFile) ||
-    state.candidateRoot === trustedRoot ||
+    (state.candidateRoot === trustedRoot && !observeNativeUnitContext(state.originalEnvironment)) ||
     !record.snapshot ||
     !record.candidateWorkspace
   )
