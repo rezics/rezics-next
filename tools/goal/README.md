@@ -3686,6 +3686,13 @@ bun tools/goal/scripts/cp-sync.ts
 bun tools/goal/scripts/cp-sync.ts --rollback
 ```
 
+During a maintainer-authorized code-only window, use `bun tools/goal/scripts/cp-sync.ts --source-only` for
+publication through the same candidate, compare-and-swap, resident handoff and forward rollback. This mode runs no
+commit hooks, dependency installs, checks or timed worker observations. Its result and history mark acceptance as
+deferred; it creates no passed gate or suite baseline. Restart readiness is deployment evidence. Preserve existing
+resident listeners when receiving source, and schedule functional acceptance separately after the window. The same
+option on rollback keeps recovery inside that window. The normal checked route described below is unchanged.
+
 Run it from any checkout; it finds the main checkout by its checked-out `main`. It normally requires `main` inside
 `dev`; a verified fast-snapshot checkpoint permits the exact published `main` when its full tree equals the recorded
 source tree and that recorded source is an ancestor of captured `dev`. It adds a temporary worktree of the current
@@ -3724,7 +3731,8 @@ full sync records the published commit's result as the next baseline, and `--fre
 main lacks get one rerun of their test files; those that pass then are reported as flaky, and any that fail again
 refuse the sync. Each run's step results are in `.temp/goal/cp-sync/<run>/results.json`. Leftover worktree processes are stopped before removal.
 
-Only when the gate passes does cp-sync publish. It first moves the main checkout's index and files with
+The normal checked route publishes when its gate passes; an authorized source-only publication records the deferred
+acceptance instead. Both first move the main checkout's index and files with
 `git read-tree -m -u <old> <new>`, then moves the refs in one `git update-ref --stdin` transaction against their
 captured values: `main` to the sync commit, `stabilize` (when present) to a merge of it that takes main's
 control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
