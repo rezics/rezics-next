@@ -77,12 +77,9 @@ async function createSource() {
     occurrenceIds: [occurrenceIds.at(-1)!],
   };
   const publicationKey = crypto.randomUUID();
-  const publication = await f.native.call(
-    'POST',
-    `/v1/hostedCatalogues/${f.catalogueId}:publish`,
-    publicationBody,
-    { key: publicationKey },
-  );
+  const publication = await f.native.call('POST', `/v1/hostedCatalogues/${f.catalogueId}:publish`, publicationBody, {
+    key: publicationKey,
+  });
   expect(publication.status).toBe(200);
   return {
     target,
@@ -472,8 +469,9 @@ test('retention reclaims due cancelled candidates, preserves pins and keeps publ
     const publicPath = `/v1/hostedCatalogues/${f.catalogueId}/occurrences/${source.occurrenceIds.at(-1)!}?kind=publication`;
     const publicBefore = await f.native.call('GET', publicPath, undefined, { anonymous: true });
     expect(publicBefore.status).toBe(200);
-    const audit = () => f.native.pool.query(
-      `SELECT to_jsonb(seal) AS seal,
+    const audit = () =>
+      f.native.pool.query(
+        `SELECT to_jsonb(seal) AS seal,
          (SELECT jsonb_agg(to_jsonb(target)) FROM content.hosted_publication_staging_target target
           WHERE target.route=seal.route AND target.catalogue_id=seal.catalogue_id
             AND target.stage_id=seal.stage_id) AS observations,
@@ -485,8 +483,8 @@ test('retention reclaims due cancelled candidates, preserves pins and keeps publ
             AND page.stage_id=seal.stage_id) AS build_receipts
        FROM content.hosted_publication_staging_seal seal
        WHERE seal.route=$1 AND seal.catalogue_id=$2 AND seal.stage_id=$3`,
-      [route, f.catalogueId, eligible.locator.stageId],
-    );
+        [route, f.catalogueId, eligible.locator.stageId],
+      );
     const auditBefore = (await audit()).rows;
     expect(auditBefore[0].observations).toHaveLength(1);
 
@@ -514,7 +512,10 @@ test('retention reclaims due cancelled candidates, preserves pins and keeps publ
       kind: 'candidate',
       result: { deletedRows: 100, progress: { terminalStatus: 'cancelled', completed: false } },
     });
-    expect(await advanceHostedPublicationRetention(f.native.pool, passId, cutoff)).toEqual({ ...first, replayed: true });
+    expect(await advanceHostedPublicationRetention(f.native.pool, passId, cutoff)).toEqual({
+      ...first,
+      replayed: true,
+    });
     const results = [first];
     for (let sweep = 0; sweep < 8 && !results.some((result) => result.cleanup?.result.progress.completed); sweep++) {
       results.push(...(await runSweep(crypto.randomUUID(), cutoff)));
@@ -547,14 +548,26 @@ test('retention reclaims due cancelled candidates, preserves pins and keeps publ
       [route, f.catalogueId, [eligible.locator.stageId, pinned.locator.stageId, young.locator.stageId]],
     );
     expect(states.rows).toContainEqual({
-      stage_id: eligible.locator.stageId, status: 'cancelled', terminal_status: 'cancelled',
-      candidate_status: 'reclaimed', generation_id: null, retirement_claimed: null, pending: false, completed: true,
+      stage_id: eligible.locator.stageId,
+      status: 'cancelled',
+      terminal_status: 'cancelled',
+      candidate_status: 'reclaimed',
+      generation_id: null,
+      retirement_claimed: null,
+      pending: false,
+      completed: true,
     });
-    for (const retained of [pinned, young]) expect(states.rows).toContainEqual({
-      stage_id: retained.locator.stageId, status: 'cancelled', terminal_status: null,
-      candidate_status: 'sealed', generation_id: retained.generationId, retirement_claimed: false,
-      pending: true, completed: false,
-    });
+    for (const retained of [pinned, young])
+      expect(states.rows).toContainEqual({
+        stage_id: retained.locator.stageId,
+        status: 'cancelled',
+        terminal_status: null,
+        candidate_status: 'sealed',
+        generation_id: retained.generationId,
+        retirement_claimed: false,
+        pending: true,
+        completed: false,
+      });
     const issue = await f.native.pool.query(
       `SELECT state FROM content.hosted_publication_retention_issue
        WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
@@ -565,9 +578,11 @@ test('retention reclaims due cancelled candidates, preserves pins and keeps publ
     const publicAfter = await f.native.call('GET', publicPath, undefined, { anonymous: true });
     expect(publicAfter.status).toBe(200);
     expect(publicAfter.value.document.sha256).toBe(publicBefore.value.document.sha256);
-    expect(await f.native.call(
-      'POST', `/v1/hostedCatalogues/${f.catalogueId}:publish`, source.publicationBody, { key: source.publicationKey },
-    )).toEqual(source.publication);
+    expect(
+      await f.native.call('POST', `/v1/hostedCatalogues/${f.catalogueId}:publish`, source.publicationBody, {
+        key: source.publicationKey,
+      }),
+    ).toEqual(source.publication);
   } finally {
     await f.close();
     f = sharedFixture;
