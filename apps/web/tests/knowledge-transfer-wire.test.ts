@@ -20,7 +20,7 @@ const ownSource: KnowledgeTransferSource = {
   notebookId: id(10),
 };
 const snapshot = fromPlainText('Exact TeX: \\frac{α}{β}\n  code();\nUnicode: 雪', 'blocks');
-const selection = { ...publicSource, sha256: 'a'.repeat(64), publicationId: id(3) };
+const selection = { ...publicSource, sha256: 'a'.repeat(64), sourceSha256: 'b'.repeat(64), publicationId: id(3) };
 function envelope(source = publicSource) {
   return {
     version: 'knowledge-document-export-v1',
@@ -30,7 +30,7 @@ function envelope(source = publicSource) {
       revisionId: source.revisionId,
       representation: source.representation,
       sha256: 'a'.repeat(64),
-      ...(source.representation === 'public' ? { publicationId: id(3) } : {}),
+      ...(source.representation === 'public' ? { publicationId: id(3), sourceSha256: 'b'.repeat(64) } : {}),
     },
     title: 'Exact source',
     language: 'en',
@@ -92,6 +92,9 @@ test('HTTP boundary accepts only the exact closed source union and native envelo
   expect(admitKnowledgeExport(envelope(), publicSource)).toBe(true);
   for (const input of [
     { ...envelope(), version: 'v2' },
+    { ...envelope(), selection: { ...selection, sourceSha256: undefined } },
+    { ...envelope(), selection: { ...selection, publicationId: undefined } },
+    { ...envelope(), provenance: { ...selection, sourceSha256: undefined } },
     { ...envelope(), representation: 'authoring' },
     { ...envelope(), selection: { ...selection, revisionId: id(8) } },
     { ...envelope(), references: Array(65).fill(envelope().references[0]) },

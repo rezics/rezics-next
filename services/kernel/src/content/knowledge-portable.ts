@@ -49,10 +49,14 @@ export const KnowledgeReferenceSchema = t.Object(
   closed,
 );
 export const KnowledgeReferencesSchema = t.Array(KnowledgeReferenceSchema, { maxItems: 64 });
-export const KnowledgeProvenanceSchema = t.Object(
-  { documentId: uuid, revisionId: uuid, representation, sha256: digest, publicationId: t.Optional(uuid) },
-  closed,
-);
+const selectionIdentity = { documentId: uuid, revisionId: uuid, sha256: digest };
+export const KnowledgeProvenanceSchema = t.Union([
+  t.Object({ ...selectionIdentity, representation: t.Literal('authoring') }, closed),
+  t.Object(
+    { ...selectionIdentity, representation: t.Literal('public'), publicationId: uuid, sourceSha256: digest },
+    closed,
+  ),
+]);
 export const KnowledgeExportSchema = t.Object(
   {
     version: t.Literal('knowledge-document-export-v1'),
@@ -84,6 +88,7 @@ export type KnowledgeExport = Readonly<{
 }>;
 
 const referenceValidator = Compile(KnowledgeReferencesSchema);
+const provenanceValidator = Compile(KnowledgeProvenanceSchema);
 const envelopeValidator = Compile(KnowledgeExportSchema);
 const referencePayloadValidator = Compile(t.Object({ referenceId: id }, closed));
 
@@ -94,6 +99,11 @@ export function knowledgeDigest(bytes: string | Uint8Array): string {
 /** The same RFC 8785 encoder used by Document, applied to the exchange wrapper. */
 export function canonicalKnowledgeJson(value: unknown): string {
   return canonicalize(value)!;
+}
+
+/** Unsupported stored metadata is unavailable; it never gains guessed source identity or extra private fields. */
+export function knowledgeProvenanceOrNull(value: unknown): KnowledgeProvenance | null {
+  return provenanceValidator.Check(value) ? (value as KnowledgeProvenance) : null;
 }
 
 export function visitKnowledgeNodes(node: DocumentNode, visit: (node: DocumentNode) => void): void {
@@ -134,6 +144,7 @@ export function validateKnowledgeReferences(
 
 /** Digest covers the actual wrapper except its own digest field; snapshot gets its independent codec check. */
 export function makeKnowledgeExport(input: Omit<KnowledgeExport, 'version' | 'sha256'>): KnowledgeExport {
+  validateExportSelection(input);
   const payload = { ...input, version: 'knowledge-document-export-v1' as const };
   return { ...payload, sha256: knowledgeDigest(canonicalKnowledgeJson(payload)) };
 }
@@ -142,6 +153,7 @@ export function makeKnowledgeExport(input: Omit<KnowledgeExport, 'version' | 'sh
 export function parseKnowledgeExport(value: unknown): KnowledgeExport {
   if (!envelopeValidator.Check(value)) throw new InvalidDocumentError('Invalid knowledge export envelope');
   const envelope = value as KnowledgeExport;
+  validateExportSelection(envelope);
   const snapshot = parseDocument(envelope.snapshot);
   validateKnowledgeReferences(snapshot, envelope.references);
   const { sha256, ...payload } = envelope;
@@ -150,6 +162,23 @@ export function parseKnowledgeExport(value: unknown): KnowledgeExport {
   if (knowledgeDigest(serializeDocument(snapshot)) !== envelope.selection.sha256)
     throw new InvalidDocumentError('Knowledge export representation digest mismatch');
   return envelope;
+}
+
+/** Representation declarations describe one exact selected artifact, not permission to upgrade a private source. */
+function validateExportSelection(value: Pick<KnowledgeExport, 'representation' | 'selection' | 'provenance'>): void {
+  if (value.selection.representation !== value.representation)
+    throw new InvalidDocumentError('Knowledge export selection representation mismatch');
+  const validLocator = (selection: KnowledgeProvenance) =>
+    selection.representation === 'public'
+      ? selection.publicationId !== undefined && selection.sourceSha256 !== undefined
+      : !('publicationId' in selection) && !('sourceSha256' in selection);
+  if (!validLocator(value.selection)) throw new InvalidDocumentError('Knowledge export selection publication mismatch');
+  if (
+    value.provenance !== null &&
+    (!validLocator(value.provenance) ||
+      (value.representation === 'public' && value.provenance.representation !== 'public'))
+  )
+    throw new InvalidDocumentError('Knowledge export provenance representation mismatch');
 }
 
 /** Only declared identities and fragment links are rewritten. Opaque payloads and external locators survive. */

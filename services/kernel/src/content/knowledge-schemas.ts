@@ -117,6 +117,7 @@ export function KnowledgePublicDocumentSchema() {
         document: t.Object(
           {
             ...byteDocument(),
+            sourceSha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
             publicationId: UUID,
             subjectId: UUID,
             publishedAt: t.String({ format: 'date-time' }),

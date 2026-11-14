@@ -24,6 +24,7 @@ const { createRoot } = await import('react-dom/client');
 const { KnowledgeDocumentCaller, openKnowledgeDocumentVisit } = await import('../src/knowledge/route');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
+const { readerSessionSource } = await import('../src/reader/lifetime');
 
 afterAll(async () => {
   notifyManager.setScheduler((callback) => setTimeout(callback, 0));
@@ -96,9 +97,11 @@ test('replacement retires the old public body and ignores a late former result',
     expect(mounted.host.textContent).toContain(knowledgePublicationText);
     const nextRequest = { ...knowledgeLiveRequest, documentId: knowledgeOtherRevisionId };
     await mounted.show(first, nextRequest);
-    expect(mounted.host.textContent).toContain(m.knowledge_preparing());
+    expect(mounted.host.textContent).toContain(m.knowledge_unavailable());
     expect(mounted.host.textContent).not.toContain(knowledgePublicationText);
     expect(mounted.host.querySelector('[data-slot="document-body"]')).toBeNull();
+    await mounted.click(m.knowledge_retry());
+    expect(mounted.retries).toEqual([nextRequest]);
     first.page = {
       state: 'ready',
       document: { ...knowledgeReadyDocument, title: 'Late former title', body: knowledgeReadyDocument.body },
@@ -106,7 +109,7 @@ test('replacement retires the old public body and ignores a late former result',
     await mounted.show(first, nextRequest);
     expect(mounted.host.textContent).not.toContain('Late former title');
     expect(mounted.host.textContent).not.toContain(knowledgePublicationText);
-    expect(mounted.host.textContent).toContain(m.knowledge_preparing());
+    expect(mounted.host.textContent).toContain(m.knowledge_unavailable());
   } finally {
     await mounted.dispose();
   }
@@ -126,7 +129,7 @@ test('retry keeps its exact operands and a failed reading leaves no former publi
     await mounted.click(m.knowledge_retry());
     expect(mounted.retries).toEqual([knowledgeExactRequest]);
     await mounted.show(unavailable, knowledgeExactRequest);
-    expect(mounted.host.textContent).toContain(m.knowledge_preparing());
+    expect(mounted.host.textContent).toContain(m.knowledge_unavailable());
     expect(mounted.host.textContent).not.toContain(knowledgePublicationText);
     unavailable.page = knowledgeReady;
     await mounted.show(unavailable, knowledgeExactRequest);
@@ -137,9 +140,9 @@ test('retry keeps its exact operands and a failed reading leaves no former publi
   }
 });
 
-test('credential lifetime changes fence the current public reading', async () => {
-  const ready = visitOf(knowledgeLiveRequest, knowledgeReady, 0);
-  const mounted = await mount(ready, knowledgeLiveRequest);
+test('credential replacement fences former content and permits fresh exact admission without reviving old data', async () => {
+  const ready = visitOf(knowledgeExactRequest, knowledgeReady, 0);
+  const mounted = await mount(ready, knowledgeExactRequest);
   try {
     expect(mounted.host.textContent).toContain(knowledgePublicationText);
     await act(async () => {
@@ -149,11 +152,16 @@ test('credential lifetime changes fence the current public reading', async () =>
         csrfToken: 'rotated',
       });
     });
-    expect(mounted.host.textContent).toContain(m.knowledge_preparing());
+    expect(mounted.host.textContent).toContain(m.knowledge_unavailable());
     expect(mounted.host.textContent).not.toContain(knowledgePublicationText);
     ready.page = knowledgeReady;
-    await mounted.show(ready, knowledgeLiveRequest);
+    await mounted.show(ready, knowledgeExactRequest);
     expect(mounted.host.textContent).not.toContain(knowledgePublicationText);
+    await mounted.click(m.knowledge_retry());
+    expect(mounted.retries).toEqual([knowledgeExactRequest]);
+    const fresh = visitOf(knowledgeExactRequest, knowledgeReady, readerSessionSource(mounted.client).snapshot());
+    await mounted.show(fresh, knowledgeExactRequest);
+    expect(mounted.host.textContent).toContain(knowledgePublicationText);
   } finally {
     await mounted.dispose();
   }
@@ -218,4 +226,28 @@ test('copy feedback stays on the current citation and a later address drops it',
   expect(host.textContent).not.toContain(m.knowledge_citation_copied());
   await act(async () => root.unmount());
   host.remove();
+});
+
+test('a recovery callback captured before session replacement cannot drive the new reader', async () => {
+  const visit = visitOf(knowledgeExactRequest, { state: 'unavailable', status: 503 });
+  const mounted = await mount(visit, knowledgeExactRequest);
+  try {
+    const button = mounted.host.querySelector<HTMLButtonElement>('button')!;
+    const key = Object.getOwnPropertyNames(button).find((key) => key.startsWith('__reactProps$'))!;
+    const former = (button as unknown as Record<string, { onClick: () => void }>)[key]!.onClick;
+    await act(async () =>
+      mounted.client.setQueryData(['session'], {
+        state: 'signed-in',
+        subject: knowledgeOtherRevisionId,
+        csrfToken: 'new-credential',
+      }),
+    );
+    await act(async () => former());
+    expect(mounted.retries).toEqual([]);
+    expect(mounted.host.textContent).toContain(m.knowledge_unavailable());
+    await mounted.click(m.knowledge_retry());
+    expect(mounted.retries).toEqual([knowledgeExactRequest]);
+  } finally {
+    await mounted.dispose();
+  }
 });

@@ -83,8 +83,13 @@ function displayedPage(
   sessionRevision: number,
   loading: boolean,
 ): KnowledgeReadState {
-  if (loading || retiredVisits.has(visit) || visit.sessionRevision !== sessionRevision) return { state: 'preparing' };
-  if (!sameKnowledgeRequest(visit.request, request)) return { state: 'preparing' };
+  if (loading) return { state: 'preparing' };
+  if (
+    retiredVisits.has(visit) ||
+    visit.sessionRevision !== sessionRevision ||
+    !sameKnowledgeRequest(visit.request, request)
+  )
+    return { state: 'unavailable', status: 409 };
   return visit.page;
 }
 
@@ -171,7 +176,7 @@ export function KnowledgeDocumentCaller({
       current?.visit !== visit ||
       !sameKnowledgeRequest(current.request, request) ||
       loading ||
-      !sameKnowledgeRequest(visit.request, request)
+      source.snapshot() !== sessionRevision
     )
       return;
     retireVisit(visit);

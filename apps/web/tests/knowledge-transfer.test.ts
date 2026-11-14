@@ -222,3 +222,29 @@ test('source withdrawal retires public actions and late copy acknowledgement can
   expect(visit.snapshot().retired).toBe(true);
   expect(lost).toBe(1);
 });
+
+test.each(['denied', 'not-found'] as const)(
+  'copy %s can describe the private destination and does not revoke the admitted public source',
+  async (state) => {
+    const f = fixture(async () => ({ state }));
+    let lost = 0;
+    const visit = new KnowledgeTransferVisit(source, f.operations, undefined, null, () => {
+      lost++;
+    });
+    const stop = visit.connect();
+    try {
+      await visit.openCopy();
+      visit.chooseNotebook(notebook);
+      await flush();
+      visit.review();
+      visit.confirm();
+      await flush();
+      expect(visit.snapshot().retired).toBe(true);
+      expect(lost).toBe(0);
+    } finally {
+      stop();
+      visit.retire();
+      f.visit.retire();
+    }
+  },
+);
