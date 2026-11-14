@@ -1,6 +1,7 @@
 import { parseDiscoveryFilter } from '@rezics/filter';
 import { deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from './access-port.ts';
 import { routeOf } from '../route/route.ts';
@@ -120,9 +121,20 @@ async function readableSubject(deps: ReviewContextDependencies, id: string, cont
     { ...identity, eligibility: subjectReadEligibility(identity) },
     { pool: deps.pool, deadline: context.deadline },
   );
-  return withConnection(deps.pool, async (client) => {
+  return withBoundedReadConnection(deps.pool, context.deadline, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     return !!(await subjectExists.run(bounded, { route, subject_id: id })) && (await check(bounded));
+  }, {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      try {
+        throwAccessUnavailable(error, context.deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainSettledQueryError: () => true,
   });
 }
 
