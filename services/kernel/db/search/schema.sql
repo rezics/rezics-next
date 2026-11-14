@@ -2902,9 +2902,6 @@ DECLARE
   v_node uuid;
   v_existing text;
 BEGIN
-  IF p_work_id IS NULL OR p_work_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    RAISE EXCEPTION 'Invalid release relevance membership work id';
-  END IF;
   IF v_root IS NULL THEN
     v_root := gen_random_uuid();
     INSERT INTO search.release_relevance_membership_node (execution_id, id, depth, children, work_id)
@@ -3000,7 +2997,7 @@ DECLARE
   v_depth integer;
   v_work text;
 BEGIN
-  IF v_node IS NULL OR p_work_id IS NULL OR p_work_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+  IF v_node IS NULL THEN
     RETURN false;
   END IF;
   v_key := encode(uuid_send(p_work_id::uuid), 'hex');
@@ -3046,9 +3043,6 @@ DECLARE
   v_works integer := 0;
   v_room integer;
 BEGIN
-  IF p_position_limit < 1 OR p_work_limit < 1 THEN
-    RAISE EXCEPTION 'Invalid release relevance membership build limit';
-  END IF;
   SELECT e.id INTO v_execution_id
   FROM search.release_relevance_execution e
   WHERE e.id = p_execution_id AND e.expires_at > p_now
