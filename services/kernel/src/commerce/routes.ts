@@ -2,19 +2,12 @@ import { memoizedValue } from '../memoized.ts';
 import { BenefitAcquisitionError } from './acquisition.ts';
 import { listSubjectOffers } from './subject-offers.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
-import {
-  ContentEditionUnavailableError,
-  contentEditionTermsView,
-  decodeCapturedContentEdition,
-  type SaleDependencies,
-} from './benefit.ts';
+import { ContentEditionUnavailableError, contentEditionTermsView, type SaleDependencies } from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { readPartition } from '../partition/partition.ts';
-import { withConnection } from '../database/pool.ts';
 import type { createApp } from '../http/app.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { customMethod } from '../http/custom-method.ts';
@@ -22,8 +15,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { checkout } from './checkout.ts';
 import { reconcileOrder } from './order-reconcile.ts';
@@ -32,9 +24,9 @@ import { listCreatorSales } from './creator-sales.ts';
 import { createCommerceCommands, OfferRevisionConflictError, OfferUnavailableError } from './commands.ts';
 import { StripeUnavailableError, type Entitlement, type Offer, type Order, type StripePort } from './model.ts';
 import * as store from './store.ts';
-import entitlementPage from './store-entitlement-list.sql';
 import { stripeWebhookRoutes } from './webhook-routes.ts';
 import type { CommerceWork } from './work-contract.ts';
+import { listBuyerEntitlements, listBuyerOrders, readBuyerEntitlement, readBuyerOrder } from './buyer-reads.ts';
 
 export type CommerceDependencies = {
   stripe: StripePort;
@@ -907,61 +899,40 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           409: problemSchema('stale_cursor'),
           503: unavailable(),
         },
-        detail: detail('order.list', 'order:read', 'gate:purchases'),
+        detail: {
+          ...detail('order.list', 'order:read', 'gate:purchases'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': ['access.account'],
+        },
       },
-      async ({ query, actor, admission, job }) => {
+      async ({ query, actor, authorize, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const account = requireAccount(actor);
         if (!scoped(actor, 'order:read')) throw new ProblemError('forbidden');
-        const route = routeOf(account.accountId)!;
-        // No account selector: both the SQL equality and cursor scope use the verified viewer.
-        // Page size can change between requests, as on the entitlement list.
-        const binding = { operation: 'order.list', parameters: { accountId: account.accountId } };
-        let after: string | null = null,
-          epoch: number | null = null;
-        if (query.cursor !== undefined) {
-          const cursor = decodeCursor(tokens, binding, query.cursor);
-          if (
-            !cursor.ok ||
-            cursor.after.length !== 1 ||
-            typeof cursor.after[0] !== 'string' ||
-            routeOf(cursor.after[0]) !== route
-          )
-            throw new ProblemError('invalid_cursor');
-          after = cursor.after[0];
-          epoch = cursor.epoch;
-        }
-        const size = query.limit ?? 20;
-        return admission.run('normal', job, () =>
-          withConnection(pool, async (client) => {
-            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            try {
-              const partition = await readPartition(client, partitionOf(route));
-              if (epoch !== null && epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-              const rows = await store.listBuyerOrders(client, route, account.accountId, {
-                after,
-                limit: size + 1,
-              });
-              await client.query('COMMIT');
-              const orders = rows.slice(0, size);
-              const last = orders.at(-1);
-              return {
-                orders: orders.map((order) => ({
-                  ...order,
-                  moneyUnit: order.moneyUnit ?? null,
-                  taxBehavior: order.taxBehavior ?? null,
-                  contentEdition: contentEditionTermsView(order.contentEdition),
-                })),
-                next:
-                  rows.length > size && last && partition
-                    ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })
-                    : null,
-              };
-            } catch (error) {
-              await client.query('ROLLBACK');
-              throw error;
-            }
-          }),
-        );
+        const access = deps.access();
+        const check = await authorize({ route: routeOf(account.accountId)!, id: account.accountId });
+        return admission.run('normal', job, async () => {
+          const page = await listBuyerOrders({
+            pool,
+            tokens,
+            routeKey: deps.routeKey,
+            access,
+            actor: account,
+            check,
+            deadline: job.deadline,
+            seen: session.components,
+            ...query,
+          });
+          return {
+            next: page.next,
+            orders: page.orders.map((order) => ({
+              ...order,
+              moneyUnit: order.moneyUnit ?? null,
+              taxBehavior: order.taxBehavior ?? null,
+              contentEdition: contentEditionTermsView(order.contentEdition),
+            })),
+          };
+        });
       },
     )
     .get(
@@ -973,39 +944,50 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           200: orderReadResponse(),
           400: problemSchema('invalid_request'),
           401: unauthorized(),
+          403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           503: unavailable(),
         },
-        detail: detail('order.get', 'order:read', 'gate:purchases'),
+        detail: {
+          ...detail('order.get', 'order:read', 'gate:purchases'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': ['access.account'],
+        },
       },
-      async ({ params, query, actor, admission, job }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        const account = actor.kind === 'account' ? actor : undefined;
         const route = routeOf(params.orderId);
-        if (
-          actor.kind !== 'account' ||
-          !scoped(actor, 'order:read') ||
-          route === null ||
-          route !== routeOf(actor.accountId)
-        )
+        if (!account || !scoped(actor, 'order:read') || route === null || route !== routeOf(account.accountId))
           throw new ProblemError('not_found');
         const languages = languagePreferences(query.languages);
+        const access = deps.access();
+        const check = await authorize({ route: routeOf(account.accountId)!, id: account.accountId });
         return admission.run('normal', job, async () => {
-          const receipt = await store.readBuyerOrder(pool, route, params.orderId);
-          if (!receipt || receipt.order.buyerAccountId !== actor.accountId) throw new ProblemError('not_found');
-          const { order, recordedCharge, recordedPresentment } = receipt;
-          const summaryDependencies = {
+          const receipt = await readBuyerOrder({
             pool,
             routeKey: deps.routeKey,
-            access: deps.access(),
-            actor,
+            access,
+            actor: account,
+            check,
             deadline: job.deadline,
-          };
-          const summaries =
-            languages === undefined
-              ? await readSubjectSummaries(summaryDependencies, [order.targetSubjectId])
-              : await readSubjectSummaries(summaryDependencies, [order.targetSubjectId], { languages });
+            seen: session.components,
+            id: params.orderId,
+            ...(languages === undefined ? {} : { languages }),
+          });
+          const { order, recordedCharge, recordedPresentment, entitlementId, subject } = receipt;
           return {
             order: {
-              ...(await orderView(pool, order)),
+              id: order.id,
+              offerId: order.offerId,
+              settlement: order.settlement,
+              checkoutUrl: order.checkoutUrl,
+              checkoutExpiresAt: order.checkoutExpiresAt,
+              entitlementId,
+              moneyUnit: order.moneyUnit ?? null,
+              taxBehavior: order.taxBehavior ?? null,
+              contentEdition: contentEditionTermsView(order.contentEdition),
+              createdAt: order.createdAt,
               title: order.title,
               currency: order.currency,
               unitAmountMinor: order.unitAmountMinor,
@@ -1014,7 +996,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               recordedCharge,
               recordedPresentment,
               targetSubjectId: order.targetSubjectId,
-              subject: summaries.get(order.targetSubjectId) ?? null,
+              subject,
             },
           };
         });
@@ -1082,72 +1064,34 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           409: problemSchema('stale_cursor'),
           503: unavailable(),
         },
-        detail: detail('entitlement.list', 'entitlement:list', 'gate:purchases'),
+        detail: {
+          ...detail('entitlement.list', 'entitlement:list', 'gate:purchases'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': ['access.account'],
+        },
       },
-      async ({ query, actor, admission, job }) => {
+      async ({ query, actor, authorize, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const account = requireAccount(actor);
         if (!scoped(actor, 'entitlement:list')) throw new ProblemError('forbidden');
-        const route = routeOf(account.accountId)!;
-        const binding = { operation: 'entitlement.list', parameters: { accountId: account.accountId } };
-        let after: string | null = null,
-          epoch: number | null = null;
-        if (query.cursor !== undefined) {
-          const cursor = decodeCursor(tokens, binding, query.cursor);
-          if (
-            !cursor.ok ||
-            cursor.after.length !== 1 ||
-            typeof cursor.after[0] !== 'string' ||
-            routeOf(cursor.after[0]) !== route
-          )
-            throw new ProblemError('invalid_cursor');
-          after = cursor.after[0];
-          epoch = cursor.epoch;
-        }
-        const size = query.limit ?? 20;
+        const access = deps.access();
+        const check = await authorize({ route: routeOf(account.accountId)!, id: account.accountId });
         return admission.run('normal', job, async () => {
-          const page = await withConnection(pool, async (client) => {
-            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            try {
-              const partition = await readPartition(client, partitionOf(route));
-              if (epoch !== null && epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-              const rows = await entitlementPage.run(
-                { query: client.query.bind(client) },
-                {
-                  route,
-                  account_id: account.accountId,
-                  after: after ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
-                  limit: size + 1,
-                },
-              );
-              const entitlements = rows.map((row) => ({
-                ...row,
-                contentEdition: decodeCapturedContentEdition(row.contentEdition),
-                grantedAt: new Date(row.grantedAt).toISOString(),
-                revokedAt: row.revokedAt === null ? null : new Date(row.revokedAt).toISOString(),
-              }));
-              await client.query('COMMIT');
-              const shown = entitlements.slice(0, size);
-              const last = shown.at(-1);
-              return {
-                entitlements: shown,
-                next:
-                  entitlements.length > size && last && partition
-                    ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })
-                    : null,
-              };
-            } catch (error) {
-              await client.query('ROLLBACK');
-              throw error;
-            }
+          const page = await listBuyerEntitlements({
+            pool,
+            tokens,
+            routeKey: deps.routeKey,
+            access,
+            actor: account,
+            check,
+            deadline: job.deadline,
+            seen: session.components,
+            ...query,
           });
-          const summaries = await readSubjectSummaries(
-            { pool, routeKey: deps.routeKey, access: deps.access(), actor, deadline: job.deadline },
-            page.entitlements.map((row) => row.targetSubjectId),
-          );
           return {
-            ...page,
+            next: page.next,
             entitlements: page.entitlements.map((row) =>
-              entitlementView(row, summaries.get(row.targetSubjectId) ?? null),
+              entitlementView(row, page.summaries.get(row.targetSubjectId) ?? null),
             ),
           };
         });
@@ -1160,34 +1104,38 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         response: {
           200: entitlementResponse(),
           401: unauthorized(),
+          403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           503: unavailable(),
         },
-        detail: detail('entitlement.get', 'entitlement:read', 'gate:purchases'),
+        detail: {
+          ...detail('entitlement.get', 'entitlement:read', 'gate:purchases'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': ['access.account'],
+        },
       },
-      async ({ params, actor, admission, job }) => {
+      async ({ params, actor, authorize, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        const account = actor.kind === 'account' ? actor : undefined;
         const route = routeOf(params.entitlementId);
-        if (
-          actor.kind !== 'account' ||
-          !scoped(actor, 'entitlement:read') ||
-          route === null ||
-          route !== routeOf(actor.accountId)
-        )
+        if (!account || !scoped(actor, 'entitlement:read') || route === null || route !== routeOf(account.accountId))
           throw new ProblemError('not_found');
-        const entitlement = await admission.run('normal', job, () =>
-          store.readEntitlement(pool, route, params.entitlementId),
+        const access = deps.access();
+        const check = await authorize({ route: routeOf(account.accountId)!, id: account.accountId });
+        const result = await admission.run('normal', job, () =>
+          readBuyerEntitlement({
+            pool,
+            routeKey: deps.routeKey,
+            access,
+            actor: account,
+            check,
+            deadline: job.deadline,
+            seen: session.components,
+            id: params.entitlementId,
+          }),
         );
-        if (!entitlement || entitlement.accountId !== actor.accountId) throw new ProblemError('not_found');
         return {
-          entitlement: entitlementView(
-            entitlement,
-            (
-              await readSubjectSummaries(
-                { pool, routeKey: deps.routeKey, access: deps.access(), actor, deadline: job.deadline },
-                [entitlement.targetSubjectId],
-              )
-            ).get(entitlement.targetSubjectId) ?? null,
-          ),
+          entitlement: entitlementView(result.entitlement, result.summary),
         };
       },
     );

@@ -21,6 +21,8 @@ import offerPrice from './store-offer-price.sql';
 import orderInsert from './store-order-insert.sql';
 import orderRead from './store-order-read.sql';
 import orderAccountPage from './order-account-page.sql';
+import buyerOrdersCurrent from './store-order-buyer-current.sql';
+import buyerOrderRead from './store-order-buyer-read.sql';
 import orderSessionRead from './store-order-session-read.sql';
 import orderSession from './store-order-session.sql';
 import orderSettlement from './store-order-settlement.sql';
@@ -31,6 +33,8 @@ import entitlementRead from './store-entitlement-read.sql';
 import entitlementOrder from './store-entitlement-order.sql';
 import entitlementLock from './store-entitlement-lock.sql';
 import entitlementList from './store-entitlement-list.sql';
+import buyerEntitlementsCurrent from './store-entitlement-buyer-current.sql';
+import buyerEntitlementRead from './store-entitlement-buyer-read.sql';
 import entitlementInsert from './store-entitlement-insert.sql';
 import entitlementChange from './store-entitlement-change.sql';
 import transactionsRead from './store-transactions-read.sql';
@@ -214,6 +218,30 @@ export async function listBuyerOrders(
     checkoutExpiresAt: row.checkoutExpiresAt === null ? null : iso(row.checkoutExpiresAt),
   }));
 }
+/** Refreshes only the selected buyer-owned rows after a foreign summary read. */
+export async function readBuyerOrdersCurrent(
+  client: Client,
+  route: number,
+  buyerAccountId: string,
+  ids: readonly string[],
+) {
+  if (ids.length === 0) return [];
+  const rows = await buyerOrdersCurrent.run(queryClient(client), {
+    route,
+    buyer_account_id: buyerAccountId,
+    ids: [...ids],
+  });
+  return rows.map((row) => ({
+    ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
+    taxBehavior: row.taxBehavior as 'exclusive' | null,
+    unitAmountMinor: Number(row.unitAmountMinor),
+    amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
+    createdAt: iso(row.createdAt),
+    checkoutExpiresAt: row.checkoutExpiresAt === null ? null : iso(row.checkoutExpiresAt),
+  }));
+}
 export async function readOrder(client: Client, route: number, id: string): Promise<Order | null> {
   const row = await orderRead.run(queryClient(client), { route, id, receipt: false });
   if (!row) return null;
@@ -228,6 +256,23 @@ export async function readBuyerOrder(client: Client, route: number, id: string) 
   const { chargeEvidence, presentmentEvidence, ...captured } = row;
   const order = asOrder(captured);
   return { order, ...orderReceiptMoney(order, chargeEvidence, presentmentEvidence) };
+}
+/** A private point read includes the buyer predicate in SQL and its exact current entitlement locator. */
+export async function readBuyerOrderForAccount(client: Client, route: number, id: string, buyerAccountId: string) {
+  const row = await buyerOrderRead.run(queryClient(client), {
+    route,
+    id,
+    buyer_account_id: buyerAccountId,
+    receipt: true,
+  });
+  if (!row) return null;
+  const { chargeEvidence, presentmentEvidence, entitlementId, ...captured } = row;
+  const order = asOrder(captured);
+  return {
+    order,
+    entitlementId,
+    ...orderReceiptMoney(order, chargeEvidence, presentmentEvidence),
+  };
 }
 /** Caller retains this transaction and lock through completion lookup, claim or apply. */
 export async function lockOrder(client: Client, route: number, id: string): Promise<Order | null> {
@@ -292,6 +337,16 @@ export async function readEntitlement(client: Client, route: number, id: string)
   const row = await entitlementRead.run(queryClient(client), { route, id });
   return row ? asEntitlement(row) : null;
 }
+/** A private point read includes the buyer predicate in SQL. */
+export async function readBuyerEntitlementForAccount(
+  client: Client,
+  route: number,
+  id: string,
+  accountId: string,
+): Promise<Entitlement | null> {
+  const row = await buyerEntitlementRead.run(queryClient(client), { route, id, account_id: accountId });
+  return row ? asEntitlement(row) : null;
+}
 export async function readOrderEntitlement(
   client: Client,
   route: number,
@@ -313,6 +368,32 @@ export async function listEntitlements(
     after: page.after ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
     limit: Math.min(100, page.limit),
   });
+  return rows.map(asEntitlement);
+}
+/** One bounded buyer-local entitlement keyset including the list reader's lookahead row. */
+export async function listBuyerEntitlements(
+  client: Client,
+  route: number,
+  accountId: string,
+  page: { after: string | null; limit: number },
+): Promise<Entitlement[]> {
+  const rows = await entitlementList.run(queryClient(client), {
+    route,
+    account_id: accountId,
+    after: page.after ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    limit: page.limit,
+  });
+  return rows.map(asEntitlement);
+}
+/** Refreshes selected buyer-owned entitlement status after foreign summary reads. */
+export async function readBuyerEntitlementsCurrent(
+  client: Client,
+  route: number,
+  accountId: string,
+  ids: readonly string[],
+): Promise<Entitlement[]> {
+  if (ids.length === 0) return [];
+  const rows = await buyerEntitlementsCurrent.run(queryClient(client), { route, account_id: accountId, ids: [...ids] });
   return rows.map(asEntitlement);
 }
 function asTransaction(row: Awaited<ReturnType<typeof transactionsRead.run>>[number]): StripeTransaction {
