@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
-import type { AccessClient } from '../../src/request/access.ts';
+import type { AccessClient, AccountActor } from '../../src/request/access.ts';
 import * as reads from '../../src/content/reads.ts';
 import readChain from '../../src/content/read-chain.sql';
 import { createAppeal, resolveAppeal } from '../../src/content/appeals.ts';
@@ -25,6 +25,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
+import type { ContentCredential } from './support/system.ts';
 
 setDefaultTimeout(360_000);
 
@@ -52,6 +53,79 @@ const commandContext = (idempotencyKey = crypto.randomUUID()) => ({
   deadline: Date.now() + 120_000,
   requestId: crypto.randomUUID(),
 });
+
+async function nativeRequest<T, Context extends { deadline: number }>(
+  credential: ContentCredential,
+  pool: Pool,
+  context: Context,
+  operation: (actor: AccountActor, context: Context) => Promise<T>,
+): Promise<T> {
+  const actor = await f.native.system.access.authenticate(credential.bearer, { pool, deadline: context.deadline });
+  return operation(actor, context);
+}
+
+async function nativeReadContext(credential: ContentCredential, pool: Pool) {
+  const context = { deadline: Date.now() + 120_000 };
+  return nativeRequest(credential, pool, context, async (actor, request) => ({ actor, deadline: request.deadline }));
+}
+
+function startActivation(
+  deps: HostedPublicationActivationDependencies,
+  credential: ContentCredential,
+  catalogueId: string,
+  stageId: string,
+  context = commandContext(),
+) {
+  return nativeRequest(credential, deps.pool, context, (actor, request) =>
+    startHostedPublicationActivation(deps, actor, catalogueId, stageId, request),
+  );
+}
+
+function advanceActivation(
+  deps: HostedPublicationActivationDependencies,
+  credential: ContentCredential,
+  catalogueId: string,
+  stageId: string,
+  context = commandContext(),
+) {
+  return nativeRequest(credential, deps.pool, context, (actor, request) =>
+    advanceHostedPublicationActivationAuthority(deps, actor, catalogueId, stageId, request),
+  );
+}
+
+function activateCandidate(
+  deps: HostedPublicationActivationDependencies,
+  credential: ContentCredential,
+  catalogueId: string,
+  stageId: string,
+  context = commandContext(),
+) {
+  return nativeRequest(credential, deps.pool, context, (actor, request) =>
+    activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, request),
+  );
+}
+
+function issueDisclosure(
+  deps: Parameters<typeof issueRevisionDisclosure>[0],
+  credential: ContentCredential,
+  input: Parameters<typeof issueRevisionDisclosure>[2],
+  context = commandContext(),
+) {
+  return nativeRequest(credential, deps.pool, context, (actor, request) =>
+    issueRevisionDisclosure(deps, actor, input, request),
+  );
+}
+
+function revokeDisclosure(
+  deps: Parameters<typeof revokeRevisionDisclosure>[0],
+  credential: ContentCredential,
+  input: Parameters<typeof revokeRevisionDisclosure>[2],
+  context = commandContext(),
+) {
+  return nativeRequest(credential, deps.pool, context, (actor, request) =>
+    revokeRevisionDisclosure(deps, actor, input, request),
+  );
+}
 
 const activationProgressEvent = 'com.rezics.content.hosted-catalogue.activation.changed.v1';
 const activationEvent = 'com.rezics.content.hosted-catalogue.publication.activated.v1';
@@ -184,11 +258,14 @@ async function activeRevisionRestrictionCount(target: HostedChapterTarget): Prom
 }
 
 async function restrictRevision(target: HostedChapterTarget, mode: 'public' | 'hard', context = commandContext()) {
-  return restrictPostRevision(
-    dependencies(f.native.pool),
-    f.native.system.actors.moderator.actor,
-    { postId: target.postId, revisionId: target.revisionId, mode, reason: `Hosted activation ${mode} restriction` },
-    context,
+  const deps = dependencies(f.native.pool);
+  return nativeRequest(f.native.system.actors.moderator, deps.pool, context, (actor, request) =>
+    restrictPostRevision(
+      deps,
+      actor,
+      { postId: target.postId, revisionId: target.revisionId, mode, reason: `Hosted activation ${mode} restriction` },
+      request,
+    ),
   );
 }
 
@@ -202,19 +279,20 @@ async function reverseLatestRevisionRestriction(target: HostedChapterTarget) {
     )
   ).rows[0];
   if (!decision) throw new Error(`Post ${target.postId} has no exact restriction decision`);
-  const appeal = await createAppeal(
-    dependencies(f.native.pool),
-    f.native.system.actors.author.actor,
-    decision.decision_id,
-    'Please restore this exact revision',
-    commandContext(),
+  const appealDeps = dependencies(f.native.pool);
+  const appealContext = commandContext();
+  const appeal = await nativeRequest(f.native.author, appealDeps.pool, appealContext, (actor, context) =>
+    createAppeal(appealDeps, actor, decision.decision_id, 'Please restore this exact revision', context),
   );
-  return resolveAppeal(
-    dependencies(f.native.pool),
-    f.native.system.actors.other.actor,
-    appeal.value.id,
-    { outcome: 'reverse', statement: 'The exact revision is restored after review' },
-    commandContext(),
+  const reviewContext = commandContext();
+  return nativeRequest(f.native.system.actors.other, appealDeps.pool, reviewContext, (actor, context) =>
+    resolveAppeal(
+      appealDeps,
+      actor,
+      appeal.value.id,
+      { outcome: 'reverse', statement: 'The exact revision is restored after review' },
+      context,
+    ),
   );
 }
 
@@ -279,12 +357,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
   const activationDeps = dependencies(f.native.pool);
   const consentByTarget = new Map<string, string>();
   for (const target of targets) {
-    const consent = await issueRevisionDisclosure(
-      activationDeps,
-      f.native.author.actor,
-      { catalogueId, target },
-      commandContext(),
-    );
+    const consent = await issueDisclosure(activationDeps, f.native.author, { catalogueId, target });
     consentByTarget.set(
       `${target.threadId}/${target.postId}/${target.revisionId}/${target.sha256}`,
       consent.value.disclosureId,
@@ -295,13 +368,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
   );
   if (!victimDisclosureId) throw new Error('The first authority page has no issued source consent');
   const candidate = await preparedCandidate(catalogueId, path, revised.revisionId, releaseA.revisionId);
-  const started = await startHostedPublicationActivation(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const started = await startActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   const originalGenerationId = started.value.candidateGenerationId;
 
   const nativeRead = reads.readBookScopedPostMetadata;
@@ -310,23 +377,12 @@ test('21-target authority restarts after cross-home consent revoke and activates
     const result = await nativeRead(...args);
     if (args[2].postId === victim.postId && !invalidated) {
       invalidated = true;
-      await revokeRevisionDisclosure(
-        dependencies(secondPool),
-        f.native.author.actor,
-        { disclosureId: victimDisclosureId! },
-        commandContext(),
-      );
+      await revokeDisclosure(dependencies(secondPool), f.native.author, { disclosureId: victimDisclosureId! });
     }
     return result;
   });
   try {
-    const firstPage = await advanceHostedPublicationActivationAuthority(
-      dependencies(f.native.pool),
-      f.native.author.actor,
-      catalogueId,
-      candidate.stageId,
-      commandContext(),
-    );
+    const firstPage = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
     expect(firstPage.value).toMatchObject({ state: 'checking', checkedTargetCount: '20', totalTargetCount: '22' });
   } finally {
     metadataSpy.mockRestore();
@@ -334,13 +390,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
   expect(invalidated).toBe(true);
 
   const beforeStaleRestartEvents = await activationEventCounts(catalogueId);
-  const staleFinal = await activateHostedPublicationCandidate(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const staleFinal = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(staleFinal.value).toMatchObject({ state: 'restart', restartRequired: true });
   expect(staleFinal.value.candidateGenerationId).toBe(originalGenerationId);
   expect(await activationEventCounts(catalogueId)).toEqual({
@@ -349,32 +399,15 @@ test('21-target authority restarts after cross-home consent revoke and activates
   });
   expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
 
-  const renewedConsent = await issueRevisionDisclosure(
-    activationDeps,
-    f.native.author.actor,
-    { catalogueId, target: victim },
-    commandContext(),
-  );
+  const renewedConsent = await issueDisclosure(activationDeps, f.native.author, { catalogueId, target: victim });
   victimDisclosureId = renewedConsent.value.disclosureId;
-  let current = await advanceHostedPublicationActivationAuthority(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  let current = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(current.value).toMatchObject({ state: 'checking', checkedTargetCount: '20', totalTargetCount: '22' });
   const resumedPageContext = commandContext();
-  current = await advanceHostedPublicationActivationAuthority(
+  current = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId, resumedPageContext);
+  const resumedPageReplay = await advanceActivation(
     activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    resumedPageContext,
-  );
-  const resumedPageReplay = await advanceHostedPublicationActivationAuthority(
-    activationDeps,
-    f.native.author.actor,
+    f.native.author,
     catalogueId,
     candidate.stageId,
     resumedPageContext,
@@ -386,13 +419,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
 
   await changeBoardVisibility(f.native.board.id, 'protected');
   const beforeContainerRestartEvents = await activationEventCounts(catalogueId);
-  const staleContainer = await activateHostedPublicationCandidate(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const staleContainer = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(staleContainer.value).toMatchObject({ state: 'restart', restartRequired: true });
   expect(staleContainer.value.candidateGenerationId).toBe(originalGenerationId);
   expect(await activationEventCounts(catalogueId)).toEqual({
@@ -401,21 +428,9 @@ test('21-target authority restarts after cross-home consent revoke and activates
   });
   expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
   await changeBoardVisibility(f.native.board.id, 'published');
-  current = await advanceHostedPublicationActivationAuthority(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  current = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(current.value).toMatchObject({ state: 'checking', checkedTargetCount: '20', totalTargetCount: '22' });
-  current = await advanceHostedPublicationActivationAuthority(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  current = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(current.value).toMatchObject({ state: 'ready', checkedTargetCount: '22', totalTargetCount: '22' });
   expect(current.value.candidateGenerationId).toBe(originalGenerationId);
 
@@ -423,13 +438,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
   const activationContext = commandContext();
   let activated: Awaited<ReturnType<typeof activateHostedPublicationCandidate>>;
   try {
-    activated = await activateHostedPublicationCandidate(
-      activationDeps,
-      f.native.author.actor,
-      catalogueId,
-      candidate.stageId,
-      activationContext,
-    );
+    activated = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId, activationContext);
   } finally {
     await observer.close();
   }
@@ -449,20 +458,8 @@ test('21-target authority restarts after cross-home consent revoke and activates
     200,
   );
   const casCandidate = await preparedCandidate(catalogueId, path, casDraft.revisionId, activated.value.publicationId!);
-  await startHostedPublicationActivation(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    casCandidate.stageId,
-    commandContext(),
-  );
-  let casProgress = await advanceHostedPublicationActivationAuthority(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    casCandidate.stageId,
-    commandContext(),
-  );
+  await startActivation(activationDeps, f.native.author, catalogueId, casCandidate.stageId);
+  let casProgress = await advanceActivation(activationDeps, f.native.author, catalogueId, casCandidate.stageId);
   expect(casProgress.value.state).toBe('ready');
   await f.native.command(
     `${path}:revise`,
@@ -473,13 +470,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
     200,
   );
   await expect(
-    activateHostedPublicationCandidate(
-      activationDeps,
-      f.native.author.actor,
-      catalogueId,
-      casCandidate.stageId,
-      commandContext(),
-    ),
+    activateCandidate(activationDeps, f.native.author, catalogueId, casCandidate.stageId),
   ).rejects.toBeInstanceOf(RevisionPreconditionError);
   expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
   expect(
@@ -489,15 +480,10 @@ test('21-target authority restarts after cross-home consent revoke and activates
     ),
   ).toHaveLength(0);
 
-  await revokeRevisionDisclosure(
-    dependencies(secondPool),
-    f.native.author.actor,
-    { disclosureId: victimDisclosureId },
-    commandContext(),
-  );
-  const replayed = await activateHostedPublicationCandidate(
+  await revokeDisclosure(dependencies(secondPool), f.native.author, { disclosureId: victimDisclosureId });
+  const replayed = await activateCandidate(
     activationDeps,
-    f.native.author.actor,
+    f.native.author,
     catalogueId,
     candidate.stageId,
     activationContext,
@@ -513,12 +499,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
   expect(reader.value.occurrence.availability).toBe('unavailable');
   expect(reader.value.document).toBeNull();
 
-  const restoredConsent = await issueRevisionDisclosure(
-    activationDeps,
-    f.native.author.actor,
-    { catalogueId, target: victim },
-    commandContext(),
-  );
+  const restoredConsent = await issueDisclosure(activationDeps, f.native.author, { catalogueId, target: victim });
   expect(restoredConsent.value.state).toBe('issued');
   await changeTargetVisibility(victim, 'taken_down');
   const afterTakedown = await f.native.call(
@@ -580,12 +561,7 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
     200,
   );
   const activationDeps = dependencies(f.native.pool);
-  const consent = await issueRevisionDisclosure(
-    activationDeps,
-    f.native.author.actor,
-    { catalogueId, target: privateTarget },
-    commandContext(),
-  );
+  const consent = await issueDisclosure(activationDeps, f.native.author, { catalogueId, target: privateTarget });
   const candidate = await preparedCandidate(catalogueId, path, revised.revisionId, releaseA.revisionId);
 
   const moderator = f.native.system.actors.moderator.actor;
@@ -631,7 +607,7 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   const publicRestrictedEpoch = await publicationAuthorityEpoch(publicHome);
   expect(publicRestrictedEpoch).toBeGreaterThan(publicEpoch);
   const publicReadContext = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 120_000 };
-  const authorReadContext = { actor: f.native.author.actor, deadline: Date.now() + 120_000 };
+  const publicAuthorReadContext = await nativeReadContext(f.native.author, activationDeps.pool);
   expect(
     (
       await reads.readPost(
@@ -649,7 +625,7 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
         activationDeps,
         publicTarget.threadId,
         publicTarget.postId,
-        authorReadContext,
+        publicAuthorReadContext,
         publicTarget.revisionId,
       )
     ).value,
@@ -658,21 +634,9 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   expect(await publicationAuthorityEpoch(publicHome)).toBeGreaterThan(publicRestrictedEpoch);
   expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
 
-  const started = await startHostedPublicationActivation(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const started = await startActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   const candidateGenerationId = started.value.candidateGenerationId;
-  const checked = await advanceHostedPublicationActivationAuthority(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const checked = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(checked.value).toMatchObject({ state: 'ready', checkedTargetCount: '2', totalTargetCount: '2' });
 
   const privateHome = partitionOf(routeOf(privateTarget.postId)!);
@@ -680,13 +644,14 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   await restrictRevision(privateTarget, 'hard');
   const hardRestrictedEpoch = await publicationAuthorityEpoch(privateHome);
   expect(hardRestrictedEpoch).toBeGreaterThan(beforeHardRestriction);
+  const hardAuthorReadContext = await nativeReadContext(f.native.author, activationDeps.pool);
   expect(
     (
       await reads.readPost(
         activationDeps,
         privateTarget.threadId,
         privateTarget.postId,
-        authorReadContext,
+        hardAuthorReadContext,
         privateTarget.revisionId,
       )
     ).value,
@@ -706,13 +671,7 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   );
   expect(hardConsentObservation).toBeNull();
 
-  const stale = await activateHostedPublicationCandidate(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const stale = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(stale.value).toMatchObject({ state: 'restart', restartRequired: true });
   expect(stale.value.candidateGenerationId).toBe(candidateGenerationId);
   expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
@@ -721,23 +680,11 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   await reverseLatestRevisionRestriction(privateTarget);
   const reversedEpoch = await publicationAuthorityEpoch(privateHome);
   expect(reversedEpoch).toBeGreaterThan(beforeReversal);
-  const resumed = await advanceHostedPublicationActivationAuthority(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const resumed = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(resumed.value).toMatchObject({ state: 'ready', checkedTargetCount: '2', totalTargetCount: '2' });
   expect(resumed.value.candidateGenerationId).toBe(candidateGenerationId);
 
-  const activated = await activateHostedPublicationCandidate(
-    activationDeps,
-    f.native.author.actor,
-    catalogueId,
-    candidate.stageId,
-    commandContext(),
-  );
+  const activated = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(activated.value).toMatchObject({ state: 'activated', restartRequired: false });
   if (!activated.value.publicationId) throw new Error('The activated Book has no publication ID');
   expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
@@ -793,7 +740,7 @@ test.each([true, false])(
     );
     const { stageId } = await preparedCandidate(catalogueId, path, revised.revisionId, releaseA.revisionId);
     const deps = dependencies(f.native.pool);
-    const actor = f.native.author.actor;
+    const author = f.native.author;
     const locator = { catalogueId, stageId };
     const route = routeOf(catalogueId)!;
     const observer = observeSql(f.native.pool);
@@ -801,14 +748,8 @@ test.each([true, false])(
     let activation: ReturnType<typeof activateHostedPublicationCandidate> | undefined;
     let cancellation: ReturnType<typeof cancelHostedPublicationStaging> | undefined;
     try {
-      await startHostedPublicationActivation(deps, actor, catalogueId, stageId, commandContext());
-      const ready = await advanceHostedPublicationActivationAuthority(
-        deps,
-        actor,
-        catalogueId,
-        stageId,
-        commandContext(),
-      );
+      await startActivation(deps, author, catalogueId, stageId);
+      const ready = await advanceActivation(deps, author, catalogueId, stageId);
       expect(ready.value.state).toBe('ready');
       // Discover the real statements from the same fixture, rather than duplicating
       // private SQL. Advancement uses the same candidate point read as activation.
@@ -827,11 +768,13 @@ test.each([true, false])(
       );
       await cancellingClient.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
       if (cancelFirst) {
-        const cancelled = await cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator);
+        const cancelled = await nativeRequest(author, secondPool, commandContext(), (actor) =>
+          cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator),
+        );
         expect(cancelled.state).toBe('cancelled');
       }
       const context = commandContext();
-      activation = activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, context);
+      activation = activateCandidate(deps, author, catalogueId, stageId, context);
       // A cancellation may make the command reject while the test is coordinating it.
       void activation.catch(() => undefined);
       await Promise.race([
@@ -864,7 +807,9 @@ test.each([true, false])(
           ),
         ).rejects.toMatchObject({ code: '55P03' });
         await cancellingClient.query('ROLLBACK TO SAVEPOINT stage_probe');
-        cancellation = cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator);
+        cancellation = nativeRequest(author, secondPool, commandContext(), (actor) =>
+          cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator),
+        );
         void cancellation.catch(() => undefined);
         boundary.release();
         const activated = await activation;
@@ -881,7 +826,7 @@ test.each([true, false])(
          WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
           [route, catalogueId, stageId],
         );
-        const replayed = await activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, context);
+        const replayed = await activateCandidate(deps, author, catalogueId, stageId, context);
         expect(replayed).toMatchObject({
           replayed: true,
           value: activated.value,
@@ -889,7 +834,7 @@ test.each([true, false])(
           position: activated.position,
         });
         await expect(
-          activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, commandContext()),
+          activateCandidate(deps, author, catalogueId, stageId),
         ).rejects.toBeInstanceOf(HostedPublicationActivationNotFoundError);
         expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
       }

@@ -47,6 +47,10 @@ ineligible or conflicting currentness returns 412, and author denial returns 403
 sealed candidate and the old public release. Ordinary Kernel composition keeps the seven mounted preparation
 commands only.
 
+Decision: native direct-operation acceptance fixtures reauthenticate each request's original bearer on the actual
+operation pool under its unchanged request context; exact receipt replay keeps its original context and uses a
+newly authenticated actor.
+
 Decision: pin the unmounted factory with one HTTP test for exact selection/readback, receipt replay,
 stale-authority retention of the old release and candidate, and authorization/boundary input, composed onto a
 candidate Kernel through createKernel modules before compile, distinct from createKernel's served routes.

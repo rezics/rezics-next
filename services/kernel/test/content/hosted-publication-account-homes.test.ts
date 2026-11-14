@@ -1,13 +1,16 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import type { Pool } from 'pg';
 import {
   activateHostedPublicationCandidate,
   advanceHostedPublicationActivationAuthority,
   startHostedPublicationActivation,
 } from '../../src/content/hosted-publication-activation.ts';
 import type { HostedPublicationActivationDependencies } from '../../src/content/hosted-publication-activation.ts';
+import type { Access, AccountActor } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
+import type { ContentCredential } from './support/system.ts';
 
 setDefaultTimeout(360_000);
 
@@ -16,6 +19,17 @@ const commandContext = () => ({
   deadline: Date.now() + 120_000,
   requestId: crypto.randomUUID(),
 });
+
+async function nativeRequest<T, Context extends { deadline: number }>(
+  access: Access,
+  credential: ContentCredential,
+  pool: Pool,
+  context: Context,
+  operation: (actor: AccountActor, context: Context) => Promise<T>,
+): Promise<T> {
+  const actor = await access.authenticate(credential.bearer, { pool, deadline: context.deadline });
+  return operation(actor, context);
+}
 
 function dependencies(f: Awaited<ReturnType<typeof hostedChaptersFixture>>) {
   return {
@@ -65,21 +79,30 @@ test('authorized author prepares and activates a Book across account homes with 
     expect(sealed.value.candidateReady).toBe(true);
 
     const deps = dependencies(f);
-    const actor = f.native.author.actor;
-    let authority = await startHostedPublicationActivation(deps, actor, catalogueId, stageId, commandContext());
+    const author = f.native.author;
+    const startContext = commandContext();
+    let authority = await nativeRequest(f.native.system.access, author, deps.pool, startContext, (actor, context) =>
+      startHostedPublicationActivation(deps, actor, catalogueId, stageId, context),
+    );
     while (authority.value.state === 'checking') {
-      authority = await advanceHostedPublicationActivationAuthority(
-        deps,
-        actor,
-        catalogueId,
-        stageId,
-        commandContext(),
+      const advanceContext = commandContext();
+      authority = await nativeRequest(f.native.system.access, author, deps.pool, advanceContext, (actor, context) =>
+        advanceHostedPublicationActivationAuthority(
+          deps,
+          actor,
+          catalogueId,
+          stageId,
+          context,
+        ),
       );
     }
     expect(authority.value.state).toBe('ready');
 
     const activationContext = commandContext();
-    const activate = () => activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, activationContext);
+    const activate = () =>
+      nativeRequest(f.native.system.access, author, deps.pool, activationContext, (actor, context) =>
+        activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, context),
+      );
     const activated = await activate();
     expect(activated.value.state).toBe('activated');
     await f.native.command(
@@ -103,7 +126,7 @@ test('authorized author prepares and activates a Book across account homes with 
       encoding: 'base64',
       canonicalBytes: Buffer.from(serializeDocument(sourceBody), 'utf8').toString('base64'),
       sha256: target.sha256,
-      authorId: actor.accountId,
+      authorId: author.actor.accountId,
       licence: 'MIT',
     });
 
