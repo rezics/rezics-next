@@ -1,16 +1,16 @@
 /** Private bounded follow preparation shared by Search and Space entry. The writer remains follows.ts. */
 import type { Pool } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
-import { deadlineClient, readAccount } from './access-port.ts';
+import { readAccount } from './access-port.ts';
 import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../access/contract/errors.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from '../request/access-check.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KernelClock } from '../clock.ts';
+import { withFollowDiscoveryReadConnection } from './follow-discovery-read-connection.ts';
 
 export type FollowDiscoveryTarget = Readonly<{
   targetId: string;
@@ -68,11 +68,9 @@ export async function readFollowDiscovery(
     const unfollow = viewer.scopes.includes('follow:delete')
       ? await accessCheck(dependencies.access, viewer, 'follow:delete', { route, id: viewer.accountId }, context)
       : null;
-    return withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
+    try {
+      return await withFollowDiscoveryReadConnection(dependencies.pool, deadline, async (client) => {
         time = await mintReadTime(client, dependencies.clock);
         const home = await readPartition(client, partition);
         if (!home || home.writeState !== 'active' || home.movedTo !== null)
@@ -85,7 +83,6 @@ export async function readFollowDiscovery(
           account.fenced ||
           account.minimumAuthnEpoch > BigInt(viewer.authnEpoch)
         ) {
-          await client.query('COMMIT');
           return null;
         }
         const actions = {
@@ -110,19 +107,11 @@ export async function readFollowDiscovery(
             return { ...target, following: row?.state === 'following', actions: { ...actions } };
           }),
         };
-        await client.query('COMMIT');
         return result;
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (cleanup) {
-          discardConnection(connection, cleanup instanceof Error ? cleanup : new Error('Follow read rollback failed'));
-        }
-        throw error;
-      } finally {
-        if (time) releaseOperationalTime(time);
-      }
-    });
+      });
+    } finally {
+      if (time) releaseOperationalTime(time);
+    }
   };
   try {
     const before = await snapshot();

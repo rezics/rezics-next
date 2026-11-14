@@ -2591,6 +2591,8 @@ Access for both write directions; reading one's own follow state uses the existi
 there is no target scan or follower count. Source is <=1024 characters; envelopes exceeding 32768 UTF-8 bytes become
 unavailable. Advice is separate from the existing idempotent follow/unfollow commands, which still
 reauthorize native actor retirement and target readability. Other consumers must supply their own current target source.
+Deadline decision: each Follow snapshot uses one deadline-bounded repeatable-read, read-only connection. Late checkout
+sends no SQL; uncertain native I/O discards its client, and cleanup shares the original deadline.
 
 ### Curator list
 
