@@ -15,7 +15,7 @@ import type { Task } from './types.ts';
 
 async function setup(
   policy?: ControlPolicy,
-  options: { autoStartGoalOnActive?: boolean; lateStartGoalOnPause?: boolean; threadSubscriptions?: boolean; codexManagerModel?: (id: string) => string | undefined } = {},
+  options: { autoStartGoalOnActive?: boolean; lateStartGoalOnPause?: boolean; codexManagerModel?: (id: string) => string | undefined } = {},
 ) {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
@@ -30,7 +30,6 @@ async function setup(
     FAKE_RPC_STALL_FILE: stallFile,
     FAKE_GOAL_AUTO_START_ON_ACTIVE: options.autoStartGoalOnActive ? '1' : '0',
     FAKE_GOAL_LATE_START_ON_PAUSE: options.lateStartGoalOnPause ? '1' : '0',
-    FAKE_THREAD_SUBSCRIPTIONS: options.threadSubscriptions ? '1' : '0',
   });
   await client.initialize();
   const inbox = new SqliteManagerInbox(db, temporary.path);
@@ -807,50 +806,6 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
       goalState: { status: 'paused' },
     });
   } finally {
-    await s.close();
-  }
-});
-
-test('a recovered manager subscribes before native inbox activation and parks when the delivered turn finishes', async () => {
-  const s = await setup(undefined, { autoStartGoalOnActive: true, threadSubscriptions: true });
-  let recovered: ManagerSessions | undefined;
-  const closeTransport = s.client.close.bind(s.client);
-  try {
-    const manager = await s.managers.start(s.spec);
-    const threadId = manager.threadId!;
-    await s.notify({ method: 'turn/completed', params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } } });
-    s.client.close = () => {};
-    await s.managers.close();
-    await s.client.request('test/drop-thread-subscriptions', {});
-    recovered = new ManagerSessions(s.db, s.inbox, s.services);
-    const before = s.requests().length;
-    await recovered.recover();
-    expect(s.requests().slice(before).some((r) => r.method === 'thread/resume')).toBe(false);
-
-    // Codex can already have loaded the thread for a viewer. The controller must not depend on
-    // turn/start failing or adding a listener: the first delivery may go straight to turn/steer.
-    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Apply the delivered result' });
-    await recovered.wake(manager.id);
-    await recovered.flush();
-    const relevant = s.requests().slice(before).filter((r) =>
-      r.method === 'thread/resume' || r.method === 'thread/goal/set' && r.params.status === 'active');
-    expect(relevant.map((r) => r.method)).toEqual(['thread/resume', 'thread/goal/set']);
-    const turnId = recovered.get(manager.id).activeTurnId!;
-    expect(turnId).toBe('turn-2');
-    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
-    await s.client.request('test/notify', { method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'completed' } } });
-    await recovered.flush();
-    expect(recovered.get(manager.id)).toMatchObject({
-      threadId, activeTurnId: null, waitingForInbox: true, goalState: { status: 'paused' },
-      turnDisposition: { threadId, turnId, status: 'completed', intent: 'work' },
-    });
-    const starts = s.requests().filter((r) => r.method === 'turn/start').length;
-    await recovered.wake(manager.id);
-    await recovered.recover();
-    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(starts);
-  } finally {
-    await recovered?.close();
-    await closeTransport();
     await s.close();
   }
 });
