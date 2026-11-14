@@ -19,6 +19,17 @@ function selected(visit: ChecklistVisit, id: string, completed: boolean): boolea
   return visit.selection.add.includes(id);
 }
 
+type AdmittedEpisodeFact = Pick<ChecklistRow, 'label' | 'ordinal'>;
+
+function admittedEpisodeName(
+  visit: ChecklistVisit,
+  episodeFacts: ReadonlyMap<string, AdmittedEpisodeFact>,
+  id: string,
+): string {
+  const fact = episodeFacts.get(id) ?? visit.rows.find((row) => row.episodeSubjectId === id);
+  return fact?.label || fact?.ordinal || m.library_progress_episodes_redacted();
+}
+
 export function EpisodeChecklistReadout({
   visit,
   work,
@@ -152,12 +163,14 @@ export function EpisodeChecklistEditor({
 
 export function EpisodeChecklistReview({
   visit,
+  episodeFacts,
   busy,
   clear,
   onConfirm,
   onCancel,
 }: {
   visit: ChecklistVisit;
+  episodeFacts: ReadonlyMap<string, AdmittedEpisodeFact>;
   busy: boolean;
   clear: boolean;
   onConfirm: () => void;
@@ -174,13 +187,15 @@ export function EpisodeChecklistReview({
       ) : (
         <ul className="space-y-2 text-sm">
           {visit.selection.add.map((id) => (
-            <li key={`add:${id}`} className="break-all">
-              {m.library_progress_episodes_mark()}: {id}
+            <li key={`add:${id}`} className="break-words">
+              {m.library_progress_episodes_mark()}: {admittedEpisodeName(visit, episodeFacts, id)}{' '}
+              <code className="break-all text-xs">({id})</code>
             </li>
           ))}
           {visit.selection.remove.map((id) => (
-            <li key={`remove:${id}`} className="break-all">
-              {m.library_progress_episodes_unmark()}: {id}
+            <li key={`remove:${id}`} className="break-words">
+              {m.library_progress_episodes_unmark()}: {admittedEpisodeName(visit, episodeFacts, id)}{' '}
+              <code className="break-all text-xs">({id})</code>
             </li>
           ))}
         </ul>
