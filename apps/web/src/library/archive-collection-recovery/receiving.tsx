@@ -68,9 +68,7 @@ export function ArchiveReceivingCollection({
         <>
           <p className="text-sm [overflow-wrap:anywhere]" data-receiving-presentation>
             <span className="font-medium">{m.library_archive_recovery_presentation_current()}: </span>
-            {visible.presentationKindSource === 'owner'
-              ? visible.presentationKind
-              : m.library_collection_mixed_label()}
+            {visible.presentationKindSource === 'owner' ? visible.presentationKind : m.library_collection_mixed_label()}
           </p>
           <p>
             {visible.visibility === 'private'

@@ -1443,23 +1443,27 @@ test('destination replacement retires coordinates and late responses; a newer sa
   }
 });
 
-test.each(['restart', 'expire', 'retire'] as const)('%s retires a pending Collection address and ignores its response', async (boundary) => {
-  const fake = fakePort();
-  const pending = deferredReceiving();
-  fake.port.receivingCollection = () => pending.promise;
-  const journey = await appliedJourney(fake);
-  try {
-    const reading = journey.readReceivingCollection('retired/native-address');
-    journey[boundary]();
-    pending.finish({ kind: 'ok', value: receivingPage('Retired page') });
-    await reading;
-    expect(journey.snapshot()).toMatchObject({
-      receiving: null, receivingWindow: { displayed: null, requested: null, previous: [], loading: false },
-    });
-  } finally {
-    journey.retire();
-  }
-});
+test.each(['restart', 'expire', 'retire'] as const)(
+  '%s retires a pending Collection address and ignores its response',
+  async (boundary) => {
+    const fake = fakePort();
+    const pending = deferredReceiving();
+    fake.port.receivingCollection = () => pending.promise;
+    const journey = await appliedJourney(fake);
+    try {
+      const reading = journey.readReceivingCollection('retired/native-address');
+      journey[boundary]();
+      pending.finish({ kind: 'ok', value: receivingPage('Retired page') });
+      await reading;
+      expect(journey.snapshot()).toMatchObject({
+        receiving: null,
+        receivingWindow: { displayed: null, requested: null, previous: [], loading: false },
+      });
+    } finally {
+      journey.retire();
+    }
+  },
+);
 
 test('Collection denial and reads preserve an original uncertain apply command for its own exact retry', async () => {
   const fake = fakePort();
@@ -1513,7 +1517,8 @@ test.each(['keyboard', 'moved-focus', 'pointer', 'replacement', 'source', 'colle
       if (mode === 'source') await click(button(view.host, m.library_archive_recovery_restart()));
       if (mode === 'collection') {
         fake.port.status = async () => ({
-          kind: 'ok', value: status('partial', { collectionId: '00000000-0000-4000-8000-000000000099' }),
+          kind: 'ok',
+          value: status('partial', { collectionId: '00000000-0000-4000-8000-000000000099' }),
         });
         await click(button(view.host, m.library_archive_recovery_read_status()));
       }

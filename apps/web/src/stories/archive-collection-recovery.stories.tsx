@@ -677,11 +677,8 @@ function ReceivingCollectionStory({ initial }: { initial: ReceivingStoryState })
   function read(direction: 'first' | 'next' | 'previous' | 'retry', cursor?: string) {
     const target = receivingReadTarget(window, receivingFirst.id, direction, cursor);
     if (!target) return;
-    const page = target.cursor === null
-      ? receivingFirst
-      : target.cursor === receivingFirst.next
-        ? receivingSparse
-        : receivingLast;
+    const page =
+      target.cursor === null ? receivingFirst : target.cursor === receivingFirst.next ? receivingSparse : receivingLast;
     setPage(page);
     setWindow(commitReceivingRead(window, target));
   }
