@@ -89,6 +89,11 @@ test('prepared Knowledge images disclose only exact admitted sources and close a
     representation: 'authoring', documentId: document.documentId,
     revisionId: document.revisionId, sourceSha256: sourceSha(initial),
   };
+  // Original inspection retains uploader/current private document admission and
+  // must not take write locks inside its read-only source snapshot.
+  expect((await fixture.call('GET', `/v1/media/${image.id}:authorizeDownload?variant=original`)).status).toBe(200);
+  expect((await fixture.call('GET', `/v1/media/${image.id}:authorizeDownload?variant=original`,
+    undefined, { other: true })).status).toBe(404);
   // A native reservation or exact document locator does not imply revision membership.
   expect((await download(image.id)).status).toBe(404);
   expect((await download(image.id, initialSelection)).status).toBe(404);
