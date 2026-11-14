@@ -1,17 +1,16 @@
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type AccountActor, type AccessCheck } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { AccountManagementPage, ManagedAuthOperationId } from './account-management.ts';
 import { readAccount, readOrganizationRole, type Account } from './account-data.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { withAccountProfileReadSnapshot } from './account-profile-read-connection.ts';
 import { deriveAccess } from './derived-access.ts';
 import assignmentRead from './delegation-read.sql';
 import { ManagementSourceRefusedError, readNativeOperatorTransferRelation } from './management-source.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError } from './unavailable.ts';
 import { managedAuthWorkflowDescriptor } from './workflow-approvals.ts';
 
 type Actions = NonNullable<AccountManagementPage['authActions']>;
@@ -36,25 +35,7 @@ export async function readManagedAuthActions(
   const targetId = selection.account.accountId;
   const at = new Date(authoritativeTimeValue(time));
   const snapshot = <T>(read: (client: AccessClient) => Promise<T>) =>
-    within(deadline, () =>
-      withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const value = await read(client);
-          requireAccessDeadline(deadline);
-          await client.query('COMMIT');
-          return value;
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(connection, rollbackError as Error);
-          }
-          throw error;
-        }
-      }),
-    );
+    withAccountProfileReadSnapshot(deps.pool, deadline, read);
   async function source(client: AccessClient) {
     const homes = new Map<number, number>();
     async function home(accountId: string) {

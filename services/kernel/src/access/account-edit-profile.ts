@@ -1,20 +1,18 @@
 import { memoizedValue } from '../memoized.ts';
 import { tryAccessApplication } from './adapters/bind.ts';
 import type { AvatarSummary } from './contract/index.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { prepareReadDecisions, type Access, type AccessContext, type AccountActor } from './check.ts';
 import { routeOf } from '../route/route.ts';
 import { type AccountLink, type AccountPublicViews } from './account-data.ts';
 import { viewerActionReadTime } from './read-bindings.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { within } from './deadline.ts';
 import { requireAccessDeadline } from './unavailable.ts';
+import { withAccountProfileReadSnapshot } from './account-profile-read-connection.ts';
 import {
-  accessCheckout,
   accessNativeDeclaration,
   accessNativeWork,
   accessOwnerWork,
-  accessTransaction,
   addAccessWork,
   EMPTY_ACCESS_WORK,
   type AccessWork,
@@ -197,7 +195,7 @@ export async function readEditableAccountProfile(
   const { pool, actor, deadline, work } = context;
   const route = routeOf(accountId);
   if (route === null || actor.kind !== 'account') throw new ProblemError('forbidden');
-  return within(deadline, async () => {
+  const { authority, time } = await within(deadline, async () => {
     const actions = new Set(['account:read', 'account:update', 'account:manage']);
     const decisions = await prepareReadDecisions(access, {
       actor,
@@ -208,81 +206,73 @@ export async function readEditableAccountProfile(
     if (!decisions.prepareAccountAuthority) throw new ProblemError('dependency_unavailable');
     const authority = await decisions.prepareAccountAuthority([accountId]);
     const time = viewerActionReadTime(access, context);
-    return accessOwnerWork(
-      work,
-      'access.account-edit-profile',
-      {
-        bound: () => profileReadBound(),
-        actual: () => profileReadBound(),
-      },
-      undefined,
-      () =>
-        accessCheckout(work, () =>
-          withConnection(pool, async (connection) => {
-            const client = deadlineClient(connection, deadline);
-            await accessTransaction(work, client, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            try {
-              const answer = await authority.decide(
-                client,
-                { kind: 'profile', action: 'account:update', ids: [accountId] },
-                time,
-              );
-              if (!answer[accountId]?.allowed) throw new ProblemError('forbidden');
-              const row = await accessNativeWork(work, 'account-profile', { route, account_id: accountId }, {}, () =>
-                profileRead.run(client, { route, account_id: accountId }),
-              );
-              if (!row) throw new ProblemError('forbidden');
-              const views = row.publicViews as Record<string, unknown> | null;
-              // Missing or malformed storage never opts an account into public presentation.
-              const publicViews = {
-                posts: views?.posts === true,
-                reviews: views?.reviews === true,
-                collections: views?.collections === true,
-                realms: views?.realms === true,
-              };
-              const avatarId = row.avatar;
-              const avatar = avatarId
-                ? await accessOwnerWork(
-                    work,
-                    'content.avatar-summaries',
-                    {
-                      bound: () => avatarBound,
-                      actual: (_input, summary) => (summary ? avatarBound : { ...avatarBound, emptySeeks: 1 }),
-                    },
-                    { media: avatarId },
-                    async () => {
-                      const application = tryAccessApplication();
-                      if (!application) throw new ProblemError('dependency_unavailable');
-                      return (await application.readAvatarSummaries(client, [avatarId])).get(avatarId) ?? null;
-                    },
-                  )
-                : null;
-              const kind = row.kind === 'organization' ? 'organization' : 'actor';
-              const profile: EditableAccountProfile = {
-                id: row.id,
-                kind,
-                handle: row.handle,
-                displayName: row.displayName,
-                bio: row.bio,
-                links: (row.links as AccountLink[]).map(({ label, url }) => ({ label, url })),
-                avatar,
-                publicViews,
-                ...(kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
-              };
-              const editing = accountProfileEditing(actor.accountId, { id: profile.id, kind });
-              requireAccessDeadline(deadline);
-              await accessTransaction(work, client, 'COMMIT');
-              return { profile, editing };
-            } catch (error) {
-              try {
-                await accessTransaction(work, client, 'ROLLBACK');
-              } catch (rollbackError) {
-                discardConnection(connection, rollbackError as Error);
-              }
-              throw error;
-            }
-          }),
-        ),
-    );
+    return { authority, time };
   });
+  return accessOwnerWork(
+    work,
+    'access.account-edit-profile',
+    {
+      bound: () => profileReadBound(),
+      actual: () => profileReadBound(),
+    },
+    undefined,
+    () =>
+      withAccountProfileReadSnapshot(
+        pool,
+        deadline,
+        async (client) => {
+          const answer = await authority.decide(
+            client,
+            { kind: 'profile', action: 'account:update', ids: [accountId] },
+            time,
+          );
+          if (!answer[accountId]?.allowed) throw new ProblemError('forbidden');
+          const row = await accessNativeWork(work, 'account-profile', { route, account_id: accountId }, {}, () =>
+            profileRead.run(client, { route, account_id: accountId }),
+          );
+          if (!row) throw new ProblemError('forbidden');
+          const views = row.publicViews as Record<string, unknown> | null;
+          // Missing or malformed storage never opts an account into public presentation.
+          const publicViews = {
+            posts: views?.posts === true,
+            reviews: views?.reviews === true,
+            collections: views?.collections === true,
+            realms: views?.realms === true,
+          };
+          const avatarId = row.avatar;
+          const avatar = avatarId
+            ? await accessOwnerWork(
+                work,
+                'content.avatar-summaries',
+                {
+                  bound: () => avatarBound,
+                  actual: (_input, summary) => (summary ? avatarBound : { ...avatarBound, emptySeeks: 1 }),
+                },
+                { media: avatarId },
+                async () => {
+                  const application = tryAccessApplication();
+                  if (!application) throw new ProblemError('dependency_unavailable');
+                  return (await application.readAvatarSummaries(client, [avatarId])).get(avatarId) ?? null;
+                },
+              )
+            : null;
+          const kind = row.kind === 'organization' ? 'organization' : 'actor';
+          const profile: EditableAccountProfile = {
+            id: row.id,
+            kind,
+            handle: row.handle,
+            displayName: row.displayName,
+            bio: row.bio,
+            links: (row.links as AccountLink[]).map(({ label, url }) => ({ label, url })),
+            avatar,
+            publicViews,
+            ...(kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
+          };
+          const editing = accountProfileEditing(actor.accountId, { id: profile.id, kind });
+          requireAccessDeadline(deadline);
+          return { profile, editing };
+        },
+        work,
+      ),
+  );
 }

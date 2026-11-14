@@ -9,12 +9,11 @@ import type { Access } from '../request/access.ts';
 import { viewerActionReadTime } from './read-bindings.ts';
 import { readEditableAccountProfile } from './account-edit-profile.ts';
 import { readManagedAuthActions } from './account-management-auth-actions.ts';
-import { withConnection } from '../database/pool.ts';
-import { deadlineClient } from './deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { requireAccessDeadline } from './unavailable.ts';
+import { withAccountProfileReadConnection } from './account-profile-read-connection.ts';
 import type { AccountManagementPage } from './account-management.ts';
 
 export type RenameAccountProfile = { profile: { id: string; kind: 'actor'; handle: string | null } };
@@ -93,8 +92,8 @@ export function createAccountProfileAccess(deps: {
       const { actor, context, profile } = await closedProfile(human, accountId, deadline);
       const route = routeOf(accountId);
       if (route === null) throw new AuthBindingDeniedError();
-      const currentAccount = await withConnection(deps.pool, (connection) =>
-        readAccount(deadlineClient(connection, deadline), route, accountId),
+      const currentAccount = await withAccountProfileReadConnection(deps.pool, deadline, (client) =>
+        readAccount(client, route, accountId),
       );
       if (!currentAccount || currentAccount.kind !== 'actor' || currentAccount.operatorAccountId !== null)
         throw new AuthBindingDeniedError();

@@ -3165,6 +3165,9 @@ active-unfenced-human formula and installed Access check; the profile permission
 scope or browser selection cannot create it. Known denial remains an empty ready action set, and dependency loss remains
 unavailable. The command still performs fresh native approval and execution checks.
 
+Decision: Editable profile, rename entry and managed action observations use the original request deadline for each
+connection; late checkouts run no SQL and unresolved transaction I/O is discarded.
+
 The complete page read has a documented finite sum: one existing bounded profile read, one full-key actor seek, and
 one existing bounded action observation. For this self-only selection the before and final snapshots each use one
 deduplicated partition seek and two full-key actor seeks; they admit at most one rename candidate and one installed
