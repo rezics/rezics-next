@@ -86,7 +86,7 @@ test('PUT set, clear and replay preserve native body, revision, idempotency head
       expect(request.method).toBe('PUT');
       expect(new URL(request.url).pathname).toBe('/v1/libraryYearlyCompletionGoal');
       expect(request.headers.get('authorization')).toBe(authorization);
-      expect(request.headers.get('idempotency-key')).toBe(command.idempotencyKey);
+      expect(request.headers.get('idempotency-key')).toBe(JSON.stringify(command.idempotencyKey));
       expect(request.cache).toBe('no-store');
       expect(request.redirect).toBe('manual');
       bodies.push(await request.text());
@@ -122,6 +122,7 @@ test('native refusal, stale review, erased receipt, key conflict and uncertainty
   for (const response of [
     Response.json({ year: 2027, metric: command.metric, target: 24, revision: '4' }),
     Response.json({ year: 2026, metric: command.metric, target: null, revision: '4' }),
+    Response.json({ year: 2026, metric: command.metric, target: 24, revision: '99999999999999999999' }),
     Response.json({ code: 'internal_error' }, { status: 500 }),
   ])
     expect(

@@ -71,7 +71,7 @@ function dispatchInput(value: unknown): YearlyGoalDispatch {
     ) ||
     !(
       command.expectedRevision === null ||
-      (typeof command.expectedRevision === 'string' && /^[1-9][0-9]*$/.test(command.expectedRevision))
+      (typeof command.expectedRevision === 'string' && /^[1-9][0-9]{0,18}$/.test(command.expectedRevision))
     ) ||
     (command.target === null && command.expectedRevision === null) ||
     typeof command.idempotencyKey !== 'string' ||

@@ -32,6 +32,7 @@ const nativeSender: YearlyGoalSender = {
     return writePrivateYearlyGoal({ data, signal, headers: { 'x-csrf-token': data.expectedCredential } });
   },
 };
+const operations = ['progress_session.list'] as const;
 
 type OriginalIntent = {
   source: YearlyGoalCommand;
@@ -137,22 +138,36 @@ export function CurrentYearlyGoal({ year }: { year: number | undefined }) {
   const client = useQueryClient();
   const application = useLibraryApplication();
   const session = application.useSession();
+  const { store, value: admission } = application.useWorkspaceAdmission(operations);
+  const admitted = admission.allowed[0];
+  const dispatch = admission.dispatch[0];
   const observer = useMemo(() => application.recoveryObservation(client), [application, client]);
   const server = useMemo(() => ({ subject: null, csrfToken: null, identity: {} }), []);
   const observation = useSyncExternalStore(observer.subscribe, observer.read, () => server);
   const locale = getLocale();
   const address = useReaderVisit(`yearly-goal:${year ?? 'invalid'}`, locale, getLocale);
   const visit = useMemo(() => {
-    if (year === undefined || !observation.subject || session.state !== 'signed-in') return undefined;
+    if (
+      year === undefined ||
+      !observation.subject ||
+      session.state !== 'signed-in' ||
+      !admitted ||
+      admission.subject !== observation.subject
+    )
+      return undefined;
     return createYearlyGoalVisit({
       year,
       viewer: observation.subject,
       csrfToken: observation.csrfToken,
       read: readNative,
       sender: nativeSender,
-      current: () => address.current() && observer.read().identity === observation.identity,
+      current: () =>
+        address.current() &&
+        observer.read().identity === observation.identity &&
+        store.allowed('progress_session.list') &&
+        store.dispatchVersion('progress_session.list') === dispatch,
     });
-  }, [year, observation, session.state, observer, address]);
+  }, [year, observation, session.state, observer, address, store, admitted, admission.subject, dispatch]);
   const previous = useRef(visit);
   if (previous.current !== visit) previous.current?.retire();
   previous.current = visit;

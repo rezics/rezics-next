@@ -2,7 +2,7 @@
 
 Decision: count completed consumption occurrences in the reported Gregorian year; each repeated completion is another occurrence.
 Decision: target editing follows the native owner actions independently of progress availability; uncertain commands retain their exact reviewed body, revision and idempotency key for retry.
-Decision: the mounted page uses the prepared no-store BFF and generated KernelClient; session/exposure replacement retires its visit, and uncertain retry retains the sealed original dispatch credential and sender.
+Decision: the mounted page uses the prepared no-store BFF and generated KernelClient; session/exposure replacement retires its visit, and uncertain retry retains the sealed original dispatch credential and sender. The logical key is encoded as the native Idempotency-Key structured field string; retry preserves the encoded header bytes.
 
 ## Native contract
 

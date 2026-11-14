@@ -48,7 +48,7 @@ export async function writeYearlyGoal(
   let result;
   try {
     result = await client.libraryYearlyCompletionGoal.put(body, {
-      headers: { authorization, 'idempotency-key': idempotencyKey },
+      headers: { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) },
       fetch: { cache: 'no-store', redirect: 'manual', signal },
     });
   } catch (error) {
@@ -59,7 +59,7 @@ export async function writeYearlyGoal(
     result.data?.year === command.year &&
     result.data.metric === command.metric &&
     result.data.target === command.target &&
-    /^[1-9][0-9]*$/.test(result.data.revision)
+    /^[1-9][0-9]{0,18}$/.test(result.data.revision)
   )
     return { state: 'applied' };
   if (result.status === 401) return { state: 'retired' };

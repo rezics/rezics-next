@@ -57,7 +57,7 @@ function nativeApi(initial: YearlyGoalSnapshot['target'] = { state: 'none', revi
       order.push(`read:${year}`);
       return {
         state: 'ready',
-        value: nativeYearlyGoalSnapshot(year, structuredClone(target), 'available', '900719925474099312345'),
+        value: nativeYearlyGoalSnapshot(year, structuredClone(target), 'available', '9007199254740993123'),
       };
     },
     async write(command) {
@@ -222,7 +222,7 @@ test('mounted owner reads native progress, sets and clears a target, and reads b
   try {
     expect(native.order).toEqual(['read:2026']);
     expect(page.container.textContent).toContain('No target has been set.');
-    expect(page.container.textContent).toContain('900719925474099312345');
+    expect(page.container.textContent).toContain('9007199254740993123');
     expect(page.container.querySelectorAll('a[href*="/library/history?year=2026&month="]')).toHaveLength(13);
     expect(page.container.querySelector('a[href="/en/library/history?year=2026"]')).not.toBeNull();
 
