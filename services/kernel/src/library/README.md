@@ -2676,6 +2676,8 @@ reauthorize native actor retirement and target readability. Other consumers must
 ### Entry read
 
 - Touches: A repeatable-read snapshot, one account admit, and one `entry` primary key. A missing or foreign row is not found. There is no write.
+- Decision: Private entry and source-observation reads carry one visit deadline through canonical Subject resolution and the snapshot; expired or uncertain native work is discarded without queuing rollback behind it.
+- Deadline transitions: `test/library/entry-personal-read-connection.test.ts` covers late checkout, blocked `BEGIN`/read/`COMMIT`, rollback failure, and the next visit.
 - Bound: The entry point is `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the account read and begin and commit.
 - Growth check: `test/library/growth-personal-reads.test.ts`: `Entry read has constant rows and statements as entries grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's entries, other accounts' entries in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 

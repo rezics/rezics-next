@@ -11,7 +11,6 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -20,6 +19,7 @@ import { createLibraryCommandRunner, libraryCommandReceiptDigestForActor } from 
 import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { resolveSubject } from './subject-anchor.ts';
+import { withEntryPersonalReadSnapshot } from './entry-personal-read-connection.ts';
 import {
   EntryAnnotationReviewStoppedError,
   LibraryConflictError,
@@ -466,8 +466,15 @@ async function resolveCanonicalSubject(
   actor: AccountActor,
   subjectId: string,
   at?: AuthoritativeTime,
+  deadline?: number,
 ) {
-  const resolved = await resolveSubject({ pool: dependencies.pool, access: dependencies.access }, actor, subjectId, at);
+  const resolved = await resolveSubject(
+    { pool: dependencies.pool, access: dependencies.access },
+    actor,
+    subjectId,
+    at,
+    deadline === undefined ? undefined : { pool: dependencies.pool, deadline },
+  );
   if (!resolved || resolved.subjectId !== subjectId) throw new LibraryNotFoundError();
   return resolved.subjectId;
 }
@@ -622,28 +629,21 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
   async function readPersonalEntry(actor: Actor, subjectId: string): Promise<PersonalEntry> {
     const account = owner(actor, 'library_entry:read');
     requireRoute(subjectId);
-    const canonical = await resolveCanonicalSubject(dependencies, account, subjectId);
-    return withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
-        if (
-          !current ||
-          current.kind !== 'actor' ||
-          current.state !== 'active' ||
-          current.fenced ||
-          !Number.isSafeInteger(account.authnEpoch) ||
-          account.authnEpoch < 1 ||
-          current.minimumAuthnEpoch > BigInt(account.authnEpoch)
-        )
-          throw new GrantDeniedError();
-        const value = await readPersonal(client, requireRoute(account.accountId), account.accountId, canonical);
-        await client.query('COMMIT');
-        return value;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const canonical = await resolveCanonicalSubject(dependencies, account, subjectId, undefined, deadline);
+    return withEntryPersonalReadSnapshot(pool, deadline, async (client) => {
+      const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
+      if (
+        !current ||
+        current.kind !== 'actor' ||
+        current.state !== 'active' ||
+        current.fenced ||
+        !Number.isSafeInteger(account.authnEpoch) ||
+        account.authnEpoch < 1 ||
+        current.minimumAuthnEpoch > BigInt(account.authnEpoch)
+      )
+        throw new GrantDeniedError();
+      return readPersonal(client, requireRoute(account.accountId), account.accountId, canonical);
     });
   }
 
@@ -657,39 +657,33 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     requireRoute(subjectId);
     const parsedProvider = parseProviderKey(provider);
     const parsedRecordId = parseProviderRecordId(recordId);
-    const canonical = await resolveCanonicalSubject(dependencies, account, subjectId);
-    return withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
-        if (
-          !current ||
-          current.kind !== 'actor' ||
-          current.state !== 'active' ||
-          current.fenced ||
-          !Number.isSafeInteger(account.authnEpoch) ||
-          account.authnEpoch < 1 ||
-          current.minimumAuthnEpoch > BigInt(account.authnEpoch)
-        )
-          throw new GrantDeniedError();
-        const found = await client.query<ObservationRow>(
-          `SELECT provider,record_id AS "recordId",revision,privacy_status AS "privacyStatus",
-            privacy_meaning AS "privacyMeaning",privacy_source_value AS "privacySourceValue",
-            source_created_status AS "sourceCreatedStatus",source_created_value AS "sourceCreatedValue",
-            source_created_precision AS "sourceCreatedPrecision",source_created_zone AS "sourceCreatedZone",
-            source_updated_status AS "sourceUpdatedStatus",source_updated_value AS "sourceUpdatedValue",
-            source_updated_precision AS "sourceUpdatedPrecision",source_updated_zone AS "sourceUpdatedZone",
-            to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedAt"
-           FROM library.entry_source_observation
-           WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND provider=$4 AND record_id=$5`,
-          [requireRoute(account.accountId), account.accountId, canonical, parsedProvider, parsedRecordId],
-        );
-        await client.query('COMMIT');
-        return found.rows[0] ? observation(found.rows[0]) : null;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const canonical = await resolveCanonicalSubject(dependencies, account, subjectId, undefined, deadline);
+    return withEntryPersonalReadSnapshot(pool, deadline, async (client) => {
+      const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
+      if (
+        !current ||
+        current.kind !== 'actor' ||
+        current.state !== 'active' ||
+        current.fenced ||
+        !Number.isSafeInteger(account.authnEpoch) ||
+        account.authnEpoch < 1 ||
+        current.minimumAuthnEpoch > BigInt(account.authnEpoch)
+      )
+        throw new GrantDeniedError();
+      const found = await client.query<ObservationRow>(
+        `SELECT provider,record_id AS "recordId",revision,privacy_status AS "privacyStatus",
+          privacy_meaning AS "privacyMeaning",privacy_source_value AS "privacySourceValue",
+          source_created_status AS "sourceCreatedStatus",source_created_value AS "sourceCreatedValue",
+          source_created_precision AS "sourceCreatedPrecision",source_created_zone AS "sourceCreatedZone",
+          source_updated_status AS "sourceUpdatedStatus",source_updated_value AS "sourceUpdatedValue",
+          source_updated_precision AS "sourceUpdatedPrecision",source_updated_zone AS "sourceUpdatedZone",
+          to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedAt"
+         FROM library.entry_source_observation
+         WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND provider=$4 AND record_id=$5`,
+        [requireRoute(account.accountId), account.accountId, canonical, parsedProvider, parsedRecordId],
+      );
+      return found.rows[0] ? observation(found.rows[0]) : null;
     });
   }
 
