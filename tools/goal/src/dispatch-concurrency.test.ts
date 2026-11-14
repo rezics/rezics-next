@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { harness, markdown } from './test-support.ts';
 
@@ -49,7 +49,7 @@ test('direct dispatch and a claimed backlog submission share one active registra
     expect(tasks[0]?.id).toBe(directResult.id);
     expect(tasks[0]?.worktree).toBe(directResult.worktree);
     expect(tasks[0]?.currentAttempt).toBe(0);
-    expect(await Bun.file(tasks[0]!.worktree).exists()).toBe(true);
+    expect(existsSync(tasks[0]!.worktree)).toBe(true);
   } finally {
     direct.kill();
     harvested.kill();
