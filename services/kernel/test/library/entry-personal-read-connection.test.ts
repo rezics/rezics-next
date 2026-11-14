@@ -12,7 +12,7 @@ function client(run: (sql: string) => Promise<unknown>, onRelease: (error?: Erro
   const statements: string[] = [];
   const value = {
     query(input: QueryConfig | string) {
-      const sql = typeof input === 'string' ? input : input.text ?? '';
+      const sql = typeof input === 'string' ? input : (input.text ?? '');
       statements.push(sql);
       return run(sql);
     },
@@ -35,9 +35,14 @@ test('a checkout arriving after expiry sends no SQL and releases the untouched c
       resolve();
     };
   });
-  const late = client(async () => ({ rows: [] }), (error) => released(error));
-  const read = withEntryPersonalReadSnapshot(pool(() => checkout.promise), Date.now() + 40, async (connection) =>
-    connection.query('SELECT late'),
+  const late = client(
+    async () => ({ rows: [] }),
+    (error) => released(error),
+  );
+  const read = withEntryPersonalReadSnapshot(
+    pool(() => checkout.promise),
+    Date.now() + 40,
+    async (connection) => connection.query('SELECT late'),
   );
 
   await expect(read).rejects.toBeDefined();
@@ -64,11 +69,7 @@ test('a successful read commits its repeatable-read snapshot', async () => {
   );
 
   expect(result).toBe('private entry');
-  expect(statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT private entry',
-    'COMMIT',
-  ]);
+  expect(statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT private entry', 'COMMIT']);
 });
 
 for (const blocked of ['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT private entry', 'COMMIT']) {

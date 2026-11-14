@@ -19,11 +19,7 @@ function controlOf(sql: string): 'begin' | 'commit' | 'rollback' | 'other' {
   return 'other';
 }
 
-function deadlineClient(
-  connection: PoolClient,
-  deadline: number,
-  markUncertain: (error: unknown) => void,
-): PoolClient {
+function deadlineClient(connection: PoolClient, deadline: number, markUncertain: (error: unknown) => void): PoolClient {
   const client = Object.create(connection) as PoolClient;
   client.query = ((query: QueryConfig | string, values?: unknown[]) => {
     const config = {
