@@ -11,5 +11,5 @@ JOIN LATERAL (
   WHERE partition_no = requested.partition_no
   LIMIT 1
 ) p ON true
-JOIN semantic.title_input_home_revision revision USING (partition_no)
+JOIN semantic.title_input_home_revision revision ON revision.partition_no = p.partition_no
 ORDER BY p.partition_no;
