@@ -5,6 +5,7 @@ import { locales } from '../paraglide/runtime.js';
 import { quantityUnitLabel } from '../subject/quantity-presentation';
 import { ConditionLanguages } from './language-preferences';
 import { calendarPrecision } from './condition-calendar';
+import { useConditionComposition } from './condition-composition';
 import {
   HEADER_SUGGESTION_LIMIT,
   loadGlobalHeaderSuggestions,
@@ -25,6 +26,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 const fieldClass = 'h-10 rounded-md border bg-background px-3 font-normal';
 const subjectFields = ['platform', 'developer', 'publisher'] as const;
 type SubjectField = (typeof subjectFields)[number];
+type ConditionComposition = ReturnType<typeof useConditionComposition>;
 type ReleaseCriteriaDraft = { form: ReleaseSearchForm; languageTags: string[] };
 type CriteriaField = keyof ReleaseSearchForm;
 const semanticFields = [
@@ -133,6 +135,8 @@ function ReleaseSearchSubjectPicker({
   selection,
   onSelection,
   onPendingChange,
+  composing,
+  composition,
 }: {
   name: SubjectField;
   label: string;
@@ -143,6 +147,8 @@ function ReleaseSearchSubjectPicker({
   selection?: ReleaseSearchSubjectSelection | undefined;
   onSelection(value?: ReleaseSearchSubjectSelection): void;
   onPendingChange(pending: boolean): void;
+  composing: boolean;
+  composition: ConditionComposition;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const inputId = `release-search-${name}`;
@@ -152,24 +158,33 @@ function ReleaseSearchSubjectPicker({
   const request = useRef<AbortController | undefined>(undefined);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<SuggestionResult>();
+  const [suggestionQuery, setSuggestionQuery] = useState<string>();
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'empty' | 'unavailable'>('idle');
   const [activeIndex, setActiveIndex] = useState(-1);
-  const active = suggestions?.subjects[activeIndex];
+  const currentSuggestions = suggestionQuery === query.trim() ? suggestions : undefined;
+  const active = currentSuggestions?.subjects[activeIndex];
   const cancel = () => {
     request.current?.abort();
     request.current = undefined;
     setSuggestions(undefined);
+    setSuggestionQuery(undefined);
     setStatus('idle');
     setActiveIndex(-1);
   };
 
   useEffect(() => {
     const text = query.trim();
+    if (composing) {
+      setStatus((currentStatus) => (currentStatus === 'loading' ? 'idle' : currentStatus));
+      return;
+    }
     if (text.length < 2) {
       setSuggestions(undefined);
+      setSuggestionQuery(undefined);
       setStatus('idle');
       return;
     }
+    if (suggestionQuery === text) return;
     const controller = new AbortController();
     request.current = controller;
     setStatus('loading');
@@ -177,21 +192,24 @@ function ReleaseSearchSubjectPicker({
       .then((page) => {
         if (controller.signal.aborted) return;
         setSuggestions(page);
+        setSuggestionQuery(text);
         setStatus(page.subjects.length ? 'ready' : 'empty');
         setActiveIndex(-1);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
         setSuggestions(undefined);
+        setSuggestionQuery(text);
         setStatus('unavailable');
       });
     return () => {
       controller.abort();
       if (request.current === controller) request.current = undefined;
     };
-  }, [query, locale]);
+  }, [query, locale, composing, suggestionQuery]);
 
   const choose = (subject: SuggestionResult['subjects'][number]) => {
+    if (composition.isComposing() || suggestionQuery !== query.trim()) return;
     cancel();
     const text = localizedLabel(subject.labels, locale).text || subject.id;
     onSelection({ id: subject.id, label: text, type: subject.type });
@@ -234,8 +252,17 @@ function ReleaseSearchSubjectPicker({
           onSelection(undefined);
           onPendingChange(Boolean(text.trim()));
         }}
+        onCompositionEnd={(event) => {
+          const text = event.currentTarget.value;
+          if (text === query) return;
+          cancel();
+          setQuery(text);
+          onSelection(undefined);
+          onPendingChange(Boolean(text.trim()));
+        }}
         onKeyDown={(event) => {
-          const count = suggestions?.subjects.length ?? 0;
+          if (composition.isComposing(event)) return;
+          const count = currentSuggestions?.subjects.length ?? 0;
           if (event.key === 'ArrowDown' && count) {
             event.preventDefault();
             setActiveIndex((index) => Math.min(index + 1, count - 1));
@@ -295,16 +322,16 @@ function ReleaseSearchSubjectPicker({
       <p id={`${inputId}-status`} role="status" aria-live="polite" className="font-normal text-muted-foreground">
         {statusText}
       </p>
-      {status === 'ready' && suggestions && (
+      {status === 'ready' && currentSuggestions && (
         <ul
           id={listId}
           role="listbox"
           aria-label={m.header_search_suggestions({}, options)}
           className="rounded-md border"
         >
-          {suggestions.subjects.slice(0, HEADER_SUGGESTION_LIMIT).map((subject, index) => {
+          {currentSuggestions.subjects.slice(0, HEADER_SUGGESTION_LIMIT).map((subject, index) => {
             const subjectLabel = localizedLabel(subject.labels, locale);
-            const typeLabel = localizedLabel(suggestions.types[subject.type] ?? {}, locale);
+            const typeLabel = localizedLabel(currentSuggestions.types[subject.type] ?? {}, locale);
             return (
               <li
                 key={subject.id}
@@ -358,6 +385,8 @@ export function ReleaseSearchFormView({
         : {}),
   }));
   const [pendingSubjects, setPendingSubjects] = useState<Set<SubjectField>>(() => new Set());
+  const [composing, setComposing] = useState(false);
+  const composition = useConditionComposition('release-search');
   const [serverErrors, setServerErrors] = useState<Set<keyof ReleaseSearchForm>>(
     () => new Set(parsed.invalid.filter((field): field is keyof ReleaseSearchForm => field !== 'cursor')),
   );
@@ -371,7 +400,6 @@ export function ReleaseSearchFormView({
         ]),
       ) as Record<SemanticField, string>,
   );
-  const [focusAttempt, setFocusAttempt] = useState(0);
   const summary = useRef<HTMLDivElement>(null);
   const current = parseReleaseSearchDraft(draftInput(draft), types, locale);
   const controls = current.controls;
@@ -561,6 +589,8 @@ export function ReleaseSearchFormView({
         invalid={errors.includes(name)}
         {...(errors.includes(name) ? { errorId: issueId(name) } : {})}
         selection={subjectSelections[name]}
+        composing={composing}
+        composition={composition}
         onSelection={(selection) => setSubject(name, selection)}
         onPendingChange={(pending) => setSubjectPending(name, pending)}
       />
@@ -582,20 +612,48 @@ export function ReleaseSearchFormView({
     corrections.size > 0 ||
     pendingSubjects.size > 0;
 
-  useEffect(() => {
-    if (focusAttempt > 0 && errors.length) summary.current?.focus();
-  }, [focusAttempt, errors.join('|')]);
-
   const submit = (event: FormEvent<HTMLFormElement>) => {
+    if (composition.isComposing()) {
+      event.preventDefault();
+      return;
+    }
     if (!errors.length) return;
     event.preventDefault();
-    setFocusAttempt((attempt) => attempt + 1);
+    summary.current?.focus();
   };
 
   return (
     <form
       method="get"
       action={`/${encodeURIComponent(locale)}/search/releases`}
+      onCompositionStartCapture={(event) => {
+        composition.handlers.onCompositionStartCapture(event);
+        setComposing(true);
+      }}
+      onCompositionEndCapture={(event) => {
+        composition.handlers.onCompositionEndCapture(event);
+        setComposing(false);
+      }}
+      onKeyDownCapture={(event) => {
+        composition.handlers.onKeyDownCapture(event);
+        if (event.key !== 'Enter') return;
+        const tagName = (event.target as HTMLElement | null)?.tagName;
+        if (tagName === 'TEXTAREA') {
+          if (composition.isComposing(event)) event.stopPropagation();
+          return;
+        }
+        if (tagName === 'INPUT') composition.preventImplicitSubmit(event);
+        else if (composition.isComposing(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      onKeyUpCapture={composition.handlers.onKeyUpCapture}
+      onPointerDownCapture={composition.handlers.onPointerDownCapture}
+      onBlurCapture={(event) => {
+        composition.handlers.onBlurCapture(event);
+        setComposing(false);
+      }}
       onSubmit={submit}
       className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2"
     >

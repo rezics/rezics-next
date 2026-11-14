@@ -588,8 +588,12 @@ test('release criteria update on subtype change, retain repairs, and apply an or
     expect(mounted.window.document.activeElement?.id).toBe('release-search-errors');
 
     await act(async () => {
-      changeValue('subtype', releaseType);
+      input('releaseLanguage').focus();
       changeValue('releaseLanguage', 'ja, en');
+    });
+    expect(mounted.window.document.activeElement).toBe(input('releaseLanguage'));
+    await act(async () => {
+      changeValue('subtype', releaseType);
     });
     expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
     const params = new URLSearchParams();
@@ -627,6 +631,129 @@ test('release criteria update on subtype change, retain repairs, and apply an or
     expect(input('ageUnit').value).toBe('http://www.wikidata.org/entity/Q577');
     expect(mounted.host.textContent).toContain('Nintendo Switch');
     expect(mounted.host.textContent).toContain('Example Studio');
+  } finally {
+    await mounted.close();
+    if (previousFetch) Object.defineProperty(globalThis, 'fetch', previousFetch);
+    else Reflect.deleteProperty(globalThis, 'fetch');
+  }
+});
+
+test('release criteria keeps IME confirmation as text, then allows deliberate selection and pointer Apply', async () => {
+  const previousFetch = Object.getOwnPropertyDescriptor(globalThis, 'fetch');
+  const queries: string[] = [];
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    writable: true,
+    value: async (input: RequestInfo | URL) => {
+      const query = new URL(String(input), 'https://site.test').searchParams.get('q')!;
+      queries.push(query);
+      return new Response(
+        JSON.stringify({
+          subjects: [{ id: platformId, type: 'schema:GamePlatform', labels: { ja: '任天堂 Switch' }, summary: null }],
+          types: { 'schema:GamePlatform': { ja: 'ゲーム機' } },
+          as_of: '2026-11-05T00:00:00.000Z',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    },
+  });
+  const mounted = await mountReleaseCriteria('ja');
+  try {
+    const parsed = parseReleaseSearch(
+      { subtype: releaseType, q: '作品集', language: ['ja'], gte: '2024-02', lte: '2024-03', cursor: 'old-cursor' },
+      bundledRelease,
+      'ja',
+    );
+    await mounted.render(parsed);
+    const platform = mounted.host.querySelector<HTMLInputElement>('#release-search-platform')!;
+    const hiddenPlatform = mounted.host.querySelector<HTMLInputElement>('input[type="hidden"][name="platform"]')!;
+    const setPlatform = (value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(platform), 'value')?.set?.call(platform, value);
+      platform.dispatchEvent(new mounted.window.Event('input', { bubbles: true }));
+    };
+    const key = (type: string, value: string, options: KeyboardEventInit = {}) =>
+      platform.dispatchEvent(
+        new mounted.window.KeyboardEvent(type, { key: value, bubbles: true, cancelable: true, ...options }),
+      );
+    const waitForLookup = () => new Promise((resolve) => setTimeout(resolve, 0));
+    await act(async () => {
+      setPlatform('Nintendo');
+      await waitForLookup();
+    });
+    expect(mounted.host.querySelector('[role="option"]')?.textContent).toContain('任天堂 Switch');
+    expect(queries).toEqual(['Nintendo']);
+
+    await act(async () => {
+      key('keydown', 'Escape');
+      key('keyup', 'Escape');
+    });
+    expect(platform.value).toBe('');
+    expect(hiddenPlatform.value).toBe('');
+    await act(async () => {
+      setPlatform('Nintendo');
+      await waitForLookup();
+    });
+    expect(queries).toEqual(['Nintendo', 'Nintendo']);
+
+    await act(async () => {
+      platform.dispatchEvent(new mounted.window.Event('compositionstart', { bubbles: true }));
+      expect(key('keydown', 'Enter', { keyCode: 229, which: 229, isComposing: true })).toBe(false);
+      key('keyup', 'Enter', { keyCode: 229, which: 229, isComposing: true });
+    });
+    expect(hiddenPlatform.value).toBe('');
+    expect(platform.value).toBe('Nintendo');
+    expect(mounted.host.querySelector('[role="option"]')?.textContent).toContain('任天堂 Switch');
+
+    await act(async () => {
+      setPlatform('任天堂');
+    });
+    expect(queries).toEqual(['Nintendo', 'Nintendo']);
+    await act(async () => {
+      platform.dispatchEvent(new mounted.window.Event('compositionend', { bubbles: true }));
+      expect(key('keydown', 'Enter', { keyCode: 229, which: 229, isComposing: true })).toBe(false);
+      const form = mounted.host.querySelector('form')!;
+      expect(form.dispatchEvent(new mounted.window.Event('submit', { bubbles: true, cancelable: true }))).toBe(false);
+      key('keyup', 'Enter', { keyCode: 229, which: 229, isComposing: true });
+      await waitForLookup();
+    });
+    expect(hiddenPlatform.value).toBe('');
+    expect(platform.value).toBe('任天堂');
+    expect(platform.getAttribute('aria-invalid')).toBe('true');
+    expect(mounted.host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(queries).toEqual(['Nintendo', 'Nintendo', '任天堂']);
+    expect(mounted.host.querySelector('[role="option"]')?.textContent).toContain('任天堂 Switch');
+
+    await act(async () => {
+      key('keydown', 'ArrowDown');
+      key('keyup', 'ArrowDown');
+    });
+    await act(async () => {
+      key('keydown', 'Enter', { keyCode: 13, which: 13 });
+      key('keyup', 'Enter', { keyCode: 13, which: 13 });
+    });
+    expect(hiddenPlatform.value).toBe(platformId);
+    expect(platform.value).toBe('');
+    expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
+
+    const form = mounted.host.querySelector<HTMLFormElement>('form')!;
+    const apply = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    let submitted: FormData | undefined;
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitted = new mounted.window.FormData(form);
+    });
+    await act(async () => {
+      apply.dispatchEvent(new mounted.window.Event('pointerdown', { bubbles: true }));
+      apply.dispatchEvent(new mounted.window.Event('pointerup', { bubbles: true }));
+      apply.click();
+    });
+    expect(submitted?.get('platform')).toBe(platformId);
+    expect(submitted?.get('q')).toBe('作品集');
+    expect(submitted?.getAll('language')).toEqual(['ja']);
+    expect(submitted?.get('gte')).toBe('2024-02');
+    expect(submitted?.get('lte')).toBe('2024-03');
+    expect(submitted?.has('cursor')).toBe(false);
+    expect(form.getAttribute('action')).toBe('/ja/search/releases');
   } finally {
     await mounted.close();
     if (previousFetch) Object.defineProperty(globalThis, 'fetch', previousFetch);
