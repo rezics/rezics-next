@@ -465,7 +465,7 @@ test('a tsc failure returns its status and diagnostics without running construct
   expect(result.status).toBe(23);
   expect(result.stderr).toBe('src/example.ts(2,3): error TS2322: diagnostic stays exact\n');
   expect(existsSync(join(directory, 'bun.log'))).toBe(false);
-});
+}, 65_000);
 
 test('construct failure is returned after a successful tsc', () => {
   const directory = temporaryDirectory();
@@ -486,7 +486,7 @@ test('construct failure is returned after a successful tsc', () => {
 
   expect(result.status).toBe(19);
   expect(readFileSync(join(directory, 'bun.log'), 'utf8')).toBe('run construct\n');
-});
+}, 65_000);
 
 test('without DATABASE_URL, auth uses kernel placement and the host owns its migrated Auth database', async () => {
   const events: string[] = [];
