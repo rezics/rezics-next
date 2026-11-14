@@ -2922,9 +2922,9 @@ export function workerCheckHostCommandMatchesSettlement(
 ): boolean {
   return Boolean(
     pendingCommand.length &&
-      settledCommand?.length &&
-      isDeepStrictEqual(wrapperExecutionArgv(pendingCommand), wrapperExecutionArgv(settledCommand)) &&
-      isDeepStrictEqual(expandCheckCommands(pendingCommand), expandCheckCommands(settledCommand)),
+    settledCommand?.length &&
+    isDeepStrictEqual(wrapperExecutionArgv(pendingCommand), wrapperExecutionArgv(settledCommand)) &&
+    isDeepStrictEqual(expandCheckCommands(pendingCommand), expandCheckCommands(settledCommand)),
   );
 }
 

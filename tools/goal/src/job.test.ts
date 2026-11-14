@@ -456,10 +456,9 @@ test('a wrapped compiler amendment holds unknown custody, then starts its existi
     expect(h.store.retryIntent(retained.ref)?.status).toBe('pending');
     expect(retained.pendingCommand).toEqual(['--local', '--', 'bun', 'scripts/typecheck.ts']);
     expect(h.store.attempt(retained.ref).typingEvidencePending?.command).toEqual(retained.pendingCommand);
-    const holdEvents =
-      h.store
-        .events(retained.task.id, retained.ref.attempt)
-        .filter((event) => event.kind === 'typing-retry-unreconciled');
+    const holdEvents = h.store
+      .events(retained.task.id, retained.ref.attempt)
+      .filter((event) => event.kind === 'typing-retry-unreconciled');
     expect(holdEvents).toHaveLength(1);
     expect(holdEvents[0]?.body).toContain('source-amendment-compiler-hold');
 
