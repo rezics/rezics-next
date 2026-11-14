@@ -118,6 +118,13 @@ Both inventories use `studio-draft-navigation.tsx` for document rows, current-do
 visibility descriptions; their existing opening guard remains with the workspace.
 The original `pages-studio-workbench--book` story renders this same workspace and controller in AppShell.
 
+Apply the shared [navigation and working-context rules](../../../../packages/ui/README.md#navigation-selection-and-working-context).
+The central canvas leads with current document or organization context and its available primary task. Version
+inspection provides an explicit return to the same editor; technical revision evidence stays secondary. Publication
+inclusion, review and confirmation remain a separate central task, never navigation controls. An unavailable native
+publication or history capability stays visible and truthful in both mounted workspaces and fixtures; layout does
+not grant it. Phone return follows the existing current canvas/departure owner rather than remounting writing.
+
 Decision: Book and Column use an explicit document/creation canvas choice, retaining one selected editor and one
 lazily mounted unsent form outside Shell navigation; first-save acknowledgement clears only its submitted version.
 The header's **New draft** opens the central creation canvas, including when navigation is collapsed. Idle workspaces

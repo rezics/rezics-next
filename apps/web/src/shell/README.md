@@ -159,6 +159,13 @@ requiring a path change. Branch disclosure, paging, More, Retry and organization
 Document rows select their canvas; publication inclusion choices belong to the central publication section.
 No label or generic button implies selection.
 
+Apply the shared [navigation and working-context rules](../../../../packages/ui/README.md#navigation-selection-and-working-context):
+current rows, independent branch disclosure and contextual actions remain distinct on desktop and phone. Native
+list/disclosure semantics are sufficient for these document destinations. Preserve visible, connected current focus
+targets and the consumer's subsequent manual focus; a closed or replaced navigation host cannot reclaim focus.
+The central canvas owns editing and confirmation, so sidebar placement or width changes never become document,
+selection or publication commands.
+
 The consumer owns its localized label and row copy, exposure checks and private mount gates. There are no added
 shell strings, I/O, persistence, navigation contributions or per-row projection. Cost is one live region and
 O(rendered navigation). Focused regression source covers replacement/removal, nested owner selection, context
