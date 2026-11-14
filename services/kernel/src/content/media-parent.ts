@@ -6,8 +6,8 @@ import type { Actor } from '../request/access.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
 import { deadlineClient, within } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import parent from './read-media-parent.sql';
@@ -111,32 +111,22 @@ export async function mediaParentSnapshot<T>(
   deadline: number,
   read: (client: AccessClient) => Promise<T>,
 ): Promise<T> {
-  return within(deadline, () =>
-    withConnection(pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      try {
-        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const anchor = await readPartition(bounded, partitionOf(r));
-        if (!anchor || anchor.writeState === 'moved') throw new GrantDeniedError();
-        const result = await within(deadline, () => read(bounded));
-        await bounded.query('COMMIT');
-        return result;
-      } catch (error) {
-        if (error instanceof AccessUnavailableError && error.reason === 'deadline') {
-          discardConnection(client, error);
-        } else {
-          try {
-            await within(deadline, () => client.query('ROLLBACK'));
-          } catch (rollbackError) {
-            discardConnection(
-              client,
-              rollbackError instanceof Error ? rollbackError : new Error('Media parent snapshot rollback failed'),
-            );
-          }
-        }
-        throw error;
-      }
-    }),
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
+      const anchor = await readPartition(client, partitionOf(r));
+      if (!anchor || anchor.writeState === 'moved') throw new GrantDeniedError();
+      return read(client);
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error) {
+        throwAccessUnavailable(error);
+        return error;
+      },
+      isUncertainSettledQueryError: () => true,
+    },
   );
 }
 
