@@ -69,11 +69,13 @@ failures remain stale, 401/403/404 deny Reports or close Appeals, and 503 keeps 
 unavailable. The Board actions menu delegates its signed-in gate to the localized Reports destination; a ready empty
 Appeals page retains Refresh without rows or resolution actions.
 
-The local public directory contract in `workbench-queue/directory.ts` is a consumer seam only; it neither mounts an
-HTTP route nor supplies a native source. The production scope directory is unavailable, so unselected discovery
-renders unavailable rather than a complete empty result and has no scope labels or controls. The consumer does not
-fall back to `GET /v1/me/realms` or `GET /v1/realms/{id}/boards` for moderator-scope coverage. See
-[Remaining producer bindings](#remaining-producer-bindings) for the missing source and declarations.
+The local public directory contract in `workbench-queue/directory.ts` is backed by the installed
+`nativeModerationDirectory` adapter and generated `GET /v1/me/moderation-directory` call. Unselected discovery reads
+that native page and admits its supplied scope labels and queue advice; it does not fall back to
+`GET /v1/me/realms` or `GET /v1/realms/{id}/boards` for moderator-scope coverage. A sparse page with continuation
+does not establish complete coverage. See
+[Installed producer bindings and remaining limits](#installed-producer-bindings-and-remaining-limits) for the current
+binding and acceptance boundaries.
 
 ### Public directory consumer contract
 
@@ -95,7 +97,7 @@ owns account, credential/session, locale and route retirement and async generati
 
 ### Cost: workbench queue and scope
 
-- Touches: unselected discovery invokes only the local directory seam, whose production source makes no native read;
+- Touches: unselected discovery invokes one installed native moderation-directory page read through the local seam;
   a directly selected board queue or catalogue reports queue makes one exact native page read without directory,
   Realm membership or Realm board-list reads.
 - Bound: the directory consumer retains at most 20 records, three queue choices each, 128-character identifiers,
@@ -129,7 +131,7 @@ An appeal resolution acknowledges only its matched native appeal ID; RFC9457 `id
 selection and captured cursor. Keyboard recovery returns to the retry control or workbench boundary unless focus moved
 or the owner retired. Pending or uncertain resolution blocks refresh until settlement.
 
-## Remaining producer bindings
+## Installed producer bindings and remaining limits
 
 Connected list and case reads are `boards/{id}.reports`, `boards/{id}.appeals`, catalogue reports (with status and
 order forwarded through the existing catalogue client seam), and exact moderator report inspection at
@@ -137,14 +139,14 @@ order forwarded through the existing catalogue client seam), and exact moderator
 captured queue state restores only the return context. Workbench rows preserve their report or appeal ID when opening
 the corresponding case, catalogue or appeal destination.
 
-Still absent is the native directory that lists only currently permitted moderation queues and its installed
-declarations. The production consumer therefore uses `nativeModerationDirectoryUnavailable` and does not claim
-`me.realms` or Realm-board listings as coverage. The integrated Content producer declares composed appeal inspection,
-but the installed generated board/thread appeals client still lacks its `inspect` request and selected response.
-Production exact appeal selection remains the named `native-appeal-inspect` unavailable seam and makes no native
-inspection request. Catalogue appeals have no native list. Source preparation and local consumer tests do not prove
-native execution. Native commands remain authoritative and retain their original sender, credentials, key and
-operands.
+Scope discovery uses the installed `nativeModerationDirectory` adapter and generated
+`me.moderation-directory` call. Board and thread appeal reads forward the selected native appeal ID as `inspect` and
+admit the matching inspect reply. Decision uses the installed closed appeal advice and presents its form only for
+native `permitted` advice with current browser command admission. Catalogue appeals have no native list. These
+bindings do not establish native outcomes, candidate completeness, browser acceptance, or physical work and
+serialized-size bounds. Those native, browser and cost acceptance gaps remain with their respective
+producer/controller integration; native commands remain authoritative and retain their original sender, credentials,
+key and operands.
 
 ## Bulk review focus regression
 

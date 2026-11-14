@@ -56,9 +56,10 @@ transient recovery. Reporter Status copies only the original reader's own report
 connection at copy and settlement. Definitive refusals require fresh reads. Retirement never turns known native
 success into uncertainty.
 
-The remaining Decision appeal contract registers composition with the shared authoring departure owner, including
-standalone presenters. It is not reachable until generated advice is available. Nonempty changed statements and
-immutable sending or uncertain commands require its accessible Stay/Leave decision.
+Decision's appeal form registers composition with the shared authoring departure owner, including standalone
+presenters. The form is offered only when the selected native decision supplies `viewer.appeal` advice in the
+`permitted` state and current browser command admission succeeds. Nonempty changed statements and immutable sending
+or uncertain commands require its accessible Stay/Leave decision.
 Stay preserves the exact decision ID, statement, idempotency key and captured CSRF request header through uncertain
 retry. Each attempt prepares the native Authorization credential from the same admitted session and the native command
 repeats authorization. Command acknowledgement and its separate current decision readback remain distinct; a read
@@ -73,8 +74,8 @@ claims to cancel or undo a native request.
 ### Decision consumer cost
 
 - Touches: one selected composed decision GET plus existing session preparation; after publication, one explicit appeal
-  POST and its supported selected decision readback after acknowledgement or conflict. The current generated seam
-  cannot admit an appeal.
+  POST and its supported selected decision readback after acknowledgement or conflict. Native `permitted` advice and
+  current browser command admission enable the form; the native command repeats authorization.
 - Bound: the exact decision ID only. Web performs no target hydration, queue scan, polling, persistent private draft,
   or accumulated receipt history. It retains one response, draft, intent and readback for one visit.
 - Growth: the producer schema currently declares no `maxLength` or byte cap for read-side decision statements,
