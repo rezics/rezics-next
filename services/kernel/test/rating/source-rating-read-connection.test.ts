@@ -43,15 +43,16 @@ async function read(client: SourceRatingReadClient) {
 test('source reads keep repeatable-read snapshots and return successful results', async () => {
   const snapshot = connection();
   await expect(
-    withSourceRatingReadConnection(poolFor(async () => snapshot.client), Date.now() + 1_000, read, {
-      repeatableRead: true,
-    }),
+    withSourceRatingReadConnection(
+      poolFor(async () => snapshot.client),
+      Date.now() + 1_000,
+      read,
+      {
+        repeatableRead: true,
+      },
+    ),
   ).resolves.toBe('current');
-  expect(snapshot.statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT source',
-    'COMMIT',
-  ]);
+  expect(snapshot.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'COMMIT']);
   expect(snapshot.releaseError()).toBeUndefined();
 });
 
@@ -70,16 +71,20 @@ for (const blocked of ['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELEC
     expect(stalled.statements).not.toContain('ROLLBACK');
     expect(stalled.releaseError()).toBeInstanceOf(Error);
     pending.resolve({ rows: [] });
-    await expect(withSourceRatingReadConnection(pool, Date.now() + 1_000, read, { repeatableRead: true })).resolves.toBe(
-      'current',
-    );
+    await expect(
+      withSourceRatingReadConnection(pool, Date.now() + 1_000, read, { repeatableRead: true }),
+    ).resolves.toBe('current');
   });
 }
 
 test('a checkout arriving after expiry sends no SQL and is discarded', async () => {
   const checkout = deferred<PoolClient>();
   const late = connection();
-  const attempt = withSourceRatingReadConnection(poolFor(() => checkout.promise), Date.now() + 100, read);
+  const attempt = withSourceRatingReadConnection(
+    poolFor(() => checkout.promise),
+    Date.now() + 100,
+    read,
+  );
   await expect(attempt).rejects.toBeInstanceOf(AccessUnavailableError);
   checkout.resolve(late.client);
   await late.releaseWait;
