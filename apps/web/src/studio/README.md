@@ -19,10 +19,12 @@ current-post readback agrees with the acknowledged body and operands.
 Decision: article publication renders only the frozen `review.articleSnapshot` through the shared structured
 reader. Each review owns its disclosure, reference and wide-content inspector lifetime; replacement or retirement
 removes those views and suppresses late focus. Supplied destination/licence/operand labels may lead presentation,
-but exact IDs remain inspectable and an absent destination label stays unnamed. Media IDs never resolve attachments;
+but exact IDs remain inspectable and an absent destination label stays unnamed. `StudioPublication.articlePresentation`
+is a synchronous, caller-supplied label projection of that exact review; it performs no reads. Media IDs never resolve attachments;
 there are no new reads or mention lookups. Notes use the admitted document's paragraphs/lists and shared spoiler
 disclosure; Studio adds no footnote schema. Consent belongs to one review object. Sending and uncertain same-intent
 retry use existing controller actions; acknowledged publication and a later current observation are distinct.
+The shared wide-inspector description says “document content” because the same renderer serves unpublished reviews.
 Book selection, expiry, native commands, authorization and departure protection retain their existing owners.
 
 Sources read before design: this guide's account publication and shared release sections, `publication.tsx`,
@@ -33,7 +35,9 @@ and no attachment resolution or additional network requests.
 
 Source-only acceptance: `studio-article-publication.stories.tsx` illustrates structured body, missing presentation,
 unknown replay and replacement during wide inspection using the real panel and contract-shaped reviews. The focused
-mounted article regression and existing Studio account/publication/retry suites, keyboard/visual inspection and
+mounted regression `apps/web/tests/studio-article-publication.test.tsx` pins frozen structured content, missing and
+supplied labels, equal-byte replacement, disclosure/inspector retirement, same-intent replay and separate later
+observations. Its execution and existing Studio account/publication/retry suites, keyboard/visual inspection and
 original native author-to-reader acceptance remain unverified until the separate verifier runs them. Story fixtures
 are illustrations, not native publication evidence.
 
