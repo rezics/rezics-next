@@ -45,7 +45,7 @@ import { publicationOverlayKind, publicPublicationStatements, type PublicationDe
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
-import { peopleOverviewFamily, peopleOverviewParts } from './showcase-people/profile';
+import { PeopleProfileContext, peopleOverviewFamily, peopleOverviewParts } from './showcase-people/profile';
 import { OrganizationOverview } from '../catalogue/organization-reader/overview';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
@@ -1577,12 +1577,7 @@ export function SubjectPage({
                             data-people-family={peopleFamily}
                             className="min-w-0 space-y-8 sm:space-y-10"
                           >
-                            <CompositionRender
-                              document={peopleParts.lead}
-                              definitions={pageDefinitions}
-                              components={pageComponents(framed)}
-                              root={PageRoot}
-                            />
+                            <PeopleProfileContext descriptions={read!.subject.descriptions} locale={locale} />
                             <CharacterAssociationBridge source={page}>
                               {peopleProfiles}
                               <CompositionRender

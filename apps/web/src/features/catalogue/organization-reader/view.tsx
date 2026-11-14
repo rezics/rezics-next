@@ -538,116 +538,112 @@ function OrganizationFacts({
       persistVisit(fact, keyboard);
     }
   };
+  const primary = model.fields.filter(
+    (field) =>
+      read.release.properties[field.id]?.datatype === 'document' ||
+      field.unavailable ||
+      (field.facts.length > 0 && (field.kind === 'dates' || field.kind === 'relations')),
+  );
+  const secondary = model.fields.filter((field) => !primary.includes(field));
+  const renderField = (field: (typeof model.fields)[number]) => (
+    <section key={field.id} className="min-w-0 space-y-2">
+      <h3
+        ref={(node) => {
+          if (node) fieldHeadings.current.set(field.id, node);
+          else fieldHeadings.current.delete(field.id);
+        }}
+        data-organization-field={field.id}
+        tabIndex={-1}
+        lang={field.label.lang ?? undefined}
+        className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        {field.label.text || m.candidate_value_unavailable({}, o)}
+      </h3>
+      {field.kind === 'relations' && (
+        <p className="text-sm text-muted-foreground">{m.organization_reader_direction({}, o)}</p>
+      )}
+      {!field.facts.length && (
+        <p>
+          {field.unavailable
+            ? m.candidate_value_unavailable({}, o)
+            : subject.resolution[field.id] === 'suppressed'
+              ? m.people_facts_suppressed({}, o)
+              : subject.resolution[field.id] === 'unresolved'
+                ? m.people_facts_unresolved({}, o)
+                : m.people_biography_absent({}, o)}
+        </p>
+      )}
+      <ul className="space-y-3">
+        {field.facts.map((fact) => {
+          const inspecting =
+            selected?.episode === episode.key && selected.id === fact.id && selected.property === field.id;
+          const content = (
+            <div className="min-w-0 space-y-2">
+              <OrganizationValue part={fact} {...presentation} />
+              <button
+                type="button"
+                className={control + ' block text-sm'}
+                onClick={(event) => open(fact, event)}
+                aria-expanded={inspecting}
+                data-organization-property={field.id}
+                data-organization-candidate={fact.id}
+              >
+                {m.organization_reader_inspect({}, o)}
+              </button>
+              {inspecting && (
+                <Inspection
+                  fact={fact}
+                  selected={selected}
+                  presentation={presentation}
+                  correction={organizationHistoryDestinationHref(
+                    `${catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}?${new URLSearchParams({ property: fact.property.id, statement: fact.id })}`,
+                    subject.context,
+                    realm,
+                    organizationHistoryAddress(
+                      currentHref,
+                      fallbackHref,
+                      locale,
+                      subject.id,
+                      subject.context,
+                      realm,
+                      organizationLocator(read, fact, selected?.keyboard ?? false, locale, realm),
+                    ),
+                    locale,
+                  )}
+                  close={close}
+                  current={episode.current}
+                />
+              )}
+            </div>
+          );
+          return (
+            <li key={fact.id} className="min-w-0 space-y-1">
+              {spoilerLevel(fact) > preferences.spoilerLevel ? (
+                <OrganizationFactDisclosure
+                  locale={locale}
+                  current={episode.current}
+                  onHide={() => {
+                    if (inspecting) {
+                      persistVisit();
+                      select(undefined);
+                    }
+                  }}
+                >
+                  {content}
+                </OrganizationFactDisclosure>
+              ) : (
+                content
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
   const sources = profileSourceRecords(subject);
   return (
     <>
-      {[...model.fields]
-        .sort((left, right) => {
-          const order = (field: (typeof model.fields)[number]) =>
-            read.release.properties[field.id]?.datatype === 'document'
-              ? 0
-              : field.kind === 'dates'
-                ? 1
-                : field.kind === 'relations'
-                  ? 3
-                  : 2;
-          return order(left) - order(right);
-        })
-        .map((field) => (
-          <section key={field.id} className="min-w-0 space-y-2">
-            <h3
-              ref={(node) => {
-                if (node) fieldHeadings.current.set(field.id, node);
-                else fieldHeadings.current.delete(field.id);
-              }}
-              data-organization-field={field.id}
-              tabIndex={-1}
-              lang={field.label.lang ?? undefined}
-              className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              {field.label.text || m.candidate_value_unavailable({}, o)}
-            </h3>
-            {field.kind === 'relations' && (
-              <p className="text-sm text-muted-foreground">{m.organization_reader_direction({}, o)}</p>
-            )}
-            {!field.facts.length && (
-              <p>
-                {field.unavailable
-                  ? m.candidate_value_unavailable({}, o)
-                  : subject.resolution[field.id] === 'suppressed'
-                    ? m.people_facts_suppressed({}, o)
-                    : subject.resolution[field.id] === 'unresolved'
-                      ? m.people_facts_unresolved({}, o)
-                      : m.people_biography_absent({}, o)}
-              </p>
-            )}
-            <ul className="space-y-3">
-              {field.facts.map((fact) => {
-                const inspecting =
-                  selected?.episode === episode.key && selected.id === fact.id && selected.property === field.id;
-                const content = (
-                  <div className="min-w-0 space-y-2">
-                    <OrganizationValue part={fact} {...presentation} />
-                    <button
-                      type="button"
-                      className={control + ' block text-sm'}
-                      onClick={(event) => open(fact, event)}
-                      aria-expanded={inspecting}
-                      data-organization-property={field.id}
-                      data-organization-candidate={fact.id}
-                    >
-                      {m.organization_reader_inspect({}, o)}
-                    </button>
-                    {inspecting && (
-                      <Inspection
-                        fact={fact}
-                        selected={selected}
-                        presentation={presentation}
-                        correction={organizationHistoryDestinationHref(
-                          `${catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}?${new URLSearchParams({ property: fact.property.id, statement: fact.id })}`,
-                          subject.context,
-                          realm,
-                          organizationHistoryAddress(
-                            currentHref,
-                            fallbackHref,
-                            locale,
-                            subject.id,
-                            subject.context,
-                            realm,
-                            organizationLocator(read, fact, selected?.keyboard ?? false, locale, realm),
-                          ),
-                          locale,
-                        )}
-                        close={close}
-                        current={episode.current}
-                      />
-                    )}
-                  </div>
-                );
-                return (
-                  <li key={fact.id} className="min-w-0 space-y-1">
-                    {spoilerLevel(fact) > preferences.spoilerLevel ? (
-                      <OrganizationFactDisclosure
-                        locale={locale}
-                        current={episode.current}
-                        onHide={() => {
-                          if (inspecting) {
-                            persistVisit();
-                            select(undefined);
-                          }
-                        }}
-                      >
-                        {content}
-                      </OrganizationFactDisclosure>
-                    ) : (
-                      content
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
+      {primary.map(renderField)}
       {!model.fields.length && <p>{m.organization_reader_no_fields({}, o)}</p>}
       {model.limited && <p role="status">{m.organization_reader_bounded({}, o)}</p>}
       <p className="text-sm text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
@@ -665,7 +661,20 @@ function OrganizationFacts({
           {m.subject_works({}, o)}
         </CurrentLink>
       </nav>
-      <ProfileDetails locale={locale}>
+      <ProfileDetails
+        locale={locale}
+        reveal={
+          selected && secondary.some((field) => field.id === selected.property)
+            ? `${selected.episode}:${selected.id}`
+            : undefined
+        }
+      >
+        {Object.entries(subject.descriptions).map(([language, description]) => (
+          <p key={language} lang={language}>
+            {description}
+          </p>
+        ))}
+        {secondary.map(renderField)}
         <p lang={model.grain.lang ?? undefined} className="font-medium">
           {model.grain.text}
         </p>

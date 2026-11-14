@@ -17,6 +17,7 @@ import {
   personScalarFields,
   profileFields,
   type PersonDefinitions,
+  type PersonGroup,
   type PersonStatement,
 } from './model';
 import { PeopleFactField } from '../people-facts/field';
@@ -194,6 +195,42 @@ function PersonFacts(reading: Reading) {
   const href = subjectHref({ id: read.subject.id, label }, locale).href;
   const Link = reading.link ?? PlainLink;
   if (!groups.length) return null;
+  const primary = groups
+    .map((group) => ({
+      ...group,
+      fields: group.fields.filter((field) => group.kind === 'biography' || (field.admitted && field.facts.length > 0)),
+    }))
+    .filter((group) => group.kind === 'biography' || group.fields.length > 0);
+  const primaryFields = new Set(primary.flatMap((group) => group.fields.map((field) => field.id)));
+  const secondary = groups
+    .map((group) => ({
+      ...group,
+      fields: group.fields.filter((field) => !primaryFields.has(field.id)),
+    }))
+    .filter((group) => group.fields.length > 0);
+  const scalars = profileFields(release, read, personScalarFields(release, read), locale);
+  const essential = new Set(['schema:birthDate', 'schema:deathDate', 'schema:gender']);
+  const renderGroup = (group: PersonGroup) => (
+    <section key={group.kind} className="min-w-0 space-y-3" data-slot={`person-reader-${group.kind}`}>
+      <h3 className="text-xl font-semibold">{title(group.kind, locale)}</h3>
+      {!group.fields.length && <p role="status">{m.people_biography_unsupported({}, o)}</p>}
+      {group.fields.map((field) =>
+        field.admitted ? (
+          <PeopleFactField key={field.id} field={field} reading={reading} />
+        ) : (
+          <section key={field.id} className="min-w-0 space-y-3" data-slot="people-fact-field">
+            <h4 className="font-medium">{field.label.text || m.subject_value_unlabelled({}, o)}</h4>
+            <p role="status">{m.people_biography_unsupported({}, o)}</p>
+          </section>
+        ),
+      )}
+      {group.more && (
+        <Link className={control} href={`${href}/details`}>
+          {m.person_reader_more({}, o)}
+        </Link>
+      )}
+    </section>
+  );
   return (
     <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]" data-slot="person-reader-facts">
       {personCrossSourceIdentity(read) !== 'current' && (
@@ -203,44 +240,19 @@ function PersonFacts(reading: Reading) {
             : m.person_identity_unconfirmed({}, o)}
         </p>
       )}
-      {groups.map((group) => (
-        <section key={group.kind} className="min-w-0 space-y-3" data-slot={`person-reader-${group.kind}`}>
-          <h3 className="text-xl font-semibold">{title(group.kind, locale)}</h3>
-          {!group.fields.length && <p role="status">{m.people_biography_unsupported({}, o)}</p>}
-          {group.fields.map((field) =>
-            field.admitted ? (
-              <PeopleFactField key={field.id} field={field} reading={reading} />
-            ) : (
-              <section key={field.id} className="min-w-0 space-y-3" data-slot="people-fact-field">
-                <h4 className="font-medium">{field.label.text || m.subject_value_unlabelled({}, o)}</h4>
-                <p role="status">{m.people_biography_unsupported({}, o)}</p>
-              </section>
-            ),
-          )}
-          {group.more && (
-            <Link className={control} href={`${href}/details`}>
-              {m.person_reader_more({}, o)}
-            </Link>
-          )}
-        </section>
-      ))}
+      {primary.map(renderGroup)}
       <ProfileFields
         reading={reading}
-        fields={profileFields(release, read, personScalarFields(release, read), locale).filter(
-          (field) =>
-            field.facts.length > 0 && ['schema:birthDate', 'schema:deathDate', 'schema:gender'].includes(field.id),
-        )}
+        fields={scalars.filter((field) => field.facts.length > 0 && essential.has(field.id))}
       />
       <Link className={control} href="#connections">
         {m.showcase_people_credits({}, o)}
       </Link>
       <ProfileDetails locale={locale}>
+        {secondary.map(renderGroup)}
         <ProfileFields
           reading={reading}
-          fields={profileFields(release, read, personScalarFields(release, read), locale).filter(
-            (field) =>
-              field.facts.length > 0 && !['schema:birthDate', 'schema:deathDate', 'schema:gender'].includes(field.id),
-          )}
+          fields={scalars.filter((field) => field.facts.length > 0 && !essential.has(field.id))}
         />
         <SuppliedNames reading={reading} />
         <Link className={control} href={catalogueEntries.people({ id: read.subject.id, label, locale }).href}>

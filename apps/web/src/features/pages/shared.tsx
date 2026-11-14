@@ -1,6 +1,6 @@
 import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
-import type { ComponentType, ReactNode } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import type { Related, Subject, Summary } from '../../subject/read-contract';
 import { SPOILER_PROPERTY } from './values';
 
@@ -103,9 +103,29 @@ export function bestRank(statements: Stmt[]): Stmt[] {
 }
 
 /** Keep the native fact/inspection owners mounted inside a secondary, keyboard-accessible disclosure. */
-export function ProfileDetails({ children, locale }: { children: ReactNode; locale: string }) {
+export function ProfileDetails({
+  children,
+  locale,
+  reveal,
+}: {
+  children: ReactNode;
+  locale: string;
+  reveal?: string | undefined;
+}) {
+  const [expanded, setExpanded] = useState(!!reveal);
+  const [lastReveal, setLastReveal] = useState(reveal);
+  // Commit the open attribute before a returning native inspection restores keyboard focus.
+  if (lastReveal !== reveal) {
+    setLastReveal(reveal);
+    if (reveal) setExpanded(true);
+  }
   return (
-    <details data-slot="people-profile-details" className="min-w-0 border-t border-border pt-4">
+    <details
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      data-slot="people-profile-details"
+      className="min-w-0 border-t border-border pt-4"
+    >
       <summary className="flex min-h-11 cursor-pointer items-center py-2 font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.subject_details({}, { locale: locale as never })}
       </summary>
