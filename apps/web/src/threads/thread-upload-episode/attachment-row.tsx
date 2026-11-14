@@ -1,4 +1,4 @@
-import type { UploadAttachment, UploadAttachmentActions } from '@rezics/ui';
+import type { UploadAttachment, UploadAttachmentActions } from '@rezics/editor';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';

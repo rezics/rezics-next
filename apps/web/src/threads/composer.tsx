@@ -7,8 +7,9 @@ import {
   type DocumentNode,
   type DocumentSnapshot,
 } from '@rezics/document';
-import { DocumentBody } from '@rezics/ui/document-body';
-import { RichTextEditor, type RichTextEditorLabels, type UploadState, type UploadAttachment } from '@rezics/ui';
+import { DocumentBody } from '@rezics/editor/reader';
+import { PreferredRichTextEditor as RichTextEditor } from '../editor/preferred-rich-text-editor';
+import { type RichTextEditorLabels, type UploadState, type UploadAttachment } from '@rezics/editor';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
@@ -348,7 +349,7 @@ function useComposerUpload(
   return {
     upload,
     retire: () => attachments.clear(),
-    renderUpload: (attachment: UploadAttachment, actions: import('@rezics/ui').UploadAttachmentActions) => (
+    renderUpload: (attachment: UploadAttachment, actions: import('@rezics/editor').UploadAttachmentActions) => (
       <ComposerAttachmentRow
         attachment={attachment}
         observation={attachments.observation(attachment)}
@@ -1549,9 +1550,7 @@ function PostComposerContent<T, Context = undefined>({
       ) : null}
       {writing || inspection ? (
         <details className="mt-4 min-w-0 rounded-xl border border-border/60 bg-muted/20 p-3 sm:p-4 [overflow-wrap:anywhere]">
-          <summary className={`${authoringActionClassName} cursor-pointer rounded-md`}>
-            {m.thread_write_help()}
-          </summary>
+          <summary className={`${authoringActionClassName} cursor-pointer rounded-md`}>{m.thread_write_help()}</summary>
           <div className="mt-3 min-w-0 space-y-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {writing ? <PortableWritingToolbar transfer={writing} /> : null}

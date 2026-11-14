@@ -61,7 +61,7 @@ at their existing boundary; internal consumers use the admitted snapshot unchang
 
 ## Editing, import and submission
 
-The existing `RichTextEditor` public entry (`@rezics/ui`) accepts these snapshots. Both profile extension sets retain
+The existing `RichTextEditor` public entry (`@rezics/editor`) accepts these snapshots. Both profile extension sets retain
 references as inline atoms and definitions as editable, draggable top-level units, including their IDs, labels and
 formatted content. Editing ordinary text or a definition does not rebuild the snapshot from its text projection.
 Keep using the editor's validated `onChange` snapshot for submission, with its existing pending/error contract.
@@ -78,7 +78,7 @@ direction from the same `data-block-id`, `lang` and `dir` attributes emitted by 
 
 ## Shared reading controls and messages
 
-Import `DocumentBody` from `@rezics/ui/document-body`. Pass the full snapshot as `document`. Each reference is a local
+Import `DocumentBody` from `@rezics/editor/reader`. Pass the full snapshot as `document`. Each reference is a local
 link to a native focusable `summary`; each referenced definition has one initially closed `details` disclosure in a
 labelled Footnotes region. Repeated references share the target; separate reader instances receive separate targets
 even for identical snapshots. Enter follows a reference, and the summary's native Enter/Space behavior opens and

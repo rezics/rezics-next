@@ -1,5 +1,5 @@
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import { type DocumentMentions, safeDocumentUrl } from '@rezics/ui/document-body';
+import { type DocumentMentions, safeDocumentUrl } from '@rezics/editor/reader';
 
 export const readingOutlineLimit = 100;
 export const readingOutlineLabelLimit = 120;

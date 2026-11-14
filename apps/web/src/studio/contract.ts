@@ -1,5 +1,5 @@
 import type { DocumentSnapshot } from '@rezics/document';
-import type { RichTextEditorProps } from '@rezics/ui';
+import type { RichTextEditorProps } from '@rezics/editor';
 import type { ComponentProps } from 'react';
 import type { DocumentBody } from '../document-body';
 

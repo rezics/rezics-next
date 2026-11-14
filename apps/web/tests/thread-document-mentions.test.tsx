@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { parseDocument, withDocumentIds } from '@rezics/document';
 
 const dom = installPostReadingDom();
-const { DocumentBody } = await import('@rezics/ui/document-body');
+const { DocumentBody } = await import('@rezics/editor/reader');
 const { projectPostReading } = await import('../src/threads/post-reference-list');
 afterAll(() => dom.restore());
 

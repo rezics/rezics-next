@@ -5,6 +5,7 @@ import { createManagementRead, managedAccountsSchema, accountManagementSchema } 
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import { editorCommandIds, type EditorPreferences, type EditorPreferencePatch } from '@rezics/editor/preferences';
 import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
@@ -450,12 +451,44 @@ const preferenceAction = t.Union([
   t.Object({ allowed: t.Literal(true) }, closed),
   t.Object({ allowed: t.Literal(false), reason: t.Literal('not_authorized') }, closed),
 ]);
+function editorPreferenceSchema(patch = false) {
+  const choice = <S extends TSchema>(schema: S) => t.Optional(patch ? nullable(schema) : schema);
+  const commandList = () => t.Array(literals(editorCommandIds), { maxItems: 64, uniqueItems: true });
+  const bindings = t.Object(
+    Object.fromEntries(editorCommandIds.map((id) => [id, choice(t.String({ maxLength: 80 }))])),
+    closed,
+  );
+  return t.Unsafe<EditorPreferences | EditorPreferencePatch>(
+    t.Object(
+      {
+        typeface: choice(literals(['sans', 'serif', 'mono', 'custom'])),
+        customFont: choice(t.String({ maxLength: 128, pattern: '^[^\\u0000-\\u001f\\u007f;{}<>]*$' })),
+        textSize: choice(t.Integer({ minimum: 12, maximum: 32 })),
+        lineSpacing: choice(t.Number({ minimum: 1, maximum: 2.5 })),
+        writingWidth: choice(t.Integer({ minimum: 40, maximum: 120 })),
+        toolbar: choice(literals(['auto', 'fixed', 'floating', 'hidden'])),
+        outline: choice(t.Boolean()),
+        markdownShortcuts: choice(t.Boolean()),
+        spellcheck: choice(t.Boolean()),
+        pasteMode: choice(literals(['rich', 'plain'])),
+        autoLink: choice(t.Boolean()),
+        pinnedCommands: choice(commandList()),
+        hiddenCommands: choice(commandList()),
+        commandOrder: choice(commandList()),
+        keyboardBindings: choice(bindings),
+      },
+      closed,
+    ),
+  );
+}
+
 function preferences() {
   return memoizedValue(preferences, () =>
     t.Object(
       {
         ...preferenceValues,
         shelf: shelf(),
+        editor: editorPreferenceSchema(),
         notifications: notifications(),
         version: t.Integer({ minimum: 0 }),
         page: preferencePage,
@@ -1221,6 +1254,7 @@ export function accessRoutes(
               spoilerLevel: t.Optional(preferenceValues.spoilerLevel),
               suitability: t.Optional(preferenceValues.suitability),
               shelf: t.Optional(nullable(shelfPatch())),
+              editor: t.Optional(nullable(editorPreferenceSchema(true))),
               notifications: t.Optional(nullable(notificationsPatch())),
             },
             closed,

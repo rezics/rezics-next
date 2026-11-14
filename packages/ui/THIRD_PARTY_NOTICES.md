@@ -2,8 +2,7 @@
 
 ## SharkUI
 
-The components in `src/components/`, the hook in `src/hooks/`, `src/prose.css`,
-`src/hitbox.css` and the theme mapping and animations in `src/styles.css` are
+The components in `src/components/`, the hook in `src/hooks/`, `src/hitbox.css` and the theme mapping and animations in `src/styles.css` are
 derived from [SharkUI](https://github.com/sharkui-inc/shark-ui) at commit
 `d43c3c2c7a5e683d46930c2ce8eb22eca2f8a0a0` and are distributed under the
 following license:

@@ -1,5 +1,5 @@
 import type { ReadingPageResponse } from '@rezics/client';
-import type { DocumentMentions } from '@rezics/ui/document-body';
+import type { DocumentMentions } from '@rezics/editor/reader';
 import { receiveThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
 import {
   receiveThreadDocumentMentions,

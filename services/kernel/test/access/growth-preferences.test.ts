@@ -168,6 +168,7 @@ test('preferences read stays constant as accounts with stored preferences grow',
     spoilerLevel: 0,
     suitability: 'blur',
     shelf: {},
+    editor: {},
     notifications: defaultNotifications,
     version: 0,
   });

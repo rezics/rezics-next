@@ -1,11 +1,12 @@
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { routeWebCheck } from '../../../apps/web/scripts/check-placement.ts';
 
 const command = process.argv.slice(2);
-const app = resolve(import.meta.dir, '..');
-const root = resolve(app, '../..');
+const app = process.cwd();
+const root = resolve(import.meta.dir, '../../..');
+const entry = relative(app, import.meta.path);
 if (command.length > 0) {
-  const routed = await routeWebCheck({ root, cwd: app, command: ['bun', 'scripts/isolated.ts', ...command] });
+  const routed = await routeWebCheck({ root, cwd: app, command: ['bun', entry, ...command] });
   if (routed !== null) process.exit(routed);
 }
 const linux = process.platform === 'linux';

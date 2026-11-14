@@ -1,4 +1,4 @@
-import type { UploadAttachment, UploadedImage } from '@rezics/ui';
+import type { UploadAttachment, UploadedImage } from '@rezics/editor';
 import { ReplyImageUploadRecovery, type ReplyUploadContext } from '../media-upload-recovery';
 import { replyImageLimit, UploadRefusal, type UploadStage } from '../upload';
 

@@ -1,4 +1,4 @@
-import type { UploadedImage } from '@rezics/ui';
+import type { UploadedImage } from '@rezics/editor';
 import * as source from './upload';
 import { FutureThreadUploadEpisode } from './thread-upload-episode/episode';
 

@@ -1,7 +1,7 @@
 import { ThreadPageCursorError } from './thread-page-errors';
 export { isThreadPageCursorError } from './thread-page-errors';
 import type { KernelClient, ReadingPageResponse } from '@rezics/client';
-import type { DocumentMentions } from '@rezics/ui/document-body';
+import type { DocumentMentions } from '@rezics/editor/reader';
 import { boardProblemCode } from './board-reading';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';

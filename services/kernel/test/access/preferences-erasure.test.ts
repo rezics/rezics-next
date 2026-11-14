@@ -57,8 +57,10 @@ async function person(savePreferences = true) {
       spoilerLevel: 2,
       suitability: 'show',
       shelf: { layouts: { all: 'table' }, gridSize: 'large', tableColumns: ['title', 'progress'] },
+      editor: { typeface: 'serif', customFont: 'Private writing font', keyboardBindings: { bold: 'Mod-Shift-j' } },
     });
     expect((await stored(accountId)).rows).toHaveLength(1);
+    expect((await stored(accountId)).rows[0].editor.customFont).toBe('Private writing font');
   }
   return { accountId, context };
 }
