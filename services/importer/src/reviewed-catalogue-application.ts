@@ -7,6 +7,7 @@ import type { ImportIdentifierLookup } from './importer.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import { RunStore, type Run } from './run-store.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
+import { ReviewedCatalogueActions, reviewedCatalogueReviewAttemptBound } from './reviewed-catalogue-actions.ts';
 import {
   assertReviewedCatalogue,
   currentReviewedCatalogueSource,
@@ -35,7 +36,11 @@ import {
 } from './reviewed-catalogue-contract.ts';
 import type { ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 import { remainingRequestFromPreparedCommand } from './seed-remaining-request.ts';
-import { currentCandidateSelection, readCurrentCandidatePages } from './showcase-current-reads.ts';
+import {
+  currentCandidateSelection,
+  readCurrentCandidatePages,
+  sameAdoptionSelection,
+} from './showcase-current-reads.ts';
 
 type CurrentReviewedCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
 
@@ -148,6 +153,7 @@ async function readCurrentReviewedBangumiTagSubjects(
 }
 
 async function select(
+  actions: ReviewedCatalogueActions,
   port: ReviewedCataloguePort,
   seed: ReviewedCatalogueSeed,
   subject: string,
@@ -158,58 +164,75 @@ async function select(
 ): Promise<ReviewedCatalogueReceipt> {
   assertReviewedCatalogue(proposed.value.type === 'value' && typeof proposed.value.content === 'string');
   const query = reviewedCatalogueSlot(proposed.property.id);
-  let page = await readReviewedCandidateSelection(port, subject, query.property, signal);
-  assertReviewedCatalogue(page.complete, 'Reviewed catalogue candidate listing exceeds its bound');
-  const row = page.candidates.find((c) => c.id === candidate);
-  assertReviewedCatalogue(
-    row &&
-      'statement' in row &&
-      currentReviewedCatalogueSource(row.source, seed, revision) &&
-      row.retracted === null &&
-      row.retraction === null,
-  );
-  assertReviewedCatalogue(row.decision !== 'rejected' && row.rank !== 'deprecated');
-  assertReviewedCatalogue(
-    !page.selection.some((c) => c.candidate !== candidate),
-    'Existing editorial selection must not be replaced',
-  );
-  assertReviewedCatalogue(
-    !page.adoption || (page.adoption.mode === 'replace' && page.selection.some((c) => c.candidate === candidate)),
-    'Existing editorial head requires an explicit operator decision',
-  );
-  const acceptance = await port.acceptReviewedCandidate(
+  const identity = sourceDigest({
+    source: reviewedCatalogueEnvelope(seed, revision),
     subject,
     candidate,
-    {
-      context: reviewedCatalogueSlot(proposed.property.id).context,
-      expected_head: row.head,
-    },
-    reviewedCatalogueKey(reviewedCatalogueSeedOwner(seed), `accept:${candidate}:${row.head}`),
-    signal,
-  );
-  assertReviewedCatalogue(acceptance.acceptance.candidate === candidate && acceptance.acceptance.decision === 'accept');
-  page = await readReviewedCandidateSelection(port, subject, query.property, signal);
-  assertReviewedCatalogue(
-    page.complete && !page.selection.some((c) => c.candidate !== candidate),
-  );
-  assertReviewedCatalogue(
-    !page.adoption ||
-      (page.adoption.mode === 'replace' && page.selection.some((c) => c.candidate === candidate)),
-  );
-  const adoption = await port.adoptReviewedCandidates(
-    subject,
-    {
-      context: query.context,
-      property: query.property,
-      mode: 'replace',
-      selection: [{ candidate, rank: 'preferred' }],
-      expected_head: page.adoption?.head ?? null,
-    },
-    reviewedCatalogueKey(reviewedCatalogueSeedOwner(seed), `adopt:${candidate}:${page.adoption?.head ?? null}`),
-    signal,
-  );
-  assertReviewedCatalogue(adoption.adoption.selection.some((c) => c.candidate === candidate));
-  return { subject, candidate, statement: proposed, acceptance, adoption };
+    statement: proposed,
+    context: query.context,
+  });
+  let stale: ImportTransportError | undefined;
+  for (let attempt = 0; attempt <= reviewedCatalogueReviewAttemptBound; attempt += 1) {
+    signal?.throwIfAborted();
+    await openFence(port, seed, signal);
+    let action = actions.pending(identity);
+    if (!action) {
+      const page = await readReviewedCandidateSelection(port, subject, query.property, signal);
+      assertReviewedCatalogue(page.complete, 'Reviewed catalogue candidate listing exceeds its bound');
+      const row = page.candidates.find((c) => c.id === candidate);
+      assertReviewedCatalogue(
+        row &&
+          currentReviewedCatalogueSource(row.source, seed, revision) &&
+          sameStatementProvenance(row.statement, proposed) &&
+          row.retracted === null &&
+          row.retraction === null,
+      );
+      assertReviewedCatalogue(row.decision !== 'rejected' && row.rank !== 'deprecated');
+      assertReviewedCatalogue(
+        !page.selection.some((c) => c.candidate !== candidate),
+        'Existing editorial selection must not be replaced',
+      );
+      assertReviewedCatalogue(
+        !page.adoption || (page.adoption.mode === 'replace' && page.selection.some((c) => c.candidate === candidate)),
+        'Existing editorial head requires an explicit operator decision',
+      );
+      const acceptance = actions.acceptance(identity);
+      const adoption = actions.adoption(identity);
+      if (
+        acceptance &&
+        row.decision === 'accepted' &&
+        adoption &&
+        page.adoption?.mode === 'replace' &&
+        sameAdoptionSelection(page.selection, adoption.adoption.selection)
+      )
+        return { subject, candidate, statement: proposed, acceptance, adoption };
+      if (attempt === reviewedCatalogueReviewAttemptBound) break;
+      action = actions.prepare(
+        identity,
+        reviewedCatalogueSeedOwner(seed),
+        !acceptance || row.decision !== 'accepted'
+          ? { kind: 'accept', subject, candidate, body: { context: query.context, expected_head: row.head } }
+          : {
+              kind: 'adopt',
+              subject,
+              body: {
+                context: query.context,
+                property: query.property,
+                mode: 'replace',
+                // Existing normal/preferred editorial ranks belong to the current complete selection.
+                selection: page.selection.length ? page.selection : [{ candidate, rank: 'preferred' }],
+                expected_head: page.adoption?.head ?? null,
+              },
+            },
+      );
+    }
+    if (attempt === reviewedCatalogueReviewAttemptBound) break;
+    // Unknown delivery is replayed before reading a new head or deriving any replacement intent.
+    await openFence(port, seed, signal);
+    const result = await actions.send(action, port, signal);
+    if (result.status === 'stale') stale = result.error;
+  }
+  throw stale ?? new Error('Reviewed catalogue review remains pending; resume from the saved ledger');
 }
 
 async function seedReviewedCatalogueWith(
@@ -229,6 +252,7 @@ async function seedReviewedCatalogueWith(
   }
   let run: Run | null = null;
   try {
+    const actions = new ReviewedCatalogueActions(session.store.database);
     const prior = store.activeRun(reviewedCatalogueSource);
     if (prior) {
       run = store.reopen(prior);
@@ -336,6 +360,7 @@ async function seedReviewedCatalogueWith(
         assertReviewedCatalogue('value' in entry && 'candidate' in entry.value);
         facts.push(
           await select(
+            actions,
             input.port,
             seed,
             subjects[seed.key]!,
