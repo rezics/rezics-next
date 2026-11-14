@@ -442,17 +442,20 @@
 }
 .studio-writing-canvas,
 .studio-creation-canvas,
+.studio-organization-canvas,
 .studio-history-canvas {
   padding: clamp(0.75rem, 2vw, 1.5rem);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--background);
 }
-.studio-creation-canvas {
+.studio-creation-canvas,
+.studio-organization-canvas {
   inline-size: 100%;
   min-inline-size: 0;
 }
-.studio-creation-canvas > button {
+.studio-creation-canvas > button,
+.studio-organization-canvas > button {
   align-self: start;
 }
 .studio-creation-canvas :is(.studio-native-create, .studio-new-draft) {
@@ -558,4 +561,15 @@
   .studio-writing-canvas {
     padding: 0.75rem;
   }
+}
+
+.studio-organization-form {
+  inline-size: 100%;
+  max-inline-size: 44rem;
+}
+.studio-organization-switch {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-block-end: 1rem;
 }

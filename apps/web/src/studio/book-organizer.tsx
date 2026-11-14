@@ -1,23 +1,19 @@
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { useId, useMemo } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
-import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import {
   bookChapterSelection,
-  bookMoveDestinations,
-  bookMovePositions,
   bookTocIndex,
   moveBookOccurrence,
-  moveBookOccurrenceTo,
   type BookChapterSelection,
   type BookTocIndex,
   type BookTocRow,
 } from './book-toc';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { sameExact, type BookStructure, type BookStructureChange } from './contract';
+import { sameExact } from './contract';
+import type { BookOrganizationRequest } from './book-organization-canvas';
 import { HostedHistoryDisclosure } from './hosted-history-view';
 import type { HostedHistoryBinding } from './hosted-history';
 import type { StudioController, StudioState } from './controller';
@@ -26,12 +22,14 @@ export function BookOrganizer({
   controller,
   state,
   onOpen,
+  onOrganize,
   history,
 }: {
   history?: HostedHistoryBinding;
   controller: StudioController;
   state: StudioState;
   onOpen: (postId: string) => void;
+  onOrganize: (request: BookOrganizationRequest) => void;
 }) {
   const structure = state.structure;
   const adapter = useMemo(() => {
@@ -81,19 +79,15 @@ export function BookOrganizer({
           controller={controller}
           editable={editable}
           onOpen={onOpen}
+          onOrganize={onOrganize}
         />
       ) : (
         <p>{m.studio_book_outline_empty({}, { locale })}</p>
       )}
       {controller.canOrganize() ? (
-        <PlacementForm
-          key={structure.revision}
-          structure={structure}
-          rows={outline.rows}
-          state={state}
-          disabled={!editable || outline.rows.length >= structure.limits.maxPlacements}
-          onChange={controller.organize}
-        />
+        <Button type="button" variant="outline" disabled={!editable} onClick={() => onOrganize({ kind: 'add' })}>
+          {m.studio_book_add_heading({}, { locale })}
+        </Button>
       ) : null}
       {history ? <HostedHistoryDisclosure key={structure.catalogueId} binding={history} /> : null}
       <details className="studio-technical">
@@ -151,6 +145,7 @@ function TocBranch({
   controller: StudioController;
   editable: boolean;
   onOpen: (postId: string) => void;
+  onOrganize: (request: BookOrganizationRequest) => void;
 }) {
   const siblings = outline.children.get(parent) ?? [];
   return (
@@ -174,6 +169,7 @@ function TocEntry({
   controller,
   editable,
   onOpen,
+  onOrganize,
 }: {
   row: BookTocRow;
   outline: BookTocIndex;
@@ -182,13 +178,10 @@ function TocEntry({
   controller: StudioController;
   editable: boolean;
   onOpen: (postId: string) => void;
+  onOrganize: (request: BookOrganizationRequest) => void;
 }) {
   const { placement } = row;
-  const [title, setTitle] = useState(placement.title);
-  const [removing, setRemoving] = useState(false);
-  const [moving, setMoving] = useState(false);
   const locale = getLocale();
-  const renameId = useId();
   const target = placement.target;
   const selection = selections.get(placement.occurrenceId)!;
   const current = state.selected;
@@ -202,7 +195,6 @@ function TocEntry({
     !sameExact(current.source.revision.exact, target.document)
       ? current.source.revision.exact
       : null;
-  const hasDescendants = outline.maxDescendantDepth.get(placement.occurrenceId)! > row.depth;
   return (
     <div className="studio-toc-entry">
       <div className="studio-toc-title">
@@ -248,7 +240,12 @@ function TocEntry({
         )}
 
         <div className="studio-action-row">
-          <Button type="button" variant="outline" disabled={!editable} onClick={() => setMoving(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!editable}
+            onClick={() => onOrganize({ kind: 'move', occurrenceId: placement.occurrenceId })}
+          >
             {m.studio_book_move_to({}, { locale })}
           </Button>
           {(
@@ -284,7 +281,12 @@ function TocEntry({
                 disabled={!editable || !change}
                 aria-label={name}
                 onClick={() => {
-                  if (change) void controller.organize(change);
+                  const structure = controller.snapshot().structure;
+                  if (!structure) return;
+                  const latest = bookTocIndex(structure);
+                  const source = latest.byId.get(placement.occurrenceId);
+                  const current = source ? moveBookOccurrence(source, direction, latest) : null;
+                  if (current) void controller.organize(current);
                 }}
               >
                 {label}
@@ -304,319 +306,25 @@ function TocEntry({
             </Button>
           ) : null}
         </div>
-        {moving ? (
-          <MoveForm
-            occurrenceId={placement.occurrenceId}
-            outline={outline}
-            controller={controller}
-            disabled={!editable}
-            onClose={() => setMoving(false)}
-          />
-        ) : null}
-        <form
-          className="studio-stack"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (title.trim())
-              void controller.organize({ kind: 'rename', occurrenceId: placement.occurrenceId, title: title.trim() });
-          }}
-        >
-          <label htmlFor={renameId}>{m.studio_book_placement_title({}, { locale })}</label>
-          <Input
-            id={renameId}
-            value={title}
-            disabled={!editable}
-            required
-            onChange={(event) => setTitle(event.target.value)}
-          />
+        <div className="studio-action-row">
           <Button
-            type="submit"
+            type="button"
             variant="outline"
-            disabled={!editable || !title.trim() || title.trim() === placement.title}
+            disabled={!editable}
+            onClick={() => onOrganize({ kind: 'rename', occurrenceId: placement.occurrenceId })}
           >
             {m.studio_book_rename({}, { locale })}
           </Button>
-        </form>
-        {removing ? (
-          <div
-            className="studio-stack"
-            role="group"
-            aria-label={m.studio_book_remove_title({ title: placement.title }, { locale })}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!editable}
+            onClick={() => onOrganize({ kind: 'remove', occurrenceId: placement.occurrenceId })}
           >
-            <p>
-              {hasDescendants
-                ? m.studio_book_remove_nested_confirmation({}, { locale })
-                : m.studio_book_remove_confirmation({}, { locale })}
-            </p>
-            <div className="studio-action-row">
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={!editable}
-                onClick={() => void controller.organize({ kind: 'remove', occurrenceId: placement.occurrenceId })}
-              >
-                {m.studio_book_remove_action({}, { locale })}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setRemoving(false)}>
-                {m.studio_book_keep_action({}, { locale })}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button type="button" variant="outline" disabled={!editable} onClick={() => setRemoving(true)}>
             {m.studio_book_remove({}, { locale })}
           </Button>
-        )}
+        </div>
       </details>
     </div>
-  );
-}
-/** Numbering distinguishes repeated titles; submitted values remain exact occurrence IDs. */
-function moveRowLabel(row: BookTocRow, outline: BookTocIndex): string {
-  const position = [...row.ancestors.map((id) => outline.byId.get(id)!.index + 1), row.index + 1].join('.');
-  return m.studio_book_outline_position({ position, title: row.placement.title }, { locale: getLocale() });
-}
-
-function MoveForm({
-  occurrenceId,
-  outline,
-  controller,
-  disabled,
-  onClose,
-}: {
-  occurrenceId: string;
-  outline: BookTocIndex;
-  controller: StudioController;
-  disabled: boolean;
-  onClose: () => void;
-}) {
-  const id = useId();
-  const locale = getLocale();
-  const destinations = useMemo(() => bookMoveDestinations(occurrenceId, outline), [occurrenceId, outline]);
-  const [parent, setParent] = useState<string | null>(() => {
-    const current = outline.byId.get(occurrenceId)!.placement.parentOccurrenceId;
-    return destinations.includes(current) ? current : (destinations[0] ?? null);
-  });
-  const positions = useMemo(() => bookMovePositions(occurrenceId, parent, outline), [occurrenceId, parent, outline]);
-  const [before, setBefore] = useState<string | null>(() => (positions.includes(null) ? null : (positions[0] ?? null)));
-  const parents = destinations.map((value) => ({
-    value,
-    label: value === null ? m.studio_book_move_root({}, { locale }) : moveRowLabel(outline.byId.get(value)!, outline),
-  }));
-  const anchors = positions.map((value) => ({
-    value,
-    label: value === null ? m.studio_book_move_end({}, { locale }) : moveRowLabel(outline.byId.get(value)!, outline),
-  }));
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const current = controller.snapshot();
-    if (
-      disabled ||
-      !controller.canOrganize() ||
-      current.busy ||
-      controller.hasUnresolvedCommand() ||
-      !current.structure
-    )
-      return;
-    // A retained form may outlive a refresh or quick move. Recheck identities and bounds on the current revision.
-    const latest = bookTocIndex(current.structure);
-    const change = moveBookOccurrenceTo(occurrenceId, parent, before, latest);
-    if (change && (await controller.organize(change))) onClose();
-  }
-  return (
-    <form className="studio-stack studio-move-form" onSubmit={(event) => void submit(event)}>
-      {destinations.length ? (
-        <>
-          <Field>
-            <FieldLabel htmlFor={`${id}-parent`}>{m.studio_book_move_destination({}, { locale })}</FieldLabel>
-            <Select<string>
-              items={parents}
-              value={parent}
-              disabled={disabled}
-              onValueChange={(value) => {
-                setParent(value);
-                const next = bookMovePositions(occurrenceId, value, outline);
-                setBefore(next.includes(null) ? null : (next[0] ?? null));
-              }}
-            >
-              <SelectTrigger id={`${id}-parent`} className="min-h-11 w-full">
-                <SelectValue>
-                  {parents.find((item) => item.value === parent)?.label ??
-                    m.studio_book_move_choose_destination({}, { locale })}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {parents.map(({ value, label }) => (
-                    <SelectItem key={value ?? ''} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${id}-before`}>{m.studio_book_move_before({}, { locale })}</FieldLabel>
-            <Select<string>
-              items={anchors}
-              value={before}
-              disabled={disabled || !positions.length}
-              onValueChange={setBefore}
-            >
-              <SelectTrigger id={`${id}-before`} className="min-h-11 w-full">
-                <SelectValue>
-                  {anchors.find((item) => item.value === before)?.label ??
-                    m.studio_book_move_choose_position({}, { locale })}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {anchors.map(({ value, label }) => (
-                    <SelectItem key={value ?? ''} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-        </>
-      ) : (
-        <p className="studio-help">{m.studio_book_move_unavailable({}, { locale })}</p>
-      )}
-      <div className="studio-action-row">
-        <Button type="submit" disabled={disabled || !moveBookOccurrenceTo(occurrenceId, parent, before, outline)}>
-          {m.studio_book_move_action({}, { locale })}
-        </Button>
-        <Button type="button" variant="outline" disabled={disabled} onClick={onClose}>
-          {m.action_cancel({}, { locale })}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function PlacementForm({
-  structure,
-  rows,
-  state,
-  disabled,
-  onChange,
-}: {
-  structure: BookStructure;
-  rows: readonly BookTocRow[];
-  state: StudioState;
-  disabled: boolean;
-  onChange: (change: BookStructureChange) => Promise<boolean>;
-}) {
-  const id = useId();
-  const locale = getLocale();
-  const [kind, setKind] = useState<'part' | 'chapter'>('chapter');
-  const [title, setTitle] = useState('');
-  const [parent, setParent] = useState<string | null>(null);
-  const kinds = [
-    { value: 'chapter' as const, label: m.studio_book_saved_chapter({}, { locale }) },
-    { value: 'part' as const, label: m.book_reader_part({}, { locale }) },
-  ];
-  const parents = [
-    { value: null, label: m.studio_book_move_root({}, { locale }) },
-    ...rows
-      .filter((row) => row.placement.target.kind === 'part' && row.depth + 1 < structure.limits.maxDepth)
-      .map((row) => ({
-        value: row.placement.occurrenceId,
-        label: m.studio_book_indented_title({ indent: '— '.repeat(row.depth), title: row.placement.title }, { locale }),
-      })),
-  ];
-  const selected = state.selected;
-  const canPlace = Boolean(
-    selected && !selected.dirty && !selected.snapshotPending && !selected.invalid && !selected.uploading,
-  );
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (disabled || !title.trim() || (kind === 'chapter' && !canPlace)) return;
-    const target =
-      kind === 'part'
-        ? { kind: 'part' as const }
-        : selected
-          ? { kind: 'chapter' as const, document: selected.source.revision.exact }
-          : null;
-    if (!target) return;
-    const saved = await onChange({
-      kind: 'insert',
-      parentOccurrenceId: parent,
-      beforeOccurrenceId: null,
-      title: title.trim(),
-      target,
-    });
-    if (saved) setTitle('');
-  }
-  return (
-    <details className="studio-placement-form">
-      <summary>{m.studio_book_add_heading({}, { locale })}</summary>
-      <form onSubmit={(event) => void submit(event)} className="studio-stack">
-        <Field>
-          <FieldLabel htmlFor={`${id}-kind`}>{m.studio_book_add_kind({}, { locale })}</FieldLabel>
-          <Select<'part' | 'chapter'>
-            items={kinds}
-            value={kind}
-            disabled={disabled}
-            onValueChange={(value) => setKind(value ?? 'chapter')}
-          >
-            <SelectTrigger
-              id={`${id}-kind`}
-              aria-describedby={kind === 'chapter' ? `${id}-document` : undefined}
-              className="min-h-11 w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {kinds.map(({ value, label }) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          {kind === 'chapter' ? (
-            <FieldDescription id={`${id}-document`} className="studio-help">
-              {selected
-                ? m.studio_book_selected_document({ title: selected.title }, { locale })
-                : m.studio_book_open_draft({}, { locale })}
-            </FieldDescription>
-          ) : null}
-        </Field>
-        <label htmlFor={`${id}-title`}>{m.studio_book_placement_title({}, { locale })}</label>
-        <Input
-          id={`${id}-title`}
-          value={title}
-          required
-          disabled={disabled}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-        <Field>
-          <FieldLabel htmlFor={`${id}-parent`}>{m.studio_book_place_inside({}, { locale })}</FieldLabel>
-          <Select<string> items={parents} value={parent} disabled={disabled} onValueChange={setParent}>
-            <SelectTrigger id={`${id}-parent`} className="min-h-11 w-full">
-              <SelectValue placeholder={m.studio_book_move_root({}, { locale })} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {parents.map(({ value, label }) => (
-                  <SelectItem key={value ?? ''} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Button type="submit" disabled={disabled || !title.trim() || (kind === 'chapter' && !canPlace)}>
-          {kind === 'part' ? m.studio_book_add_part({}, { locale }) : m.studio_book_add_chapter({}, { locale })}
-        </Button>
-      </form>
-    </details>
   );
 }

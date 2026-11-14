@@ -129,3 +129,35 @@ export const ColumnWorkingPreviewReturnsToDraft: Story = {
   args: { profile: 'column', scenario: 'working-preview' },
   play: workingPreviewReturnsToDraft,
 };
+
+export const BookOrganizationDraft: Story = {
+  args: { profile: 'book', scenario: 'populated' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Retained central Book organization with the same selected editor. Review add, rename, move and removal from the nested outline on phone and desktop; this fixture does not prove native acknowledgement.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const copy = workbenchCopy[getLocale()];
+    const title = await canvas.findByRole('textbox', { name: m.studio_workspace_title(), exact: true });
+    const editor = canvasElement.querySelector('.tiptap');
+    await openNavigation(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const outline = page.getByRole('region', { name: m.studio_book_outline_label() });
+    await userEvent.click(within(outline).getByRole('button', { name: m.studio_book_add_heading(), exact: true }));
+    const form = canvas.getByRole('form', { name: m.studio_book_add_heading() });
+    const placement = within(form).getByRole('textbox', { name: m.studio_book_placement_title() });
+    await userEvent.type(placement, 'A retained chapter placement');
+    await expect(title).not.toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: copy.returnToDocument, exact: true }));
+    await expect(title).toBeVisible();
+    await expect(canvasElement.querySelector('.tiptap')).toBe(editor);
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_book_organize(), exact: true }));
+    await expect(canvas.getByRole('form', { name: m.studio_book_add_heading() })).toBe(form);
+    await expect(placement).toHaveValue('A retained chapter placement');
+  },
+};

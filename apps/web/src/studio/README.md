@@ -110,7 +110,8 @@ Shared Studio puts the document first; Shell owns its sidebar and phone drawer.
 Decision: Book chapters and Column drafts live in the main Shell sidebar through
 `ShellContextNavigation({ label, children })` from `shell/contextual-navigation.tsx`. Shell owns placement, the phone
 drawer, dismissal and focus restoration; Studio contributes one mounted navigation subtree, never a second aside,
-responsive disclosure or navigation column inside the content width. The center contains one document canvas.
+responsive disclosure or navigation column inside the content width. The center chooses between retained document,
+creation and Book organization canvases.
 Book parts retain their native nested order. The draft inventory lists only documents not already placed in that
 outline, avoiding repeated chapter navigation. Column series context stays distinct from independent articles.
 The original `pages-studio-workbench--book` story renders this same workspace and controller in AppShell.
@@ -125,9 +126,47 @@ selection performs no read and preserves Write/Preview/history choice, saved-ver
 Reopening creation restores its own form, metadata, editor and selection. Hidden owners are inert and outside the
 tab order; their reading inspectors retire on hide and reopen as fresh readers.
 
+Decision: Book add, rename, move and removal share one central organization form owner in `workspace.tsx` through
+`book-organization-canvas.tsx`; the sidebar contains the native nested outline, release choices and concise actions.
+Opening an action uses Shell's admitted-selection handoff, so phone Menu dismissal cannot destroy its fields. The
+selected document editor remains mounted and inert while hidden. **Return to documents** deliberately restores that
+same editor, selection and Write/Preview/history choice without a read; it retains the organization draft. Hidden
+organization fields and their Select popups are inert. Column keeps its article navigation and creation workflow.
+
+Opening organization from dirty document work uses the existing Save and switch / Discard and switch / Keep editing
+review. A cancelled review cannot resume after a late save. Changing an organization action or selecting another
+document while organization values are dirty requires Discard and switch / Keep changes. Returning to the same
+document hides compatible values without discarding them; reopening an unsent placement after saving binds the current
+exact saved selection. A pending command remains reachable even after editing that document again, without
+discarding its newer text. Cancel explicitly discards unsent organization work. Only one organization draft and one
+selected editor exist per visit; account/session, locale and visit replacement retire their owners together.
+
+Submission resolves the current catalogue, occurrence, parent and anchor through the existing bounded index and
+checks saved chapter eligibility and placement capacity/depth again. A structure refresh never keys or resets the
+form. Missing or invalid operands stay visible for correction or cancellation. Pending/unknown organization remains
+reachable from the header, contributes to departure protection even while hidden, and uses only the controller's
+frozen native intent on retry. Authors may prepare newer fields while a command settles; acknowledgement clears
+only the submitted form version, preserving newer local values. Quick native moves, pinned versions, publication
+selection and frozen public editions keep their installed owners.
+
+Sources read before this choice: this guide's Writing workbench and Direct Book moves, `workspace.tsx`,
+`book-organizer.tsx`, `book-toc.ts`, `contract.ts`, controller organization/retry and selection/save owners,
+`studio.css`, focused placement/selection/continuity tests, workbench fixtures and stories, Shell's contextual
+navigation/selection owner, and the read-only main checkout's `.reference/INDEX.md`. This is a local presentation and
+lifetime change with no command engine or producer dependency.
+Focused source acceptance in `studio-book-placement.test.tsx` relocates existing field/locale assertions to the
+central form, preserves exact native command assertions, and adds navigation unmount, newer-edit acknowledgement,
+unknown replay and current-structure rechecks. `studio-workspace-continuity.test.tsx` adds dirty organization entry,
+cancelled late save, caret/editor return, incompatible dirty switching and pending replay beside newer document work. `studio-book-selection.test.tsx` supplies
+the new presentation callback with all selection assertions unchanged; the mounted outline in
+`studio-hosted-draft-picker.test.tsx` supplies the same callback without changing its attachment assertions. `BookOrganizationDraft` is the named retained
+form story. Execution is deferred: formatting and diff review are the source-only checks; compiler, focused tests,
+Storybook/browser/captures, native phone/desktop/keyboard interactions and original/promoted acceptance remain
+unverified and belong to the separate verifier.
+
 Opening creation from a dirty selection uses Save and switch / Discard and switch / Keep editing. Pending snapshots
 and uploads retain their existing save/discard restrictions; a cancelled switch cannot resume after a late save.
-Changing the selected document uses the same controller guard and retains the independent unsent form. Both forms
+Changing the selected document uses the same controller guard and retains the independent unsent form. Creation and document drafts
 contribute to departure protection while hidden. Sending or unknown creation retains its original command and explicit
 replay; the retained form remains reachable. An acknowledgement opens the saved document only when it clears that
 form version; newer unsent edits remain in creation. Account/session, locale and visit replacement retire both owners.
@@ -142,9 +181,8 @@ Focused acceptance source adds Book/Column dirty creation entry, pending snapsho
 simple/native forms and selected editors, history continuity and same-intent creation replay with newer edits.
 Existing language, native first-save and rich-preview assertions remain, with explicit entry and cleared-form reentry.
 The original Book/Column story IDs remain stable; named creation stories cover both simple profiles.
-Remaining exceptions: simple creation has no unsent body command; phone document-selection buttons do not yet dismiss
-Shell's Menu (its `closeOnNavigation` currently handles anchors). That Shell/UI gap is handed off to Web. Real first-save,
-dirty switch/cancel, preview/history, original native authoring, keyboard and phone/desktop acceptance at the original
+Remaining exception: simple creation has no unsent body command. Shell owns the installed admitted-selection
+handoff for Menu dismissal. Real first-save, dirty switch/cancel, preview/history, original native authoring, keyboard and phone/desktop acceptance at the original
 URLs remain separate verifier work, as do compiler, tests, build and browser/capture execution.
 
 The document toolbar offers Save and one action that changes between Preview and Write. Version history is a
@@ -171,7 +209,8 @@ contracts retain their existing owners.
 
 Cost: one selected editor, no additional document store, one existing bounded organizer and history page, and no new
 fetch effect, polling, per-row body hydration or prefetch. Creation and editor owners stay in the central canvas;
-Shell contributions contain document choices and existing bounded organizer actions.
+Shell contributions contain document choices, release selection and concise bounded organizer actions.
+One visit-local organization draft stores only fields and exact identities, with no body copy or per-row form owner.
 
 Source-first choice: commit product and focused acceptance source; diff/format review only. Compiler, tests, build,
 browser/captures, old-editor parity, native acceptance and eight-locale phone/desktop/keyboard verification are deferred
@@ -515,17 +554,17 @@ changed-file formatting and one Web typecheck; acceptance, mounted native, brows
 
 ## Direct Book moves
 
-Decision: Each occurrence's organization disclosure offers Move to with shared labelled Selects for Book root or
-an eligible part and an exact sibling insertion point, including a labelled end-of-list option. Values are stable
-occurrence IDs; outline numbering distinguishes repeated titles. Options reuse the current outline index, exclude
+Decision: Each occurrence's concise organization disclosure opens central Move to with shared labelled Selects for
+Book root or an eligible part and an exact sibling insertion point, including a labelled end-of-list option. Values
+are stable occurrence IDs; outline numbering distinguishes repeated titles. Options reuse the current outline index, exclude
 the source and descendants, account for the deepest moved descendant, and omit invalid anchors and unchanged
 positions. Destination enumeration happens only for an opened move form and visits the indexed child lists once.
 
 Submission resolves the retained identities against the controller's current structure before issuing the existing
 organize command. A removed or reparented destination/anchor, newly excessive subtree depth or already completed
-move cannot submit a stale form. The form closes on acknowledgment or explicit cancellation and retains failed
-choices. The controller and hosted adapter continue to own stale/uncertain recovery and conditional native revision
-writes. Moving a chapter or whole part subtree makes one draft revision and keeps occurrence IDs, exact Post
+move cannot submit a stale form. The form closes on acknowledgment of its submitted version or explicit
+cancellation, retains failed choices, and keeps newer local edits when an older command acknowledges. The controller
+and hosted adapter continue to own stale/uncertain recovery and conditional native revision writes. Moving a chapter or whole part subtree makes one draft revision and keeps occurrence IDs, exact Post
 versions, release selection and the current publication. Quick moves retain their existing behavior.
 
 Sources read before design: this Studio owner document, `book-toc.ts`, `book-organizer.tsx`, `contract.ts`,
@@ -536,9 +575,9 @@ Sources read before design: this Studio owner document, `book-toc.ts`, `book-org
 Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-book-outline.test.ts
  tests/studio-book-placement.test.tsx tests/studio-hosted-publication.test.ts`. Added cases cover exact destination
 and sibling identities, repeated titles, root and empty parts, subtree depth/cycles, no-op exclusion, form retention,
-current-structure rechecks and one native revision preserving pinned targets and selection. Existing assertions stay
-unchanged. Source verification is changed-file formatting and one affected Web typecheck; acceptance, browser,
-mounted native, Storybook and broad suites remain deferred.
+current-structure rechecks and one native revision preserving pinned targets and selection. Existing operand and
+selection assertions stay unchanged; form location assertions follow the central organization owner. Source
+verification is changed-file formatting and diff review; compiler, acceptance, browser, mounted native, Storybook and broad suites remain deferred.
 
 ## Native author outline
 

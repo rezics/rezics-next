@@ -162,7 +162,12 @@ test('shared release checkboxes show empty, mixed and checked chapter counts, in
   const f = fixture();
   const markup = () =>
     renderToStaticMarkup(
-      createElement(BookOrganizer, { controller: f.controller, state: f.controller.snapshot(), onOpen: () => {} }),
+      createElement(BookOrganizer, {
+        controller: f.controller,
+        state: f.controller.snapshot(),
+        onOpen: () => {},
+        onOrganize: () => {},
+      }),
     );
   expect(markup()).toContain('0 of 3 chapters selected');
   f.controller.toggleOccurrence('deep', true);

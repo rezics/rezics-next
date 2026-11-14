@@ -1,5 +1,6 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
-import { act, createElement } from 'react';
+import { act, createElement, useSyncExternalStore } from 'react';
+import type { StudioState } from '../src/studio/controller';
 import type { BookOrganizerPort, BookStructure, StudioPort } from '../src/studio/contract';
 import { installPostReadingDom } from './post-reading-dom';
 import { chooseSelect, selectOptions, selectTrigger } from './support/select';
@@ -12,6 +13,37 @@ const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
 const { fromPlainText } = await import('@rezics/document');
 const { StudioController } = await import('../src/studio/controller');
 const { BookOrganizer } = await import('../src/studio/book-organizer');
+const { BookOrganizationCanvas, useBookOrganization } = await import('../src/studio/book-organization-canvas');
+
+function OrganizationHarness({
+  controller,
+  state,
+  onOpen = () => {},
+  outlineVisible = true,
+}: {
+  controller: InstanceType<typeof StudioController>;
+  state?: StudioState;
+  onOpen?: (post: string) => void;
+  outlineVisible?: boolean;
+}) {
+  const live = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const current = state ?? live;
+  const organization = useBookOrganization(controller, current);
+  return (
+    <>
+      {outlineVisible ? (
+        <BookOrganizer controller={controller} state={current} onOpen={onOpen} onOrganize={organization.open} />
+      ) : null}
+      <BookOrganizationCanvas
+        organization={organization}
+        active
+        disabled={Boolean(current.busy) || controller.hasUnresolvedCommand()}
+        onCancel={organization.discard}
+      />
+    </>
+  );
+}
+
 afterAll(() => dom.restore());
 
 const unavailable = async () => ({ ok: false as const, error: { kind: 'unavailable' as const, message: 'Unused' } });
@@ -83,13 +115,13 @@ test('placement Selects retain labels, exact parents, root and saved-document el
   const initial = controller.snapshot();
   const render = async (state = initial) =>
     act(async () => {
-      root.render(createElement(BookOrganizer, { controller, state, onOpen: () => {} }));
+      root.render(createElement(OrganizationHarness, { controller, state, onOpen: () => {} }));
     });
   const user = userEvent.setup({ document });
   try {
     await render();
-    host.querySelector<HTMLDetailsElement>('.studio-placement-form')!.open = true;
-    const form = host.querySelector<HTMLFormElement>('.studio-placement-form form')!;
+    await act(async () => user.click(getByRole(host, 'button', { name: 'Add part or chapter', exact: true })));
+    const form = host.querySelector<HTMLFormElement>('.studio-placement-form')!;
     const kind = selectTrigger(form);
     const parent = selectTrigger(form, 1);
     expect(form.querySelector('select')).toBeNull();
@@ -214,7 +246,7 @@ test('Move to uses labelled exact destinations, retains failures and rechecks th
   const root = createRoot(host);
   const render = async () =>
     act(async () =>
-      root.render(createElement(BookOrganizer, { controller, state: controller.snapshot(), onOpen: () => {} })),
+      root.render(createElement(OrganizationHarness, { controller, state: controller.snapshot(), onOpen: () => {} })),
     );
   const user = userEvent.setup({ document });
   try {
@@ -225,7 +257,7 @@ test('Move to uses labelled exact destinations, retains failures and rechecks th
     entry.querySelector<HTMLDetailsElement>('details')!.open = true;
     const buttons = [...entry.querySelectorAll<HTMLButtonElement>('button')];
     await act(async () => user.click(buttons.find((button) => button.textContent === 'Move to…')!));
-    const form = entry.querySelector<HTMLFormElement>('.studio-move-form')!;
+    const form = host.querySelector<HTMLFormElement>('.studio-move-form')!;
     const parent = selectTrigger(form);
     const before = selectTrigger(form, 1);
     const parents = await selectOptions(parent);
@@ -239,7 +271,7 @@ test('Move to uses labelled exact destinations, retains failures and rechecks th
     expect(requests).toHaveLength(0);
     const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     await act(async () => user.click(submit));
-    expect(entry.querySelector('.studio-move-form')).toBe(form);
+    expect(host.querySelector('.studio-move-form')).toBe(form);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
       expectedRevision: 'initial',
@@ -263,7 +295,7 @@ test('Move to uses labelled exact destinations, retains failures and rechecks th
     await act(async () => user.click(submit));
     expect(requests).toHaveLength(2);
     expect(requests[1]!.change).toEqual(requests[0]!.change);
-    expect(entry.querySelector('.studio-move-form')).toBeNull();
+    expect(host.querySelector('.studio-move-form')).toBeNull();
     expect(controller.snapshot().structure!.revision).toBe('moved');
     expect(controller.snapshot().selectedOccurrences).toEqual(new Set(['source']));
     await render();
@@ -333,13 +365,15 @@ test('current locale translates nested placement and removal names while authore
   const host = document.body.appendChild(document.createElement('main'));
   const root = createRoot(host);
   const render = () =>
-    act(async () => root.render(createElement(BookOrganizer, { controller, state: controller.snapshot(), onOpen })));
+    act(async () =>
+      root.render(createElement(OrganizationHarness, { controller, state: controller.snapshot(), onOpen })),
+    );
   const user = userEvent.setup({ document });
   try {
     await render();
     expect(getByRole(host, 'region', { name: 'Book table of contents' })).toBeTruthy();
-    host.querySelector<HTMLDetailsElement>('.studio-placement-form')!.open = true;
-    const form = host.querySelector<HTMLFormElement>('.studio-placement-form form')!;
+    await act(async () => user.click(getByRole(host, 'button', { name: 'Add part or chapter', exact: true })));
+    const form = host.querySelector<HTMLFormElement>('.studio-placement-form')!;
     const input = getByRole(form, 'textbox', { name: 'Placement title' }) as HTMLInputElement;
     await act(async () => user.type(input, 'New chapter / 原稿'));
     const chapter = [...host.querySelectorAll<HTMLElement>('.studio-toc-entry')].find(
@@ -352,7 +386,7 @@ test('current locale translates nested placement and removal names while authore
     expect(getByRole(host, 'heading', { name: '目次' })).toBeTruthy();
     expect(host.textContent).toContain('3 / 10');
     expect(host.textContent).toContain('1 章中 0 章を選択');
-    expect(form.parentElement!.querySelector('summary')!.textContent).toBe('部または章を追加');
+    expect(getByRole(form, 'heading').textContent).toBe('部または章を追加');
     expect(getByRole(form, 'textbox', { name: '配置タイトル' })).toBe(input);
     expect(input.value).toBe('New chapter / 原稿');
     const kind = getByRole(form, 'combobox', { name: '追加' }) as HTMLButtonElement;
@@ -394,27 +428,33 @@ test('current locale translates nested placement and removal names while authore
       parentOccurrenceId: 'part',
       beforeOccurrenceId: null,
     });
-    const rename = getByRole(chapter, 'textbox', { name: '配置タイトル' }) as HTMLInputElement;
+    await act(async () => user.click(getByRole(chapter, 'button', { name: '名前を変更', exact: true })));
+    const renameForm = host.querySelector<HTMLFormElement>('.studio-organization-form')!;
+    const rename = getByRole(renameForm, 'textbox', { name: '配置タイトル' }) as HTMLInputElement;
     expect(rename.value).toBe(chapterTitle);
     await act(async () => user.clear(rename));
     await act(async () => user.type(rename, 'Renamed / 改稿'));
-    await act(async () => user.click(getByRole(chapter, 'button', { name: '名前を変更', exact: true })));
+    await act(async () => user.click(getByRole(renameForm, 'button', { name: '名前を変更', exact: true })));
     expect(organize).toHaveBeenLastCalledWith({ kind: 'rename', occurrenceId: 'chapter', title: 'Renamed / 改稿' });
     const callsBeforeRemoval = organize.mock.calls.length;
     await act(async () => user.click(getByRole(chapter, 'button', { name: '削除…', exact: true })));
-    const leafConfirmation = getByRole(chapter, 'group', { name: `「${chapterTitle}」を削除`, exact: true });
+    const leafConfirmation = getByRole(host, 'group', { name: `「${chapterTitle}」を削除`, exact: true });
     expect(leafConfirmation.textContent).toContain('この配置を削除しますか？文書と過去の公開版は保持されます。');
-    await act(async () => user.click(getByRole(leafConfirmation, 'button', { name: '配置を保持', exact: true })));
+    await act(async () =>
+      user.click(getByRole(leafConfirmation.closest('form')!, 'button', { name: '配置を保持', exact: true })),
+    );
     expect(organize.mock.calls).toHaveLength(callsBeforeRemoval);
     const part = host.querySelector<HTMLElement>('.studio-toc-entry')!;
     part.querySelector<HTMLDetailsElement>('details')!.open = true;
     await act(async () => user.click(getByRole(part, 'button', { name: '削除…', exact: true })));
-    const confirmation = getByRole(part, 'group', { name: `「${partTitle}」を削除`, exact: true });
+    const confirmation = getByRole(host, 'group', { name: `「${partTitle}」を削除`, exact: true });
     expect(confirmation.textContent).toContain(
       'この配置とその配下の配置を削除しますか？文書と過去の公開版は保持されます。',
     );
     expect(organize.mock.calls).toHaveLength(callsBeforeRemoval);
-    await act(async () => user.click(getByRole(confirmation, 'button', { name: '配置を削除', exact: true })));
+    await act(async () =>
+      user.click(getByRole(confirmation.closest('form')!, 'button', { name: '配置を削除', exact: true })),
+    );
     expect(organize).toHaveBeenLastCalledWith({ kind: 'remove', occurrenceId: 'part' });
     expect(host.querySelector('.studio-part-title')!.textContent).toBe(partTitle);
     expect(chapter.querySelector('.studio-toc-open')!.textContent).toBe(chapterTitle);
@@ -433,5 +473,159 @@ test('current locale translates nested placement and removal names while authore
     organize.mockRestore();
     onOpen.mockRestore();
     setLocale(previousLocale, { reload: false });
+  }
+});
+
+test('navigation dismissal retains a pending organization form and exact unknown retry cannot erase newer values', async () => {
+  setLocale('en', { reload: false });
+  const structure: BookStructure = {
+    catalogueId: 'book',
+    revision: 'before',
+    canOrganize: true,
+    limits: { maxDepth: 3, maxPlacements: 10 },
+    placements: [{ occurrenceId: 'part', parentOccurrenceId: null, title: 'Original', target: { kind: 'part' } }],
+  };
+  const requests: Parameters<BookOrganizerPort['change']>[0][] = [];
+  let finish!: () => void;
+  const acknowledgement = new Promise<void>((resolve) => (finish = resolve));
+  const controller = new StudioController(
+    {
+      visitKey: 'retained-organization',
+      projectId: 'book',
+      title: 'Book',
+      profile: { kind: 'book', structure },
+      documents: { items: [], nextCursor: null },
+      publications: { items: [], nextCursor: null },
+      canCreateDraft: true,
+      canPublish: true,
+    },
+    port,
+    {
+      change: async (input) => {
+        requests.push(input);
+        if (requests.length === 1) return { ok: false, error: { kind: 'uncertain', message: 'Response lost' } };
+        await acknowledgement;
+        return {
+          ok: true,
+          value: { ...structure, revision: 'after', placements: [{ ...structure.placements[0]!, title: 'Submitted' }] },
+        };
+      },
+    },
+  );
+  const disconnect = controller.connect();
+  const host = document.body.appendChild(document.createElement('main'));
+  const root = createRoot(host);
+  const user = userEvent.setup({ document });
+  const render = (outlineVisible = true) =>
+    act(async () => root.render(<OrganizationHarness controller={controller} outlineVisible={outlineVisible} />));
+  try {
+    await render();
+    host.querySelector<HTMLDetailsElement>('.studio-toc-actions')!.open = true;
+    await act(async () => user.click(getByRole(host, 'button', { name: 'Rename', exact: true })));
+    const form = getByRole(host, 'form', { name: 'Rename', exact: true });
+    const title = getByRole(form, 'textbox', { name: 'Placement title' }) as HTMLInputElement;
+    await act(async () => user.clear(title));
+    await act(async () => user.type(title, 'Submitted'));
+    await act(async () => user.click(getByRole(form, 'button', { name: 'Rename', exact: true })));
+    expect(controller.hasUnresolvedCommand()).toBe(true);
+    await render(false);
+    expect(host.querySelector('.studio-toc')).toBeNull();
+    expect(getByRole(host, 'form', { name: 'Rename', exact: true })).toBe(form);
+    await act(async () => user.clear(title));
+    await act(async () => user.type(title, 'Newer local title'));
+    let replay!: ReturnType<typeof controller.retry>;
+    await act(async () => {
+      replay = controller.retry();
+    });
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toEqual(requests[0]);
+    expect(requests[0]!.change).toEqual({ kind: 'rename', occurrenceId: 'part', title: 'Submitted' });
+    await act(async () => {
+      finish();
+      await replay;
+    });
+    expect(title.value).toBe('Newer local title');
+    expect(getByRole(form, 'button', { name: 'Rename', exact: true }).hasAttribute('disabled')).toBe(false);
+    await render();
+    expect(host.querySelector('.studio-part-title')!.textContent).toBe('Submitted');
+    expect(title.value).toBe('Newer local title');
+  } finally {
+    finish();
+    await act(async () => root.unmount());
+    disconnect();
+    host.remove();
+  }
+});
+
+test('add, rename and remove recheck current identities without resetting retained fields on structure replacement', async () => {
+  const structure: BookStructure = {
+    catalogueId: 'book',
+    revision: 'before',
+    canOrganize: true,
+    limits: { maxDepth: 3, maxPlacements: 10 },
+    placements: [{ occurrenceId: 'part', parentOccurrenceId: null, title: 'Part', target: { kind: 'part' } }],
+  };
+  const controller = new StudioController(
+    {
+      visitKey: 'current-organization',
+      projectId: 'book',
+      title: 'Book',
+      profile: { kind: 'book', structure },
+      documents: { items: [], nextCursor: null },
+      publications: { items: [], nextCursor: null },
+      canCreateDraft: true,
+      canPublish: true,
+    },
+    port,
+    { change: unavailable },
+  );
+  const organize = spyOn(controller, 'organize').mockResolvedValue(false);
+  const snapshot = controller.snapshot();
+  const fresh = spyOn(controller, 'snapshot').mockReturnValue(snapshot);
+  const host = document.body.appendChild(document.createElement('main'));
+  const root = createRoot(host);
+  const user = userEvent.setup({ document });
+  const render = (state = snapshot) =>
+    act(async () => root.render(<OrganizationHarness controller={controller} state={state} />));
+  const removed = { ...snapshot, structure: { ...structure, revision: 'after', placements: [] } };
+  try {
+    await render();
+    await act(async () => user.click(getByRole(host, 'button', { name: 'Add part or chapter', exact: true })));
+    const form = host.querySelector<HTMLFormElement>('.studio-placement-form')!;
+    await chooseSelect(selectTrigger(form), 'part');
+    await chooseSelect(selectTrigger(form, 1), 'part');
+    const title = getByRole(form, 'textbox', { name: 'Placement title' }) as HTMLInputElement;
+    await act(async () => user.type(title, 'Retained part'));
+    fresh.mockReturnValue(removed);
+    await act(async () => user.click(getByRole(form, 'button', { name: 'Add part', exact: true })));
+    expect(organize).not.toHaveBeenCalled();
+    await render(removed);
+    expect(title.value).toBe('Retained part');
+    expect((getByRole(form, 'button', { name: 'Add part' }) as HTMLButtonElement).disabled).toBe(true);
+    fresh.mockReturnValue(snapshot);
+    await render();
+    await act(async () => user.click(getByRole(form, 'button', { name: 'Cancel', exact: true })));
+    for (const action of ['Rename', 'Remove…']) {
+      host.querySelector<HTMLDetailsElement>('.studio-toc-actions')!.open = true;
+      await act(async () => user.click(getByRole(host, 'button', { name: action, exact: true })));
+      const currentForm = host.querySelector<HTMLFormElement>('.studio-organization-form')!;
+      if (action === 'Rename') {
+        await act(async () => user.type(getByRole(currentForm, 'textbox', { name: 'Placement title' }), ' changed'));
+      }
+      fresh.mockReturnValue(removed);
+      await act(async () => user.click(currentForm.querySelector<HTMLButtonElement>('button[type="submit"]')!));
+      expect(organize).not.toHaveBeenCalled();
+      fresh.mockReturnValue(snapshot);
+      await act(async () =>
+        user.click(
+          getByRole(currentForm, 'button', { name: action === 'Rename' ? 'Cancel' : 'Keep placement', exact: true }),
+        ),
+      );
+    }
+  } finally {
+    await act(async () => root.unmount());
+    organize.mockRestore();
+    fresh.mockRestore();
+    host.remove();
   }
 });

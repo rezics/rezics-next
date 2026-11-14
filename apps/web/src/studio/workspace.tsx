@@ -19,6 +19,12 @@ import { StudioController, type WorkingDocument } from './controller';
 import { NativeDraftComposer } from './native-draft-composer';
 import { workspaceEditorLabels, workspaceFailureMessage } from './workspace-language';
 import { BookOrganizer } from './book-organizer';
+import {
+  BookOrganizationCanvas,
+  sameOrganizationRequest,
+  useBookOrganization,
+  type BookOrganizationRequest,
+} from './book-organization-canvas';
 import { ExactVersionDetails, StudioVersions } from './revisions';
 import { StudioPublication } from './publication';
 import { m } from '../paraglide/messages.js';
@@ -44,6 +50,11 @@ import './studio.css';
 const noBookStart: HostedBookStartState = { kind: 'idle' };
 const noSubscribe = () => () => {};
 const noSnapshot = () => noBookStart;
+
+type CanvasDestination =
+  | { kind: 'create' }
+  | { kind: 'document'; post: string }
+  | { kind: 'organize'; request: BookOrganizationRequest };
 
 export type StudioWorkspaceProps = {
   input: StudioInput;
@@ -107,9 +118,13 @@ export function StudioWorkbench({
   const [focusHistory, setFocusHistory] = useState(false);
   const writingCanvas = useRef<HTMLElement>(null);
   const historyHeading = useRef<HTMLHeadingElement>(null);
-  const [canvas, setCanvas] = useState<'document' | 'create'>('document');
+  const [canvas, setCanvas] = useState<'document' | 'create' | 'organize'>('document');
   const [creationVisited, setCreationVisited] = useState(false);
-  const [pendingOpen, setPendingOpen] = useState<{ kind: 'create' } | { kind: 'document'; post: string } | null>(null);
+  const [pendingOpen, setPendingOpen] = useState<CanvasDestination | null>(null);
+  const organization = useBookOrganization(controller, state);
+  const [pendingOrganization, setPendingOrganization] = useState<CanvasDestination | null>(null);
+  const organizationCanvas = useRef<HTMLElement>(null);
+  const switchReview = useRef<HTMLElement>(null);
   const pendingDestination = useRef(pendingOpen);
   pendingDestination.current = pendingOpen;
   const creationCanvas = useRef<HTMLElement>(null);
@@ -152,6 +167,8 @@ export function StudioWorkbench({
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
   const unresolved = controller.hasUnresolvedCommand();
   const atRisk = Boolean(
+    organization.dirty ||
+    organization.pending ||
     nativeDraftRisk ||
     selected?.dirty ||
     selected?.snapshotPending ||
@@ -248,12 +265,17 @@ export function StudioWorkbench({
   useLayoutEffect(() => {
     if (!focusCanvas) return;
     if (canvas === 'create') creationCanvas.current?.focus({ preventScroll: true });
+    else if (canvas === 'organize') organizationCanvas.current?.focus({ preventScroll: true });
     else if (focusCreated.current) editorHeading.current?.focus({ preventScroll: true });
     else if (!historyOpen && view === 'write' && selected) authoringSelection.restore();
     else document.getElementById(`${id}-document`)?.focus({ preventScroll: true });
     setFocusCanvas(false);
     focusCreated.current = false;
   }, [focusCanvas, canvas, historyOpen, view, selected, authoringSelection, id]);
+
+  useEffect(() => {
+    if (canvas === 'organize' && !organization.draft) returnToDocument();
+  }, [canvas, organization.draft]);
 
   function showCreation() {
     setCreationVisited(true);
@@ -265,6 +287,14 @@ export function StudioWorkbench({
     setFocusCanvas(true);
   }
   function newDraft() {
+    if (blocked && !nativeCreationPending) return;
+    if (organization.dirty) {
+      reviewOrganizationSwitch({ kind: 'create' });
+      return;
+    }
+    beginCreation();
+  }
+  function beginCreation() {
     if ((blocked && !nativeCreationPending) || !input.canCreateDraft) return;
     if (nativeCreationPending) {
       showCreation();
@@ -276,8 +306,63 @@ export function StudioWorkbench({
     }
     showCreation();
   }
+  function reviewOrganizationSwitch(target: CanvasDestination) {
+    setPendingOrganization(target);
+    selectNavigation(true, () => document.getElementById(`${id}-organization-switch`));
+  }
+  function openOrganization(request: BookOrganizationRequest) {
+    const same = organization.draft && sameOrganizationRequest(organization.draft.request, request);
+    if (blocked && !(same && organization.pending)) return;
+    if (same && organization.pending) {
+      showOrganization(request);
+      return;
+    }
+    if (organization.dirty && !same) {
+      reviewOrganizationSwitch({ kind: 'organize', request });
+      return;
+    }
+    beginOrganization(request);
+  }
+  function beginOrganization(request: BookOrganizationRequest) {
+    const live = controller.snapshot().selected;
+    if (live?.dirty || live?.snapshotPending || live?.uploading) {
+      setPendingOpen({ kind: 'organize', request });
+      selectNavigation(true, () => switchReview.current?.querySelector<HTMLButtonElement>('button:not(:disabled)'));
+      return;
+    }
+    showOrganization(request);
+  }
+  function showOrganization(request: BookOrganizationRequest) {
+    organization.open(request);
+    setCanvas('organize');
+    setFocusCanvas(true);
+    selectNavigation(true, () => organizationCanvas.current);
+  }
+  function discardOrganizationAndSwitch() {
+    const target = pendingOrganization;
+    if (!target || blocked || organization.pending) return;
+    organization.discard();
+    setPendingOrganization(null);
+    if (target.kind === 'create') beginCreation();
+    else if (target.kind === 'organize') beginOrganization(target.request);
+    else openDocument(target.post);
+  }
   function open(post: string) {
+    if (post === postId) {
+      returnToDocument();
+      selectNavigation(port.isCurrent());
+      return;
+    }
     if (blocked) return;
+    if (organization.dirty) {
+      reviewOrganizationSwitch({ kind: 'document', post });
+      return;
+    }
+    openDocument(post);
+  }
+  function openDocument(post: string) {
+    if (blocked) return;
+    organization.discard();
     const before = controller.snapshot();
     if (post === postId) {
       returnToDocument();
@@ -287,9 +372,7 @@ export function StudioWorkbench({
     if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
       setPendingOpen({ kind: 'document', post });
       selectNavigation(!blocked && port.isCurrent(), () =>
-        editorHeading.current
-          ?.closest('section.studio-workspace')
-          ?.querySelector<HTMLButtonElement>('.studio-navigation-confirm button:not(:disabled)'),
+        switchReview.current?.querySelector<HTMLButtonElement>('button:not(:disabled)'),
       );
       return;
     }
@@ -311,6 +394,9 @@ export function StudioWorkbench({
     if (target.kind === 'create') {
       setPendingOpen(null);
       showCreation();
+    } else if (target.kind === 'organize') {
+      setPendingOpen(null);
+      beginOrganization(target.request);
     } else if (await controller.open(target.post)) {
       setPendingOpen(null);
       returnToDocument();
@@ -346,7 +432,20 @@ export function StudioWorkbench({
             {copy.newDraft}
           </Button>
         ) : null}
-        <a className="studio-skip" href={`#${id}-${canvas === 'create' ? 'creation' : 'document'}`}>
+        {organization.draft ? (
+          <Button
+            type="button"
+            variant="outline"
+            aria-pressed={canvas === 'organize'}
+            onClick={() => openOrganization(organization.draft!.request)}
+          >
+            {m.studio_book_organize({}, options)}
+          </Button>
+        ) : null}
+        <a
+          className="studio-skip"
+          href={`#${id}-${canvas === 'create' ? 'creation' : canvas === 'organize' ? 'organization' : 'document'}`}
+        >
           {m.studio_workspace_skip({}, options)}
         </a>
       </header>
@@ -376,8 +475,43 @@ export function StudioWorkbench({
           </div>
         ) : null}
       </div>
+      {pendingOrganization ? (
+        <section
+          id={`${id}-organization-switch`}
+          tabIndex={-1}
+          className="studio-organization-switch studio-stack"
+          aria-label={m.studio_book_organize({}, options)}
+        >
+          <h2>{m.studio_workspace_switch_heading({}, options)}</h2>
+          <p>
+            {m.studio_workspace_unsaved({}, options)}: {m.studio_book_organize({}, options)}
+          </p>
+          <div className="studio-action-row">
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={blocked || organization.pending}
+              onClick={discardOrganizationAndSwitch}
+            >
+              {m.studio_workspace_discard_switch({}, options)}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setPendingOrganization(null);
+                setCanvas('organize');
+                setFocusCanvas(true);
+              }}
+            >
+              {m.studio_workspace_keep_changes({}, options)}
+            </Button>
+          </div>
+        </section>
+      ) : null}
       {pendingOpen ? (
         <section
+          ref={switchReview}
           className="studio-navigation-confirm studio-stack"
           aria-label={m.studio_workspace_switch_region({}, options)}
         >
@@ -421,6 +555,7 @@ export function StudioWorkbench({
               controller={controller}
               state={state}
               onOpen={open}
+              onOrganize={openOrganization}
               {...(bookHistory ? { history: bookHistory } : {})}
             />
           ) : null}
@@ -498,6 +633,30 @@ export function StudioWorkbench({
         </fieldset>
       </ShellContextNavigation>
       <fieldset className="studio-layout min-w-0" disabled={startingBook}>
+        {organization.draft ? (
+          <section
+            id={`${id}-organization`}
+            ref={organizationCanvas}
+            hidden={canvas !== 'organize'}
+            inert={canvas !== 'organize'}
+            tabIndex={-1}
+            aria-label={m.studio_book_organize({}, options)}
+            className="studio-organization-canvas studio-stack"
+          >
+            <Button type="button" variant="outline" onClick={returnToDocument}>
+              {copy.returnToDocument}
+            </Button>
+            <BookOrganizationCanvas
+              organization={organization}
+              active={canvas === 'organize' && !pendingOrganization && !pendingOpen}
+              disabled={blocked || !controller.canOrganize()}
+              onCancel={() => {
+                organization.discard();
+                returnToDocument();
+              }}
+            />
+          </section>
+        ) : null}
         {creationVisited ? (
           <section
             id={`${id}-creation`}

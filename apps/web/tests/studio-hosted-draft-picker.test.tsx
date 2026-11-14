@@ -189,7 +189,12 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>) {
             opening = f.controller.open(post);
           }}
         />
-        <BookOrganizer controller={f.controller} state={state} onOpen={(post) => void f.controller.open(post)} />
+        <BookOrganizer
+          controller={f.controller}
+          state={state}
+          onOpen={(post) => void f.controller.open(post)}
+          onOrganize={() => {}}
+        />
       </>
     );
   }

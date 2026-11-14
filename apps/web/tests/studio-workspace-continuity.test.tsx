@@ -4,6 +4,7 @@ import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
 const { createRoot } = await import('react-dom/client');
+const { default: userEvent } = await import('@testing-library/user-event');
 const { getByRole, getAllByRole, queryByRole, waitFor } = await import('@testing-library/dom');
 const { serializeDocument } = await import('@rezics/document');
 const { StudioWorkbench } = await import('../src/studio/workspace');
@@ -106,31 +107,37 @@ test.each(profiles)(
   },
 );
 
-test('Keep editing cancels creation entry even when the requested save acknowledges later', async () => {
-  const v = await mount('column', 'dirty');
-  const original = v.props.port.saveDraft;
-  let finish!: () => void;
-  const response = new Promise<void>((resolve) => (finish = resolve));
-  const save = spyOn(v.props.port, 'saveDraft').mockImplementation(async (...args) => {
-    await response;
-    return original(...args);
-  });
-  try {
-    const editor = v.host.querySelector('.tiptap');
-    await v.click(workbenchCopy.en.newDraft);
-    await v.click(m.studio_workspace_save_switch());
-    await v.click(m.studio_workspace_keep_editing());
-    await act(async () => finish());
-    await waitFor(() => expect(v.controller.snapshot().operation).toBeNull());
-    expect(v.host.querySelector('.studio-new-draft')).toBeNull();
-    expect(v.host.querySelector('.tiptap')).toBe(editor);
-    expect(getByRole(v.host, 'textbox', { name: m.studio_workspace_title() })).toBeTruthy();
-  } finally {
-    finish();
-    save.mockRestore();
-    await v.close();
-  }
-});
+test.each([
+  ['column', 'create'],
+  ['book', 'organize'],
+] as const)(
+  '%s: Keep editing cancels %s entry even when the requested save acknowledges later',
+  async (profile, destination) => {
+    const v = await mount(profile, 'dirty');
+    const original = v.props.port.saveDraft;
+    let finish!: () => void;
+    const response = new Promise<void>((resolve) => (finish = resolve));
+    const save = spyOn(v.props.port, 'saveDraft').mockImplementation(async (...args) => {
+      await response;
+      return original(...args);
+    });
+    try {
+      const editor = v.host.querySelector('.tiptap');
+      await v.click(destination === 'create' ? workbenchCopy.en.newDraft : m.studio_book_add_heading());
+      await v.click(m.studio_workspace_save_switch());
+      await v.click(m.studio_workspace_keep_editing());
+      await act(async () => finish());
+      await waitFor(() => expect(v.controller.snapshot().operation).toBeNull());
+      expect(v.host.querySelector('.studio-new-draft, .studio-organization-form')).toBeNull();
+      expect(v.host.querySelector('.tiptap')).toBe(editor);
+      expect(getByRole(v.host, 'textbox', { name: m.studio_workspace_title() })).toBeTruthy();
+    } finally {
+      finish();
+      save.mockRestore();
+      await v.close();
+    }
+  },
+);
 
 test('simple first-save replay keeps its original title and acknowledgement retains a newer unsent title', async () => {
   const v = await mount('column');
@@ -400,6 +407,108 @@ test('a file picker cannot become a text-caret return target', async () => {
     expect(document.activeElement).toBe(getByRole(v.host, 'textbox', { name: m.studio_workspace_title() }));
     expect(v.host.querySelector('.tiptap')).not.toBeNull();
   } finally {
+    await v.close();
+  }
+});
+
+test('Book organization stays central and retained, returns to the same caret, and reviews incompatible dirty switches', async () => {
+  const v = await mount('book');
+  const opens = spyOn(v.props.port, 'open');
+  try {
+    const title = getByRole(v.host, 'textbox', { name: m.studio_workspace_title() }) as HTMLInputElement;
+    const editor = v.host.querySelector('.tiptap');
+    title.focus();
+    title.setSelectionRange(2, 6);
+    const exact = v.controller.snapshot().selected!.source.revision.exact;
+    await v.click(m.studio_book_add_heading());
+    const form = getByRole(v.host, 'form', { name: m.studio_book_add_heading() });
+    expect(v.host.querySelector('.studio-context-navigation')!.querySelector('form, input[type="text"]')).toBeNull();
+    expect(v.host.querySelector('.studio-document')!.hasAttribute('inert')).toBe(true);
+    const input = getByRole(form, 'textbox', { name: m.studio_book_placement_title() }) as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'Unsent placement',
+      );
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    const user = userEvent.setup({ document });
+    v.button(workbenchCopy.en.returnToDocument).focus();
+    await act(async () => user.keyboard('{Enter}'));
+    expect(document.activeElement).toBe(title);
+    expect([title.selectionStart, title.selectionEnd]).toEqual([2, 6]);
+    expect(v.host.querySelector('.studio-organization-canvas')!.hasAttribute('inert')).toBe(true);
+    await v.click(m.studio_book_organize());
+    expect(getByRole(v.host, 'form', { name: m.studio_book_add_heading() })).toBe(form);
+    expect(input.value).toBe('Unsent placement');
+    const outline = getByRole(v.host, 'region', { name: m.studio_book_outline_label() });
+    const other = getByRole(outline, 'button', { name: v.titles.second, exact: true });
+    await act(async () => other.click());
+    expect(v.host.querySelector('.studio-organization-switch')).toBeTruthy();
+    expect(opens).not.toHaveBeenCalled();
+    await v.click(m.studio_workspace_keep_changes());
+    expect(input.value).toBe('Unsent placement');
+    expect(v.controller.snapshot().selected!.source.revision.exact).toEqual(exact);
+    const entry = other.closest('.studio-toc-entry')!;
+    entry.querySelector<HTMLDetailsElement>('details')!.open = true;
+    await act(async () => getByRole(entry, 'button', { name: m.studio_book_move_to(), exact: true }).click());
+    expect(v.host.querySelector('.studio-organization-switch')).toBeTruthy();
+    await v.click(m.studio_workspace_discard_switch());
+    expect(getByRole(v.host, 'form', { name: m.studio_book_move_to() })).toBeTruthy();
+    await v.click(m.action_cancel());
+    expect(v.host.querySelector('.tiptap')).toBe(editor);
+    expect(v.controller.snapshot().selected!.source.revision.exact).toEqual(exact);
+    expect(opens).not.toHaveBeenCalled();
+  } finally {
+    opens.mockRestore();
+    await v.close();
+  }
+});
+
+test('a pending Book organization draft remains reachable beside newer document work and late retry keeps both drafts', async () => {
+  const v = await mount('book');
+  const original = v.props.bookPort!.change;
+  let finish!: () => void;
+  const acknowledgement = new Promise<void>((resolve) => (finish = resolve));
+  const change = spyOn(v.props.bookPort!, 'change')
+    .mockResolvedValueOnce({ ok: false, error: { kind: 'uncertain', message: 'Response lost' } })
+    .mockImplementation(async (...args) => {
+      await acknowledgement;
+      return original(...args);
+    });
+  try {
+    const editor = v.host.querySelector('.tiptap');
+    await v.click(m.studio_book_add_heading());
+    const form = getByRole(v.host, 'form', { name: m.studio_book_add_heading() });
+    const title = getByRole(form, 'textbox', { name: m.studio_book_placement_title() }) as HTMLInputElement;
+    const type = (value: string) =>
+      act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(title, value);
+        title.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+    await type('Submitted placement');
+    await v.click(m.studio_book_add_chapter());
+    expect(v.controller.hasUnresolvedCommand()).toBe(true);
+    await type('Newer placement');
+    await v.click(workbenchCopy.en.returnToDocument);
+    await act(async () => {
+      v.controller.changeTitle('Newer document text');
+      v.controller.snapshotPending();
+    });
+    await v.click(m.studio_book_organize());
+    expect(getByRole(v.host, 'form', { name: m.studio_book_add_heading() })).toBe(form);
+    expect(queryByRole(v.host, 'region', { name: m.studio_workspace_switch_region() })).toBeNull();
+    await v.click(m.studio_workspace_retry());
+    expect(change.mock.calls[1]![0]).toEqual(change.mock.calls[0]![0]);
+    await act(async () => finish());
+    await waitFor(() => expect(v.controller.snapshot().operation).toBeNull());
+    expect(title.value).toBe('Newer placement');
+    expect(v.controller.snapshot().selected!.title).toBe('Newer document text');
+    expect(v.controller.snapshot().selected!.dirty).toBe(true);
+    expect(v.host.querySelector('.tiptap')).toBe(editor);
+  } finally {
+    finish();
+    change.mockRestore();
     await v.close();
   }
 });
