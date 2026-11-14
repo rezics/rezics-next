@@ -404,7 +404,7 @@ export function ManagedAccountsView({
   }, [snapshot, current, organizationsHeadingId, responsibilitiesHeadingId]);
   return (
     <div
-      className="min-w-0 max-w-full space-y-6 wrap-anywhere"
+      className="min-w-0 max-w-full space-y-5 wrap-anywhere"
       ref={container}
       data-slot="managed-accounts"
       onClickCapture={(event) => {
@@ -417,7 +417,7 @@ export function ManagedAccountsView({
       onAuxClickCapture={visit}
     >
       <ContentSection
-        className="min-w-0 max-w-full"
+        className="min-w-0 max-w-full border-l-4 border-l-primary"
         role="region"
         aria-labelledby={viewerHeadingId}
         aria-busy={snapshot.loading}
@@ -429,7 +429,7 @@ export function ManagedAccountsView({
             </ContentItemHeading>
           </ContentSectionTitle>
         </ContentSectionHeader>
-        <ContentSectionBody className="min-w-0">
+        <ContentSectionBody className="min-w-0 space-y-4">
           {snapshot.loading || (!account && !snapshot.failure) ? (
             <p role="status" aria-labelledby={viewerHeadingId}>
               {m.settings_managed_loading()}
@@ -456,11 +456,8 @@ export function ManagedAccountsView({
               />
             </ul>
           ) : null}
-          {account ? (
-            <div className="mt-3 space-y-3">
-              {!snapshot.navigation ? (
-                <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
-              ) : null}
+          {account && !snapshot.failure ? (
+            <div className="flex min-w-0 max-w-full flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
               {waiting ? (
                 <p id={inventoryWaitId} role="status" aria-labelledby={viewerHeadingId}>
                   {m.settings_managed_inventory_retry_wait()}
@@ -469,7 +466,7 @@ export function ManagedAccountsView({
               <Button
                 type="button"
                 variant="outline"
-                className={recoveryButtonClassName}
+                className={`${recoveryButtonClassName} sm:ml-auto`}
                 aria-describedby={`${viewerHeadingId}${waiting ? ` ${inventoryWaitId}` : ''}`}
                 disabled={snapshot.loading || waiting}
                 onClick={retry}
@@ -481,9 +478,9 @@ export function ManagedAccountsView({
         </ContentSectionBody>
       </ContentSection>
       {account ? (
-        <>
+        <div className="grid min-w-0 max-w-full grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
           <ContentSection
-            className="min-w-0 max-w-full"
+            className="flex min-w-0 max-w-full flex-col border-t-2 border-t-primary/60"
             role="region"
             aria-labelledby={organizationsHeadingId}
             aria-busy={organizations.busy || snapshot.loading}
@@ -538,7 +535,7 @@ export function ManagedAccountsView({
             </ContentSectionBody>
           </ContentSection>
           <ContentSection
-            className="min-w-0 max-w-full"
+            className="flex min-w-0 max-w-full flex-col border-t-2 border-t-muted-foreground/40"
             role="region"
             aria-labelledby={responsibilitiesHeadingId}
             aria-busy={responsibilities.busy || snapshot.loading}
@@ -603,7 +600,7 @@ export function ManagedAccountsView({
               />
             </ContentSectionBody>
           </ContentSection>
-        </>
+        </div>
       ) : null}
     </div>
   );
