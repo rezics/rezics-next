@@ -62,6 +62,10 @@ const localAdmissions = new WeakMap<
     locator: CollectionKindPreparationLocator;
     originId: string;
     referenceId: string;
+    releaseDigest: string;
+    audience: string;
+    sourceFence: string;
+    identityObservation: IdentityScopeObservation;
     sourceIdentity: NativeSourceIdentity;
     custody: NativeSourceCustody;
   }>
@@ -393,6 +397,17 @@ export async function admitCollectionKindPreparationStep(
         locator: Object.freeze({ ...locator }),
         originId: consumer.originId,
         referenceId: consumer.referenceId,
+        releaseDigest: consumer.catalogueRoot,
+        audience: consumer.audience,
+        sourceFence: token.fence,
+        identityObservation: Object.freeze({
+          key: Object.freeze({
+            source: Object.freeze({ kind: 'library' as const, identity }),
+            scopeId: 'collection-source',
+          }),
+          captureId: token.scopeCaptureId,
+          committedRevision: BigInt(token.revision),
+        }),
         sourceIdentity: identity,
         custody: held.custody,
       }),
@@ -432,7 +447,7 @@ export async function readCollectionKindWorkDefinition(
   return null;
 }
 
-/** Pre-Type owner operands only. No repair receipt, release or disclosure closure. */
+/** Retained pre-Type owner operands only; no repair receipt or disclosure closure. */
 export function currentCollectionKindInputAdmission(
   tx: OperationalTransaction,
   locator: CollectionKindPreparationLocator,

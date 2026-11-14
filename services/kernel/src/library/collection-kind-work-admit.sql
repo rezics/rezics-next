@@ -1,6 +1,7 @@
 -- One bounded exact owner episode. More than one origin for the same preparation is ambiguous.
 SELECT consumer.reference_id AS "referenceId",
        consumer.origin_id AS "originId",
+       original.audience,
        consumer.source_generation::text AS "sourceGeneration",
        consumer.capture_generation::text AS "captureGeneration",
        consumer.source_capture AS "sourceCapture",

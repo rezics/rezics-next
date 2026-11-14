@@ -85,7 +85,7 @@ function custodySql() {
 
 function admissionEpisode() {
   return memoizedValue(admissionEpisode, () =>
-    statement(admitEpisode.sql, 8, 8, 9, 0, { escaped: 2 * (ESCAPED_BODY + 2048) }),
+    statement(admitEpisode.sql, 8, 8, 9, 0, { escaped: 2 * (ESCAPED_BODY + 2048 + 6 * 256) }),
   );
 }
 function admissionSource() {
