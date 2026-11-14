@@ -26,11 +26,23 @@ function body(response: HttpResponse, status = 200) {
 }
 async function propose(subject: CreatedSubject, fact: Fact) {
   return body(
-    await fixture.request('editor', 'POST', `/v1/subjects/${subject.id}/candidates`, { statement: fact }, discoveryKey()),
+    await fixture.request(
+      'editor',
+      'POST',
+      `/v1/subjects/${subject.id}/candidates`,
+      { statement: fact },
+      discoveryKey(),
+    ),
     201,
   ).candidate as string;
 }
-async function decide(subject: CreatedSubject, candidate: string, context: string, decision: Decision, expected_head: number | null) {
+async function decide(
+  subject: CreatedSubject,
+  candidate: string,
+  context: string,
+  decision: Decision,
+  expected_head: number | null,
+) {
   body(
     await fixture.request(
       'acceptor',
@@ -146,7 +158,14 @@ test('native edition cards use adopted scalars across rejection, replacement and
   expect(inherited.fields['schema:inLanguage'].statements.map(({ id }: any) => id)).toEqual([rejectedLanguage]);
 
   await decide(edition, selectedDate.candidate, contextId, 'accept', null);
-  await adopt(edition, contextId, 'schema:datePublished', 'replace', selectedDate.candidate, heads['schema:datePublished']!);
+  await adopt(
+    edition,
+    contextId,
+    'schema:datePublished',
+    'replace',
+    selectedDate.candidate,
+    heads['schema:datePublished']!,
+  );
   await adopt(edition, contextId, 'schema:inLanguage', 'suppress', undefined, heads['schema:inLanguage']!);
   await fixture.catchUp([work, edition]);
   const overridden = await card(work, edition, contextId);
