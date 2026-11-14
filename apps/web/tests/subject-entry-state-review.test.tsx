@@ -51,6 +51,7 @@ const choices: LibraryStateChoice[] = [
   { id: 'in_progress', label: { text: 'In progress', lang: 'en' } },
   { id: 'completed', label: { text: 'Completed', lang: 'en' } },
   { id: 'paused', label: { text: 'Paused', lang: 'en' } },
+  { id: 'remove', label: { text: 'Removed state', lang: 'en' } },
 ];
 function lifetime(seed: string, active = { value: true }): SlotLifetime {
   return { seed, active: true, current: (..._operations) => active.value };
@@ -82,6 +83,7 @@ test('state choice stays unsent through review and correction; exact current bas
   let receivedLabel = 'Other';
   let conflict: EntryStateConflictIntent | null = null;
   const saves: ReviewedEntryState[] = [];
+  let removals = 0;
   const response: SubjectLibraryMutationResponse = {
     result: 'saved',
     entry: { subjectId: subject.id, state: 'in_progress', revision: 1, incarnationId: 'entry-new' },
@@ -108,7 +110,9 @@ test('state choice stays unsent through review and correction; exact current bas
             saves.push(review);
             return response;
           }}
-          onRemove={() => {}}
+          onRemove={() => {
+            removals++;
+          }}
           onDismissConflict={() => {
             conflict = null;
           }}
@@ -134,6 +138,11 @@ test('state choice stays unsent through review and correction; exact current bas
 
   try {
     await render();
+    await choose('Removed state');
+    expect(host.querySelector('[data-entry-state-review-card]')?.textContent).toContain('Removed state');
+    expect(removals).toBe(0);
+    expect(saves).toHaveLength(0);
+    await act(async () => button(host, 'Discard choice').click());
     await choose('In progress');
     const firstReview = host.querySelector<HTMLElement>('[data-entry-state-review-card]')!;
     expect(firstReview.textContent).toContain(subject.label);
