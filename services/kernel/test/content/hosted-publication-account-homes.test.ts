@@ -69,11 +69,21 @@ test('authorized author prepares and activates a Book across account homes with 
       mode: 'whole',
     });
     expect(prepared.status).toBe(202);
-    const advanced = await f.native.call('POST', `${stagePath}:advance`, {
-      stepId: f.newOccurrenceIdFor(catalogueId),
-    });
-    expect(advanced.status).toBe(200);
-    expect(advanced.value.candidate.coverageComplete).toBe(true);
+    // This one-chapter fixture still advances through separate retained build, receiving and lifecycle steps.
+    const preparationStepLimit = 16;
+    let preparationSteps = 0;
+    let preparationProgress = prepared.value;
+    while (!preparationProgress.candidate?.coverageComplete) {
+      if (preparationSteps >= preparationStepLimit)
+        throw new Error('One-chapter candidate preparation exceeded 16 bounded steps');
+      const advanced = await f.native.call('POST', `${stagePath}:advance`, {
+        stepId: f.newOccurrenceIdFor(catalogueId),
+      });
+      expect(advanced.status).toBe(200);
+      preparationProgress = advanced.value;
+      preparationSteps += 1;
+    }
+    expect(preparationProgress.candidate?.coverageComplete).toBe(true);
     const sealed = await f.native.call('POST', `${stagePath}:seal`, {});
     expect(sealed.status).toBe(200);
     expect(sealed.value.candidateReady).toBe(true);
