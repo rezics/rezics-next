@@ -78,6 +78,23 @@ function Frame() {
   );
 }
 const region = () => document.querySelector<HTMLElement>('[data-shell-context-navigation]');
+test('standalone declarations retain accessible local navigation without a Router or Shell', async () => {
+  const host = document.createElement('main');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(
+      <ShellContextNavigation label="Local chapters">
+        <Contents />
+      </ShellContextNavigation>,
+    ),
+  );
+  expect(host.contains(region())).toBe(true);
+  expect(region()?.tagName).toBe('NAV');
+  expect(document.getElementById(region()!.getAttribute('aria-labelledby')!)?.textContent).toBe('Local chapters');
+  expect(region()!.querySelector('a')?.getAttribute('href')).toBe('#chapter');
+});
+
 async function mount() {
   const route = createRootRoute({ component: Frame });
   const router = createRouter({

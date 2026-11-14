@@ -117,7 +117,7 @@ The shared navigation pattern is `Patterns/Navigation/Contributions` (public lea
 
 ## Current workspace navigation
 
-Decision: Book and Studio declare `ShellContextNavigation({ label, children })` from
+Decision: Book, Studio and Knowledge declare `ShellContextNavigation({ label, children })` from
 `shell/contextual-navigation.tsx` inside their existing route, reader and data providers. The shell places that
 one current region after global links and before Following, in the expanded desktop sidebar or the existing open
 phone navigation Menu. Reading and editing stay in the center canvas without another route sidebar.
@@ -134,14 +134,37 @@ The collapsed desktop rail has no contextual tree; its existing expand control r
 opening the existing navigation Menu admits its host, and closing it removes that tree. Changing viewport removes
 the old host before admitting the other surface. Keep editable state and dirty-page protection in the route, above
 the declaration, so drawer and collapse changes cannot discard an editor draft. Consumers use ordinary anchors or
-router Links for selection, with their existing blocked-departure behavior. Menu owns dismissal and keyboard focus
-return, including physical DOM capture for links rendered through a portal; the region schedules no focus work.
+router Links for selection, with their existing blocked-departure behavior. Menu owns dismissal and opener focus
+return, including physical DOM capture for links rendered through a portal.
+
+Decision: button consumers call `useShellContextNavigationSelection(lifetime)` only for an admitted document choice
+or an existing dirty-switch review. It signals the physical Menu host through UI's `dismissMenuForNavigation`;
+navigation dismissal cancels opener restoration, while Escape/Done retain ordinary return focus. An optional
+consumer-owned focus resolver runs after the selection commit, fenced by route scope and reader lifetime, without
+an animation frame. A standalone declaration renders the same labelled local region without Router hooks. A
+hosted declaration waits for its admitted host even when the rail is collapsed or the phone Menu is closed.
+Replacing or retiring the active route/reader owner dismisses its stale Menu; the shell passes the same lifetime as
+Menu's `navigationScope` to cancel any queued opener return even after the physical panel has closed.
+
+Coverage: Studio's shared `open` path covers BookOrganizer chapters, Book draft inventory, Column/article inventory
+and the hosted draft picker. Selecting the current document reaches its canvas; dirty, snapshot-pending or uploading
+switches reveal the existing route-owned review without discarding the draft. Keep editing returns to that canvas.
+A clean accepted open dismisses while the existing request and destination-focus owner continue. Refused/busy
+selections do not dismiss. Workspace edits only invoke this seam; editor, creation and organization form placement
+remain with their existing owners. Book outline chapter destinations and ancestor destinations explicitly admit
+both native anchors and standalone buttons, including hosted reader retirement on navigation; loading/refused
+destinations stay open. Knowledge placement and return Links use Menu's physical link behavior and retain their
+existing route/history and departure guards; a current-document placement focuses the existing main canvas without
+requiring a path change. All branch disclosure, paging, More, Retry, release choices and
+organization controls remain in navigation. No label or generic button implies selection.
 
 The consumer owns its localized label and row copy, exposure checks and private mount gates. There are no added
 shell strings, I/O, persistence, navigation contributions or per-row projection. Cost is one live region and
 O(rendered navigation). Focused regression source covers replacement/removal, nested owner selection, context
-retention and single desktop/phone placement. App Shell stories cover the current region, collapsed rail and phone
-keyboard close/return; runtime and integrated Book/Studio acceptance are separate verifier work.
+retention, standalone fallback and single desktop/phone placement. Contextual navigation stories cover phone
+selection, dirty review and branch/More/Retry retention using the installed consumers. Menu interactions cover
+portal button/link selection, ordinary close/return, rapid reopen and cancelled focus after replacement/unmount.
+Execution and integrated phone/keyboard Book, Book/Column Studio and Knowledge acceptance remain verifier work.
 
 ## Phone navigation clearance
 
