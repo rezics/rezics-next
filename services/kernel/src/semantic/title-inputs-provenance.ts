@@ -53,11 +53,7 @@ const object = (value: unknown): value is ObjectValue =>
 
 function positiveInteger(value: unknown): number | null {
   const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && /^[1-9][0-9]*$/.test(value)
-        ? Number(value)
-        : NaN;
+    typeof value === 'number' ? value : typeof value === 'string' && /^[1-9][0-9]*$/.test(value) ? Number(value) : NaN;
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
@@ -207,10 +203,7 @@ export function bindSemanticTitleProvenanceRows(
       return null;
     const labelKeys = Object.keys(entry.labels).sort();
     const bindingKeys = Object.keys(labels).sort();
-    if (
-      labelKeys.length !== bindingKeys.length ||
-      labelKeys.some((key, index) => key !== bindingKeys[index])
-    )
+    if (labelKeys.length !== bindingKeys.length || labelKeys.some((key, index) => key !== bindingKeys[index]))
       return null;
     const boundLabels: Record<string, SemanticTitleFieldBinding> = {};
     for (const language of labelKeys) {
@@ -221,11 +214,7 @@ export function bindSemanticTitleProvenanceRows(
 
     let originalLanguage: SemanticTitleFieldBinding | null = null;
     if (entry.originalLanguage === null) {
-      if (
-        row.originalCandidate !== null ||
-        row.originalSupportRevision !== null ||
-        row.originalSource !== null
-      )
+      if (row.originalCandidate !== null || row.originalSupportRevision !== null || row.originalSource !== null)
         return null;
     } else {
       originalLanguage = statementBinding(
@@ -251,14 +240,14 @@ export function bindSemanticTitleProvenanceRows(
 }
 
 function sourceRowsByHome(entries: readonly SemanticTitleInputEntry[]) {
-  const homes = new Map<number, { route: number; id: string; languageSlot: string; labels: unknown; original: string | null }[]>();
+  const homes = new Map<
+    number,
+    { route: number; id: string; languageSlot: string; labels: unknown; original: string | null }[]
+  >();
   const byId = new Map<string, SemanticTitleInputEntry>();
   for (const entry of entries) {
     const existing = byId.get(entry.sourceId);
-    if (
-      existing &&
-      (!sameMap(existing.labels, entry.labels) || existing.originalLanguage !== entry.originalLanguage)
-    )
+    if (existing && (!sameMap(existing.labels, entry.labels) || existing.originalLanguage !== entry.originalLanguage))
       return null;
     byId.set(entry.sourceId, entry);
   }
