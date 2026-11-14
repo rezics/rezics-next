@@ -19,6 +19,7 @@ import { StudioController, type WorkingDocument } from './controller';
 import { NativeDraftComposer } from './native-draft-composer';
 import { workspaceEditorLabels, workspaceFailureMessage } from './workspace-language';
 import { BookOrganizer } from './book-organizer';
+import { StudioDraftNavigation } from './studio-draft-navigation';
 import {
   BookOrganizationCanvas,
   sameOrganizationRequest,
@@ -624,34 +625,12 @@ export function StudioWorkbench({
                 onSelect={open}
               />
             ) : null}
-            <ol className="studio-draft-list">
-              {draftDocuments.map((document) => (
-                <li key={document.postId}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    aria-current={canvas === 'document' && postId === document.postId ? 'page' : undefined}
-                    disabled={blocked || document.openable === false}
-                    onClick={() => open(document.postId)}
-                  >
-                    {document.openable === false
-                      ? document.title.trim() || m.own_drafts_selection_unavailable({}, options)
-                      : document.title.trim() || m.own_drafts_no_title({}, options)}
-                  </Button>
-                  <span className="studio-help">
-                    {document.openable === false
-                      ? m.studio_account_continue_drafts({}, { locale: getLocale() })
-                      : document.state === 'published'
-                        ? m.studio_workspace_published_document({}, options)
-                        : document.state === 'protected'
-                          ? m.studio_workspace_protected_document({}, options)
-                          : document.state === 'taken_down'
-                            ? m.studio_workspace_taken_down({}, options)
-                            : m.studio_workspace_private_draft({}, options)}
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <StudioDraftNavigation
+              documents={draftDocuments}
+              activePostId={canvas === 'document' ? postId : null}
+              disabled={blocked}
+              onOpen={open}
+            />
             {!draftDocuments.length ? <p>{m.studio_workspace_empty_page({}, options)}</p> : null}
             {state.documents.nextCursor ? (
               <Button
