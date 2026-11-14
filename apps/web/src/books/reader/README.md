@@ -121,6 +121,21 @@ reads only its bounded ancestor path and at most one neighbour per direction, th
 uses the current public release, never a private Studio draft. Children/neighbours use the frozen release. A
 current parent absent from the frozen release may be unavailable; no alternative body/tree is substituted.
 
+## Presentation
+
+Decision: use one restrained reading column, linked work/part breadcrumbs and bounded contents rows whose titles
+open their chapter or nested level. Containers with a body retain separate Read and Contents destinations. Current
+selection remains visible and focusable; sparse windows keep their exact More/Retry operands. The chapter uses
+Content's existing multilingual prose measure, outline, wide blocks and anchor renderer. Compact chapter navigation
+can be pinned or unpinned without changing the body, focus or saved position. Unpinned navigation shows full neighbour
+titles; pinned navigation keeps their full accessible names. Checkpoint Save and Continue remain directly available;
+saved-position review and Clear sit in a disclosure. Progress extensions follow the body and fail independently.
+
+Decision: this frontend source-only refactor window defers tests, typing, builds, browser, capture and native
+acceptance to the dev verifier, overriding generic worker verification instructions. Preserve existing regression
+sources and exact-link/block-anchor repairs. Manual review stories use illustrative installed contracts; they do not
+establish native publication acceptance. No new API, progress store, automatic save or authorization rule is introduced.
+
 ## Controls and progress
 
 Explicit navigation focuses the heading; contents return focuses the selected occurrence where present. Choosing
@@ -190,7 +205,7 @@ save or clear. A later chapter open still performs its existing exact-body admis
 and stories. It is never a production source. Story IDs remain `interfaces-hosted-book-reader` with named states
 `nested-contents`, `exact-chapter`, `sparse-continuation`, `failed-page-recovery`, `moved-occurrence`,
 `unavailable-navigation` and `retired-reading`. Review at 390px/1280px in light/dark and all eight locale globals.
-The incumbent refinement keeps the existing reading measure, wrapping controls, focus rings and safe area spacing.
+The reading column keeps the shared reading measure, wrapping controls, focus rings and safe area spacing.
 
 `tests/hosted-book-reader.test.tsx` retains original bounds, exact operands, reuse, sparse retry, move, focus,
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native
@@ -205,8 +220,8 @@ scoping, every exact coordinate, null/missing anchors, withheld targets, viewer 
 restoration and the unchanged public resume URL. Assertions use explicitly illustrative native-format responses;
 source assertions do not establish native admission or growth acceptance.
 
-Worker acceptance is final-source Web typing and formatting/diff inspection. The dev verifier executes the Web
-owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`. Mounted acceptance remains
+Worker source review is formatting/diff inspection. Web typing and runtime acceptance are deferred in this
+source-only window. The dev verifier executes Web typing and the owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`. Mounted acceptance remains
 deferred for explicit block save, reload and Library/Resume reopening in the exact
 chapter, stale revision/digest/publication/occurrence, missing anchor and old null positions, a changed viewer during
 the private read or restore frame, a withheld target, and scrolling while that read is pending. Verify that the

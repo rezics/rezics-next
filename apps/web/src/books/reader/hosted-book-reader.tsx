@@ -1,5 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { ArrowLeft, ArrowRight, ChevronRight, List, Pin, PinOff } from 'lucide-react';
 import {
   Component,
   useCallback,
@@ -148,7 +149,7 @@ function BookReaderView({
     () => ({ current: focusOwner === undefined ? null : { owner: focusOwner } }),
     [reader],
   );
-  const [showControls, setShowControls] = useState(true);
+  const [pinNavigation, setPinNavigation] = useState(true);
   const page = state.page;
   const isPageCurrent = useCallback(
     () => reader.current() && reader.getSnapshot() === state && state.state === 'ready',
@@ -199,9 +200,6 @@ function BookReaderView({
     return () => cancelAnimationFrame(frame);
   }, [reader, state]);
   useLayoutEffect(() => checkpointPosition.connect(), [checkpointPosition]);
-  useEffect(() => {
-    setShowControls(true);
-  }, [page]);
 
   const labels = {
     contents: m.book_reader_contents({}, options),
@@ -210,7 +208,7 @@ function BookReaderView({
     chapter: m.book_reader_chapter({}, options),
     unavailable: m.book_reader_unavailable({}, options),
   };
-  const destination = (target: BookAddress, title: ReactNode, extra?: { selected?: boolean; row?: string }) => {
+  const destination: Destination = (target, title, extra) => {
     const address =
       target.kind === 'contents' && state.address.selection
         ? { ...target, selection: state.address.selection }
@@ -218,6 +216,17 @@ function BookReaderView({
     const supplied = hrefForAddress?.(address);
     // Only the host's origin-local canonical addresses can become native links.
     const href = supplied?.startsWith('/') && !supplied.startsWith('//') && !/[\\\s]/.test(supplied) ? supplied : null;
+    const appearance = extra?.appearance ?? 'control';
+    const variant = appearance === 'control' ? 'outline' : 'ghost';
+    const className = `${control} ${
+      appearance === 'breadcrumb'
+        ? 'justify-start px-1.5 py-1 font-normal text-muted-foreground hover:text-foreground hover:underline underline-offset-4'
+        : appearance === 'row'
+          ? 'w-full justify-between gap-3 rounded-md px-3 py-3 text-base font-normal'
+          : appearance === 'step'
+            ? 'w-full flex-col items-start justify-center gap-1 px-3 py-2 font-normal'
+            : ''
+    } ${extra?.selected ? 'bg-muted font-semibold text-foreground' : ''}`;
     const ref = (element: HTMLElement | null) => {
       if (!extra?.row) return;
       if (element) rows.current.set(extra.row, element);
@@ -227,7 +236,7 @@ function BookReaderView({
       <a
         href={href}
         ref={ref}
-        className={buttonVariants({ variant: 'outline', className: control })}
+        className={buttonVariants({ variant, className })}
         aria-current={extra?.selected ? 'location' : undefined}
         onClick={(event) => {
           if (
@@ -249,8 +258,8 @@ function BookReaderView({
       <Button
         ref={ref}
         type="button"
-        variant="outline"
-        className={control}
+        variant={variant}
+        className={className}
         aria-current={extra?.selected ? 'location' : undefined}
         onClick={() => navigate(address)}
       >
@@ -298,18 +307,25 @@ function BookReaderView({
 
   const step = (value: BookNavigation, forward: boolean) => {
     const label = forward ? m.book_reader_next({}, options) : m.book_reader_previous({}, options);
+    const Icon = forward ? ArrowRight : ArrowLeft;
     if (value.state === 'available')
       return destination(
         value.address,
         <>
-          {label}
-          <span className="block text-xs font-normal">{value.title}</span>
+          <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+            <Icon aria-hidden="true" className="size-4 shrink-0 rtl:rotate-180" />
+            {label}
+          </span>
+          <span className={pinNavigation ? 'sr-only' : 'block text-sm text-muted-foreground'}>
+            <bdi>{value.title}</bdi>
+          </span>
         </>,
+        { appearance: 'step' },
       );
     return (
-      <div className="min-w-0 rounded-lg border p-3 text-sm" aria-disabled="true">
-        <span className="block font-medium">{label}</span>
-        <span className="block text-muted-foreground">
+      <div className="grid min-w-0 content-center gap-1 px-3 py-2 text-sm text-muted-foreground" aria-disabled="true">
+        <span className="font-medium">{label}</span>
+        <span className={pinNavigation && value.state === 'end' ? 'sr-only' : 'block text-xs'}>
           {value.state === 'unavailable'
             ? m.book_reader_navigation_unavailable({}, options)
             : forward
@@ -320,77 +336,106 @@ function BookReaderView({
     );
   };
   const title = page?.title ?? m.book_reader_title({}, options);
+  const rootContents = page
+    ? {
+        kind: 'contents' as const,
+        publication: page.address.publication,
+        parentOccurrenceId: null,
+        cursor: null,
+        selection: page.address.selection,
+      }
+    : null;
+  const rootPage = page?.kind === 'contents' && page.address.parentOccurrenceId === null;
   return (
     <section
       ref={root}
       aria-labelledby={headingId}
       aria-busy={state.state === 'loading'}
-      className="mx-auto grid w-full min-w-0 max-w-5xl gap-6 px-4 py-6 sm:px-6"
+      className="mx-auto grid w-full min-w-0 max-w-[52rem] gap-6 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 sm:gap-8 sm:px-8 sm:pt-10"
       lang={locale}
       data-slot="hosted-book-reader"
-      onFocusCapture={() => setShowControls(true)}
+      data-reading-mode={pinNavigation ? 'pinned' : 'flow'}
     >
-      <header className="grid min-w-0 gap-3 [overflow-wrap:anywhere]">
-        {page ? (
-          <p className="text-sm font-medium text-muted-foreground">
+      <header className="grid min-w-0 gap-4 [overflow-wrap:anywhere]">
+        {page && !rootPage ? (
+          <p className="text-sm leading-relaxed text-muted-foreground">
             <bdi>{page.publicationTitle}</bdi>
           </p>
         ) : null}
-        {page ? (
-          <nav aria-label={m.book_reader_context({}, options)}>
-            <ol className="flex flex-wrap gap-2">
-              <li>
-                {destination(
-                  {
-                    kind: 'contents',
-                    publication: page.address.publication,
-                    parentOccurrenceId: null,
-                    cursor: null,
-                    selection: page.address.selection,
-                  },
-                  m.book_reader_root({}, options),
-                )}
+        {page && rootContents ? (
+          <nav aria-label={m.book_reader_context({}, options)} className="-mx-1.5">
+            <ol className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm">
+              <li className="min-w-0 max-w-full">
+                {destination(rootContents, m.book_reader_root({}, options), { appearance: 'breadcrumb' })}
               </li>
               {page.ancestors.map((ancestor) => (
-                <li key={ancestor.occurrenceId}>{destination(ancestor.contents, <bdi>{ancestor.title}</bdi>)}</li>
+                <li key={ancestor.occurrenceId} className="flex min-w-0 max-w-full items-center gap-1">
+                  <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground rtl:rotate-180" />
+                  {destination(ancestor.contents, <bdi>{ancestor.title}</bdi>, { appearance: 'breadcrumb' })}
+                </li>
               ))}
             </ol>
           </nav>
         ) : null}
-        <h1 ref={heading} id={headingId} tabIndex={-1} className={`text-2xl font-semibold sm:text-3xl ${focusable}`}>
-          <bdi>{title}</bdi>
-        </h1>
+        <div className="grid min-w-0 gap-2">
+          {page ? (
+            <p className="text-xs font-medium text-muted-foreground">
+              {page.kind === 'chapter' ? labels.chapter : labels.contents}
+            </p>
+          ) : null}
+          <h1
+            ref={heading}
+            id={headingId}
+            tabIndex={-1}
+            className={`text-pretty text-3xl font-semibold leading-tight tracking-tight sm:text-4xl ${focusable}`}
+          >
+            <bdi>{title}</bdi>
+          </h1>
+        </div>
       </header>
+      {page?.kind === 'chapter' ? (
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-3">
+          <Button className={`${control} gap-2 px-2`} variant="ghost" onClick={() => act(() => reader.openContents())}>
+            <List aria-hidden="true" className="size-4 shrink-0" />
+            {labels.contents}
+          </Button>
+          <Button
+            className={`${control} gap-2 px-2 text-muted-foreground`}
+            variant="ghost"
+            aria-pressed={pinNavigation}
+            onClick={() => setPinNavigation((value) => !value)}
+          >
+            {pinNavigation ? (
+              <PinOff aria-hidden="true" className="size-4 shrink-0" />
+            ) : (
+              <Pin aria-hidden="true" className="size-4 shrink-0" />
+            )}
+            {pinNavigation ? m.book_reader_hide_controls({}, options) : m.book_reader_show_controls({}, options)}
+          </Button>
+        </div>
+      ) : null}
       {page && renderCheckpoint ? (
         <ProgressRegion
           key={JSON.stringify(page.address)}
           unavailable={m.book_reader_progress_unavailable({}, options)}
         >
-          {renderCheckpoint(page, isPageCurrent, checkpointPosition)}
+          <CheckpointOwner
+            render={renderCheckpoint}
+            page={page}
+            current={isPageCurrent}
+            position={checkpointPosition}
+          />
         </ProgressRegion>
       ) : null}
       {page?.kind === 'chapter' ? (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button className={control} variant="outline" onClick={() => act(() => reader.openContents())}>
-              {labels.contents}
-            </Button>
-            <Button
-              className={control}
-              variant="ghost"
-              aria-pressed={showControls}
-              onClick={() => setShowControls((value) => !value)}
-            >
-              {showControls ? m.book_reader_hide_controls({}, options) : m.book_reader_show_controls({}, options)}
-            </Button>
-          </div>
           <article
             ref={article}
             aria-labelledby={headingId}
             lang={page.language ?? ''}
             dir={page.direction}
             tabIndex={-1}
-            className={focusable}
+            className={`min-w-0 py-2 sm:py-4 ${focusable}`}
           >
             <PostReadingBody
               {...page.body}
@@ -403,19 +448,30 @@ function BookReaderView({
             />
           </article>
           {renderProgress ? (
-            <ProgressRegion
-              key={JSON.stringify(page.address)}
-              unavailable={m.book_reader_progress_unavailable({}, options)}
-            >
-              <ProgressOwner render={renderProgress} page={page} current={isPageCurrent} />
-            </ProgressRegion>
+            <details className="min-w-0 border-t pt-3">
+              <summary className={`flex min-h-11 cursor-pointer items-center text-sm font-medium ${focusable}`}>
+                {m.book_reader_progress_review({}, options)}
+              </summary>
+              <div className="min-w-0 py-3">
+                <ProgressRegion
+                  key={JSON.stringify(page.address)}
+                  unavailable={m.book_reader_progress_unavailable({}, options)}
+                >
+                  <ProgressOwner render={renderProgress} page={page} current={isPageCurrent} />
+                </ProgressRegion>
+              </div>
+            </details>
           ) : null}
           <nav
             aria-label={m.book_reader_navigation({}, options)}
-            className={`${showControls ? 'sticky' : ''} bottom-[env(safe-area-inset-bottom)] z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 rounded-xl bg-background/95 p-2 shadow-sm`}
+            className={`${pinNavigation ? 'sticky bottom-0 z-10 shadow-sm' : ''} grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-1 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] pt-2 [overflow-wrap:anywhere]`}
           >
             {step(page.previous, false)}
-            <Button variant="outline" className={control} onClick={() => act(() => reader.openContents())}>
+            <Button
+              variant="ghost"
+              className={`${control} self-center px-2`}
+              onClick={() => act(() => reader.openContents())}
+            >
               {labels.contents}
             </Button>
             {step(page.next, true)}
@@ -424,8 +480,8 @@ function BookReaderView({
       ) : page?.kind === 'contents' ? (
         <Contents page={page} locale={locale} destination={destination} labels={labels} reader={reader} act={act} />
       ) : (
-        <div className="grid justify-items-start gap-3 rounded-xl border p-5">
-          <p role="status">
+        <div className="grid justify-items-start gap-4 border-y py-6">
+          <p role="status" className="max-w-prose leading-relaxed text-muted-foreground">
             {state.state === 'loading' || state.state === 'idle'
               ? m.book_reader_loading({}, options)
               : state.state === 'not-installed'
@@ -439,7 +495,7 @@ function BookReaderView({
                       : labels.unavailable}
           </p>
           {state.state !== 'loading' && state.state !== 'idle' && state.state !== 'not-installed' ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 flex-wrap gap-2">
               <Button
                 className={control}
                 variant="outline"
@@ -454,7 +510,7 @@ function BookReaderView({
               </Button>
               {state.state !== 'retired' ? (
                 <>
-                  <Button className={control} variant="outline" onClick={() => act(() => reader.openContents())}>
+                  <Button className={control} variant="ghost" onClick={() => act(() => reader.openContents())}>
                     {labels.contents}
                   </Button>
                   {state.address.kind === 'contents' && state.address.selection
@@ -477,7 +533,12 @@ function BookReaderView({
   );
 }
 
-type Destination = (address: BookAddress, title: ReactNode, extra?: { selected?: boolean; row?: string }) => ReactNode;
+type Destination = (
+  address: BookAddress,
+  title: ReactNode,
+  extra?: { selected?: boolean; row?: string; appearance?: 'control' | 'breadcrumb' | 'row' | 'step' },
+) => ReactNode;
+
 function Contents({
   page,
   locale,
@@ -495,81 +556,100 @@ function Contents({
 }) {
   const options = { locale: locale as never };
   return (
-    <div className="grid min-w-0 gap-4">
+    <div className="grid min-w-0 gap-5">
       {page.selected && page.selected.state !== 'unavailable' ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted p-3">
+        <div className="grid min-w-0 justify-items-start gap-2 border-s-2 border-foreground/30 ps-4">
           {destination(page.selected.chapter, m.book_reader_return_chapter({}, options))}
           {page.selected.state === 'moved' ? (
             <>
-              <p className="text-sm">{m.book_reader_moved({}, options)}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">{m.book_reader_moved({}, options)}</p>
               {destination(page.selected.contents, m.book_reader_current_location({}, options))}
             </>
           ) : null}
         </div>
       ) : page.selected?.state === 'unavailable' ? (
-        <p role="status">{m.book_reader_selection_unavailable({}, options)}</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.book_reader_selection_unavailable({}, options)}
+        </p>
       ) : null}
-      {!page.rows.length ? <p role="status">{m.book_reader_empty({}, options)}</p> : null}
-      <ol className="grid min-w-0 gap-2">
-        {page.rows.map((row) => {
-          const selected = 'chapter' in row && sameSelection(row.chapter.selection, page.address.selection);
-          return (
-            <li
-              key={row.occurrenceId}
-              className="grid min-w-0 gap-2 rounded-xl border p-3 [overflow-wrap:anywhere]"
-              data-occurrence={row.occurrenceId}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {row.kind === 'container'
-                    ? labels.part
-                    : row.kind === 'container-with-body'
-                      ? `${labels.part} · ${labels.chapter}`
-                      : row.kind === 'chapter'
-                        ? labels.chapter
-                        : m.book_reader_selection_unavailable({}, options)}
-                </span>
-                <span className="font-medium">
+      {!page.rows.length ? (
+        <p role="status" className="py-4 text-sm text-muted-foreground">
+          {m.book_reader_empty({}, options)}
+        </p>
+      ) : null}
+      <nav aria-label={labels.contents}>
+        <ol className="grid min-w-0 divide-y border-y">
+          {page.rows.map((row) => {
+            const selected = 'chapter' in row && sameSelection(row.chapter.selection, page.address.selection);
+            const kind =
+              row.kind === 'container'
+                ? labels.part
+                : row.kind === 'container-with-body'
+                  ? `${labels.part} · ${labels.chapter}`
+                  : row.kind === 'chapter'
+                    ? labels.chapter
+                    : m.book_reader_selection_unavailable({}, options);
+            const title = (label: string) => (
+              <>
+                <span className="min-w-0 text-start leading-relaxed">
+                  <span className="sr-only">{label} · </span>
                   <bdi>{row.title}</bdi>
                 </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
+                <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" />
+              </>
+            );
+            return (
+              <li
+                key={row.occurrenceId}
+                className="grid min-w-0 gap-0.5 py-3 [overflow-wrap:anywhere]"
+                data-occurrence={row.occurrenceId}
+              >
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 px-3 text-xs text-muted-foreground">
+                  <span>{kind}</span>
+                  {selected ? (
+                    <span className="font-medium text-foreground">{m.book_reader_selected({}, options)}</span>
+                  ) : null}
+                </div>
                 {'chapter' in row
-                  ? destination(
-                      row.chapter,
-                      <>
-                        {labels.open}
-                        <span className="sr-only"> · {row.title}</span>
-                      </>,
-                      { selected, row: row.occurrenceId },
-                    )
+                  ? destination(row.chapter, title(labels.open), { selected, row: row.occurrenceId, appearance: 'row' })
                   : null}
-                {'contents' in row
-                  ? destination(
+                {row.kind === 'container'
+                  ? destination(row.contents, title(labels.contents), { row: row.occurrenceId, appearance: 'row' })
+                  : null}
+                {row.kind === 'container-with-body' ? (
+                  <div className="px-3">
+                    {destination(
                       row.contents,
                       <>
                         {labels.contents}
                         <span className="sr-only"> · {row.title}</span>
                       </>,
-                      row.kind === 'container' ? { row: row.occurrenceId } : undefined,
-                    )
-                  : null}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-      <div className="flex flex-wrap items-center gap-2">
+                    )}
+                  </div>
+                ) : null}
+                {row.kind === 'unavailable' && row.title ? (
+                  <p className="px-3 py-2 text-muted-foreground">
+                    <bdi>{row.title}</bdi>
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         {page.address.cursor !== null
           ? destination({ ...page.address, cursor: null }, m.book_reader_first_page({}, options))
           : null}
         {page.continuation.state === 'more' ? (
           destination({ ...page.address, cursor: page.continuation.cursor }, m.book_reader_more({}, options))
         ) : page.continuation.state === 'end' ? (
-          <p className="text-sm text-muted-foreground">{m.book_reader_level_end({}, options)}</p>
+          <p className="text-xs text-muted-foreground">{m.book_reader_level_end({}, options)}</p>
         ) : (
           <>
-            <p role="status">{m.book_reader_navigation_unavailable({}, options)}</p>
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.book_reader_navigation_unavailable({}, options)}
+            </p>
             <Button className={control} variant="outline" onClick={() => act(() => reader.retry())}>
               {m.book_reader_retry({}, options)}
             </Button>
@@ -578,6 +658,20 @@ function Contents({
       </div>
     </div>
   );
+}
+
+function CheckpointOwner({
+  render,
+  page,
+  current,
+  position,
+}: {
+  render: NonNullable<HostedBookReaderProps['renderCheckpoint']>;
+  page: BookPage;
+  current: () => boolean;
+  position: CheckpointPosition;
+}) {
+  return render(page, current, position);
 }
 
 function ProgressOwner({
