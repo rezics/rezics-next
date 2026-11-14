@@ -22,13 +22,13 @@ import { locateCreatedChild, screenSeriesId } from './screen-episode-membership.
 import {
   admitOrderingDrafts,
   advanceOrderingReview,
+  canIncludeOrderingDraft,
   concealOrderingCommands,
   discardUnsentOrdering,
   includedOrderingChanges,
   markOrderingPresence,
   orderingFingerprint,
   orderingKey,
-  orderingLimit,
   pageOrderingDrafts,
   recordOrderingResult,
   sealOrdering,
@@ -538,7 +538,8 @@ function WorkPartsPageLive({
                                     selected={selectedOrdering.has(orderingKey(row))}
                                     busy={busy}
                                     disabled={
-                                      !selectedOrdering.has(orderingKey(row)) && pageOrdering.length >= orderingLimit
+                                      !selectedOrdering.has(orderingKey(row)) &&
+                                      !canIncludeOrderingDraft(pageOrdering, orderingKey(row))
                                     }
                                     locale={locale}
                                     controlId={`${streamId}-order-${row.holder}-${row.statementId}`}

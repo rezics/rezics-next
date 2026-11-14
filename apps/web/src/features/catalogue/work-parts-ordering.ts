@@ -165,6 +165,10 @@ export function pageOrderingDrafts(drafts: OrderingDraft[], streamKey: string, c
   return drafts.filter((draft) => draft.streamKey === streamKey && draft.cursor === page);
 }
 
+export function canIncludeOrderingDraft(drafts: readonly OrderingDraft[], key: string): boolean {
+  return drafts.some((draft) => draft.key === key && draft.admitted) || drafts.length < orderingLimit;
+}
+
 export function stageOrderingSelection(
   drafts: OrderingDraft[],
   rows: PartRow[],
@@ -187,7 +191,7 @@ export function stageOrderingSelection(
       staged.set(key, { ...current, included: true, summary: row.summary, related: row.related, present: true });
       continue;
     }
-    if (staged.size >= orderingLimit) continue;
+    if (!canIncludeOrderingDraft([...staged.values()], key)) continue;
     const draft = stageOrderingRow(row, stream, cursor);
     if (draft) staged.set(key, draft);
   }
