@@ -241,11 +241,13 @@ async function transaction<T>(
   begin = 'BEGIN',
   admit?: () => void,
 ): Promise<T> {
+  const { context } = lifetimes.get(meter)!;
   let unfinished = false;
   let client: PoolClient | undefined;
   let cleanup: Promise<void> | undefined;
   const rollback = () =>
-    (cleanup ??= sql(client!, meter, 'ROLLBACK').then(() => {
+    (cleanup ??= sql(client!, meter, 'ROLLBACK').then((result) => {
+      if (result.command !== 'ROLLBACK') throw new Failure('owner_unavailable');
       unfinished = false;
     }));
   try {
@@ -256,26 +258,28 @@ async function transaction<T>(
         try {
           admit?.();
           unfinished = true;
-          await sql(client, meter, begin);
+          const started = await sql(client, meter, begin);
+          if (started.command !== 'BEGIN') throw new Failure('owner_unavailable');
           admit?.();
           const value = await work(client);
           admit?.();
-          await sql(client, meter, 'COMMIT');
+          const committed = await sql(client, meter, 'COMMIT');
+          if (committed.command !== 'COMMIT') throw new Failure('owner_unavailable');
           unfinished = false;
           admit?.();
           return value;
         } catch (error) {
           // Cleanup spends the same meter and deadline, even after allowance exhaustion.
-          if (unfinished) await rollback().catch(() => {});
+          if (unfinished && Date.now() < context.deadline) await rollback().catch(() => {});
           throw error;
         }
       },
       () => unfinished,
     );
   } catch (error) {
-    // Expiry can precede the callback's catch. Join its one cleanup attempt before
-    // returning the cost; the retired client refuses late SQL and its owner discards it.
-    if (unfinished) await rollback().catch(() => {});
+    // Expiry can precede the callback's catch. Only join cleanup already started
+    // within the request; physical retirement never waits for a late owner callback.
+    if (cleanup) await cleanup.catch(() => {});
     throw error;
   }
 }
