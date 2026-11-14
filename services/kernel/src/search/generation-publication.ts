@@ -6,6 +6,9 @@ import { releaseDigest } from '@rezics/definitions';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from './native-bindings.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
@@ -121,6 +124,13 @@ class Pending extends Error {
     super(reason);
   }
 }
+const publicationLifetime = {
+  deadlineError: () => new Pending('deadline'),
+  mapError: (error: unknown) =>
+    error instanceof Error && error.message === 'Query read timeout' ? new Pending('deadline') : error,
+  // A native timeout or transport failure may settle before the absolute-deadline timer fires.
+  isUncertainSettledQueryError: () => true,
+};
 function requireValue(value: unknown): asserts value {
   if (!value) throw new TypeError('Invalid generation publication input');
 }
@@ -274,7 +284,7 @@ export function createSearchGenerationPublication(
   ): Promise<T | PublicFilterConsumerUnavailable> {
     const meter = cost();
     if (closed) return { status: 'unavailable', reason: 'dependency_unavailable', cost: meter };
-    const operation = (async () => {
+    const operation = withRequestDeadline(context.deadline, async () => {
       try {
         check(context);
         const result = await work(meter);
@@ -297,7 +307,7 @@ export function createSearchGenerationPublication(
           cost: meter,
         };
       }
-    })();
+    });
     pending.add(operation);
     try {
       return await operation;
@@ -561,62 +571,106 @@ export function createSearchGenerationPublication(
     requireValue(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ref.job));
     // This is a maintenance session lock, not a command transaction. Native owners acquire their own
     // bounded snapshot connections; do not wrap them in withConnection's single-command checkout scope.
-    const client = await pool.connect();
+    let connection: PoolClient | undefined;
+    let released = false;
     let broken: Error | undefined;
-    try {
-      const lock = await client.query<{ locked: boolean }>(
-        'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
-        [ref.job],
+    let mayOwnLock = false;
+    const dispose = () => {
+      if (!connection || released) return;
+      released = true;
+      connection.release(
+        broken ??
+          (mayOwnLock ? new Error('Generation publication session lock ownership is uncertain') : undefined),
       );
-      if (!lock.rows[0]?.locked) throw new Pending('source_pending');
-      try {
-        const {
-          rows: [job],
-        } = await client.query<Job>('SELECT * FROM search.generation_publication WHERE partition_no=0 AND job=$1', [
-          ref.job,
-        ]);
-        if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
-        if (job.phase === 'active') {
-          // Settled publication may still need idempotent fence release after a lost response.
-          // A later Source change must not strand the ordinary repair writer behind that old fence.
-          await native(job.consumer, context);
-        } else {
+    };
+    try {
+      return await withBoundedReadLifetime(
+        async (read) => {
+          const raw = await pool.connect();
+          connection = raw;
           try {
-            await adopt(job, context, meter);
-          } catch (error) {
-            if (
-              error instanceof Pending &&
-              (job.fence || job.phase === 'fencing') &&
-              ['source_pending', 'routing_incomplete', 'registration_missing'].includes(error.reason)
-            ) {
-              // Definition/observation changes can be discovered before entering the publication body.
-              // Recover an outstanding alias intent under the same native fence before returning unready.
-              await native(job.consumer, context);
-              if (!job.fence) await installFence(job, client, context, meter);
-              await restart(job, client, context, meter);
-            }
-            throw error;
+            return await read(raw);
+          } finally {
+            // A checkout arriving after expiry is retired before it can dispatch SQL.
+            dispose();
           }
-        }
-        return await work(job, client);
-      } finally {
-        try {
-          await client.query('SELECT pg_advisory_unlock(hashtextextended($1,2))', [ref.job]);
-        } catch (error) {
-          broken = error instanceof Error ? error : new Error(String(error));
-          throw error;
-        }
-      }
+        },
+        (_client, error) => {
+          broken ??= error;
+        },
+        context.deadline,
+        (client) =>
+          // Keep owner snapshots on this deadline until the callback itself settles, even if the
+          // lifetime has already retired its session and returned the turn's deadline failure.
+          withRequestDeadline(context.deadline, async () => {
+            mayOwnLock = true;
+            const lock = await client.query<{ locked: boolean }>(
+              'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
+              [ref.job],
+            );
+            mayOwnLock = lock.rows[0]?.locked !== false;
+            if (lock.rows[0]?.locked !== true) throw new Pending('source_pending');
+            try {
+              const {
+                rows: [job],
+              } = await client.query<Job>(
+                'SELECT * FROM search.generation_publication WHERE partition_no=0 AND job=$1',
+                [ref.job],
+              );
+              if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
+              if (job.phase === 'active') {
+                // Settled publication may still need idempotent fence release after a lost response.
+                // A later Source change must not strand the ordinary repair writer behind that old fence.
+                await native(job.consumer, context);
+              } else {
+                try {
+                  await adopt(job, context, meter);
+                } catch (error) {
+                  if (
+                    error instanceof Pending &&
+                    (job.fence || job.phase === 'fencing') &&
+                    ['source_pending', 'routing_incomplete', 'registration_missing'].includes(error.reason)
+                  ) {
+                    // Definition/observation changes can be discovered before entering the publication body.
+                    // Recover an outstanding alias intent under the same native fence before returning unready.
+                    await native(job.consumer, context);
+                    if (!job.fence) await installFence(job, client, context, meter);
+                    await restart(job, client, context, meter);
+                  }
+                  throw error;
+                }
+              }
+              return await work(job, client);
+            } finally {
+              const unlocked = await client.query<{ unlocked: boolean }>(
+                'SELECT pg_advisory_unlock(hashtextextended($1,2)) AS unlocked',
+                [ref.job],
+              );
+              if (unlocked.rows[0]?.unlocked !== true)
+                throw new Error('Generation publication session lock was not released');
+              mayOwnLock = false;
+            }
+          }),
+        publicationLifetime,
+      );
     } finally {
-      client.release(broken);
+      // Expiry can win while an owner is using its own snapshot. Drop our lock before returning;
+      // the retired callback cannot reuse this session or release it a second time.
+      dispose();
     }
   }
-  async function head(partition: number): Promise<Home> {
+  async function head(partition: number, context: PublicFilterConsumerContext): Promise<Home> {
     const {
       rows: [row],
-    } = await pool.query<{ epoch: number; position: string }>(
-      'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
-      [partition],
+    } = await withBoundedReadConnection(
+      pool,
+      context.deadline,
+      (client) =>
+        client.query<{ epoch: number; position: string }>(
+          'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
+          [partition],
+        ),
+      publicationLifetime,
     );
     if (!row) throw new Pending('routing_incomplete');
     const witness = registry ? (await readAccountDiscoveryWitness(pool, [partition])).get(partition) : undefined;
@@ -768,7 +822,7 @@ export function createSearchGenerationPublication(
         await save(client, job, meter);
         return;
       }
-      const before = await head(job.home);
+      const before = await head(job.home, context);
       await remember(job, before, client);
       const after = cursor(job);
       let ids: readonly string[],
@@ -811,7 +865,7 @@ export function createSearchGenerationPublication(
         keys = ids.map((id) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
       }
       await reconcile(job, job.home, ids, keys, BigInt(before.position), context, meter);
-      if (!same(before, await head(job.home))) throw new Pending('source_pending');
+      if (!same(before, await head(job.home, context))) throw new Pending('source_pending');
       job.after_route = next?.route ?? null;
       job.after_id = next?.id ?? null;
       if (complete) {
@@ -933,7 +987,7 @@ export function createSearchGenerationPublication(
           group.ids,
         );
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
-        const before = await head(group.partition);
+        const before = await head(group.partition, context);
         await remember(job, before, client);
         const discoveryKeys =
           job.family === 'discovery'
@@ -941,7 +995,7 @@ export function createSearchGenerationPublication(
             : undefined;
         if (discoveryKeys && discoveryKeys.length !== group.keys.length) throw new Pending('source_pending');
         await reconcile(job, group.partition, group.ids, discoveryKeys, BigInt(before.position), context, meter);
-        if (!same(before, await head(group.partition))) throw new Pending('source_pending');
+        if (!same(before, await head(group.partition, context))) throw new Pending('source_pending');
       }
       job.engine_after = (next as Record<string, unknown> | undefined) ?? null;
       if (next === undefined) {
@@ -958,7 +1012,7 @@ export function createSearchGenerationPublication(
       if (rows.rows.length !== Math.min(PAGE, 4096 - job.home)) throw new Pending('routing_incomplete');
       for (const row of rows.rows) {
         meter.inputKeys++;
-        if (!same(row, await head(row.partition))) {
+        if (!same(row, await head(row.partition, context))) {
           await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
             row.partition,
             job.job,
@@ -1098,33 +1152,41 @@ export function createSearchGenerationPublication(
         )
           throw new Pending('registration_missing');
         const id = randomUUID();
-        const result = await pool.query<Job>(
-          `INSERT INTO search.generation_publication
+        const job = await withBoundedReadConnection(
+          pool,
+          context.deadline,
+          async (client) => {
+            const result = await client.query<Job>(
+              `INSERT INTO search.generation_publication
           (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
           ON CONFLICT(partition_no,physical_target,consumer) DO NOTHING RETURNING *`,
-          [
-            id,
-            input.physicalTarget,
-            input,
-            target.prefix,
-            target.generation,
-            target.family,
-            target.incarnation,
-            kinds.map(({ kind, owner }) => `${owner}:${kind}`),
-            resolved.definition.source.partition,
-            bindingKey(resolved.definition),
-            config.clock().toISOString(),
-          ],
+              [
+                id,
+                input.physicalTarget,
+                input,
+                target.prefix,
+                target.generation,
+                target.family,
+                target.incarnation,
+                kinds.map(({ kind, owner }) => `${owner}:${kind}`),
+                resolved.definition.source.partition,
+                bindingKey(resolved.definition),
+                config.clock().toISOString(),
+              ],
+            );
+            return (
+              result.rows[0] ??
+              (
+                await client.query<Job>(
+                  'SELECT * FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1 AND consumer=$2',
+                  [input.physicalTarget, input],
+                )
+              ).rows[0]
+            );
+          },
+          publicationLifetime,
         );
-        const job =
-          result.rows[0] ??
-          (
-            await pool.query<Job>(
-              'SELECT * FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1 AND consumer=$2',
-              [input.physicalTarget, input],
-            )
-          ).rows[0];
         if (!job || !same(job.consumer, input)) throw new Pending('incarnation_changed');
         await adopt(job, context, meter);
         return { status: 'preparing' as const, job: reference(job), cost: meter };
