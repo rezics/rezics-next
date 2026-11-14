@@ -672,7 +672,11 @@ function readGoalDocuments(cwd: string, goals: readonly string[]): ManagerGoalDo
 type ManagerContinuation = { path: string; text: string };
 
 /** Read each owned Goal continuation plus a distinct renewal continuation at most once. */
-function readManagerContinuations(cwd: string, goals: readonly string[], continuationFile?: string): ManagerContinuation[] {
+function readManagerContinuations(
+  cwd: string,
+  goals: readonly string[],
+  continuationFile?: string,
+): ManagerContinuation[] {
   const paths = [
     ...goals.map((goal) => join(cwd, '.temp', 'goal', goal, 'CONTINUATION.md')),
     ...(continuationFile ? [continuationFile] : []),

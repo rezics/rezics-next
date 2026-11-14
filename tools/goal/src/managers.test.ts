@@ -315,7 +315,10 @@ test('an oversized legacy diagnostic reaches the existing turn only as an inbox 
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Continue independent source' });
     await s.managers.wake(manager.id);
     await s.managers.flush();
-    const texts = s.requests().filter((r) => r.method === 'turn/steer').map((r) => r.params.input[0].text);
+    const texts = s
+      .requests()
+      .filter((r) => r.method === 'turn/steer')
+      .map((r) => r.params.input[0].text);
     expect(texts).toHaveLength(2);
     expect(texts[0]).toContain(`Inbox #${id}: round-limit.`);
     expect(texts[0]).toContain(taskId);
