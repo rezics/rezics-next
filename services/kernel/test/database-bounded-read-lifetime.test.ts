@@ -171,9 +171,7 @@ test('nested checkout is refused before another physical connection is requested
   });
 
   await expect(
-    withBoundedReadConnection(database, Date.now() + 500, async () =>
-      withConnection(database, async () => 'nested'),
-    ),
+    withBoundedReadConnection(database, Date.now() + 500, async () => withConnection(database, async () => 'nested')),
   ).rejects.toBeInstanceOf(NestedPoolCheckoutError);
   expect(checkouts).toBe(1);
 });

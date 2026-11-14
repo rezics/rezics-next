@@ -1,10 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { ConfigError } from '../commerce/config.ts';
-import {
-  withBoundedReadLifetime,
-  type BoundedReadLifetimeOptions,
-} from './bounded-read-lifetime.ts';
+import { withBoundedReadLifetime, type BoundedReadLifetimeOptions } from './bounded-read-lifetime.ts';
 export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 export { boundedReadWindow } from './bounded-read-window.ts';
 export { BoundedReadDeadlineError, RetiredReadClientError } from './bounded-read-lifetime.ts';

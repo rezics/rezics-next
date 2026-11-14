@@ -103,8 +103,7 @@ export function withBoundedReadLifetime<T>(
   let uncertainty: unknown;
   let activeQueries = 0;
   const settledServerErrors = new WeakSet<object>();
-  let transaction: 'none' | 'beginning' | 'open' | 'committing' | 'rolling-back' | 'committed' | 'rolled-back' =
-    'none';
+  let transaction: 'none' | 'beginning' | 'open' | 'committing' | 'rolling-back' | 'committed' | 'rolled-back' = 'none';
   let hasFailure = false;
   let firstFailure: unknown;
 
@@ -142,9 +141,7 @@ export function withBoundedReadLifetime<T>(
       }
 
       const config: QueryConfig =
-        typeof input === 'string'
-          ? { text: input, ...(values === undefined ? {} : { values }) }
-          : { ...input };
+        typeof input === 'string' ? { text: input, ...(values === undefined ? {} : { values }) } : { ...input };
       let timeout: number;
       try {
         timeout = before(deadline, deadlineError);
@@ -187,12 +184,8 @@ export function withBoundedReadLifetime<T>(
           if (typeof mapped === 'object' && mapped !== null) settledServerErrors.add(mapped);
         }
         const uncertainSettledError =
-          !settledServerError &&
-          (isUncertain(error) || options.isUncertainSettledQueryError?.(error) === true);
-        if (
-          dispatched &&
-          (!settled || command !== undefined || uncertainSettledError || Date.now() >= deadline)
-        )
+          !settledServerError && (isUncertain(error) || options.isUncertainSettledQueryError?.(error) === true);
+        if (dispatched && (!settled || command !== undefined || uncertainSettledError || Date.now() >= deadline))
           discard(mapped);
         throw mapped;
       });
