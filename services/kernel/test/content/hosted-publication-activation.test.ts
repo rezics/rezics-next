@@ -20,10 +20,7 @@ const context = () => ({
   requestId: crypto.randomUUID(),
 });
 
-async function activationEventCounts(
-  f: Awaited<ReturnType<typeof hostedChaptersFixture>>,
-  catalogueId: string,
-) {
+async function activationEventCounts(f: Awaited<ReturnType<typeof hostedChaptersFixture>>, catalogueId: string) {
   const result = await f.native.pool.query<{ type: string; count: number }>(
     `SELECT type,count(*)::integer AS count FROM core.outbox
      WHERE partition_no=$1 AND subject=$2 AND type=ANY($3::text[]) GROUP BY type`,
