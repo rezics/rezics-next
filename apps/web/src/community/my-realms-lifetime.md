@@ -106,13 +106,19 @@ the request and the reader has not focused or pointed elsewhere. Retirement clea
 
 Decision: current-entry rows lead with the supplied identity, description and independently admitted Open/Manage
 choices. Optional media states remain visible as secondary information; a missing image never changes action advice.
-Leave is a separate row action that selects one page-level review above the inventory. Selection focuses that review;
-explicit Cancel or Discard returns focus to its connected trigger. The original controller continues to own the
+Leave is a separate row action that selects one review immediately after that exact row, within the same list item
+in normal flow, following the shared [local-detail pattern](../../../../packages/ui/src/components/list-presentation.mdx#member-reading).
+Opening preserves trigger focus and viewport; Tab reaches the local review actions. Only explicit Cancel or Discard
+returns focus to the captured live opener with `preventScroll`. Escape retains the review, including an uncertain
+intent's explicit command-discard action. Selection, page or admission retirement clears obsolete opener effects
+without restoring focus. The original controller continues to own the
 selected Account, episode, command, retry and readback. Browsing and sparse continuation retain the supplied order,
 current window and finite inventory history; no extra membership, media or permission reads are introduced.
 
 The current route sources include a synthetic admitted member with independent Open/Manage advice, a member whose
 entry is withheld, a sparse inventory with an opaque continuation, and deliberate leave selection/cancel. The selected
-review has one page-level region above the inventory, associates its trigger, receives keyboard focus and returns it
-on explicit cancellation when that original trigger is still connected. These states leave the existing immutable
-selected episode and command controller unchanged. Source acceptance is authored and deferred to the dev verifier.
+review has one local region associated with its Leave control; a later-row selection stays beside that Realm.
+Pointer and keyboard opening, switching Realms, confirmation, pending standing, uncertain exact replay, refusal,
+explicit Cancel/Discard and page/session retirement retain that placement and focus contract. These states leave
+the existing immutable selected episode and command controller unchanged. Illustrative interaction fixtures remain
+labelled; integrated native, privacy and growth acceptance is deferred to the dev verifier.

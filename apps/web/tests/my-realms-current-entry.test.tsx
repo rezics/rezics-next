@@ -195,7 +195,7 @@ test('rendered current rows expose only admitted destinations and retain supplie
 });
 
 // Authored for the dev verifier; the source window does not execute acceptance.
-test('one selected leave review precedes browsing while independent current action advice stays on each row', async () => {
+test('one leave review follows the exact later row while independent current action advice stays on each row', async () => {
   const admitted = itemAt(0);
   const source = itemAt(1);
   const withheld: MyRealmsNativeItem = {
@@ -205,7 +205,7 @@ test('one selected leave review precedes browsing while independent current acti
       actions: { ...source.current.actions, enter: { state: 'prohibited', reason: 'not_authorized' } },
     },
   };
-  const selected = formatMyRealmsCurrent({ items: [admitted], next: null }).realms[0]!;
+  const selected = formatMyRealmsCurrent({ items: [withheld], next: null }).realms[0]!;
   const controller: MyRealmsCurrentController = {
     ready: true,
     review: { row: selected, phase: 'review', standing: 'member', retryAllowed: false },
@@ -220,22 +220,41 @@ test('one selected leave review precedes browsing while independent current acti
   const rows = [...markup.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gu)].map((match) => match[1]!);
   expect(rows).toHaveLength(2);
   expect(markup.match(/data-slot="my-realms-leave-review"/gu)).toHaveLength(1);
-  expect(markup.indexOf('data-slot="my-realms-leave-review"')).toBeLessThan(markup.indexOf('<ul'));
+  expect(rows[0]).not.toContain('my-realms-leave-review');
+  expect(rows[1]).toContain('my-realms-leave-review');
+  expect(rows[1]!.indexOf('data-slot="my-realms-leave-review"')).toBeGreaterThan(rows[1]!.indexOf('</article>'));
   const review = markup.split('data-slot="my-realms-leave-review"')[1]!.split('</section>')[0]!;
-  expect(review).toContain(`<h2`);
+  expect(review).toContain(`<h3`);
   expect(review).toContain(selected.name);
-  expect(review).not.toContain(withheld.name);
+  expect(review).not.toContain(admitted.name);
   expect(review).toContain(m.my_realms_leave_confirm_button());
   expect(review).toContain(m.action_cancel());
-  for (const row of rows) {
-    expect(row).not.toContain('my-realms-leave-review');
-    expect(row).not.toContain(m.my_realms_leave_confirm_button());
-    expect(row).toContain(m.realm_leave());
-  }
-  expect(rows[0]).toContain('aria-expanded="true"');
-  expect(rows[0]).toMatch(/aria-controls="[^"]+-leave-review"/u);
-  expect(rows[1]).toContain('aria-expanded="false"');
+  expect(rows[0]).not.toContain(m.my_realms_leave_confirm_button());
+  for (const row of rows) expect(row).toContain(m.realm_leave());
+  expect(rows[0]).toContain('aria-expanded="false"');
+  expect(rows[1]).toContain('aria-expanded="true"');
+  expect(rows[1]).toMatch(/aria-controls="[^"]+-leave-review"/u);
   expect(rows[1]).not.toContain(`/realms/${withheld.realmId}"`);
   expect(rows[1]).toContain(`/realms/${withheld.realmId}/members`);
   expect(rows[1]).toContain(m.my_realms_action_prohibited({ action: m.my_realms_open() }));
+
+  for (const [phase, status] of [
+    ['submitting', m.realm_membership_checking()],
+    ['pending', m.realm_membership_checking()],
+    ['uncertain', m.realm_leave_uncertain()],
+    ['refused', m.realm_leave_owner_required()],
+    ['blocked', m.my_realms_leave_blocked()],
+  ] as const) {
+    const { markup: state } = await render([admitted, withheld], null, 'en', {
+      ...controller,
+      review: { ...controller.review!, phase, retryAllowed: phase === 'uncertain', ownerReason: 'last-owner' },
+    });
+    expect(state.match(/data-slot="my-realms-leave-review"/gu)).toHaveLength(1);
+    expect(state).toContain(`data-phase="${phase}"`);
+    expect(state).toContain(m.my_realms_leave_confirm({ realm: selected.name }));
+    expect(state).toContain(status);
+    expect(state).not.toContain(m.my_realms_leave_confirm_button());
+  }
+  const { markup: retired } = await render([admitted], null, 'en', controller);
+  expect(retired).not.toContain('my-realms-leave-review');
 });

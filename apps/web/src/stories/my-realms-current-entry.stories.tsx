@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { useState } from 'react';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { PageStory, pageReady } from './page';
 import { interfaceCursors, interfaceRealmTitle } from '../kernel/fake/realm-home-interface';
 import { MyRealmsPageView } from '../community/my-realms-page';
@@ -32,6 +33,48 @@ const selectedLeave: MyRealmsCurrentRow = {
   },
 };
 
+const earlierId = '0192f3a0-6c1e-7b2a-9d4e-000000000099';
+const earlier: MyRealmsCurrentRow = {
+  ...selectedLeave,
+  realmId: earlierId,
+  name: 'Illustrative earlier Realm',
+  current: {
+    ...selectedLeave.current,
+    description: 'Illustrative membership before the selected Realm.',
+    destination: { ...selectedLeave.current.destination, realmId: earlierId },
+    actions: {
+      ...selectedLeave.current.actions,
+      enter: { state: 'prohibited', reason: 'not_authorized' },
+      manage: { state: 'prohibited', reason: 'not_authorized' },
+      leave: { ...leaveAdvice, path: `/v1/realms/${earlierId}/membership` },
+    },
+  },
+};
+const illustrativePage = { signedIn: true, realms: [earlier, selectedLeave], next: null };
+
+// Presentation-only fixture: the real controller owns retirement and original command operands.
+function IllustrativeReview({ controller }: { controller: MyRealmsCurrentController }) {
+  const [review, setReview] = useState(controller.review);
+  const [retired, setRetired] = useState(false);
+  return (
+    <>
+      <p>Illustrative review interactions; no membership command or session change is executed.</p>
+      <MyRealmsPageView
+        page={retired ? { ...illustrativePage } : illustrativePage}
+        currentController={{
+          ...controller,
+          review: retired ? null : review,
+          select: (row) => setReview({ ...controller.review!, row }),
+          discard: () => setReview(null),
+        }}
+      />
+      <button type="button" onClick={() => setRetired(true)}>
+        Replace illustrative page/session
+      </button>
+    </>
+  );
+}
+
 function reviewController(phase: 'pending' | 'uncertain'): MyRealmsCurrentController {
   return {
     ready: true,
@@ -45,7 +88,7 @@ function reviewController(phase: 'pending' | 'uncertain'): MyRealmsCurrentContro
     select() {},
     cancel() {},
     confirm() {},
-    retry() {},
+    retry: fn(),
     refresh() {},
     discard() {},
   };
@@ -60,7 +103,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Member entry uses the refreshed kernel recording. Pending and uncertain review states use a static controller fixture to show the selected UI; they do not execute membership commands.',
+          'Member entry uses the refreshed kernel recording. Pending and uncertain reviews, including the earlier Realm, use illustrative presentation fixtures; they do not execute membership commands.',
       },
     },
   },
@@ -101,18 +144,62 @@ export const MemberEntry: Story = { globals: phone };
 
 export const SelectedLeavePending: Story = {
   args: {
-    page: { signedIn: true, realms: [selectedLeave], next: null },
+    page: illustrativePage,
     currentController: reviewController('pending'),
   },
   globals: phone,
 };
 
 export const UncertainExactRetry: Story = {
+  render: (args) => <IllustrativeReview controller={args.currentController!} />,
   args: {
-    page: { signedIn: true, realms: [selectedLeave], next: null },
+    page: illustrativePage,
     currentController: reviewController('uncertain'),
   },
   globals: phone,
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    const leaves = view.getAllByRole('button', { name: m.realm_leave() });
+    const leave = leaves[1]!;
+    const top = leave.getBoundingClientRect().top;
+    await userEvent.click(leave);
+    await expect(leave.getBoundingClientRect().top).toBe(top);
+    const focus = fn(leave.focus.bind(leave));
+    leave.focus = focus;
+    const review = view.getByRole('region', { name: m.my_realms_leave_review() });
+    await expect(review.previousElementSibling).toContainElement(leave);
+    await expect(leave).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await expect(review).toBeVisible();
+    await userEvent.tab();
+    const retry = within(review).getByRole('button', { name: m.realm_leave_retry_same() });
+    await expect(retry).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(args.currentController!.retry).toHaveBeenCalledTimes(1);
+    await expect(review).toHaveTextContent(m.realm_leave_uncertain());
+    await userEvent.keyboard('{Escape}');
+    await expect(review).toBeVisible();
+    await userEvent.click(within(review).getByRole('button', { name: m.realm_membership_command_discard() }));
+    await expect(leave).toHaveFocus();
+    await expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    await userEvent.click(leaves[0]!);
+    await expect(
+      view.getByRole('region', { name: m.my_realms_leave_review() }).previousElementSibling,
+    ).toContainElement(leaves[0]!);
+    await userEvent.click(leave);
+    await expect(view.getAllByRole('region', { name: m.my_realms_leave_review() })).toHaveLength(1);
+    await userEvent.click(
+      within(view.getByRole('region', { name: m.my_realms_leave_review() })).getByRole('button', {
+        name: m.realm_membership_command_discard(),
+      }),
+    );
+    await expect(leave).toHaveFocus();
+    await userEvent.click(leave);
+    const replacement = view.getByRole('button', { name: 'Replace illustrative page/session' });
+    await userEvent.click(replacement);
+    await expect(view.queryByRole('region', { name: m.my_realms_leave_review() })).toBeNull();
+    await expect(replacement).toHaveFocus();
+  },
 };
 
 export const RoutedMemberEntry: Story = {
@@ -156,14 +243,35 @@ export const RoutedDeliberateLeave: Story = {
     const view = within(main);
     const leave = await view.findByRole('button', { name: m.realm_leave() });
     await expect(leave).toHaveAttribute('aria-expanded', 'false');
-    await userEvent.click(leave);
+    const focus = fn(leave.focus.bind(leave));
+    leave.focus = focus;
+    leave.focus();
+    const top = leave.getBoundingClientRect().top;
+    await userEvent.keyboard('{Enter}');
     const review = await view.findByRole('region', { name: m.my_realms_leave_review() });
-    await expect(within(review).getByRole('heading', { name: m.my_realms_leave_review() })).toHaveFocus();
+    await expect(leave).toHaveFocus();
+    await expect(leave.getBoundingClientRect().top).toBe(top);
     await expect(review.closest('[data-slot="my-realms-item"]')).toBeNull();
+    await expect(review.parentElement?.tagName).toBe('LI');
+    await expect(review.previousElementSibling).toContainElement(leave);
+    await expect(leave).toHaveAttribute('aria-controls', review.id);
     await expect(view.getByRole('link', { name: m.my_realms_open() })).toBeVisible();
     await expect(within(review).getByText(m.my_realms_leave_confirm({ realm: interfaceRealmTitle }))).toBeVisible();
-    await userEvent.click(within(review).getByRole('button', { name: m.action_cancel() }));
+    await userEvent.tab();
+    await expect(within(review).getByRole('button', { name: m.my_realms_leave_confirm_button() })).toHaveFocus();
+    await userEvent.tab();
+    await expect(within(review).getByRole('button', { name: m.action_cancel() })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
     await expect(view.queryByRole('region', { name: m.my_realms_leave_review() })).toBeNull();
+    await expect(leave).toHaveFocus();
+    await expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    await userEvent.click(leave);
+    await expect(leave).toHaveFocus();
+    await userEvent.click(
+      within(view.getByRole('region', { name: m.my_realms_leave_review() })).getByRole('button', {
+        name: m.action_cancel(),
+      }),
+    );
     await expect(leave).toHaveFocus();
     await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth + 1);
   },

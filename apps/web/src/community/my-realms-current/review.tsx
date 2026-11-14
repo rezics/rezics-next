@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useId } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { MyRealmsCurrentController } from './contract';
@@ -14,11 +14,6 @@ export function MyRealmsLeaveReview({
   onDismiss?: (() => void) | undefined;
 }) {
   const headingId = useId();
-  const heading = useRef<HTMLHeadingElement>(null);
-  const selected = controller.review?.row;
-  useEffect(() => {
-    if (selected) heading.current?.focus();
-  }, [selected]);
   const dismiss = (action: () => void) => {
     action();
     onDismiss?.();
@@ -57,19 +52,14 @@ export function MyRealmsLeaveReview({
       id={id}
       aria-labelledby={headingId}
       aria-busy={review.phase === 'submitting' || review.standing === 'loading'}
-      className="min-w-0 space-y-4 rounded-xl border border-border bg-muted/40 p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
+      className="mb-6 min-w-0 space-y-4 border-s-2 border-border ps-4 [overflow-wrap:anywhere] sm:mb-8 sm:ps-6 [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
       data-slot="my-realms-leave-review"
       data-phase={review.phase}
       data-workflow-id={review.workflowId}
     >
-      <h2
-        id={headingId}
-        ref={heading}
-        tabIndex={-1}
-        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-      >
+      <h3 id={headingId} className="text-lg font-semibold">
         {m.my_realms_leave_review()}
-      </h2>
+      </h3>
       <p className="max-w-prose leading-relaxed">{m.my_realms_leave_confirm({ realm: review.row.name })}</p>
       <p role="status">{status}</p>
       {review.phase === 'pending' || review.phase === 'submitting' ? (

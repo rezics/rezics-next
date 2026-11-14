@@ -4,7 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { MyRealmsCurrentRowView } from './my-realms-current/states';
 import { MyRealmsLeaveReview } from './my-realms-current/review';
-import type { MyRealmsCurrentController } from './my-realms-current/contract';
+import type { MyRealmsCurrentController, MyRealmsCurrentRow } from './my-realms-current/contract';
 import type { MyRealmsPage } from './space';
 import type { MyRealmsMovement, MyRealmsNavigation } from './my-realms-caller';
 
@@ -25,8 +25,18 @@ export function MyRealmsPageView({
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const attemptedFocus = useRef(false);
-  const leaveTrigger = useRef<HTMLButtonElement | null>(null);
+  const leaveTrigger = useRef<{
+    element: HTMLButtonElement;
+    page: MyRealmsPage;
+    row: MyRealmsCurrentRow;
+  } | null>(null);
+  const review = currentController?.review;
   const next = page.next;
+
+  useEffect(() => {
+    const opener = leaveTrigger.current;
+    if (!review || !opener || opener.page !== page || opener.row !== review.row) leaveTrigger.current = null;
+  }, [page, review]);
 
   useEffect(() => {
     if (attemptedFocus.current || !focusContinuation) return;
@@ -43,16 +53,6 @@ export function MyRealmsPageView({
           </PageHeading>
           <p className="max-w-prose leading-relaxed text-muted-foreground">{m.my_realms_page_description()}</p>
         </header>
-        {currentController?.review ? (
-          <MyRealmsLeaveReview
-            key={currentController.review.row.realmId}
-            controller={currentController}
-            id={`${headingId}-leave-review`}
-            onDismiss={() => {
-              if (leaveTrigger.current?.isConnected) leaveTrigger.current.focus();
-            }}
-          />
-        ) : null}
         {page.realms.length ? (
           <ul aria-labelledby={headingId} className="divide-y divide-border border-y border-border">
             {page.realms.map((realm) => (
@@ -62,9 +62,26 @@ export function MyRealmsPageView({
                   controller={currentController}
                   reviewId={`${headingId}-leave-review`}
                   onLeaveSelect={(trigger) => {
-                    leaveTrigger.current = trigger;
+                    leaveTrigger.current = { element: trigger, page, row: realm };
                   }}
                 />
+                {currentController && review?.row.realmId === realm.realmId ? (
+                  <MyRealmsLeaveReview
+                    controller={currentController}
+                    id={`${headingId}-leave-review`}
+                    onDismiss={() => {
+                      const opener = leaveTrigger.current;
+                      leaveTrigger.current = null;
+                      if (
+                        currentController.ready &&
+                        opener?.page === page &&
+                        opener.row === review.row &&
+                        opener.element.isConnected
+                      )
+                        opener.element.focus({ preventScroll: true });
+                    }}
+                  />
+                ) : null}
               </li>
             ))}
           </ul>
