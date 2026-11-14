@@ -72,6 +72,7 @@ import type {
   SubjectLabelMutationResult,
 } from './subject-labels.ts';
 import { useSubjectLibraryObservation, type SlotLifetime } from './subject-library-current-origin';
+import { EntryStateHistory } from './entry-state-history/view';
 export { useSubjectLibraryObservation } from './subject-library-current-origin';
 
 type SubjectSlotProps = {
@@ -191,7 +192,11 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
           current.sessionReady &&
           current.scope === observedScope &&
           current[family] === revision &&
-          operations.every((operation) => operationIsAdmitted(operation, current.admitted)))
+          operations.every((operation) =>
+            operation.startsWith('library_entry_state_history.')
+              ? (current.admitted?.includes(operation) ?? false)
+              : operationIsAdmitted(operation as Parameters<typeof operationIsAdmitted>[0], current.admitted),
+          ))
       );
     };
     const signature = JSON.stringify([scope, browser ? families[family].seed : 0]);
@@ -272,6 +277,11 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       entryIdentity={scope}
       entryObservation={observation.value.entry}
       entryLifetime={admissions.current.entry!.lifetime}
+      entryHistoryAdmissions={{
+        list: observation.value.admitted?.includes('library_entry_state_history.list') ?? false,
+        review: observation.value.admitted?.includes('library_entry_state_history.review') ?? false,
+        restore: observation.value.admitted?.includes('library_entry_state_history.restore') ?? false,
+      }}
       labelLifetime={admissions.current.labels!.lifetime}
       labelWriteCustody={labelWriteCustody}
       collectionLifetime={admissions.current.collections!.lifetime}
@@ -285,6 +295,7 @@ function SubjectLibrarySlotView({
   locale,
   data,
   entryLifetime,
+  entryHistoryAdmissions,
   entryIdentity,
   entryObservation,
   labelLifetime,
@@ -292,6 +303,7 @@ function SubjectLibrarySlotView({
   collectionLifetime,
 }: SubjectSlotProps & {
   entryLifetime: SlotLifetime;
+  entryHistoryAdmissions: { list: boolean; review: boolean; restore: boolean };
   entryIdentity: string;
   entryObservation: number;
   labelLifetime: SlotLifetime;
@@ -580,6 +592,7 @@ function SubjectLibrarySlotView({
     pickerFlight.current = false;
   }
   const stateOptions = (data.stateOptions ?? []).map(({ id, label }) => [id, label.text] as const);
+  const historyProvenance = data.provenance?.csrfToken ? data.provenance : null;
   const entryReviewOrigin = JSON.stringify([
     entryIdentity,
     entryObservation,
@@ -1792,6 +1805,33 @@ function SubjectLibrarySlotView({
             </Exposure>
           ) : null}
         </div>
+      ) : null}
+
+      {hydrated &&
+      data.session === 'signed-in' &&
+      data.entryAvailable &&
+      entry &&
+      historyProvenance &&
+      entryHistoryAdmissions.list &&
+      entryLifetime.current('library_entry.get', 'library_entry_state_history.list') ? (
+        <EntryStateHistory
+          key={entryReviewOrigin}
+          entry={entry}
+          stateOptions={data.stateOptions ?? []}
+          provenance={historyProvenance}
+          lifetime={entryLifetime}
+          canReview={entryHistoryAdmissions.review}
+          canRestore={entryHistoryAdmissions.restore}
+          onReadback={(current) => {
+            if (!entryLifetime.current('library_entry.get', 'library_entry_state_history.list')) return;
+            setEntry(current);
+            setEntryStateLabel(
+              (data.stateOptions ?? []).find(({ id }) => id === current.state)?.label.text ?? m.library_other(),
+            );
+            setEntryConflict(null);
+          }}
+          onRefresh={() => void router.invalidate()}
+        />
       ) : null}
 
       {hydrated &&

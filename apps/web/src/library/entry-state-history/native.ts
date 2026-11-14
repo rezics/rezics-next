@@ -34,7 +34,7 @@ function readFailure(status: number, error: unknown): Exclude<HistoryRead<never>
   if (status === 404) return { kind: 'missing' };
   if (status === 401) return { kind: 'retired' };
   if (status === 403) return { kind: 'denied' };
-  if (status === 409 && codeOf(error) === 'stale_cursor') return { kind: 'stale' };
+  if (codeOf(error) === 'stale_cursor') return { kind: 'stale' };
   return { kind: 'unavailable' };
 }
 
@@ -85,19 +85,24 @@ export async function restoreEntryState(
   command: RestoreCommand,
 ): Promise<RestoreResult> {
   try {
+    const headers = { authorization, 'idempotency-key': JSON.stringify(command.key) };
     const result = await client
       .libraryEntries({ subjectId: command.subjectId })
       .stateHistory({ changeRevision: command.changeRevision })
       .$restore.post(
         { incarnationId: command.incarnationId, currentRevision: command.currentRevision },
         {
-          headers: { authorization, 'idempotency-key': JSON.stringify(command.key) },
+          headers,
           fetch: { cache: 'no-store', redirect: 'manual' },
         },
       );
     if (!result.error) {
       const entry = receiveEntry(result.data?.libraryEntry, command.subjectId);
-      return entry ? { kind: 'recorded', entry } : { kind: 'uncertain' };
+      return entry &&
+        entry.incarnationId === command.incarnationId &&
+        entry.revision > command.currentRevision
+        ? { kind: 'recorded', entry }
+        : { kind: 'uncertain' };
     }
     if (result.status >= 500) return { kind: 'uncertain' };
     if (result.status === 404) return { kind: 'missing' };

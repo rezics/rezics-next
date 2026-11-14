@@ -85,4 +85,17 @@ deliberate restore; stale incarnation/revision requires a new review, and restor
 The native page cap remains the documented maximum of 50 with default 20; Web must retain only that addressed page
 and the fixed review/restore/readback sequence. Pruned coverage is partial, pre-install coverage unknown, and an empty
 page does not establish completeness. The current released profile supplies presentation labels when available;
-historical state and profile identifiers remain exact recorded evidence.
+historical state identifiers remain exact recorded evidence.
+
+The Subject Library slot mounts the private Web journey in `apps/web/src/library/entry-state-history`. It requests
+one newest-first page at a time, with an explicit signed continuation and a 20 or 50 row choice. An addressed review
+must still match the visible entry incarnation, revision and selected change before the restore button appears.
+Restore sends the reviewed incarnation and current revision with one idempotency key; an uncertain response retains
+that exact command for an explicit retry. A recorded restore receipt remains distinct from the following current-entry
+readback, including when that readback is unavailable. Slot reader, source, entry basis and operation admission retire
+the page and review before late responses can disclose or act on them.
+
+The installed page and review HTTP schemas expose state IDs, revisions, command IDs, command kind and change time, but
+omit the stored before/after profile pins. Web displays the exact exposed evidence and marks historical profile pin
+evidence unavailable; any matching label from the current released profile is visibly presentation only. Exposing the
+stored pins requires a separate native route/schema and generated-client outcome before Web can render them.

@@ -7,11 +7,28 @@ import { sessionQuery, type useSession } from '../session';
 import type { SubjectReference } from './subject-ref';
 import { subjectSlotReturnTo } from './subject-slot-return-context';
 
-type Operation = Parameters<typeof operationIsAdmitted>[0];
+type HistoryOperation =
+  | 'library_entry_state_history.list'
+  | 'library_entry_state_history.review'
+  | 'library_entry_state_history.restore';
+type Operation = Parameters<typeof operationIsAdmitted>[0] | HistoryOperation;
+// The native history routes advertise exact operation keys outside Web's current shared exposure catalogue.
+const isAdmitted = (operation: Operation, admitted: readonly string[] | undefined) =>
+  operation.startsWith('library_entry_state_history.')
+    ? (admitted?.includes(operation) ?? false)
+    : operationIsAdmitted(operation as Parameters<typeof operationIsAdmitted>[0], admitted);
 export type SlotFamily = 'entry' | 'labels' | 'collections';
 export type SlotLifetime = { seed: string; active: boolean; current: (...operations: Operation[]) => boolean };
 const operations = {
-  entry: ['library_entry.get', 'library_entry.put', 'library_entry.delete', 'library_entry.restore'],
+  entry: [
+    'library_entry.get',
+    'library_entry.put',
+    'library_entry.delete',
+    'library_entry.restore',
+    'library_entry_state_history.list',
+    'library_entry_state_history.review',
+    'library_entry_state_history.restore',
+  ],
   // The received assignment read has its own lifetime. Picker search is admitted separately so it cannot retire
   // a still-current assignment review.
   labels: ['library_label.assignment_list'],
@@ -101,9 +118,9 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
         viewer: sessionReady ? viewer.subject! : null,
         credential: sessionReady ? viewer.csrfToken : null,
         admitted,
-        entryAdmitted: operationIsAdmitted('library_entry.get', admitted),
-        labelsAdmitted: operationIsAdmitted('library_label.assignment_list', admitted),
-        collectionsAdmitted: operationIsAdmitted('collection.list', admitted),
+        entryAdmitted: isAdmitted('library_entry.get', admitted),
+        labelsAdmitted: isAdmitted('library_label.assignment_list', admitted),
+        collectionsAdmitted: isAdmitted('collection.list', admitted),
       };
       if (identityChanged) {
         next.scope++;
@@ -112,10 +129,10 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
       const nextGates = Object.fromEntries(
         families.map((family) => [
           family,
-          JSON.stringify(operations[family].map((operation) => operationIsAdmitted(operation, admitted))),
+          JSON.stringify(operations[family].map((operation) => isAdmitted(operation, admitted))),
         ]),
       );
-      const allGates = JSON.stringify(allOperations.map((operation) => operationIsAdmitted(operation, admitted)));
+      const allGates = JSON.stringify(allOperations.map((operation) => isAdmitted(operation, admitted)));
       const gateChange = previousAllGates !== allGates;
       previousAllGates = allGates;
       for (const family of families) {

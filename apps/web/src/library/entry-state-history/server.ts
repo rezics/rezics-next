@@ -43,7 +43,7 @@ function privateResponse() {
   setResponseHeader('cache-control', 'private, no-store');
 }
 
-export const readEntryHistoryPage = createServerFn({ method: 'GET' })
+export const readEntryHistoryPage = createServerFn({ method: 'POST' })
   .validator((value: unknown) => v.parse(pageInput, value))
   .handler(async ({ data }) => {
     privateResponse();
@@ -54,15 +54,15 @@ export const readEntryHistoryPage = createServerFn({ method: 'GET' })
     return { viewer: data.expectedReader, subjectId: data.subjectId, result };
   });
 
-export const readEntryHistoryReview = createServerFn({ method: 'GET' })
+export const readEntryHistoryReview = createServerFn({ method: 'POST' })
   .validator((value: unknown) => v.parse(addressedInput, value))
   .handler(async ({ data }) => {
     privateResponse();
     const request = getRequest();
     const authorization = await prepareExpectedReader(request, env as Partial<SessionEnv>, data);
-    if (!authorization) return { viewer: data.expectedReader, subjectId: data.subjectId, result: { kind: 'retired' as const } };
+    if (!authorization) return { viewer: data.expectedReader, subjectId: data.subjectId, result: { kind: 'retired' as const }, credential: null };
     const result = await reviewEntryStateChange(kernelClient(), authorization, data.subjectId, data.changeRevision);
-    if (result.kind !== 'ready') return { viewer: data.expectedReader, subjectId: data.subjectId, result };
+    if (result.kind !== 'ready') return { viewer: data.expectedReader, subjectId: data.subjectId, result, credential: null };
     try {
       const credential = await captureAnnotationCredential(
         request,
@@ -72,7 +72,7 @@ export const readEntryHistoryReview = createServerFn({ method: 'GET' })
       );
       return { viewer: data.expectedReader, subjectId: data.subjectId, result, credential };
     } catch {
-      return { viewer: data.expectedReader, subjectId: data.subjectId, result: { kind: 'unavailable' as const } };
+      return { viewer: data.expectedReader, subjectId: data.subjectId, result: { kind: 'unavailable' as const }, credential: null };
     }
   });
 
@@ -108,7 +108,7 @@ export const sendEntryStateRestore = createServerFn({ method: 'POST' })
     return { viewer: data.expectedReader, subjectId: data.subjectId, result };
   });
 
-export const readEntryAfterRestore = createServerFn({ method: 'GET' })
+export const readEntryAfterRestore = createServerFn({ method: 'POST' })
   .validator((value: unknown) => v.parse(readbackInput, value))
   .handler(async ({ data }) => {
     privateResponse();
