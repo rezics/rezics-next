@@ -70,7 +70,7 @@ function startHost(env: NodeJS.ProcessEnv): Hosted {
   child.stderr?.on('data', (chunk) => {
     diagnostics = `${diagnostics}${String(chunk)}`.slice(-4096);
   });
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
   const ready = new Promise<void>((resolve, reject) => {
     const lines = createInterface({ input: child.stdout! });
     lines.once('line', (line) => {
@@ -96,7 +96,8 @@ function hostShutdownEvidence(stateDirectory: string, host: Hosted, identity: Pr
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') handoff = String(error);
   }
-  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${host.diagnostics?.() ?? ''}`;
+  const termination = `${host.child.exitCode ?? 'running'}/${host.child.signalCode ?? 'no signal'}`;
+  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${termination}; ${host.diagnostics?.() ?? ''}`;
 }
 
 function children(pid: number): ProcessIdentity[] {
