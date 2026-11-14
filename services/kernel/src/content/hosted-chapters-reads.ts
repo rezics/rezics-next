@@ -497,10 +497,7 @@ type HostedPageTargetGuard = Readonly<{
 /** Run independent target work in a local window. A rejection stops new work
  * immediately; already active operations settle before the original error is
  * rethrown. Results retain input order regardless of completion order. */
-async function withinHostedPageWindow<T, R>(
-  values: readonly T[],
-  work: (value: T) => Promise<R>,
-): Promise<R[]> {
+async function withinHostedPageWindow<T, R>(values: readonly T[], work: (value: T) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(values.length);
   let next = 0;
   let rejected = false;
@@ -540,7 +537,10 @@ export async function discloseHostedPageTargets(
     if (placement.kind === 'chapter') targetGroups.set(hostedTargetKey(placement.target), placement.target);
   }
   const ordinary = new Map(
-    await withinHostedPageWindow([...targetGroups], async ([key, target]) => [key, await prepareOrdinary(target)] as const),
+    await withinHostedPageWindow(
+      [...targetGroups],
+      async ([key, target]) => [key, await prepareOrdinary(target)] as const,
+    ),
   );
 
   const scopedPlacements = prepareScoped
@@ -550,8 +550,9 @@ export async function discloseHostedPageTargets(
       )
     : [];
   const scoped = new Map(
-    await withinHostedPageWindow(scopedPlacements, async (placement) =>
-      [placement.occurrenceId, await prepareScoped!(placement)] as const,
+    await withinHostedPageWindow(
+      scopedPlacements,
+      async (placement) => [placement.occurrenceId, await prepareScoped!(placement)] as const,
     ),
   );
 
@@ -578,8 +579,8 @@ export async function discloseHostedPageTargets(
       if (placement.kind !== 'chapter') return [];
       const key = hostedTargetKey(placement.target);
       const anchor = ordinary.get(key)
-        ? ordinaryAnchors.get(key) ?? null
-        : scopedAnchors.get(placement.occurrenceId) ?? null;
+        ? (ordinaryAnchors.get(key) ?? null)
+        : (scopedAnchors.get(placement.occurrenceId) ?? null);
       return [[placement.occurrenceId, anchor] as const];
     }),
   );
