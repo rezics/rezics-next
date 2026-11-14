@@ -78,9 +78,14 @@ for (const blocked of ['BEGIN', 'SELECT page', 'COMMIT'] as const) {
 test('a late snapshot checkout dispatches no SQL', async () => {
   let resolveCheckout!: (client: PoolClient) => void;
   const checkout = new Promise<PoolClient>((resolve) => (resolveCheckout = resolve));
-  const attempt = snapshot(readDependencies({ connect: () => checkout } as unknown as Pool), id, {
-    deadline: Date.now() + 100,
-  }, async () => 'unreachable');
+  const attempt = snapshot(
+    readDependencies({ connect: () => checkout } as unknown as Pool),
+    id,
+    {
+      deadline: Date.now() + 100,
+    },
+    async () => 'unreachable',
+  );
 
   await expect(attempt).rejects.toBeInstanceOf(AccessUnavailableError);
   const late = connection();

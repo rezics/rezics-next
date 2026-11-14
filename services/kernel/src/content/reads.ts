@@ -18,11 +18,7 @@ import presentationRuleBodies from './community-presentation-rules.sql';
 import { readCommunityPresentations } from './community-presentation.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool } from 'pg';
-import {
-  commandAccessContext,
-  accountStandingCheck,
-  createResourcePublicEligibility,
-} from './access-port.ts';
+import { commandAccessContext, accountStandingCheck, createResourcePublicEligibility } from './access-port.ts';
 import { spaceReadEligibility } from '../community/space.ts';
 import { authoritativeTimeValue } from '../command/command.ts';
 import { realmReadEligibility } from '../community/realm.ts';
@@ -474,7 +470,8 @@ async function batchSnapshot<T>(
       for (const partitionNo of partitionNos) {
         const partition = anchors.get(partitionNo);
         if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+        if (partition.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
       }
       const value = await work(client, anchors);
       await client.query('COMMIT');

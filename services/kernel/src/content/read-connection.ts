@@ -79,7 +79,14 @@ export async function withReadConnection<T>(
         }) as AccessClient['query'];
 
         try {
-          return await work({ client, get uncertain() { return uncertain; }, discard, retain });
+          return await work({
+            client,
+            get uncertain() {
+              return uncertain;
+            },
+            discard,
+            retain,
+          });
         } finally {
           active = false;
           connection = undefined;
