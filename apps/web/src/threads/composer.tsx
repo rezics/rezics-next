@@ -1148,7 +1148,16 @@ function PostComposerContent<T, Context = undefined>({
   const editorSize = titleRequired ? 'thread-opening-editor' : 'thread-reply-editor';
   const fallbackSize = titleRequired ? 'thread-opening-fallback' : 'thread-reply-fallback';
   return (
-    <div className="min-w-0 rounded-xl border border-border/70 bg-card p-5 [container-type:inline-size] [overflow-wrap:anywhere]">
+    <div
+      data-slot="conversation-composer"
+      className="min-w-0 rounded-xl border border-border/70 bg-card p-4 sm:p-6 [container-type:inline-size] [overflow-wrap:anywhere]"
+    >
+      {!titleRequired ? (
+        <header className="mb-4 space-y-1">
+          <h2 className="text-lg font-semibold">{m.conversation_write_reply()}</h2>
+          <p className="max-w-[60ch] text-sm leading-relaxed text-muted-foreground">{m.conversation_write_help()}</p>
+        </header>
+      ) : null}
       {replyContext}
       {boardId ? (
         <SlowModeEligibility

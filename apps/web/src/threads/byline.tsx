@@ -60,7 +60,7 @@ export function Byline({
       : [author?.displayName, author?.handle ? `@${author.handle}` : null].filter(Boolean).join(' ');
 
   return (
-    <div className={cn('flex min-w-0 items-start gap-2.5 text-sm text-muted-foreground', className)}>
+    <div className={cn('flex min-w-0 items-center gap-2.5 text-sm text-muted-foreground', className)}>
       {showAuthor ? (
         <Avatar aria-hidden="true" size={size === 'sm' ? 'sm' : 'default'}>
           {avatar && variant ? (
@@ -71,10 +71,10 @@ export function Byline({
           </AvatarFallback>
         </Avatar>
       ) : null}
-      <p className="min-w-0 flex-1">
+      <p className="min-w-0 flex-1 leading-relaxed">
         <span className="block min-w-0">
           {showAuthor ? (
-            <span className="block min-w-0 whitespace-normal [overflow-wrap:anywhere]" title={identityTitle}>
+            <span className="inline min-w-0 whitespace-normal [overflow-wrap:anywhere]" title={identityTitle}>
               {deleted ? (
                 <span>
                   {author?.kind === 'organization'
@@ -107,9 +107,14 @@ export function Byline({
                 </>
               )}
             </span>
-          ) : null}{' '}
+          ) : null}
+          {showAuthor ? (
+            <span aria-hidden="true" className="mx-1.5">
+              ·
+            </span>
+          ) : null}
           <MetaLine
-            className="block"
+            className="inline text-xs"
             items={[
               <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
                 {timeText(createdAt, now, locale)}

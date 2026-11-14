@@ -3,6 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { SignInPrompt } from './write-prompts';
+import { ConversationInspection } from './conversation-presentation';
 import { useThreadWatchCurrent, type ThreadWatchProps, type ThreadWatchView } from './thread-watch-current';
 
 export type { ThreadWatchProps } from './thread-watch-current';
@@ -98,7 +99,7 @@ export function ThreadWatch(props: ThreadWatchProps) {
           !adviceRefreshBusy &&
           visit.canBegin() &&
           (typeof props.initialWatching !== 'boolean' || view.watching === props.initialWatching) ? (
-            <Button type="button" size="sm" className={actionClass} onClick={visit.begin}>
+            <Button type="button" variant="outline" size="sm" className={actionClass} onClick={visit.begin}>
               {view.watching ? m.thread_watch_stop() : m.thread_watch_watch()}
             </Button>
           ) : null}
@@ -145,12 +146,12 @@ export function ThreadWatch(props: ThreadWatchProps) {
         </div>
       ) : null}
       {signedIn && props.admitted ? (
-        <p className="text-xs text-muted-foreground">
-          {m.thread_watch_guidance()}{' '}
+        <ConversationInspection label={m.conversation_watch_help()}>
+          <p className="text-xs leading-relaxed text-muted-foreground">{m.thread_watch_guidance()}</p>
           <a className="inline-flex min-h-11 items-center underline" href={`/${getLocale()}/settings#notifications`}>
             {m.thread_watch_preferences()}
           </a>
-        </p>
+        </ConversationInspection>
       ) : null}
     </div>
   );

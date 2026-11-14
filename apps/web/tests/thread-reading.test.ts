@@ -224,6 +224,12 @@ test('Default thread reading renders the conversation before secondary history a
     expect(start).toBeGreaterThan(conversation);
     expect(body).toBeGreaterThan(-1);
     expect(footer).toBeGreaterThan(body);
+    const postActions = item.indexOf('data-slot="post-conversation-actions"');
+    const postDetails = item.lastIndexOf('<details', footer);
+    expect(postActions).toBeGreaterThan(body);
+    expect(postDetails).toBeGreaterThan(postActions);
+    expect(item.slice(postDetails, footer)).toContain(m.conversation_post_details());
+    expect(item.slice(postDetails, item.indexOf('>', postDetails))).not.toMatch(/\bopen(?:=|\s|$)/);
     for (const text of documentText(post.body).split('\n').filter(Boolean)) expect(item).toContain(text);
     expect(item).toContain(`href="/en/posts/${post.id}/revisions/${post.revisionId}"`);
     const controls = item.slice(footer);

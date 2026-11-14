@@ -51,6 +51,7 @@ import {
   type BoardPreparedNavigation,
   type BoardRowOccurrence,
 } from './board-navigation';
+import { ConversationKind } from './conversation-presentation';
 import { NativeDocumentImage } from './document-media-image';
 
 const consumedContinuationStates = new WeakSet<object>();
@@ -115,7 +116,9 @@ function ThreadCard({
     preview || openingUnavailable ? (
       <>
         {preview ? (
-          <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:text-base">{preview}</p>
+          <p className="line-clamp-3 max-w-[65ch] text-sm leading-relaxed text-muted-foreground sm:text-base">
+            {preview}
+          </p>
         ) : null}
         {openingUnavailable ? (
           <p className="text-sm text-muted-foreground">{m.board_feed_opening_unavailable()}</p>
@@ -147,7 +150,7 @@ function ThreadCard({
 
   return (
     <ContentItem
-      className="px-3 py-5 [overflow-wrap:anywhere] sm:px-4 [&>div]:sm:block [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=actions]]:min-w-0 [&_[data-content-item-slot=actions]]:max-w-full [&_[data-content-item-slot=actions]]:sm:mt-3"
+      className="px-4 py-6 [overflow-wrap:anywhere] sm:px-4 [&>div]:sm:block [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=actions]]:min-w-0 [&_[data-content-item-slot=actions]]:max-w-full [&_[data-content-item-slot=actions]]:sm:mt-3"
       title={title}
       href={href}
       headingLevel={3}
@@ -156,10 +159,17 @@ function ThreadCard({
       id={boardRowAnchor(thread.id, occurrence)}
       data-board-occurrence={`${occurrence.section}-${occurrence.index}`}
       tabIndex={-1}
+      context={
+        available ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <ConversationKind kind={thread.kind} />
+            {pin?.pinned ? <BoardPinBadge pinned /> : null}
+          </div>
+        ) : null
+      }
       metadata={
         available ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {pin?.pinned ? <BoardPinBadge pinned /> : null}
             <Byline
               author={author}
               createdAt={thread.createdAt}

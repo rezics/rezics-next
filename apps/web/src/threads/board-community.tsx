@@ -80,7 +80,7 @@ export function BoardCommunity({
           </div>
           <BoardContext realm={contextRealm} />
           <PageHeading className="break-words text-2xl sm:text-3xl">{title}</PageHeading>
-          {summary ? <p className="line-clamp-1 max-w-3xl text-muted-foreground">{summary}</p> : null}
+          {summary ? <p className="line-clamp-3 max-w-3xl text-muted-foreground">{summary}</p> : null}
           {board.realmId !== null ? (
             <div data-slot="board-community-members">
               <CommunityMemberCount members={community?.members} />
@@ -89,7 +89,7 @@ export function BoardCommunity({
           {board.visibility === 'protected' ? <Badge variant="secondary">{m.board_community_protected()}</Badge> : null}
         </div>
       </header>
-      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+      <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_17rem]">
         <BoardFeed
           key={replacement?.source === initialPage ? replacement.generation : 0}
           onOpeningRead={(page) =>

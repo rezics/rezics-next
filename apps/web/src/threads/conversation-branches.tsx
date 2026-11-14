@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { ConversationInspection } from './conversation-presentation';
 import { threadLocation } from './thread-href';
 import {
   conversationDepth,
@@ -63,6 +64,7 @@ export function ConversationBranches({
   listRef,
   renderPost,
   boardReturn,
+  openingPostId,
 }: {
   model: ConversationPageModel;
   thread: { id: string; title: string | null };
@@ -73,6 +75,7 @@ export function ConversationBranches({
   listRef: RefObject<HTMLOListElement | null>;
   renderPost: (row: ConversationRow) => ReactNode;
   boardReturn?: string | undefined;
+  openingPostId?: string | undefined;
 }) {
   const [stored, setVisit] = useState(() => initialVisit(scope));
   // Reset presentation in place: keying the region would discard mounted post editors.
@@ -189,7 +192,9 @@ export function ConversationBranches({
   return (
     <ParentNavigationContext.Provider value={navigation}>
       <div data-slot="conversation-branches" className="min-w-0 space-y-3">
-        <p className="px-1 text-xs leading-relaxed text-muted-foreground">{m.thread_branch_scope()}</p>
+        <ConversationInspection label={m.conversation_scope()} className="px-1">
+          <p className="text-xs leading-relaxed text-muted-foreground">{m.thread_branch_scope()}</p>
+        </ConversationInspection>
         {current && returnPoint ? (
           <nav
             aria-label={m.thread_branch_return_navigation()}
@@ -209,6 +214,7 @@ export function ConversationBranches({
         >
           {model.rows.map((row) => {
             const collapsed = visit.collapsed.has(row.index);
+            const opening = row.id === openingPostId;
             const regionId = `branch-content-${thread.id}-${row.index}`;
             return (
               <li
@@ -216,13 +222,17 @@ export function ConversationBranches({
                 id={`branch-row-${thread.id}-${row.index}`}
                 data-conversation-row={row.index}
                 data-relationship-stop={row.stop}
+                data-conversation-part={opening ? 'opening' : 'reply'}
                 hidden={conversationRowHidden(row, visit.collapsed)}
                 onClickCapture={(event) => follow(event, row)}
-                className="min-w-0 space-y-1 border-s border-border ps-1 sm:ps-2"
-                style={{ marginInlineStart: `min(${row.ancestors.length * 0.25}rem, 4vw)` }}
+                className={opening ? 'min-w-0 space-y-1' : 'min-w-0 space-y-1 border-s-2 border-border ps-2 sm:ps-3'}
+                style={{ marginInlineStart: `min(${Math.min(row.ancestors.length, 3) * 0.5}rem, 4vw)` }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-1 px-1 text-xs text-muted-foreground">
-                  <span>{m.thread_branch_position({ position: row.index + 1 })}</span>
+                  {opening ? <span className="font-semibold text-foreground">{m.conversation_opening()}</span> : null}
+                  <a href={`#${row.anchorId}`} className={`${controlClass} inline-flex items-center hover:underline`}>
+                    {m.thread_branch_position({ position: row.index + 1 })}
+                  </a>
                   {row.relatedCount > 0 ? (
                     <Button
                       type="button"
@@ -245,20 +255,22 @@ export function ConversationBranches({
                   ) : null}
                 </div>
                 {row.ancestors.length ? (
-                  <nav aria-label={m.thread_branch_path()} className="min-w-0 px-1">
-                    <ol className="flex min-w-0 flex-wrap items-center gap-1">
-                      {row.ancestors.map((index) => (
-                        <li key={index} className="min-w-0">
-                          <a
-                            href={`#${model.rows[index]!.anchorId}`}
-                            className={`${controlClass} inline-flex items-center underline underline-offset-4`}
-                          >
-                            {m.thread_branch_position({ position: index + 1 })}
-                          </a>
-                        </li>
-                      ))}
-                    </ol>
-                  </nav>
+                  <ConversationInspection label={m.conversation_reply_path()} className="px-2">
+                    <nav aria-label={m.thread_branch_path()} className="min-w-0">
+                      <ol className="flex min-w-0 flex-wrap items-center gap-1">
+                        {row.ancestors.map((index) => (
+                          <li key={index} className="min-w-0">
+                            <a
+                              href={`#${model.rows[index]!.anchorId}`}
+                              className={`${controlClass} inline-flex items-center underline underline-offset-4`}
+                            >
+                              {m.thread_branch_position({ position: index + 1 })}
+                            </a>
+                          </li>
+                        ))}
+                      </ol>
+                    </nav>
+                  </ConversationInspection>
                 ) : null}
                 {row.continuation ? (
                   <a
