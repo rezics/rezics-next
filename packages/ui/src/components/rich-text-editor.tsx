@@ -87,7 +87,7 @@ export interface RichTextEditorProps {
   onSnapshotPending?: () => void;
   /** Unnormalized editor nodes for explicit local recovery; never a submit-ready snapshot. */
   onSnapshotError?: (document: DocumentNode) => void;
-  /** Rendered at the end of the row that starts with the image control. */
+  /** Caller actions follow the media control and can wrap onto their own row. */
   actions?: ReactNode;
   onBlur?: () => void;
   onFocus?: () => void;
@@ -355,6 +355,7 @@ export function RichTextEditor({
   });
   const [uploadMessage, setUploadMessage] = useState('');
   const [touchSheetOpen, setTouchSheetOpen] = useState(false);
+  const [toolbarFocused, setToolbarFocused] = useState(false);
   const uploads = useRef<ReturnType<typeof editorUploads> | null>(null);
   const uploadLease = useRef<symbol | null>(null);
   const resolvedLabels = useMemo(() => ({ ...richTextEditorLabels, ...labels }), [labels]);
@@ -663,6 +664,7 @@ export function RichTextEditor({
     setOwnedLinkRange(null);
     setOwnedImagePosition(null);
     setTouchSheetOpen(false);
+    setToolbarFocused(false);
     setVisit(visitRef.current);
   }, [setOwnedImagePosition, setOwnedLinkRange]);
 
@@ -1019,23 +1021,43 @@ export function RichTextEditor({
 
   const coarsePointer = useCoarsePointer();
   const editorFocused = useEditorFocus(editor);
-  const touchBarVisible =
-    editable && toolbar !== 'never' && (toolbar === 'always' || (coarsePointer && editorFocused) || touchSheetOpen);
+  const toolbarVisible =
+    editable && toolbar !== 'never' && (toolbar === 'always' || editorFocused || toolbarFocused || touchSheetOpen);
+  const touchBarDocked = toolbarVisible && coarsePointer && (editorFocused || toolbarFocused || touchSheetOpen);
   const imageControl =
     editor && editable && upload && availableCommands([imageCommand], editor).length > 0 ? (
       <Button
         type="button"
         variant="outline"
-        className="shrink-0 max-md:px-2.5"
+        className="min-h-11 shrink-0"
+        onPointerDown={(event) => event.preventDefault()}
         onClick={() => runEditorCommand(imageCommand, editor, openLink, openImage, isCurrent)}
       >
         <ImageIcon aria-hidden="true" />
-        <span className="max-md:sr-only">{resolvedLabels.image}</span>
+        <span>{resolvedLabels.image}</span>
       </Button>
     ) : null;
 
   return (
     <div ref={menuContainer} data-slot="rich-text-editor" className={cn('relative min-w-0', className)}>
+      {editor && editable && toolbar !== 'never' ? (
+        <EditorTouchBar
+          key={`touch-${visit}`}
+          editor={editor}
+          labels={resolvedLabels}
+          onLink={openLink}
+          onImage={openImage}
+          upload={hasUpload}
+          visible={toolbarVisible}
+          docked={touchBarDocked}
+          persistent={toolbar === 'always'}
+          onFocusChange={setToolbarFocused}
+          onSheetOpenChange={(open) => {
+            if (isCurrent()) setTouchSheetOpen(open);
+          }}
+          isCurrent={isCurrent}
+        />
+      ) : null}
       <EditorSurface
         editor={editor}
         label={label}
@@ -1047,9 +1069,13 @@ export function RichTextEditor({
         onCompositionEnd={handleCompositionEnd}
       />
       {imageControl || actions ? (
-        <div className="mt-3 flex w-full min-w-0 flex-nowrap items-center gap-2">
+        <div className="mt-3 flex w-full min-w-0 flex-wrap items-center gap-2">
           {imageControl}
-          {actions ? <div className="ms-auto flex shrink-0">{actions}</div> : null}
+          {actions ? (
+            <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 overflow-x-auto sm:ms-auto sm:w-auto sm:flex-1 sm:justify-end">
+              {actions}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {editor && editable ? (
@@ -1092,21 +1118,6 @@ export function RichTextEditor({
             visit={visit}
             isCurrent={isCurrent}
           />
-          {toolbar !== 'never' ? (
-            <EditorTouchBar
-              key={`touch-${visit}`}
-              editor={editor}
-              labels={resolvedLabels}
-              onLink={openLink}
-              onImage={openImage}
-              upload={hasUpload}
-              visible={touchBarVisible}
-              onSheetOpenChange={(open) => {
-                if (isCurrent()) setTouchSheetOpen(open);
-              }}
-              isCurrent={isCurrent}
-            />
-          ) : null}
           <SelectionMenu
             key={`selection-${visit}`}
             editor={editor}
@@ -1117,7 +1128,7 @@ export function RichTextEditor({
               if (linkRange) closeLink(linkRange.id);
             }}
             container={menuContainer}
-            visible={!touchBarVisible}
+            visible={toolbar !== 'always' && !touchBarDocked}
             isCurrent={isCurrent}
             isRangeCurrent={isCurrentLinkRange}
             onLinkUrlChange={updateLinkUrl}
@@ -1137,7 +1148,7 @@ export function RichTextEditor({
             isRangeCurrent={isCurrentLinkRange}
             onUrlChange={updateLinkUrl}
             focusEditor={focusEditor}
-            rangeVisible={touchBarVisible}
+            rangeVisible={toolbar === 'always' || touchBarDocked}
           />
         </>
       ) : null}
