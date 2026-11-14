@@ -2332,7 +2332,7 @@ async function publishShowcasePhases(
         const parentWithheld = !!identity && withheldParentTags.has(identity.tagId);
         const association =
           identity &&
-          manifest.tagAssociations.find(
+          (manifest.tagAssociations ?? []).find(
             (item) =>
               item.workId === group.record.sourceKey &&
               item.sourceKey === identity.sourceKey &&
