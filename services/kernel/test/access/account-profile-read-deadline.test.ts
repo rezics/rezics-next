@@ -29,13 +29,12 @@ const blocked = () => new Promise<never>(() => {});
 test('uncertain snapshot phases discard their client and the next profile visit can use a fresh one', async () => {
   for (const phase of ['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT 1', 'COMMIT']) {
     let finish!: () => void;
-    const first = fakeClient(
-      (sql) =>
-        sql === phase
-          ? new Promise((resolve) => {
-              finish = () => resolve({ rows: [] });
-            })
-          : Promise.resolve({ rows: [] }),
+    const first = fakeClient((sql) =>
+      sql === phase
+        ? new Promise((resolve) => {
+            finish = () => resolve({ rows: [] });
+          })
+        : Promise.resolve({ rows: [] }),
     );
     const next = fakeClient();
     const clients = [first, next];

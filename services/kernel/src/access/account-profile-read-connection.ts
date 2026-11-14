@@ -3,12 +3,7 @@ import type { AccessClient } from '../request/access.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from './deadline.ts';
 import { classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
-import {
-  AccessWorkUnavailableError,
-  accessCheckout,
-  accessTransaction,
-  type AccessWorkAccounting,
-} from './work.ts';
+import { AccessWorkUnavailableError, accessCheckout, accessTransaction, type AccessWorkAccounting } from './work.ts';
 
 type TransactionControl = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' | 'COMMIT' | 'ROLLBACK';
 
