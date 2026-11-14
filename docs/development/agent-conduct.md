@@ -38,14 +38,16 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   are immutable.
 - Code another Goal has not delivered is not a blocker. Build against its documented contract or a minimal local
   seam, and name it.
-- A blocker is only one of these: two requirements that cannot both hold (quote both), or a tool or access failure
-  that persists after two retries (quote the error line). Missing authority, a missing receipt and unfinished work
-  are not blockers.
+- A blocker is conflicting requirements (quote both), a tool or access failure after two retries (quote its error),
+  or required original authorization missing for a dependent operation (state exactly what is missing through Goal).
+  Continue safe independent work. A missing receipt or unfinished work is not a blocker. Keep original execution
+  cancellation, physical cleanup and authorization separate. Never invent authorization, receipts or compiler evidence.
 - On dev, finished and committed work whose checks cannot run because the shared check infrastructure fails is a
   success: name each check that did not run and its error line. Dev is verified after the merge.
 - If the work does not fit in one attempt, land a coherent working part and write the remainder as a continuation
   brief.
-- Never ask a human from an unattended session.
+- Route internal evidence questions through the existing native inbox to the evidence owner, never to the maintainer to
+  locate files. Do not ask a human from an unattended session.
 - A tool or environment failure you did not cause goes in the blocker with its exact first error line. The controller
   groups the same line across tasks into one incident for the supermanager, so do not work around it or message other
   owners about it.
