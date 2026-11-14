@@ -20,17 +20,32 @@ function client(
   };
 }
 
-function tokens(text: string) {
-  const folded = text.trim().toLowerCase();
-  if (!folded) return [];
-  return [{ token: folded, position: 0, start_offset: 0, end_offset: text.length }];
+function tokens(texts: readonly string[]) {
+  const result: { token: string; position: number; start_offset: number; end_offset: number }[] = [];
+  let position = 0;
+  let offset = 0;
+  for (let i = 0; i < texts.length; i++) {
+    const text = texts[i]!;
+    for (const match of text.matchAll(/\S+/gu)) {
+      const start = match.index!;
+      const value = match[0]!;
+      result.push({
+        token: value.normalize('NFKC').toLowerCase(),
+        position: position++,
+        start_offset: offset + start,
+        end_offset: offset + start + value.length,
+      });
+    }
+    offset += text.length + (i + 1 < texts.length ? 1 : 0);
+  }
+  return result;
 }
 
-function analyzing(onAnalyze?: (analyzer: string, text: string) => void): OpenSearch {
+function analyzing(onAnalyze?: (analyzer: string, texts: readonly string[]) => void): OpenSearch {
   return client(async (method, path, body) => {
     expect(method).toBe('POST');
     expect(path).toBe('/subjects-test-1/_analyze');
-    const request = body as { analyzer: string; text: string };
+    const request = body as { analyzer: string; text: readonly string[] };
     onAnalyze?.(request.analyzer, request.text);
     return { status: 200, body: { tokens: tokens(request.text) } };
   });
@@ -43,7 +58,7 @@ test('current-text analyzer concurrency is the installed owner limit', () => {
 test('current-text uses the queried generation analyzers for terms, phrases and prefixes', async () => {
   const seen: string[] = [];
   const disclosure = createCurrentTextDisclosure(
-    analyzing((analyzer, text) => seen.push(`${analyzer}:${text}`)),
+    analyzing((analyzer, texts) => seen.push(analyzer + ':' + texts.join('|'))),
     'subjects-test-1',
   );
   const subject = releasedMultilingualSubject({
@@ -59,6 +74,48 @@ test('current-text uses the queried generation analyzers for terms, phrases and 
   expect(await disclosure.matchesPrefix(subject, '命运')).toBe(false);
   expect(seen.some((entry) => entry.startsWith(`${CJK_ANALYZER}:`))).toBe(true);
   expect(seen.some((entry) => entry.startsWith(`${NAME_PREFIX_ANALYZER}:`))).toBe(true);
+});
+
+test('current names, descriptions and query leaves share bounded batches without crossing phrase values', async () => {
+  const calls: { analyzer: string; texts: readonly string[] }[] = [];
+  const aliases = [
+    ...Array.from({ length: 2_500 }, (_, index) => ({
+      language: 'und',
+      value: 'alias' + String(index).padStart(4, '0'),
+    })),
+    { language: 'en', value: 'alias0000' },
+    { language: 'en', value: 'red' },
+    { language: 'fr', value: 'lantern' },
+  ];
+  const subject = releasedMultilingualSubject({
+    labels: [],
+    aliases,
+    descriptions: [{ language: 'en', value: 'soft blue' }],
+    statements: [],
+  });
+  const disclosure = createCurrentTextDisclosure(
+    analyzing((analyzer, texts) => calls.push({ analyzer, texts })),
+    'subjects-test-1',
+  );
+
+  expect(await disclosure.matchesText(subject, parseText('"red lantern"'))).toBe(false);
+  expect(await disclosure.matchesText(subject, parseText('"soft blue"'))).toBe(true);
+  expect(await disclosure.matchesText(subject, parseText('alias2499'))).toBe(true);
+  expect(await disclosure.matchesPrefix(subject, 'alias2499')).toBe(true);
+
+  const currentCalls = calls.filter(({ analyzer }) => analyzer === CJK_ANALYZER);
+  const prefixCalls = calls.filter(({ analyzer }) => analyzer === NAME_PREFIX_ANALYZER);
+  expect(currentCalls.length).toBeLessThanOrEqual(CURRENT_TEXT_LIMITS.batchesPerSubject);
+  expect(prefixCalls.length).toBeLessThanOrEqual(CURRENT_TEXT_LIMITS.batchesPerSubject);
+  for (const { texts } of [...currentCalls, ...prefixCalls]) {
+    const bytes = texts.reduce((total, text) => total + Buffer.byteLength(text, 'utf8'), 0);
+    expect(bytes <= CURRENT_TEXT_LIMITS.batchBytes || texts.length === 1).toBe(true);
+  }
+  const submitted = currentCalls.flatMap(({ texts }) => texts);
+  expect(submitted).toContain('soft blue');
+  expect(submitted).toContain('red lantern');
+  expect(submitted.filter((text) => text === 'alias0000')).toHaveLength(1);
+  expect(submitted.filter((text) => text.startsWith('alias'))).toHaveLength(2_500);
 });
 
 test('malformed analyzer replies stay unavailable, and omitted names remain unproven', async () => {
@@ -91,7 +148,7 @@ test('malformed analyzer replies stay unavailable, and omitted names remain unpr
 
   const analyzed: string[] = [];
   const bounded = createCurrentTextDisclosure(
-    analyzing((_analyzer, text) => analyzed.push(text)),
+    analyzing((_analyzer, texts) => analyzed.push(...texts)),
     'subjects-test-1',
   );
   const bulky = 'x'.repeat(CURRENT_TEXT_LIMITS.scanBytes - 4);

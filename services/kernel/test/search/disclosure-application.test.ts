@@ -122,9 +122,11 @@ test('one retained concept cut serves duplicate selections and charges the exist
 test('current text uses the bound physical analyzer and an invocation-local analysis cache', async () => {
   const calls: string[] = [];
   const application = createSearchDisclosureApplication({
-    analyze: async (index, analyzer, text) => {
-      calls.push(`${index}:${analyzer}:${text}`);
-      return [{ token: text.toLowerCase(), position: 0, startOffset: 0, endOffset: text.length }];
+    analyze: async (index, analyzer, texts) => {
+      calls.push(index + ':' + analyzer + ':' + texts.join('|'));
+      return texts.map((text) => [
+        { token: text.toLowerCase(), position: 0, startOffset: 0, endOffset: text.length },
+      ]);
     },
   });
   const subject = releasedMultilingualSubject();

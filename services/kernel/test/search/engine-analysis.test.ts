@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   ANALYSIS_ICU_PLUGIN,
   analyzeInstalled,
+  analyzeInstalledMany,
   CJK_ANALYZER,
   ENGINE_ANALYSIS_LIMITS,
   NAME_KEY_NORMALIZER,
@@ -94,6 +95,74 @@ test('malformed analyzer replies are unavailable without retaining engine bodies
   );
   expect(wrapped.message).toBe('OpenSearch analysis returned HTTP 400');
   expect(JSON.stringify(wrapped)).not.toContain('index-internal');
+});
+
+test('multi-value analysis restores each duplicate and empty value with local UTF-16 offsets and positions', async () => {
+  const texts = ['x🦊', '', 'Ｒu', 'x🦊'];
+  let received: unknown;
+  const result = await analyzeInstalledMany(
+    client(async (_method, _path, body) => {
+      received = body;
+      return {
+        status: 200,
+        body: {
+          tokens: [
+            { token: 'x', position: 5, start_offset: 0, end_offset: 1 },
+            { token: 'fox', position: 6, start_offset: 1, end_offset: 3 },
+            { token: 'r', position: 9, start_offset: 6, end_offset: 7 },
+            { token: 'u', position: 10, start_offset: 7, end_offset: 8 },
+            { token: 'x', position: 20, start_offset: 9, end_offset: 10 },
+            { token: 'fox', position: 21, start_offset: 10, end_offset: 12 },
+          ],
+        },
+      };
+    }),
+    'subjects-test-1',
+    { analyzer: CJK_ANALYZER, text: texts },
+  );
+  expect(received).toEqual({ analyzer: CJK_ANALYZER, text: texts });
+  expect(result).toEqual([
+    [
+      { token: 'x', position: 0, startOffset: 0, endOffset: 1 },
+      { token: 'fox', position: 1, startOffset: 1, endOffset: 3 },
+    ],
+    [],
+    [
+      { token: 'r', position: 0, startOffset: 0, endOffset: 1 },
+      { token: 'u', position: 1, startOffset: 1, endOffset: 2 },
+    ],
+    [
+      { token: 'x', position: 0, startOffset: 0, endOffset: 1 },
+      { token: 'fox', position: 1, startOffset: 1, endOffset: 3 },
+    ],
+  ]);
+});
+
+test('multi-value analysis rejects cross-value offsets and keeps the response token ceiling', async () => {
+  await unavailable(() =>
+    analyzeInstalledMany(
+      client(async () => ({
+        status: 200,
+        body: { tokens: [{ token: 'bad', position: 0, start_offset: 3, end_offset: 5 }] },
+      })),
+      'subjects-test-1',
+      { analyzer: CJK_ANALYZER, text: ['one', 'two'] },
+    ),
+  );
+  await unavailable(() =>
+    analyzeInstalledMany(
+      client(async () => ({
+        status: 200,
+        body: {
+          tokens: Array.from({ length: ENGINE_ANALYSIS_LIMITS.tokens + 1 }, (_, position) =>
+            token({ position, start_offset: 0, end_offset: 1 }),
+          ),
+        },
+      })),
+      'subjects-test-1',
+      { analyzer: CJK_ANALYZER, text: ['x'] },
+    ),
+  );
 });
 
 test('plugin inventory and development analyzer refuse malformed third-party replies', async () => {
