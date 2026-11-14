@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "내보내기 검토",
   "library_export_save_heading": "다운로드 다시 시도",
   "library_export_stopped_heading": "캡처 중지됨",
+  "library_export_saving": "완성된 파일을 이 기기에 전달하고 있습니다…",
+  "library_export_leave_completed": "복원 화면으로 이동해도 이 계정의 완성된 원본 아카이브는 메모리에 유지됩니다. 기기에도 사본이 필요하면 먼저 다운로드하세요.",
   "library_export_version": "형식 버전 {version}",
   "library_filter_empty_description": "상태 필터를 지우면 기록한 모든 항목을 볼 수 있습니다.",
   "library_filter_empty_title": "아직 {status} 상태인 항목이 없습니다",

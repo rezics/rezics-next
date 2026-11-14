@@ -4,7 +4,12 @@ import { EXPORT_SECTIONS_V4, EXPORT_TTL_MINUTES, EXPORT_VERSION } from './contra
 import { ExportAction, actionClass } from './controls';
 import { exportSectionLabel } from './meaning';
 
-export function ExportCoverage({ busy, locked, previousDisposition, onCapture }: {
+export function ExportCoverage({
+  busy,
+  locked,
+  previousDisposition,
+  onCapture,
+}: {
   busy: boolean;
   locked: boolean;
   previousDisposition: string | null;
@@ -16,6 +21,8 @@ export function ExportCoverage({ busy, locked, previousDisposition, onCapture }:
       <div className="space-y-2">
         <h3 className="font-semibold">{m.library_export_coverage_heading()}</h3>
         <p>{m.library_export_coverage()}</p>
+        <p>{m.library_export_independent_facts()}</p>
+        <p className="text-sm">{m.library_export_privacy()}</p>
         <p className="text-sm text-muted-foreground">{m.library_export_version({ version: EXPORT_VERSION })}</p>
       </div>
       <div className="space-y-2 rounded-lg border p-4">
@@ -33,16 +40,16 @@ export function ExportCoverage({ busy, locked, previousDisposition, onCapture }:
         </ExportAction>
       </div>
       <details className="rounded-lg border">
-        <summary className={`${actionClass} cursor-pointer font-medium`}>{m.library_export_sections_heading()}</summary>
+        <summary className={`${actionClass} cursor-pointer font-medium`}>
+          {m.library_export_sections_heading()}
+        </summary>
         <div className="space-y-4 px-4 pb-4">
           <ul className="list-disc space-y-2 pl-5 text-sm">
-            {EXPORT_SECTIONS_V4.map((section) => <li key={section}>{exportSectionLabel(section)}</li>)}
+            {EXPORT_SECTIONS_V4.map((section) => (
+              <li key={section}>{exportSectionLabel(section)}</li>
+            ))}
           </ul>
-          <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-            <li>{m.library_export_independent_facts()}</li>
-            <li>{m.library_export_timestamps()}</li>
-            <li>{m.library_export_privacy()}</li>
-          </ul>
+          <p className="text-sm text-muted-foreground">{m.library_export_timestamps()}</p>
         </div>
       </details>
     </div>

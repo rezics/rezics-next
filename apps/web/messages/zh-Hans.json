@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "检查导出范围",
   "library_export_save_heading": "重试下载",
   "library_export_stopped_heading": "捕获已停止",
+  "library_export_saving": "正在将完整文件交给此设备…",
+  "library_export_leave_completed": "前往恢复页面时，此账号已完成的原始归档会继续保留在内存中。若还需要设备上的副本，请先下载。",
   "library_export_version": "格式版本 {version}",
   "library_filter_empty_description": "清除状态筛选即可查看所有已追踪条目。",
   "library_filter_empty_title": "还没有状态为“{status}”的条目",

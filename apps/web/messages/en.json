@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "Review your export",
   "library_export_save_heading": "Retry the download",
   "library_export_stopped_heading": "Capture stopped",
+  "library_export_saving": "Offering the completed file to this device…",
+  "library_export_leave_completed": "Moving to a restore visit keeps this account’s completed original archive in memory. Download it first if you also need a device copy.",
   "library_export_version": "Format version {version}",
   "library_filter_empty_description": "Clear the state filter to see all tracked entries.",
   "library_filter_empty_title": "No entries in {status} yet",

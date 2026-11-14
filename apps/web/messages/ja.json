@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "エクスポート内容を確認",
   "library_export_save_heading": "ダウンロードを再試行",
   "library_export_stopped_heading": "キャプチャを停止しました",
+  "library_export_saving": "完成したファイルをこの端末に渡しています…",
+  "library_export_leave_completed": "復元画面へ移動しても、このアカウントの完成済みの元アーカイブはメモリ内に保持されます。端末にも保存したい場合は、先にダウンロードしてください。",
   "library_export_version": "形式バージョン {version}",
   "library_filter_empty_description": "状態の絞り込みを解除すると、記録したすべての項目が表示されます。",
   "library_filter_empty_title": "「{status}」の項目はまだありません",

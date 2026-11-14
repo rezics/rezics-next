@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type Ref } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -41,6 +41,8 @@ function announcement(snap: ExportJourneySnapshot): string {
   const notice = noticeText(snap.notice);
   if (notice) return notice;
   if (snap.stage === 'coverage') return '';
+  if (snap.busy && (snap.stage === 'ready' || snap.stage === 'empty' || snap.stage === 'save-failed'))
+    return m.library_export_saving();
   if (snap.stage === 'preparing') return m.library_export_preparing();
   if (snap.stage === 'capturing') return m.library_export_progress({ records: snap.records, pages: snap.pages });
   if (snap.stage === 'cancelling') return m.library_export_cancelling();
@@ -58,7 +60,9 @@ function useExportTransitionFocus() {
   const intent = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    const revoke = () => { intent.current = null; };
+    const revoke = () => {
+      intent.current = null;
+    };
     const moved = (event: FocusEvent) => {
       if (event.target !== intent.current) revoke();
     };
@@ -86,7 +90,8 @@ function useExportTransitionFocus() {
   return {
     heading,
     begin(event: MouseEvent<HTMLButtonElement>) {
-      intent.current = event.detail === 0 && document.activeElement === event.currentTarget ? event.currentTarget : null;
+      intent.current =
+        event.detail === 0 && document.activeElement === event.currentTarget ? event.currentTarget : null;
     },
   };
 }
@@ -104,7 +109,6 @@ export function PrivateLibraryExportPage({ visit, ...runtime }: { visit?: Export
 function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRuntime) {
   const port = useLibraryExportPort();
   const focus = useExportTransitionFocus();
-  const headingId = useId();
   const publish = useRef<(snapshot: ExportJourneySnapshot) => void>(() => {});
   const journey = useRef<ExportJourney | null>(null);
   if (!journey.current) {
@@ -112,7 +116,9 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
       ...runtime,
       port,
       visit,
-      onChange(current) { publish.current(current); },
+      onChange(current) {
+        publish.current(current);
+      },
     });
   }
   const [snap, setSnap] = useState<ExportJourneySnapshot>(() => journey.current!.snapshot());
@@ -128,56 +134,125 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
   }
 
   bindArchiveCustodyOwner(visit.subject);
+  return (
+    <ExportVisitView
+      snapshot={snap}
+      headingRef={focus.heading}
+      onAction={(event, action) => void act(event, (current) => current[action]())}
+      onLeave={() => journey.current?.retire()}
+    />
+  );
+}
+
+export type ExportVisitAction = 'capture' | 'cancel' | 'retryUnknown' | 'download' | 'replay' | 'restart';
+
+/** The mounted visit and illustrative routed states share the same presentation. */
+export function ExportVisitView({
+  snapshot: snap,
+  headingRef,
+  onAction,
+  onLeave,
+}: {
+  snapshot: ExportJourneySnapshot;
+  headingRef?: Ref<HTMLHeadingElement>;
+  onAction: (event: MouseEvent<HTMLButtonElement>, action: ExportVisitAction) => void;
+  onLeave: () => void;
+}) {
+  const headingId = useId();
   const locked = snap.notice?.kind === 'unknown';
   const complete = snap.stage === 'ready' || snap.stage === 'empty' || snap.stage === 'save-failed';
   const terminal =
-    snap.stage === 'cancelled' || snap.stage === 'stale' || snap.stage === 'expired' ||
-    snap.stage === 'conflict' || snap.stage === 'limit' || snap.stage === 'denied' || snap.stage === 'unavailable';
+    snap.stage === 'cancelled' ||
+    snap.stage === 'stale' ||
+    snap.stage === 'expired' ||
+    snap.stage === 'conflict' ||
+    snap.stage === 'limit' ||
+    snap.stage === 'denied' ||
+    snap.stage === 'unavailable';
   const text = noticeText(snap.notice);
 
   return (
     <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
       <PageHeading>{m.library_export_title()}</PageHeading>
-      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement(snap)}</p>
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {announcement(snap)}
+      </p>
       <section aria-labelledby={headingId} className="space-y-5 rounded-xl border bg-card p-4 sm:p-6">
-        <h2 ref={focus.heading} id={headingId} tabIndex={-1} className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring">
+        <h2
+          ref={headingRef}
+          id={headingId}
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+        >
           {stageHeading(snap)}
         </h2>
         {locked ? (
-          <div className="space-y-3 rounded-lg border border-amber-600/40 bg-amber-500/5 p-4" data-export-outcome="unknown">
+          <div
+            className="space-y-3 rounded-lg border border-amber-600/40 bg-amber-500/5 p-4"
+            data-export-outcome="unknown"
+          >
             <p>{text}</p>
-            <ExportAction type="button" disabled={snap.busy} onClick={(event) => void act(event, (current) => current.retryUnknown())}>
+            <ExportAction
+              type="button"
+              disabled={snap.busy}
+              onClick={(event) => onAction(event, 'retryUnknown')}
+            >
               {m.library_export_retry_command()}
             </ExportAction>
           </div>
-        ) : text && !complete && !terminal ? <p>{text}</p> : null}
+        ) : text && !complete && !terminal ? (
+          <p>{text}</p>
+        ) : null}
         {snap.stage === 'coverage' ? (
-          <ExportCoverage busy={snap.busy} locked={locked} previousDisposition={snap.previousDisposition}
-            onCapture={(event) => void act(event, (current) => current.capture())} />
+          <ExportCoverage
+            busy={snap.busy}
+            locked={locked}
+            previousDisposition={snap.previousDisposition}
+            onCapture={(event) => onAction(event, 'capture')}
+          />
         ) : null}
         {snap.stage === 'preparing' && !locked ? <p>{m.library_export_preparing_help()}</p> : null}
         {snap.stage === 'capturing' ? (
-          <ExportProgress records={snap.records} pages={snap.pages} paused={locked}
-            onCancel={(event) => void act(event, (current) => current.cancel())} />
+          <ExportProgress
+            records={snap.records}
+            pages={snap.pages}
+            paused={locked}
+            onCancel={(event) => onAction(event, 'cancel')}
+          />
         ) : null}
         {snap.stage === 'cancelling' && !locked ? <p>{m.library_export_cancelling_help()}</p> : null}
         {complete ? (
           snap.manifest ? (
-            <ExportReady empty={snap.stage === 'empty' || snap.manifest.rows === 0}
-              saveFailed={snap.stage === 'save-failed'} bytesLost={snap.notice?.kind === 'bytes-lost'}
-              saved={snap.notice?.kind === 'saved'} manifest={snap.manifest} busy={snap.busy}
-              onDownload={(event) => void act(event, (current) => current.download())}
-              onReplay={(event) => void act(event, (current) => current.replay())} />
-          ) : <ExportTerminal stage="unavailable" onRestart={(event) => void act(event, (current) => current.restart())} />
+            <ExportReady
+              empty={snap.stage === 'empty' || snap.manifest.rows === 0}
+              saveFailed={snap.stage === 'save-failed'}
+              bytesLost={snap.notice?.kind === 'bytes-lost'}
+              saved={snap.notice?.kind === 'saved'}
+              manifest={snap.manifest}
+              busy={snap.busy}
+              onDownload={(event) => onAction(event, 'download')}
+              onReplay={(event) => onAction(event, 'replay')}
+            />
+          ) : (
+            <ExportTerminal stage="unavailable" />
+          )
         ) : null}
         {terminal ? (
-          <ExportTerminal stage={snap.stage as 'cancelled' | 'stale' | 'expired' | 'conflict' | 'limit' | 'denied' | 'unavailable'}
-            notice={text} onRestart={(event) => void act(event, (current) => current.restart())} />
+          <ExportTerminal
+            stage={snap.stage as 'cancelled' | 'stale' | 'expired' | 'conflict' | 'limit' | 'denied' | 'unavailable'}
+            notice={text}
+            onRestart={(event) => onAction(event, 'restart')}
+          />
         ) : null}
       </section>
       <ArchiveRecoveryDestinations current="export" />
       {!terminal ? <LibraryReturnLink /> : null}
-      <ExportDeparture active={snap.stage !== 'coverage' && !terminal} locked={locked} onLeave={() => journey.current?.retire()} />
+      <ExportDeparture
+        active={snap.stage !== 'coverage' && !terminal}
+        locked={locked}
+        completed={complete}
+        onLeave={onLeave}
+      />
     </main>
   );
 }

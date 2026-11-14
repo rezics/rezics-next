@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "檢查匯出範圍",
   "library_export_save_heading": "重試下載",
   "library_export_stopped_heading": "擷取已停止",
+  "library_export_saving": "正在將完整檔案交給此裝置…",
+  "library_export_leave_completed": "前往還原頁面時，此帳號已完成的原始封存檔會繼續保留在記憶體中。若也需要裝置上的副本，請先下載。",
   "library_export_version": "格式版本 {version}",
   "library_filter_empty_description": "清除狀態篩選即可查看所有已追蹤項目。",
   "library_filter_empty_title": "尚無狀態為「{status}」的項目",

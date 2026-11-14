@@ -16,10 +16,12 @@ import { actionClass } from './controls';
 export function ExportDeparture({
   active,
   locked,
+  completed = false,
   onLeave,
 }: {
   active: boolean;
   locked: boolean;
+  completed?: boolean;
   onLeave: () => void;
 }) {
   const stay = useRef<HTMLButtonElement>(null);
@@ -35,7 +37,11 @@ export function ExportDeparture({
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_export_leave_title()}</AlertDialogTitle>
             <AlertDialogDescription>
-              {locked ? m.library_export_leave_pending() : m.library_export_leave_help()}
+              {locked
+                ? m.library_export_leave_pending()
+                : completed
+                  ? m.library_export_leave_completed()
+                  : m.library_export_leave_help()}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

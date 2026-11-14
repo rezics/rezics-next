@@ -30,12 +30,14 @@ import {
   isExportStatus,
   sectionsForExportVersion,
 } from '../src/library/private-export/contract';
+import type { ReactNode } from 'react';
 import { exportCallTotal, expectedExportCalls } from '../src/library/private-export/cost';
 import { createExportJourney } from '../src/library/private-export/controller';
 import { parseAssembledArtifact } from '../src/library/private-export/artifact';
 import { libraryNavigation } from '../src/library/navigation';
 import type { ExportVisit } from '../src/library/private-export/visit';
 import { exportRecording, recordedExportPort } from '../src/library/private-export/recording';
+import { completedArchiveFor } from '../src/library/private-export/custody';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -69,7 +71,7 @@ const { createRoot } = await import('react-dom/client');
 type Root = ReturnType<typeof createRoot>;
 const { m } = await import('../src/paraglide/messages.js');
 const { LibraryExportPortContext } = await import('../src/library/private-export/port');
-const { PrivateLibraryExportPage } = await import('../src/library/private-export/page');
+const { PrivateLibraryExportPage, ExportVisitView } = await import('../src/library/private-export/page');
 
 const exportId = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const first = 'cursor-first';
@@ -300,31 +302,43 @@ async function click(label: string) {
   const target = button(label);
   expect(target).toBeDefined();
   await act(async () => {
-    target!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    target!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 }));
     await Promise.resolve();
   });
   await settle();
 }
 
-async function waitFor(text: string) {
+async function keyboardClick(label: string) {
+  const target = button(label)!;
+  expect(target).toBeDefined();
+  await act(async () => {
+    target.focus();
+    target.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+    await Promise.resolve();
+  });
+  await settle();
+}
+
+async function waitFor(text: string, container: HTMLElement = host) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (host.textContent?.includes(text)) return;
+    if (container.textContent?.includes(text)) return;
     await settle();
   }
-  expect(host.textContent).toContain(text);
+  expect(container.textContent).toContain(text);
 }
 
 async function mount(
   port: ExportPort,
   current: ExportVisit | null = visit(),
   runtime: Parameters<typeof PrivateLibraryExportPage>[0] = {},
+  presentation?: ReactNode,
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const tree = createRootRoute({
     component: () => (
       <QueryClientProvider client={client}>
         <LibraryExportPortContext.Provider value={port}>
-          <PrivateLibraryExportPage visit={current} {...runtime} />
+          {presentation ?? <PrivateLibraryExportPage visit={current} {...runtime} />}
         </LibraryExportPortContext.Provider>
       </QueryClientProvider>
     ),
@@ -338,6 +352,7 @@ async function mount(
     root.render(<RouterProvider router={router} />);
   });
   await settle();
+  return router;
 }
 
 beforeEach(() => {
@@ -1031,30 +1046,36 @@ test('mounted cancellation retries its uncertain command once and ignores late p
     },
   };
   await mount(port);
-  await click(m.library_export_capture());
+  await keyboardClick(m.library_export_capture());
   await waitFor(m.library_export_progress({ records: 16, pages: 1 }));
-  await click(m.library_export_cancel());
+  await keyboardClick(m.library_export_cancel());
   expect(host.textContent).toContain(m.library_export_cancelling());
-  expect(document.activeElement?.textContent).toBe(m.library_export_cancelling());
+  expect(document.activeElement).toBe(host.querySelector('h2'));
+  const destination = host.querySelector<HTMLAnchorElement>('a[href$="/library/recover-archive"]')!;
+  destination.focus();
   expect(button(m.library_export_cancel())).toBeUndefined();
   expect(commands).toHaveLength(1);
   await act(async () => attempt.resolve({ kind: 'unknown', command: commands[0]! }));
   await waitFor(m.library_export_cancel_uncertain());
-  expect(document.activeElement?.textContent).toBe(m.library_export_cancel_uncertain());
+  expect(document.activeElement).toBe(destination);
   expect(button(m.library_export_capture())).toBeUndefined();
   expect(button(m.library_export_download())).toBeUndefined();
   attempt = Promise.withResolvers();
-  await click(m.library_export_retry_command());
+  await keyboardClick(m.library_export_retry_command());
+  expect(document.activeElement).toBe(host.querySelector('h2'));
+  destination.focus();
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(commands[0]);
   await act(async () => page.resolve({ kind: 'unknown', command: { kind: 'page', exportId, cursor: first } }));
   expect(host.textContent).toContain(m.library_export_cancelling());
   await act(async () => attempt.resolve({ kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }) }));
   await waitFor(m.library_export_cancelled());
-  expect(document.activeElement?.textContent).toBe(m.library_export_cancelled());
+  expect(document.activeElement).toBe(destination);
   expect(button(m.library_export_download())).toBeUndefined();
   expect(fixture.creates).toHaveLength(1);
-  await click(m.library_export_restart());
+  await keyboardClick(m.library_export_restart());
+  expect(document.activeElement).toBe(host.querySelector('h2'));
+  expect(document.activeElement?.textContent).toBe(m.library_export_review_heading());
   expect(button(m.library_export_capture())).toBeDefined();
   expect(fixture.creates).toHaveLength(1);
 });
@@ -1142,4 +1163,141 @@ test('cancellation distinguishes native refusal and expiry; pending create canno
   expect(fixture.creates).toEqual([key]);
   await journey.retryUnknown();
   expect(fixture.creates).toEqual([key, key]);
+});
+
+test('review and ready put the primary action before inspection and restore while keeping all omissions visible', async () => {
+  const fixture = recordingPort(pagesFor(1));
+  const files: ExportArtifact[] = [];
+  await mount(fixture.port, visit(), { deliver: (file) => { files.push(file); return files.length > 1; } });
+  expect(host.contains(document.activeElement)).toBe(false);
+  const restore = host.querySelector('nav')!;
+  expect(button(m.library_export_capture())!.compareDocumentPosition(restore) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const coverageDetails = host.querySelector('details')!;
+  expect(coverageDetails.open).toBe(false);
+  expect(coverageDetails.querySelectorAll('ul:first-child > li')).toHaveLength(21);
+  await click(m.library_export_capture());
+  await waitFor(m.library_export_ready());
+  const download = button(m.library_export_download())!;
+  const inspection = host.querySelector('details')!;
+  expect(inspection.querySelector('summary')?.textContent).toBe(m.library_export_inspect_manifest());
+  expect(inspection.open).toBe(false);
+  expect(download.closest('details')).toBeNull();
+  expect(download.compareDocumentPosition(inspection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(inspection.compareDocumentPosition(restore) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(inspection.querySelectorAll('section li')).toHaveLength(21);
+  const omissionDetails = host.querySelector('dl')!;
+  expect(omissionDetails.closest('details')).toBeNull();
+  expect(omissionDetails.querySelectorAll('dd')).toHaveLength(6);
+  for (const value of Object.values(omissions)) expect(omissionDetails.textContent).toContain(value);
+  expect(host.textContent).toContain(m.library_export_restore_separate());
+  const cursors = [...fixture.pageCursors];
+  await click(m.library_export_download());
+  await waitFor(m.library_export_save_failed());
+  const retry = button(m.library_export_retry_save())!;
+  expect(retry.compareDocumentPosition(host.querySelector('details')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await click(m.library_export_retry_save());
+  await waitFor(m.library_export_downloaded());
+  expect(files).toHaveLength(2);
+  expect(files[1]).toBe(files[0]);
+  expect(files[1]!.bytes).toBe(files[0]!.bytes);
+  expect(fixture.creates).toHaveLength(1);
+  expect(fixture.statuses).toEqual([]);
+  expect(fixture.pageCursors).toEqual(cursors);
+});
+
+test('keyboard capture orients once; late progress, completion and local save failure preserve moved focus', async () => {
+  const fixture = recordingPort(pagesFor(1));
+  const creation = Promise.withResolvers<Awaited<ReturnType<ExportPort['create']>>>();
+  const page = Promise.withResolvers<Awaited<ReturnType<ExportPort['page']>>>();
+  const save = Promise.withResolvers<boolean>();
+  await mount({ ...fixture.port, create: () => creation.promise, page: () => page.promise }, visit(), {
+    deliver: () => save.promise,
+  });
+  await keyboardClick(m.library_export_capture());
+  const heading = host.querySelector('h2')!;
+  expect(document.activeElement).toBe(heading);
+  expect(heading.textContent).toBe(m.library_export_preparing());
+  const elsewhere = host.querySelector<HTMLAnchorElement>('a[href$="/library/recover-progress"]')!;
+  elsewhere.focus();
+  await act(async () => creation.resolve({ kind: 'status', status: coverage() }));
+  await waitFor(m.library_export_progress({ records: 0, pages: 0 }));
+  expect(document.activeElement).toBe(elsewhere);
+  await act(async () => page.resolve({ kind: 'page', page: pagesFor(1)[0]! }));
+  await waitFor(m.library_export_ready());
+  expect(document.activeElement).toBe(elsewhere);
+  const status = host.querySelector('[role="status"]')!;
+  expect(status.getAttribute('tabindex')).toBeNull();
+  expect(status.getAttribute('aria-live')).toBe('polite');
+  await keyboardClick(m.library_export_download());
+  expect(document.activeElement).toBe(heading);
+  elsewhere.focus();
+  await act(async () => save.resolve(false));
+  await waitFor(m.library_export_save_failed());
+  expect(document.activeElement).toBe(elsewhere);
+  expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);
+});
+
+test('focus movement before the keyboard transition commits revokes its orientation intent', async () => {
+  const fixture = recordingPort(pagesFor(1));
+  const creation = Promise.withResolvers<Awaited<ReturnType<ExportPort['create']>>>();
+  await mount({ ...fixture.port, create: () => creation.promise });
+  const source = button(m.library_export_capture())!;
+  const elsewhere = host.querySelector<HTMLAnchorElement>('a[href$="/library/recover-archive"]')!;
+  await act(async () => {
+    source.focus();
+    source.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+    elsewhere.focus();
+  });
+  expect(document.activeElement).toBe(elsewhere);
+  await act(async () => creation.resolve({ kind: 'status', status: coverage() }));
+  await waitFor(m.library_export_ready());
+  expect(document.activeElement).toBe(elsewhere);
+});
+
+test('bytes-lost presentation offers original replay rather than download and retains its manifest identity', async () => {
+  const fixture = recordingPort(pagesFor(1));
+  const journey = createExportJourney({ port: fixture.port, visit: visit() });
+  const complete = await journey.capture();
+  const originalCursors = [...fixture.pageCursors];
+  const actions: string[] = [];
+  await mount(fixture.port, visit(), {}, <ExportVisitView
+    snapshot={{ ...complete, hasArtifact: false, notice: { kind: 'bytes-lost' } }}
+    onAction={(_event, action) => { actions.push(action); if (action === 'replay') void journey.replay(); }}
+    onLeave={() => journey.retire()}
+  />);
+  expect(button(m.library_export_download())).toBeUndefined();
+  expect(host.textContent).toContain(m.library_export_bytes_lost());
+  await click(m.library_export_replay());
+  expect(actions).toEqual(['replay']);
+  expect(journey.snapshot().exportId).toBe(complete.exportId);
+  expect(journey.snapshot().requestKey).toBe(complete.requestKey);
+  expect(fixture.creates).toHaveLength(1);
+  expect(fixture.statuses).toEqual([complete.exportId!]);
+  expect(fixture.pageCursors).toEqual([...originalCursors, ...originalCursors]);
+});
+
+test('restore navigation uses the router and keeps the completed original archive for the same owner', async () => {
+  const fixture = recordingPort(pagesFor(1));
+  const router = await mount(fixture.port);
+  await click(m.library_export_capture());
+  await waitFor(m.library_export_ready());
+  const original = completedArchiveFor('alice')!;
+  const originalText = new TextDecoder().decode(original.bytes);
+  const destination = host.querySelector<HTMLAnchorElement>('a[href$="/library/recover-archive"]')!;
+  const activation = new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: 1 });
+  await act(async () => {
+    destination.focus();
+    destination.dispatchEvent(activation);
+  });
+  expect(activation.defaultPrevented).toBe(true);
+  await waitFor(m.library_export_leave_completed(), document.body);
+  const leave = [...document.querySelectorAll('button')].find((item) => item.textContent === m.library_export_leave())!;
+  await act(async () => {
+    leave.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+  });
+  await settle();
+  expect(router.state.location.pathname).toBe('/library/recover-archive');
+  expect(completedArchiveFor('alice')).toBe(original);
+  expect(new TextDecoder().decode(original.bytes)).toBe(originalText);
+  expect(fixture.creates).toHaveLength(1);
 });

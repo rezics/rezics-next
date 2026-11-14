@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "Revisa tu exportación",
   "library_export_save_heading": "Reintentar la descarga",
   "library_export_stopped_heading": "Captura detenida",
+  "library_export_saving": "Ofreciendo el archivo completo a este dispositivo…",
+  "library_export_leave_completed": "Al pasar a una página de restauración, el archivo original completado de esta cuenta se mantiene en memoria. Descárgalo primero si también necesitas una copia en el dispositivo.",
   "library_export_version": "Versión de formato {version}",
   "library_filter_empty_description": "Quita el filtro de estado para ver todas las entradas registradas.",
   "library_filter_empty_title": "Aún no hay entradas con el estado {status}",

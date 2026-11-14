@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "Export prüfen",
   "library_export_save_heading": "Download wiederholen",
   "library_export_stopped_heading": "Erfassung beendet",
+  "library_export_saving": "Die fertige Datei wird diesem Gerät angeboten…",
+  "library_export_leave_completed": "Beim Wechsel zu einer Wiederherstellungsseite bleibt das abgeschlossene Originalarchiv dieses Kontos im Speicher. Lade es zuerst herunter, wenn du auch eine Kopie auf deinem Gerät möchtest.",
   "library_export_version": "Formatversion {version}",
   "library_filter_empty_description": "Entfernen Sie den Statusfilter, um alle erfassten Einträge zu sehen.",
   "library_filter_empty_title": "Noch keine Einträge mit dem Status {status}",

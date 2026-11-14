@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { Link } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { actionClass } from './controls';
@@ -17,10 +18,25 @@ export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveReco
   const headingId = useId();
   if (current === 'export') {
     const destinations = [
-      { href: '/library/recover-collections', label: m.library_export_restore_collections(), description: m.library_export_restore_collections_help() },
-      { href: '/library/recover-archive', label: m.library_export_restore_entries(), description: m.library_export_restore_entries_help() },
-      { href: '/library/recover-progress', label: m.library_export_restore_progress(), description: m.library_export_restore_progress_help() },
-    ];
+      {
+        id: 'collections',
+        href: '/library/recover-collections',
+        label: m.library_export_restore_collections(),
+        description: m.library_export_restore_collections_help(),
+      },
+      {
+        id: 'entries',
+        href: '/library/recover-archive',
+        label: m.library_export_restore_entries(),
+        description: m.library_export_restore_entries_help(),
+      },
+      {
+        id: 'progress',
+        href: '/library/recover-progress',
+        label: m.library_export_restore_progress(),
+        description: m.library_export_restore_progress_help(),
+      },
+    ] as const;
     return (
       <section aria-labelledby={headingId} className="space-y-4 border-t pt-6">
         <h2 id={headingId} className="text-lg font-semibold">{m.library_export_restore_heading()}</h2>
@@ -29,9 +45,18 @@ export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveReco
           <ul className="divide-y">
             {destinations.map((item) => (
               <li key={item.href} className="space-y-1 py-3 first:pt-0">
-                <a className={`${actionClass} -ml-3 inline-flex items-center font-medium underline underline-offset-4`}
-                  href={localizeHref(item.href)}>{item.label}</a>
-                <p className="text-sm text-muted-foreground">{item.description}</p>
+                <Link
+                  className={`${actionClass} -ml-3 inline-flex items-center font-medium underline underline-offset-4`}
+                  to={item.href}
+                  search={{}}
+                  preload={false}
+                  aria-describedby={`${headingId}-${item.id}`}
+                >
+                  {item.label}
+                </Link>
+                <p id={`${headingId}-${item.id}`} className="text-sm text-muted-foreground">
+                  {item.description}
+                </p>
               </li>
             ))}
           </ul>

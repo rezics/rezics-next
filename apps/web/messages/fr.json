@@ -5413,6 +5413,8 @@
   "library_export_review_heading": "Vérifier votre export",
   "library_export_save_heading": "Réessayer le téléchargement",
   "library_export_stopped_heading": "Capture arrêtée",
+  "library_export_saving": "Envoi du fichier terminé vers cet appareil…",
+  "library_export_leave_completed": "Le passage à une page de restauration conserve en mémoire l’archive d’origine terminée de ce compte. Téléchargez-la d’abord si vous souhaitez aussi une copie sur votre appareil.",
   "library_export_version": "Version de format {version}",
   "library_filter_empty_description": "Effacez le filtre de statut pour voir toutes les entrées suivies.",
   "library_filter_empty_title": "Aucune entrée avec le statut {status} pour l’instant",
