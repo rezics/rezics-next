@@ -225,6 +225,46 @@ test('progress emits only for a persisted expiry transition and authorized recei
   expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeProgress + 1);
 });
 
+test('Freeze emits once for the first input version and not for exact or fresh-key retries', async () => {
+  const book = await newBook();
+  const started = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    stageId: book.newId(),
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'selection',
+  });
+  expect(started.status).toBe(202);
+  const stageId = started.value.stageId as string;
+  const stagePath = prepPath(book.path, stageId);
+  const appended = await f.native.call('POST', `${stagePath}:appendSelectionBatch`, {
+    batchId: book.newId(),
+    occurrenceIds: [book.publicChapter],
+  });
+  expect(appended.status).toBe(200);
+
+  const eventsBeforeFreeze = await preparationEventCount(book.catalogueId);
+  const freezeKey = crypto.randomUUID();
+  const frozen = await f.native.call('POST', `${stagePath}:freezeSelection`, {}, { key: freezeKey });
+  expect(frozen.status).toBe(200);
+  expect(frozen.value).toMatchObject({
+    catalogueId: book.catalogueId,
+    stageId,
+    stage: { state: 'building', mode: 'selection', inputCount: '1' },
+    candidate: null,
+    candidateReady: false,
+  });
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeFreeze + 1);
+
+  const replayed = await f.native.call('POST', `${stagePath}:freezeSelection`, {}, { key: freezeKey });
+  expect(replayed.status).toBe(200);
+  expect(replayed.value).toEqual(frozen.value);
+
+  const freshKeyRetry = await f.native.call('POST', `${stagePath}:freezeSelection`, {}, { key: crypto.randomUUID() });
+  expect(freshKeyRetry.status).toBe(200);
+  expect(freshKeyRetry.value).toEqual(frozen.value);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeFreeze + 1);
+});
+
 test('mounted whole and nested selection builds complete private candidates with exact retry and resume', async () => {
   const book = await newBook();
   const startBody = {

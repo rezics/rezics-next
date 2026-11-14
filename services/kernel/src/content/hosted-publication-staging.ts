@@ -564,12 +564,22 @@ export async function freezeHostedPublicationSelection(
   actorInput: Actor,
   locator: HostedPublicationStagingLocator,
 ): Promise<HostedPublicationStagingCheckpoint> {
+  return (await freezeHostedPublicationSelectionWithEvidence(client, actorInput, locator)).checkpoint;
+}
+
+/** Mounted commands use the locked transition evidence to decide whether to
+ * announce a change; native callers keep the checkpoint-only contract. */
+export async function freezeHostedPublicationSelectionWithEvidence(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<Readonly<{ checkpoint: HostedPublicationStagingCheckpoint; changed: boolean }>> {
   const actor = accountActor(actorInput);
   const row = await lockStage(client, locator);
   assertActorBinding(row, actor);
   const live = await requireLiveStage(client, row);
   if (live.mode !== 'selection') throw stagingConflict('Whole-source staging has no imported selection');
-  if (live.input_frozen_version !== null) return checkpoint(live);
+  if (live.input_frozen_version !== null) return { checkpoint: checkpoint(live), changed: false };
   if (live.status !== 'collecting') throw stagingConflict('Selection input cannot be frozen in its current state');
   await requireCurrentPinnedSource(client, live);
   const nextState = BigInt(live.input_count) === 0n ? 'closing' : 'building';
@@ -580,7 +590,7 @@ export async function freezeHostedPublicationSelection(
     [live.route, live.catalogue_id, live.stage_id, nextState],
   );
   if (updated.rowCount !== 1) throw stagingConflict();
-  return checkpoint(await stageSnapshot(client, live.route, locator));
+  return { checkpoint: checkpoint(await stageSnapshot(client, live.route, locator)), changed: true };
 }
 
 /** Advance one page of at most twenty source or closure rows. A step key makes

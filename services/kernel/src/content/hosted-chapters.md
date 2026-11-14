@@ -491,6 +491,10 @@ Decision: a fresh selection Freeze locks its stage, then the current catalogue r
 and publication IDs before persisting the frozen input version or phase. A stale pointer leaves collection progress
 untouched; already frozen stages remain no-ops, and exact authorized command receipts replay before this check.
 
+Decision: mounted Freeze emits preparation-changed only when a locked stage first persists its input frozen version.
+A fresh-key retry of an already frozen stage returns its current progress without another event; exact authorized
+receipt replay preserves the original response.
+
 Persist a small control row, indexed input/output, selected snapshot roots and a durable raw traversal frontier.
 Use existing Book page 20 plus lookahead for one processing step (1,024 is at most an ingestion batch). Each step
 bounds metadata checks, memory and writes, including O(H log N) path changes per admitted row; it commits output,

@@ -20,7 +20,7 @@ import {
   appendHostedPublicationSelectionBatch,
   beginHostedPublicationStaging,
   cancelHostedPublicationStagingWithEvidence,
-  freezeHostedPublicationSelection,
+  freezeHostedPublicationSelectionWithEvidence,
   requireRoute,
   readHostedPublicationStagingProgress,
   readHostedPublicationStagingProgressWithExpiry,
@@ -273,8 +273,12 @@ export function freezeHostedPublicationPreparationSelection(
     { stageId },
     context,
     async (tx) => {
-      const stage = await freezeHostedPublicationSelection(tx as AccessClient, actor, locator(catalogueId, stageId));
-      return progress(catalogueId, stage);
+      const result = await freezeHostedPublicationSelectionWithEvidence(
+        tx as AccessClient,
+        actor,
+        locator(catalogueId, stageId),
+      );
+      return { value: progress(catalogueId, result.checkpoint), changed: result.changed };
     },
     { stageId, allowMissing: false },
   );
