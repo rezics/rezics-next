@@ -22,6 +22,7 @@ export function BookOutlineView({ reader, locale, page, selection, destination, 
   const outline = reader.outline;
   const snapshot = useSyncExternalStore(outline.subscribe, outline.getSnapshot, outline.getSnapshot);
   const options = { locale: locale as never };
+  const outlineId = useId();
   const regions = useRef(new Map<string | null, HTMLElement>());
   const intent = useMemo<{ current: { owner: Element | null; parent: string | null; before: number } | null }>(
     () => ({ current: null }),
@@ -53,7 +54,10 @@ export function BookOutlineView({ reader, locale, page, selection, destination, 
       if (intent.current !== pending || !reader.current()) return;
       const branch = outline.branch(pending.parent);
       const region = regions.current.get(pending.parent);
-      if (!branch?.expanded || !region) return;
+      if (!branch?.expanded || !region) {
+        intent.current = null;
+        return;
+      }
       const active = document.activeElement;
       if (active !== pending.owner && !(active === document.body && !pending.owner?.isConnected)) return;
       const added = region.querySelectorAll<HTMLElement>(':scope > ol > li[data-occurrence]')[pending.before];
@@ -73,7 +77,7 @@ export function BookOutlineView({ reader, locale, page, selection, destination, 
   };
   if (!reader.current()) return null;
   return (
-    <div className="grid min-w-0 gap-3 [overflow-wrap:anywhere]" data-slot="book-outline">
+    <div id={outlineId} className="grid min-w-0 gap-3 [overflow-wrap:anywhere]" data-slot="book-outline">
       {page?.kind === 'chapter' ? (
         <p className="grid gap-1 px-2 text-sm" aria-live="polite">
           <span className="text-xs text-muted-foreground">{m.book_reader_selected({}, options)}</span>
@@ -98,7 +102,28 @@ export function BookOutlineView({ reader, locale, page, selection, destination, 
               {destination(ancestor.contents, <bdi>{ancestor.title}</bdi>, { appearance: 'breadcrumb' })}
             </div>
           ))}
-          {destination(page.contents, m.book_reader_contents({}, options))}
+          <Button
+            variant="ghost"
+            className={`${control} justify-start`}
+            aria-expanded={false}
+            aria-controls={outlineId}
+            onClick={(event) =>
+              request(
+                null,
+                () =>
+                  reader.openOutline({
+                    kind: 'contents',
+                    publication: page.address.publication,
+                    parentOccurrenceId: null,
+                    cursor: null,
+                    selection: page.address.selection,
+                  }),
+                event.detail === 0,
+              )
+            }
+          >
+            {m.book_reader_root({}, options)}
+          </Button>
         </nav>
       ) : null}
     </div>
@@ -168,7 +193,8 @@ function OutlineBranch({
                       const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
                       const open = rtl ? 'ArrowLeft' : 'ArrowRight';
                       const close = rtl ? 'ArrowRight' : 'ArrowLeft';
-                      if ((event.key === open && !expanded) || (event.key === close && expanded)) {
+                      const isExpanded = reader.outline.branch(row.occurrenceId)?.expanded ?? false;
+                      if ((event.key === open && !isExpanded) || (event.key === close && isExpanded)) {
                         event.preventDefault();
                         reader.toggleBranch(address(row.contents));
                       }

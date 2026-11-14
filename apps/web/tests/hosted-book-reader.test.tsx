@@ -145,7 +145,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-test('nested levels read one window per activation; reused bodies keep distinct exact operands and return focus', async () => {
+test('nested expansion reads one bounded branch per activation; reused bodies keep exact operands and return focus', async () => {
   const book = createIllustrativeHostedBook();
   await book.ready;
   const source = observed(book.source);
@@ -186,6 +186,225 @@ test('nested levels read one window per activation; reused bodies keep distinct 
   expect(host.querySelector('h1')?.textContent).toBe('Dawn, an echo / 再読');
 });
 
+test('siblings, collapse/reopen and a failed branch leave the exact current chapter and checkpoint current', async () => {
+  const book = createIllustrativeHostedBook('nested', true);
+  const source = observed(book.source);
+  let checkpointCurrent: (() => boolean) | undefined;
+  await mount(source, book.contents(), {
+    renderCheckpoint: (_page, current) => {
+      checkpointCurrent = current;
+      return null;
+    },
+  });
+  const part = button(`${m.book_reader_contents()} · Part I · The journey`);
+  await click(part);
+  await click(button(`${m.book_reader_contents()} · The observatory`));
+  await click(button(`${m.book_reader_open_chapter()} · Dawn / 黎明`));
+  const article = host.querySelector('article');
+  const current = checkpointCurrent!;
+  const first = await book.chapter();
+  const secondPart = button(
+    `${m.book_reader_contents()} · Part II · The coast, the town, and the long way home / 海岸、町、そして帰り道`,
+  );
+  source.read.mockResolvedValueOnce({ state: 'denied' });
+  await click(secondPart);
+  const failed = source.read.mock.calls.at(-1)![0];
+  expect(failed.address).toEqual({ ...book.contents(ids.secondPart), selection: first.selection });
+  expect(host.textContent).toContain(m.book_reader_denied());
+  expect(host.querySelector('article')).toBe(article);
+  expect(current()).toBe(true);
+  expect(checkpointCurrent).toBe(current);
+  expect(part.getAttribute('aria-expanded')).toBe('true');
+  expect(host.querySelector(`[data-occurrence="${ids.first}"] [aria-current]`)).not.toBeNull();
+  const before = source.read.mock.calls.length;
+  await click(part);
+  expect(part.getAttribute('aria-expanded')).toBe('false');
+  expect(host.querySelector(`[data-occurrence="${ids.first}"]`)).toBeNull();
+  expect(host.querySelector('article')).toBe(article);
+  await click(part);
+  expect(part.getAttribute('aria-expanded')).toBe('true');
+  expect(source.read).toHaveBeenCalledTimes(before);
+  await click(button(`${m.book_reader_open_chapter()} · Dawn, an echo / 再読`));
+  const reused = await book.chapter(true);
+  expect(source.read.mock.calls.at(-1)![0].address).toEqual(reused);
+  expect(reused.selection.body).toEqual(first.selection.body);
+  expect(host.querySelectorAll('[data-occurrence] [aria-current]')).toHaveLength(1);
+  expect(host.querySelector(`[data-occurrence="${ids.reused}"] [aria-current]`)).not.toBeNull();
+  await click(button(m.book_reader_retry()));
+  expect(source.read.mock.calls.at(-1)![0]).toEqual(failed); // Selection stays with the original failed request.
+  expect(host.textContent).toContain('The harbor at low water / 退潮後的港口');
+  expect(host.querySelector('h1')?.textContent).toBe('Dawn, an echo / 再読');
+  expect(host.querySelector(`[data-occurrence="${ids.first}"]`)).not.toBeNull();
+  expect(document.activeElement?.closest('[data-branch]')?.getAttribute('data-branch')).toBe(ids.secondPart);
+});
+
+test('two explicit sibling reads may settle out of order while one chapter remains open', async () => {
+  const book = createIllustrativeHostedBook('nested', true);
+  const source = observed(book.source);
+  await mount(source, book.contents());
+  const part = deferred<BookReadResult>();
+  const coast = deferred<BookReadResult>();
+  source.read.mockImplementationOnce(() => part.promise).mockImplementationOnce(() => coast.promise);
+  await click(button(`${m.book_reader_contents()} · Part I · The journey`));
+  await click(
+    button(
+      `${m.book_reader_contents()} · Part II · The coast, the town, and the long way home / 海岸、町、そして帰り道`,
+    ),
+  );
+  expect(source.read).toHaveBeenCalledTimes(3);
+  const partRequest = source.read.mock.calls[1]!;
+  const coastRequest = source.read.mock.calls[2]!;
+  await act(async () => coast.resolve(await book.source.read(coastRequest[0], coastRequest[1])));
+  await settle();
+  await click(button(`${m.book_reader_open_chapter()} · The harbor at low water / 退潮後的港口`));
+  const article = host.querySelector('article');
+  expect(article).not.toBeNull();
+  await act(async () => part.resolve(await book.source.read(partRequest[0], partRequest[1])));
+  await settle();
+  expect(host.querySelector('article')).toBe(article);
+  expect(host.querySelector('h1')?.textContent).toBe('The harbor at low water / 退潮後的港口');
+  expect(button(`${m.book_reader_contents()} · The observatory`)).toBeDefined();
+  expect(host.querySelector(`[data-occurrence="${ids.harbor}"] [aria-current]`)).not.toBeNull();
+  expect(source.read).toHaveBeenCalledTimes(4);
+});
+
+test('a direct exact chapter explicitly reveals root and nested branches without replacing its body', async () => {
+  const book = createIllustrativeHostedBook();
+  const source = observed(book.source);
+  const chapter = await book.chapter(true);
+  await mount(source, chapter);
+  const article = host.querySelector('article');
+  expect(source.read).toHaveBeenCalledTimes(1);
+  await click(button(m.book_reader_root()));
+  expect(source.read).toHaveBeenCalledTimes(2);
+  expect(source.read.mock.calls[1]![0].address).toEqual({ ...book.contents(), selection: chapter.selection });
+  expect(host.querySelector('article')).toBe(article);
+  const part = button(`${m.book_reader_contents()} · Part I · The journey`);
+  await act(async () => {
+    part.focus();
+    part.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  });
+  await settle();
+  expect(part.getAttribute('aria-expanded')).toBe('true');
+  await click(button(`${m.book_reader_contents()} · The observatory`));
+  expect(source.read).toHaveBeenCalledTimes(4);
+  expect(host.querySelector('article')).toBe(article);
+  expect(host.querySelector(`[data-occurrence="${ids.reused}"] [aria-current]`)).not.toBeNull();
+  expect(host.querySelector(`[data-occurrence="${ids.first}"] [aria-current]`)).toBeNull();
+});
+
+test('duplicate-only and sparse branch pages append without refill or losing each occurrence origin', async () => {
+  const book = createIllustrativeHostedBook('multiple-pages');
+  const initial = await book.source.read(
+    { address: book.contents(ids.nested), locale: 'en', limit: 40, ancestorLimit: 24 },
+    new AbortController().signal,
+  );
+  const middle = await book.source.read(
+    { address: book.contents(ids.nested, illustrativeBookCursor), locale: 'en', limit: 40, ancestorLimit: 24 },
+    new AbortController().signal,
+  );
+  if (
+    initial.state !== 'ready' ||
+    initial.page.kind !== 'contents' ||
+    middle.state !== 'ready' ||
+    middle.page.kind !== 'contents'
+  )
+    throw new Error('Expected illustrative branch pages');
+  const firstRows = initial.page.rows;
+  const middleRows = middle.page.rows;
+  const source = observed(book.source);
+  const read: HostedBookSource['read'] = async (request, signal) => {
+    const result = await book.source.read(request, signal);
+    if (result.state !== 'ready' || result.page.kind !== 'contents') return result;
+    const cursor = result.page.address.cursor;
+    return {
+      state: 'ready',
+      page: {
+        ...result.page,
+        rows:
+          cursor === illustrativeBookCursor
+            ? firstRows
+            : cursor === illustrativeBookLastCursor
+              ? [...firstRows, ...middleRows]
+              : result.page.rows,
+      },
+    };
+  };
+  source.read.mockImplementation(read);
+  await mount(source, book.contents(ids.nested));
+  await click(button(m.book_reader_more()));
+  expect(source.read).toHaveBeenCalledTimes(2);
+  expect(host.querySelectorAll('[data-occurrence]')).toHaveLength(1);
+  expect(host.textContent).toContain('Dawn / 黎明');
+  expect(host.textContent).not.toContain('Dawn, an echo / 再読');
+  const late = deferred<BookReadResult>();
+  source.read.mockImplementationOnce(() => late.promise);
+  await click(button(m.book_reader_more()));
+  const attempt = source.read.mock.calls.at(-1)!;
+  const outside = document.createElement('button');
+  document.body.append(outside);
+  outside.focus();
+  const result = await read(attempt[0], attempt[1]);
+  await act(async () => late.resolve(result));
+  await settle();
+  expect(source.read).toHaveBeenCalledTimes(3);
+  expect(host.querySelectorAll('[data-occurrence]')).toHaveLength(2);
+  expect(document.activeElement).toBe(outside);
+  await click(button(`${m.book_reader_open_chapter()} · Dawn / 黎明`));
+  await click(button(m.book_reader_contents()));
+  expect(source.read.mock.calls.at(-1)![0].address).toEqual({
+    ...book.contents(ids.nested),
+    selection: (await book.chapter()).selection,
+  });
+  expect(host.querySelectorAll('[data-occurrence]')).toHaveLength(2);
+  expect(host.textContent).toContain(m.book_reader_level_end());
+  expect(host.textContent).not.toContain(m.book_reader_more()); // Earlier return does not regress the frontier.
+});
+
+test.each(['publication', 'locale', 'viewer', 'source'] as const)(
+  '%s replacement retires every outline branch and late expansion focus',
+  async (replacement) => {
+    const book = createIllustrativeHostedBook();
+    const source = observed(book.source);
+    const contentsNavigation = createBookContentsNavigation();
+    const render = await mount(source, book.contents(), { contentsNavigation });
+    const pending = deferred<BookReadResult>();
+    source.read.mockImplementationOnce(() => pending.promise);
+    const part = button(`${m.book_reader_contents()} · Part I · The journey`);
+    await click(part);
+    const attempt = source.read.mock.calls.at(-1)!;
+    const result = await book.source.read(attempt[0], attempt[1]);
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    outside.focus();
+    if (replacement === 'viewer') {
+      await act(async () =>
+        client.setQueryData(['session'], { state: 'signed-in', subject: 'other', csrfToken: 'new' }),
+      );
+    } else if (replacement === 'locale') {
+      window.history.replaceState(null, '', 'https://reader.test/fr/');
+      setLocale('fr', { reload: false });
+      await render({ locale: 'fr' });
+    } else if (replacement === 'publication') {
+      await render({
+        address: {
+          ...book.contents(),
+          publication: { ...illustrativePublication, releaseRevisionId: 'another-release' },
+        },
+      });
+    } else {
+      const fresh = createIllustrativeHostedBook();
+      await render({ source: fresh.source, readingIdentity: fresh });
+    }
+    expect(attempt[1].aborted).toBe(true);
+    await act(async () => pending.resolve(result));
+    await settle();
+    expect(contentsNavigation.outline.branch(ids.part)).toBeUndefined();
+    expect(host.querySelector(`[data-occurrence="${ids.nested}"]`)).toBeNull();
+    expect(document.activeElement).toBe(outside);
+  },
+);
+
 test('sparse continuation, failure and retry retain the opaque cursor and the selected exact return', async () => {
   const book = createIllustrativeHostedBook('failed-page');
   const chapter = await book.chapter();
@@ -208,7 +427,7 @@ test('sparse continuation, failure and retry retain the opaque cursor and the se
   await click(button(m.book_reader_return_chapter()));
   expect(source.read.mock.calls[3]![0].address).toEqual(chapter);
   await click(button(m.book_reader_contents()));
-  expect(source.read.mock.calls[4]![0].address).toEqual({ ...address, cursor: illustrativeBookCursor });
+  expect(source.read.mock.calls[4]![0].address).toEqual(address);
 });
 
 test('host-supplied canonical links remain native links with independent occurrence addresses', async () => {
@@ -776,7 +995,6 @@ test('the default production route reads native contents and exact chapters, the
   );
   const sourceReads: BookReadRequest[] = [];
   const hostReads: unknown[] = [];
-  let failPrevious = false;
   mock.module('../src/books/reader/native-visit', () => ({
     readHostedBookVisit: async ({ data }: Parameters<typeof actualVisit.readHostedBookVisit>[0]) => {
       hostReads.push(data);
@@ -792,10 +1010,6 @@ test('the default production route reads native contents and exact chapters, the
     ...actualRead,
     readNativeHostedBook: async ({ data }: Parameters<typeof actualRead.readNativeHostedBook>[0]) => {
       sourceReads.push(data.request);
-      if (failPrevious && data.request.address.kind === 'contents' && data.request.address.cursor === null) {
-        failPrevious = false;
-        return { state: 'unavailable' };
-      }
       return readHostedBook(api, data.request, data.publicationTitle, new AbortController().signal);
     },
   }));
@@ -833,15 +1047,15 @@ test('the default production route reads native contents and exact chapters, the
     });
     await settle();
     expect(host.textContent).toContain('Part I · The journey');
-    expect(host.querySelector('header > p')?.textContent).toBe(title!);
+    expect(host.querySelector('h1')?.textContent).toBe(title!);
     const link = (text: string) => {
       const anchor = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((element) => element.textContent === text);
       expect(anchor).toBeDefined();
       return anchor!;
     };
-    await click(link(`${m.book_reader_contents()} · Part I · The journey`));
-    await click(link(`${m.book_reader_contents()} · The observatory`));
-    await click(link(m.book_reader_more()));
+    await click(button(`${m.book_reader_contents()} · Part I · The journey`));
+    await click(button(`${m.book_reader_contents()} · The observatory`));
+    await click(button(m.book_reader_more()));
     expect(host.querySelector('article')).toBeNull();
     expect(host.textContent).toContain(m.book_reader_unavailable());
     await click(button(m.book_reader_retry()));
@@ -859,9 +1073,9 @@ test('the default production route reads native contents and exact chapters, the
     });
     await settle();
     expect(sourceReads).toHaveLength(beforeBack + 1);
-    expect(host.querySelector('header > p')?.textContent).toBe(m.book_reader_title());
+    expect(host.querySelector('h1')?.textContent).toBe(m.book_reader_title());
     title = 'A freshly admitted opening';
-    expect(sourceReads.at(-1)?.address).toEqual(book.contents(ids.nested, illustrativeBookCursor));
+    expect(sourceReads.at(-1)?.address).toEqual(book.contents());
     expect(host.querySelector('article')).toBeNull();
     await act(async () => {
       history.forward();
@@ -876,7 +1090,7 @@ test('the default production route reads native contents and exact chapters, the
       selection: (await book.chapter(true)).selection,
     });
     expect(document.activeElement?.getAttribute('aria-current')).toBe('location');
-    expect(hostReads).toHaveLength(sourceReads.length);
+    expect(hostReads).toHaveLength(sourceReads.length - 4); // Branch reads never replace route admission.
     expect(pointReads).toHaveLength(hostReads.length);
     expect(
       pointReads.every(
@@ -887,20 +1101,9 @@ test('the default production route reads native contents and exact chapters, the
           !url.searchParams.has('revisionId'),
       ),
     ).toBe(true);
-    failPrevious = true;
-    const beforePrevious = sourceReads.length;
-    await click(link(m.book_reader_previous_page()));
-    const exactPrevious = { ...book.contents(ids.nested), selection: (await book.chapter(true)).selection };
-    expect(sourceReads).toHaveLength(beforePrevious + 1);
-    expect(sourceReads.at(-1)?.address).toEqual(exactPrevious);
-    expect(host.textContent).toContain(m.book_reader_unavailable());
-    expect(host.textContent).toContain(m.book_reader_contents_recovery());
-    await click(button(m.book_reader_retry()));
-    expect(sourceReads).toHaveLength(beforePrevious + 2);
-    expect(sourceReads.at(-1)?.address).toEqual(exactPrevious);
-    expect(host.textContent).toContain(m.book_reader_empty());
-    expect(document.activeElement).toBe(host.querySelector('h1'));
-    expect(hostReads).toHaveLength(sourceReads.length);
+    expect(host.querySelector(`[data-occurrence="${ids.part}"]`)).not.toBeNull();
+    expect(host.querySelector(`[data-occurrence="${ids.reused}"]`)).not.toBeNull();
+    expect(host.textContent).not.toContain(m.book_reader_previous_page());
   } finally {
     canonical.remove();
     mock.module('../src/books/reader/native-visit', () => actualVisit);
@@ -1575,7 +1778,7 @@ test('a fresh exact reading restores the private block after admission and leave
   }
 });
 
-test('contents Previous rereads sparse pages; pointer movement keeps focus and keyboard movement focuses the heading', async () => {
+test('branch More appends sparse pages and focuses only within its requester', async () => {
   const book = createIllustrativeHostedBook('multiple-pages');
   await book.ready;
   const source = observed(book.source);
@@ -1588,29 +1791,16 @@ test('contents Previous rereads sparse pages; pointer movement keeps focus and k
   });
   await settle();
   expect(document.activeElement).toBe(external);
+  expect(host.textContent).toContain('Dawn / 黎明');
   expect(host.textContent).toContain('Dawn, an echo / 再読');
   await click(button(m.book_reader_more()));
   expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(book.contents(ids.nested, illustrativeBookLastCursor));
-  expect(host.textContent).toContain(m.book_reader_empty());
-  expect(document.activeElement).toBe(host.querySelector('h1'));
-  const pending = deferred<BookReadResult>();
-  source.read.mockImplementationOnce(() => pending.promise);
-  await click(button(m.book_reader_previous_page()));
-  const target = book.contents(ids.nested, illustrativeBookCursor);
-  expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(target);
-  expect(host.textContent).toContain(m.book_reader_contents_recovery());
-  external.focus();
-  const result = await book.source.read(
-    { address: target, locale: 'en', limit: 40, ancestorLimit: 24 },
-    new AbortController().signal,
-  );
-  await act(async () => pending.resolve(result));
-  await settle();
-  expect(document.activeElement).toBe(external);
-  expect(host.textContent).toContain('Dawn, an echo / 再読');
-  await click(button(m.book_reader_previous_page()));
-  expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(book.contents(ids.nested));
-  expect(document.activeElement).toBe(host.querySelector('h1'));
+  expect(host.querySelectorAll('[data-occurrence]')).toHaveLength(2);
+  expect(host.textContent).not.toContain(m.book_reader_empty());
+  expect(host.textContent).toContain(m.book_reader_level_end());
+  expect(document.activeElement?.hasAttribute('data-branch-result')).toBe(true);
+  expect(document.activeElement).not.toBe(host.querySelector('h1'));
+  expect(source.read).toHaveBeenCalledTimes(3);
 });
 
 test('chapter return rereads the original sparse address and leaves a missing selected row honestly missing', async () => {

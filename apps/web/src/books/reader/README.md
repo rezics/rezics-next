@@ -11,7 +11,7 @@ view. The reader uses Library's native hosted-reading checkpoint with explicit s
 positions; no automatic write or ordinary Progress conversion occurs. Hosts use the declared `books/reader/route.tsx`
 composition entry.
 
-The entry's `hostedBookNavigationForRouter` owns the bounded contents/chooser/focus visit and its subscriptions.
+The entry's `hostedBookNavigationForRouter` owns the revealed outline, bounded chooser/focus visit and subscriptions.
 File routes supply their existing Router and QueryClient. Search-only loader replacement retains that Router's
 visit; successful session replacement and `pagehide` retire its coordinates and pending focus. Moving between Book
 reader paths retires chapter/contents coordinates while preserving the independent chooser window. Leaving the Book
@@ -255,9 +255,9 @@ operands, using O(revealed rows + explicitly opened branches) memory. It keeps o
 Each chapter's canonical link and originating contents position use the page which actually revealed that occurrence;
 reused body bytes never merge distinct placements. Selected state compares publication/occurrence/exact body, never
 Post alone. A direct chapter entry shows only its admitted current chapter and bounded ancestors until an explicit
-Contents read. Ordinary chapter/contents navigation may retain the outline; Back/Forward still prepares admission
+All contents read, which reveals the root without replacing the body. Ordinary chapter/contents navigation may retain the outline; Back/Forward still prepares admission
 and rereads the exact URL. The compatibility coordinate window retains at most eight observed predecessor operands;
-it does not drive append or expansion. Source retirement, publication/current release/structure, locale, session,
+it does not drive append or expansion. Failed/withheld admission, chooser entry, source retirement, publication/current release/structure, locale, session,
 viewer/credential replacement, pagehide and departure discard all branches, pending reads and focus. A same-address
 admission refresh starts a fresh outline. Late completions cannot populate a replacement owner.
 

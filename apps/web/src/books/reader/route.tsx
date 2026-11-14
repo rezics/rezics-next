@@ -29,7 +29,7 @@ export { HostedBookReaderLink, HostedBookSubjectReaderLink } from './link';
 export type { HostedBookSearch } from './address';
 export type { HostedBookVisit } from './visit';
 
-/** Route-owned coordinates survive fresh loader reads without retaining a discovery or reading response. */
+/** Route-owned public outline rows and coordinates survive chapter movement; bodies never enter this visit. */
 export function createHostedBookNavigation() {
   const contents = createBookContentsNavigation();
   const catalogues = createBookCatalogueNavigation();
@@ -175,7 +175,7 @@ export function HostedBookVisitView({
         session.snapshot(),
       ]),
     );
-  }
+  } else coordinates.retireReading();
   const chooser =
     visit.state === 'catalogues'
       ? { subjectId: visit.page.subjectId, cursor: location?.search.cursor ?? null }

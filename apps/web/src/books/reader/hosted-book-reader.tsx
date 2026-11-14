@@ -49,7 +49,7 @@ export type HostedBookReaderProps = {
   contentsReturn?: BookContentsAddress | null;
   onNavigate?: BookReaderNavigation;
   onReload?: (focus?: BookReaderFocus) => void;
-  /** Bounded coordinate memory owned and scoped by the route host. */
+  /** Explicitly revealed outline and bounded return coordinates, scoped by the route host. */
   contentsNavigation?: BookContentsNavigation;
   focusOnRead?: { focus: BookReaderFocus; owner: Element | null };
   /** Native Library checkpoint controls share the admitted page lifetime. */

@@ -22,7 +22,7 @@ const coordinate = (address: BookContentsCoordinate): BookContentsCoordinate => 
 const same = (a: BookContentsCoordinate, b: BookContentsCoordinate) =>
   a.parentOccurrenceId === b.parentOccurrenceId && a.cursor === b.cursor;
 
-/** Eight observed predecessors plus current/staged operands; never a page or a cursor generated from order. */
+/** Revealed outline plus eight compatibility predecessors; no cursor is generated from ordering. */
 export function createBookContentsNavigation() {
   const outline = createBookOutline();
   let window: BookContentsWindow = { predecessors: [], current: null, staged: null };

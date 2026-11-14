@@ -134,7 +134,7 @@ export function createBookReader(
       request = undefined;
       if (result.state === 'ready' && result.page.kind === 'contents') {
         contents.observe(result.page.address);
-        outline.accept(result.page);
+        outline.accept(result.page, false);
         outline.root(result.page.address);
       }
       publish(
@@ -230,6 +230,12 @@ export function createBookReader(
       retire();
     },
     read,
+    openOutline(address: BookContentsAddress) {
+      if (!current()) return;
+      const branch = outline.expand(address);
+      outline.root(address);
+      if (!branch.page && branch.state !== 'loading') void readBranch(branch.attempt ?? address);
+    },
     toggleBranch(address: BookContentsAddress) {
       if (!current()) return;
       const branch = outline.branch(address.parentOccurrenceId);
@@ -260,9 +266,10 @@ export function createBookReader(
     resolveContents: contents.resolve,
     openChapter(address: BookChapterAddress, focus: BookReaderFocus = { kind: 'heading' }) {
       if (!current() || snapshot.state === 'loading') return;
-      const origin = outline.origin(address.selection.occurrenceId);
-      if (origin || snapshot.address.kind === 'contents')
-        contentsReturn = { ...(origin ?? (snapshot.address as BookContentsAddress)), selection: address.selection };
+      const origin =
+        outline.origin(address.selection.occurrenceId) ??
+        (snapshot.address.kind === 'contents' ? snapshot.address : null);
+      if (origin) contentsReturn = { ...origin, selection: address.selection };
       move(address, focus);
     },
     openContents(

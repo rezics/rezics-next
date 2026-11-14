@@ -63,7 +63,7 @@ export function createBookOutline() {
       const branch = ensure(address);
       update(address.parentOccurrenceId, { ...branch, state: 'loading', attempt: address });
     },
-    accept(page: BookContentsPage) {
+    accept(page: BookContentsPage, advance = true) {
       const parent = page.address.parentOccurrenceId;
       const branch = ensure(page.address);
       const seen = identities.get(key(parent)) ?? new Set<string>();
@@ -78,11 +78,11 @@ export function createBookOutline() {
       // Keep the first revealed order. A repeated/sparse page can advance only its native continuation.
       update(parent, {
         ...branch,
-        address: page.address,
+        address: !advance && branch.page ? branch.address : page.address,
         rows: added.length ? [...branch.rows, ...added] : branch.rows,
-        page,
-        state: 'ready',
-        attempt: null,
+        page: !advance && branch.page ? branch.page : page,
+        state: !advance && branch.page ? branch.state : 'ready',
+        attempt: !advance && branch.page ? branch.attempt : null,
       });
     },
     fail(address: BookContentsAddress, state: Exclude<BookReadResult['state'], 'ready'>) {
@@ -91,7 +91,7 @@ export function createBookOutline() {
     cancel(address: BookContentsAddress) {
       const branch = branches.get(address.parentOccurrenceId);
       if (branch?.state === 'loading' && branch.attempt === address)
-        update(address.parentOccurrenceId, { ...branch, state: branch.page ? 'ready' : 'idle', attempt: address });
+        update(address.parentOccurrenceId, { ...branch, state: 'idle', attempt: address });
     },
     origin(occurrenceId: string) {
       return origins.get(occurrenceId) ?? null;
