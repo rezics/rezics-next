@@ -81,7 +81,7 @@ import { validateSearchInput } from './search-query-input';
 import type { SearchPageData } from './search-query-contract';
 export type { SearchFacetValueLabel, SearchPageData } from './search-query-contract';
 import { searchResourceScopeChanged } from './search-scope-restart';
-import { DiscoveryKinds } from './discovery-kinds';
+import { DiscoveryKinds, RetainedKindSelections } from './discovery-kinds';
 
 import { useDiscoveryPersonalResults } from './discovery-personal-host';
 
@@ -1137,9 +1137,26 @@ export function SearchPage({
       {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
       ))}
-      {(!kindDirectory ? (draft.kinds ?? []) : []).map((kind) => (
-        <input key={kind} type="hidden" name="kinds" value={kind} />
-      ))}
+      {(!kindDirectory || !data?.queryState) && (
+        <RetainedKindSelections
+          selected={draft.kinds ?? []}
+          loaded={[]}
+          known={[
+            ...(kindDirectory?.initial.values ?? []),
+            ...(kindDirectory?.initial.omitted ?? []),
+            ...(result?.kinds?.values ?? []),
+            ...(result?.kinds?.omitted ?? []),
+          ]}
+          locale={locale}
+          hydrated={hydrated}
+          onRemove={(kind) =>
+            setDraft((previous) => ({
+              ...previous,
+              kinds: previous.kinds?.filter((value) => value !== kind),
+            }))
+          }
+        />
+      )}
       {(!data?.refinement || scopeChanged ||
         Object.entries(draftFacets).some(
           ([property]) => !filterRefinementProperties.some((entry) => entry.property === property),

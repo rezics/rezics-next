@@ -14,6 +14,7 @@ import type { SearchRecoveryState } from './search-recovery';
 import { searchRecoveryMessage } from './search-recovery-view';
 import { useSearchRetryWait } from './search-recovery-retry';
 import { DefinitionMeaning } from '../features/catalogue/definition-meaning';
+import { filterApplicationCopy } from './filter-application-copy';
 
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
@@ -48,6 +49,63 @@ function refusalState(state: DiscoveryKindsState, recovery?: SearchRecoveryState
     default:
       return { status: 'unavailable' };
   }
+}
+
+type KindLabel = Pick<Kinds['values'][number], 'id' | 'labels'>;
+
+/** Keep opaque selections visible even when their directory rows have not been loaded. */
+export function RetainedKindSelections({
+  selected,
+  loaded,
+  known,
+  locale,
+  hydrated,
+  onRemove,
+}: {
+  selected: readonly string[];
+  loaded: readonly string[];
+  known: readonly KindLabel[];
+  locale: string;
+  hydrated: boolean;
+  onRemove: (id: string, source: HTMLButtonElement) => void;
+}) {
+  const loadedIds = new Set(loaded);
+  const retained = [...new Set(selected)].filter((id) => !loadedIds.has(id));
+  if (retained.length === 0) return null;
+  const labels = new Map<string, KindLabel['labels']>(known.map(({ id, labels }) => [id, labels]));
+  const options = messageOptions(locale);
+  const copy = filterApplicationCopy(locale);
+  return (
+    <section aria-label={copy.retainedKinds} className="min-w-0 space-y-2">
+      <p className="text-sm font-medium">{copy.retainedKinds}</p>
+      <ul className="space-y-2">
+        {retained.map((id) => {
+          const label = localizedLabel(labels.get(id) ?? {}, locale);
+          return (
+            <li key={id} className="min-w-0 rounded-lg border border-border/60 p-3">
+              <input type="hidden" name="kinds" value={id} />
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <span lang={label.lang} className="min-w-0 text-sm wrap-anywhere">
+                  {label.text.trim() || m.search_constraint_identity_kind_unavailable({}, options)}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!hydrated}
+                  aria-label={`${copy.removeKind}: ${id}`}
+                  onClick={(event) => onRemove(id, event.currentTarget)}
+                >
+                  {copy.removeKind}
+                </Button>
+              </div>
+              <code className="block break-all text-xs text-muted-foreground">{id}</code>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 }
 
 /** Registry pages are explicit bounded reads; rows and initial count evidence remain in place. */
@@ -202,7 +260,10 @@ export function DiscoveryKinds({
           setStatus(undefined);
           setRecovery(undefined);
         } else {
-          setContinuation(result.kinds);
+          setContinuation((previous) => ({
+            ...result.kinds,
+            values: [...(previous?.values ?? []), ...result.kinds.values],
+          }));
           setStatus(undefined);
           setRecovery(undefined);
         }
@@ -270,11 +331,22 @@ export function DiscoveryKinds({
           {m.search_all_kinds({}, options)}
         </p>
       )}
-      {[...chosen]
-        .filter((id) => !values.some((kind) => kind.id === id))
-        .map((id) => (
-          <input key={id} type="hidden" name="kinds" value={id} />
-        ))}
+      <RetainedKindSelections
+        selected={[...chosen]}
+        loaded={values.map((kind) => kind.id)}
+        known={[...initial.values, ...(continuation?.values ?? []), ...(initial.omitted ?? [])]}
+        locale={locale}
+        hydrated={hydrated}
+        onRemove={(id, source) => {
+          const updated = [...chosen].filter((value) => value !== id);
+          if (onSelectionChange) onSelectionChange(updated);
+          else {
+            const form = source.form;
+            setChosen(new Set(updated));
+            if (hydrated) requestAnimationFrame(() => form?.requestSubmit());
+          }
+        }}
+      />
       <details open={chosen.size > 0}>
         <summary className="cursor-pointer text-sm font-medium">{m.search_choose_kinds({}, options)}</summary>
         <ul className="space-y-2 pt-3">
