@@ -14,7 +14,7 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 | `hosted_catalogue.insert_draft_point`               | `POST /v1/hostedCatalogues/{id}:insertDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`, `title`, `placement` |
 | `hosted_catalogue.remove_draft_point`               | `POST /v1/hostedCatalogues/{id}:removeDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`                                                                 |
 | `hosted_catalogue.update_draft_point`               | `POST /v1/hostedCatalogues/{id}:updateDraftPoint`                                       | `expectedRevisionId`, `occurrenceId`, `title`, explicit nullable `target`                            |
-| `hosted_catalogue.move_draft_point`                 | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`                                         | `expectedRevisionId`, `occurrenceId`, `parentId`, nullable `beforeOccurrenceId`                      |
+| `hosted_catalogue.move_draft_point`                 | `POST /v1/hostedCatalogues/{id}:moveDraftPoint`                                         | `expectedRevisionId`, `occurrenceId`, nullable `parentId`/`beforeOccurrenceId`                       |
 | `hosted_catalogue.convert_draft`                    | `POST /v1/hostedCatalogues/{id}:convertDraft`                                           | `expectedRevisionId`, bounded `step`, retained `inputId` and native page cursor when paging          |
 | `hosted_catalogue.publish`                          | `POST /v1/hostedCatalogues/{id}:publish`                                                | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds`                              |
 | `hosted_catalogue.prepare_release`                  | `POST /v1/hostedCatalogues/{id}:prepareRelease`                                         | caller-generated `stageId`, `expectedRevisionId`, nullable `expectedPublicationId`, `mode`           |
@@ -112,11 +112,12 @@ Decision: a cross-parent move cuts the stable occurrence subtree's contiguous pr
 splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
 ancestor summaries, without visiting descendants.
 
-Decision: mount the stable-anchor move as `moveDraftPoint`; require an existing part `parentId`, and interpret a
-null `beforeOccurrenceId` as the end of that parent's sibling list. The existing move command retains author
-admission, receipt, idempotent replay and the identity-only revise event. The native move adapter selects and writes
-the expected ordered snapshot in the same transaction as its head CAS. An adjacent move returns the current
-revision without writing a new revision or event.
+Decision: mount the stable-anchor move as `moveDraftPoint`; `parentId: null` selects the root sibling list, and a
+null `beforeOccurrenceId` appends to the selected sibling list. A non-null anchor must be a current sibling of the
+selected root or Part. Root moves create no synthetic occurrence or chapter destination. The existing move command
+retains author admission, receipt, idempotent replay and the identity-only revise event. The native move adapter
+selects and writes the expected ordered snapshot in the same transaction as its head CAS. An adjacent move returns
+the current revision without writing a new revision or event.
 
 Decision: the retained binder resolves the expected immutable structure descriptor after author admission; the
 native adapter proves selected membership and bounded containment paths in that draft snapshot, then commits all

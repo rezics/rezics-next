@@ -115,7 +115,7 @@ function assertSnapshotIdentity(snapshot: HostedVersionSnapshot, descriptor: Hos
 function assertRequestIdsUseRoute(route: number, input: HostedVersionDraftMoveInput): void {
   if (
     routeOf(input.occurrenceId) !== route ||
-    routeOf(input.parentId) !== route ||
+    (input.parentId !== null && routeOf(input.parentId) !== route) ||
     (input.beforeOccurrenceId !== null && routeOf(input.beforeOccurrenceId) !== route)
   ) {
     invalidAnchor();
@@ -280,14 +280,16 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
       };
 
       const source = await readOccurrence(input.occurrenceId);
-      const destinationParent = await readOccurrence(input.parentId);
+      const destinationParent = input.parentId === null ? null : await readOccurrence(input.parentId);
       if (source.parentOccurrenceId === null && input.occurrenceId === input.parentId) invalidAnchor();
-      if (destinationParent.value.kind !== 'part') invalidAnchor();
+      if (destinationParent !== null && destinationParent.value.kind !== 'part') invalidAnchor();
       await requirePreorderMember(source.occurrenceId);
-      await requirePreorderMember(destinationParent.occurrenceId);
       await assertChapterAggregate(source);
       await assertChapterProjectionRange(source);
-      await assertChapterAggregate(destinationParent);
+      if (destinationParent !== null) {
+        await requirePreorderMember(destinationParent.occurrenceId);
+        await assertChapterAggregate(destinationParent);
+      }
 
       const before = input.beforeOccurrenceId === null ? null : await readOccurrence(input.beforeOccurrenceId);
       if (before !== null) {
@@ -311,7 +313,7 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         }
       };
 
-      if (before !== null) await assertContainedRange(before, destinationParent);
+      if (before !== null && destinationParent !== null) await assertContainedRange(before, destinationParent);
 
       const collectAncestors = async (
         initial: HostedVersionDraftMoveSelectedOccurrence,
@@ -331,7 +333,7 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
       };
 
       await collectAncestors(source, sourceAncestors);
-      await collectAncestors(destinationParent, destinationAncestors);
+      if (destinationParent !== null) await collectAncestors(destinationParent, destinationAncestors);
 
       const rootForParent = async (parentId: string | null): Promise<string | null> => {
         const root = await readHostedVersionSiblingRoot(tx, snapshot, parentId);
@@ -349,10 +351,10 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         snapshotId: descriptor.revisionId,
         headRevisionId: head.head_revision_id,
         source: occurrenceFact(descriptor.revisionId, source),
-        destinationParent: {
-          ...occurrenceFact(descriptor.revisionId, destinationParent),
-          kind: 'part',
-        },
+        destinationParent:
+          destinationParent === null
+            ? null
+            : { ...occurrenceFact(descriptor.revisionId, destinationParent), kind: 'part' },
         before: before === null ? null : occurrenceFact(descriptor.revisionId, before),
         sourceAncestors,
         destinationAncestors,

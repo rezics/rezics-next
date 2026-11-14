@@ -3,12 +3,10 @@ import type { CommandTransaction } from '../../src/command/command.ts';
 import {
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
-  type VersionedOutlineSequenceSnapshotReader,
 } from '../../src/content/versioned-outline-sequence.ts';
 import { commitHostedVersionDraftMoveInTransaction } from '../../src/content/hosted-version-draft-edit-command.ts';
 import { prepareHostedVersionDraftMovePlan } from '../../src/content/hosted-version-draft-edit.ts';
 import {
-  HostedVersionDraftMoveError,
   type HostedVersionDraftMoveInput,
   type HostedVersionDraftMoveNativeAdapter,
   type HostedVersionDraftMoveIndexes,
@@ -222,7 +220,7 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
     { ...input, parentId: 'parent-a', beforeOccurrenceId: 'a-after' },
     {
       ...selection,
-      destinationParent: { ...selection.destinationParent, occurrenceId: 'parent-a', subtreeSize: 12_004n },
+      destinationParent: { ...selection.destinationParent!, occurrenceId: 'parent-a', subtreeSize: 12_004n },
       before: { ...selection.before!, occurrenceId: 'a-after', parentId: 'parent-a' },
       destinationAncestors: selection.sourceAncestors,
       destinationSiblingRootId: selection.sourceSiblingRootId,
@@ -231,6 +229,167 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
   );
   expect(noOp.result).toBe('no-op');
   expect(noOp.work.siblings.writtenNodeCount + noOp.work.preorder.writtenNodeCount).toBe(0);
+});
+
+test('promotes a large subtree to the root, reorders root siblings, and skips an adjacent root move', async () => {
+  const revisionId = 'draft-root-v1';
+  const descendants = Array.from({ length: 12_000 }, (_, index) => `root-child-${index}`);
+  const oldPreorder = ['source-parent', 'source-part', ...descendants, 'root-anchor'];
+  const oldChapters = [...descendants, 'root-anchor'];
+  const rootSiblings = buildSequence(['source-parent', 'root-anchor']);
+  const parentSiblings = buildSequence(['source-part']);
+  const sourceSiblings = buildSequence(descendants);
+  const preorder = buildSequence(oldPreorder, new Set(oldChapters));
+  const chapters = buildSequence(oldChapters, new Set(oldChapters));
+  const original = {
+    siblings: new Map([...rootSiblings.nodes, ...parentSiblings.nodes, ...sourceSiblings.nodes]),
+    preorder: preorder.nodes,
+    chapters: chapters.nodes,
+  };
+  const sourceSize = BigInt(descendants.length + 1);
+  const selection: HostedVersionDraftMoveSelection = {
+    snapshotId: revisionId,
+    headRevisionId: revisionId,
+    source: {
+      snapshotId: revisionId,
+      occurrenceId: 'source-part',
+      parentId: 'source-parent',
+      kind: 'part',
+      subtreeSize: sourceSize,
+      subtreeHeight: 1,
+      chapterCount: BigInt(descendants.length),
+    },
+    destinationParent: null,
+    before: null,
+    sourceAncestors: [
+      {
+        snapshotId: revisionId,
+        occurrenceId: 'source-parent',
+        parentId: null,
+        subtreeSize: sourceSize + 1n,
+        chapterCount: BigInt(descendants.length),
+      },
+    ],
+    destinationAncestors: [],
+    sourceSiblingRootId: parentSiblings.rootId,
+    destinationSiblingRootId: rootSiblings.rootId,
+    preorderRootId: preorder.rootId,
+    chapterRootId: chapters.rootId,
+  };
+  const input: HostedVersionDraftMoveInput = {
+    expectedRevisionId: revisionId,
+    occurrenceId: 'source-part',
+    parentId: null,
+    beforeOccurrenceId: null,
+  };
+  const indexes = makeIndexes(original);
+  const promoted = await prepareHostedVersionDraftMovePlan(input, selection, indexes);
+  const promotedSnapshots = {
+    siblings: commit(original.siblings, indexes.siblings),
+    preorder: commit(original.preorder, indexes.preorder),
+    chapters: commit(original.chapters, indexes.chapters),
+  };
+
+  expect(promoted.result).toBe('moved');
+  expect(promoted.toParentId).toBeNull();
+  expect(promoted.ancestorDeltas).toEqual([
+    {
+      occurrenceId: 'source-parent',
+      subtreeSizeDelta: -sourceSize,
+      chapterCountDelta: -BigInt(descendants.length),
+      subtreeSize: 1n,
+      chapterCount: 0n,
+    },
+  ]);
+  expect(materialize(promotedSnapshots.siblings, promoted.destinationSiblingRootId)).toEqual([
+    'source-parent',
+    'root-anchor',
+    'source-part',
+  ]);
+  expect(materialize(promotedSnapshots.siblings, promoted.sourceSiblingRootId)).toEqual([]);
+  expect(materialize(promotedSnapshots.preorder, promoted.preorderRootId)).toEqual([
+    'source-parent',
+    'root-anchor',
+    'source-part',
+    ...descendants,
+  ]);
+  expect(materialize(promotedSnapshots.chapters, promoted.chapterRootId)).toEqual(['root-anchor', ...descendants]);
+  expect(materialize(original.preorder, preorder.rootId)).toEqual(oldPreorder);
+  expect(materialize(original.chapters, chapters.rootId)).toEqual(oldChapters);
+
+  const pathBound =
+    64 * (preorder.nodes.get(preorder.rootId!)!.height + chapters.nodes.get(chapters.rootId!)!.height + 8);
+  const promotedWork =
+    promoted.work.siblings.snapshotProbeCount +
+    promoted.work.preorder.snapshotProbeCount +
+    promoted.work.chapters.snapshotProbeCount;
+  const promotedWrites =
+    promoted.work.siblings.writtenNodeCount +
+    promoted.work.preorder.writtenNodeCount +
+    promoted.work.chapters.writtenNodeCount;
+  expect(promotedWork).toBeLessThan(pathBound);
+  expect(promotedWrites).toBeLessThan(pathBound);
+  expect(promotedWork).toBeLessThan(descendants.length);
+  expect(promotedWrites).toBeLessThan(descendants.length);
+
+  const reorderIndexes = makeIndexes(promotedSnapshots);
+  const rootSelection: HostedVersionDraftMoveSelection = {
+    ...selection,
+    source: { ...selection.source, parentId: null },
+    destinationParent: null,
+    before: {
+      snapshotId: revisionId,
+      occurrenceId: 'root-anchor',
+      parentId: null,
+      kind: 'chapter',
+      subtreeSize: 1n,
+      subtreeHeight: 0,
+      chapterCount: 1n,
+    },
+    sourceAncestors: [],
+    destinationAncestors: [],
+    sourceSiblingRootId: promoted.destinationSiblingRootId,
+    destinationSiblingRootId: promoted.destinationSiblingRootId,
+    preorderRootId: promoted.preorderRootId,
+    chapterRootId: promoted.chapterRootId,
+  };
+  const reordered = await prepareHostedVersionDraftMovePlan(
+    { ...input, beforeOccurrenceId: 'root-anchor' },
+    rootSelection,
+    reorderIndexes,
+  );
+  expect(reordered.result).toBe('moved');
+  expect(reordered.ancestorDeltas).toEqual([]);
+  expect(
+    materialize(commit(promotedSnapshots.siblings, reorderIndexes.siblings), reordered.destinationSiblingRootId),
+  ).toEqual(['source-parent', 'source-part', 'root-anchor']);
+  expect(materialize(commit(promotedSnapshots.preorder, reorderIndexes.preorder), reordered.preorderRootId)).toEqual([
+    'source-parent',
+    'source-part',
+    ...descendants,
+    'root-anchor',
+  ]);
+
+  const reorderedSnapshots = {
+    siblings: commit(promotedSnapshots.siblings, reorderIndexes.siblings),
+    preorder: commit(promotedSnapshots.preorder, reorderIndexes.preorder),
+    chapters: commit(promotedSnapshots.chapters, reorderIndexes.chapters),
+  };
+  const adjacentIndexes = makeIndexes(reorderedSnapshots);
+  const adjacentSelection: HostedVersionDraftMoveSelection = {
+    ...rootSelection,
+    sourceSiblingRootId: reordered.destinationSiblingRootId,
+    destinationSiblingRootId: reordered.destinationSiblingRootId,
+    preorderRootId: reordered.preorderRootId,
+    chapterRootId: reordered.chapterRootId,
+  };
+  const adjacent = await prepareHostedVersionDraftMovePlan(
+    { ...input, beforeOccurrenceId: 'root-anchor' },
+    adjacentSelection,
+    adjacentIndexes,
+  );
+  expect(adjacent.result).toBe('no-op');
+  expect(adjacent.work.siblings.writtenNodeCount + adjacent.work.preorder.writtenNodeCount).toBe(0);
 });
 
 test('binds staged move roots to one adapter commit, skips adjacent no-ops, and rejects a lost head CAS', async () => {
@@ -352,7 +511,7 @@ test('binds staged move roots to one adapter commit, skips adjacent no-ops, and 
   const noOpSelection: HostedVersionDraftMoveSelection = {
     ...selection,
     destinationParent: {
-      ...selection.destinationParent,
+      ...selection.destinationParent!,
       occurrenceId: 'parent-a',
       subtreeSize: 2n,
       chapterCount: 1n,

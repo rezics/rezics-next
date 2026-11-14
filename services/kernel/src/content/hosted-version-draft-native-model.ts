@@ -23,6 +23,7 @@ export type HostedVersionDraftMoveNativeContext = Readonly<{
   descriptor: HostedVersionDraftMoveDescriptor;
   snapshot: HostedVersionSnapshot;
   write: HostedVersionWrite<HostedVersionDraftMoveStoredValue>;
+  /** Occurrences loaded along the moved and changed ancestor paths; root has no entry. */
   occurrences: ReadonlyMap<string, HostedVersionDraftMoveSelectedOccurrence>;
   selection: HostedVersionDraftMoveSelection;
 }>;

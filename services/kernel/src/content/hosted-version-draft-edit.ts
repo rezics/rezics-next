@@ -12,7 +12,6 @@ import {
   type HostedVersionDraftMoveAncestorDelta,
   type HostedVersionDraftMoveIndexes,
   type HostedVersionDraftMoveInput,
-  type HostedVersionDraftMoveOccurrence,
   type HostedVersionDraftMovePlan,
   type HostedVersionDraftMoveSelection,
 } from './hosted-version-draft-edit-model.ts';
@@ -27,7 +26,7 @@ function assertSnapshot(selection: HostedVersionDraftMoveSelection, expectedRevi
   }
   const facts = [
     selection.source,
-    selection.destinationParent,
+    ...(selection.destinationParent === null ? [] : [selection.destinationParent]),
     ...(selection.before === null ? [] : [selection.before]),
     ...selection.sourceAncestors,
     ...selection.destinationAncestors,
@@ -131,10 +130,11 @@ export async function prepareHostedVersionDraftMovePlan(
 ): Promise<HostedVersionDraftMovePlan> {
   assertSnapshot(selection, input.expectedRevisionId);
   const { source, destinationParent, before } = selection;
+  const destinationParentId = destinationParent?.occurrenceId ?? null;
   if (
     source.occurrenceId !== input.occurrenceId ||
-    destinationParent.occurrenceId !== input.parentId ||
-    destinationParent.kind !== 'part' ||
+    destinationParentId !== input.parentId ||
+    (destinationParent !== null && destinationParent.kind !== 'part') ||
     source.subtreeSize < 1n ||
     source.chapterCount < 0n ||
     source.subtreeHeight < 0 ||
@@ -145,27 +145,24 @@ export async function prepareHostedVersionDraftMovePlan(
     invalidAnchor();
   }
   assertAncestorChain(source.parentId, selection.sourceAncestors);
-  assertAncestorChain(destinationParent.occurrenceId, selection.destinationAncestors);
+  assertAncestorChain(destinationParentId, selection.destinationAncestors);
   if (selection.destinationAncestors.length + source.subtreeHeight > HOSTED_DEPTH_LIMIT) invalidAnchor();
-  if (
-    source.parentId === destinationParent.occurrenceId &&
-    selection.sourceSiblingRootId !== selection.destinationSiblingRootId
-  ) {
+  if (source.parentId === destinationParentId && selection.sourceSiblingRootId !== selection.destinationSiblingRootId) {
     throw new Error('Hosted version draft selection returned different sibling roots for one parent');
   }
 
   const sourceSiblingRank = await selectedRank(indexes.siblings, selection.sourceSiblingRootId, source.occurrenceId);
   const sourcePreorderRank = await selectedPreorderRank(indexes, selection.preorderRootId, source.occurrenceId);
-  const destinationPreorderRank = await selectedPreorderRank(
-    indexes,
-    selection.preorderRootId,
-    destinationParent.occurrenceId,
-  );
+  const destinationPreorderRank =
+    destinationParent === null
+      ? null
+      : await selectedPreorderRank(indexes, selection.preorderRootId, destinationParent.occurrenceId);
   const preorderLength = await sequenceLength(indexes.preorder, selection.preorderRootId);
   if (sourcePreorderRank + source.subtreeSize > preorderLength) {
     throw new Error('Hosted version draft subtree exceeds the selected preorder');
   }
   if (
+    destinationPreorderRank !== null &&
     destinationPreorderRank >= sourcePreorderRank &&
     destinationPreorderRank < sourcePreorderRank + source.subtreeSize
   ) {
@@ -187,7 +184,9 @@ export async function prepareHostedVersionDraftMovePlan(
     invalidAnchor();
   }
 
-  const preorderDestination = beforePreorderRank ?? destinationPreorderRank + destinationParent.subtreeSize;
+  const preorderDestination =
+    beforePreorderRank ??
+    (destinationParent === null ? preorderLength : destinationPreorderRank! + destinationParent.subtreeSize);
   if (preorderDestination > preorderLength) {
     throw new Error('Hosted version draft destination exceeds the selected preorder');
   }
@@ -197,20 +196,28 @@ export async function prepareHostedVersionDraftMovePlan(
     selection.preorderRootId,
     source.occurrenceId,
   );
-  const destinationParentChapterRank = await chapterRankVersionedOutlineSequenceNode(
-    indexes.preorder,
-    selection.preorderRootId,
-    destinationParent.occurrenceId,
-  );
-  if (sourceChapterRank === null || destinationParentChapterRank === null) invalidAnchor();
+  if (sourceChapterRank === null) invalidAnchor();
   const beforeChapterRank =
     before === null
       ? null
       : await chapterRankVersionedOutlineSequenceNode(indexes.preorder, selection.preorderRootId, before.occurrenceId);
   if (before !== null && beforeChapterRank === null) invalidAnchor();
-  const chapterDestination = beforeChapterRank ?? destinationParentChapterRank + destinationParent.chapterCount;
+  let chapterDestination: bigint;
+  if (beforeChapterRank !== null) {
+    chapterDestination = beforeChapterRank;
+  } else if (destinationParent === null) {
+    chapterDestination = await sequenceLength(indexes.chapters, selection.chapterRootId);
+  } else {
+    const destinationParentChapterRank = await chapterRankVersionedOutlineSequenceNode(
+      indexes.preorder,
+      selection.preorderRootId,
+      destinationParent.occurrenceId,
+    );
+    if (destinationParentChapterRank === null) invalidAnchor();
+    chapterDestination = destinationParentChapterRank + destinationParent.chapterCount;
+  }
 
-  const sameParent = source.parentId === destinationParent.occurrenceId;
+  const sameParent = source.parentId === destinationParentId;
   const samePosition =
     sameParent &&
     (destinationSiblingRank === sourceSiblingRank + 1n ||
@@ -295,7 +302,7 @@ export async function prepareHostedVersionDraftMovePlan(
     expectedRevisionId: input.expectedRevisionId,
     occurrenceId: source.occurrenceId,
     fromParentId: source.parentId,
-    toParentId: destinationParent.occurrenceId,
+    toParentId: destinationParentId,
     sourceSiblingRootId,
     destinationSiblingRootId,
     preorderRootId,
