@@ -20,6 +20,7 @@ import { readerSessionSource, useReaderVisit } from '../../reader/lifetime';
 import { ShellContextNavigation } from '../../shell/contextual-navigation';
 import { BookOutlineView } from './outline';
 import { ReaderWorkspace } from './reader-workspace';
+import { BookDisplaySettings, useBookDisplay } from './display-settings';
 import { PostReadingBody } from '../../threads/post-reading-body';
 import type { BookContentsMovement, BookContentsNavigation } from './contents-navigation';
 import { createCheckpointPosition, type CheckpointPosition } from './checkpoint-position';
@@ -170,6 +171,7 @@ function BookReaderView({
     [reader],
   );
   const [pinNavigation, setPinNavigation] = useState(true);
+  const display = useBookDisplay();
   const page = state.page;
   const isPageCurrent = useCallback(
     () => reader.current() && reader.getSnapshot() === state && state.state === 'ready',
@@ -478,13 +480,20 @@ function BookReaderView({
       >
         {page?.kind === 'chapter' ? (
           <>
+            <BookDisplaySettings {...display} locale={locale} />
             <article
               ref={article}
+              data-size={display.display.size}
+              data-width={display.display.width}
+              data-face={display.display.face}
+              data-indent={display.display.indent}
+              data-spacing={display.display.spacing}
+              data-punctuation={display.display.punctuation}
               aria-labelledby={headingId}
               lang={page.language ?? ''}
               dir={page.direction}
               tabIndex={-1}
-              className={`min-w-0 py-2 sm:py-4 ${focusable}`}
+              className={`book-reading-display min-w-0 py-2 sm:py-4 ${focusable}`}
             >
               <PostReadingBody
                 {...page.body}

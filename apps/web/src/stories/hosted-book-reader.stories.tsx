@@ -339,7 +339,22 @@ async function failedPage({
 
 // The same named behavior states use the locale/theme globals and both screenshot widths (390 / 1280).
 export const NestedContents: Story = { play: nestedJourney };
-export const ExactChapter: Story = { args: { chapter: true, direct: 'night' } };
+export const ExactChapter: Story = {
+  args: { chapter: true, direct: 'night' },
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByText(m.book_reader_display_settings()));
+    const article = canvasElement.querySelector('article')!;
+    const document = article.querySelector('.post-reading-document');
+    await userEvent.click(canvas.getByRole('button', { name: m.book_reader_display_larger() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.book_reader_display_serif() }));
+    await expect(article).toHaveAttribute('data-face', 'serif');
+    await expect(article.querySelector('.post-reading-document')).toBe(document);
+    await userEvent.click(canvas.getByRole('button', { name: m.book_reader_display_reset() }));
+    await expect(article).toHaveAttribute('data-size', '17');
+  },
+};
 export const SavedContinue: Story = { args: { checkpoint: 'saved' } };
 export const IndependentCheckpointFailure: Story = { args: { chapter: true, checkpoint: 'unavailable' } };
 export const SparseContinuation: Story = { args: { state: 'sparse' } };

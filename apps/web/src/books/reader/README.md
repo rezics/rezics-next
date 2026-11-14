@@ -223,6 +223,34 @@ Library progress and membership remain unchanged.
 The independent `renderProgress(page, isCurrent)` extension remains available for an admitted Commerce region;
 rendering failure cannot remove the chapter. It does not supply or replace the Library checkpoint.
 
+## Reading display and parity
+
+Decision: Book-owned appearance controls change only scoped CSS, retaining the shared renderer and exact admitted
+Document object. Text size includes 12–32 px, with the incumbent 17 px default; line width, serif/sans, paragraph
+indent, CJK spacing and line breaking are explicit local choices. A versioned, bounded, validated browser value
+contains display fields only. Storage denial keeps the visit usable and reports that choices cannot persist.
+SSR starts with defaults; the client restores once. No account preference, body, position, identity, native request
+or theme store is added. Theme remains the shared Shell Appearance control.
+
+Source comparison uses the read-only `../rezics` commit `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d`:
+`apps/web/features/units/reader.tsx` supplies nested current-chapter navigation, previous/next, progress, persisted
+12–32 px text sizes and a chapter-language choice; `components/book-content-structure-editor.tsx` supplies nested
+parts/chapters and moves. The separate `legacy-final` reference at `1ac6ed6e0668` adds size/measure/typeface/indent/
+CJK controls in `apps/web/features/work-page/reader.tsx` and `reader-settings.ts`, plus author creation, movement,
+private save and explicit saved-text publication in `features/studio/{chapter-list,chapter-editor,publish-dialog}`.
+This is a source comparison, not observed legacy runtime or completed mounted parity. The current native frozen
+publication supplies body language/direction; an alternate translated-chapter chooser remains a producer/Studio
+handoff and is not simulated by changing the reader's interface locale.
+
+The current implementation improves the older per-chapter publication flow with one selected frozen TOC and exact
+body revisions, stable occurrence links after moves, and body-free private checkpoint metadata. Its native/browser
+journey source pins private later drafts, exact bytes, moved links and independent checkpoint readback; only actual
+execution establishes those outcomes. External comparators inform navigation: [Pressbooks](https://guide.pressbooks.com/chapter/organize/)
+keeps parts, chapters and visibility explicit, [GitBook](https://gitbook.com/docs/publish/site-redirects) retains page
+references through moves, and [Thorium](https://thorium.edrlab.org/en/docs/400_ressources/402_keyboard-shortcuts/)
+distinguishes TOC/current location and reader focus. Those comparisons do not establish frozen historical bodies
+or REZICS progress privacy.
+
 ## Bounds and evidence
 
 Decision: the Subject catalogue chooser retains eight observed predecessor coordinates plus current/staged

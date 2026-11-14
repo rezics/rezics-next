@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { act, StrictMode } from 'react';
 import type { Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -58,6 +58,7 @@ const { HostedBookReader } = await import('../src/books/reader/hosted-book-reade
 const { NativeHostedBookReader } = await import('../src/books/reader/native-hosted-book-reader');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
+const { bookDisplayStorageKey } = await import('../src/books/reader/display-settings');
 
 let root: Root | undefined;
 let host: HTMLElement;
@@ -68,6 +69,7 @@ afterEach(async () => {
   client?.clear();
   window.document.body.replaceChildren();
   window.getSelection()?.removeAllRanges();
+  window.localStorage.removeItem(bookDisplayStorageKey);
 });
 afterAll(async () => {
   mock.module('@tanstack/react-start', () => actualStart);
@@ -2084,5 +2086,87 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
   } finally {
     mock.module('../src/books/reader/native-visit', () => actualVisit);
     mock.module('../src/books/reader/native-read', () => actualRead);
+  }
+});
+
+test('Book reading display persists locally without replacing exact content or reading another body', async () => {
+  const book = createIllustrativeHostedBook();
+  const admitted = await book.ready;
+  const original = JSON.stringify(admitted.exactDocument);
+  const source = observed(book.source);
+  const address = await book.chapter();
+  await mount(source, address);
+  const article = host.querySelector('article')!;
+  const document = article.querySelector('.post-reading-document');
+  const content = document?.innerHTML;
+  expect(article.dataset.size).toBe('17');
+  expect(article.dataset.face).toBe('sans');
+  await click(host.querySelector<HTMLButtonElement>(`button[aria-label="${m.book_reader_display_larger()}"]`)!);
+  await click(button(m.book_reader_display_narrow()));
+  await click(button(m.book_reader_display_serif()));
+  await click(button(m.book_reader_display_indent()));
+  expect(article.dataset.size).toBe('18');
+  expect(article.dataset.width).toBe('narrow');
+  expect(article.dataset.face).toBe('serif');
+  expect(article.dataset.indent).toBe('true');
+  expect(article.querySelector('.post-reading-document')).toBe(document);
+  expect(document?.innerHTML).toBe(content);
+  expect(JSON.stringify(admitted.exactDocument)).toBe(original);
+  expect(source.read).toHaveBeenCalledTimes(1);
+  expect(source.read.mock.calls[0]![0].address).toEqual(address);
+  const saved = window.localStorage.getItem(bookDisplayStorageKey)!;
+  expect(Object.keys(JSON.parse(saved)).sort()).toEqual([
+    'face',
+    'indent',
+    'punctuation',
+    'size',
+    'spacing',
+    'version',
+    'width',
+  ]);
+  expect(saved).not.toContain(address.selection.occurrenceId);
+  expect(saved).not.toContain(address.selection.body.sha256);
+
+  await act(async () => root?.unmount());
+  root = undefined;
+  client.clear();
+  host.remove();
+  await mount(source, address);
+  expect(host.querySelector('article')?.dataset.size).toBe('18');
+  expect(host.querySelector('article')?.dataset.width).toBe('narrow');
+  expect(host.querySelector('article')?.dataset.face).toBe('serif');
+  await click(button(m.book_reader_display_reset()));
+  expect(host.querySelector('article')?.dataset.size).toBe('17');
+  expect(host.querySelector('article')?.dataset.face).toBe('sans');
+  expect(JSON.stringify(admitted.exactDocument)).toBe(original);
+});
+
+test('Book reading display remains usable with blocked storage and bounds text size choices', async () => {
+  const book = createIllustrativeHostedBook();
+  await book.ready;
+  const source = observed(book.source);
+  const read = spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+    throw new Error('Storage denied');
+  });
+  const write = spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+    throw new Error('Storage denied');
+  });
+  try {
+    await mount(source, await book.chapter());
+    expect(host.textContent).toContain(m.book_reader_display_unavailable());
+    const smaller = host.querySelector<HTMLButtonElement>(`button[aria-label="${m.book_reader_display_smaller()}"]`)!;
+    const larger = host.querySelector<HTMLButtonElement>(`button[aria-label="${m.book_reader_display_larger()}"]`)!;
+    for (let index = 0; index < 20; index++) await click(larger);
+    expect(host.querySelector('article')?.dataset.size).toBe('32');
+    expect(larger.disabled).toBe(true);
+    for (let index = 0; index < 20; index++) await click(smaller);
+    expect(host.querySelector('article')?.dataset.size).toBe('12');
+    expect(smaller.disabled).toBe(true);
+    expect(source.read).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('article')?.textContent).toContain('The keeper opened the eastern shutters.');
+    expect(host.textContent).toContain(m.book_reader_display_unavailable());
+  } finally {
+    read.mockRestore();
+    write.mockRestore();
   }
 });
