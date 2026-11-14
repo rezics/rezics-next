@@ -36,6 +36,11 @@ import {
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const short = (path: string) => relative(process.cwd(), path);
+const tmuxBinary = [process.env.TMUX, '/usr/bin/tmux', '/bin/tmux', 'tmux'].find((candidate) => {
+  if (!candidate) return false;
+  const result = spawnSync(candidate, ['-V'], { encoding: 'utf8' });
+  return result.status === 0;
+});
 
 function fixture(extra: NodeJS.ProcessEnv = {}) {
   const temporary = temporaryDirectory();
@@ -111,7 +116,8 @@ function installFakeWebSocketCodex(stateDirectory: string): string {
 }
 
 function startIsolatedTmux(socket: string, session: string, cwd: string): void {
-  const result = spawnSync('tmux', ['-u', '-S', socket, 'new-session', '-d', '-s', session, '-c', cwd, 'sleep', '300'], {
+  if (!tmuxBinary) throw new Error('tmux fixture is unavailable');
+  const result = spawnSync(tmuxBinary, ['-u', '-S', socket, 'new-session', '-d', '-s', session, '-c', cwd, 'sleep', '300'], {
     encoding: 'utf8',
   });
   if (result.status !== 0)
@@ -119,7 +125,8 @@ function startIsolatedTmux(socket: string, session: string, cwd: string): void {
 }
 
 function tmux(socket: string, ...argv: string[]): string {
-  const result = spawnSync('tmux', ['-u', '-S', socket, ...argv], { encoding: 'utf8' });
+  if (!tmuxBinary) throw new Error('tmux fixture is unavailable');
+  const result = spawnSync(tmuxBinary, ['-u', '-S', socket, ...argv], { encoding: 'utf8' });
   if (result.status !== 0)
     throw new Error(result.error?.message || result.stderr || `tmux ${argv.join(' ')} exited ${result.status}`);
   return result.stdout.trim();
@@ -231,7 +238,10 @@ test('the app-server a host owns exits with the host', async () => {
     await host.ready;
     const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
     expect(started.code).toBe(0);
-    server = children(host.pid)[0];
+    const registry = JSON.parse(readFileSync(join(f.path, 'manager-app-servers.json'), 'utf8')) as {
+      identity: ProcessIdentity;
+    }[];
+    server = registry[0]?.identity;
     expect(server).toBeDefined();
     host.child.kill('SIGTERM');
     await host.exited;
@@ -285,7 +295,7 @@ test('a host that finds a recorded app-server of a dead host stops it before res
   }
 }, 15_000);
 
-test('a routine Goal host restart keeps the pool server endpoint and its tmux viewer', async () => {
+test.skipIf(!tmuxBinary)('a routine Goal host restart keeps the pool server endpoint and its tmux viewer', async () => {
   const f = fixture();
   const tmuxDirectory = join(process.cwd(), '.temp');
   mkdirSync(tmuxDirectory, { recursive: true });
@@ -400,7 +410,8 @@ test('a routine Goal host restart keeps the pool server endpoint and its tmux vi
   } finally {
     await cleanHosted(f.path, second);
     await cleanHosted(f.path, first);
-    if (existsSync(tmuxSocket)) spawnSync('tmux', ['-u', '-S', tmuxSocket, 'kill-server'], { stdio: 'ignore' });
+    if (existsSync(tmuxSocket) && tmuxBinary)
+      spawnSync(tmuxBinary, ['-u', '-S', tmuxSocket, 'kill-server'], { stdio: 'ignore' });
     rmSync(tmuxSocket, { force: true });
     f.close();
   }

@@ -207,12 +207,34 @@ test('maintenance reaps recorded groups in deleted worktrees and spares workers 
     const identities = children.map((child) => processIdentity(child.pid!)!);
     const runtime = {
       stateDirectory: dir.path,
+      settings: {
+        stateDirectory: dir.path,
+        worktreeRoot: join(dir.path, 'trees'),
+        mainCheckout: dir.path,
+      },
       store: {
-        tasks: () => [
-          { id: 'gone', worktree: join(dir.path, 'deleted') },
-          { id: 'kept', worktree: retained },
+        bootstrapMaintenanceProcesses: () => ({ examined: 0, complete: true }),
+        reapMaintenanceCandidates: () => [
+          {
+            ticket: 1,
+            kind: 'reap',
+            taskId: 'gone',
+            attempt: 1,
+            worktree: join(dir.path, 'deleted'),
+            process: identities[0],
+          },
+          {
+            ticket: 2,
+            kind: 'reap',
+            taskId: 'kept',
+            attempt: 1,
+            worktree: retained,
+            process: identities[1],
+          },
         ],
-        attempts: (id: string) => [{ process: identities[id === 'gone' ? 0 : 1] }],
+        completeMaintenanceCandidates: () => {},
+        bootstrapMaintenanceTasks: () => ({ examined: 0, complete: true }),
+        worktreeMaintenanceCandidates: () => [],
       },
     } as unknown as Runtime;
     expect(await runMaintenance('reap', runtime)).toBe(0);
