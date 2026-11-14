@@ -40,14 +40,18 @@ test('expired health, total, outgoing and queued reads release capacity and reta
       ['projection_unready', (deadline: number) => requireFollowCountHealth(pool, deadline), 1],
       ['consumer_lag_unavailable', (deadline: number) => requireFollowCountHealth(pool, deadline), 2],
       ['total_unavailable', blockedCountRead('SELECT total FROM library.follow_count_total LIMIT 1'), 1],
-      ['outgoing_unavailable', blockedCountRead('SELECT observed_live_count FROM library.follow_count_owner LIMIT 1'), 1],
+      [
+        'outgoing_unavailable',
+        blockedCountRead('SELECT observed_live_count FROM library.follow_count_owner LIMIT 1'),
+        1,
+      ],
     ] as const) {
       await driver.fault(fault);
       const cost = { connections: 0, queries: 0 };
       const released = removed();
       const startedAt = Date.now();
       await expect(
-        withQueryAccounting(
+        withQueryAccounting<unknown>(
           {
             connection(dispatch) {
               cost.connections++;
