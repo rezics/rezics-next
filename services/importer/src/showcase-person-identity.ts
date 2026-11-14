@@ -419,9 +419,7 @@ function creditCharacter(row: StatementRow): string | undefined {
   return undefined;
 }
 
-function selectedFacts(
-  rows: readonly StatementRow[] | undefined,
-): readonly Readonly<{
+function selectedFacts(rows: readonly StatementRow[] | undefined): readonly Readonly<{
   content: string;
   qualifiers: readonly string[];
   citations: readonly string[];
