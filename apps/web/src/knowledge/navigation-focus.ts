@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+
 /** One deliberate keyboard action owns orientation until the reader does something else. */
 export class KnowledgeNavigationFocus {
   private pending: { origin: HTMLElement; stop: () => void } | undefined;
@@ -41,4 +43,92 @@ export class KnowledgeNavigationFocus {
     this.pending?.stop();
     this.pending = undefined;
   }
+}
+
+export type KnowledgeNavigationFocusReturn = Readonly<{
+  orientation?: KnowledgeNavigationFocus;
+  documentId?: string;
+}>;
+
+type ReadingSnapshot = Readonly<{ state: string; frontier: Readonly<{ request: object }> }>;
+
+/** Share focus ownership between the inventory, plain outline and organization-enabled outline. */
+export function useKnowledgeNavigationOrientation<Snapshot extends ReadingSnapshot>(
+  snapshot: Snapshot,
+  getSnapshot: () => Snapshot,
+  {
+    embedded = false,
+    restored,
+    selectedDocumentId,
+  }: {
+    embedded?: boolean | undefined;
+    restored?: KnowledgeNavigationFocusReturn | undefined;
+    selectedDocumentId?: string | undefined;
+  } = {},
+) {
+  const boundary = useRef<HTMLElement>(null);
+  const selected = useRef<HTMLAnchorElement>(null);
+  const [orientation] = useState(() => restored?.orientation ?? new KnowledgeNavigationFocus());
+  const requested = useRef<{ snapshot: Snapshot; returning: boolean } | undefined>(
+    restored?.orientation ? { snapshot, returning: true } : undefined,
+  );
+  const owner = useRef({ getSnapshot, embedded, selectedDocumentId });
+  const generation = useRef(0);
+  useLayoutEffect(() => {
+    const lifetime = ++generation.current;
+    return () => {
+      // StrictMode immediately reattaches the same owner; a real departure cancels the transferred request.
+      queueMicrotask(() => {
+        if (generation.current === lifetime) orientation.cancel();
+      });
+    };
+  }, [orientation]);
+  useLayoutEffect(() => {
+    const previous = owner.current;
+    owner.current = { getSnapshot, embedded, selectedDocumentId };
+    if (
+      previous.getSnapshot !== getSnapshot ||
+      previous.embedded !== embedded ||
+      previous.selectedDocumentId !== selectedDocumentId
+    ) {
+      requested.current = undefined;
+      orientation.cancel();
+    }
+    const pending = requested.current;
+    if (!pending) return;
+    if (embedded || snapshot.state === 'retired' || snapshot !== getSnapshot()) {
+      requested.current = undefined;
+      orientation.cancel();
+      return;
+    }
+    if (
+      snapshot.state === 'preparing' &&
+      (snapshot === pending.snapshot ||
+        (pending.returning && snapshot.frontier.request === pending.snapshot.frontier.request))
+    ) {
+      pending.snapshot = snapshot;
+      return;
+    }
+    requested.current = undefined;
+    if (snapshot.state === 'preparing' || snapshot.frontier.request !== pending.snapshot.frontier.request) {
+      orientation.cancel();
+      return;
+    }
+    orientation.arrive(
+      pending.returning && snapshot.state === 'ready' ? (selected.current ?? boundary.current) : boundary.current,
+    );
+  }, [snapshot, getSnapshot, embedded, selectedDocumentId, orientation]);
+
+  const activate = (event: MouseEvent<HTMLElement>, action: () => void) => {
+    requested.current = undefined;
+    orientation.cancel();
+    if (snapshot !== getSnapshot()) return;
+    const orient = orientation.request(event.currentTarget, !embedded && event.detail === 0);
+    action();
+    const started = getSnapshot();
+    if (orient && started !== snapshot && started.state === 'preparing')
+      requested.current = { snapshot: started, returning: false };
+    else orientation.cancel();
+  };
+  return { boundary, selected, activate };
 }

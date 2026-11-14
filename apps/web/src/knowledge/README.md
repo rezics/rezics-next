@@ -149,7 +149,8 @@ Decision: only a focused keyboard page action or deliberate keyboard document re
 pointer actions and ordinary observations preserve the reader's focus. One ephemeral request is cancelled by
 focus movement, pointer use, another key, window departure, a superseding request or owner replacement. Embedded
 navigation leaves orientation to its caller. Each completed current read may orient its result or failure boundary;
-no focus request starts a read. Native page order, sparse continuation, exact-cursor Retry and explicit first-page
+no focus request starts a read. The organization-enabled notebook caller shares this ownership while its
+commands, history and native producer keep their existing state contracts. Native page order, sparse continuation, exact-cursor Retry and explicit first-page
 Restart retain their existing contracts and twenty-row bound.
 
 Sources read before design: this owner document, `navigation-page.tsx`, `navigation.ts`, `navigation-model.ts`,
@@ -158,3 +159,18 @@ navigation stories, the writer/reader and organization contracts in [Knowledge w
 and the read-only main reference index. The separate history/comparison journey retains its own focus ownership.
 Source review covers every request, arrival and cancellation; execution of mounted regressions, typing, builds,
 native document return, and phone/desktop keyboard and visual acceptance belongs to the integration verifier.
+
+A deliberate return consumes the existing one-slot frontier and selected document once, then makes the existing
+fresh native observation. A matching current result restores the selected document link; a missing selection or a
+failed/changed reading orients its boundary only while the keyboard request still owns focus. Pointer return restores
+the position and selection without orientation. Expired or changed coordinates keep explicit Restart; return stores
+no page rows, body, DOM target or private data in persistent storage. StrictMode reattachment preserves the same live
+request, while actual unmount and reader, locale, source, selected target or embedding replacement cancel it.
+
+The mounted source now exercises plain and organization-enabled outlines, embedded ownership, initial/pointer
+non-interference, keyboard success/failure/exact Retry, focus/pointer/key/window cancellation, selection replacement,
+document return with fresh admission, missing returned selections and retired late results. The existing wire
+return assertion now includes its selected document identity; the frontier, expiry and identity assertions remain.
+KeyboardCompletion and KeyboardRetry stories use the actual entry component with illustrative native DTOs admitted
+through the existing adapter; they are not native acceptance recordings. The extra changed paths are the shared
+`navigation-focus.ts`, existing return seam/link, organization caller, and wire return test.

@@ -2,7 +2,7 @@ import { KnowledgeDetails, KnowledgeValue } from './workspace';
 import { BookOpen, FileText } from 'lucide-react';
 import { KnowledgeOrganizationOwner } from './organization-page';
 import type { OrganizationOperations } from './organization-read';
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -13,11 +13,11 @@ import {
   knowledgeNavigationRoot,
   type KnowledgeNavigationFrontier,
   type KnowledgeNavigationReader,
-  type KnowledgeNavigationSnapshot,
 } from './navigation-model';
 import type { KnowledgeNavigationAddress } from './navigation-read';
 import { KnowledgeNavigationReturn } from './navigation-return';
-import { KnowledgeNavigationFocus } from './navigation-focus';
+import { useKnowledgeNavigationOrientation } from './navigation-focus';
+import type { KnowledgeNavigationRestoration } from './navigation-return';
 import { knowledgeNavigationControl, knowledgeNavigationLink } from './navigation-return-link';
 
 export type KnowledgeNavigationAccess = 'available' | 'preparing' | 'denied' | 'unavailable' | 'signed-out';
@@ -170,13 +170,14 @@ function KnowledgeNavigationOwner({
   returning?: KnowledgeNavigationReturn | undefined;
 }) {
   const [initialized, setInitialized] = useState(false);
-  const initial = useRef<{ frontier: KnowledgeNavigationFrontier; expired: boolean }>(null);
+  const initial = useRef<KnowledgeNavigationRestoration & { frontier: KnowledgeNavigationFrontier }>(null);
   const [reading, setReading] = useState<KnowledgeNavigationReading>();
   useLayoutEffect(() => {
     if (!initial.current) {
       const restored = address.kind === 'outline' ? returning?.take(binding, address.notebookId) : undefined;
       if (address.kind === 'owned') returning?.clear();
       initial.current = {
+        ...restored,
         frontier: restored?.frontier ?? knowledgeNavigationRoot(address),
         expired: restored?.expired ?? false,
       };
@@ -210,6 +211,9 @@ function KnowledgeNavigationOwner({
         current={operations.current}
         subscribeRetirement={operations.subscribeRetirement}
         returning={returning}
+        restored={initial.current}
+        embedded={embedded}
+        selectedDocumentId={selectedDocumentId}
       />
     );
   if (!reading) return <p role="status">{m.knowledge_navigation_preparing({}, { locale: locale as never })}</p>;
@@ -219,13 +223,15 @@ function KnowledgeNavigationOwner({
       locale={locale}
       binding={binding}
       returning={returning}
-      selectedDocumentId={selectedDocumentId}
+      selectedDocumentId={selectedDocumentId ?? initial.current?.documentId}
+      restored={initial.current ?? undefined}
       embedded={embedded}
     />
   );
 }
 
 function KnowledgeNavigationRows({
+  restored,
   reading,
   locale,
   binding,
@@ -235,6 +241,7 @@ function KnowledgeNavigationRows({
 }: {
   selectedDocumentId?: string | undefined;
   embedded?: boolean | undefined;
+  restored?: KnowledgeNavigationRestoration | undefined;
   reading: KnowledgeNavigationReading;
   locale: string;
   binding: string;
@@ -242,35 +249,11 @@ function KnowledgeNavigationRows({
 }) {
   const snapshot = useSyncExternalStore(reading.subscribe, reading.getSnapshot, reading.getSnapshot);
   const options = { locale: locale as never };
-  const focus = useRef<HTMLElement>(null);
-  const [orientation] = useState(() => new KnowledgeNavigationFocus());
-  const requested = useRef<KnowledgeNavigationSnapshot | null>(null);
-  useLayoutEffect(() => () => orientation.cancel(), [orientation]);
-  useLayoutEffect(() => {
-    const pending = requested.current;
-    if (!pending || snapshot === pending) return;
-    requested.current = null;
-    if (
-      embedded ||
-      snapshot.state === 'preparing' ||
-      snapshot.state === 'retired' ||
-      snapshot.frontier.request !== pending.frontier.request
-    ) {
-      orientation.cancel();
-      return;
-    }
-    orientation.arrive(focus.current);
-  }, [snapshot, embedded, orientation]);
-  const activate = (event: MouseEvent<HTMLElement>, action: () => void) => {
-    requested.current = null;
-    orientation.cancel();
-    if (snapshot !== reading.getSnapshot()) return;
-    const orient = orientation.request(event.currentTarget, !embedded && event.detail === 0);
-    action();
-    const started = reading.getSnapshot();
-    if (orient && started !== snapshot && started.state === 'preparing') requested.current = started;
-    else orientation.cancel();
-  };
+  const { boundary, selected, activate } = useKnowledgeNavigationOrientation(snapshot, reading.getSnapshot, {
+    embedded,
+    restored,
+    selectedDocumentId,
+  });
   const actions = reading.actions(snapshot);
   const { page, frontier } = snapshot;
   const outline = frontier.request.kind === 'outline';
@@ -281,7 +264,7 @@ function KnowledgeNavigationRows({
   };
   return (
     <section
-      ref={focus}
+      ref={boundary}
       tabIndex={-1}
       className="min-w-0 space-y-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       aria-label={m.knowledge_navigation_reading({}, options)}
@@ -368,6 +351,7 @@ function KnowledgeNavigationRows({
                             params={{ notebookId: page.notebookId, documentId: row.documentId }}
                             preload={false}
                             className={knowledgeNavigationLink}
+                            ref={row.documentId === selectedDocumentId ? selected : undefined}
                             aria-current={row.documentId === selectedDocumentId ? 'page' : undefined}
                             onClick={(event) => {
                               if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)

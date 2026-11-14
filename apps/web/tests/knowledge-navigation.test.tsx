@@ -8,6 +8,7 @@ import type {
   KnowledgeNavigationResult,
 } from '../src/knowledge/navigation-read';
 import type { KnowledgeNavigationOperations, KnowledgeNavigationAccess } from '../src/knowledge/navigation-page';
+import type { OrganizationReadResult, OrganizationRequest } from '../src/knowledge/organization-read';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -51,9 +52,18 @@ type Entry = {
   binding: string;
   access: KnowledgeNavigationAccess;
   operations: KnowledgeNavigationOperations;
+  embedded?: boolean;
+  selectedDocumentId?: string;
 };
 
-async function mount(read: KnowledgeNavigationOperations['read'], address: KnowledgeNavigationAddress = rootAddress) {
+async function mount(
+  read: KnowledgeNavigationOperations['read'],
+  address: KnowledgeNavigationAddress = rootAddress,
+  {
+    organization = false,
+    embedded = false,
+  }: { organization?: boolean | undefined; embedded?: boolean | undefined } = {},
+) {
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const returning = knowledgeNavigationReturn(client);
@@ -62,7 +72,24 @@ async function mount(read: KnowledgeNavigationOperations['read'], address: Knowl
     locale: 'en',
     binding: 'signed-in-session-csrf-exposure',
     access: 'available',
-    operations: { read },
+    embedded,
+    operations: {
+      read,
+      ...(organization
+        ? {
+            organization: {
+              read: (request: OrganizationRequest) =>
+                read(request as KnowledgeNavigationRequest) as Promise<OrganizationReadResult>,
+              prepare: async () => {
+                throw new Error('Navigation does not prepare a write');
+              },
+              move: async () => {
+                throw new Error('Navigation does not move a placement');
+              },
+            },
+          }
+        : {}),
+    },
   };
   let update!: (next: Entry) => void;
   function Visit() {
@@ -92,7 +119,10 @@ async function mount(read: KnowledgeNavigationOperations['read'], address: Knowl
     history: createMemoryHistory({ initialEntries: [`/knowledge/notebooks/${notebookId}`] }),
   });
   const host = document.createElement('div');
-  document.body.append(host);
+  const elsewhere = document.createElement('button');
+  elsewhere.textContent = 'Continue another reading';
+  document.body.append(host, elsewhere);
+  elsewhere.focus();
   const react = createRoot(host);
   await act(async () => {
     react.render(
@@ -103,17 +133,31 @@ async function mount(read: KnowledgeNavigationOperations['read'], address: Knowl
       </StrictMode>,
     );
   });
-  const click = async (label: string) => {
-    const target = [...host.querySelectorAll<HTMLElement>('button,a')].find(
-      (node) => node.textContent?.trim() === label || node.textContent?.trim().startsWith(label + ':'),
-    );
+  const click = async (label: string | HTMLElement, keyboard = false) => {
+    const target =
+      typeof label === 'string'
+        ? [...host.querySelectorAll<HTMLElement>('button,a')].find(
+            (node) => node.textContent?.trim() === label || node.textContent?.trim().startsWith(label + ':'),
+          )
+        : label;
     if (!target) throw new Error(`Missing navigation control: ${label}`);
     await act(async () => {
-      target.click();
+      if (keyboard) {
+        target.focus();
+        target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        target.click();
+      } else {
+        target.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true }));
+        target.focus();
+        target.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+      }
     });
   };
   return {
     host,
+    elsewhere,
+    key: (label: string | HTMLElement) => click(label, true),
+    boundary: () => host.querySelector<HTMLElement>('section[aria-busy]')!,
     client,
     returning,
     router,
@@ -132,6 +176,7 @@ async function mount(read: KnowledgeNavigationOperations['read'], address: Knowl
       await act(async () => react.unmount());
       client.clear();
       host.remove();
+      elsewhere.remove();
     },
   };
 }
@@ -181,6 +226,7 @@ test('mounted replacement retires late results for session, CSRF, exposure, loca
   };
   const view = await mount(read);
   try {
+    await act(async () => pending.at(-1)!(outline(rootAddress, { next: 'retired-frontier' })));
     for (const changes of [
       { binding: 'replacement-viewer' },
       { binding: 'replacement-csrf' },
@@ -189,6 +235,7 @@ test('mounted replacement retires late results for session, CSRF, exposure, loca
       { operations: { read } },
       { address: { kind: 'outline' as const, notebookId: id(11), parentPlacementId: null } },
     ]) {
+      await view.key(view.host.querySelector<HTMLElement>('section > button')!);
       const stale = pending.at(-1)!;
       const before = calls.length;
       await view.show(changes);
@@ -197,12 +244,16 @@ test('mounted replacement retires late results for session, CSRF, exposure, loca
         stale(outline(rootAddress));
       });
       expect(view.host.textContent).not.toContain('Private supplied note');
+      await act(async () => pending.at(-1)!(outline(rootAddress, { next: 'retired-frontier' })));
+      expect(document.activeElement).not.toBe(view.boundary());
     }
+    await view.key(view.host.querySelector<HTMLElement>('section > button')!);
     await view.show({ access: 'denied' });
     await act(async () => {
       pending.at(-1)!(outline(rootAddress));
     });
     expect(view.host.querySelectorAll('li')).toHaveLength(0);
+    expect(document.activeElement).not.toBe(view.boundary());
   } finally {
     await view.dispose();
   }
@@ -230,7 +281,7 @@ test('editor return re-admits the same child frontier before rows, then exposes 
     await view.click('Open document');
     expect(view.host.textContent).toContain('Exact existing editor route');
     expect(view.host.textContent).not.toContain('Child page');
-    await view.click('Return to notebook reading');
+    await view.key('Return to notebook reading');
     expect(calls).toHaveLength(3);
     expect(calls[2]).toEqual(calls[1]);
     expect(view.host.textContent).not.toContain('Child page');
@@ -238,6 +289,7 @@ test('editor return re-admits the same child frontier before rows, then exposes 
       readmit(outline(calls[2]!, { structureRevisionId: id(31) }));
     });
     expect(view.host.textContent).toContain('This reading changed');
+    expect(document.activeElement).toBe(view.boundary());
     expect(view.host.querySelectorAll('li')).toHaveLength(0);
     await view.click('Restart this parent');
     expect(calls[3]).toEqual({ ...rootAddress, parentPlacementId: placementId });
@@ -270,3 +322,109 @@ test('inventory reloads once and changed/expired returns require explicit restar
     await view.dispose();
   }
 });
+
+for (const configuration of [
+  { organization: false },
+  { organization: true },
+  { embedded: true },
+  { organization: true, embedded: true },
+]) {
+  test(`navigation orientation follows explicit keyboard completion and failure ${JSON.stringify(configuration)}`, async () => {
+    const calls: KnowledgeNavigationRequest[] = [];
+    let resolve!: (result: KnowledgeNavigationResult) => void;
+    const view = await mount(
+      (request) => {
+        calls.push(request);
+        return new Promise<KnowledgeNavigationResult>((done) => {
+          resolve = done;
+        });
+      },
+      rootAddress,
+      configuration,
+    );
+    const complete = async (result: KnowledgeNavigationResult) => act(async () => resolve(result));
+    try {
+      expect(document.activeElement).toBe(view.elsewhere);
+      await complete(outline(rootAddress, { next: 'first-frontier' }));
+      expect(document.activeElement).toBe(view.elsewhere);
+      await view.click('More');
+      await complete(outline(calls.at(-1)!, { placements: [], next: 'sparse-frontier' }));
+      expect(document.activeElement).not.toBe(view.boundary());
+      await view.key('More');
+      await complete({ state: 'unavailable' });
+      expect(document.activeElement === view.boundary()).toBe(!configuration.embedded);
+      await view.key('Retry this page');
+      expect(calls.at(-1)).toEqual(calls.at(-2));
+      expect(calls.at(-1)?.cursor).toBe('sparse-frontier');
+      await complete(outline(calls.at(-1)!));
+      expect(document.activeElement === view.boundary()).toBe(!configuration.embedded);
+      await view.key('Explore children');
+      view.elsewhere.focus();
+      await complete(outline(calls.at(-1)!, { next: 'continuing-child' }));
+      await view.show({});
+      expect(document.activeElement).toBe(view.elsewhere);
+      for (const cancel of [
+        () => view.elsewhere.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true })),
+        () => document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true })),
+        () => window.dispatchEvent(new dom.window.Event('blur')),
+        () => view.show({ selectedDocumentId: id(90) }),
+      ]) {
+        await view.key('More');
+        await cancel();
+        await complete(outline(calls.at(-1)!, { next: 'continuing-child' }));
+        expect(document.activeElement).not.toBe(view.boundary());
+      }
+      expect(calls).toHaveLength(9);
+    } finally {
+      await view.dispose();
+    }
+  });
+}
+
+for (const organization of [false, true]) {
+  test(`document return re-admits the saved page and selection with cancellable orientation (${organization})`, async () => {
+    for (const outcome of ['keyboard', 'pointer', 'moved', 'missing', 'unavailable'] as const) {
+      const calls: KnowledgeNavigationRequest[] = [];
+      let resolve!: (result: KnowledgeNavigationResult) => void;
+      const view = await mount(
+        async (request) => {
+          calls.push(request);
+          if (calls.length === 1) return outline(request, { next: 'selected-page' });
+          if (calls.length === 2) return outline(request);
+          return new Promise<KnowledgeNavigationResult>((done) => {
+            resolve = done;
+          });
+        },
+        rootAddress,
+        { organization },
+      );
+      try {
+        await view.click('More');
+        await view.click('Open document');
+        if (outcome === 'pointer') await view.click('Return to notebook reading');
+        else await view.key('Return to notebook reading');
+        expect(calls).toHaveLength(3);
+        expect(calls[2]).toEqual(calls[1]);
+        expect(view.host.querySelectorAll('li')).toHaveLength(0);
+        if (outcome === 'moved') view.elsewhere.focus();
+        await act(async () =>
+          resolve(
+            outcome === 'unavailable'
+              ? { state: 'unavailable' }
+              : outline(calls[2]!, { placements: outcome === 'missing' ? [] : [placement] }),
+          ),
+        );
+        const selected = view.host.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
+        expect(Boolean(selected)).toBe(outcome !== 'missing' && outcome !== 'unavailable');
+        if (outcome === 'keyboard') expect(document.activeElement).toBe(selected);
+        else if (outcome === 'missing' || outcome === 'unavailable')
+          expect(document.activeElement).toBe(view.boundary());
+        else expect(document.activeElement).not.toBe(view.boundary());
+        if (outcome === 'moved') expect(document.activeElement).toBe(view.elsewhere);
+        if (outcome === 'pointer') expect(document.activeElement).not.toBe(selected);
+      } finally {
+        await view.dispose();
+      }
+    }
+  });
+}

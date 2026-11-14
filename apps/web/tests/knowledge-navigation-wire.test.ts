@@ -172,7 +172,11 @@ test('editor returns consume a bounded frontier once; expiry and identity replac
   expect(returning.take('viewer-session-locale', notebookId)).toBeUndefined(); // Exact address openings reload root.
   returning.save('viewer-session-locale', address, frontier);
   returning.returnTo('viewer-session-locale', address);
-  expect(returning.take('viewer-session-locale', notebookId)).toEqual({ frontier, expired: false });
+  expect(returning.take('viewer-session-locale', notebookId)).toEqual({
+    frontier,
+    documentId: address.documentId,
+    expired: false,
+  });
   returning.save('viewer-session-locale', address, frontier);
   returning.returnTo('viewer-session-locale', address);
   now += 15 * 60_000;
