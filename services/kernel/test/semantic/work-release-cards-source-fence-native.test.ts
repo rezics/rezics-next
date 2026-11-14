@@ -4,7 +4,13 @@ import type { BatchStatement, Source } from '@rezics/definitions/bulk';
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { createReleasedDiscoveryFixture, discoveryKey, discoveryStatement, type CreatedSubject, type ReleasedDiscoveryFixture } from '../support/released-discovery.ts';
+import {
+  createReleasedDiscoveryFixture,
+  discoveryKey,
+  discoveryStatement,
+  type CreatedSubject,
+  type ReleasedDiscoveryFixture,
+} from '../support/released-discovery.ts';
 
 const fixturePromise = createReleasedDiscoveryFixture({ version: 1 });
 let fixture: ReleasedDiscoveryFixture;
@@ -16,7 +22,13 @@ function body(response: HttpResponse, status = 200) {
 }
 
 async function card(work: CreatedSubject, edition: CreatedSubject) {
-  const result = body(await fixture.request('anonymous', 'GET', `/v1/subjects/${work.id}/links?property=schema:exampleOfWork&limit=20&language=en`));
+  const result = body(
+    await fixture.request(
+      'anonymous',
+      'GET',
+      `/v1/subjects/${work.id}/links?property=schema:exampleOfWork&limit=20&language=en`,
+    ),
+  );
   expect(result.workReleaseCards.state).toBe('available');
   return (result.workReleaseCards.cards as Record<string, any>[]).find(({ subject }) => subject === edition.id)!;
 }
@@ -29,7 +41,12 @@ function importedStatement(property: string, content: unknown, citation: string)
   };
 }
 
-async function importAndAdopt(importer: Awaited<ReturnType<ReleasedDiscoveryFixture['reviewedCatalogueOperator']>>, edition: CreatedSubject, source: Source, attempt: number) {
+async function importAndAdopt(
+  importer: Awaited<ReturnType<ReleasedDiscoveryFixture['reviewedCatalogueOperator']>>,
+  edition: CreatedSubject,
+  source: Source,
+  attempt: number,
+) {
   const facts = [
     ['schema:datePublished', dateValue, `https://example.org/card-source/${attempt}/date`],
     ['schema:inLanguage', 'ja', `https://example.org/card-source/${attempt}/language`],
@@ -58,7 +75,17 @@ async function importAndAdopt(importer: Awaited<ReturnType<ReleasedDiscoveryFixt
       { context: GLOBAL_CONTEXT, expected_head: row.head },
       randomUUID(),
     );
-    await importer.adoptReviewedCandidates(edition.id, { context: GLOBAL_CONTEXT, property, mode: 'replace', selection: [{ candidate, rank: 'normal' }], expected_head: page.adoption?.head ?? null }, randomUUID());
+    await importer.adoptReviewedCandidates(
+      edition.id,
+      {
+        context: GLOBAL_CONTEXT,
+        property,
+        mode: 'replace',
+        selection: [{ candidate, rank: 'normal' }],
+        expected_head: page.adoption?.head ?? null,
+      },
+      randomUUID(),
+    );
   }
   return { dateCitation: facts[0][2], languageCitation: facts[1][2] };
 }
@@ -72,7 +99,20 @@ function expectFenced(card: Record<string, any>, citations: { dateCitation: stri
 }
 
 async function takedown(source: Source) {
-  body(await fixture.request('alice', 'POST', '/v1/sourceFences:takedown', { source: source.source, externalId: source.external_id, fieldGroup: source.field_group, reason: 'Release-card native source-fence acceptance' }, discoveryKey()));
+  body(
+    await fixture.request(
+      'alice',
+      'POST',
+      '/v1/sourceFences:takedown',
+      {
+        source: source.source,
+        externalId: source.external_id,
+        fieldGroup: source.field_group,
+        reason: 'Release-card native source-fence acceptance',
+      },
+      discoveryKey(),
+    ),
+  );
 }
 
 afterAll(async () => (fixture ??= await fixturePromise).close());
