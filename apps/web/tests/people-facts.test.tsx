@@ -10,6 +10,7 @@ import { peopleFactsExample } from '../src/features/catalogue/people-facts/examp
 import { personGroups, personScalarFields } from '../src/features/catalogue/person-reader/model';
 import { admitFacts, factVisitBounds } from '../src/features/catalogue/people-facts/model';
 import { readValueExplanation, type ValueRead, type ValueRequest } from '../src/features/catalogue/value-explanation';
+import type { ProfileReading } from '../src/features/catalogue/person-reader/contract';
 
 let read: (request: ValueRequest) => Promise<ValueRead> = async () => ({ kind: 'unavailable' });
 const requests: ValueRequest[] = [];
@@ -27,11 +28,11 @@ mock.module('../src/features/catalogue/value-explanation-actions', () => ({
     return read(data);
   },
 }));
-const { PersonReader } = await import('../src/features/catalogue/person-reader/reader');
-const { CharacterReader } = await import('../src/features/pages/showcase-people/character');
+const { PersonReader, PersonOverview } = await import('../src/features/catalogue/person-reader/reader');
+const { CharacterReader, CharacterOverview } = await import('../src/features/pages/showcase-people/character');
 const { m } = await import('../src/paraglide/messages.js');
 
-async function mounted(character = false) {
+async function mounted(character = false, overview = false) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(require.resolve('happy-dom', { paths: [require.resolve('@puckeditor/core')] }));
   const window = new Window({ url: 'https://site.test/en/profile' });
@@ -60,10 +61,19 @@ async function mounted(character = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null, subject: null });
   const fixture = peopleFactsExample(character);
-  let reading = { public: fixture.read, release: fixture.release, documents: fixture.documents, locale: 'en' };
+  let source = {};
+  let reading: ProfileReading = {
+    public: fixture.read,
+    release: fixture.release,
+    documents: fixture.documents,
+    locale: 'en',
+  };
   const draw = () =>
     act(async () => {
-      root.render(h(QueryClientProvider, { client }, h(character ? CharacterReader : PersonReader, reading)));
+      const body = overview
+        ? h(character ? CharacterOverview : PersonOverview, { ...reading, source, viewer: null })
+        : h(character ? CharacterReader : PersonReader, reading);
+      root.render(h(QueryClientProvider, { client }, body));
     });
   const click = (element: Element) =>
     act(async () => {
@@ -80,7 +90,11 @@ async function mounted(character = false) {
     draw,
     click,
     button,
+    preferences(reader: ProfileReading['reader']) {
+      reading = { ...reading, reader };
+    },
     replace(publicRead = structuredClone(fixture.read)) {
+      source = {};
       reading = { ...reading, public: publicRead };
     },
     async close() {
@@ -95,11 +109,17 @@ async function mounted(character = false) {
   };
 }
 
-test('Person and Character windows preserve duplicate assertions, evidence and keyboard position without native reads', async () => {
+test('Person and Character overviews retain facts, selection and evidence through first preferences, then retire on replacement', async () => {
   for (const character of [false, true]) {
-    const page = await mounted(character);
+    const page = await mounted(character, true);
     try {
       const { host, fixture, click, button, window } = page;
+      fixture.rows[21]!.qualifiers.push({
+        property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+        value: { type: 'value', content: { amount: '+1', unit: '1' } },
+      });
+      page.replace(fixture.read);
+      await page.draw();
       requests.length = 0;
       const field = host.querySelector(`[id="profile-fact-${encodeURIComponent(fixture.property)}"]`)!.parentElement!;
       const disclosure = field.closest('details');
@@ -115,6 +135,7 @@ test('Person and Character windows preserve duplicate assertions, evidence and k
       await click(button(m.people_facts_browse(), field));
       await click(button(m.people_facts_next(), field));
       expect(field.textContent).toContain('Condition 21');
+      expect(field.textContent).not.toContain('Condition 22');
       expect(field.textContent).not.toContain('Condition 43');
       const input = field.querySelector('input')!;
       await act(async () => {
@@ -152,6 +173,14 @@ test('Person and Character windows preserve duplicate assertions, evidence and k
       expect(host.querySelector('h1')).toBeNull();
       expect(host.textContent).toContain(m.value_denied());
       expect(window.document.activeElement?.getAttribute('data-slot')).toBe('people-fact-visit');
+      const inspection = host.querySelector('[data-slot="people-fact-visit"]');
+      page.preferences({ spoilerLevel: 2, suitability: 'show' });
+      await page.draw();
+      expect(host.querySelector('[data-slot="people-fact-visit"]')).toBe(inspection);
+      expect(field.textContent).toContain('Condition 21');
+      expect(field.textContent).toContain('Condition 22');
+      expect(field.textContent).toContain('https://example.org/biography');
+      expect(requests).toHaveLength(1);
       if (disclosure)
         await act(async () => {
           disclosure.open = false;
@@ -166,6 +195,24 @@ test('Person and Character windows preserve duplicate assertions, evidence and k
       if (disclosure) expect(disclosure.open).toBe(true);
       expect(field.textContent).toContain('Condition 21');
       expect(field.querySelector('input')?.value).toBe('');
+      let finish!: (result: ValueRead) => void;
+      read = () => new Promise((resolve) => (finish = resolve));
+      await click(origin);
+      const oldReturn = button(m.people_facts_return());
+      page.preferences({ spoilerLevel: 2, suitability: 'blur' });
+      await page.draw();
+      page.preferences({ spoilerLevel: 2, suitability: 'show' });
+      await page.draw();
+      await act(async () => finish({ kind: 'denied' }));
+      await click(oldReturn);
+      expect(host.querySelector('[data-slot="people-fact-visit"]')).toBeNull();
+      expect(host.textContent).not.toContain('Condition 21');
+      page.replace();
+      await page.draw();
+      read = async () => ({ kind: 'unavailable' });
+      await click(host.querySelector('a[href*="/value?"]')!);
+      expect(host.textContent).toContain(m.value_error());
+      expect(host.textContent).not.toContain(m.value_denied());
     } finally {
       await page.close();
     }

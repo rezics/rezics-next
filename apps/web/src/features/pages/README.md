@@ -47,15 +47,18 @@ session cache and does not start another session fetch.
 
 The initial unknown/server observation may settle to signed-out for a public source or to that source's matching
 reader. This binds its existing lease without changing its generation, remounting facts or invalidating pending
-callbacks. An initially mismatched admitted reader is unusable. Game passes spoiler preparation separately from its
-address descriptor: undefined uses conservative zero until the first prepared setting; later changes retire the
-source, including returning to an earlier value. Browser observation identity owns credential renewal and A/B/A,
+callbacks. An initially mismatched admitted reader is unusable. Decision: Person, Character and nested PeopleFacts
+pass optional spoiler and suitability preparation through the existing community lifetime, outside source/address
+identity. Undefined keeps conservative rendering; each first prepared preference binds once without restarting
+pending definitions or discarding eligible facts, selected windows or evidence. Game retains its optional spoiler
+preparation. Later changes to either prepared preference retire the source, including returning to an earlier value.
+Browser observation identity owns credential renewal and A/B/A,
 including equal successful session replacement and temporary authority loss between React renders. A current
 observation's first exposure success may prepare; its replacement, invalidation, removal or failure retires the
 reading. Unscoped viewer exposure changes conservatively retire it. Recovery requires a fresh admitted source.
 
 Shared callers reviewed: album tracks; album/music release/location; Person and Character; people facts; community
-regions and connections. Their address descriptors and native admission remain unchanged. The shared mounted
+regions and connections. Their remaining address descriptors and native admission remain unchanged. The shared mounted
 `subject-community-current-retirement.test.tsx` exercises stable preparation callbacks, private-action gating,
 credential/account/exposure retirement and non-revival; the Game view/recovery regressions exercise facts, selected
 evidence, release rows and late results. These are source regressions pending integrated execution.
@@ -64,7 +67,10 @@ fixtures. `subject-community-current-retirement.test.tsx` imports that fixture f
 `subject-community-participation.test.tsx`; its initial-preparation case now expects obsolete bodies to disappear
 after account replacement or a fresh source still admitted for a signed-out reader. Other assertions remain intact.
 Affected caller coverage also includes `album-track-reader-recovery.test.tsx`, `music-release-reader-view.test.tsx`,
-`music-location-reading-recovery.test.tsx` and `person-reader.test.tsx`; their execution remains deferred.
+`music-location-reading-recovery.test.tsx`, `person-reader.test.tsx` and `people-facts.test.tsx`. The existing mounted
+Person/Character cases cover pending definitions, nondefault preparation, conservative gates, retained selection and
+inspection, preference retirement and late-result rejection; their execution remains deferred. Cost remains one
+definitions read per admitted visit, bounded local fact projection and one explicitly selected inspection.
 
 ## Rating presentation
 

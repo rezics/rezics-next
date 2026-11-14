@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { personReaderExample } from '../src/features/catalogue/person-reader/examples';
 import { personGroups, personBounds, type PersonDefinitions } from '../src/features/catalogue/person-reader/model';
+import type { Reader } from '../src/subject/reader';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { PersonReader, PersonOverview } = await import('../src/features/catalogue/person-reader/reader');
@@ -110,7 +111,7 @@ test('unsupported, absent, unknown, withheld and unhydrated values remain distin
   expect(draw(fixture)).not.toContain('Mira directs independent films.');
 });
 
-test('old definition responses, expanded evidence and focused controls retire on source, locale, session, exposure and unmount', async () => {
+test('Person and Character prepare pending definitions once, then retire old responses and focused controls on replacement', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(require.resolve('happy-dom', { paths: [require.resolve('@puckeditor/core')] }));
   const window = new Window({ url: 'https://site.test/en/subjects/person' });
@@ -141,6 +142,7 @@ test('old definition responses, expanded evidence and focused controls retire on
   const fixture = personReaderExample();
   let source = {};
   let locale = 'en';
+  let reader: Reader | undefined;
   let resolve: ((release: PersonDefinitions | null) => void) | undefined;
   const load = () =>
     new Promise<PersonDefinitions | null>((done) => {
@@ -160,12 +162,26 @@ test('old definition responses, expanded evidence and focused controls retire on
             public: fixture.read,
             documents: fixture.documents,
             locale,
+            reader,
             load,
           }),
         ),
       ),
     );
   try {
+    await draw();
+    const preparing = resolve!;
+    reader = { spoilerLevel: 2, suitability: 'show' };
+    await draw();
+    expect(resolve).toBe(preparing);
+    await act(async () => preparing(fixture.release));
+    expect(host.textContent).toContain('Mira directs');
+    reader = { ...reader, spoilerLevel: 1 };
+    await draw();
+    reader = { ...reader, spoilerLevel: 2 };
+    await draw();
+    expect(host.textContent).not.toContain('Mira directs');
+    source = {};
     await draw();
     const old = resolve!;
     source = {};
@@ -197,7 +213,21 @@ test('old definition responses, expanded evidence and focused controls retire on
     expect(host.textContent).not.toContain('Mira directs');
     source = {};
     character = true;
+    reader = undefined;
     fixture.read.subject.type = 'wd:Q95074';
+    await draw();
+    const characterPreparing = resolve!;
+    reader = { spoilerLevel: 2, suitability: 'show' };
+    await draw();
+    expect(resolve).toBe(characterPreparing);
+    await act(async () => characterPreparing(fixture.release));
+    expect(host.querySelector('[data-slot="character-reader-facts"]')).not.toBeNull();
+    reader = { ...reader, suitability: 'blur' };
+    await draw();
+    reader = { ...reader, suitability: 'show' };
+    await draw();
+    expect(host.querySelector('[data-slot="character-reader-facts"]')).toBeNull();
+    source = {};
     await draw();
     const priorCharacter = resolve!;
     source = {};

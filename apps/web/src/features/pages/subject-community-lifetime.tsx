@@ -2,6 +2,7 @@ import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSyncExternalStoreWithSelector } from '../../kernel/use-sync-external-store-with-selector';
 import { browserObservation, type BrowserObservationSnapshot } from '../../session';
+import type { Reader } from '../../subject/reader';
 
 const noSubscribe = () => () => {};
 const UNKNOWN_SNAPSHOT: BrowserObservationSnapshot = { state: 'unknown' };
@@ -142,10 +143,17 @@ type CommunityReadingBinding = {
   generation: number;
   retired: boolean;
   spoiler?: number | undefined;
+  suitability?: Reader['suitability'] | undefined;
 };
 
 function initialBinding(
-  input: { source: object | string; descriptor: string; reader: string | null; spoiler?: number | undefined },
+  input: {
+    source: object | string;
+    descriptor: string;
+    reader: string | null;
+    spoiler?: number | undefined;
+    suitability?: Reader['suitability'] | undefined;
+  },
   environment: CommunityEnvironment,
 ): CommunityReadingBinding {
   return {
@@ -161,8 +169,9 @@ export function useSubjectCommunityReading(input: {
   source: object | string;
   descriptor: string;
   reader: string | null;
-  /** Undefined is conservative initial preparation; the first prepared setting binds this source once. */
+  /** Undefined retains conservative rendering; each first prepared preference binds this source once. */
   spoiler?: number | undefined;
+  suitability?: Reader['suitability'] | undefined;
   queryKey?: readonly unknown[] | undefined;
 }) {
   const client = useContext(QueryClientContext);
@@ -186,15 +195,20 @@ export function useSubjectCommunityReading(input: {
     binding.descriptor === input.descriptor &&
     binding.reader === input.reader &&
     (binding.spoiler === undefined || binding.spoiler === input.spoiler) &&
+    (binding.suitability === undefined || binding.suitability === input.suitability) &&
     binding.environment === environment;
 
   if (binding.source !== input.source) {
     setBinding({ ...initialBinding(input, environment), generation: binding.generation + 1 });
   } else if (!binding.retired && (!identityMatches || !environment.sourceCurrent())) {
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
-  } else if (!binding.retired && binding.spoiler === undefined && input.spoiler !== undefined) {
+  } else if (
+    !binding.retired &&
+    ((binding.spoiler === undefined && input.spoiler !== undefined) ||
+      (binding.suitability === undefined && input.suitability !== undefined))
+  ) {
     // Preparing personal preferences does not remount the public reading or cancel its one pending read.
-    setBinding({ ...binding, spoiler: input.spoiler });
+    setBinding({ ...binding, spoiler: input.spoiler, suitability: input.suitability });
   }
 
   const current = useRef(binding);

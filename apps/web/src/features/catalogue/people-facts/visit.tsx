@@ -50,16 +50,13 @@ function ObservedFacts({ client, ...props }: FactsProps & { client: QueryClient 
 }
 
 function FactsReading({ reading, fields, children, inspectable }: FactsProps & { inspectable: boolean }) {
-  const source = useMemo(() => ({}), [reading.public, reading.release, reading.documents, reading.reader]);
+  const source = useMemo(() => ({}), [reading.public, reading.release, reading.documents]);
   const lifetime = useSubjectCommunityReading({
     source,
     reader: null,
-    descriptor: JSON.stringify([
-      reading.public.subject.id,
-      reading.public.subject.context,
-      reading.locale,
-      reading.reader,
-    ]),
+    spoiler: reading.reader?.spoilerLevel,
+    suitability: reading.reader?.suitability,
+    descriptor: JSON.stringify([reading.public.subject.id, reading.public.subject.context, reading.locale]),
   });
   return (
     <FactVisit

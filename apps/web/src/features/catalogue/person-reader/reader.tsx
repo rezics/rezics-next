@@ -338,12 +338,13 @@ export function PersonOverview({
   const lifetime = useSubjectCommunityReading({
     source,
     reader: viewer,
+    spoiler: reading.reader?.spoilerLevel,
+    suitability: reading.reader?.suitability,
     descriptor: JSON.stringify([
       reading.public.subject.id,
       reading.public.subject.type,
       reading.public.subject.context,
       reading.locale,
-      reading.reader ?? defaultReader,
     ]),
   });
   const heading = useRef<HTMLHeadingElement>(null);

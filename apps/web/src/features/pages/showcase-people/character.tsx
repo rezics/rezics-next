@@ -1,7 +1,6 @@
 import { pickText } from '@rezics/composition';
 import { useContext, useLayoutEffect, useRef } from 'react';
 import { m } from '../../../paraglide/messages.js';
-import { defaultReader } from '../../../subject/reader';
 import { characterGroups } from '../../catalogue/character-profile';
 import { CharacterProfileEntry } from '../../catalogue/character-profile-entry';
 import { CharacterRelationshipsEntry } from '../../catalogue/character-relationships/entry';
@@ -117,12 +116,13 @@ export function CharacterOverview({
   const lifetime = useSubjectCommunityReading({
     source,
     reader: viewer,
+    spoiler: reading.reader?.spoilerLevel,
+    suitability: reading.reader?.suitability,
     descriptor: JSON.stringify([
       reading.public.subject.id,
       reading.public.subject.type,
       reading.public.subject.context,
       reading.locale,
-      reading.reader ?? defaultReader,
       overview?.realm,
       overview?.context,
       overview?.releaseDigest,
