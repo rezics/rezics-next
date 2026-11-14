@@ -195,7 +195,7 @@ export type CanonicalPublication =
   | { readonly state: 'published' | 'basis_changed' | 'incomplete'; readonly work: CanonicalWork };
 import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -213,7 +213,6 @@ import {
 } from './collection-source-native.ts';
 import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
-import { deadlineClient } from './access-port.ts';
 import { creationDeclares } from './access-port.ts';
 import { shareAccount } from './access-port.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
@@ -406,7 +405,7 @@ async function scope(
   l: CollectionSourceLedger,
   observations: LibrarySemanticObservationCapability,
 ) {
-  const [row] = await withConnection(pool, (client) =>
+  const [row] = await withBoundedReadConnection(pool, l.deadline, (client) =>
     query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().scope, [
       metadata.route,
       metadata.collectionId,
@@ -482,8 +481,9 @@ async function current(pool: Pool, input: CanonicalBoundCall, l: CollectionSourc
   return observed && same(observed.basis, input.basis) ? observed : null;
 }
 async function readGeneration(pool: Pool, input: CanonicalSourceRef, generation: string, l: CollectionSourceLedger) {
-  return withConnection(
+  return withBoundedReadConnection(
     pool,
+    l.deadline,
     async (client) =>
       (
         await query<Generation>(client, l, CANONICAL_SOURCE_STATEMENTS().generation, [
@@ -564,7 +564,7 @@ export async function readCanonicalSourceState(pool: Pool, input: CanonicalCall)
   try {
     const observed = await observe(pool, input, l);
     if (!observed) return notReady(l, 'identity');
-    const [head] = await withConnection(pool, (client) =>
+    const [head] = await withBoundedReadConnection(pool, l.deadline, (client) =>
       query<{ generation: string }>(client, l, CANONICAL_SOURCE_STATEMENTS().head, [input.route, input.collectionId]),
     );
     if (!head) return notReady(l, 'unbuilt');
@@ -590,7 +590,7 @@ export async function seekCanonicalSourceGroup(
     const generation = await readGeneration(pool, input, input.generation, l);
     if (!generation || generation.state !== 'complete' || !same(generation.basis, input.basis))
       return notReady(l, 'unbuilt');
-    const [row] = await withConnection(pool, (client) =>
+    const [row] = await withBoundedReadConnection(pool, l.deadline, (client) =>
       query<{ subject: string }>(client, l, CANONICAL_SOURCE_STATEMENTS().seek, [
         input.route,
         input.collectionId,
@@ -628,7 +628,7 @@ export async function readCanonicalSourceGroup(
       return notReady(l, 'unbuilt');
     const limit = Math.min(CANONICAL_SOURCE_RAW_KEY_LIMIT, l.allowance().remaining.candidateKeys);
     if (!limit) return notReady(l, 'allowance');
-    const rows = await withConnection(pool, (client) =>
+    const rows = await withBoundedReadConnection(pool, l.deadline, (client) =>
       query<{ original: string; driver: number; fact: string }>(client, l, canonicalSourceGroupStatement(limit), [
         input.route,
         input.collectionId,
@@ -741,9 +741,9 @@ export async function repairCanonicalSourceStep(
       ? await l.bounded(
           canonicalSourceWorkDimensions(canonicalSourceOwnerFactBound(limit)),
           () =>
-            withConnection(pool, (client) =>
+            withBoundedReadConnection(pool, l.deadline, (client) =>
               readOwnerNativeFactPage(
-                deadlineClient(client, input.deadline),
+                client,
                 observed.metadata.curatorAccountId!,
                 row.driver as OwnerNativeFactDriver,
                 input.repair.after,
@@ -886,7 +886,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
     )
       return notReady(l, 'source');
     const fence = nativeSourceFence(metadata);
-    let [row] = await withConnection(pool, (client) =>
+    let [row] = await withBoundedReadConnection(pool, l.deadline, (client) =>
       query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().scope, [input.route, input.collectionId, fence]),
     );
     if (!row) {
@@ -904,7 +904,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
           JSON.stringify(identity),
         ]);
       });
-      [row] = await withConnection(pool, (client) =>
+      [row] = await withBoundedReadConnection(pool, l.deadline, (client) =>
         query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().scope, [input.route, input.collectionId, fence]),
       );
     }
@@ -944,7 +944,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       custody.finishCapture({ identity: row.identity, frontier: row.frontier!, deadline: input.deadline, allowance }),
     );
     if (completed.status !== 'complete') return notReady(l, 'identity');
-    const [predecessor] = await withConnection(pool, (client) =>
+    const [predecessor] = await withBoundedReadConnection(pool, l.deadline, (client) =>
       query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().predecessorScope, [
         input.route,
         input.collectionId,
