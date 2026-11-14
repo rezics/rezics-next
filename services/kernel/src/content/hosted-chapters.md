@@ -137,11 +137,15 @@ retains author admission, receipt, idempotent replay and the identity-only revis
 selects and writes the expected ordered snapshot in the same transaction as its head CAS. An adjacent move returns
 the current revision without writing a new revision or event.
 
-Decision: the retained binder resolves the expected immutable structure descriptor after author admission; the
-native adapter proves selected membership and bounded containment paths in that draft snapshot, then commits all
-three final index roots, moved containment and changed size/chapter summaries through one store overlay with the
-revision-head CAS. Adjacent no-op retains the existing revision; selection and writes never enumerate the subtree
-or load target bodies. Route mounting remains with its owner.
+Decision: after catalogue author admission, the retained `moveHostedVersionDraftOccurrence` command binder resolves
+the expected ordered structure revision and draft snapshot before invoking the pure planner. `hostedChapterRoutes`
+owns the current mount: it constructs the native move adapter and installs
+`POST /v1/hostedCatalogues/:id:moveDraftPoint`. The adapter proves selected membership and bounded containment
+paths in that snapshot, then stages the sibling, preorder and chapter roots, moved containment and changed ancestor
+size/chapter summaries in one temporal store overlay before the revision descriptor and expected draft-head CAS
+commit. The command's receipt and identity-only revise event remain in that `runCommand` transaction. An adjacent
+no-op returns the expected revision without a new revision or event; selection and writes never enumerate the subtree
+or load target bodies.
 
 Decision: move preflight deduplicates every already-known sibling parent, reads temporal roots from the selected
 snapshot in sequential windows of at most 512, maps missing and empty roots to null, and validates each returned
@@ -198,20 +202,12 @@ draft generations and publication writes require candidate generations. After bo
 generation-kind foreign keys in `20261113121340_hosted_version_revision_snapshot_fk.sql` because the descriptor table
 did not exist at the store producer timestamp.
 
-Decision: the private adapter appends route/catalogue-bound node and occurrence versions by generation and sequence,
-stores sibling/preorder/chapter roots explicitly, and collapses each transaction's repeated keys to their final row.
-History seeks use the full equality prefix followed by sequence descending; tombstones are tested after selecting the
-latest row. The generation row is the only head fence. This representation stays unmounted and does not alter legacy
-snapshots or sealed prefixes.
-Decision: keep the hosted move planner pure and unmounted until the native version adapter provides
-expected-snapshot selection, transaction-local sibling/preorder/chapter workspaces, temporal owner writes and
-expected-head CAS. The existing immutable placement snapshot is not a substitute for that adapter; do not add a
-parallel move store or mount a command that commits only part of the move.
-
-Once all four adapter capabilities are available, bind through the admitted-author `runCommand`: resolve source,
-destination, optional same-parent anchor and both ancestor paths from one pinned draft, stage all three sequence
-workspaces in that transaction, then commit sequence roots, occurrence parent, changed ancestor summaries,
-receipt/event and expected-head CAS atomically. The planner remains pure and owns no command or persistence authority.
+Decision: the private version store appends route/catalogue-bound node and occurrence versions by generation and
+sequence, stores sibling/preorder/chapter roots explicitly, and collapses each transaction's repeated keys to their
+final row. History seeks use the full equality prefix followed by sequence descending; tombstones are tested after
+selecting the latest row. For this private store, the generation row is the only head fence. It has no route of its
+own; the hosted move's native adapter uses it internally without altering legacy snapshots or sealed prefixes. The
+planner remains pure and owns no command or persistence authority.
 
 ### Evidence and migration
 
