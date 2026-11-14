@@ -186,6 +186,17 @@ def finish(path, *, main, state, bun=None, retry_source=False):
             'nextOutcomeProposal': record.get('nextOutcomeProposal'),
             'acceptance': 'Deferred. This is retained source and a worker handoff, not accepted output.',
         }
+        # Keep the launch's original manager as attribution, separately from the eventual inbox recipient.
+        completion.setdefault('sourceManager', record.get('sourceManager') or record['manager'])
+        if isinstance(completion.get('delivery'), dict):
+            delivery = completion['delivery']
+            if not delivery.get('sourceManager'):
+                delivery['sourceManager'] = completion['sourceManager']
+            # Previous helpers always sent to completion.manager, so old markers retain their actual recipient.
+            if not delivery.get('recipient'):
+                delivery['recipient'] = completion.get('recipient') or completion['sourceManager']
+            if not completion.get('recipient'):
+                completion['recipient'] = delivery['recipient']
         retain_evidence(completion, record, retry_source)
         # Evidence survives even if cleanup, the native helper or this callback is interrupted.
         atomic(target, completion)
@@ -208,7 +219,14 @@ def finish(path, *, main, state, bun=None, retry_source=False):
                 delivery = json.loads(call.stdout)
                 if not isinstance(delivery, dict) or not isinstance(delivery.get('id'), int) or delivery['id'] < 1:
                     raise ValueError('native helper returned no inbox row id')
-                completion['delivery'] = {**delivery, 'deliveredAt': now()}
+                recipient = delivery.get('recipient') or completion['sourceManager']
+                if not isinstance(recipient, str) or not recipient:
+                    raise ValueError('native helper returned no inbox recipient')
+                completion['recipient'] = recipient
+                completion['delivery'] = {
+                    **delivery, 'sourceManager': completion['sourceManager'], 'recipient': recipient,
+                    'deliveredAt': now(),
+                }
                 completion.pop('deliveryError', None)
             except (OSError, ValueError, RuntimeError) as error:
                 failure = {'observedAt': now(), 'cause': str(error)}

@@ -3,14 +3,24 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { readManagerOwnership } from './manager-ownership.ts';
 import { loadSettings } from './settings.ts';
 
-type CodeOnlyCompletion = { id: string; manager: string; goal: string };
+type CodeOnlyCompletion = { id: string; manager: string; sourceManager?: string; goal: string };
+
+function currentGoalOwner(db: ReturnType<typeof openDb>, goal: string, fallback: string): string {
+  const owners = readManagerOwnership(db)
+    .filter((manager) => manager.status === 'running' && manager.kind !== 'resident-supermanager'
+      && manager.goals.includes(goal))
+    .map((manager) => manager.id);
+  return owners.length === 1 ? owners[0]! : fallback;
+}
 
 /** System observation of an original launch; never a manager send, task result or acceptance. */
 export function deliverCodeOnlyCompletion(path: string, settings = loadSettings()) {
   const evidencePath = resolve(path);
   const completion = JSON.parse(readFileSync(evidencePath, 'utf8')) as CodeOnlyCompletion;
+  const sourceManager = completion.sourceManager || completion.manager;
   const db = openDb(join(settings.stateDirectory, 'goal.sqlite'), settings.policy.storage);
   try {
     // The native commit must survive a host restart before Python saves its local delivery marker.
@@ -19,22 +29,36 @@ export function deliverCodeOnlyCompletion(path: string, settings = loadSettings(
     // Keep this identity independent of source failures, execution updates and recovery attempts.
     // JSON quoting keeps launch labels on one line, matching the native first-line delivery key.
     const summary = `Code-only completion ${JSON.stringify(completion.id)}. Retained source and worker final/next-outcome handoff; review and refill independent work. Integration and acceptance remain deferred.`;
-    const key = createHash('sha256')
-      .update(JSON.stringify([completion.manager, 'handoff', 'system:code-only', null, null, summary]))
+    const keyFor = (manager: string) => createHash('sha256')
+      .update(JSON.stringify([manager, 'handoff', 'system:code-only', null, null, summary]))
       .digest('hex');
     return db.transaction(() => {
-      const find = () => db.query(
-        'SELECT id FROM manager_inbox WHERE dedupe_key = ? ORDER BY created_at DESC, id DESC LIMIT 1',
-      ).get(key) as { id: number } | null;
+      const findByKey = (key: string) => db.query(
+        'SELECT id, manager FROM manager_inbox WHERE dedupe_key = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+      ).get(key) as { id: number; manager: string } | null;
+      const findCompletion = () => db.query(
+        `SELECT id, manager FROM manager_inbox
+         WHERE sender = 'system:code-only' AND kind = 'handoff' AND goal_id = ? AND summary = ?
+         ORDER BY id ASC LIMIT 1`,
+      ).get(completion.goal, summary) as { id: number; manager: string } | null;
       // No time window: a committed native row resolves a restart before the local marker,
       // even after the ordinary inbox fold has expired or the manager has consumed the message.
-      const existing = find();
-      if (existing) return { id: existing.id, reused: true };
-      inbox.deliver({ managerId: completion.manager, kind: 'handoff', from: 'system:code-only',
+      // Search by the stable completion evidence first so a Goal transfer cannot redeliver a
+      // completion whose native commit preceded the Python delivery marker.
+      const existing = findCompletion();
+      if (existing) return { id: existing.id, recipient: existing.manager, sourceManager, reused: true };
+      // This is the original recipient-scoped native dedupe identity used by earlier helpers.
+      const legacy = findByKey(keyFor(completion.manager));
+      if (legacy) return { id: legacy.id, recipient: legacy.manager, sourceManager, reused: true };
+      const recipient = currentGoalOwner(db, completion.goal, sourceManager);
+      const key = keyFor(recipient);
+      const keyed = findByKey(key);
+      if (keyed) return { id: keyed.id, recipient: keyed.manager, sourceManager, reused: true };
+      inbox.deliver({ managerId: recipient, kind: 'handoff', from: 'system:code-only',
         goalId: completion.goal, summary, evidencePath });
-      const row = find();
+      const row = findByKey(key);
       if (!row) throw new Error('code-only handoff did not create a native inbox row');
-      return { id: row.id, reused: false };
+      return { id: row.id, recipient: row.manager, sourceManager, reused: false };
     }).immediate();
   } finally {
     db.close();
