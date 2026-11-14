@@ -1297,30 +1297,35 @@ flow report. It joins timestamped integrations to task and attempt identities, n
 current waits, orphaned landings, promotion state, quarantines and shared tool incidents from their existing durable
 records. Missing source history is `unknown`; an empty counter is not inferred from missing evidence. Landing counts
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
-product work.
+product work. The hourly code measure keeps all-product additions separate from Web campaign additions in the pinned
+completed bucket and reports Web attribution. The campaign boundary and target are owned by
+[delivery efficiency](../../docs/development/efficiency.md#output-and-flow). The report does not certify quality, so
+changed workflows, integrated source and published visual review remain part of delivery assessment.
 
 Decision: one `efficiency_report_deliveries` row is the immutable observation and report for a UTC bucket. The first
-capture stores report bytes/hash, product-line additions, pinned `dev` revision, half-open commit-date window, filter
-version, a separate revision-delta backfill count, attribution, rolling total and private-duty alerts atomically. A retry returns those bytes; a different metric
-or source revision reports `conflicting` and records the first competing attribution against the original report ref
-without rewriting the observation. Product-line totals use only stored measured
-observations, so a two-hour total is unknown when either bucket is missing or unknown. Newly visible older commits are
-reported as backfill from the prior captured source revision and excluded from measured throughput. Late integration events appear
-in their integration bucket and never revise measured throughput. Reads use the bucket primary key and at
-most the preceding bucket. The original 2,979 and 4,266 values and 7,245 observed sum are retained here as unassigned
-history: no permitted original delivery source provided exact UTC labels or provenance, so no bucket is fabricated
-and 10,232 is not used.
+capture stores report bytes/hash, aggregate and Web product-line additions, pinned `dev` revision, half-open
+commit-date window, filter version, a separate aggregate revision-delta backfill count, attribution, aggregate rolling
+total and private-duty alerts atomically. A retry returns those bytes; a different metric or source revision reports
+`conflicting` and records the first competing attribution against the original report ref without rewriting the
+observation. Aggregate rolling totals use only stored measured observations and remain informational during the Web
+campaign. Newly visible older commits are reported as aggregate backfill from the prior captured source revision and
+excluded from measured throughput. Late integration events appear in their integration bucket and never revise
+measured throughput. Reads use the bucket primary key and at most the preceding bucket. The original 2,979 and 4,266
+values and 7,245 observed sum are retained here as unassigned history: no permitted original delivery source provided
+exact UTC labels or provenance, so no bucket is fabricated and 10,232 is not used.
 
 Decision: Native attribution excludes only newly reachable side history from first-parent merges whose tree exactly
-matches their first parent; source-bearing merges and later landings remain countable, incomplete history is unknown,
-and the path filter advances to v2.
+matches their first parent; source-bearing merges and later landings remain countable, incomplete history is unknown.
+Filter v3 keeps aggregate output and adds source-only Web counts from the boundary in
+[delivery efficiency](../../docs/development/efficiency.md#output-and-flow), excluding fixtures and formatting-only
+additions.
 
 The private duty keeps its existing hourly sleep boundary, inbox alarm, and Telegram sender. After the source is
 promoted, the controller replaces the existing `.temp/goal/watch/hourly-report.sh` bridge in place at its ordinary
 post-send boundary. Remove its `lines()` helper and the `n=$(lines ...)` / `n2=$(lines ...)` calls. Keep its current
 `run`, `stop`, `ready`, allowance, and non-product alarm collection, then replace message construction and the direct
-Telegram send with this native call. Remove the old two-hour `$n2 < 20000` alarm; the native capture adds it only when
-both stored observations are measured:
+Telegram send with this native call. The native capture alerts only when measured Web additions in this completed hour
+are below the current campaign target; the all-product two-hour sum remains informational:
 
 ```bash
 duty_context=$(jq -cn \
@@ -1811,6 +1816,20 @@ the existing per-generation watchdog state prevents a second wake. Scheduling fl
 fallback. Other watchdog alerts keep their existing routing.
 
 Decision: The watchdog reports a same-generation stopped typing-evidence retry only after its eligible no-worker deadline and positive live pool supply; it routes that alert and flow alarms to the active control-plane manager, falling back to the supermanager, and directs the authenticated task owner to run the existing `typing-recover` command.
+
+During a source-only verification window, an exited successful source attempt with a current accepted changed brief
+also keeps its existing retry pending when compiler evidence is unavailable and exact same-attempt check custody is
+unresolved. The accepted amendment remains the only retry intent; this hold does not run a compiler, settle the old
+source attempt or discard its proposal. After the ordinary no-worker deadline and existing dependency, backoff,
+host-outage, capacity and live-supply checks, the watchdog names unavailable compiler evidence, unresolved terminal
+check custody, the task owner and active control-plane owner. The existing per-generation alert state prevents a
+second wake.
+
+Decision: A current accepted ordinary source-only amendment may start its existing retry after exact same-attempt terminal proof when compiler evidence remains unavailable; compiler acceptance stays owed, and unresolved custody holds use the existing watchdog route to name the task and active control-plane owners.
+
+For the current ready task, exited attempt and pending retry, `goal status` reads only that attempt's events. When it finds the `typing-retry-unreconciled` event whose action is `source-amendment-compiler-hold`, `pendingRetry` reports `reason: compiler-custody`, `ownerAction: wait-for-retained-check-custody`, `taskOwner` and `controlPlaneOwner`. The task owner is the brief's manager; the control-plane owner follows watchdog routing: the single running managed owner of `control-plane`, or the configured supermanager when there is no unique owner. This reports the existing retry hold and does not start, replace or fail that retry. Dependency, backoff and check-host reasons keep precedence; a hold event from an earlier attempt cannot replace the current attempt's reason.
+
+Decision: `goal status` exposes the current accepted amendment's compiler-custody hold with both routed owners and the action to let retained check custody settle before the existing retry starts; dependency, backoff, check-host and current-attempt precedence remain intact.
 
 A running attempt that exceeds its routed time limit (two hours by default) sends its owning manager one event. The
 event includes elapsed time, commits in the task worktree, time recorded waiting for check slots and the last ten shell

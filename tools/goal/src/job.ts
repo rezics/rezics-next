@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import {
   hasQueuedTypingSourceRepair,
   reconcileQueuedTypingFailureRetry,
+  reconcileQueuedTypingFailureRetryOutcome,
   recoverWorkerTyping,
 } from './typing-recovery.ts';
 import { isTypingEvidenceUnavailableResult } from './worker-check-budget.ts';
@@ -371,7 +372,19 @@ export class WorkerJob implements GateOutcomeSink {
           return;
         }
         if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
-          if (!reconcileQueuedTypingFailureRetry(this.tasks, ref)) {
+          const reconciliation = reconcileQueuedTypingFailureRetryOutcome(this.tasks, ref);
+          if (reconciliation === 'source-amendment-compiler-hold') {
+            const unreconciled = store
+              .events(ref.taskId, ref.attempt)
+              .some(
+                (event) =>
+                  event.kind === 'typing-retry-unreconciled' && event.body.includes('source-amendment-compiler-hold'),
+              );
+            if (!unreconciled)
+              store.event(ref, 'typing-retry-unreconciled', { action: 'source-amendment-compiler-hold' });
+            return;
+          }
+          if (reconciliation !== 'admitted') {
             // Keep the unresolved same-generation retry visible to the existing watchdog without waking a second owner.
             if (completed.state === 'stopped') {
               store.recordUnreconciledTypingRetry(ref);

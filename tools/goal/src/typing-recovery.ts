@@ -44,17 +44,22 @@ import {
 const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
 
 /**
- * Release a queued source repair through the normal retry transaction only for a current retained compiler failure
- * or the exact supported setup defect, with terminal custody for every check. Stopped attempts keep their stop proof;
- * exited attempts use their captured branch head when recorded and retained source identity for legacy omissions.
+ * Release a queued source repair through normal retry admission only for a retained compiler failure, the exact
+ * supported setup defect, or an accepted source-only amendment with unavailable compiler evidence. Every check must
+ * have terminal custody. Stopped attempts keep their stop proof; exited attempts keep their captured source head.
  */
-export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
+export type TypingRetryReconciliationOutcome = 'admitted' | 'source-amendment-compiler-hold' | 'unresolved';
+
+export function reconcileQueuedTypingFailureRetryOutcome(
+  tasks: WorkerTasks,
+  ref: AttemptRef,
+): TypingRetryReconciliationOutcome {
   const { store, settings } = tasks;
   const lease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', ref.taskId), settings.policy?.leases);
   try {
     const task = store.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt || task.state !== 'ready' || task.brief.kind === 'verification')
-      return false;
+      return 'unresolved';
     const attempt = store.attempt(ref);
     const retry = store.retryIntent(ref);
     const pendingEvidence =
@@ -66,13 +71,14 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       (retry.status !== 'pending' && retry.status !== 'started') ||
       (retry.status === 'pending' ? retry.nextAttempt !== undefined : retry.nextAttempt !== ref.attempt)
     )
-      return false;
+      return 'unresolved';
 
     const retryQueuedAt = Date.parse(retry.queuedAt ?? '');
     const events = store.events(task.id);
     const attemptEvents = store.events(task.id, ref.attempt);
     let validStoppedRetry = false;
     let validExitedAmendment = false;
+    let acceptedSourceOnlyAmendment = false;
     let exitedProgressEventRecorded = false;
     let exitedCapturedHeadMatches = false;
     let exitedCurrentHead: string | null = null;
@@ -150,8 +156,11 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
           (identity) => identity !== null && sameProcess(identity),
         ),
       );
+      acceptedSourceOnlyAmendment =
+        validExitedAmendment &&
+        sourceOnlyCompletionEligible({ task, stateDirectory: settings.stateDirectory, policy: settings.policy });
     }
-    if (!validStoppedRetry && !validExitedAmendment) return false;
+    if (!validStoppedRetry && !validExitedAmendment) return 'unresolved';
 
     if (
       events.some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested') ||
@@ -163,7 +172,7 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       store.attempts(task.id).some((candidate) => candidate.attempt > ref.attempt) ||
       capacityWaiters(settings.stateDirectory, store).has(task.id)
     )
-      return false;
+      return 'unresolved';
 
     const proofInput = {
       directory: workerCheckBudgetDirectory(settings.stateDirectory, task.id, ref.attempt),
@@ -173,18 +182,35 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       attempt: ref.attempt,
       checkIds: attempt.checks ?? [],
       ...(attempt.typingEvidencePending?.command ? { pendingCommand: attempt.typingEvidencePending.command } : {}),
+      ...(acceptedSourceOnlyAmendment ? { allowUnavailableSourceAmendment: true } : {}),
     };
-    if (!workerCheckHostTerminalSourceRepair(proofInput)) return false;
+    if (!workerCheckHostTerminalSourceRepair(proofInput)) {
+      const settlement = workerCheckHostTypingSettlement(proofInput);
+      if (
+        acceptedSourceOnlyAmendment &&
+        attempt.typingEvidencePending?.command &&
+        !settlement.ok &&
+        settlement.kind === 'evidence-unavailable' &&
+        JSON.stringify(attempt.typingEvidencePending.command) === JSON.stringify(settlement.command) &&
+        workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, attempt.checks ?? []) === 'unknown'
+      )
+        return 'source-amendment-compiler-hold';
+      return 'unresolved';
+    }
 
     if (retry.status === 'started')
       store.updateRetryIntent(ref, (current) => {
         current.status = 'pending';
         delete current.nextAttempt;
       });
-    return true;
+    return 'admitted';
   } finally {
     lease.release();
   }
+}
+
+export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
+  return reconcileQueuedTypingFailureRetryOutcome(tasks, ref) === 'admitted';
 }
 
 function sha256(value: string): string {

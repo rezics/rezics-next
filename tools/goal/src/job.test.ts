@@ -84,6 +84,7 @@ async function typingRetryFixture(
     legacySourceRepair?: boolean;
     staleProgress?: boolean;
     unknownCustody?: boolean;
+    unavailableCompilerReceipt?: boolean;
     misclassified?: boolean;
     stale?: boolean;
     foreign?: boolean;
@@ -97,7 +98,8 @@ async function typingRetryFixture(
     throw new Error('Migration setup fixture models an exited non-emitting compiler attempt');
   const brief = readFileSync(h.briefFile, 'utf8')
     .replace(/^goal: fixture$/m, 'goal: web')
-    .replace(/^kind: implementation$/m, 'kind: interface');
+    .replace(/^kind: implementation$/m, 'kind: interface')
+    .concat(`\n<!-- retry fixture ${randomUUID()} -->\n`);
   writeFileSync(h.briefFile, brief);
   const task = h.tasks.dispatch(h.briefFile);
   const ref = { taskId: task.id, attempt: 1 };
@@ -242,7 +244,8 @@ async function typingRetryFixture(
       bundleSha256: outputTreeDigest(bundle),
     });
   }
-  complete?.(options.legacySourceRepair ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1);
+  if (!options.unavailableCompilerReceipt)
+    complete?.(options.legacySourceRepair ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1);
 
   const log = join(worktree, '.temp/goal/checks', `${checkId}.log`);
   mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
@@ -390,6 +393,27 @@ async function typingRetryFixture(
   }
   return { task: h.store.task(task.id), ref, checkId, listedCheckId, physicalRunId, pendingCommand, compiler };
 }
+
+function publishLocalTerminalProof(retained: Awaited<ReturnType<typeof typingRetryFixture>>): void {
+  const { task, checkId, physicalRunId } = retained;
+  const checks = join(task.worktree, '.temp', 'goal', 'checks');
+  const resultPath = join(checks, 'results', `${checkId}.json`);
+  const historyDirectory = join(checks, 'custody', 'history');
+  const result = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, unknown>;
+  const finished = { ...result, status: 'finished', exitCode: WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT };
+  mkdirSync(historyDirectory, { recursive: true });
+  writeFileSync(resultPath, JSON.stringify(finished));
+  writeFileSync(
+    join(historyDirectory, `${checkId}.${physicalRunId}.json`),
+    JSON.stringify({
+      version: 1,
+      ...finished,
+      remoteExpected: false,
+      terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+    }),
+  );
+}
+
 test('newest worktree mtime ignores node_modules and .temp', async () => {
   const root = tempDirectory();
   mkdirSync(join(root, 'src'), { recursive: true });
@@ -408,6 +432,45 @@ test('newest worktree mtime ignores node_modules and .temp', async () => {
   utimesSync(join(root, '.temp/scratch'), future, future);
   expect(await newestWorktreeMtime(root)).toBe(lstatSync(kept).mtimeMs);
 });
+
+test('an accepted source-only amendment waits for terminal proof, then starts its existing retry once', async () => {
+  const h = harness();
+  try {
+    const retained = await typingRetryFixture(h, {
+      exited: true,
+      unknownCustody: true,
+      unavailableCompilerReceipt: true,
+    });
+    writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'source-only\n');
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+
+    job.resumePendingRetries();
+    await job.drain();
+    expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
+    expect(h.store.retryIntent(retained.ref)?.status).toBe('pending');
+    expect(h.store.attempt(retained.ref).typingEvidencePending).toBeDefined();
+    expect(
+      h.store
+        .events(retained.task.id, retained.ref.attempt)
+        .filter((event) => event.kind === 'typing-retry-unreconciled'),
+    ).toHaveLength(1);
+
+    publishLocalTerminalProof(retained);
+    job.resumePendingRetries();
+    job.resumePendingRetries();
+    await job.drain();
+
+    expect(h.store.task(retained.task.id).currentAttempt).toBe(2);
+    expect(h.store.retryIntent(retained.ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
+    expect(h.store.attempt(retained.ref).state).toBe('superseded');
+    expect(h.store.attempt(retained.ref).typingEvidencePending).toBeDefined();
+    expect(
+      h.store.events(retained.task.id).filter((event) => event.kind === 'worker-run-started' && event.attempt === 2),
+    ).toHaveLength(1);
+  } finally {
+    await h.disposeAsync();
+  }
+}, 30_000);
 
 test('an amended retry reuses a current Kernel client-output failure only after owned custody is terminal', async () => {
   const h = harness();

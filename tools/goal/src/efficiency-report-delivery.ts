@@ -13,6 +13,8 @@ export type CaptureDisposition = 'captured' | 'replayed' | 'conflicting';
 export type HourlyObservationData = {
   productLines: number | null;
   attribution: ObservationAttribution;
+  webProductLines: number | null;
+  webAttribution: ObservationAttribution;
   sourceRevision: string | null;
   backfillProductLines: number | null;
   backfillAttribution: ObservationAttribution;
@@ -34,6 +36,8 @@ export type FrozenHourlyEfficiencyReport = {
   observation: {
     productLines: number | null;
     attribution: ObservationAttribution;
+    webProductLines: number | null;
+    webAttribution: ObservationAttribution;
     sourceRevision: string | null;
     backfillProductLines: number | null;
     backfillAttribution: ObservationAttribution;
@@ -53,6 +57,8 @@ export type ConflictingAttribution = {
   observedAt: string;
   productLines: number | null;
   attribution: ObservationAttribution;
+  webProductLines: number | null;
+  webAttribution: ObservationAttribution;
   sourceRevision: string | null;
   backfillProductLines: number | null;
   backfillAttribution: ObservationAttribution;
@@ -122,6 +128,14 @@ ALTER TABLE efficiency_report_deliveries ADD COLUMN backfill_from_revision TEXT;
       filter_version TEXT NOT NULL
     );`,
   },
+  {
+    module: 'efficiency-report',
+    version: 5,
+    sql: `ALTER TABLE efficiency_report_deliveries ADD COLUMN web_product_lines INTEGER;
+ALTER TABLE efficiency_report_deliveries ADD COLUMN web_attribution TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE efficiency_report_observation_conflicts ADD COLUMN web_product_lines INTEGER;
+ALTER TABLE efficiency_report_observation_conflicts ADD COLUMN web_attribution TEXT NOT NULL DEFAULT 'unknown';`,
+  },
 ] as const;
 
 type DeliveryRow = {
@@ -134,6 +148,8 @@ type DeliveryRow = {
   detail: string | null;
   product_lines: number | null;
   attribution: ObservationAttribution;
+  web_product_lines: number | null;
+  web_attribution: ObservationAttribution;
   source_revision: string | null;
   source_window_start: string | null;
   source_window_end: string | null;
@@ -148,22 +164,23 @@ type DeliveryRow = {
 };
 
 function deliveryRow(db: Database, bucket: string): DeliveryRow | null {
-  return (db
+  return db
     .query(
       `SELECT hour_bucket, report_ref, report, status, claimed_at, finished_at, detail,
-              product_lines, attribution, source_revision, backfill_product_lines,
+              product_lines, attribution, web_product_lines, web_attribution,
+              source_revision, backfill_product_lines,
               backfill_attribution, backfill_from_revision,
               source_window_start, source_window_end, filter_version, captured_at,
               rolling_product_lines, rolling_attribution, alerts_json
        FROM efficiency_report_deliveries WHERE hour_bucket=?`,
     )
-    .get(bucket) as DeliveryRow | null);
+    .get(bucket) as DeliveryRow | null;
 }
 
 function snapshot(db: Database, row: DeliveryRow): FrozenHourlyEfficiencyReport {
   const conflict = db
     .query(
-      `SELECT report_ref, observed_at, product_lines, attribution, source_revision,
+      `SELECT report_ref, observed_at, product_lines, attribution, web_product_lines, web_attribution, source_revision,
               backfill_product_lines, backfill_attribution, backfill_from_revision,
               source_window_start, source_window_end, filter_version
        FROM efficiency_report_observation_conflicts WHERE hour_bucket=?`,
@@ -173,6 +190,8 @@ function snapshot(db: Database, row: DeliveryRow): FrozenHourlyEfficiencyReport 
     observed_at: string;
     product_lines: number | null;
     attribution: ObservationAttribution;
+    web_product_lines: number | null;
+    web_attribution: ObservationAttribution;
     source_revision: string | null;
     backfill_product_lines: number | null;
     backfill_attribution: ObservationAttribution;
@@ -189,6 +208,8 @@ function snapshot(db: Database, row: DeliveryRow): FrozenHourlyEfficiencyReport 
     observation: {
       productLines: row.product_lines,
       attribution: row.attribution === 'measured' ? 'measured' : 'unknown',
+      webProductLines: row.web_product_lines,
+      webAttribution: row.web_attribution === 'measured' ? 'measured' : 'unknown',
       sourceRevision: row.source_revision,
       backfillProductLines: row.backfill_product_lines,
       backfillAttribution: row.backfill_attribution === 'measured' ? 'measured' : 'unknown',
@@ -209,6 +230,8 @@ function snapshot(db: Database, row: DeliveryRow): FrozenHourlyEfficiencyReport 
           observedAt: conflict.observed_at,
           productLines: conflict.product_lines,
           attribution: conflict.attribution,
+          webProductLines: conflict.web_product_lines,
+          webAttribution: conflict.web_attribution === 'measured' ? 'measured' : 'unknown',
           sourceRevision: conflict.source_revision,
           backfillProductLines: conflict.backfill_product_lines,
           backfillAttribution: conflict.backfill_attribution,
@@ -235,6 +258,8 @@ type ObservationCandidate = Pick<
   HourlyObservationData,
   | 'productLines'
   | 'attribution'
+  | 'webProductLines'
+  | 'webAttribution'
   | 'sourceRevision'
   | 'backfillProductLines'
   | 'backfillAttribution'
@@ -248,6 +273,8 @@ function sameObservation(left: DeliveryRow, right: ObservationCandidate): boolea
   return (
     left.product_lines === right.productLines &&
     left.attribution === right.attribution &&
+    left.web_product_lines === right.webProductLines &&
+    left.web_attribution === right.webAttribution &&
     left.source_revision === right.sourceRevision &&
     left.backfill_product_lines === right.backfillProductLines &&
     left.backfill_attribution === right.backfillAttribution &&
@@ -281,16 +308,19 @@ export function captureFrozenHourlyEfficiencyReport(
           };
         db.query(
           `INSERT OR IGNORE INTO efficiency_report_observation_conflicts(
-            hour_bucket, report_ref, observed_at, product_lines, attribution, source_revision,
+            hour_bucket, report_ref, observed_at, product_lines, attribution, web_product_lines, web_attribution,
+            source_revision,
             backfill_product_lines, backfill_attribution, backfill_from_revision,
             source_window_start, source_window_end, filter_version
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           bucket.start,
           existing.report_ref,
           new Date().toISOString(),
           candidate.productLines,
           candidate.attribution,
+          candidate.webProductLines,
+          candidate.webAttribution,
           candidate.sourceRevision,
           candidate.backfillProductLines,
           candidate.backfillAttribution,
@@ -311,9 +341,18 @@ export function captureFrozenHourlyEfficiencyReport(
         throw new Error('hourly observation window must match its UTC bucket');
       if (
         observation.attribution === 'measured' &&
-        (!Number.isSafeInteger(observation.productLines) || observation.productLines! < 0 || !observation.sourceRevision)
+        (!Number.isSafeInteger(observation.productLines) ||
+          observation.productLines! < 0 ||
+          !observation.sourceRevision)
       )
         throw new Error('measured hourly observation requires product lines and a source revision');
+      if (
+        observation.webAttribution === 'measured' &&
+        (!Number.isSafeInteger(observation.webProductLines) ||
+          observation.webProductLines! < 0 ||
+          !observation.sourceRevision)
+      )
+        throw new Error('measured Web hourly observation requires product lines and a source revision');
       if (
         observation.backfillAttribution === 'measured' &&
         (!Number.isSafeInteger(observation.backfillProductLines) ||
@@ -326,10 +365,11 @@ export function captureFrozenHourlyEfficiencyReport(
       db.query(
         `INSERT INTO efficiency_report_deliveries(
           hour_bucket, report_ref, report, status, created_at,
-          product_lines, attribution, source_revision, backfill_product_lines, backfill_attribution,
+          product_lines, attribution, web_product_lines, web_attribution, source_revision,
+          backfill_product_lines, backfill_attribution,
           backfill_from_revision, source_window_start, source_window_end,
           filter_version, captured_at, rolling_product_lines, rolling_attribution, alerts_json
-        ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         bucket.start,
         reportRef,
@@ -337,6 +377,8 @@ export function captureFrozenHourlyEfficiencyReport(
         observation.capturedAt,
         observation.productLines,
         observation.attribution,
+        observation.webProductLines,
+        observation.webAttribution,
         observation.sourceRevision,
         observation.backfillProductLines,
         observation.backfillAttribution,
@@ -485,7 +527,9 @@ export async function sendHourlyEfficiencyReport(
   const claim = db
     .transaction(() => {
       let row = db
-        .query('SELECT report_ref, report, status, claimed_at, detail FROM efficiency_report_deliveries WHERE hour_bucket=?')
+        .query(
+          'SELECT report_ref, report, status, claimed_at, detail FROM efficiency_report_deliveries WHERE hour_bucket=?',
+        )
         .get(bucket.start) as {
         report_ref: string;
         report: string;
