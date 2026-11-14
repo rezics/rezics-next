@@ -6,8 +6,7 @@ import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from './dependencies.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withSourceRatingReadConnection, type SourceRatingReadClient } from './source-rating-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
@@ -361,27 +360,18 @@ async function readFenceSnapshot(
   tuple: SourceFenceTuple,
   deadline: number,
 ): Promise<FenceSnapshot> {
-  return within(deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const home = partitionOf(tuple.route);
-        const partition = await readPartition(client, home);
-        if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
-        const [fence] = await readFences(client, [tuple]);
-        if (!fence) throw new ProblemError('partition_unavailable');
-        await client.query('COMMIT');
-        return { home: partition.partitionNo, epoch: partition.epoch, fence };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
+  return withSourceRatingReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      const home = partitionOf(tuple.route);
+      const partition = await readPartition(client, home);
+      if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
+      const [fence] = await readFences(client, [tuple]);
+      if (!fence) throw new ProblemError('partition_unavailable');
+      return { home: partition.partitionNo, epoch: partition.epoch, fence };
+    },
+    { repeatableRead: true },
   );
 }
 
@@ -480,14 +470,12 @@ function sameRows(left: readonly MetaRow[], right: readonly MetaRow[]): boolean 
 
 export function createSourceObservationReadCommands(dependencies: SourceObservationReadDependencies) {
   async function query<T>(
-    sql: { run: (client: ReturnType<typeof deadlineClient>, parameters: never) => Promise<unknown[]> },
+    sql: { run: (client: SourceRatingReadClient, parameters: never) => Promise<unknown[]> },
     parameters: unknown,
     deadline: number,
   ): Promise<T[]> {
-    return within(deadline, () =>
-      withConnection(dependencies.pool, (connection) =>
-        sql.run(deadlineClient(connection, deadline), parameters as never),
-      ),
+    return withSourceRatingReadConnection(dependencies.pool, deadline, (client) =>
+      sql.run(client, parameters as never),
     ) as Promise<T[]>;
   }
 
@@ -661,14 +649,12 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     const needsLegacyPayload = hydrated.some((row) => row.digest === null && row.legacy);
     let legacyRow: NonNullable<Awaited<ReturnType<typeof legacyPayloadQuery.run>>> | null = null;
     if (needsLegacyPayload) {
-      legacyRow = await within(input.deadline, () =>
-        withConnection(dependencies.pool, (connection) =>
-          legacyPayloadQuery.run(deadlineClient(connection, input.deadline), {
-            route,
-            subject_id: input.subjectId,
-            source,
-          }),
-        ),
+      legacyRow = await withSourceRatingReadConnection(dependencies.pool, input.deadline, (client) =>
+        legacyPayloadQuery.run(client, {
+          route,
+          subject_id: input.subjectId,
+          source,
+        }),
       );
       if (!legacyRow) throw new ProblemError('conflict');
     }

@@ -11,8 +11,6 @@ import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
 import {
   GrantDeniedError,
-  deadlineClient,
-  within,
   problemSchema,
   IDEMPOTENCY_HEADER,
   idempotencyKeyOf,
@@ -24,8 +22,8 @@ import {
 } from './dependencies.ts';
 
 import type { CommandAuthorization, CommandOutcome } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
+import { withSourceRatingReadConnection } from './source-rating-read-connection.ts';
 
 import { customMethod } from '../http/custom-method.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -323,26 +321,17 @@ async function readFenceSnapshot(
   tuple: SourceFenceTuple,
   deadline: number,
 ): Promise<FenceSnapshot> {
-  return within(deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(tuple.route));
-        if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
-        const [fence] = await readFences(client, [tuple]);
-        if (!fence) throw new ProblemError('partition_unavailable');
-        await client.query('COMMIT');
-        return { fence, partition: partition.partitionNo, epoch: partition.epoch, position: partition.position };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
+  return withSourceRatingReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      const partition = await readPartition(client, partitionOf(tuple.route));
+      if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
+      const [fence] = await readFences(client, [tuple]);
+      if (!fence) throw new ProblemError('partition_unavailable');
+      return { fence, partition: partition.partitionNo, epoch: partition.epoch, position: partition.position };
+    },
+    { repeatableRead: true },
   );
 }
 
@@ -516,10 +505,8 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
   async function readRaw(subjectId: string, deadline: number): Promise<SourceStatistic[]> {
     const route = routeOf(subjectId);
     if (route === null) return [];
-    const rows = await within(deadline, () =>
-      withConnection(config.pool, (connection) =>
-        sourceStatisticList.run(deadlineClient(connection, deadline), { route, subject_id: subjectId }),
-      ),
+    const rows = await withSourceRatingReadConnection(config.pool, deadline, (client) =>
+      sourceStatisticList.run(client, { route, subject_id: subjectId }),
     );
     const result = rows.map((row) => statistic(row as Row));
     if (Buffer.byteLength(JSON.stringify(result), 'utf8') > SOURCE_STATISTICS_MAX_BODY_BYTES)

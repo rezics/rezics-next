@@ -157,6 +157,10 @@ Semantic supplies native adapters through composition. Rating owns exact readbac
 immutable review operands. Extend vote-review for original actor/Pool/deadline/transaction handoff, receive installed
 repair/default-worker acceptance, and leave native/browser/growth receiving to sole Goal walks. See the [Rating boundary](../../services/kernel/src/rating/README.md#vote-and-semantic-application-boundary).
 
+Decision: source-statistic and source-observation reads carry the request deadline through checkout, repeatable-read
+fence snapshots, queries and cleanup; late or uncertain native work discards its connection, while settled snapshot
+errors roll back within that deadline.
+
 ## Dependencies
 
 Requires Accounts membership, role, ban, preference and lifecycle ports; Access authorization and resource grants;
