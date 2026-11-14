@@ -227,7 +227,7 @@ export async function sendDurableAdopt(input: {
         if (
           prior?.state === 'refused' &&
           permanentReviewRefusal(prior.error_code) &&
-          !staleAdoptionHead(prior.error_code)
+          !staleReviewHead(prior.error_code)
         )
           return { status: 'refused', code: prior.error_code! };
         if (prior?.state !== 'acknowledged') continue;
@@ -257,7 +257,7 @@ export async function sendDurableAdopt(input: {
         action,
         body,
         refusalDisposition: (code) =>
-          staleAdoptionHead(code) ? 'stale' : permanentReviewRefusal(code) ? 'refused' : 'retry',
+          staleReviewHead(code) ? 'stale' : permanentReviewRefusal(code) ? 'refused' : 'retry',
         send: (sealedBody, sealedKey) =>
           input.review.adoptReviewedCandidates(input.subjectId, sealedBody as AdoptBody, sealedKey),
       });
@@ -300,6 +300,6 @@ export function permanentReviewRefusal(code: string | null | undefined): boolean
   );
 }
 
-function staleAdoptionHead(code: string | null | undefined): boolean {
+export function staleReviewHead(code: string | null | undefined): boolean {
   return code === 'review-http-409' || code === 'review-http-412';
 }

@@ -50,11 +50,12 @@ import type {
 import { captureShowcaseCommands, type ShowcaseJournal } from './showcase-journal.ts';
 import type { ShowcaseAdoptBody as AdoptBody, ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import {
-  actionIdempotencyKey,
   errorCode,
   permanentReviewRefusal,
   sendDurableAdopt,
+  sendSealedShowcaseAction,
   showcaseReviewActionKey as actionKey,
+  staleReviewHead,
 } from './showcase-adoption.ts';
 import {
   adoptionSnapshot,
@@ -1527,6 +1528,146 @@ async function publishShowcasePhases(
     withheldAcceptanceCandidates.add(candidateId);
     omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code });
   };
+  const refreshAcceptancePrerequisites = async (
+    record: ShowcaseRecord,
+    assertion: ShowcaseAssertion,
+  ): Promise<string | null> => {
+    const current = await input.review.readReviewedSubject(record.subjectId!);
+    currentSubjectCache.set(record.subjectId!, current);
+    if (!recordSource(record, assertion) || !currentSourceRead(current, record))
+      return 'current-source-identity-mismatch';
+    if (!input.review.fence) return 'source-claim-withheld';
+    const fence = await input.review.fence({
+      source: assertion.source.source,
+      externalId: assertion.source.external_id,
+      fieldGroup: assertion.source.field_group,
+    });
+    if (fence.fenced || fence.securityRevision !== null) return 'source-claim-withheld';
+    if (assertion.property === 'schema:image') {
+      const outcome = admittedCoverMedia(input.plan, mediaOutcomes, record, assertion);
+      const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
+      if (state !== 'open') return state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable';
+    }
+    if (assertion.graphTarget) {
+      const target = manifest.records.find(
+        (entry) =>
+          entry.provider === assertion.graphTarget!.provider && entry.sourceKey === assertion.graphTarget!.sourceKey,
+      );
+      if (
+        !target ||
+        target.subjectId !== assertion.graphTarget.subjectId ||
+        target.nativeType !== assertion.graphTarget.nativeType ||
+        !recordHasSourceIdentity(target) ||
+        blockedSubjects.has(target.subjectId) ||
+        !currentSourceRead(await input.review.readReviewedSubject(target.subjectId), target)
+      )
+        return 'graph-endpoint-current-read-unavailable';
+      if (assertion.graphTarget.factsFence) {
+        const state = await showcaseFranchiseFence(input.review, record.sourceAlias, [
+          record.sourceKey,
+          assertion.graphTarget.sourceKey,
+        ]);
+        if (state !== 'open')
+          return state === 'fenced' ? 'graph-source-facts-fenced' : 'graph-source-facts-unavailable';
+      }
+    }
+    const value = assertion.statement.value;
+    const tagId = sourceTagId(assertion.statement);
+    const association = vndbTagMembership(record, assertion)
+      ? tagAssociationFor(record, assertion, manifest.tagAssociations ?? [])
+      : undefined;
+    const binding = sourceTagWeight(assertion.statement)
+      ? observedTagBindings.get(`${record.sourceKey}\0${tagId}\0${value.type === 'value' ? value.content : ''}`)
+      : association;
+    if (binding) {
+      if (!binding.conceptId || !binding.schemeId) return 'vocabulary-binding-missing';
+      for (const id of [binding.conceptId, binding.schemeId]) {
+        currentSubjectCache.delete(id);
+        await readCurrentSubject(id);
+      }
+      const state = currentBindingMatches(binding);
+      const key = `${record.sourceKey}\0${binding.tagId}\0${binding.conceptId}`;
+      if (sourceTagWeight(assertion.statement)) currentTagBindingStates.set(key, state);
+      else if (association) currentMembershipBindingStates.set(tagAssociationKey(association), state);
+      if (state !== 'current')
+        return state === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-not-current';
+    }
+    return null;
+  };
+  // Three sends at most per candidate and invocation. A known stale response permits a new body;
+  // an unknown delivery must settle its original sealed body/key before that decision is possible.
+  const acceptAssertion = async (
+    record: ShowcaseRecord,
+    assertion: ShowcaseAssertion,
+    refreshDependencies?: () => Promise<string | null>,
+  ): Promise<string | null> => {
+    const id = record.subjectId!;
+    const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
+    let candidate = validated.get(assertion.candidateId)!;
+    const original = input.journal.action(key);
+    let refresh = original?.state === 'refused' && staleReviewHead(original.error_code);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (refresh) {
+        pageCache.delete(groupKey(id, assertion.property));
+        let page: CandidatePage;
+        try {
+          page = await candidatePage(
+            { review: input.review, id, property: assertion.property, journal: input.journal },
+            pageCache,
+          );
+        } catch {
+          return 'candidate-current-read-unavailable';
+        }
+        const current = page.candidates.find((entry) => entry.id === assertion.candidateId);
+        if (!current && !page.complete) return 'candidate-page-bounded';
+        if (
+          !current ||
+          !showcaseSourceMatches(current.source, assertion.source) ||
+          !showcaseStatementMatches(current.statement, assertion.statement) ||
+          showcaseDigest({ source: current.source, statement: assertion.statement }) !== assertion.candidateDigest
+        )
+          return 'candidate-digest-changed';
+        candidate = current;
+        validated.set(assertion.candidateId, candidate);
+        try {
+          const code = (await refreshAcceptancePrerequisites(record, assertion)) ?? (await refreshDependencies?.());
+          if (code) return code;
+        } catch {
+          return 'acceptance-current-read-unavailable';
+        }
+      }
+      const prior = input.journal.action(key);
+      const unknown =
+        prior?.state === 'prepared' ||
+        (prior?.state === 'refused' && !prior.error_code?.startsWith('review-http-4'));
+      if (candidate.decision === 'rejected') return 'candidate-currently-rejected';
+      if (candidate.decision === 'accepted' && !unknown) return null;
+      const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
+      try {
+        const sent = await sendSealedShowcaseAction({
+          journal: input.journal,
+          action: key,
+          body,
+          refusalDisposition: (code) =>
+            staleReviewHead(code) ? 'stale' : permanentReviewRefusal(code) ? 'refused' : 'retry',
+          send: (sealedBody, sealedKey) =>
+            input.review.acceptReviewedCandidate(id, assertion.candidateId, sealedBody as typeof body, sealedKey),
+        });
+        if (sent.status === 'acknowledged') return null;
+        pageCache.delete(groupKey(id, assertion.property));
+        if (sent.status === 'sent') return null;
+        if (sent.status === 'refused') return sent.code;
+        // Do not resend a known-refused request when the current native head has not advanced.
+        if (refresh && prior?.state === 'refused' && prior.body_digest === showcaseDigest(body)) return sent.code;
+        refresh = true;
+      } catch (error) {
+        const code = errorCode(error);
+        if (code.startsWith('review-http-4')) input.journal.refuseAction(key, code);
+        return code;
+      }
+    }
+    return 'candidate-acceptance-recovery-bound';
+  };
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (
@@ -1568,31 +1709,8 @@ async function publishShowcasePhases(
         continue;
       }
     }
-    const candidate = validated.get(assertion.candidateId)!;
-    if (candidate.decision === 'accepted') continue;
-    if (candidate.decision === 'rejected') {
-      withholdAcceptance(record, assertion.candidateId, 'candidate-currently-rejected');
-      continue;
-    }
-    const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
-    const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
-    const idempotencyKey = actionIdempotencyKey(key, body);
-    const prior = input.journal.action(key);
-    if (prior?.state === 'acknowledged') continue;
-    if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
-      withholdAcceptance(record, assertion.candidateId, prior.error_code!);
-      continue;
-    }
-    const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
-    const sealedKey = input.journal.action(key)!.idempotency_key;
-    try {
-      await input.review.acceptReviewedCandidate(id, assertion.candidateId, sealedBody, sealedKey);
-      input.journal.acknowledgeAction(key);
-      pageCache.delete(groupKey(id, assertion.property));
-    } catch (error) {
-      input.journal.refuseAction(key, errorCode(error));
-      withholdAcceptance(record, assertion.candidateId, errorCode(error));
-    }
+    const code = await acceptAssertion(record, assertion);
+    if (code) withholdAcceptance(record, assertion.candidateId, code);
   }
 
   progress.enter('tag-parent-publication');
@@ -1864,35 +1982,27 @@ async function publishShowcasePhases(
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'candidate-currently-rejected' });
       continue;
     }
-    if (candidate.decision !== 'accepted') {
-      const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
-      const key = actionKey('accept', edge.assertion.candidateId, edge.assertion.candidateDigest);
-      const idempotencyKey = actionIdempotencyKey(key, body);
-      const prior = input.journal.action(key);
-      if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
-        omissions.push({ provider: 'vndb', sourceKey: binding.path, code: prior.error_code! });
-        setParentOutcome(binding, 'withheld', edge.assertion.candidateId, prior.error_code!);
-        continue;
+    const code = await acceptAssertion(edge.record, edge.assertion, async () => {
+      const fence = input.review.fence
+        ? await showcaseTagParentSourceFence(input.review.fence, binding)
+        : 'unavailable';
+      if (fence !== 'open') return 'source-claim-withheld';
+      for (const id of [binding.childId, binding.parentId, binding.schemeId]) publicSubjects.delete(id);
+      const state = await parentBindingEvidence(binding);
+      if (state === 'unavailable') {
+        unavailableParentCandidateIds.add(edge.assertion.candidateId);
+        unavailableParentPaths.add(binding.path);
       }
-      if (prior?.state !== 'acknowledged') {
-        const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
-        const sealedKey = input.journal.action(key)!.idempotency_key;
-        try {
-          await input.review.acceptReviewedCandidate(
-            binding.childId,
-            edge.assertion.candidateId,
-            sealedBody,
-            sealedKey,
-          );
-          input.journal.acknowledgeAction(key);
-          pageCache.delete(groupKey(binding.childId, 'skos:broader'));
-        } catch (error) {
-          input.journal.refuseAction(key, errorCode(error));
-          omissions.push({ provider: 'vndb', sourceKey: binding.path, code: errorCode(error) });
-          setParentOutcome(binding, 'withheld', edge.assertion.candidateId, errorCode(error));
-          continue;
-        }
-      }
+      return state === 'current'
+        ? null
+        : state === 'unavailable'
+          ? 'public-view-unavailable'
+          : 'vocabulary-binding-not-current';
+    });
+    if (code) {
+      omissions.push({ provider: 'vndb', sourceKey: binding.path, code });
+      setParentOutcome(binding, 'withheld', edge.assertion.candidateId, code);
+      continue;
     }
     parentAccepted.add(edge.assertion.candidateId);
   }
@@ -2134,37 +2244,37 @@ async function publishShowcasePhases(
       continue;
     const association = tagAssociationFor(record, assertion, manifest.tagAssociations ?? []);
     if (!association || withheldParentTags.has(association.tagId)) continue;
-    const candidate = validated.get(assertion.candidateId)!;
-    if (candidate.decision === 'accepted') continue;
-    if (candidate.decision === 'rejected') {
-      withholdAcceptance(record, assertion.candidateId, 'candidate-currently-rejected');
-      continue;
-    }
     const state = await currentFactsFence(input.review, input.aliases.vndb, record.sourceKey);
     if (state !== 'open') {
       blockedTagSubjects.add(id);
       omissions.push({ provider: 'vndb', sourceKey: record.sourceKey, code: 'tag-weight-fenced' });
       continue;
     }
-    const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
-    const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
-    const idempotencyKey = actionIdempotencyKey(key, body);
-    const prior = input.journal.action(key);
-    if (prior?.state === 'acknowledged') continue;
-    if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
-      withholdAcceptance(record, assertion.candidateId, prior.error_code!);
-      continue;
-    }
-    const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
-    const sealedKey = input.journal.action(key)!.idempotency_key;
-    try {
-      await input.review.acceptReviewedCandidate(id, assertion.candidateId, sealedBody, sealedKey);
-      input.journal.acknowledgeAction(key);
-      pageCache.delete(groupKey(id, assertion.property));
-    } catch (error) {
-      input.journal.refuseAction(key, errorCode(error));
-      withholdAcceptance(record, assertion.candidateId, errorCode(error));
-    }
+    const code = await acceptAssertion(record, assertion, async () => {
+      // Recheck only the saved association's admitted ancestry, never discover native graph roots.
+      const pending = [association.tagId];
+      const visited = new Set<string>();
+      for (let offset = 0; offset < pending.length; offset += 1) {
+        const child = pending[offset]!;
+        if (visited.has(child)) continue;
+        visited.add(child);
+        for (const binding of parentEvidence.filter((entry) => entry.child === child)) {
+          const edge = parentAssertions.find((entry) => entry.assertion.tagParentPath === binding.path);
+          if (!edge) return 'vocabulary-binding-not-current';
+          const fence = input.review.fence
+            ? await showcaseTagParentSourceFence(input.review.fence, binding)
+            : 'unavailable';
+          if (fence !== 'open') return 'source-claim-withheld';
+          for (const id of [binding.childId, binding.parentId, binding.schemeId]) publicSubjects.delete(id);
+          const state = await parentStatementCurrent(binding, edge.assertion);
+          if (state !== 'current')
+            return state === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-not-current';
+          pending.push(binding.parent);
+        }
+      }
+      return null;
+    });
+    if (code) withholdAcceptance(record, assertion.candidateId, code);
   }
   for (const [key, group] of grouped) {
     for (const candidateId of group.ids)
