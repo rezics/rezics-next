@@ -18,6 +18,7 @@ export const COMMAND_HISTORY_KINDS = Object.freeze({
   'commerce.offer.delist': 1001,
   'commerce.offer.revise': 1002,
   'commerce.order.create': 1003,
+  'library.collectionBulk.target': 4000,
   'content.authored_field.erase': 2000,
   'context.create': 3000,
   'context:delete': 3001,

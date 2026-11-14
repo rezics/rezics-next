@@ -14,6 +14,14 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { assertCollectionOrderWritable, lockOrderParent } from './collection-order.ts';
+import { readCollection } from './collection-store.ts';
+import { enterShelfWrite } from './shelf-counter-owner.ts';
+import {
+  declareCollectionBulkTargetHistory,
+  guardCollectionBulkTargetHistory,
+} from './collection-bulk-history-producer.ts';
 import type { AccessClient, AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { addCollectionMemberIfAbsentNative, type CollectionBulkAddEffect } from './collections.ts';
@@ -30,6 +38,7 @@ import type {
 } from './bulk-contract.ts';
 
 type ExpectationResult = { matches: true } | { matches: false; reason: BulkReason };
+const MAX_COLLECTION_MEMBER_COUNT = 2_147_483_647;
 type Prepared = {
   attempt: object;
   actor: AccountActor;
@@ -367,19 +376,50 @@ export async function executeCollectionAddTarget(
             ? { matches: false, reason: 'incarnation_mismatch' }
             : state.expectation;
         const targetEffect = async (): Promise<CollectionBulkAddEffect> => {
-          if (!subjectResult.matches)
+          if (!subjectResult.matches) {
+            await declareCollectionBulkTargetHistory(tx, null, false);
             return {
               state: subjectResult.reason === 'target_denied' ? 'denied' : 'conflict',
               reason: subjectResult.reason,
               resultingMemberId: null,
               events: [],
             };
+          }
           const expectation =
             collectionRoute === sourceRoute
               ? await checkEntryExpectation(tx, accountId, target.subjectId, target.expected)
               : state.expectation;
-          if (!expectation.matches)
+          if (!expectation.matches) {
+            await declareCollectionBulkTargetHistory(tx, null, false);
             return { state: 'conflict', reason: expectation.reason, resultingMemberId: null, events: [] };
+          }
+          const first = await readCollection(tx, collectionRoute, collectionId);
+          if (!first || first.state !== 'active') throw new ProblemError('not_found');
+          if (!first.curatorAccountId) throw new GrantDeniedError();
+          await guardCollectionBulkTargetHistory(tx, first.curatorAccountId);
+
+          // Match the existing add writer's owner-gate then Collection-parent lock order before
+          // predicting its optional outbox event. History admission is already held at this point.
+          await enterShelfWrite({ client: tx, route: collectionRoute, accountId: first.curatorAccountId });
+          await lockOrderParent(tx, collectionRoute, collectionId);
+          const current = await readCollection(tx, collectionRoute, collectionId);
+          if (!current || current.state !== 'active') throw new ProblemError('not_found');
+          if (!current.curatorAccountId || current.curatorAccountId !== first.curatorAccountId)
+            throw new GrantDeniedError();
+
+          let emitsEvent = false;
+          if (current.membershipKind === 'curated' && current.builtinKind === null) {
+            const represented = await tx.query(
+              `SELECT 1 FROM library.collection_member
+               WHERE route=$1 AND collection_id=$2 AND subject_id=$3 AND deletion_id IS NULL LIMIT 1`,
+              [collectionRoute, collectionId, target.subjectId],
+            );
+            if (represented.rows.length === 0 && current.memberCount < MAX_COLLECTION_MEMBER_COUNT) {
+              await assertCollectionOrderWritable(tx, collectionRoute, collectionId);
+              emitsEvent = true;
+            }
+          }
+          await declareCollectionBulkTargetHistory(tx, current.curatorAccountId, emitsEvent);
           return addCollectionMemberIfAbsentNative(tx, state.actor, collectionId, target.subjectId, {
             transactionId: context.transactionId,
             time: authoritativeTimeValue(context.time),
@@ -394,12 +434,29 @@ export async function executeCollectionAddTarget(
 
         let invoked = false;
         let events: CollectionBulkAddEffect['events'] = [];
+        const key = { route: sourceRoute, accountId, operationId: target.operationId };
+        await tx.query(
+          `SELECT operation_id FROM library.bulk_operation WHERE route=$1 AND operation_id=$2
+            AND account_id=$3 FOR UPDATE`,
+          [key.route, key.operationId, key.accountId],
+        );
+        const operation = await readCollectionBulk(tx, key);
+        const storedTarget = await tx.query<{ state: string }>(
+          `SELECT state FROM library.bulk_target
+           WHERE route=$1 AND operation_id=$2 AND account_id=$3 AND ordinal=$4`,
+          [key.route, key.operationId, key.accountId, Number(target.ordinal)],
+        );
+        const targetWillRun =
+          operation !== null &&
+          operation.phase !== 'preview' &&
+          operation.phase !== 'completed' &&
+          Date.parse(authoritativeTimeValue(context.time)) < Date.parse(operation.expiresAt) &&
+          (storedTarget.rows[0]?.state === 'pending' || storedTarget.rows[0]?.state === 'reconciling');
+        if (!targetWillRun) await declareCollectionBulkTargetHistory(tx, null, false);
         const applied = await applyCollectionBulkTarget(
           tx,
           {
-            route: sourceRoute,
-            accountId,
-            operationId: target.operationId,
+            ...key,
             ordinal: Number(target.ordinal),
             now: authoritativeTimeValue(context.time),
           },

@@ -27,6 +27,10 @@ import type {
 import { BULK_COMMAND_DEADLINE_MS } from './contract/index.ts';
 import { deleteMembers, readCollection, readMemberDeletion } from './collection-store.ts';
 import { assertCollectionOrderWritable } from './collection-order.ts';
+import {
+  declareCollectionBulkTargetHistory,
+  guardCollectionBulkTargetHistory,
+} from './collection-bulk-history-producer.ts';
 import { recordPublicCollectionReduction } from './collections.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { readableSubjects } from './subject-anchor.ts';
@@ -181,6 +185,7 @@ export async function executeCollectionRemoveTarget(
       );
     },
   };
+  let curatorAccountId: string | null = null;
   const authorization: CommandAuthorization = {
     action: 'collection:update',
     resource: anchor.resource,
@@ -219,6 +224,7 @@ export async function executeCollectionRemoveTarget(
       if (!parent?.curatorAccountId || parent.state !== 'active' || parent.membershipKind === 'dynamic')
         throw new GrantDeniedError();
       await shareAccount(tx, parent.curatorAccountId);
+      curatorAccountId = parent.curatorAccountId;
       return 'execute';
     },
   };
@@ -250,6 +256,8 @@ export async function executeCollectionRemoveTarget(
         const at = authoritativeTimeValue(native.time);
         const outcome = (state: TargetEvidence['outcome'], reason: TargetEvidence['reason'] = null) =>
           evidence(command, native.transactionId, state, reason);
+        if (!curatorAccountId) throw new GrantDeniedError();
+        await guardCollectionBulkTargetHistory(tx, curatorAccountId);
         if (sameHome) {
           // Match the operation owner's lock order. Only this transaction may acknowledge a same-home effect.
           await tx.query(
@@ -290,17 +298,24 @@ export async function executeCollectionRemoveTarget(
         };
         if (!readable) {
           const value = outcome('denied', 'target_denied');
+          await declareCollectionBulkTargetHistory(tx, curatorAccountId, false);
           await settle(value);
           return noEffect(value);
         }
         if (Date.parse(at) >= Date.parse(original.expiresAt)) {
           const value = outcome('cancelled', 'execution_expired');
+          await declareCollectionBulkTargetHistory(tx, curatorAccountId, false);
           await settle(value);
           return noEffect(value);
         }
         await assertCollectionOrderWritable(tx, route, target.collectionId);
         const parent = await readCollection(tx, route, target.collectionId);
-        if (!parent?.curatorAccountId || parent.state !== 'active' || parent.membershipKind === 'dynamic')
+        if (
+          !parent?.curatorAccountId ||
+          parent.state !== 'active' ||
+          parent.membershipKind === 'dynamic' ||
+          parent.curatorAccountId !== curatorAccountId
+        )
           throw new GrantDeniedError();
         const found = await tx.query<{
           subjectId: string;
@@ -317,6 +332,7 @@ export async function executeCollectionRemoveTarget(
         const member = found.rows[0];
         if (!member || member.deletionId) {
           const value = outcome('no_effect', 'missing_target');
+          await declareCollectionBulkTargetHistory(tx, curatorAccountId, false);
           await settle(value);
           return noEffect(value);
         }
@@ -327,11 +343,13 @@ export async function executeCollectionRemoveTarget(
           member.transactionId !== target.expected.transactionId
         ) {
           const value = outcome('conflict', 'revision_mismatch');
+          await declareCollectionBulkTargetHistory(tx, curatorAccountId, false);
           await settle(value);
           return noEffect(value);
         }
         // The native parent CAS and member lock protect the captured stamps through deletion. Sibling edits
         // use the current locked parent revision, rather than turning one removal into conflicts for its peers.
+        await declareCollectionBulkTargetHistory(tx, curatorAccountId, true);
         await enterShelfWrite({ client: tx, route, accountId: parent.curatorAccountId });
         const removed = await deleteMembers(
           tx,
