@@ -30,7 +30,9 @@ export function ModerationReference({
         {fields.map((field) => (
           <div key={field.label} className="min-w-0 space-y-1">
             <dt className="text-muted-foreground">{field.label}</dt>
-            <dd dir="ltr" className="select-text break-all font-mono leading-6">{field.value}</dd>
+            <dd dir="ltr" className="select-text break-all font-mono leading-6">
+              {field.value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -60,23 +62,23 @@ export function ModerationScope({
         </p>
         {admitted ? <Badge variant="secondary">{m.moderation_admission_current()}</Badge> : null}
       </div>
-      {id ? <p dir="ltr" className="select-text break-all font-mono text-xs text-muted-foreground">{id}</p> : null}
+      {id ? (
+        <p dir="ltr" className="select-text break-all font-mono text-xs text-muted-foreground">
+          {id}
+        </p>
+      ) : null}
     </div>
   );
 }
 
 /** One flat review region follows the evidence; command owners supply their own controls. */
-export function ModerationActionRegion({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+export function ModerationActionRegion({ title, children }: { title: string; children: ReactNode }) {
   const heading = useId();
   return (
     <section aria-labelledby={heading} className="min-w-0 space-y-4 border-t pt-5">
-      <h3 id={heading} className="text-base font-semibold">{title}</h3>
+      <h3 id={heading} className="text-base font-semibold">
+        {title}
+      </h3>
       {children}
     </section>
   );
@@ -96,11 +98,16 @@ export function ModerationActionTarget({
     <div className="min-w-0 space-y-2 border-l-2 border-border pl-3 text-sm">
       <p className="font-medium">{m.moderation_action_target()}</p>
       <p className="min-w-0 [overflow-wrap:anywhere]">
-        {kind} <code dir="ltr" className="select-text break-all">{id}</code>
+        {kind}{' '}
+        <code dir="ltr" className="select-text break-all">
+          {id}
+        </code>
       </p>
       {reference ? (
         <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-          <code dir="ltr" className="select-text break-all">{reference.label}: {reference.value}</code>
+          <code dir="ltr" className="select-text break-all">
+            {reference.label}: {reference.value}
+          </code>
         </p>
       ) : null}
     </div>

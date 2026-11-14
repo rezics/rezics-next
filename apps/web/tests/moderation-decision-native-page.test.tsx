@@ -94,7 +94,6 @@ test('only native permitted advice and browser admission admit appeals regardles
   }
 });
 
-
 test('served decision fixtures retain readable concealed receipts with native advice and a final source header', async () => {
   for (const state of ['open', 'pending', 'expired']) {
     const id = `decision-${state}`;

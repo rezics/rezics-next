@@ -245,21 +245,30 @@ export function ReportReviewCard({
               ? m.moderation_queue_uncertain()
               : m.moderation_action_failed();
 
-  const targetKind = report.target.kind === 'post'
-    ? m.moderation_queue_post()
-    : report.target.kind === 'thread' ? m.moderation_queue_thread() : m.moderation_queue_board();
+  const targetKind =
+    report.target.kind === 'post'
+      ? m.moderation_queue_post()
+      : report.target.kind === 'thread'
+        ? m.moderation_queue_thread()
+        : m.moderation_queue_board();
 
   return (
     <ContentItemFrame as="article" className="min-w-0 space-y-6 p-4 sm:p-6" aria-labelledby={`${id}-title`}>
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-2">
           <ContentItemHeading id={`${id}-title`} level={2} className="space-y-2 [overflow-wrap:anywhere]">
-            <span className="block text-xs font-medium text-muted-foreground">{m.moderation_reports_tab()} · {targetKind}</span>
+            <span className="block text-xs font-medium text-muted-foreground">
+              {m.moderation_reports_tab()} · {targetKind}
+            </span>
             <span className="block text-xl font-semibold">{submittedReason(report.reason)}</span>
           </ContentItemHeading>
           <p className="text-xs leading-6 text-muted-foreground">
             {m.moderation_queue_submitted()}{' '}
-            <time dateTime={report.createdAt} dir="ltr" className="inline-block max-w-full select-text tabular-nums [overflow-wrap:anywhere]">
+            <time
+              dateTime={report.createdAt}
+              dir="ltr"
+              className="inline-block max-w-full select-text tabular-nums [overflow-wrap:anywhere]"
+            >
               {date(report.createdAt)}
             </time>
           </p>
@@ -273,7 +282,9 @@ export function ReportReviewCard({
         <dl className="space-y-3 text-sm leading-7">
           <div>
             <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
-            <dd className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">{submittedReason(report.reason)}</dd>
+            <dd className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">
+              {submittedReason(report.reason)}
+            </dd>
           </div>
           {report.evidence ? (
             <div>
@@ -290,9 +301,13 @@ export function ReportReviewCard({
           </ContentItemHeading>
           {reportedRevisionState && reportedRevisionState !== 'available' ? (
             <p role="status" className="text-sm text-muted-foreground">
-              {reportedRevisionState === 'taken-down' ? m.moderation_target_taken_down()
-                : reportedRevisionState === 'erased' ? m.moderation_target_deleted()
-                : reportedRevisionState === 'withheld' ? m.moderation_target_withheld() : m.moderation_target_unavailable()}
+              {reportedRevisionState === 'taken-down'
+                ? m.moderation_target_taken_down()
+                : reportedRevisionState === 'erased'
+                  ? m.moderation_target_deleted()
+                  : reportedRevisionState === 'withheld'
+                    ? m.moderation_target_withheld()
+                    : m.moderation_target_unavailable()}
             </p>
           ) : null}
           <div className="min-w-0 border-l-2 pl-3 text-sm leading-7">
@@ -319,7 +334,11 @@ export function ReportReviewCard({
             {report.resolvedAt ? (
               <p className="text-muted-foreground">
                 {m.moderation_queue_resolved_at()}{' '}
-                <time dateTime={report.resolvedAt} dir="ltr" className="inline-block max-w-full select-text tabular-nums [overflow-wrap:anywhere]">
+                <time
+                  dateTime={report.resolvedAt}
+                  dir="ltr"
+                  className="inline-block max-w-full select-text tabular-nums [overflow-wrap:anywhere]"
+                >
                   {date(report.resolvedAt)}
                 </time>
               </p>
@@ -335,7 +354,10 @@ export function ReportReviewCard({
       ) : (
         <div className="min-w-0 border-t pt-5">
           <Collapsible>
-            <CollapsibleTrigger render={<Button variant="outline" className={moderationControl} />} disabled={bulkBlocked || pending}>
+            <CollapsibleTrigger
+              render={<Button variant="outline" className={moderationControl} />}
+              disabled={bulkBlocked || pending}
+            >
               {m.moderation_queue_review()}
             </CollapsibleTrigger>
             <CollapsibleContent keepMounted>
@@ -374,14 +396,18 @@ export function ReportReviewCard({
                   />
                   <FieldDescription id={`${id}-hint`}>{m.moderation_queue_reason_hint()}</FieldDescription>
                 </Field>
-                {takenDown ? <p className="text-sm text-muted-foreground">{m.moderation_queue_takedown_confirmed()}</p> : null}
+                {takenDown ? (
+                  <p className="text-sm text-muted-foreground">{m.moderation_queue_takedown_confirmed()}</p>
+                ) : null}
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <Button
                     type="submit"
                     variant="destructive"
                     className={moderationControl}
                     disabled={blocked || takenDown || (actionAdvice !== undefined && !actionAdvice.takeDown)}
-                    onClick={(event) => { submitSource.current = keyboardSource(event); }}
+                    onClick={(event) => {
+                      submitSource.current = keyboardSource(event);
+                    }}
                   >
                     {m.moderation_take_down()}
                   </Button>
@@ -395,7 +421,11 @@ export function ReportReviewCard({
                     {m.moderation_dismiss()}
                   </Button>
                 </div>
-                {pending ? <p role="status" className="text-sm">{m.moderation_queue_pending()}</p> : null}
+                {pending ? (
+                  <p role="status" className="text-sm">
+                    {m.moderation_queue_pending()}
+                  </p>
+                ) : null}
                 {failure ? (
                   <div role="alert" className="space-y-3 border-l-2 border-border pl-3 text-sm">
                     <p>{failureMessage}</p>
@@ -403,22 +433,41 @@ export function ReportReviewCard({
                       {failure === 'uncertain' ? m.moderation_queue_retry_hint() : m.moderation_queue_refresh_hint()}
                     </p>
                     {failure === 'uncertain' ? (
-                      <Button type="button" variant="outline" className={moderationControl} disabled={bulkBlocked || pending} onClick={(event) => void retry(keyboardSource(event))}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={moderationControl}
+                        disabled={bulkBlocked || pending}
+                        onClick={(event) => void retry(keyboardSource(event))}
+                      >
                         {m.moderation_queue_retry_action()}
                       </Button>
                     ) : onRefresh ? (
-                      <Button type="button" variant="outline" className={moderationControl} disabled={pending} onClick={() => void refresh()}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={moderationControl}
+                        disabled={pending}
+                        onClick={() => void refresh()}
+                      >
                         {m.moderation_queue_refresh()}
                       </Button>
                     ) : null}
                     {failure === 'sign-in' ? (
-                      <a className="inline-flex min-h-11 items-center underline" href={`/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}>
+                      <a
+                        className="inline-flex min-h-11 items-center underline"
+                        href={`/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+                      >
                         {m.moderation_queue_sign_in()}
                       </a>
                     ) : null}
                   </div>
                 ) : null}
-                {message ? <p role={message === m.moderation_queue_refreshed() ? 'status' : 'alert'} className="text-sm">{message}</p> : null}
+                {message ? (
+                  <p role={message === m.moderation_queue_refreshed() ? 'status' : 'alert'} className="text-sm">
+                    {message}
+                  </p>
+                ) : null}
               </form>
             </CollapsibleContent>
           </Collapsible>

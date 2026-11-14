@@ -75,7 +75,11 @@ export function WorkbenchAppealDetail({
   const resolution = appeal.resolution !== undefined ? appeal.resolution : (appeal.decision.appeal ?? null);
   return (
     <article className="min-w-0 space-y-5 [overflow-wrap:anywhere]">
-      <a className={moderationLink} href={queueHref} onClick={(event) => onReturn?.(appeal.id, event.currentTarget, event)}>
+      <a
+        className={moderationLink}
+        href={queueHref}
+        onClick={(event) => onReturn?.(appeal.id, event.currentTarget, event)}
+      >
         {m.moderation_workbench_history_return()}
       </a>
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -87,23 +91,31 @@ export function WorkbenchAppealDetail({
           </p>
         </div>
         <Badge variant="secondary">
-          {resolution
-            ? m.moderation_filter_resolved()
-            : m.moderation_appeal_resolution_pending()}
+          {resolution ? m.moderation_filter_resolved() : m.moderation_appeal_resolution_pending()}
         </Badge>
       </header>
       <div className="grid min-w-0 gap-6 border-t pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="min-w-0 space-y-3">
-          <ContentItemHeading level={3} className="text-sm font-semibold">{m.moderation_appeal_reason_label()}</ContentItemHeading>
-          <p className="max-w-prose whitespace-pre-wrap text-base leading-7 [overflow-wrap:anywhere]">{appeal.statement}</p>
+          <ContentItemHeading level={3} className="text-sm font-semibold">
+            {m.moderation_appeal_reason_label()}
+          </ContentItemHeading>
+          <p className="max-w-prose whitespace-pre-wrap text-base leading-7 [overflow-wrap:anywhere]">
+            {appeal.statement}
+          </p>
         </section>
         <div className="min-w-0 space-y-6">
           <section className="min-w-0 space-y-3">
-            <ContentItemHeading level={3} className="text-sm font-semibold">{m.moderation_appeal_decision_label()}</ContentItemHeading>
-            <p className="whitespace-pre-wrap text-sm leading-7 [overflow-wrap:anywhere]">{appeal.decision.statement}</p>
+            <ContentItemHeading level={3} className="text-sm font-semibold">
+              {m.moderation_appeal_decision_label()}
+            </ContentItemHeading>
+            <p className="whitespace-pre-wrap text-sm leading-7 [overflow-wrap:anywhere]">
+              {appeal.decision.statement}
+            </p>
           </section>
           <section className="min-w-0 space-y-3 border-t pt-4">
-            <ContentItemHeading level={3} className="text-sm font-semibold">{m.moderation_current_target_label()}</ContentItemHeading>
+            <ContentItemHeading level={3} className="text-sm font-semibold">
+              {m.moderation_current_target_label()}
+            </ContentItemHeading>
             <CurrentDestination context={appeal.targetContext} />
           </section>
         </div>
@@ -115,10 +127,13 @@ export function WorkbenchAppealDetail({
             id={originalTarget.id}
             reference={{ label: m.moderation_case_details_appeal_id(), value: appeal.id }}
           />
-        ) : <p className="text-sm text-muted-foreground">{m.moderation_target_unavailable()}</p>}
+        ) : (
+          <p className="text-sm text-muted-foreground">{m.moderation_target_unavailable()}</p>
+        )}
         {resolution ? (
           <p className="text-xs text-muted-foreground">
-            {m.moderation_queue_resolved_at()} <time dateTime={resolution.resolvedAt}>{date(resolution.resolvedAt)}</time>
+            {m.moderation_queue_resolved_at()}{' '}
+            <time dateTime={resolution.resolvedAt}>{date(resolution.resolvedAt)}</time>
           </p>
         ) : null}
         <AppealResolution
@@ -134,7 +149,14 @@ export function WorkbenchAppealDetail({
         fields={[
           { label: m.moderation_case_details_appeal_id(), value: appeal.id },
           { label: m.moderation_case_details_decision_id(), value: appeal.decisionId },
-          ...(originalTarget ? [{ label: m.moderation_appeal_original_target_label(), value: `${targetKindLabel(originalTarget.kind)} ${originalTarget.id}` }] : []),
+          ...(originalTarget
+            ? [
+                {
+                  label: m.moderation_appeal_original_target_label(),
+                  value: `${targetKindLabel(originalTarget.kind)} ${originalTarget.id}`,
+                },
+              ]
+            : []),
         ]}
       />
     </article>

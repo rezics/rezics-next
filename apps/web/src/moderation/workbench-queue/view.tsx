@@ -219,7 +219,9 @@ export function WorkbenchView({
             {...(boardId ? { id: boardId, label: page.boards.find((board) => board.id === boardId)?.title } : {})}
             admitted={page.state === 'ready' && isCurrent?.() !== false}
           />
-        ) : <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>}
+        ) : (
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>
+        )}
       </header>
       {status && !search.history ? (
         <p

@@ -14,16 +14,14 @@ function decision(id: string, state: DecisionState) {
     statement: 'This post was withheld because it included personal information without consent.',
     decidedAt: '2026-10-01T09:30:00.000Z',
     appealDeadline: state === 'expired' ? '2026-10-28T09:30:00.000Z' : '2027-04-02T09:30:00.000Z',
-    appeal:
-      state === 'pending'
-        ? { id: 'appeal-1', outcome: null, statement: null, resolvedAt: null }
-        : null,
+    appeal: state === 'pending' ? { id: 'appeal-1', outcome: null, statement: null, resolvedAt: null } : null,
     viewer: {
       affectedAuthor: true,
       observedAt: '2026-11-04T00:00:00.000Z',
-      appeal: state === 'open'
-        ? { state: 'permitted' }
-        : { state: 'unavailable', reason: state === 'pending' ? 'already_appealed' : 'deadline_passed' },
+      appeal:
+        state === 'open'
+          ? { state: 'permitted' }
+          : { state: 'unavailable', reason: state === 'pending' ? 'already_appealed' : 'deadline_passed' },
     },
     targetContext: { state: 'concealed' },
   } satisfies Decision;

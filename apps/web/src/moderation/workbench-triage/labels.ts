@@ -68,11 +68,12 @@ export function workbenchTriageTime(createdAt: string, locale: string): { iso: s
   try {
     return {
       iso: createdAt,
-      readable: new Intl.DateTimeFormat(locale, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'UTC',
-      }).format(date) + ' UTC',
+      readable:
+        new Intl.DateTimeFormat(locale, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+          timeZone: 'UTC',
+        }).format(date) + ' UTC',
     };
   } catch {
     return null;

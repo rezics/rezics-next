@@ -11,7 +11,12 @@ function SummaryValue({ field }: { field: WorkbenchTriageField }) {
     );
   }
   return (
-    <span data-triage-presence={field.presence} className={field.presence === 'present' ? '[overflow-wrap:anywhere]' : 'text-muted-foreground [overflow-wrap:anywhere]'}>
+    <span
+      data-triage-presence={field.presence}
+      className={
+        field.presence === 'present' ? '[overflow-wrap:anywhere]' : 'text-muted-foreground [overflow-wrap:anywhere]'
+      }
+    >
       {field.value}
     </span>
   );
@@ -30,22 +35,36 @@ export function WorkbenchTriageSummary({ item, locale = getLocale() }: { item: W
     <div className="min-w-0 space-y-3 text-sm">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         {type ? <span>{type.value}</span> : null}
-        {targetKind ? <><span aria-hidden="true">·</span><span>{targetKind.value}</span></> : null}
+        {targetKind ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{targetKind.value}</span>
+          </>
+        ) : null}
         {outcome ? (
-          <span data-triage-presence={outcome.presence} className="rounded-md bg-secondary px-2 py-1 font-medium text-secondary-foreground">
+          <span
+            data-triage-presence={outcome.presence}
+            className="rounded-md bg-secondary px-2 py-1 font-medium text-secondary-foreground"
+          >
             {outcome.value}
           </span>
         ) : null}
-        {created ? <span className="basis-full sm:ml-auto sm:basis-auto"><SummaryValue field={created} /></span> : null}
+        {created ? (
+          <span className="basis-full sm:ml-auto sm:basis-auto">
+            <SummaryValue field={created} />
+          </span>
+        ) : null}
       </div>
       {reason ? (
         <p className="text-base font-semibold [overflow-wrap:anywhere]">
-          <span className="sr-only">{reason.label}: </span><SummaryValue field={reason} />
+          <span className="sr-only">{reason.label}: </span>
+          <SummaryValue field={reason} />
         </p>
       ) : null}
       {evidence ? (
         <p className="max-w-prose whitespace-pre-wrap text-sm leading-6 line-clamp-3 [overflow-wrap:anywhere]">
-          <span className="sr-only">{evidence.label}: </span><SummaryValue field={evidence} />
+          <span className="sr-only">{evidence.label}: </span>
+          <SummaryValue field={evidence} />
         </p>
       ) : null}
     </div>

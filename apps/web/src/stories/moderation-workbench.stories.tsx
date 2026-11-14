@@ -139,7 +139,8 @@ const selectedAppeal: Appeal = {
     automated: false,
   },
   createdAt: '2026-11-02T08:30:00.000Z',
-  statement: 'The contact details are the organization’s public event enquiry address. Please review the original context.',
+  statement:
+    'The contact details are the organization’s public event enquiry address. Please review the original context.',
   decision: {
     statement: 'The reported revision appeared to disclose a private contact address.',
     target: { kind: 'post', id: 'original-reported-post' },

@@ -393,7 +393,10 @@ function AppealsView({
         >
           {m.moderation_reports_tab()}
         </a>
-        <span aria-current="page" className="inline-flex min-h-11 items-center border-b-2 border-primary px-3 py-2 text-sm font-semibold">
+        <span
+          aria-current="page"
+          className="inline-flex min-h-11 items-center border-b-2 border-primary px-3 py-2 text-sm font-semibold"
+        >
           {m.moderation_appeals_tab()}
         </span>
       </nav>
@@ -564,12 +567,17 @@ function AppealCard({
             {...(isCurrent ? { isCurrent } : {})}
           />
         </ModerationActionRegion>
-        <ModerationReference fields={[
-          { label: m.moderation_case_details_appeal_id(), value: appeal.id },
-          { label: m.moderation_case_details_decision_id(), value: appeal.decisionId },
-          ...(identity && identity.kind !== 'board' && currentTargetIsAvailable(target, { kind: identity.kind, id: identity.id })
-            ? [{ label: m.moderation_case_details_target_id(), value: identity.id }] : []),
-        ]} />
+        <ModerationReference
+          fields={[
+            { label: m.moderation_case_details_appeal_id(), value: appeal.id },
+            { label: m.moderation_case_details_decision_id(), value: appeal.decisionId },
+            ...(identity &&
+            identity.kind !== 'board' &&
+            currentTargetIsAvailable(target, { kind: identity.kind, id: identity.id })
+              ? [{ label: m.moderation_case_details_target_id(), value: identity.id }]
+              : []),
+          ]}
+        />
       </ContentItemFrame>
     </li>
   );

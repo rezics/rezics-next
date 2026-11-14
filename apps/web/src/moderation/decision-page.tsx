@@ -655,10 +655,7 @@ function DecisionVisit({
       }}
     >
       <header className="space-y-5">
-        <a
-          href={localizeHref('/inbox')}
-          className={moderationLink}
-        >
+        <a href={localizeHref('/inbox')} className={moderationLink}>
           <ArrowLeft className="size-4" aria-hidden="true" />
           {m.decision_back()}
         </a>
@@ -686,10 +683,17 @@ function DecisionVisit({
             {decision.appealDeadline ? (
               <dl className="space-y-1 leading-6">
                 <dt className="font-medium">{m.decision_deadline_label()}</dt>
-                <dd className="text-muted-foreground"><DecisionTime instant={decision.appealDeadline} now={now} locale={locale} /></dd>
+                <dd className="text-muted-foreground">
+                  <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
+                </dd>
               </dl>
             ) : null}
-            <Button className={moderationControl} variant="outline" disabled={refreshing} onClick={() => void refresh()}>
+            <Button
+              className={moderationControl}
+              variant="outline"
+              disabled={refreshing}
+              onClick={() => void refresh()}
+            >
               {refreshing ? m.decision_refreshing() : m.decision_refresh()}
             </Button>
           </div>
@@ -818,7 +822,10 @@ function DecisionVisit({
                 {m.decision_authority_hint()}
               </p>
               <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                {m.moderation_case_details_decision_id()}: <code dir="ltr" className="select-text break-all">{decision.id}</code>
+                {m.moderation_case_details_decision_id()}:{' '}
+                <code dir="ltr" className="select-text break-all">
+                  {decision.id}
+                </code>
               </p>
               <Button
                 type="submit"
@@ -886,10 +893,12 @@ function DecisionVisit({
           ) : null}
         </div>
       </section>
-      <ModerationReference fields={[
-        { label: m.moderation_case_details_decision_id(), value: decision.id },
-        ...(appeal ? [{ label: m.moderation_case_details_appeal_id(), value: appeal.id }] : []),
-      ]}>
+      <ModerationReference
+        fields={[
+          { label: m.moderation_case_details_decision_id(), value: decision.id },
+          ...(appeal ? [{ label: m.moderation_case_details_appeal_id(), value: appeal.id }] : []),
+        ]}
+      >
         <p className="max-w-prose pb-3 text-xs leading-6 text-muted-foreground">{m.decision_target_independent()}</p>
       </ModerationReference>
     </article>

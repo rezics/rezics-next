@@ -238,7 +238,12 @@ function ResolutionForm({
 
   if (result)
     return (
-      <p ref={resultFocusTarget} role="status" tabIndex={-1} className="space-y-2 font-medium focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <p
+        ref={resultFocusTarget}
+        role="status"
+        tabIndex={-1}
+        className="space-y-2 font-medium focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         {result.outcome === 'upheld' ? m.moderation_appeal_upheld() : m.moderation_appeal_reversed()}
         <span className="block whitespace-pre-wrap font-normal">{result.statement}</span>
       </p>

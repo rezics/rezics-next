@@ -192,6 +192,8 @@ test('valid report times remain readable in all eight interface locales with the
     const time = workbenchTriageTime(pending.createdAt, locale);
     expect(time?.iso).toBe(pending.createdAt);
     expect(time?.readable).toContain('UTC');
-    expect(workbenchTriageDetailFields(pending, locale).find((field) => field.key === 'created')?.presence).toBe('present');
+    expect(workbenchTriageDetailFields(pending, locale).find((field) => field.key === 'created')?.presence).toBe(
+      'present',
+    );
   }
 });
