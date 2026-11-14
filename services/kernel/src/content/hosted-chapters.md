@@ -143,6 +143,10 @@ three final index roots, moved containment and changed size/chapter summaries th
 revision-head CAS. Adjacent no-op retains the existing revision; selection and writes never enumerate the subtree
 or load target bodies. Route mounting remains with its owner.
 
+Decision: move preflight deduplicates every already-known sibling parent, reads temporal roots from the selected
+snapshot in sequential windows of at most 512, maps missing and empty roots to null, and validates each returned
+parent and sequence before binding roots to the move selection.
+
 Decision: point insertion and subtree removal resolve one expected snapshot and update the existing sibling,
 preorder and chapter indexes; removal cuts ranges by stored aggregates without visiting descendants, preserving
 historical roots and permanent occurrence identity. Admitted authors bind insert and subtree removal through

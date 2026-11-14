@@ -22,7 +22,7 @@ import versionHeadSql from '../../src/content/hosted-version-read-head.sql';
 import nodeSql from '../../src/content/hosted-version-read-node.sql';
 import nodesSql from '../../src/content/hosted-version-read-nodes.sql';
 import occurrencesSql from '../../src/content/hosted-version-read-occurrences.sql';
-import siblingRootSql from '../../src/content/hosted-version-read-sibling-root.sql';
+import siblingRootsSql from '../../src/content/hosted-version-read-sibling-roots.sql';
 
 type Snapshot = Map<string, VersionedOutlineSequenceNode<string>>;
 
@@ -708,6 +708,13 @@ function nativePreflightFixture() {
   } as const;
   const batches: { index: string; ids: readonly string[] }[] = [];
   const occurrenceBatches: string[][] = [];
+  const siblingRootBatches: (string | null)[][] = [];
+  const siblingRoots = [
+    { parent_id: null, root_node_id: 'root-from-sequence-5', sequence: '5' },
+    { parent_id: parentA, root_node_id: 'parent-a-siblings', sequence: '7' },
+    { parent_id: parentB, root_node_id: null, sequence: '7' },
+    { parent_id: empty, root_node_id: null, sequence: '6' },
+  ];
   const tx = {
     async query(sql: string, args: readonly unknown[]) {
       if (sql === draftHeadSql.sql) return { rows: [{ head_revision_id: revisionId }] };
@@ -750,9 +757,11 @@ function nativePreflightFixture() {
           }),
         };
       }
-      if (sql === siblingRootSql.sql) {
+      if (sql === siblingRootsSql.sql) {
         expect(args[5]).toBe('7');
-        return { rows: [] };
+        const ids = args[3] as (string | null)[];
+        siblingRootBatches.push([...ids]);
+        return { rows: siblingRoots.filter(({ parent_id }) => ids.includes(parent_id)) };
       }
       throw new Error('Unexpected preflight SQL');
     },
@@ -765,7 +774,10 @@ function nativePreflightFixture() {
   };
   const select = (selectedInput = input) =>
     createHostedVersionDraftMoveNativeAdapter().selectExpectedSnapshot(tx, catalogueId, selectedInput, descriptor);
-  return { select, input, facts, batches, occurrenceBatches, outer, parentA, source, parentB, empty, tail, preorder };
+  return {
+    select, input, facts, batches, occurrenceBatches, siblingRootBatches,
+    outer, parentA, source, parentB, empty, tail, preorder,
+  };
 }
 
 test('native preflight shares large-Book participant and ancestor frontiers, including empty and root placements', async () => {
@@ -775,6 +787,16 @@ test('native preflight shares large-Book participant and ancestor frontiers, inc
   expect(selection.before?.chapterCount).toBe(0n);
   expect(selection.sourceAncestors.map(({ occurrenceId }) => occurrenceId)).toEqual([fixture.parentA, fixture.outer]);
   expect(selection.destinationAncestors.map(({ occurrenceId }) => occurrenceId)).toEqual([fixture.outer]);
+  expect(fixture.siblingRootBatches).toEqual([
+    [null, fixture.source, fixture.parentA, fixture.parentB, fixture.empty, fixture.outer],
+  ]);
+  expect(fixture.siblingRootBatches.every(({ length }) => length <= 512)).toBe(true);
+  expect(selection.sourceSiblingRootId).toBe('parent-a-siblings');
+  expect(selection.destinationSiblingRootId).toBeNull();
+  expect(selection.siblingRootByParent.get(null)).toBe('root-from-sequence-5');
+  expect(selection.siblingRootByParent.get(fixture.empty)).toBeNull();
+  expect(selection.siblingRootByParent.has(fixture.source)).toBe(true);
+  expect(selection.siblingRootByParent.get(fixture.source)).toBeNull();
   const participants = [fixture.source, fixture.parentB, fixture.empty, fixture.parentA, fixture.outer];
   const preorderBatches = fixture.batches.filter(({ index }) => index === 'preorder');
   expect(preorderBatches.some(({ ids }) => participants.every((id) => ids.includes(id)))).toBe(true);
@@ -791,6 +813,9 @@ test('native preflight shares large-Book participant and ancestor frontiers, inc
   const root = await fixture.select({ ...fixture.input, parentId: null, beforeOccurrenceId: fixture.tail });
   expect(root.selection.destinationParent).toBeNull();
   expect(root.selection.destinationAncestors).toEqual([]);
+  expect(root.selection.destinationSiblingRootId).toBe('root-from-sequence-5');
+  const sameParent = await fixture.select({ ...fixture.input, parentId: fixture.parentA, beforeOccurrenceId: null });
+  expect(sameParent.selection.sourceSiblingRootId).toBe(sameParent.selection.destinationSiblingRootId);
   const empty = await fixture.select({ ...fixture.input, occurrenceId: fixture.empty, beforeOccurrenceId: null });
   expect(empty.selection.source.chapterCount).toBe(0n);
 

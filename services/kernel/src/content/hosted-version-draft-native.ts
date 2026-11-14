@@ -29,7 +29,7 @@ import {
   readHostedVersionHead,
   readHostedVersionMaximumChildSubtreeHeight,
   readHostedVersionOccurrences,
-  readHostedVersionSiblingRoot,
+  readHostedVersionSiblingRoots,
   readHostedVersionSnapshot,
   stageHostedVersionOccurrence,
   stageHostedVersionSiblingRoot,
@@ -50,6 +50,8 @@ import type {
 import readHead from './hosted-version-draft-native-read-head.sql';
 
 type DraftHeadRow = Readonly<{ head_revision_id: string }>;
+
+const HOSTED_VERSION_SIBLING_ROOT_BATCH_SIZE = 512;
 
 const contexts = new WeakMap<object, HostedVersionDraftMoveNativeContext>();
 
@@ -392,17 +394,6 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         }
       }
 
-      const rootForParent = async (parentId: string | null): Promise<string | null> => {
-        const root = await readHostedVersionSiblingRoot(tx, snapshot, parentId);
-        if (root === null) return null;
-        if (root.parentOccurrenceId !== parentId || root.sequence > snapshot.sequence) {
-          throw new InvalidHostedVersionIdentityError();
-        }
-        return root.rootNodeId;
-      };
-      const sourceSiblingRootId = await rootForParent(source.parentOccurrenceId);
-      const destinationSiblingRootId =
-        source.parentOccurrenceId === input.parentId ? sourceSiblingRootId : await rootForParent(input.parentId);
       const siblingParents = new Set<string | null>([
         null,
         source.occurrenceId,
@@ -415,16 +406,20 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         siblingParents.add(ancestor.parentId);
       }
       const siblingRootByParent = new Map<string | null, string | null>();
-      for (const parentId of siblingParents) {
-        siblingRootByParent.set(
-          parentId,
-          parentId === source.parentOccurrenceId
-            ? sourceSiblingRootId
-            : parentId === input.parentId
-              ? destinationSiblingRootId
-              : await rootForParent(parentId),
-        );
+      const siblingParentIds = [...siblingParents];
+      for (let offset = 0; offset < siblingParentIds.length; offset += HOSTED_VERSION_SIBLING_ROOT_BATCH_SIZE) {
+        const parentIds = siblingParentIds.slice(offset, offset + HOSTED_VERSION_SIBLING_ROOT_BATCH_SIZE);
+        const roots = await readHostedVersionSiblingRoots(tx, snapshot, parentIds);
+        for (const parentId of parentIds) {
+          const root = roots.get(parentId) ?? null;
+          if (root !== null && (root.parentOccurrenceId !== parentId || root.sequence > snapshot.sequence)) {
+            throw new InvalidHostedVersionIdentityError();
+          }
+          siblingRootByParent.set(parentId, root?.rootNodeId ?? null);
+        }
       }
+      const sourceSiblingRootId = siblingRootByParent.get(source.parentOccurrenceId) ?? null;
+      const destinationSiblingRootId = siblingRootByParent.get(input.parentId) ?? null;
 
       const selection: HostedVersionDraftMoveSelection = {
         snapshotId: descriptor.revisionId,
