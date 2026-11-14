@@ -71,7 +71,7 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
   const ownsBrowser = suppliedBrowser === undefined;
   if (!existsSync(resolve(output, 'index.json')) || !existsSync(resolve(output, 'ui/index.json')))
     throw new Error(
-      'Storybook smoke unavailable: both built indexes must exist in this physical snapshot. Use storybook-deploy.ts --validate-only to build and run the six smoke scenarios together.',
+      'Storybook smoke unavailable: both built indexes must exist in this physical snapshot. Use storybook-deploy.ts --validate-only to prepare the artifact, then run storybook-smoke.ts independently.',
     );
   const webIndex = JSON.parse(readFileSync(resolve(output, 'index.json'), 'utf8')) as SmokeStoryIndex;
   const uiIndex = JSON.parse(readFileSync(resolve(output, 'ui/index.json'), 'utf8')) as SmokeStoryIndex;

@@ -80,6 +80,23 @@ Keep automated multi-tab, history and viewport walks in separately named interac
 loading a review entry must not run through other pages before settling. The same canonical review URL supports
 manual phone/desktop and theme changes.
 
+## Publication transport
+
+The publication program builds one committed snapshot without waiting for review tests, then returns one
+publication archive through the ordinary check-artifact boundary. The embedded manifest records the exact revision,
+relative member paths, byte lengths and SHA-256 digests. Publication accepts at most 16,384 ordinary files and
+240 MiB including a manifest of at most 4 MiB. The receiver verifies all members and the built revision before
+atomically replacing the local deployment directory. Generic check-artifact file and byte limits remain unchanged.
+The focused boundary regression is `apps/web/tests/storybook-archive.test.ts`; successful transport does not establish
+native product acceptance or visual review.
+
+Routine publication is a finite program, not a resident model worker. Run `bun run --cwd apps/web storybook:deploy`
+from the selected clean snapshot; it builds, returns the archive, deploys and checks the live revision. A manager
+assigns source repair only when the program fails or its behavior must change. Keep one publication process at a
+time and retain its terminal result. Smoke, interaction and visual checks run independently after deployment;
+`bun apps/web/scripts/storybook-smoke.ts` runs the retained smoke scenarios. Tests do not block review publication.
+
+
 ## Agent access
 
 Start an isolated local catalogue from the worktree root with an unused exact loopback port:
