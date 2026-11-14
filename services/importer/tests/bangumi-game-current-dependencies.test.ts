@@ -14,16 +14,46 @@ const sourceUri = 'https://bgm.tv/info/platform/PC';
 const binding = { kind: 'platform', item: 'PC', conceptId: pc, sourceUri } as const;
 const reference = bangumiGameEnvironmentReferenceKey('schema:gamePlatform', 'PC');
 
-function current() {
+function current(id = pc, url = sourceUri) {
   return {
     subject: {
-      id: pc,
+      id,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: sourceUri } }],
+        'schema:url': [{ rank: 'normal', value: { type: 'value', content: url } }],
       },
     },
   } as unknown as ReviewedSubjectRead;
+}
+
+function withUrls(rows: unknown[]): ReviewedSubjectRead {
+  return {
+    subject: { ...current().subject, statements: { 'schema:url': rows } },
+  } as unknown as ReviewedSubjectRead;
+}
+
+async function resolveGame(
+  bindings: readonly (typeof binding | { kind: 'engine'; item: string; conceptId: string; sourceUri: string })[],
+  available: { conceptId: string; sourceUri: string },
+) {
+  const lookup = createShowcaseBangumiGameEnvironmentLookup({
+    sourceAlias: 'bangumi',
+    bindings,
+    read: async (id) => (id === available.conceptId ? current(id, available.sourceUri) : null),
+  });
+  const conversion = createSourceRegistration('bangumi').convert(
+    {
+      external_id: '1',
+      record_revision: null,
+      record: { id: 1, type: 4, name: 'Authored Game', infobox: '{{Infobox Game\n|平台=PC\n|游戏引擎=Unity\n}}' },
+    },
+    { source: 'bangumi' },
+  );
+  return lookup.resolve({
+    owner: { source: 'bangumi', external_id: '1' },
+    conversion,
+    signal: new AbortController().signal,
+  });
 }
 
 test('external Game environment profiles retain exact native lookup hints and reject ambiguous mappings', () => {
@@ -66,6 +96,25 @@ test('one unavailable Game lookup preserves its properties and independently res
   });
   expect(mergeIdentifierResolutions([{}, { [reference]: pc }])).toEqual({ [reference]: pc });
   expect(mergeIdentifierResolutions([])).toEqual({});
+});
+
+test('unavailable Game environment properties preserve independently current siblings in either direction', async () => {
+  const engine = {
+    kind: 'engine' as const,
+    item: 'Unity',
+    conceptId: randomUUID(),
+    sourceUri: 'https://bgm.tv/info/engine/Unity',
+  };
+  for (const [available, unavailable, property, key] of [
+    [binding, engine, 'wdt:P408', reference],
+    [engine, binding, 'schema:gamePlatform', bangumiGameEnvironmentReferenceKey('wdt:P408', 'Unity')],
+  ] as const) {
+    expect(await resolveGame([available, unavailable], available)).toEqual({
+      status: 'unavailable',
+      preserveProperties: [property],
+      resolvedReferences: { [key]: available.conceptId },
+    });
+  }
 });
 
 for (const scale of [1, 8, 64])
@@ -119,10 +168,23 @@ test('unchanged Game source resolves a dependency again on the next seed pass', 
   });
   expect(mergeIdentifierResolutions([{}, await lookup.resolve(input)])).toEqual({
     status: 'unavailable',
-    preserveProperties: ['schema:gamePlatform', 'wdt:P408'],
+    preserveProperties: ['schema:gamePlatform'],
   });
+  const resolve = () => lookup.resolve({ ...input, signal: new AbortController().signal });
   page = current();
-  expect(await lookup.resolve({ ...input, signal: new AbortController().signal })).toEqual({ [reference]: pc });
+  expect(await resolve()).toEqual({ [reference]: pc });
+  page = withUrls([{ rank: 'deprecated', value: { type: 'value', content: sourceUri } }]);
+  expect(await resolve()).toEqual({});
+  const source = { rank: 'preferred', value: { type: 'value', content: sourceUri } };
+  const foreign = 'https://vndb.org/releases/platforms/win';
+  page = withUrls([source, { rank: 'deprecated', value: { type: 'value', content: foreign } }]);
+  expect(await resolve()).toEqual({ [reference]: pc });
+  page = withUrls([source, { rank: 'normal', value: { type: 'value', content: foreign } }]);
+  expect(await resolve()).toEqual({});
+  page = withUrls([{ value: { type: 'value', content: sourceUri } }]);
+  expect(await resolve()).toEqual({});
+  page = withUrls([{ rank: 'normal', value: { type: 'some', content: sourceUri } }]);
+  expect(await resolve()).toEqual({});
   page = { subject: { id: pc, type: 'skos:Concept', statements: {} } } as unknown as ReviewedSubjectRead;
-  expect(await lookup.resolve({ ...input, signal: new AbortController().signal })).toEqual({});
+  expect(await resolve()).toEqual({});
 });
