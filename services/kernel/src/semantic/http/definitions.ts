@@ -17,7 +17,7 @@ import { LeafNativeWork, LeafReservationUnavailable } from '../scope-leaf-select
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import { withConnection } from '../../database/pool.ts';
+import { withBoundedReadConnection } from '../../database/pool.ts';
 import { withReadTransaction } from '../read.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
@@ -739,7 +739,8 @@ export function definitionRoutes(
           ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
         });
         const release = await admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           // A release composed for one Context is not a published release.
           return readRelease(pool, params.digest, { composed: false });
         });
@@ -766,7 +767,8 @@ export function definitionRoutes(
           ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
         });
         const active = await admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           return activeRelease(pool);
         });
         if (!active) throw new ProblemError('not_found');
@@ -790,7 +792,8 @@ export function definitionRoutes(
           ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
         });
         const active = await admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           return activeRelease(pool);
         });
         if (!active) throw new ProblemError('not_found');
@@ -1017,7 +1020,8 @@ export function definitionRoutes(
         context.eligibility = publicContextEligibility(context);
         const check = await authorize(context);
         const active = await admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           try {
             return await activeExtension(pool, params.id);
           } catch (error) {
@@ -1059,7 +1063,8 @@ export function definitionRoutes(
         context.eligibility = publicContextEligibility(context);
         const check = await authorize(context);
         const extension = await admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           try {
             return await readPublishedExtension(pool, params.id, params.digest);
           } catch (error) {
