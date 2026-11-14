@@ -26,7 +26,7 @@ import type { ReadCredentialMode } from '../session/reader';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
-import { NotFoundPage, StatusPage } from '../shell/shell';
+import { NotFoundPage } from '../shell/shell';
 import { RouteState } from '../shell/route-state';
 import type { PagePaths } from '../shell/head';
 import {
@@ -137,14 +137,34 @@ function retryDelay(value: string): number {
 
 const maxAutomaticContinuations = 4;
 
+function continuationAfter(attempted: ZonePageInput, outcome: ZonePageRouteOutcome): ZonePageInput {
+  return outcome.kind === 'preparing' && outcome.cursor !== undefined
+    ? { ...attempted, cursor: outcome.cursor }
+    : attempted;
+}
+
+type ZoneRecoveryFocusCandidate = {
+  visit: string;
+  sequence: number;
+  cancel: (event?: Event) => void;
+};
+
+function clearZoneRecoveryFocus(candidate: ZoneRecoveryFocusCandidate): void {
+  if (typeof document === 'undefined') return;
+  document.removeEventListener('pointerdown', candidate.cancel, true);
+  document.removeEventListener('focusin', candidate.cancel, true);
+  if (typeof window !== 'undefined') window.removeEventListener('blur', candidate.cancel, true);
+}
+
 type ZoneReadBoundaryState = {
   visit: string;
   outcome: ZonePageRouteOutcome;
+  continuation: ZonePageInput;
   automaticContinuations: number;
   retrying: boolean;
 };
 
-/** Keep the last server cursor in component state and resume the public read after hydration. */
+/** Keep the exact continuation request in component state and resume the public read after hydration. */
 export function ZoneReadBoundary({
   initial,
   request,
@@ -154,7 +174,6 @@ export function ZoneReadBoundary({
   request: ZonePageInput;
   children: (page: Extract<ZonePageRouteOutcome, { kind: 'page' }>) => ReactNode;
 }) {
-  const targetKey = JSON.stringify(request.target);
   const callbackRef = useRef<ZoneCallbackIdentity | undefined>(undefined);
   const callback = advanceZoneCallback(
     callbackRef.current,
@@ -175,15 +194,32 @@ export function ZoneReadBoundary({
   const [state, setState] = useState<ZoneReadBoundaryState>(() => ({
     visit,
     outcome: initial,
+    continuation: continuationAfter(request, initial),
     automaticContinuations: 0,
     retrying: false,
   }));
-  if (state.visit !== visit) setState({ visit, outcome: initial, automaticContinuations: 0, retrying: false });
+  if (state.visit !== visit)
+    setState({
+      visit,
+      outcome: initial,
+      continuation: continuationAfter(request, initial),
+      automaticContinuations: 0,
+      retrying: false,
+    });
   const current =
-    state.visit === visit ? state : { visit, outcome: initial, automaticContinuations: 0, retrying: false };
+    state.visit === visit
+      ? state
+      : {
+          visit,
+          outcome: initial,
+          continuation: continuationAfter(request, initial),
+          automaticContinuations: 0,
+          retrying: false,
+        };
   const outcome = current.outcome;
   const kind = outcome.kind;
-  const cursor = outcome.kind === 'preparing' ? outcome.cursor : undefined;
+  const continuation = current.continuation;
+  const cursor = continuation.cursor;
   const retryAfter = outcome.kind === 'preparing' || outcome.kind === 'unavailable' ? outcome.retryAfter : undefined;
   const retryKey = JSON.stringify([visit, kind, cursor ?? null, retryAfter ?? null, current.retrying]);
   const [retryReadiness, setRetryReadiness] = useState({ key: '', ready: false });
@@ -191,6 +227,49 @@ export function ZoneReadBoundary({
   const activeVisit = useRef(visit);
   activeVisit.current = visit;
   const retrySequence = useRef(0);
+  const pendingManual = useRef<{ visit: string; sequence: number } | undefined>(undefined);
+  const keyboardRecovery = useRef<ZoneRecoveryFocusCandidate | undefined>(undefined);
+  const [recoveryResult, setRecoveryResult] = useState<{ visit: string; sequence: number } | undefined>();
+  const recoveryResultRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    activeVisit.current = visit;
+    return () => {
+      if (activeVisit.current === visit) activeVisit.current = '';
+      retrySequence.current += 1;
+      if (pendingManual.current?.visit === visit) pendingManual.current = undefined;
+      const candidate = keyboardRecovery.current;
+      if (candidate?.visit === visit) {
+        clearZoneRecoveryFocus(candidate);
+        keyboardRecovery.current = undefined;
+      }
+    };
+  }, [visit]);
+
+  useEffect(() => {
+    if (!recoveryResult) return;
+    const candidate = keyboardRecovery.current;
+    if (
+      recoveryResult.visit !== visit ||
+      activeVisit.current !== visit ||
+      retrySequence.current !== recoveryResult.sequence ||
+      !candidate ||
+      candidate.visit !== visit ||
+      candidate.sequence !== recoveryResult.sequence
+    ) {
+      if (candidate && candidate.visit === recoveryResult.visit) {
+        clearZoneRecoveryFocus(candidate);
+        keyboardRecovery.current = undefined;
+      }
+      setRecoveryResult(undefined);
+      return;
+    }
+    const result = recoveryResultRef.current;
+    if (!result) return;
+    clearZoneRecoveryFocus(candidate);
+    keyboardRecovery.current = undefined;
+    result.focus({ preventScroll: true });
+  }, [recoveryResult, visit, outcome]);
 
   useEffect(() => {
     if (kind !== 'preparing' && kind !== 'unavailable') return;
@@ -207,15 +286,7 @@ export function ZoneReadBoundary({
     const sequence = retrySequence.current;
     const timer = setTimeout(
       () => {
-        void continueZonePageRequest({
-          data: {
-            id: request.id,
-            locale: request.locale,
-            target: JSON.parse(targetKey) as ZonePageInput['target'],
-            ...(request.credentialMode === undefined ? {} : { credentialMode: request.credentialMode }),
-            ...(cursor === undefined ? {} : { cursor }),
-          },
-        }).then(
+        void continueZonePageRequest({ data: continuation }).then(
           (next) => {
             if (!active || activeVisit.current !== visit || retrySequence.current !== sequence) return;
             setState((previous) =>
@@ -223,6 +294,7 @@ export function ZoneReadBoundary({
                 ? {
                     ...previous,
                     outcome: next,
+                    continuation: continuationAfter(previous.continuation, next),
                     automaticContinuations: previous.automaticContinuations + 1,
                   }
                 : previous,
@@ -244,38 +316,104 @@ export function ZoneReadBoundary({
     visit,
     kind,
     cursor,
+    continuation,
     retryAfter,
-    request.id,
-    request.locale,
-    request.credentialMode,
-    targetKey,
     current.automaticContinuations,
     current.retrying,
   ]);
 
-  const retry = () => {
+  const retry = (event?: { detail: number; currentTarget: Element | null }) => {
+    const retryAllowed =
+      kind === 'error' ||
+      ((kind === 'unavailable' || kind === 'preparing') &&
+        (kind !== 'preparing' || current.automaticContinuations >= maxAutomaticContinuations) &&
+        retryReady);
+    if (
+      !retryAllowed ||
+      current.retrying ||
+      activeVisit.current !== visit ||
+      pendingManual.current?.visit === visit
+    )
+      return;
     const sequence = ++retrySequence.current;
+    pendingManual.current = { visit, sequence };
+    const previousCandidate = keyboardRecovery.current;
+    if (previousCandidate) {
+      clearZoneRecoveryFocus(previousCandidate);
+      keyboardRecovery.current = undefined;
+    }
+    if (
+      event?.detail === 0 &&
+      typeof document !== 'undefined' &&
+      event.currentTarget !== null &&
+      event.currentTarget === document.activeElement
+    ) {
+      const cancel = (inputEvent?: Event) => {
+        if (
+          inputEvent?.type === 'focusin' &&
+          (inputEvent.target === document.body || inputEvent.target === document.documentElement)
+        )
+          return;
+        const candidate = keyboardRecovery.current;
+        if (candidate?.visit !== visit || candidate.sequence !== sequence) return;
+        clearZoneRecoveryFocus(candidate);
+        keyboardRecovery.current = undefined;
+      };
+      const candidate = { visit, sequence, cancel };
+      keyboardRecovery.current = candidate;
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('focusin', cancel, true);
+      window.addEventListener('blur', cancel, true);
+    }
     setRetryReadiness({ key: '', ready: false });
     setState((previous) =>
       previous.visit === visit
         ? { ...previous, retrying: true, automaticContinuations: maxAutomaticContinuations }
         : previous,
     );
-    void continueZonePageRequest({
-      data: {
-        id: request.id,
-        locale: request.locale,
-        target: JSON.parse(targetKey) as ZonePageInput['target'],
-        ...(request.credentialMode === undefined ? {} : { credentialMode: request.credentialMode }),
-        ...(cursor === undefined ? {} : { cursor }),
-      },
-    }).then(
+    void continueZonePageRequest({ data: continuation }).then(
       (next) => {
-        if (activeVisit.current !== visit || retrySequence.current !== sequence) return;
-        setState((previous) => (previous.visit === visit ? { ...previous, outcome: next, retrying: false } : previous));
+        if (
+          activeVisit.current !== visit ||
+          retrySequence.current !== sequence ||
+          pendingManual.current?.visit !== visit ||
+          pendingManual.current.sequence !== sequence
+        )
+          return;
+        pendingManual.current = undefined;
+        const candidate = keyboardRecovery.current;
+        const ownsKeyboardRecovery = candidate?.visit === visit && candidate.sequence === sequence;
+        if (ownsKeyboardRecovery) setRecoveryResult({ visit, sequence });
+        else if (candidate) {
+          clearZoneRecoveryFocus(candidate);
+          keyboardRecovery.current = undefined;
+        }
+        setState((previous) =>
+          previous.visit === visit
+            ? {
+                ...previous,
+                outcome: next,
+                continuation: continuationAfter(previous.continuation, next),
+                retrying: false,
+              }
+            : previous,
+        );
       },
       () => {
-        if (activeVisit.current !== visit || retrySequence.current !== sequence) return;
+        if (
+          activeVisit.current !== visit ||
+          retrySequence.current !== sequence ||
+          pendingManual.current?.visit !== visit ||
+          pendingManual.current.sequence !== sequence
+        )
+          return;
+        pendingManual.current = undefined;
+        const candidate = keyboardRecovery.current;
+        if (candidate?.visit === visit && candidate.sequence === sequence) setRecoveryResult({ visit, sequence });
+        else if (candidate) {
+          clearZoneRecoveryFocus(candidate);
+          keyboardRecovery.current = undefined;
+        }
         setState((previous) =>
           previous.visit === visit ? { ...previous, outcome: { kind: 'error' }, retrying: false } : previous,
         );
@@ -283,29 +421,68 @@ export function ZoneReadBoundary({
     );
   };
 
-  if (outcome.kind === 'page') return children(outcome);
-  if (outcome.kind === 'preparing')
+  const focusAcceptedResult =
+    recoveryResult?.visit === visit && recoveryResult.sequence === retrySequence.current;
+  const recoveryRegion = (label: string, content: ReactNode) => (
+    <div
+      ref={focusAcceptedResult ? recoveryResultRef : undefined}
+      role={focusAcceptedResult ? 'region' : undefined}
+      aria-label={focusAcceptedResult ? label : undefined}
+      tabIndex={focusAcceptedResult ? -1 : undefined}
+      className="min-w-0"
+    >
+      {content}
+    </div>
+  );
+  if (outcome.kind === 'page') {
+    if (!focusAcceptedResult) return children(outcome);
+    const pageVisit = zoneVisitFromRequest(request.locale, request.id, request.target);
     return (
+      <div
+        ref={recoveryResultRef}
+        role="region"
+        aria-label={zonePageHeading(outcome.page, pageVisit)}
+        tabIndex={-1}
+        className="min-w-0"
+      >
+        {children(outcome)}
+      </div>
+    );
+  }
+  if (outcome.kind === 'preparing')
+    return recoveryRegion(
+      m.zone_preparing_heading(),
       <RouteState
         heading={m.zone_preparing_heading()}
         message={m.zone_preparing_message()}
         onRetry={current.automaticContinuations >= maxAutomaticContinuations ? retry : undefined}
         retrying={current.retrying}
         retryDisabled={!retryReady}
-      />
+      />,
     );
   if (outcome.kind === 'unavailable')
-    return (
+    return recoveryRegion(
+      m.zone_unavailable_heading(),
       <RouteState
+        kind="unavailable"
         heading={m.zone_unavailable_heading()}
         message={m.zone_unavailable_message()}
         onRetry={retry}
         retrying={current.retrying}
         retryDisabled={!retryReady}
-      />
+      />,
     );
-  if (outcome.kind === 'missing') return <NotFoundPage />;
-  return <StatusPage heading={m.error_heading()} message={m.error_message()} />;
+  if (outcome.kind === 'missing') return recoveryRegion(m.not_found_heading(), <NotFoundPage />);
+  return recoveryRegion(
+    m.error_heading(),
+    <RouteState
+      kind="error"
+      heading={m.error_heading()}
+      message={m.error_message()}
+      onRetry={retry}
+      retrying={current.retrying}
+    />,
+  );
 }
 
 export function ZonePageSurface({
