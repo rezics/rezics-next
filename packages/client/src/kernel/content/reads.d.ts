@@ -294,7 +294,7 @@ export declare function postReadableByAccount(dependencies: Pick<ContentReadDepe
  * source incarnation, container Access, Board and Realm on the exact read. */
 export declare function readBookScopedPost(dependencies: ContentReadDependencies, catalogueId: string, target: RevisionDisclosureTarget, gate: RevisionDisclosureReaderGate, context: ReadContext): Promise<Anchored<PostEntry | null>>;
 /** Metadata-only variant of the same Book-scoped source authority. */
-export declare function readBookScopedPostMetadata(dependencies: ContentReadDependencies, catalogueId: string, target: RevisionDisclosureTarget, gate: RevisionDisclosureReaderGate, context: ReadContext): Promise<Anchored<NativePostMetadata | null>>;
+export declare function readBookScopedPostMetadata(dependencies: ContentReadDependencies, catalogueId: string, target: RevisionDisclosureTarget, gate: RevisionDisclosureReaderGate, context: ReadContext, retain?: RetainContentRead<NativePostMetadata>): Promise<Anchored<NativePostMetadata | null>>;
 export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId, retain?: RetainContentRead<PostEntry>): Promise<Anchored<PostEntry | null>>;
 /** Private inventory projection of ordinary source disclosure. This path never
  * requests revision bytes; account ownership does not replace container Access.
