@@ -2,9 +2,10 @@ import type { Pool, PoolClient } from 'pg';
 import { readAccount } from './access-port.ts';
 import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
+import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 
 export const MAX_REPORTED_YEAR_SUMMARY_BYTES = 16_384;
 export type ReportedYearCounts = Readonly<{
@@ -138,28 +139,35 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }): ReportedYe
       };
       alive();
       const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
-      return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
-        // Hold native lifecycle authority through response preparation. Source writers
-        // already share this owner; this adds no maintenance or write effect.
-        await client.query('BEGIN');
+      const authorize = async (client: PoolClient) => {
+        const owner = await readAccount(client, route, actor.accountId);
+        if (
+          !owner ||
+          owner.kind !== 'actor' ||
+          owner.state !== 'active' ||
+          owner.fenced ||
+          !Number.isSafeInteger(actor.authnEpoch) ||
+          actor.authnEpoch < 1 ||
+          owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+        )
+          throw new ProblemError('forbidden');
+      };
+      const admitOwnerHome = async (client: PoolClient) => {
         await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
           route,
           actor.accountId,
         ]);
-        const authorize = async () => {
-          const owner = await readAccount(client, route, actor.accountId);
-          if (
-            !owner ||
-            owner.kind !== 'actor' ||
-            owner.state !== 'active' ||
-            owner.fenced ||
-            !Number.isSafeInteger(actor.authnEpoch) ||
-            actor.authnEpoch < 1 ||
-            owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-          )
-            throw new ProblemError('forbidden');
-        };
-        await authorize();
+        await authorize(client);
+        const home = await readPartition(client, partitionOf(route));
+        if (!home || home.writeState !== 'active' || home.movedTo !== null)
+          throw new ProblemError('partition_unavailable');
+        return home.epoch;
+      };
+      const source = await withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
+        // Hold native lifecycle authority through response preparation. Source writers
+        // already share this owner; this adds no maintenance or write effect.
+        await client.query('BEGIN');
+        const homeEpoch = await admitOwnerHome(client);
         // One statement snapshot covers both heads and the 14 fixed keys. A
         // later source mutation is a later snapshot, never partial receiving.
         const result = await client.query<{
@@ -200,7 +208,7 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }): ReportedYe
         const encoded = JSON.stringify(value);
         if (new TextEncoder().encode(encoded).byteLength > MAX_REPORTED_YEAR_SUMMARY_BYTES)
           throw new ProblemError('dependency_unavailable');
-        await authorize();
+        await authorize(client);
         const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
         if (
           !latest?.complete ||
@@ -211,9 +219,7 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }): ReportedYe
           throw new ProblemError('dependency_unavailable');
         alive();
         await client.query('COMMIT');
-        // No await between the actual delivery check and HTTP encoding.
-        alive();
-        return deliver ? deliver(value, encoded) : (value as T);
+        return { value, encoded, homeEpoch };
       }).catch((error) => {
         if (
           typeof error === 'object' &&
@@ -224,6 +230,19 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }): ReportedYe
           throw new ProblemError('dependency_unavailable');
         throw error;
       });
+      // The source transaction and its connection are released before this fresh
+      // owner/home admission. A moved home or changed authentication cannot deliver
+      // counts prepared under the previous observation.
+      await withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
+        await client.query('BEGIN');
+        const homeEpoch = await admitOwnerHome(client);
+        if (homeEpoch !== source.homeEpoch) throw new ProblemError('partition_unavailable');
+        alive();
+        await client.query('COMMIT');
+      });
+      // No await between the actual delivery check and HTTP encoding.
+      alive();
+      return deliver ? deliver(source.value, source.encoded) : (source.value as T);
     },
   };
 }
