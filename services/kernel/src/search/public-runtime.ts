@@ -10,6 +10,8 @@ import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { discoveryIndexName } from './indices.ts';
 import type { SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import type { KernelClock } from '../clock.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
@@ -36,7 +38,7 @@ import {
   readSubjectCalendarMappingFormat,
   readSubjectCreditMappingFormat,
 } from './indices.ts';
-import type { OpenSearch } from './opensearch.ts';
+import type { OpenSearch, SearchRequestOptions } from './opensearch.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import { createFacetNativeOperations } from './facet-discovery-operations.ts';
@@ -102,9 +104,10 @@ export type DefaultPublicFilterRuntime = Readonly<{
 function notReady(): never {
   throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 }
-function checkDeadline(context: PublicFilterConsumerContext): void {
-  if (!Number.isSafeInteger(context.deadline) || context.deadline <= Date.now())
-    throw new ProblemError('deadline_exceeded');
+function checkDeadline(context: PublicFilterConsumerContext): number {
+  const remaining = context.deadline - Date.now();
+  if (!Number.isSafeInteger(context.deadline) || remaining <= 0) throw new ProblemError('deadline_exceeded');
+  return remaining;
 }
 
 /** Trusted default composition. Neither Source nor Actor nor physical identity is injectable. */
@@ -114,10 +117,36 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   }).source;
   const sourcePublication = searchSourcePublicationApplication();
   type ActiveRelease = NonNullable<Awaited<ReturnType<typeof sourcePublication.activeRelease>>>;
-  async function requestMeaning(acceptedRelease?: string) {
-    if (acceptedRelease === undefined) return sourcePublication.activeRelease(config.pool);
-    const release = await sourcePublication.readRelease(config.pool, acceptedRelease);
-    return release ? { digest: acceptedRelease, release } : null;
+  async function requestMeaning(context: PublicFilterConsumerContext, acceptedRelease?: string) {
+    checkDeadline(context);
+    // Native release reads own their short snapshot on the original pool and inherit
+    // this absolute deadline, including physical checkout and transaction settlement.
+    const meaning = await withRequestDeadline(context.deadline, async () => {
+      if (acceptedRelease === undefined) return sourcePublication.activeRelease(config.pool);
+      const release = await sourcePublication.readRelease(config.pool, acceptedRelease);
+      return release ? { digest: acceptedRelease, release } : null;
+    });
+    checkDeadline(context);
+    return meaning;
+  }
+  function requestSearch(context: PublicFilterConsumerContext): OpenSearch {
+    return {
+      ...config.search,
+      async request<T>(
+        method: Parameters<OpenSearch['request']>[0],
+        path: string,
+        body?: unknown,
+        options?: SearchRequestOptions,
+      ) {
+        const remaining = checkDeadline(context);
+        const response = await config.search.request<T>(method, path, body, {
+          ...options,
+          timeoutMs: Math.min(options?.timeoutMs ?? Infinity, remaining),
+        });
+        checkDeadline(context);
+        return response;
+      },
+    };
   }
   if (!(config.routeKey instanceof Uint8Array) || config.routeKey.byteLength !== 32)
     throw new TypeError('Public Search requires the canonical route key');
@@ -137,6 +166,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   const subjects = new Map<string, Promise<PublicDiscoveryConsumerOperations>>();
   let closed = false;
   let closing: Promise<void> | undefined;
+  let cleanupFailure: { error: unknown } | undefined;
   const track = <T>(operation: () => Promise<T>): Promise<T> => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready'));
     const promise = operation();
@@ -144,11 +174,27 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     void promise.finally(() => pending.delete(promise)).catch(() => {});
     return promise;
   };
+  function retire(factory: Promise<{ close(): Promise<void> }>): void {
+    // Factory cleanup can drain other requests. Keep it runtime-owned without
+    // extending the request that observed a replacement or a failed capture.
+    const drain = factory.then(
+      (operations) => operations.close(),
+      () => {},
+    );
+    pending.add(drain);
+    void drain.then(
+      () => pending.delete(drain),
+      (error: unknown) => {
+        pending.delete(drain);
+        cleanupFailure ??= { error };
+      },
+    );
+  }
   async function publicationFor(consumer: PublicFilterConsumer, context: PublicFilterConsumerContext) {
     checkDeadline(context);
     const digest = consumer.meaningDigest;
     if (digest === null) notReady();
-    const release = await sourcePublication.readRelease(config.pool, digest);
+    const release = (await requestMeaning(context, digest))?.release;
     const match = /subjects-g([1-9][0-9]*)$/.exec(consumer.physicalTarget);
     const generation = Number(match?.[1]);
     if (
@@ -157,8 +203,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       consumer.physicalTarget !== subjectIndexName(config.prefix, generation)
     )
       notReady();
-    const calendarFormat = await readSubjectCalendarMappingFormat(config.search, config.prefix, generation);
-    const creditFormat = await readSubjectCreditMappingFormat(config.search, config.prefix, generation);
+    const search = requestSearch(context);
+    const calendarFormat = await readSubjectCalendarMappingFormat(search, config.prefix, generation);
+    const creditFormat = await readSubjectCreditMappingFormat(search, config.prefix, generation);
     return sourcePublication.createGenerationPublication({
       pool: config.pool,
       search: config.search,
@@ -270,6 +317,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     meaning: Pick<ActiveRelease, 'digest' | 'release'>,
     context: PublicFilterConsumerContext,
   ): Promise<PublicDiscoveryConsumerOperations> {
+    checkDeadline(context);
     const key = JSON.stringify([physicalTarget, meaning.digest]);
     let operations = subjects.get(key);
     if (!operations) {
@@ -279,6 +327,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (subjects.get(key) === operations) subjects.delete(key);
       });
     }
+    checkDeadline(context);
     // Saved rules can read an older accepted meaning while ordinary Search reads the active one.
     // Closing that meaning's factory would close its retained observations and break continuation.
     const retired = [...subjects].filter(
@@ -286,24 +335,34 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     );
     for (const [candidate, old] of retired) {
       subjects.delete(candidate);
-      await (await old).close();
+      retire(old);
     }
-    return operations;
+    const current = await operations;
+    checkDeadline(context);
+    return current;
   }
   return {
     openDiscovery(registry, digest, context, queried) {
       return track(async () => {
         checkDeadline(context);
-        const release = await sourcePublication.activeRelease(config.pool);
+        const release = await requestMeaning(context);
         if (!release) notReady();
         if (release.digest !== digest) throw new ProblemError('search_restart_required');
-        const query: import('pg').QueryConfig & { query_timeout: number } = {
-          text: `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
-            FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
-          values: [config.prefix],
-          query_timeout: Math.max(1, context.deadline - Date.now()),
-        };
-        const result = await config.pool.query<{ generation: number; uuid: string; incarnation: string }>(query);
+        const result = await withBoundedReadConnection(
+          config.pool,
+          context.deadline,
+          (client) =>
+            client.query<{ generation: number; uuid: string; incarnation: string }>({
+              text: `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
+                FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
+              values: [config.prefix],
+            }),
+          {
+            deadlineError: () => new ProblemError('deadline_exceeded'),
+            isUncertainSettledQueryError: () => true,
+          },
+        );
+        checkDeadline(context);
         if (result.rows.length !== 1) notReady();
         const allocation = result.rows[0]!;
         if (!allocation.uuid || !Number.isSafeInteger(allocation.generation)) notReady();
@@ -324,21 +383,24 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             if (mixed.get(key) === operations) mixed.delete(key);
           });
         }
+        checkDeadline(context);
         // A real generation/release switch invalidates old cursors. Drain their factories rather
         // than retaining one resource owner for every historical release in a long-lived process.
         const retired = [...mixed].filter(([candidate]) => candidate !== key);
         for (const [candidate, old] of retired) {
           mixed.delete(candidate);
-          await (await old).close();
+          retire(old);
         }
-        return operations;
+        const current = await operations;
+        checkDeadline(context);
+        return current;
       });
     },
     publication,
     preparePublication(generation, context) {
       return track(async () => {
         checkDeadline(context);
-        const current = await sourcePublication.activeRelease(config.pool);
+        const current = await requestMeaning(context);
         if (!current) notReady();
         const resolved = await binding.resolve(
           {
@@ -374,9 +436,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     bindRequest(request, context, acceptedRelease) {
       return track(async () => {
         checkDeadline(context);
-        const release = await requestMeaning(acceptedRelease);
+        const release = await requestMeaning(context, acceptedRelease);
         if (!release) notReady();
-        const state = await subjectGenerations(config.search, config.prefix);
+        const state = await subjectGenerations(requestSearch(context), config.prefix);
         if (state.active === null) notReady();
         if (request.plan.generation !== undefined && request.plan.generation !== state.active)
           throw new ProblemError('search_restart_required');
@@ -391,9 +453,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     resumeRequest(queried, context, acceptedRelease) {
       return track(async () => {
         checkDeadline(context);
-        const release = await requestMeaning(acceptedRelease);
+        const release = await requestMeaning(context, acceptedRelease);
         if (!release) notReady();
-        const state = await subjectGenerations(config.search, config.prefix);
+        const state = await subjectGenerations(requestSearch(context), config.prefix);
         if (state.active === null) notReady();
         if (
           queried.consumer.physicalTarget !== subjectIndexName(config.prefix, state.active) ||
@@ -407,9 +469,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     bindSuggestion(request, context) {
       return track(async () => {
         checkDeadline(context);
-        const release = await sourcePublication.activeRelease(config.pool);
+        const release = await requestMeaning(context);
         if (!release) notReady();
-        const state = await subjectGenerations(config.search, config.prefix);
+        const state = await subjectGenerations(requestSearch(context), config.prefix);
         if (state.active === null) notReady();
         if (request.generation !== undefined && request.generation !== state.active)
           throw new ProblemError('search_restart_required');
@@ -430,11 +492,12 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           close: () => (draining ??= native.close().finally(() => owned.delete(native))),
         };
         try {
+          checkDeadline(context);
           const capture = await operations.capture(structuredClone({ ...request, generation: state.active }), context);
           checkDeadline(context);
           return { operations, capture };
         } catch (error) {
-          await operations.close();
+          retire(Promise.resolve(operations));
           throw error;
         }
       });
@@ -446,7 +509,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       return track(async () => {
         checkDeadline(context);
         const digest = job.consumer.meaningDigest;
-        const release = digest === null ? null : await sourcePublication.readRelease(config.pool, digest);
+        const release = digest === null ? null : (await requestMeaning(context, digest))?.release;
         if (!release || digest === null) notReady();
         // The job only locates producer state. Native repair resolves incarnation, definition and grant again.
         const registry = job.consumer.physicalTarget.startsWith(`${config.prefix}discovery-g`)
@@ -496,7 +559,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             },
             async repair(job, context) {
               const digest = job.consumer.meaningDigest;
-              const release = digest === null ? null : await sourcePublication.readRelease(config.pool, digest);
+              const release = digest === null ? null : (await requestMeaning(context, digest))?.release;
               if (!release || digest === null) notReady();
               return (await subjectOperations(job.consumer.physicalTarget, { digest, release }, context)).repairStep(
                 job,
@@ -512,13 +575,14 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       closed = true;
       closing = (async () => {
         await Promise.allSettled([...pending]);
-        const results = await Promise.allSettled([...owned].map((operations) => operations.close()));
+        const results = await Promise.allSettled([...pending, ...[...owned].map((operations) => operations.close())]);
         mixed.clear();
         subjects.clear();
         owned.clear();
         await publication.close();
         const failed = results.find((result) => result.status === 'rejected');
         if (failed?.status === 'rejected') throw failed.reason;
+        if (cleanupFailure) throw cleanupFailure.error;
       })();
       return closing;
     },
