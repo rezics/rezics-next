@@ -60,6 +60,10 @@ import {
   type UnresolvedEdge,
 } from './cross-media-bindings.ts';
 import {
+  currentProviderIdentity,
+  providerSourceIdentity,
+} from './cross-media-current-identity.ts';
+import {
   attachShowcaseWorkLinks,
   resolveShowcaseWorkLinkHandoffs,
   type CurrentWorkRead,
@@ -116,7 +120,6 @@ import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from 
 import { selectedFamilyAdmission } from './registration-contract.ts';
 import {
   admitBoundProposals,
-  isBookSeriesSourceTuple,
   bindSourceRegistration,
   createSelectedFamilySourceRegistration,
   crossMediaBangumiRevision,
@@ -2341,24 +2344,14 @@ function currentVndbIdentityEndpoint(
   canonical = false,
 ): ReleaseEndpointCurrentness {
   if (!read) return failure === undefined ? 'unavailable' : currentReleaseReadFailure(failure);
-  const subject = (
-    read as {
-      subject?: {
-        id?: unknown;
-        type?: unknown;
-        statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[] | undefined>;
-      };
-    }
-  ).subject;
-  if (!subject) return 'unknown';
   if (expectedType !== nativeType) return 'wrong_type';
-  if (!canonical && subject.id !== nativeSubjectId) return 'identity_mismatch';
-  if (subject.type !== expectedType) return 'wrong_type';
-  const identities = subject.statements?.['wdt:P3180'];
-  if (!Array.isArray(identities)) return 'unknown';
-  return identities.some((statement) => statement.value?.type === 'value' && statement.value.content === externalId)
-    ? 'current'
-    : 'identity_mismatch';
+  return currentProviderIdentity(read, {
+    provider: 'vndb',
+    externalId,
+    nativeSubjectId,
+    expectedType,
+    allowCanonicalRedirect: canonical,
+  });
 }
 
 function currentReleaseEndpoint(
@@ -2395,29 +2388,21 @@ function currentBangumiRelationEndpoint(
   failure?: unknown,
 ): RelationEndpointCurrentness {
   if (!read) return failure === undefined ? 'unavailable' : currentReleaseReadFailure(failure);
-  const subject = (
-    read as {
-      subject?: {
-        id?: unknown;
-        type?: unknown;
-        statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[] | undefined>;
-      };
-    }
-  ).subject;
-  if (!subject) return 'unknown';
-  // The native transport follows its admitted redirect chain. Numeric Work keys may resolve canonically;
-  // proposal ownership and target operands remain on the original claim, checked separately by the journal.
-  if (!/^[1-9][0-9]*$/u.test(externalId) && subject.id !== nativeSubjectId) return 'identity_mismatch';
-  if (expectedType === undefined || subject.type !== expectedType) return 'wrong_type';
-  if (isBookSeriesSourceTuple(externalId, expectedType))
-    return subject.id === nativeSubjectId ? 'current' : 'identity_mismatch';
-  const identity = bangumiSourceIdentity(externalId, expectedType);
-  if (!identity) return 'wrong_type';
-  const statements = subject.statements?.[identity.property];
-  if (!Array.isArray(statements)) return 'unknown';
-  return statements.some((statement) => statement.value?.type === 'value' && statement.value.content === identity.value)
-    ? 'current'
-    : 'identity_mismatch';
+  const personIdentity = personIdentityForSource('bangumi', externalId, expectedType);
+  if (personIdentity) {
+    const observation = observePersonIdentity(personIdentity, read);
+    return observation.state === 'current'
+      ? 'current'
+      : observation.state === 'wrong_type'
+        ? 'wrong_type'
+        : 'identity_mismatch';
+  }
+  return currentProviderIdentity(read, {
+    provider: 'bangumi',
+    externalId,
+    nativeSubjectId,
+    expectedType,
+  });
 }
 
 export type CrossMediaSeedExtras = {
@@ -2451,18 +2436,6 @@ export type CrossMediaSeedExtras = {
     read(subjectId: string): Promise<ReviewedSubjectRead | null>;
   }) => Promise<BangumiCreditVocabularyResolution>;
 };
-
-function bangumiSourceIdentity(key: string, nativeType?: string): { property: string; value: string } | undefined {
-  if (key.startsWith('person:'))
-    return nativeType === 'schema:Organization'
-      ? undefined
-      : { property: 'wdt:P6298', value: key.slice('person:'.length) };
-  if (key.startsWith('character:')) return { property: 'wdt:P6296', value: key.slice('character:'.length) };
-  if (key.startsWith('episode:')) return { property: 'schema:url', value: bangumiRecordUrl(key) };
-  if (/^[1-9][0-9]*$/u.test(key))
-    return isBookSeriesSourceTuple(key, nativeType) ? undefined : { property: 'wdt:P5732', value: key };
-  return undefined;
-}
 
 export async function seedCrossMedia(
   plan: CrossMediaPlan,
@@ -2982,23 +2955,6 @@ export async function seedCrossMedia(
         if (reviewSource) personReviewSources.push(reviewSource);
       }
       const subjectRead = await readCurrent(claim.subject);
-      if (!subjectRead && provider === 'vndb' && /^r[1-9][0-9]*$/u.test(record.key)) {
-        const status = currentReleaseEndpoint(
-          subjectRead,
-          record.key,
-          claim.subject,
-          nativeTypes.get(`${sourceAlias}\u0000${record.key}`),
-          currentReadFailures.get(claim.subject),
-        );
-        sourceIdentityGaps.push({
-          source: 'vndb',
-          fields: ['wdt:P3180'],
-          record: { external_id: record.key },
-          reason: `Current VNDB release descriptor is ${status}`,
-          property: 'wdt:P3180',
-        });
-        continue;
-      }
       const expectedType = nativeTypes.get(`${sourceAlias}\u0000${record.key}`);
       const personIdentity = personIdentityForSource(provider, record.key, expectedType);
       if (personIdentity) {
@@ -3040,58 +2996,75 @@ export async function seedCrossMedia(
         });
         continue;
       }
-      ensure(subjectRead, 'Current bound source subject is unavailable');
-      if (provider === 'bangumi') {
-        const subject = subjectRead.subject as
-          | {
-              id?: unknown;
-              type?: unknown;
-              statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[]>;
-            }
-          | undefined;
-        const identity = bangumiSourceIdentity(record.key, expectedType);
-        const matches =
-          identity === undefined
-            ? (record.key.startsWith('person:') && expectedType === 'schema:Organization') ||
-              (isBookSeriesSourceTuple(record.key, expectedType) && subject?.id === claim.subject)
-            : (subject?.statements?.[identity.property]?.some(
-                (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
-              ) ?? false);
-        if (
-          !subject ||
-          subject.type !== expectedType ||
-          !matches ||
-          (!/^[1-9][0-9]*$/u.test(record.key) && subject.id !== claim.subject)
-        ) {
-          if (identity)
-            sourceIdentityGaps.push({
-              source: 'bangumi',
-              fields: [identity.property],
-              record: { external_id: record.key },
-              reason: 'Current source identity association is missing or mismatched',
-              property: identity.property,
-            });
-          continue;
-        }
-      }
-      if (provider === 'vndb' && /^r[1-9][0-9]*$/u.test(record.key)) {
-        const status = currentReleaseEndpoint(
-          subjectRead,
-          record.key,
-          claim.subject,
-          nativeTypes.get(`${sourceAlias}\u0000${record.key}`),
-        );
+      if (provider === 'vndb' && /^[vr][1-9][0-9]*$/u.test(record.key)) {
+        const status = subjectRead
+          ? currentProviderIdentity(subjectRead, {
+              provider,
+              externalId: record.key,
+              nativeSubjectId: claim.subject,
+              expectedType,
+            })
+          : currentReleaseReadFailure(currentReadFailures.get(claim.subject));
         if (status !== 'current') {
+          const kind = record.key.startsWith('r') ? 'release' : 'work';
           sourceIdentityGaps.push({
             source: 'vndb',
             fields: ['wdt:P3180'],
             record: { external_id: record.key },
-            reason: `Current VNDB release descriptor is ${status}`,
+            reason: `Current VNDB ${kind} descriptor is ${status}`,
             property: 'wdt:P3180',
           });
           continue;
         }
+        readings.push({
+          boundSubjectId: claim.subject,
+          source: provider,
+          externalId: record.key,
+          subject: subjectRead!,
+          route: subjectRoute(subjectRead!),
+          selection: 'selected',
+        });
+        continue;
       }
+      if (provider === 'bangumi') {
+        const identity = providerSourceIdentity(provider, record.key, expectedType);
+        const status = subjectRead
+          ? currentProviderIdentity(subjectRead, {
+              provider,
+              externalId: record.key,
+              nativeSubjectId: claim.subject,
+              expectedType,
+            })
+          : currentReleaseReadFailure(currentReadFailures.get(claim.subject));
+        if (status !== 'current') {
+          if (identity?.kind === 'value')
+            sourceIdentityGaps.push({
+              source: 'bangumi',
+              fields: [identity.property],
+              record: { external_id: record.key },
+              reason: `Current source identity association is ${status}`,
+              property: identity.property,
+            });
+          else if (identity?.kind === 'source-tuple')
+            sourceIdentityGaps.push({
+              source: 'bangumi',
+              fields: [],
+              record: { external_id: record.key },
+              reason: `Current source tuple binding is ${status}`,
+            });
+          continue;
+        }
+        readings.push({
+          boundSubjectId: claim.subject,
+          source: provider,
+          externalId: record.key,
+          subject: subjectRead!,
+          route: subjectRoute(subjectRead!),
+          selection: 'selected',
+        });
+        continue;
+      }
+      ensure(subjectRead, 'Current bound source subject is unavailable');
       readings.push({
         boundSubjectId: claim.subject,
         source: provider,

@@ -7,6 +7,7 @@ import { createImportFetch } from './import-fetch.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { showcaseDigest } from './showcase-contract.ts';
 import type { ShowcaseJournal } from './showcase-journal.ts';
+import { currentProviderIdentity } from './cross-media-current-identity.ts';
 
 /** Separate creator credential; these are not importer scopes or additional platform grants. */
 export const developmentCollectionScopes = [
@@ -73,6 +74,9 @@ const subjectReply = Type.Object({
       Type.String(),
       Type.Array(
         Type.Object({
+          rank: Type.Optional(
+            Type.Union([Type.Literal('normal'), Type.Literal('preferred'), Type.Literal('deprecated')]),
+          ),
           value: Type.Object({ type: Type.String(), content: Type.Unknown() }),
         }),
       ),
@@ -229,16 +233,17 @@ export async function seedDevelopmentShowcase(
       continue;
     }
     const subject = read.value.subject;
-    const property = root.provider === 'vndb' ? 'wdt:P3180' : 'wdt:P5732';
-    if (
-      subject.id !== subjectId ||
-      subject.type !== reading.subject.subject!.type ||
-      !subject.statements[property]?.some((row) => row.value.type === 'value' && row.value.content === root.externalId)
-    ) {
+    const identity = currentProviderIdentity(read.value, {
+      provider: root.provider,
+      externalId: root.externalId,
+      nativeSubjectId: subjectId,
+      expectedType: reading.subject.subject!.type,
+    });
+    if (identity !== 'current') {
       sources.push({ ...root, status: 'missing-source', code: 'current-source-identity-mismatch' });
       continue;
     }
-    sources.push({ ...root, status: 'current', value: { ...root, subjectId, type: subject.type } });
+    sources.push({ ...root, status: 'current', value: { ...root, subjectId: subject.id, type: subject.type } });
   }
   const collections: DevelopmentShowcaseResult['collections'] = [];
   for (const view of ['ranked', 'grid', 'mixed'] as const) {
