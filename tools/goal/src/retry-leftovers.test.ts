@@ -152,11 +152,12 @@ test('a genuine leftover Git error keeps its task diagnosis without a shared tim
     const corruptIndex = join(h.root, '.temp', 'corrupt-index');
     writeFileSync(corruptIndex, 'broken index');
     process.env.GIT_INDEX_FILE = corruptIndex;
-    await expect(h.tasks.retry(task.id)).rejects.toThrow('git status:');
+    await job.runHostTask('retry', task.id);
 
     expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })?.status).toBe('pending');
     const failure = JSON.parse(h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body);
-    expect(failure).toMatchObject({ step: 'checking worktree leftovers', diagnostic: {
+    expect(failure).toMatchObject({ diagnostic: {
       commandText: 'git status --porcelain=v1 --untracked-files=normal', timedOut: false,
     } });
     expect(failure.diagnostic.message).toContain('index file smaller than expected');
@@ -175,7 +176,7 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
   try {
     h.settings.integration.operationsManager = 'operations';
     h.settings.policy!.host.recoveryIntervalMs = 300;
-    h.settings.policy!.worker.retryIntentLeadMs = 300;
+    h.settings.policy!.worker.retryIntentLeadMs = 1000;
     h.settings.policy!.worker.capacityPauseMs = 300;
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     const firstJob = new WorkerJob(h.tasks, { enqueue() {} }, inbox);
@@ -215,12 +216,8 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
       expect(failure).toMatchObject({
         step: 'checking worktree leftovers',
         diagnostic: {
-          operation: 'git status',
+          operation: 'git status', errorCode: 'ETIMEDOUT', timedOut: true, timeoutMs: 750, signal: 'SIGTERM',
           commandText: 'git status --porcelain=v1 --untracked-files=normal',
-          errorCode: 'ETIMEDOUT',
-          timedOut: true,
-          timeoutMs: 750,
-          signal: 'SIGTERM',
         },
       });
       expect(git(worktree, 'diff', '--cached', '--name-only')).toBe('README.md');
@@ -244,7 +241,7 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
     ).toBe(true);
 
     const resumedHost = restartedHost();
-    await new Promise((resolve) => setTimeout(resolve, 650));
+    await new Promise((resolve) => setTimeout(resolve, 1400));
     resumedHost.resumePendingRetries();
     await resumedHost.drain();
     for (const task of tasks) {

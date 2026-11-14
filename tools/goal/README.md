@@ -3763,6 +3763,8 @@ A bounded Git status timeout keeps the durable retry intent and source in place,
 diagnostics, releases its capacity ticket after the Git process settles, and folds the timeout into one operations
 action through the existing recovery pass.
 
+A later admission keeps the original intent options and resume identity.
+
 To pause:
 
 1. Back up `<state>/capacity.json`, then write `{"maxWorkers": 0, "minAvailableMiB": 999999999}` to it. It is read on
