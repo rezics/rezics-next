@@ -65,6 +65,12 @@ Decision: outline and both chapter directions resolve visible sibling positions 
 rank frontier per selected AVL level. Each temporal batch carries route, catalogue, generation, index, node IDs and
 sequence; shared ancestors are read once, and exact single-placement reads retain their point path.
 
+Decision: raw children, outline and both chapter-direction windows expand only immutable AVL subtrees intersecting
+the requested rank interval, including one lookahead. Known child roots load together per frontier; selected-root
+membership and inverse-parent/cycle checks remain required. The snapshot cache shares pending reads and dispatches
+at most 512 distinct IDs per physical batch. Work counts include prefetched child roots; memory and probes grow
+with the raw window and necessary index paths, while dependent rounds still grow with tree height.
+
 The [hosted catalogue API contract](hosted-chapters.md) defines operation IDs, request fields, current draft
 selection, canonical byte encoding, continuation binding, cost and integration boundaries. Native growth,
 schema dump refresh and installed client publication remain owned by the existing integration workflows.

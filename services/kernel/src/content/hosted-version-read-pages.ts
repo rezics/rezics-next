@@ -1,7 +1,6 @@
 import {
   chapterRankVersionedOutlineSequenceNode,
   rankVersionedOutlineSequenceNode,
-  selectVersionedOutlineSequenceNode,
   type VersionedOutlineSequenceNode,
   type VersionedOutlineSequenceReadAccess,
 } from './versioned-outline-sequence.ts';
@@ -94,79 +93,56 @@ async function selectedRoot<Value>(
   return root;
 }
 
-function schedule<Value>(
-  stack: VersionedOutlineSequenceNode<Value>[],
-  scheduled: Set<string>,
-  node: VersionedOutlineSequenceNode<Value>,
-): void {
-  if (scheduled.has(node.id)) throw new HostedVersionReadIndexCorruptionError();
-  scheduled.add(node.id);
-  stack.push(node);
-}
-
-async function pushSpine<Value>(
+/**
+ * Expand only subtrees intersecting [firstRank, endRank). Child roots supply the
+ * next level's ranks together, rather than probing a new spine for every row.
+ * The retained frontier and cache cover the raw window plus its index paths;
+ * the number of dependent rounds still grows with the selected tree's height.
+ */
+async function readRankWindow<Value>(
   access: VersionedOutlineSequenceReadAccess<Value>,
-  stack: VersionedOutlineSequenceNode<Value>[],
-  scheduled: Set<string>,
-  firstId: string | null,
-  expectedParentId: string | null,
-  direction: HostedVersionReadDirection,
-): Promise<void> {
-  let nodeId = firstId;
-  let parentId = expectedParentId;
-  while (nodeId !== null) {
-    const node = await readRequired(access, nodeId);
-    assertChildPointers(node);
-    if (node.treeParentId !== parentId) throw new HostedVersionReadIndexCorruptionError();
-    schedule(stack, scheduled, node);
-    parentId = node.id;
-    nodeId = direction === 'forward' ? node.leftId : node.rightId;
+  root: VersionedOutlineSequenceNode<Value>,
+  firstRank: bigint,
+  endRank: bigint,
+): Promise<HostedVersionReadCandidate<Value>[]> {
+  type Frontier = Readonly<{ node: VersionedOutlineSequenceNode<Value>; firstRank: bigint }>;
+  let frontier: Frontier[] = [{ node: root, firstRank: 0n }];
+  const scheduled = new Set<string>([root.id]);
+  const candidates: HostedVersionReadCandidate<Value>[] = [];
+
+  while (frontier.length > 0) {
+    const childIds = [...new Set(frontier.flatMap(({ node }) => [node.leftId, node.rightId]))].filter(
+      (id): id is string => id !== null,
+    );
+    const children = await access.readNodes(childIds);
+    const next: Frontier[] = [];
+
+    function childOf(
+      id: string | null,
+      parent: VersionedOutlineSequenceNode<Value>,
+    ): VersionedOutlineSequenceNode<Value> | null {
+      if (id === null) return null;
+      const child = children.get(id) ?? null;
+      if (child === null || child.id !== id || child.treeParentId !== parent.id || scheduled.has(id))
+        throw new HostedVersionReadIndexCorruptionError();
+      assertChildPointers(child);
+      scheduled.add(id);
+      return child;
+    }
+
+    for (const { node, firstRank: subtreeRank } of frontier) {
+      const left = childOf(node.leftId, node);
+      const right = childOf(node.rightId, node);
+      const rank = subtreeRank + (left?.count ?? 0n);
+      if (rank >= firstRank && rank < endRank) candidates.push({ nodeId: node.id, value: node.value, rank });
+      if (left !== null && subtreeRank < endRank && rank > firstRank) next.push({ node: left, firstRank: subtreeRank });
+      if (right !== null && rank + 1n < endRank && subtreeRank + node.count > firstRank)
+        next.push({ node: right, firstRank: rank + 1n });
+    }
+    frontier = next;
   }
-}
 
-/** Prepare eligible in-order ancestors beyond an already-proven member. */
-async function pushDirectionalAncestors<Value>(
-  access: VersionedOutlineSequenceReadAccess<Value>,
-  rootId: string,
-  anchor: VersionedOutlineSequenceNode<Value>,
-  direction: HostedVersionReadDirection,
-  stack: VersionedOutlineSequenceNode<Value>[],
-  scheduled: Set<string>,
-): Promise<void> {
-  const ancestors: VersionedOutlineSequenceNode<Value>[] = [];
-  const climbing = new Set<string>([anchor.id]);
-  let child = anchor;
-
-  while (child.treeParentId !== null) {
-    const parent = await readRequired(access, child.treeParentId);
-    assertChildPointers(parent);
-    if (climbing.has(parent.id)) throw new HostedVersionReadIndexCorruptionError();
-    climbing.add(parent.id);
-    const isLeft = parent.leftId === child.id;
-    const isRight = parent.rightId === child.id;
-    if (isLeft === isRight) throw new HostedVersionReadIndexCorruptionError();
-    if ((direction === 'forward' && isLeft) || (direction === 'reverse' && isRight)) ancestors.push(parent);
-    child = parent;
-  }
-  if (child.id !== rootId) throw new HostedVersionReadIndexCorruptionError();
-
-  // The nearest eligible ancestor must be on top; a nearer subtree, if present,
-  // is pushed last and therefore traversed first.
-  for (let index = ancestors.length - 1; index >= 0; index -= 1) schedule(stack, scheduled, ancestors[index]!);
-}
-
-/** Prepare the in-order candidates strictly after/before an already-proven member. */
-async function pushAfterAnchor<Value>(
-  access: VersionedOutlineSequenceReadAccess<Value>,
-  rootId: string,
-  anchor: VersionedOutlineSequenceNode<Value>,
-  direction: HostedVersionReadDirection,
-  stack: VersionedOutlineSequenceNode<Value>[],
-  scheduled: Set<string>,
-): Promise<void> {
-  await pushDirectionalAncestors(access, rootId, anchor, direction, stack, scheduled);
-  const subtreeId = direction === 'forward' ? anchor.rightId : anchor.leftId;
-  await pushSpine(access, stack, scheduled, subtreeId, anchor.id, direction);
+  return candidates.sort((left, right) => (left.rank < right.rank ? -1 : left.rank > right.rank ? 1 : 0));
 }
 
 async function readWindow<Value>(
@@ -178,42 +154,25 @@ async function readWindow<Value>(
   const root = await selectedRoot(index, access);
   if (query.expectedRootCount !== undefined && (root?.count ?? 0n) !== query.expectedRootCount)
     throw new HostedVersionReadIndexCorruptionError();
-  const stack: VersionedOutlineSequenceNode<Value>[] = [];
-  const scheduled = new Set<string>();
-  let nextRank = 0n;
+  let nextRank = query.startRank ?? (query.direction === 'forward' ? 0n : (root?.count ?? 0n) - 1n);
 
   if (query.afterNodeId !== undefined) {
     const anchorRank = await rankVersionedOutlineSequenceNode(access, index.rootId, query.afterNodeId);
     if (anchorRank === null) throw new HostedVersionReadAnchorError();
     query.checkAnchorRank?.(anchorRank);
     const anchor = await readRequired(access, query.afterNodeId);
+    assertChildPointers(anchor);
     nextRank = query.direction === 'forward' ? anchorRank + 1n : anchorRank - 1n;
-    scheduled.add(anchor.id);
-    await pushAfterAnchor(access, index.rootId!, anchor, query.direction, stack, scheduled);
-  } else if (query.startRank !== undefined) {
-    if (query.startRank >= 0n && root !== null) {
-      const selected = await selectVersionedOutlineSequenceNode(access, index.rootId, query.startRank);
-      if (selected !== null) {
-        nextRank = query.startRank;
-        // The selected rank is inclusive. Its directional subtree is added after
-        // the selected node is consumed, while eligible ancestors remain below it.
-        await pushDirectionalAncestors(access, index.rootId!, selected, query.direction, stack, scheduled);
-        schedule(stack, scheduled, selected);
-      }
-    }
-  } else if (root !== null) {
-    nextRank = query.direction === 'forward' ? 0n : root.count - 1n;
-    await pushSpine(access, stack, scheduled, root.id, null, query.direction);
   }
 
-  const candidates: HostedVersionReadCandidate<Value>[] = [];
-  const maxRawCandidates = query.limit + 1;
-  while (stack.length > 0 && candidates.length < maxRawCandidates) {
-    const node = stack.pop()!;
-    candidates.push({ nodeId: node.id, value: node.value, rank: nextRank });
-    nextRank += query.direction === 'forward' ? 1n : -1n;
-    const subtreeId = query.direction === 'forward' ? node.rightId : node.leftId;
-    await pushSpine(access, stack, scheduled, subtreeId, node.id, query.direction);
+  let candidates: HostedVersionReadCandidate<Value>[] = [];
+  if (root !== null && nextRank >= 0n && nextRank < root.count) {
+    const width = BigInt(query.limit + 1);
+    const lowerRank = query.direction === 'forward' ? nextRank : nextRank + 1n - width;
+    const firstRank = lowerRank < 0n ? 0n : lowerRank;
+    const endRank = query.direction === 'reverse' ? nextRank + 1n : nextRank + width;
+    candidates = await readRankWindow(access, root, firstRank, endRank);
+    if (query.direction === 'reverse') candidates.reverse();
   }
 
   const hasMore = candidates.length > query.limit;

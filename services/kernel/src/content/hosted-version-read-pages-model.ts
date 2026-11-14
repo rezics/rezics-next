@@ -10,9 +10,9 @@ export type HostedVersionReadIndex<Value> = Readonly<{
 export type HostedVersionReadDirection = 'forward' | 'reverse';
 
 export type HostedVersionReadWork = Readonly<{
-  /** Calls made by this page to the selected-index read set, including cache hits. */
+  /** Requested node IDs, including cache hits and prefetched index-frontier nodes. */
   logicalNodeReadCalls: number;
-  /** Unique sequence node IDs touched by this page. */
+  /** Unique existing sequence node IDs touched, including prefetched child roots. */
   distinctLogicalNodeVisits: number;
   /** New selected-snapshot probes reported by the read set; this is not a SQL statement count. */
   snapshotProbeCount: number;

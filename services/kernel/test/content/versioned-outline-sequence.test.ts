@@ -214,6 +214,45 @@ test('multi-rank frontiers deduplicate shared paths across roots and stay pinned
   ).toEqual([41n]);
 });
 
+test('snapshot batches share pending probes, cache absence and split at 512 without parallel dispatch', async () => {
+  const seeded = seedBalanced(1100, 'batch-');
+  const batches: string[][] = [];
+  let active = 0;
+  let maximumActive = 0;
+  const access = createVersionedOutlineSequenceReadAccess<string>(
+    async () => {
+      throw new Error('native batch reads must not use point probes');
+    },
+    async (ids) => {
+      batches.push([...ids]);
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await Promise.resolve();
+      active -= 1;
+      return new Map(ids.map((id) => [id, seeded.nodes.get(id) ?? null]));
+    },
+  );
+  const firstIds = [...seeded.ids.slice(0, 800), 'absent'];
+  const secondIds = [...seeded.ids.slice(600), 'absent', seeded.ids[600]!];
+  const [first, second, shared] = await Promise.all([
+    access.readNodes(firstIds),
+    access.readNodes(secondIds),
+    access.readNode(seeded.ids[700]!),
+  ]);
+  expect(first.size).toBe(801);
+  expect(second.size).toBe(501);
+  expect(shared?.id).toBe(seeded.ids[700]);
+  expect(await access.readNode('absent')).toBeNull();
+  expect(batches.map((ids) => ids.length)).toEqual([512, 289, 300]);
+  expect(batches.flat().length).toBe(new Set(batches.flat()).size);
+  expect(maximumActive).toBe(1);
+  expect(access.work()).toMatchObject({
+    nodeReadCalls: firstIds.length + secondIds.length + 2,
+    distinctVisitedNodeCount: 1100,
+    snapshotProbeCount: 1101,
+  });
+});
+
 test('split handles edges and arbitrary height joins without changing logical IDs', async () => {
   const seeded = seedBalanced(4095, 'join-');
   const access = workspace(seeded.nodes);

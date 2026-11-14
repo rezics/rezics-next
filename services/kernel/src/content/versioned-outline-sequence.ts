@@ -60,29 +60,35 @@ export type VersionedOutlineSequenceReadWriteSet<Value> = VersionedOutlineSequen
     readonly nodeWrites: ReadonlyMap<string, VersionedOutlineSequenceNode<Value>>;
   }>;
 
+const SNAPSHOT_READ_BATCH_LIMIT = 512;
+
 /** Cache one immutable selected snapshot with a bounded batch seam and no write overlay. */
 export function createVersionedOutlineSequenceReadAccess<Value>(
   readSelectedSnapshot: VersionedOutlineSequenceSnapshotReader<Value>,
   readSelectedSnapshotBatch?: VersionedOutlineSequenceSnapshotBatchReader<Value>,
 ): VersionedOutlineSequenceReadAccess<Value> {
   const nodeReads = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+  const pending = new Map<string, Promise<void>>();
   const visited = new Set<string>();
   let nodeReadCalls = 0;
+  let snapshotProbeCount = 0;
+  let loading = Promise.resolve();
 
-  async function readNodes(
-    ids: readonly string[],
-  ): Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>> {
-    nodeReadCalls += ids.length;
-    const selectedIds = [...new Set(ids)];
-    const missingIds = selectedIds.filter((id) => !nodeReads.has(id));
-    if (missingIds.length > 0) {
+  async function loadMissing(ids: readonly string[]): Promise<void> {
+    for (let start = 0; start < ids.length; start += SNAPSHOT_READ_BATCH_LIMIT) {
+      const batch = ids.slice(start, start + SNAPSHOT_READ_BATCH_LIMIT);
       const loaded = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
       if (readSelectedSnapshotBatch) {
-        for (const [id, node] of await readSelectedSnapshotBatch(missingIds)) loaded.set(id, node);
+        snapshotProbeCount += batch.length;
+        for (const [id, node] of await readSelectedSnapshotBatch(batch)) loaded.set(id, node);
       } else {
-        for (const id of missingIds) loaded.set(id, await readSelectedSnapshot(id));
+        // Keep the point-reader fallback serial rather than launching one promise per ID.
+        for (const id of batch) {
+          snapshotProbeCount += 1;
+          loaded.set(id, await readSelectedSnapshot(id));
+        }
       }
-      for (const id of missingIds) {
+      for (const id of batch) {
         const node = loaded.get(id) ?? null;
         if (node !== null && node.id !== id) {
           throw new Error('Versioned outline sequence snapshot returned a different node identity');
@@ -90,6 +96,30 @@ export function createVersionedOutlineSequenceReadAccess<Value>(
         nodeReads.set(id, node);
       }
     }
+  }
+
+  async function readNodes(
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>> {
+    nodeReadCalls += ids.length;
+    const selectedIds = [...new Set(ids)];
+    const missingIds = selectedIds.filter((id) => !nodeReads.has(id) && !pending.has(id));
+    if (missingIds.length > 0) {
+      const load = loading.then(() => loadMissing(missingIds));
+      for (const id of missingIds) pending.set(id, load);
+      const clearPending = () => {
+        for (const id of missingIds) pending.delete(id);
+      };
+      // Callers await the rejecting load below; settling the queue lets a later
+      // operation retry after a reader failure without hiding it from this call.
+      loading = load.then(clearPending, clearPending);
+    }
+    const waits = new Set<Promise<void>>();
+    for (const id of selectedIds) {
+      const load = pending.get(id);
+      if (load !== undefined) waits.add(load);
+    }
+    await Promise.all(waits);
 
     const result = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
     for (const id of selectedIds) {
@@ -109,7 +139,7 @@ export function createVersionedOutlineSequenceReadAccess<Value>(
     work: () => ({
       nodeReadCalls,
       distinctVisitedNodeCount: visited.size,
-      snapshotProbeCount: nodeReads.size,
+      snapshotProbeCount,
       stagedWriteCalls: 0,
       writtenNodeCount: 0,
     }),
@@ -175,7 +205,7 @@ export function createVersionedOutlineSequenceReadWriteSet<Value>(
     work: () => ({
       nodeReadCalls,
       distinctVisitedNodeCount: visited.size,
-      snapshotProbeCount: nodeReads.size,
+      snapshotProbeCount: selectedSnapshot.work().snapshotProbeCount,
       stagedWriteCalls,
       writtenNodeCount: nodeWrites.size,
     }),

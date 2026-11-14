@@ -6,11 +6,12 @@ import {
 } from '../../src/content/hosted-version-read-pages.ts';
 import {
   HostedVersionReadAnchorError,
+  HostedVersionReadIndexCorruptionError,
   type HostedVersionReadIndex,
   type HostedVersionReadPage,
 } from '../../src/content/hosted-version-read-pages-model.ts';
 import {
-  createVersionedOutlineSequenceReadWriteSet,
+  createVersionedOutlineSequenceReadAccess,
   type VersionedOutlineSequenceNode,
 } from '../../src/content/versioned-outline-sequence.ts';
 
@@ -65,10 +66,16 @@ function buildSnapshot(values: readonly PlacementValue[]): Snapshot {
   return { rootId: build(0, values.length, null), nodes };
 }
 
-function selectedIndex(snapshot: Snapshot): HostedVersionReadIndex<PlacementValue> {
+function selectedIndex(snapshot: Snapshot, batches?: string[][]): HostedVersionReadIndex<PlacementValue> {
   return {
     rootId: snapshot.rootId,
-    access: createVersionedOutlineSequenceReadWriteSet(async (id) => snapshot.nodes.get(id) ?? null),
+    access: createVersionedOutlineSequenceReadAccess(
+      async (id) => snapshot.nodes.get(id) ?? null,
+      async (ids) => {
+        batches?.push([...ids]);
+        return new Map(ids.map((id) => [id, snapshot.nodes.get(id) ?? null]));
+      },
+    ),
   };
 }
 
@@ -249,4 +256,102 @@ test('pinned sibling, preorder and chapter pages retain their old roots after ed
   assertLogicalWork(next, [rootNode(oldOutline), rootNode(oldChapters)], 2);
   expect(children.work.logicalNodeReadCalls).toBeGreaterThan(children.work.distinctLogicalNodeVisits);
   expect(rootNode(currentChapters)?.count).toBe(rootNode(oldChapters)!.count + 1n);
+});
+
+test('large raw windows batch independent frontiers without reading the whole Book', async () => {
+  const values = outlineValues(16383);
+  const outline = buildSnapshot(values);
+  const chapterValues = values.filter((value) => value.kind === 'chapter');
+  const chapters = buildSnapshot(chapterValues);
+  const limit = 64;
+  for (const readPage of [readHostedVersionChildrenPage, readHostedVersionOutlinePage]) {
+    const batches: string[][] = [];
+    const page = await readPage(selectedIndex(outline, batches), { afterNodeId: 'o067', limit });
+    expect(page.candidates.map(({ value }) => value)).toEqual(values.slice(68, 68 + limit + 1));
+    expect(page.nextAnchorId).toBe(values[68 + limit - 1]!.occurrenceId);
+    expect(batches.some((ids) => ids.length > 1)).toBe(true);
+    expect(batches.length).toBeLessThan(limit);
+    const probes = batches.flat();
+    expect(probes.length).toBe(new Set(probes).size);
+    expect(page.work.snapshotProbeCount).toBe(probes.length);
+    assertLogicalWork(page, [rootNode(outline)], limit);
+  }
+  const originIndex = 8192;
+  const originRank = values.slice(0, originIndex).filter((value) => value.kind === 'chapter').length;
+  for (const direction of ['next', 'previous'] as const) {
+    const batches: string[][] = [];
+    const originBatches: string[][] = [];
+    const page = await readHostedVersionChapterPage(
+      selectedIndex(outline, originBatches),
+      selectedIndex(chapters, batches),
+      { originNodeId: values[originIndex]!.occurrenceId, direction, limit },
+    );
+    const ranks = Array.from({ length: limit + 1 }, (_, offset) =>
+      direction === 'next' ? originRank + offset : originRank - 1 - offset,
+    );
+    expect(page.candidates.map(({ value, rank }) => [value, rank])).toEqual(
+      ranks.map((rank) => [chapterValues[rank], BigInt(rank)]),
+    );
+    expect(batches.some((ids) => ids.length > 1)).toBe(true);
+    expect(batches.length).toBeLessThan(limit);
+    expect(batches.every((ids) => ids.length <= 512)).toBe(true);
+    expect(batches.flat().length).toBe(new Set(batches.flat()).size);
+    expect(page.work.snapshotProbeCount).toBe(batches.flat().length + originBatches.flat().length);
+    assertLogicalWork(page, [rootNode(outline), rootNode(chapters)], limit);
+  }
+});
+
+test('empty and mixed windows keep origin exclusion, lookahead and exhausted continuations', async () => {
+  const empty = buildSnapshot([]);
+  for (const readPage of [readHostedVersionChildrenPage, readHostedVersionOutlinePage]) {
+    const page = await readPage(selectedIndex(empty), { limit: 1 });
+    expect(page).toMatchObject({ candidates: [], hasMore: false, nextAnchorId: null });
+    expect(page.work.snapshotProbeCount).toBe(0);
+  }
+  const values = ['part', 'chapter', 'part', 'chapter', 'part'].map((kind, ordinal) =>
+    placement('mixed-' + String(ordinal), ordinal, kind as PlacementValue['kind']),
+  );
+  for (const entries of [values, values.filter(({ kind }) => kind === 'part')]) {
+    const preorder = buildSnapshot(entries);
+    const chapters = buildSnapshot(entries.filter(({ kind }) => kind === 'chapter'));
+    for (let origin = 0; origin < entries.length; origin += 1) {
+      for (const direction of ['next', 'previous'] as const) {
+        const eligible = (direction === 'next' ? entries.slice(origin + 1) : entries.slice(0, origin).reverse()).filter(
+          ({ kind }) => kind === 'chapter',
+        );
+        const query = { originNodeId: entries[origin]!.occurrenceId, direction, limit: 1 };
+        const page = await readHostedVersionChapterPage(selectedIndex(preorder), selectedIndex(chapters), query);
+        expect(page.candidates.map(({ value }) => value)).toEqual(eligible);
+        expect(page.hasMore).toBe(eligible.length > 1);
+        expect(page.nextAnchorId).toBe(eligible.length > 1 ? eligible[0]!.occurrenceId : null);
+        if (eligible.length > 0) {
+          const tail = await readHostedVersionChapterPage(selectedIndex(preorder), selectedIndex(chapters), {
+            ...query,
+            afterNodeId: eligible.at(-1)!.occurrenceId,
+          });
+          expect(tail).toMatchObject({ candidates: [], hasMore: false, nextAnchorId: null });
+        }
+      }
+    }
+  }
+});
+
+test('batched child frontiers retain missing-node, parent and cycle checks', async () => {
+  const snapshot = buildSnapshot(siblingValues(31));
+  const root = rootNode(snapshot)!;
+  const left = snapshot.nodes.get(root.leftId!)!;
+  for (const replacement of [
+    { ...root, treeParentId: left.id },
+    { ...root, rightId: root.leftId },
+    { ...left, treeParentId: null },
+    { ...left, leftId: root.id },
+    null,
+  ]) {
+    const nodes = new Map(snapshot.nodes);
+    if (replacement === null) nodes.delete(left.id);
+    else nodes.set(replacement.id, replacement);
+    await expect(
+      readHostedVersionChildrenPage(selectedIndex({ ...snapshot, nodes }), { limit: 20 }),
+    ).rejects.toBeInstanceOf(HostedVersionReadIndexCorruptionError);
+  }
 });
