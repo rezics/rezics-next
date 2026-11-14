@@ -1714,8 +1714,8 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 
 Workers, managers and researchers receive prompts rendered from `tools/goal/prompts/`: `worker.md`, `manager.md`,
 `research.md`, and `conditions/<id>.md`. The renderer reads those files from disk at each launch, cached by
-modification time and size. Budgets are `policy.prompt` (worker role 3,500 bytes, conditions 1,500, worker total
-20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. Worker
+modification time and size. Budgets are `policy.prompt` (worker role 10,000 bytes, conditions 1,500, worker total
+20,000, manager role 5,000, manager opening 30,000, research role 9,000) and `policy.brief.bytes` 12,288. Worker
 and manager renders always launch when a size exceeds its budget. Manager openings replace full owner Goal documents
 with their first complete Outcome and Scope paragraphs, plus links to the full Goal file and its scope, ownership,
 Done when and acceptance sections. The opening follows the configured brief and includes each current continuation
@@ -1729,6 +1729,7 @@ dispatch results. Committed-template golden renders still assert role and condit
 caught during development. Each worker attempt records the git blob SHAs of `AGENTS.md`, the role template, each
 condition and the brief, plus the policy hash and layer measurements; manager sessions retain their opening
 measurements. `attempts --json` exports worker manifests.
+Decision: concise shared worker guidance keeps the largest current architecture map under the unchanged 10,000-byte role budget with at least 200 bytes of headroom; preserve all selected dependency rows and required workflow guidance.
 Decision: renewed manager openings keep the configured brief and each current continuation once, replace full Goal
 documents with complete Scope then Outcome paragraphs plus owner-detail links, and omit whole summary paragraphs when
 the existing opening budget is tight; managers read omitted detail on demand.
