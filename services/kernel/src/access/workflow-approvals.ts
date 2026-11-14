@@ -48,7 +48,6 @@ import {
 import { resourceAuthorization } from './resource-authorization.ts';
 import { GrantDeniedError } from './resource-access-errors.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import { accessCommandAttempt, commandAccessContext } from './command-admission.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import credentialRead from './auth-credential-capability-workflow-read.sql';
 import approvalInsert from './workflow-approvals-insert.sql';
@@ -422,35 +421,19 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     requireAccessDeadline(context.deadline);
     requireAllowed(config.actions.has(descriptor.action));
     const authority = resourceAuthorization({
-      access:
-        observeDeadline || context.work
-          ? {
-              ...config.access,
-              async prepare(candidate, action, resource, preparation) {
-                requireAllowed(config.access.prepare);
-                // Resource authorization supplies the live command attempt. Carry
-                // the original request ledger into that context without losing its
-                // pool identity or private command-attempt association.
-                const attempt = accessCommandAttempt(preparation);
-                const original = {
-                  ...preparation,
-                  ...(context.work ? { work: context.work } : {}),
-                };
-                const evidence = await config.access.prepare(
-                  candidate,
-                  action,
-                  resource,
-                  attempt ? commandAccessContext(original, attempt) : original,
-                );
-                if (observeDeadline) {
-                  const deadline = permissionEvidenceDeadline(evidence);
-                  requireAllowed(deadline !== undefined);
-                  observeDeadline(deadline);
-                }
-                return evidence;
-              },
-            }
-          : config.access,
+      access: observeDeadline
+        ? {
+            ...config.access,
+            async prepare(candidate, action, resource, preparation) {
+              requireAllowed(config.access.prepare);
+              const evidence = await config.access.prepare(candidate, action, resource, preparation);
+              const deadline = permissionEvidenceDeadline(evidence);
+              requireAllowed(deadline !== undefined);
+              observeDeadline(deadline);
+              return evidence;
+            },
+          }
+        : config.access,
       actor,
       action: descriptor.action,
       anchor: anchor(descriptor, context.work),

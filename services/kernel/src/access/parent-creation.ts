@@ -256,7 +256,7 @@ export function parentCreationAuthorization(input: {
           return evidence;
         },
       });
-      const context = { pool, deadline, partition: partitionOf(resource.route) };
+      const context = { ...input.context, partition: partitionOf(resource.route) };
       const authorization =
         input.parent.resourceType === undefined
           ? resourceAuthorization({ access: operand, actor, action, anchor: { resource: parent, validate }, context })

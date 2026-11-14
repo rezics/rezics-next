@@ -428,7 +428,7 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
         actor,
         action: 'account:update',
         anchor: { resource: { route, id: input.accountId }, validate: async () => true },
-        context: { pool: context.pool, deadline: context.deadline, partition },
+        context: { ...context, partition },
       });
       return runCommand(
         config.pool,

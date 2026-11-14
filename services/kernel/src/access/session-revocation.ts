@@ -105,7 +105,7 @@ export function createSessionRevocationCommands(config: { pool: Pool; access: Ac
                 return global?.global === true;
               },
             },
-        context: { pool: context.pool, deadline: context.deadline, partition },
+        context: { ...context, partition },
       });
       return runCommand(
         config.pool,

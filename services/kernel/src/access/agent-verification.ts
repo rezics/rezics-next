@@ -285,7 +285,7 @@ function freshAccountAuthorization(
         );
       },
     },
-    context: { pool: context.pool, deadline: context.deadline, partition: reversing ? partitionOf(route) : 0 },
+    context: { ...context, partition: reversing ? partitionOf(route) : 0 },
   });
 }
 
@@ -305,7 +305,7 @@ function globalCommandAuthorization(access: Access, actor: Actor, context: Verif
         return row?.global === true;
       },
     },
-    context: { pool: context.pool, deadline: context.deadline, partition },
+    context: { ...context, partition },
   });
 }
 

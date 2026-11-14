@@ -71,7 +71,7 @@ export function createRateTierCommands(config: { pool: Pool; access: Access; clo
             return global?.global === true;
           },
         },
-        context: { pool: context.pool, deadline: context.deadline, partition },
+        context: { ...context, partition },
       });
 
       return runCommand(

@@ -1,5 +1,5 @@
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { commandAccessContext } from './command-admission.ts';
 import {
   ANONYMOUS_PRINCIPAL_ID,
@@ -9,7 +9,7 @@ import {
   type CommandAttempt,
   type CommandAuthorization,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { deadlineClient, within } from './deadline.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './resource-access-errors.ts';
@@ -27,6 +27,12 @@ import {
 import { governanceReachUse, recordGovernanceReachUse, type GovernanceReachUse } from './governance-reach.ts';
 import { bindCommandHistoryEvidence } from '../history/application/index.ts';
 import { type AccountReference } from '../history/contract/index.ts';
+import { accessCheckout } from './work.ts';
+
+const authorizationReadOptions = Object.freeze({
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  isUncertainSettledQueryError: () => true,
+});
 
 /** Trusted server binding to the authorization resource. validate checks THAT
  * anchor's existence and domain prerequisites at command T on its supplied client;
@@ -193,21 +199,27 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
     async prepare(attempt) {
       requireAccessDeadline(deadline);
       if (!bound(attempt) || !prepare) throw denied();
+      const context = commandAccessContext(input.context, attempt);
+      const attemptDeadline = context.deadline;
+      requireAccessDeadline(attemptDeadline);
       try {
-        const evidence = await within(deadline, () =>
-          prepare(actor, action, resource, commandAccessContext({ pool, deadline }, attempt)),
-        );
-        const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+        const evidence = await within(attemptDeadline, () => prepare(actor, action, resource, context));
+        const proofDeadline = Math.min(attemptDeadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
         if (permissionEvidenceDeadline(evidence) === undefined) throw denied();
         requireAccessDeadline(proofDeadline);
         let governanceReach: GovernanceReachUse | undefined;
-        await within(proofDeadline, () =>
-          withConnection(pool, async (client) => {
-            const bounded = deadlineClient(client, proofDeadline);
-            if (!(await accessEvidence(() => validate(bounded, attempt.time), denied, proofDeadline))) throw denied();
-            if (!(await authorize(bounded, actor, action, resource, evidence, attempt.time))) throw denied();
-            governanceReach = governanceReachUse(evidence, actor, action, resource);
-          }),
+        await accessCheckout(context.work, () =>
+          withBoundedReadConnection(
+            pool,
+            proofDeadline,
+            async (client) => {
+              const bounded = deadlineClient(client, proofDeadline);
+              if (!(await accessEvidence(() => validate(bounded, attempt.time), denied, proofDeadline))) throw denied();
+              if (!(await authorize(bounded, actor, action, resource, evidence, attempt.time))) throw denied();
+              governanceReach = governanceReachUse(evidence, actor, action, resource);
+            },
+            authorizationReadOptions,
+          ),
         );
         requireAccessDeadline(proofDeadline);
         if (!bound(attempt)) throw denied();
@@ -220,7 +232,7 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
         });
         return proof;
       } catch (error) {
-        throwAccessUnavailable(error, deadline);
+        throwAccessUnavailable(error);
         throwEvidenceFailure(error);
         // Domain unavailability must not expose a receipt or reach target checkout.
         if (anonymous) throw denied();

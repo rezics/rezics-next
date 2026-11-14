@@ -103,7 +103,7 @@ export function createReinstatementCommands(config: { pool: Pool; access: Access
             return global?.global === true;
           },
         },
-        context: { pool: context.pool, deadline: context.deadline, partition },
+        context: { ...context, partition },
       });
       return runCommand(
         config.pool,
