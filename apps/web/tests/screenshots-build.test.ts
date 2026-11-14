@@ -50,6 +50,15 @@ test('the screenshot build uses Storybook test mode and keeps its other build fl
   );
 });
 
+test('the full Storybook build reuses matching input identity and atomically publishes changed output', () => {
+  const source = readFileSync(join(app, 'scripts/storybook-build.ts'), 'utf8');
+  expect(source).toContain("readStorybookArtifactIdentity(root, 'full')");
+  expect(source).toContain('createStorybookArtifactStore');
+  expect(source).toContain('outputMatches(identity)');
+  expect(source).toContain('publishStorybookDirectory(publicationDirectory, output)');
+  expect(source).toContain('artifactIdentity: identity');
+});
+
 test(
   'a test build indexes every story from the full build',
   async () => {

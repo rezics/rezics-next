@@ -832,8 +832,23 @@ board's threads, the thread and its posts. Name all five to write only them.
 Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
 The tool uses Storybook's test build, which has no docs pages.
 The run captures every job, then lists the stories that failed and exits non-zero.
-The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
-full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS pixels.
+Decision: screenshot builds reuse an immutable Storybook test artifact keyed by effective source, recordings,
+configuration, toolchain and build mode; retain at most two completed artifacts and one in-progress build.
+
+The command builds Storybook when that identity is absent, serves the matching completed artifact on a free port,
+and writes a full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS
+pixels. A capture reports its artifact identity, whether it built or reused it, recursive site payload bytes, and nested
+build and reuse counts; reported bytes exclude publication metadata, cache metadata and lease files. The full static
+build carries the identity into `build.json` while refreshing its publication commit independently of the cache key.
+Identity examines `apps/web/.storybook`,
+`apps/web/src` (including recorded responses), `apps/web/public`, `apps/auth/src`, reachable `packages/*/src` and their
+build configs, Web/Auth/root manifests, `bun.lock`, `bunfig.toml`, the screenshot/build scripts, relevant Storybook
+environment values, Bun and Node versions, and the explicit build mode. Commit history and screenshot count do not
+enter the key. The cache holds at most two completed site trees and one in-progress build workspace; construction is
+serialized, and a changed key waits up to ten minutes for an idle lease before reporting a full cache. A failed build
+publishes no partial site. If a child cannot be proved settled, its workspace keeps the one build slot until its
+process owner exits, after which a later request can recover it. Browser cleanup releases only its own lease, so a
+valid shared artifact survives an individual capture failure.
 Files are named `<story id>.<locale>.<theme>.png` and land in `.temp/screenshots/` at the repository root.
 A page that fits the viewport, such as the missing-subject page, is captured at 1280×720 pixels; a longer page is
 captured whole. Choose a story id or glob, and repeat locale and theme, with:

@@ -1,9 +1,16 @@
 import { stat } from 'node:fs/promises';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { placeWebCheck } from './check-placement.ts';
 import { operatorEntry } from './operator-entry.ts';
+import {
+  StorybookArtifactBuildCleanupFailure,
+  createStorybookArtifactStore,
+  readStorybookArtifactIdentity,
+  type StorybookArtifactLease,
+  type StorybookArtifactStore,
+} from './storybook-artifact.ts';
 
 export { observeStorybook, settle };
 
@@ -69,8 +76,6 @@ export type ScreenshotRuntime = {
   launch: () => Promise<Browser>;
   readStories: (directory: string) => Promise<string[]>;
   mkdir: typeof mkdir;
-  mkdtemp: typeof mkdtemp;
-  rm: typeof rm;
   buildTimeoutMs?: number;
   cleanupTimeoutMs?: number;
   signals?: {
@@ -80,6 +85,8 @@ export type ScreenshotRuntime = {
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
   progress?: (write: (line: string) => void) => ProgressReporter;
+  artifactStore?: StorybookArtifactStore;
+  artifactIdentity?: () => Promise<string>;
 };
 
 function errorMessage(error: unknown): string {
@@ -321,6 +328,16 @@ class ResourceRegistry {
     }
     return { issues: [], unproved: [] };
   }
+
+  async settled(): Promise<boolean> {
+    await Promise.all(
+      this.records.map(async (record) => {
+        if (record.acquired) await record.acquired.catch(() => undefined);
+        if (record.hasValue) await this.closeRecord(record).catch(() => undefined);
+      }),
+    );
+    return this.records.every((record) => record.state === 'closed' || record.state === 'failed');
+  }
 }
 
 class CaptureLifecycleFailure extends Error {
@@ -362,6 +379,17 @@ export function createProgressReporter(
       const duration = buildStartedAt === undefined ? 0 : Math.max(0, now() - buildStartedAt);
       write(`Storybook build finished in ${(duration / 1_000).toFixed(1)}s.`);
       buildStartedAt = undefined;
+    },
+    artifact(
+      identity: string,
+      disposition: 'built' | 'reused',
+      bytes: number,
+      nestedBuilds: number,
+      nestedReuses: number,
+    ) {
+      write(
+        `Storybook artifact ${identity} ${disposition} (${bytes} bytes; nested work ${nestedBuilds} build, ${nestedReuses} reuse).`,
+      );
     },
     captured(index: number, total: number, file: string) {
       write(`captured ${index}/${total} ${file}`);
@@ -662,6 +690,7 @@ class CaptureLifetime {
   readonly unproved: string[] = [];
   private readonly cleanupIssues: CleanupIssue[] = [];
   private readonly scopes = new Set<ResourceRegistry>();
+  private readonly allScopes = new Set<ResourceRegistry>();
   private retired = false;
   private retirement: Promise<CleanupReport> | undefined;
 
@@ -673,7 +702,13 @@ class CaptureLifetime {
     if (this.retired) throw new Error(`Screenshot run is retired; cannot open ${label}.`);
     const scope = new ResourceRegistry(label, this.timeoutMs, () => !this.retired, this.signal.signal);
     this.scopes.add(scope);
+    this.allScopes.add(scope);
     return scope;
+  }
+
+  async settled(): Promise<boolean> {
+    const results = await Promise.all([this.resources, ...this.allScopes].map((scope) => scope.settled()));
+    return results.every(Boolean);
   }
 
   async retireScope(scope: ResourceRegistry): Promise<void> {
@@ -1161,8 +1196,8 @@ const productionRuntime: ScreenshotRuntime = {
     );
   },
   mkdir,
-  mkdtemp,
-  rm,
+  artifactStore: createStorybookArtifactStore(join(root, '.temp/storybook-artifacts')),
+  artifactIdentity: () => readStorybookArtifactIdentity(root, 'screenshot-test'),
   signals: {
     listen(signal, listener) {
       process.once(signal, listener);
@@ -1184,8 +1219,6 @@ const productionRuntime: ScreenshotRuntime = {
 export async function runCaptureLifecycle(options: Options, runtime: ScreenshotRuntime): Promise<number> {
   await runtime.mkdir(join(root, '.temp'), { recursive: true });
   await runtime.mkdir(options.out, { recursive: true });
-  const buildDir = await runtime.mkdtemp(join(root, '.temp/storybook-build-'));
-  const site = join(buildDir, 'site');
   const timeoutMs = runtime.cleanupTimeoutMs ?? cleanupTimeout;
   const lifetime = new CaptureLifetime(timeoutMs);
   const writeStdout = runtime.stdout ?? ((text: string) => process.stdout.write(text));
@@ -1194,6 +1227,8 @@ export async function runCaptureLifecycle(options: Options, runtime: ScreenshotR
   const detachSignals: (() => void)[] = [];
   const buildUnproved: string[] = [];
   const cleanupFailures: string[] = [];
+  let artifact: StorybookArtifactLease | undefined;
+  let buildDir: string | undefined;
   let primary: unknown;
   let result = 1;
   let signalExitCode: number | undefined;
@@ -1208,7 +1243,34 @@ export async function runCaptureLifecycle(options: Options, runtime: ScreenshotR
     );
   }
   try {
-    await build(site, join(buildDir, 'cache'), progress, lifetime.signal.signal, runtime);
+    const identity = await (
+      runtime.artifactIdentity ?? (() => readStorybookArtifactIdentity(root, 'screenshot-test'))
+    )();
+    const artifactStore =
+      runtime.artifactStore ?? createStorybookArtifactStore(join(root, '.temp/storybook-artifacts'));
+    artifact = await artifactStore.acquire(
+      identity,
+      async (site, workDirectory) => {
+        buildDir = workDirectory;
+        await build(site, join(workDirectory, 'cache'), progress, lifetime.signal.signal, runtime);
+        return { nestedBuilds: 1 };
+      },
+      {
+        signal: lifetime.signal.signal,
+        mode: 'screenshot-test',
+        onBuildStart(directory) {
+          buildDir = directory;
+        },
+      },
+    );
+    const site = artifact.site;
+    progress.artifact(
+      artifact.identity,
+      artifact.disposition,
+      artifact.bytes,
+      artifact.nestedBuilds,
+      artifact.nestedReuses,
+    );
     if (lifetime.signal.signal.aborted) throw abortedError(lifetime.signal.signal);
     const availableStories = await waitForSignal(runtime.readStories(site), lifetime.signal.signal);
     const { stories, unmatchedSelectors } = selectStories(availableStories, options.stories);
@@ -1245,12 +1307,16 @@ export async function runCaptureLifecycle(options: Options, runtime: ScreenshotR
       result = reportCaptureResults(files, failures, writeStdout, unmatchedSelectors);
     }
   } catch (error) {
-    if (error instanceof BuildSettlementFailure) {
-      primary = error.primary;
-      cleanupFailures.push(...error.cleanupFailures);
-      buildUnproved.push(...error.unproved);
+    const buildError = error instanceof StorybookArtifactBuildCleanupFailure ? error.buildFailure : error;
+    if (error instanceof StorybookArtifactBuildCleanupFailure) {
+      cleanupFailures.push(`Storybook artifact workspace removal failed: ${errorMessage(error.cleanupFailure)}`);
+    }
+    if (buildError instanceof BuildSettlementFailure) {
+      primary = buildError.primary;
+      cleanupFailures.push(...buildError.cleanupFailures);
+      buildUnproved.push(...buildError.unproved);
     } else {
-      primary = error;
+      primary = buildError;
     }
   }
 
@@ -1259,16 +1325,23 @@ export async function runCaptureLifecycle(options: Options, runtime: ScreenshotR
   buildUnproved.push(...resources.unproved);
   const reasons = [...new Set(buildUnproved)];
   let disposition: { path: string; state: 'retained' | 'unknown'; reasons: string[] } | undefined;
-  if (reasons.length) {
-    disposition = { path: buildDir, state: 'retained', reasons };
-  } else {
+  const retainedDirectory = artifact?.site ?? buildDir;
+  if (reasons.length && retainedDirectory) {
+    disposition = { path: retainedDirectory, state: 'retained', reasons };
+  }
+  if (artifact && reasons.length === 0) {
     try {
-      await runtime.rm(buildDir, { recursive: true, force: true });
+      await artifact.release();
     } catch (error) {
-      const detail = `build directory removal failed: ${errorMessage(error)}`;
-      cleanupFailures.push(detail);
-      disposition = { path: buildDir, state: 'unknown', reasons: [detail] };
+      cleanupFailures.push(`Storybook artifact lease release failed: ${errorMessage(error)}`);
     }
+  } else if (artifact) {
+    void lifetime
+      .settled()
+      .then((settled) => (settled ? artifact!.release() : undefined))
+      .catch((error: unknown) => {
+        writeStderr(`Storybook artifact lease release failed: ${errorMessage(error)}\n`);
+      });
   }
   for (const detach of detachSignals) detach();
 

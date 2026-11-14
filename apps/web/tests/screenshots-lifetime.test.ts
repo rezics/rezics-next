@@ -1,11 +1,16 @@
 import { expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { Browser, BrowserContext, Page } from 'playwright';
+import { createStorybookArtifactStore } from '../scripts/storybook-artifact.ts';
 import {
   createProgressReporter,
   parseOptions,
   runCaptureLifecycle,
   type ScreenshotRuntime,
 } from '../scripts/screenshots.ts';
+
+const root = resolve(import.meta.dir, '../..');
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void };
 
@@ -68,9 +73,10 @@ type Harness = {
   widths: number[];
   files: string[];
   progress: string[];
-  removed: string[];
   serverClosed: number;
   browserClosed: number;
+  buildCalls: number;
+  artifactReleases: number;
   contextClosed: number[];
   pageClosed: number[];
   navigations: string[];
@@ -84,7 +90,7 @@ type Hooks = {
   addInitScript?: (index: number) => Promise<void>;
   closeContext?: (index: number) => Promise<void>;
   closePage?: (index: number) => Promise<void>;
-  launch?: () => Promise<Browser>;
+  launch?: () => Promise<Browser | undefined>;
   child?: () => ReturnType<typeof Bun.spawn>;
   stories?: string[];
   signals?: ReturnType<typeof signalHarness>;
@@ -101,9 +107,10 @@ function setup(hooks: Hooks = {}): {
     widths: [],
     files: [],
     progress: [],
-    removed: [],
     serverClosed: 0,
     browserClosed: 0,
+    buildCalls: 0,
+    artifactReleases: 0,
     contextClosed: [],
     pageClosed: [],
     navigations: [],
@@ -111,6 +118,7 @@ function setup(hooks: Hooks = {}): {
   };
   const signals = hooks.signals ?? signalHarness();
   let contextIndex = 0;
+  let artifactBuilt = false;
   const context = (index: number): BrowserContext => {
     let currentStoryId = '';
     const pageIndex = index;
@@ -180,13 +188,33 @@ function setup(hooks: Hooks = {}): {
         },
       };
     },
-    launch: hooks.launch ?? (async () => browser),
+    launch: async () => (await hooks.launch?.()) ?? browser,
     readStories: async () => hooks.stories ?? ['components-example--a', 'components-example--b'],
     mkdir: (async () => undefined) as ScreenshotRuntime['mkdir'],
-    mkdtemp: (async () => '/fake/.temp/storybook-build-lifetime') as ScreenshotRuntime['mkdtemp'],
-    rm: (async (path: string) => {
-      events.removed.push(path);
-    }) as ScreenshotRuntime['rm'],
+    artifactIdentity: async () => 'a'.repeat(64),
+    artifactStore: {
+      async acquire(identity, build, options) {
+        const workDirectory = '/fake/.temp/storybook-build-lifetime';
+        const disposition = artifactBuilt ? 'reused' : 'built';
+        if (!artifactBuilt) {
+          events.buildCalls += 1;
+          options?.onBuildStart?.(workDirectory);
+          await build(`${workDirectory}/site`, workDirectory);
+          artifactBuilt = true;
+        }
+        return {
+          identity,
+          site: `${workDirectory}/site`,
+          bytes: 42,
+          disposition,
+          nestedBuilds: disposition === 'built' ? 1 : 0,
+          nestedReuses: disposition === 'reused' ? 1 : 0,
+          async release() {
+            events.artifactReleases += 1;
+          },
+        };
+      },
+    },
     cleanupTimeoutMs: hooks.cleanupTimeoutMs ?? 20,
     buildTimeoutMs: hooks.buildTimeoutMs ?? 500,
     signals: signals.signals,
@@ -223,9 +251,67 @@ test('the injected production composition preserves file order, progress and wid
   );
   expect(events.progress[0]).toBe('Storybook build started.');
   expect(events.progress[1]).toBe('Storybook build finished in 0.0s.');
-  expect(events.progress.slice(2)).toHaveLength(4);
-  expect(events.progress.slice(2).map((line) => line.replace(/^captured \d+\/\d+ /, ''))).toEqual(events.files);
-  expect(events.removed).toEqual(['/fake/.temp/storybook-build-lifetime']);
+  expect(events.progress[2]).toContain('Storybook artifact ');
+  expect(events.progress.slice(3)).toHaveLength(4);
+  expect(events.progress.slice(3).map((line) => line.replace(/^captured \d+\/\d+ /, ''))).toEqual(events.files);
+  expect(events.artifactReleases).toBe(1);
+});
+
+test('a failed browser releases only its lease and the next capture reuses the completed artifact', async () => {
+  let launches = 0;
+  const { runtime, events } = setup({
+    stories: ['components-example--a'],
+    launch: async () => {
+      launches += 1;
+      if (launches === 1) throw new Error('browser launch failed');
+      return undefined;
+    },
+  });
+
+  await expect(runCaptureLifecycle(options(['--story', 'components-example--a']), runtime)).rejects.toThrow(
+    'browser launch failed',
+  );
+  expect(events.buildCalls).toBe(1);
+
+  await runCaptureLifecycle(options(['--story', 'components-example--a']), runtime);
+  expect(events.buildCalls).toBe(1);
+  expect(events.progress.filter((line) => line.includes('Storybook artifact'))).toHaveLength(2);
+  expect(events.progress.at(-1)).toContain('reused (42 bytes; nested work 0 build, 1 reuse)');
+  expect(events.browserClosed).toBe(1);
+  expect(events.artifactReleases).toBe(2);
+});
+
+test('simultaneous same-key captures share one completed build and hold separate browser leases', async () => {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const temporary = mkdtempSync(join(root, '.temp/screenshots-artifact-lifetime-'));
+  const { runtime, events } = setup({ stories: ['components-example--a'] });
+  runtime.artifactStore = createStorybookArtifactStore(join(temporary, 'artifacts'));
+  let builds = 0;
+  runtime.spawn = ((command: string[]) => {
+    const output = command[command.indexOf('--output-dir') + 1]!;
+    mkdirSync(output, { recursive: true });
+    writeFileSync(join(output, 'index.json'), '{"entries":{}}');
+    builds += 1;
+    return child();
+  }) as unknown as typeof Bun.spawn;
+
+  try {
+    const [first, second] = await Promise.all([
+      runCaptureLifecycle(options(['--story', 'components-example--a']), runtime),
+      runCaptureLifecycle(options(['--story', 'components-example--a']), runtime),
+    ]);
+    const artifacts = events.progress.filter((line) => line.includes('Storybook artifact'));
+    expect([first, second]).toEqual([0, 0]);
+    expect(builds).toBe(1);
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts.filter((line) => line.includes(' built '))).toHaveLength(1);
+    expect(artifacts.filter((line) => line.includes(' reused '))).toHaveLength(1);
+    expect(events.browserClosed).toBe(2);
+    expect(events.contextClosed).toHaveLength(2);
+    expect(events.pageClosed).toHaveLength(2);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
 });
 
 test('the injected production composition retains matched work and reports unmatched selectors afterward', async () => {
@@ -253,7 +339,6 @@ test('a build parent that never exits is killed, bounded, and keeps its build di
   );
   expect(kills).toContain(undefined);
   expect(kills).toContain(9);
-  expect(events.removed).toEqual([]);
   expect(events.serverClosed).toBe(0);
   expect(events.browserClosed).toBe(0);
 });
@@ -268,7 +353,6 @@ test('an exited build parent does not release the directory while an inherited o
 
   await expect(runCaptureLifecycle(options(), runtime)).rejects.toThrow('Storybook build stdout did not settle');
   expect(kills).toEqual([]);
-  expect(events.removed).toEqual([]);
 });
 
 test('a signal during a pending build fences later server and browser work and detaches listeners', async () => {
@@ -289,7 +373,6 @@ test('a signal during a pending build fences later server and browser work and d
   await expect(running).rejects.toThrow('Capture interrupted by SIGINT');
   expect(events.serverClosed).toBe(0);
   expect(events.browserClosed).toBe(0);
-  expect(events.removed).toHaveLength(1);
   expect(signals.count()).toBe(0);
 });
 
@@ -316,7 +399,6 @@ test('a successful context is retired when a sibling context acquisition rejects
   );
   expect(events.contextClosed).toEqual([0]);
   expect(events.navigations).toEqual([]);
-  expect(events.removed).toEqual(['/fake/.temp/storybook-build-lifetime']);
 });
 
 test.each(['addInitScript', 'newPage'] as const)('%s setup failure retires every acquired resource', async (stage) => {
@@ -338,7 +420,6 @@ test.each(['addInitScript', 'newPage'] as const)('%s setup failure retires every
   expect(events.navigations).toEqual([]);
   expect(events.browserClosed).toBe(1);
   expect(events.serverClosed).toBe(1);
-  expect(events.removed).toEqual(['/fake/.temp/storybook-build-lifetime']);
 });
 
 test.each(['reject', 'hang'] as const)(
@@ -362,7 +443,7 @@ test.each(['reject', 'hang'] as const)(
     );
 
     expect(failure).toBeInstanceOf(Error);
-    expect(failure!.message).toContain('Build directory retained at /fake/.temp/storybook-build-lifetime');
+    expect(failure!.message).toContain('Build directory retained at /fake/.temp/storybook-build-lifetime/site');
     expect(failure!.message).toContain(
       mode === 'reject'
         ? 'context 1 at 1280px close failed: context close rejected'
@@ -373,7 +454,6 @@ test.each(['reject', 'hang'] as const)(
     expect(events.pageClosed.sort()).toEqual([0, 1, 2, 3]);
     expect(events.serverClosed).toBe(1);
     expect(events.browserClosed).toBe(1);
-    expect(events.removed).toEqual([]);
   },
 );
 
@@ -458,10 +538,9 @@ test.each(['browser', 'context', 'page'] as const)(
           ? 'context 1 at 1280px acquisition did not settle within 8ms.'
           : 'page 1 at 1280px acquisition did not settle within 8ms.';
     expect(failure!.message).toContain(
-      `Build directory retained at /fake/.temp/storybook-build-lifetime because ${reason}`,
+      `Build directory retained at /fake/.temp/storybook-build-lifetime/site because ${reason}`,
     );
     expect(base.events.navigations).toEqual([]);
-    expect(base.events.removed).toEqual([]);
 
     late.resolve(lateHandle as unknown as Browser | BrowserContext | Page);
     await closed.promise;
@@ -495,17 +574,15 @@ test('an in-flight capture job that outlives page close keeps the build occupied
 
   expect(failure).toBeInstanceOf(Error);
   expect(failure!.message).toContain(
-    'Build directory retained at /fake/.temp/storybook-build-lifetime because capture job components-example--a en dark at 1280px acquisition did not settle within 8ms.',
+    'Build directory retained at /fake/.temp/storybook-build-lifetime/site because capture job components-example--a en dark at 1280px acquisition did not settle within 8ms.',
   );
   expect(events.pageClosed).toEqual([0]);
   expect(events.contextClosed).toEqual([0]);
   expect(events.serverClosed).toBe(1);
   expect(events.browserClosed).toBe(1);
-  expect(events.removed).toEqual([]);
   expect(events.navigations).toEqual(['components-example--a']);
   expect(signals.count()).toBe(0);
 
   navigation.resolve(null);
   await Promise.resolve();
-  expect(events.removed).toEqual([]);
 });
