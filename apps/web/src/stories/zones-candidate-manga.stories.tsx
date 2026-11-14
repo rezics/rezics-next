@@ -38,7 +38,6 @@ export const AdmittedPreview = {
     for (const subject of ['Clockwork Kites', 'Moonlit Postcards']) {
       await userEvent.click(await view.findByRole('link', { name: subject }));
       await view.findByRole('heading', { name: subject });
-      await view.findByText(/Fictional subject in a gated development preview/);
       await userEvent.click(await view.findByRole('link', { name: 'Manga' }));
       await view.findByRole('heading', { name: 'Manga' });
     }

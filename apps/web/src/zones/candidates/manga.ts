@@ -20,8 +20,8 @@ export const mangaCandidateSubjectIds = {
 } as const;
 
 export const mangaCandidateSubjects = [
-  { id: mangaCandidateSubjectIds.clockworkKites, label: 'Clockwork Kites' },
-  { id: mangaCandidateSubjectIds.moonlitPostcards, label: 'Moonlit Postcards' },
+  { id: mangaCandidateSubjectIds.clockworkKites, type: 'schema:ComicSeries', label: 'Clockwork Kites' },
+  { id: mangaCandidateSubjectIds.moonlitPostcards, type: 'schema:ComicSeries', label: 'Moonlit Postcards' },
 ] as const;
 
 const previewCopy =
