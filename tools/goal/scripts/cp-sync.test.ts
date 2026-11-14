@@ -119,6 +119,32 @@ test('If a resident service cannot be restarted or does not come back, cp-sync r
   }
 });
 
+test('the publisher accepts a ready successor after a transient systemd host restart failure', async () => {
+  const root = checkout();
+  const host = RESIDENT_CODE_UNITS[0];
+  const started = Math.floor(Date.now() / 1000) + 1;
+  let reads = 0;
+  let restarts = 0;
+  try {
+    await restartResident(root, async (argv) => {
+      const loaded = systemdState(argv);
+      if (loaded) return loaded;
+      if (argv.includes('restart') && argv.includes(host)) {
+        restarts++;
+        return { code: 1, output: 'The first restart attempt failed' };
+      }
+      if (argv.includes('restart')) return { code: 0, output: '' };
+      if (argv.includes(host) && reads++ === 0)
+        return { code: 0, output: 'ActiveState=activating\nExecMainStartTimestamp=@0\n' };
+      return { code: 0, output: `ActiveState=active\nExecMainStartTimestamp=@${started}\n` };
+    }, false, async () => {});
+    expect(restarts).toBe(1);
+    expect(reads).toBe(2);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('cp-sync preserves a paused verifier and refuses any service install that would start it.', async () => {
   const root = checkout();
   const calls: string[][] = [];
