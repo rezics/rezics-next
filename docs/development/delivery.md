@@ -55,6 +55,7 @@ than assumed. Check:
 
 - required exports, fixtures and dependencies exist on the recorded base;
 - the acceptance agrees with current contracts;
+- skill instructions distinguish reference reads from executable commands ([skill instructions](#skill-instructions));
 - declared risk areas cover the paths;
 - the target is recorded in parsed metadata;
 - dependencies are real code dependencies;
@@ -75,6 +76,23 @@ lists the file and the reason, and continues.
 
 Declared paths guide scope. A minimal adjacent correction must respect risk ownership, include its affected checks
 and notify its owner. Agree shared interfaces before consuming them; include consumers and fixtures in the change.
+
+## Skill instructions
+
+When a brief uses a skill, link its installed `SKILL.md` and name reference files as reads. Run only commands the
+skill documents, resolving its launcher from the installed skill directory rather than assuming a bare command
+exists on PATH. In Impeccable, `reference/craft-floor.md` is a document to read before UI edits, not a `craft-floor`
+CLI verb. Use the documented launcher for `context` or `detect`, within the task's authorized scope.
+
+If the launcher fails, follow the skill's documented fallback. Impeccable permits reading existing project context
+and the applicable references directly and continuing the repair; a launcher failure alone does not require another
+source attempt, installation, a PATH change or repetition of passed checks on unchanged inputs. Preserve the source
+and valid evidence, and fix any actual product defect found during that review.
+
+When an instruction caused the failure, correct its owning document and the affected active brief in the same
+turn; a temporary decision or retry message alone does not repair future instructions. Keep archived attempts as
+evidence and link subsequent briefs to the corrected owner. Verify the replacement wording against the installed
+skill and state separately whether the document change has landed and reached existing workers.
 
 ## Checkout and landing discipline
 
