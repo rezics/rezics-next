@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
@@ -70,6 +71,15 @@ export function TermsConflictResolution({
   const absent = m.catalogue_terms_absent({}, options);
   const overlaps = changes.filter((change) => change.overlap);
   const classified = changes.filter((change) => !change.overlap);
+  const keyboardReviewOpener = useRef<HTMLButtonElement | null>(null);
+  const [reviewAction, setReviewAction] = useState(0);
+  useLayoutEffect(() => {
+    const opener = keyboardReviewOpener.current;
+    if (!opener) return;
+    keyboardReviewOpener.current = null;
+    if (!reviewed || disabled || !opener.isConnected || opener.ownerDocument.activeElement !== opener) return;
+    opener.ownerDocument.getElementById(controlId('patch-review'))?.focus();
+  }, [controlId, disabled, reviewAction, reviewed]);
   const classLabel = (change: TermFieldChange) =>
     change.currentUnchanged
       ? m.catalogue_terms_class_current_unchanged({}, options)
@@ -89,6 +99,7 @@ export function TermsConflictResolution({
           const edit = replacements[key] ?? { mode: 'set' as const, value: formatTermPresence(change.intended) };
           const invalid = kind === 'replacement' && !replacementPresence(change.field, edit);
           const errorId = invalid ? controlId(`resolve-${key}-error`) : undefined;
+          const aliasesHelpId = controlId(`resolve-${key}-aliases-help`);
           return (
             <FieldSet key={key} disabled={disabled} className="min-w-0 gap-0">
               <FieldLegend className="px-1">
@@ -151,7 +162,7 @@ export function TermsConflictResolution({
                         value={edit.value}
                         rows={3}
                         aria-invalid={invalid}
-                        aria-describedby={[controlId('aliases-help'), errorId].filter(Boolean).join(' ')}
+                        aria-describedby={[aliasesHelpId, errorId].filter(Boolean).join(' ')}
                         onChange={(event) => onReplacement(change.language, change.field, event.target.value)}
                       />
                     ) : (
@@ -167,7 +178,7 @@ export function TermsConflictResolution({
                       />
                     )}
                     {change.field === 'aliases' && (
-                      <FieldDescription id={controlId('aliases-help')}>
+                      <FieldDescription id={aliasesHelpId}>
                         {m.catalogue_terms_alias_limits({}, options)}
                       </FieldDescription>
                     )}
@@ -207,14 +218,22 @@ export function TermsConflictResolution({
           type="button"
           variant="outline"
           disabled={disabled || unresolved.length > 0}
-          onClick={onReview}
+          onClick={(event) => {
+            keyboardReviewOpener.current = event.detail === 0 ? event.currentTarget : null;
+            if (event.detail === 0) setReviewAction((current) => current + 1);
+            onReview();
+          }}
         >
           {m.catalogue_terms_review({}, options)}
         </Button>
       </section>
       {reviewed && (
         <section className="flex min-w-0 flex-col gap-3" aria-labelledby={controlId('patch-review')}>
-          <ContentItemHeading id={controlId('patch-review')} className="font-semibold">
+          <ContentItemHeading
+            id={controlId('patch-review')}
+            tabIndex={-1}
+            className="font-semibold focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+          >
             {m.catalogue_terms_review_title({}, options)}
           </ContentItemHeading>
           <p>{m.catalogue_terms_review_help({ revision: String(revision), etag }, options)}</p>
