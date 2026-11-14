@@ -60,7 +60,7 @@ import type {
 } from './page-contract.ts';
 import { PAGE_GLOBAL_CONTEXT } from './page-contract.ts';
 import type { PageApplicationPorts, PageSemanticPort } from './page-semantic-port.ts';
-import { PageReadBudget, PageReadError, type PageRead } from './reads.ts';
+import { PageReadBudget, PageReadError, withPageReadLifetime, type PageRead, type PageReadLifetime } from './reads.ts';
 
 export type { PageApplicationPorts } from './page-semantic-port.ts';
 export {
@@ -694,6 +694,7 @@ async function preparePublicSemanticPageMetadata(
 async function answerPage(
   application: PageApplication,
   ports: PageApplicationPorts,
+  lifetime: PageReadLifetime,
   input: {
     release: import('@rezics/filter').FilterRelease | undefined;
     continuationOnlyLists: boolean;
@@ -725,6 +726,7 @@ async function answerPage(
     }>;
   },
 ): Promise<PageWireResult> {
+  lifetime.check();
   const violations = validateDocumentFilters(
     platformRegistry,
     input.resolved.document,
@@ -834,8 +836,9 @@ async function answerPage(
   );
   const incoming = new Request(input.execution.request.url, {
     headers: input.execution.request.headers,
-    signal: input.execution.request.signal,
+    signal: lifetime.signal,
   });
+  lifetime.check();
   const forwarded = mergedSession(
     input.session.ring,
     input.session.scope,
@@ -846,22 +849,26 @@ async function answerPage(
   let page;
   let releaseGuard: (() => void) | undefined;
   try {
+    lifetime.check();
     releaseGuard = input.finalGuard ? input.budget.reserve(1, 1) : undefined;
     page = await ports.pageRead.readPage({
       dispatch: input.execution.dispatch,
+      deadline: input.execution.deadline,
       resolveBuiltin: async (key) => {
+        lifetime.check();
         if (
           input.execution.actor.kind !== 'account' ||
           (input.account !== null && input.account.id !== input.execution.actor.accountId)
         )
           return null;
-        return input.execution.run(() =>
-          createBuiltinRuntime({ pool: input.execution.pool }).resolve(
+        return input.execution.run(() => {
+          lifetime.check();
+          return createBuiltinRuntime({ pool: input.execution.pool }).resolve(
             input.execution.actor as Extract<Actor, { kind: 'account' }>,
             key,
             input.execution.deadline,
-          ),
-        );
+          );
+        });
       },
       incoming,
       reads: plan.reads as Record<string, PageRead>,
@@ -872,18 +879,23 @@ async function answerPage(
       ...(input.languages === undefined ? {} : { languages: input.languages }),
     });
   } catch (error) {
+    lifetime.check();
     if (error instanceof PageReadError) reject(error.errors);
     throw error;
   } finally {
     releaseGuard?.();
   }
+  lifetime.check();
   let readSession = mergedSession(input.session.ring, input.session.scope, input.probeSession, page.session);
   if (input.finalGuard) {
+    lifetime.check();
     const guarded = await input.finalGuard(readSession);
+    lifetime.check();
     readSession = mergedSession(input.session.ring, input.session.scope, readSession, guarded);
   }
   const reads: Record<string, PageReadResult> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
+    lifetime.check();
     let result = page.results[key];
     if (
       result?.status === 200 &&
@@ -906,7 +918,9 @@ async function answerPage(
         : result;
   }
 
+  lifetime.check();
   const catalogueViewer = input.viewer ? await input.viewer() : undefined;
+  lifetime.check();
   const subjectViewer =
     catalogueViewer === undefined && input.subject !== null
       ? input.execution.actor.kind === 'account'
@@ -928,23 +942,23 @@ async function answerPage(
         : undefined;
     if (type && !quotationTypeAdmitted(input.release, input.subjectType)) {
       try {
+        lifetime.check();
         input.budget.charge(1);
         const headers = new Headers(incoming.headers);
         headers.set('content-type', 'application/json');
         if (readSession !== null) headers.set(SESSION_HEADER, readSession);
-        const viewerResponse = await input.execution.dispatch(
+        const viewerResponse = await lifetime.dispatch(
+          input.execution.dispatch,
           new Request(new URL('/v1/viewerActions', input.execution.request.url), {
             method: 'POST',
             headers,
             body: JSON.stringify({ resources: [{ type, id: input.subject }] }),
-            signal: input.execution.request.signal,
           }),
         );
-        const text = await viewerResponse.text();
-        viewerEnvelope = pageViewerActions(type, input.subject, {
-          status: viewerResponse.status,
-          body: text === '' ? null : (JSON.parse(text) as unknown),
-        });
+        const result = await lifetime.result(viewerResponse);
+        lifetime.check();
+        viewerEnvelope = pageViewerActions(type, input.subject, result);
+        lifetime.check();
         readSession = mergedSession(
           input.session.ring,
           input.session.scope,
@@ -952,6 +966,7 @@ async function answerPage(
           viewerResponse.headers.get(SESSION_HEADER),
         );
       } catch (error) {
+        lifetime.check();
         if (error instanceof PageReadError || error instanceof SyntaxError)
           viewerEnvelope = pageViewerActions(type, input.subject, { status: 503, body: null });
         else throw error;
@@ -959,6 +974,7 @@ async function answerPage(
     }
   }
 
+  lifetime.check();
   const quotationAuthority =
     input.subject !== null && quotationTypeAdmitted(input.release, input.subjectType)
       ? await application.readQuotationPageAuthority({
@@ -969,6 +985,7 @@ async function answerPage(
         })
       : null;
 
+  lifetime.check();
   return wire(
     200,
     {
@@ -1002,6 +1019,7 @@ async function readConfiguredPage(
   application: PageApplication,
   ports: PageApplicationPorts,
   request: ConfiguredPageRequest,
+  lifetime: PageReadLifetime,
 ): Promise<PageWireResult> {
   const { execution, target, continuation, stream } = request;
   const languages = request.languages;
@@ -1012,12 +1030,17 @@ async function readConfiguredPage(
   const captured = execution.capturedProfile;
   const includeEligibility = execution.includeEligibility;
   const active = await execution.run(async () => {
+    lifetime.check();
     const admitted = await withBoundedReadConnection(
       pool,
       execution.deadline,
-      (client) => execution.admit(client),
+      (client) => {
+        lifetime.check();
+        return execution.admit(client);
+      },
       pageReadLifetimeOptions,
     );
+    lifetime.check();
     if (!admitted) throw new ProblemError(draftPreview ? 'forbidden' : 'not_found');
     if (!captured) return application.activeProfile(pool, execution.deadline);
     const readResource = {
@@ -1027,19 +1050,26 @@ async function readConfiguredPage(
         : {}),
     };
     for (const reader of execution.draftReaders ?? [actor]) {
+      lifetime.check();
       const readCheck = await accessCheck(execution.access, reader, 'presentation:read', readResource, {
         pool,
         deadline: execution.deadline,
       });
+      lifetime.check();
       const allowed = await withBoundedReadConnection(
         pool,
         execution.deadline,
-        (client) => readCheck(client),
+        (client) => {
+          lifetime.check();
+          return readCheck(client);
+        },
         pageReadLifetimeOptions,
       );
+      lifetime.check();
       if (!allowed) throw new ProblemError('forbidden');
     }
     const release = await ports.semantic.activeRelease(pool, execution.deadline);
+    lifetime.check();
     const violations = validateProfileFilters(
       platformRegistry,
       captured,
@@ -1056,6 +1086,7 @@ async function readConfiguredPage(
       reject([{ pointer: '/target/route', code: 'unsupported' }]);
     return { digest: profileDigest(captured), profile: captured };
   });
+  lifetime.check();
   if (!active) throw new ProblemError('presentation_not_ready', { headers: { 'retry-after': '1' } });
 
   const scope = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
@@ -1064,20 +1095,23 @@ async function readConfiguredPage(
   const probes = new Map<string, PageReadResult>();
   let probeSession: string | null = null;
   const probe = async (descriptor: CompositionPageRead): Promise<PageReadResult> => {
+    lifetime.check();
     const incoming = new Request(execution.request.url, {
       headers: execution.request.headers,
-      signal: execution.request.signal,
+      signal: lifetime.signal,
     });
     const forwarded = mergedSession(tokens, scope, incoming.headers.get(SESSION_HEADER), probeSession);
     if (forwarded !== null) incoming.headers.set(SESSION_HEADER, forwarded);
     const probed = await ports.pageRead.readPage({
       dispatch: execution.dispatch,
+      deadline: execution.deadline,
       incoming,
       reads: { probe: descriptor as PageRead },
       session,
       budget,
       ...(languages ? { languages } : {}),
     });
+    lifetime.check();
     probeSession = mergedSession(tokens, scope, probeSession, probed.session);
     const result = probed.results.probe!;
     probes.set(canonicalize(descriptor)!, result);
@@ -1096,7 +1130,9 @@ async function readConfiguredPage(
   let account: PageAccount | null = null;
   let resolved: ResolvedTemplate;
   let views: View[] | null = null;
+  lifetime.check();
   const definitionRelease = await ports.semantic.activeRelease(pool, execution.deadline);
+  lifetime.check();
   if ('route' in target) {
     resolved = resolveTemplate(active.profile, { route: target.route });
   } else {
@@ -1107,14 +1143,19 @@ async function readConfiguredPage(
     if ('subject' in target) {
       subjectTarget = target.subject;
       if (target.realm) {
-        const types = await execution.run(() =>
-          withBoundedReadConnection(
+        const types = await execution.run(() => {
+          lifetime.check();
+          return withBoundedReadConnection(
             pool,
             execution.deadline,
-            (client) => ports.semantic.readItemTypes(deadlineClient(client, execution.deadline), [target.subject]),
+            (client) => {
+              lifetime.check();
+              return ports.semantic.readItemTypes(deadlineClient(client, execution.deadline), [target.subject]);
+            },
             pageReadLifetimeOptions,
-          ),
-        );
+          );
+        });
+        lifetime.check();
         const roots = new Set(['schema:Person', 'schema:Organization', 'schema:SoftwareApplication']);
         const visited = new Set<string>();
         const agentType = (type: string): boolean => {
@@ -1124,7 +1165,9 @@ async function readConfiguredPage(
           return (release?.release.types[type]?.bases ?? []).some(agentType);
         };
         const type = types.get(target.subject);
+        lifetime.check();
         if (!type || !agentType(type)) selected = await application.selectPage(execution, target.realm, subjectTarget);
+        lifetime.check();
       }
     } else {
       const result = await probe({ kind: 'account', handle: target.account });
@@ -1142,7 +1185,11 @@ async function readConfiguredPage(
         return wire(probed.failed.status, probed.failed.body, probeSession, probed.failed.headers);
       subject = probed.subject;
       if ('subject' in target) {
-        const [agent] = await execution.run(() => readPublicAccountByAgent(pool, probed.subject.id));
+        const [agent] = await execution.run(() => {
+          lifetime.check();
+          return readPublicAccountByAgent(pool, probed.subject.id);
+        });
+        lifetime.check();
         if (agent && agent.state !== 'deleted' && agent.handle !== null) {
           return {
             status: 308,
@@ -1162,6 +1209,7 @@ async function readConfiguredPage(
     views = page.views;
   }
 
+  lifetime.check();
   probeSession = mergedSession(
     tokens,
     scope,
@@ -1190,18 +1238,30 @@ async function readConfiguredPage(
   const pageViewer =
     pageCatalogue?.state === 'released' || identityOverlay
       ? async () => {
+          lifetime.check();
           let statementPropose: 'allowed' | 'denied' | 'unavailable';
           try {
             const check = await accessCheck(execution.access, actor, 'statement:propose', resource(), {
               pool,
               deadline: execution.deadline,
             });
-            statementPropose = (await execution.run(() =>
-              withBoundedReadConnection(pool, execution.deadline, (client) => check(client), pageReadLifetimeOptions),
-            ))
-              ? 'allowed'
-              : 'denied';
+            lifetime.check();
+            const allowed = await execution.run(() => {
+              lifetime.check();
+              return withBoundedReadConnection(
+                pool,
+                execution.deadline,
+                (client) => {
+                  lifetime.check();
+                  return check(client);
+                },
+                pageReadLifetimeOptions,
+              );
+            });
+            lifetime.check();
+            statementPropose = allowed ? 'allowed' : 'denied';
           } catch (error) {
+            lifetime.check();
             if (!classifyUnavailability(error)) throw error;
             statementPropose = 'unavailable';
           }
@@ -1213,7 +1273,7 @@ async function readConfiguredPage(
           };
         }
       : undefined;
-  return answerPage(application, ports, {
+  return answerPage(application, ports, lifetime, {
     release: definitionRelease?.release,
     continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
     execution,
@@ -1239,7 +1299,11 @@ async function readConfiguredPage(
     ...(selected || plannedDocuments
       ? {
           finalGuard: async (readSession: string | null) => {
-            const incoming = new Request(execution.request, { headers: execution.request.headers });
+            lifetime.check();
+            const incoming = new Request(execution.request, {
+              headers: execution.request.headers,
+              signal: lifetime.signal,
+            });
             if (readSession !== null) incoming.headers.set(SESSION_HEADER, readSession);
             const descriptor = {
               kind: 'subject' as const,
@@ -1248,12 +1312,14 @@ async function readConfiguredPage(
             };
             const current = await ports.pageRead.readPage({
               dispatch: execution.dispatch,
+              deadline: execution.deadline,
               incoming,
               reads: { guard: descriptor },
               session,
               budget,
               ...(languages ? { languages } : {}),
             });
+            lifetime.check();
             probeSession = mergedSession(tokens, scope, probeSession, current.session);
             const result = current.results.guard!;
             if (result.status !== 200)
@@ -1263,7 +1329,9 @@ async function readConfiguredPage(
             const initial = probes.get(canonicalize(descriptor)!);
             if (survivor(result.body).id !== subject!.id || canonicalize(result.body) !== canonicalize(initial?.body))
               throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
+            lifetime.check();
             if (selected) await application.guardSelectedPage(execution, selected);
+            lifetime.check();
             return mergedSession(
               tokens,
               scope,
@@ -1316,7 +1384,13 @@ export function createPageApplication(ports: PageApplicationPorts): PageApplicat
       ports.selected.selectPage(execution, realmId, subject),
     guardSelectedPage: (execution: PageExecution, selected: SelectedPageSnapshot) =>
       ports.selected.guardSelectedPage(execution, selected),
-    readConfiguredPage: (request: ConfiguredPageRequest) => readConfiguredPage(application, ports, request),
+    readConfiguredPage: (request: ConfiguredPageRequest) =>
+      withPageReadLifetime(
+        request.execution.request,
+        request.execution.deadline,
+        (lifetime) => readConfiguredPage(application, ports, request, lifetime),
+        request.execution.deadlineNow,
+      ),
   } as PageApplication;
   return Object.freeze(application);
 }

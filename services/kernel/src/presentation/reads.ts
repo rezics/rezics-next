@@ -14,6 +14,7 @@ import { MAX_DOCUMENT_BYTES } from '../content/document.ts';
 import { SESSION_HEADER } from '../http/request.ts';
 import { ProblemError, problemResponse } from '../http/problem.ts';
 import type { FieldError } from '../http/problem.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { validateSearchLimit } from '../search/hits.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
 import { decodeSession, encodeSession, mergeSession } from '../tokens/session.ts';
@@ -470,14 +471,157 @@ function readToken(response: Response, tokens: string[]): void {
   if (token !== null) tokens.push(token);
 }
 
-async function responseResult(response: Response): Promise<PageResult> {
-  const text = await response.text();
-  const retry = response.headers.get('retry-after');
-  return {
-    status: response.status,
-    body: text === '' ? null : (JSON.parse(text) as unknown),
-    ...(retry ? { headers: { 'retry-after': retry } } : {}),
-  };
+type OwnedBody = {
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  cancellation?: Promise<void>;
+};
+
+/** One signal and body owner survive headers, redirect hops and complete body consumption. */
+export class PageReadLifetime {
+  readonly deadline: number;
+  private readonly controller = new AbortController();
+  readonly signal = this.controller.signal;
+  private readonly bodies = new Map<Response, OwnedBody>();
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private readonly cancelIncoming = () =>
+    this.abort(new ProblemError(this.now() >= this.deadline ? 'deadline_exceeded' : 'dependency_unavailable'));
+
+  constructor(
+    private readonly incoming: Request,
+    deadline: number | undefined,
+    private readonly now: () => number,
+  ) {
+    if (deadline !== undefined && !Number.isFinite(deadline)) throw new TypeError('Page deadline must be finite');
+    // An absent ambient deadline adds no new budget to compatible standalone callers.
+    this.deadline = Math.min(deadline ?? Infinity, deadlineFor(1, () => Infinity));
+    incoming.signal.addEventListener('abort', this.cancelIncoming, { once: true });
+    if (incoming.signal.aborted) this.cancelIncoming();
+    const expire = () => {
+      if (this.signal.aborted) return;
+      const remaining = this.deadline - this.now();
+      if (remaining <= 0) this.abort(new ProblemError('deadline_exceeded'));
+      else this.timer = setTimeout(expire, Math.min(remaining, 2_147_483_647));
+    };
+    if (Number.isFinite(this.deadline)) expire();
+  }
+
+  private cancel(body: OwnedBody): Promise<void> {
+    if (!body.cancellation) {
+      body.cancellation = body.reader.cancel(this.signal.reason);
+      // Observe rejection immediately, but retain it for the owner awaiting close.
+      void body.cancellation.catch(() => {});
+    }
+    return body.cancellation;
+  }
+
+  private abort(error: ProblemError): void {
+    if (!this.signal.aborted) this.controller.abort(error);
+    for (const body of this.bodies.values()) void this.cancel(body);
+  }
+
+  check(): void {
+    if (!this.signal.aborted && this.now() >= this.deadline) this.abort(new ProblemError('deadline_exceeded'));
+    this.signal.throwIfAborted();
+  }
+
+  private own(response: Response): OwnedBody | undefined {
+    let body = this.bodies.get(response);
+    if (!body && response.body) {
+      body = { reader: response.body.getReader() };
+      this.bodies.set(response, body);
+      if (this.signal.aborted) void this.cancel(body);
+    }
+    return body;
+  }
+
+  async dispatch(dispatch: (request: Request) => Promise<Response>, request: Request): Promise<Response> {
+    this.check();
+    const incoming = new Request(request, { signal: this.signal });
+    this.check();
+    // Keep settlement when an injected dispatcher cannot stop on cancellation; never race away its custody.
+    const response = await dispatch(incoming);
+    this.own(response);
+    this.check();
+    return response;
+  }
+
+  async close(response: Response): Promise<void> {
+    const body = this.bodies.get(response);
+    if (!body) return;
+    try {
+      await this.cancel(body);
+    } finally {
+      body.reader.releaseLock();
+      this.bodies.delete(response);
+    }
+  }
+
+  async result(response: Response): Promise<PageResult> {
+    const body = this.own(response);
+    let text = '';
+    try {
+      this.check();
+      if (body) {
+        const decoder = new TextDecoder();
+        while (true) {
+          this.check();
+          const chunk = await body.reader.read();
+          this.check();
+          if (chunk.done) {
+            text += decoder.decode();
+            break;
+          }
+          text += decoder.decode(chunk.value, { stream: true });
+        }
+      }
+    } finally {
+      await this.close(response);
+    }
+    this.check();
+    const retry = response.headers.get('retry-after');
+    const result = {
+      status: response.status,
+      body: text === '' ? null : (JSON.parse(text) as unknown),
+      ...(retry ? { headers: { 'retry-after': retry } } : {}),
+    };
+    this.check();
+    return result;
+  }
+
+  async dispose(): Promise<void> {
+    try {
+      const closed = await Promise.allSettled([...this.bodies.keys()].map((response) => this.close(response)));
+      for (const result of closed) if (result.status === 'rejected') throw result.reason;
+    } finally {
+      clearTimeout(this.timer);
+      this.incoming.signal.removeEventListener('abort', this.cancelIncoming);
+    }
+  }
+}
+
+export async function withPageReadLifetime<T>(
+  incoming: Request,
+  deadline: number | undefined,
+  run: (lifetime: PageReadLifetime) => Promise<T>,
+  now: () => number = Date.now,
+): Promise<T> {
+  const lifetime = new PageReadLifetime(incoming, deadline, now);
+  try {
+    let result: T;
+    try {
+      lifetime.check();
+      result = await (Number.isFinite(lifetime.deadline)
+        ? withRequestDeadline(lifetime.deadline, () => run(lifetime))
+        : run(lifetime));
+    } finally {
+      await lifetime.dispose();
+    }
+    lifetime.check();
+    return result;
+  } catch (error) {
+    lifetime.check();
+    throw error;
+  }
 }
 
 async function executeRead(
@@ -485,6 +629,7 @@ async function executeRead(
   origin: string,
   credentials: ForwardedCredentials,
   dispatch: (request: Request) => Promise<Response>,
+  lifetime: PageReadLifetime,
 ): Promise<DispatchResult> {
   const descriptor = read.descriptor;
   const initialPath =
@@ -501,6 +646,7 @@ async function executeRead(
             : `/v1/subjects/${descriptor.id}`;
   const tokens: string[] = [];
   let response = await dispatch(requestFor(new URL(initialPath, origin), read.descriptor, credentials));
+  lifetime.check();
   readToken(response, tokens);
 
   if (descriptor.kind === 'subject' && response.status === 308) {
@@ -522,13 +668,16 @@ async function executeRead(
         // URL parsing normalizes dot segments and empty query/fragment markers; refuse those too.
         (location === target.pathname || location === `${origin}${target.pathname}`)
       ) {
+        await lifetime.close(response);
+        lifetime.check();
         response = await dispatch(requestFor(target, read.descriptor, credentials));
+        lifetime.check();
         readToken(response, tokens);
       }
     }
   }
 
-  return { result: await responseResult(response), tokens };
+  return { result: await lifetime.result(response), tokens };
 }
 
 /** The same search canonical used by `readPage`, including language overlay and admitted limit. */
@@ -552,6 +701,8 @@ export function preparePageRead(
 export async function readPage(options: {
   dispatch: (request: Request) => Promise<Response>;
   incoming: Request;
+  /** Original absolute page deadline; an earlier ambient request deadline also applies. */
+  deadline?: number;
   reads: Record<string, PageRead>;
   session: SessionKeys;
   languages?: readonly string[];
@@ -563,6 +714,10 @@ export async function readPage(options: {
     source: Exclude<Extract<PageRead, { kind: 'members' }>['source'], { kind: 'collection' }>,
   ) => Promise<{ id: string } | null>;
 }): Promise<{ results: Record<string, PageResult>; session: string | null; documents: Record<string, unknown> }> {
+  return withPageReadLifetime(options.incoming, options.deadline, (lifetime) => executePageReads(options, lifetime));
+}
+
+async function executePageReads(options: Parameters<typeof readPage>[0], lifetime: PageReadLifetime) {
   const reads = validateReads(options.reads).map((read) => {
     const prepared = preparePageRead(read.descriptor, options.languages);
     return { ...read, descriptor: prepared.descriptor, canonical: prepared.canonical };
@@ -606,31 +761,40 @@ export async function readPage(options: {
   };
   const tokens: string[] = [];
   const forwardToken = (token: string | null) => {
+    lifetime.check();
     if (token === null) return;
-    tokens.push(token);
     let components =
       credentials.session === null
         ? []
         : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
     for (const component of decodeSession(options.session.ring, options.session.scope, token) ?? [])
       components = mergeSession(components, component);
-    credentials.session = encodeSession(options.session.ring, options.session.scope, components);
+    const session = encodeSession(options.session.ring, options.session.scope, components);
+    lifetime.check();
+    tokens.push(token);
+    credentials.session = session;
   };
   const guards: Array<() => Promise<void>> = [];
   const execute = async (read: PreparedRead): Promise<DispatchResult> => {
+    lifetime.check();
     const descriptor = read.descriptor;
     if (descriptor.kind === 'members' && descriptor.source.kind !== 'collection') {
       const concealed = (): DispatchResult => ({ result: { status: 404, body: { code: 'not_found' } }, tokens: [] });
       if (!options.resolveBuiltin)
         return {
-          result: await responseResult(
+          result: await lifetime.result(
             problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' }),
           ),
           tokens: [],
         };
       const resolve = async () => {
+        lifetime.check();
         budget.charge(1);
-        return options.resolveBuiltin!(descriptor.source as Exclude<typeof descriptor.source, { kind: 'collection' }>);
+        const source = await options.resolveBuiltin!(
+          descriptor.source as Exclude<typeof descriptor.source, { kind: 'collection' }>,
+        );
+        lifetime.check();
+        return source;
       };
       try {
         const source = await resolve();
@@ -638,38 +802,54 @@ export async function readPage(options: {
         let result: DispatchResult;
         {
           const bound: PageRead = { ...descriptor, source: { kind: 'collection', id: source.id } };
-          result = await executeRead({ ...read, descriptor: bound }, origin, credentials, async (request) => {
-            budget.charge(descriptor.limit);
-            const response = await options.dispatch(new Request(request, { signal: options.incoming.signal }));
-            forwardToken(response.headers.get(SESSION_HEADER));
-            return response;
-          });
+          result = await executeRead(
+            { ...read, descriptor: bound },
+            origin,
+            credentials,
+            async (request) => {
+              lifetime.check();
+              budget.charge(descriptor.limit);
+              const response = await lifetime.dispatch(options.dispatch, request);
+              forwardToken(response.headers.get(SESSION_HEADER));
+              return response;
+            },
+            lifetime,
+          );
         }
         guards.push(async () => {
           try {
             const current = await resolve();
             if (!current) result.result = concealed().result;
             else if (current.id !== source.id)
-              result.result = await responseResult(
+              result.result = await lifetime.result(
                 problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' }),
               );
           } catch (error) {
+            lifetime.check();
             if (!(error instanceof ProblemError)) throw error;
-            result.result = await responseResult(problemResponse(error, { method: 'GET', id: 'page' }));
+            result.result = await lifetime.result(problemResponse(error, { method: 'GET', id: 'page' }));
           }
         });
         return result;
       } catch (error) {
+        lifetime.check();
         if (!(error instanceof ProblemError)) throw error;
-        return { result: await responseResult(problemResponse(error, { method: 'GET', id: 'page' })), tokens: [] };
+        return { result: await lifetime.result(problemResponse(error, { method: 'GET', id: 'page' })), tokens: [] };
       }
     }
-    return executeRead(read, origin, credentials, async (request) => {
-      budget.charge(nativeCost(read));
-      const response = await options.dispatch(new Request(request, { signal: options.incoming.signal }));
-      forwardToken(response.headers.get(SESSION_HEADER));
-      return response;
-    });
+    return executeRead(
+      read,
+      origin,
+      credentials,
+      async (request) => {
+        lifetime.check();
+        budget.charge(nativeCost(read));
+        const response = await lifetime.dispatch(options.dispatch, request);
+        forwardToken(response.headers.get(SESSION_HEADER));
+        return response;
+      },
+      lifetime,
+    );
   };
   if (descriptor) {
     const subject: PageRead = {
@@ -680,6 +860,7 @@ export async function readPage(options: {
     const canonical = canonicalize(subject)!;
     if (!observed.has(canonical)) {
       const result = await withPublicStatementReader(() => execute({ key: 'subject', descriptor: subject, canonical }));
+      lifetime.check();
       observed.set(canonical, result.result);
     }
   }
@@ -701,6 +882,7 @@ export async function readPage(options: {
   const documentIds = [...new Set(references.map((reference) => reference.document))];
   const distinctReads = [...unique.values()].filter((read) => !observed.has(read.canonical));
   // This is the effective dependent plan. Reject it as a whole before any body/list execution; never truncate values.
+  lifetime.check();
   if (documentIds.length > MAX_PAGE_DOCUMENTS) throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
   budget.admit(
     distinctReads.length +
@@ -720,10 +902,11 @@ export async function readPage(options: {
   const failures = new Array<{ error: unknown } | undefined>(distinctReads.length);
   let next = 0;
   const worker = async (): Promise<void> => {
-    while (true) {
+    while (!lifetime.signal.aborted) {
       const index = next++;
       if (index >= distinctReads.length) return;
       try {
+        lifetime.check();
         completed[index] = await execute(distinctReads[index]!);
       } catch (error) {
         failures[index] = { error };
@@ -733,6 +916,7 @@ export async function readPage(options: {
   await withPublicStatementReader(() =>
     Promise.all(Array.from({ length: Math.min(4, distinctReads.length) }, () => worker())),
   );
+  lifetime.check();
   const failedAt = failures.findIndex((failure) => failure !== undefined);
   if (failedAt !== -1) throw failures[failedAt]!.error;
 
@@ -754,27 +938,29 @@ export async function readPage(options: {
   };
   const failDocument = async () => {
     setSubjectResult(
-      await responseResult(problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' })),
+      await lifetime.result(problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' })),
     );
   };
   for (const id of documentIds) {
+    lifetime.check();
     budget.charge(1);
     const headers = new Headers();
     if (credentials.authorization !== null) headers.set('authorization', credentials.authorization);
     if (credentials.session !== null) headers.set(SESSION_HEADER, credentials.session);
-    const response = await options.dispatch(
+    const response = await lifetime.dispatch(
+      options.dispatch,
       new Request(new URL(`/v1/documents/${id}`, origin), {
         headers,
-        signal: options.incoming.signal,
         redirect: 'manual',
       }),
     );
     forwardToken(response.headers.get(SESSION_HEADER));
     if (response.status === 404) {
-      await response.body?.cancel();
+      await lifetime.close(response);
+      lifetime.check();
       continue;
     }
-    const result = await responseResult(response);
+    const result = await lifetime.result(response);
     if (result.status !== 200) {
       setSubjectResult(result);
       break;
@@ -818,7 +1004,11 @@ export async function readPage(options: {
     }
   }
 
-  for (const guard of guards) await guard();
+  for (const guard of guards) {
+    lifetime.check();
+    await guard();
+  }
+  lifetime.check();
   for (let index = 0; index < distinctReads.length; index++) {
     if (distinctReads[index]!.descriptor.kind === 'members')
       byCanonical.set(distinctReads[index]!.canonical, completed[index]!.result);
