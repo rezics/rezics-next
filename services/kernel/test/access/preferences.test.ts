@@ -14,6 +14,7 @@ function shown(
     spoilerLevel?: 0 | 1 | 2;
     suitability?: 'blur' | 'show';
     shelf?: AccountPreferences['shelf'];
+    editor?: AccountPreferences['editor'];
     notifications?: AccountPreferences['notifications'];
     version: number;
   },
@@ -24,6 +25,7 @@ function shown(
       spoilerLevel: value.spoilerLevel ?? 0,
       suitability: value.suitability ?? 'blur',
       shelf: value.shelf ?? {},
+      editor: value.editor ?? {},
       notifications: { ...DEFAULT_NOTIFICATIONS, ...value.notifications },
       version: value.version,
     },
@@ -97,6 +99,65 @@ afterAll(async () => {
   } finally {
     await db?.close();
   }
+});
+
+test('editor preferences share native version, no-op, receipt and reset semantics with the other domains', async () => {
+  const person = await fixture.person('editor-preferences-owner');
+  const initial = await call(person.accountId, person.bearer);
+  expect(initial.value.editor).toEqual({});
+  const editor = {
+    typeface: 'serif',
+    textSize: 20,
+    lineSpacing: 1.8,
+    writingWidth: 80,
+    toolbar: 'fixed',
+    outline: true,
+    markdownShortcuts: false,
+    spellcheck: false,
+    pasteMode: 'plain',
+    pinnedCommands: ['bold', 'table'],
+    hiddenCommands: ['image'],
+    commandOrder: ['table', 'bold'],
+    keyboardBindings: { bold: 'Mod-Shift-j' },
+  };
+  const key = Bun.randomUUIDv7();
+  const body = { expectedVersion: 0, editor, shelf: { gridSize: 'large' }, notifications: { reply: false } };
+  const saved = await call(person.accountId, person.bearer, body, key);
+  expect(saved.response.status).toBe(200);
+  expect(saved.value.editor).toEqual(editor);
+  expect(saved.value.version).toBe(1);
+  expect((await call(person.accountId, person.bearer)).value).toEqual(saved.value);
+  expect((await call(person.accountId, person.bearer, body, key)).value).toEqual(saved.value);
+  const events = await preferenceEventCount(person.accountId);
+  const equal = await call(person.accountId, person.bearer, { expectedVersion: 1, editor });
+  expect(equal.value.version).toBe(1);
+  expect(await preferenceEventCount(person.accountId)).toBe(events);
+  expect((await call(person.accountId, person.bearer, { expectedVersion: 0, editor: null })).response.status).toBe(409);
+  const memberReset = await call(person.accountId, person.bearer, {
+    expectedVersion: 1,
+    editor: { textSize: null, keyboardBindings: { bold: null } },
+  });
+  expect(memberReset.value.editor.textSize).toBeUndefined();
+  expect(memberReset.value.editor.keyboardBindings).toEqual({});
+  const reset = await call(person.accountId, person.bearer, { expectedVersion: 2, editor: null });
+  expect(reset.value.editor).toEqual({});
+  expect(reset.value.shelf).toEqual(saved.value.shelf);
+  expect(reset.value.notifications).toEqual(saved.value.notifications);
+  expect(reset.value.spoilerLevel).toBe(saved.value.spoilerLevel);
+  expect((await call(person.accountId, undefined, { expectedVersion: 3, editor })).response.status).toBe(401);
+  expect((await call(person.accountId, other.bearer, { expectedVersion: 3, editor })).response.status).toBe(403);
+  for (const invalid of [
+    { textSize: 99 },
+    { unknown: true },
+    { pinnedCommands: ['bold', 'bold'] },
+    { keyboardBindings: { bold: 'Mod-v' } },
+    { keyboardBindings: { italic: 'Mod-b' } },
+  ]) {
+    expect((await call(person.accountId, person.bearer, { expectedVersion: 3, editor: invalid })).response.status).toBe(
+      400,
+    );
+  }
+  expect((await call(person.accountId, person.bearer)).value).toEqual(reset.value);
 });
 
 test('default and equal settings return durable eventless exact retries', async () => {

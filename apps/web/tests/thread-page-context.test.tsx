@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { fromPlainText } from '@rezics/document';
 import { createKernelClient } from '@rezics/client';
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '@rezics/editor/reader';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import { loadThreadPage, type ReadingPage } from '../src/threads/thread-page';
 import {

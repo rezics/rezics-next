@@ -459,7 +459,7 @@ function productLineLines(bucket: UtcHour, data: HourlyObservationData): string[
       `(attribution ${attribution}; ${source}; window [${bucket.start}, ${bucket.end}); filter ${data.filterVersion}).`,
     `Aggregate product lines across this and the previous completed UTC hour: ${total}.`,
     `Aggregate late integration backfill in this bucket: ${backfill}; excluded from measured throughput.`,
-    'Late integrations remain visible in their integration bucket and do not revise a frozen bucket or its measured throughput.',
+    'Late integration backfill is older committed source newly visible on dev, not newly authored source in this bucket. It does not revise a frozen bucket or its measured throughput.',
   ];
 }
 
@@ -548,15 +548,15 @@ function landingLines(
         : `Landing operations in UTC hour: ${operationSummary.terminalCount} terminal; ${operationSummary.measuredCount} timed; ${operationSummary.unknownDurationCount} unknown duration; p50 ${operationSummary.p50DurationMs === null ? 'unknown' : `${operationSummary.p50DurationMs} ms`}; p90 ${operationSummary.p90DurationMs === null ? 'unknown' : `${operationSummary.p90DurationMs} ms`}.`;
   return [
     tasksAvailable
-      ? `Landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`
-      : 'Landings: unknown (current task attribution unavailable).',
+      ? `Legacy managed landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`
+      : 'Legacy managed landings: unknown (current task attribution unavailable).',
     tasksAvailable
-      ? `Landings by Goal: ${perGoal || (hasLanding ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`
-      : 'Landings by Goal: unknown (current task attribution unavailable).',
+      ? `Legacy managed landings by Goal: ${perGoal || (hasLanding ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`
+      : 'Legacy managed landings by Goal: unknown (current task attribution unavailable).',
     tasksAvailable
-      ? `Landing identities: ${identities.join('; ') || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`
-      : 'Landing identities: unknown (current task attribution unavailable).',
-    `Urgent landings (excluded from throughput): ${urgentIdentities.join('; ') || 'none recorded'}.`,
+      ? `Legacy managed landing identities: ${identities.join('; ') || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`
+      : 'Legacy managed landing identities: unknown (current task attribution unavailable).',
+    `Legacy managed urgent landings (excluded from throughput): ${urgentIdentities.join('; ') || 'none recorded'}.`,
     landingDuration,
   ];
 }
@@ -581,8 +581,8 @@ function aggregateBucket(
       'Host admission wait for check resumes: unknown (flow history unavailable).',
     ],
     landingLines: [
-      'Landings: unknown (timestamped integration history unavailable).',
-      'Landing identities: unknown (timestamped integration history unavailable).',
+      'Legacy managed landings: unknown (timestamped integration history unavailable).',
+      'Legacy managed landing identities: unknown (timestamped integration history unavailable).',
       'Landing operation timing in UTC hour: unknown (flow history unavailable).',
     ],
   };
@@ -982,13 +982,13 @@ function buildHourlyEfficiencyReport(
     latestUsefulLanding(db, bucket.end, flowAvailable, policy),
     backlogReturnsLine(db, bucket, flowAvailable),
     flowAvailable
-      ? `Worker starts / finishes in bucket: ${bucketSummary.starts} starts (including resumes) / ${bucketSummary.finishes} finished attempts.`
-      : 'Worker starts / finishes in bucket: unknown (flow history unavailable).',
+      ? `Legacy managed worker starts / finishes in bucket: ${bucketSummary.starts} starts (including resumes) / ${bucketSummary.finishes} finished attempts.`
+      : 'Legacy managed worker starts / finishes in bucket: unknown (flow history unavailable).',
     flowAvailable && openWorkAvailable
-      ? `Urgent worker starts / finishes in bucket (excluded from throughput): ${bucketSummary.urgentStarts} / ${bucketSummary.urgentFinishes}.`
-      : 'Urgent worker starts / finishes in bucket: unknown (task or flow history unavailable).',
+      ? `Legacy managed urgent worker starts / finishes in bucket (excluded from throughput): ${bucketSummary.urgentStarts} / ${bucketSummary.urgentFinishes}.`
+      : 'Legacy managed urgent worker starts / finishes in bucket: unknown (task or flow history unavailable).',
     workSummary(db, openWorkAvailable, policy),
-    ...nativeUnitReportLines(db, bucket),
+    ...nativeUnitReportLines(db, bucket, isAggregateProductPath),
     landingQueueAge(metrics, landingQueueAvailable),
     waitIdentities(metrics, waitsAvailable, policy),
     checkWaitLine,

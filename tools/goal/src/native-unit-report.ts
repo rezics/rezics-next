@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { codexUsageAccumulator } from './agents/codex-events.ts';
 import { scanSessionJsonl } from './session-accounting.ts';
 import { registeredNativeUnits } from './native-units.ts';
@@ -8,10 +9,64 @@ import type { UtcHour } from './efficiency-report-time.ts';
 const SESSION_LIMIT = 256;
 type Thread = { id: string; rollout_path: string; source: string };
 
+type SourceDelta = { dev: string; head: string; base: string; added: number; deleted: number };
+
+/** Current committed tree difference only; no claim about authorship time, acceptance or working hours. */
+function currentSourceDelta(worktree: string, includeProductPath: (path: string) => boolean): SourceDelta | null {
+  const git = (args: string[]) => {
+    const result = spawnSync('git', args, {
+      cwd: worktree,
+      encoding: 'utf8',
+      timeout: 5_000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return result.error || result.status !== 0 ? null : result.stdout;
+  };
+  const head = git(['rev-parse', '--verify', 'HEAD^{commit}'])?.trim();
+  const dev = git(['rev-parse', '--verify', 'refs/heads/dev^{commit}'])?.trim();
+  const objectId = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+  if (!head || !dev || !objectId.test(head) || !objectId.test(dev)) return null;
+  const bases = git(['merge-base', '--all', dev, head])?.trim().split(/\r?\n/);
+  if (!bases || bases.length !== 1 || !objectId.test(bases[0]!)) return null;
+  const base = bases[0]!;
+  const stats = git([
+    'diff', '--numstat', '-z', '--no-renames', '--no-ext-diff', '--no-textconv',
+    base, head, '--', 'apps', 'services', 'packages',
+  ]);
+  if (stats === null) return null;
+  let added = 0;
+  let deleted = 0;
+  for (const row of stats.split('\0')) {
+    if (!row) continue;
+    const [additions, deletions, ...path] = row.split('\t');
+    if (!path.length) return null;
+    if (!includeProductPath(path.join('\t'))) continue;
+    if (additions === '-' && deletions === '-') continue;
+    if (!/^\d+$/.test(additions ?? '') || !/^\d+$/.test(deletions ?? '')) return null;
+    added += Number(additions);
+    deleted += Number(deletions);
+    if (!Number.isSafeInteger(added) || !Number.isSafeInteger(deleted)) return null;
+  }
+  return { dev, head, base, added, deleted };
+}
+
 /** Observe registered native units in the existing completed-hour report, without importing live attempts. */
-export function nativeUnitReportLines(db: Database, bucket: UtcHour): string[] {
+export function nativeUnitReportLines(
+  db: Database,
+  bucket: UtcHour,
+  includeProductPath?: (path: string) => boolean,
+): string[] {
   const units = registeredNativeUnits(db);
   if (!units.length) return [];
+  const sourceDeltas = units.map((unit) => {
+    const delta = includeProductPath ? currentSourceDelta(unit.worktree, includeProductPath) : null;
+    return delta
+      ? `Current native unit committed source awaiting dev: ${unit.id}; +${delta.added} product additions; ${delta.deleted} product deletions; merge-base ${delta.base}, dev ${delta.dev}, unit HEAD ${delta.head}.`
+      : `Current native unit committed source awaiting dev: ${unit.id}; unknown (Git source observation or product classifier unavailable).`;
+  });
+  sourceDeltas.push(
+    'Current native source deltas exclude working-tree edits and use the existing product classifier. They are committed branch changes since merge-base with dev, not new hourly authored throughput; imported or older source may be present. Do not add them across overlapping units or to frozen UTC buckets, late integration backfill, accepted journeys or an efficiency multiplier.',
+  );
   const start = Date.parse(bucket.start);
   const end = Date.parse(bucket.end);
   const sessions = new Set<string>();
@@ -24,6 +79,7 @@ export function nativeUnitReportLines(db: Database, bucket: UtcHour): string[] {
   );
   if (hasAttempts && !sessionIndex)
     return [
+      ...sourceDeltas,
       `Native execution units: ${units.length} registered; usage unknown (managed session lookup index unavailable).`,
     ];
   const managed = hasAttempts
@@ -158,6 +214,7 @@ export function nativeUnitReportLines(db: Database, bucket: UtcHour): string[] {
     }
   }
   return [
+    ...sourceDeltas,
     `Native execution units: ${nativeStates.join('; ')}. ${sessions.size} distinct parent/subagent sessions observed; ${measured} measured; ${unknown} unknown or incomplete. Native Goal status is execution state, not release acceptance.`,
     `Native unit usage in UTC bucket: ${input} input, ${cached} cached input, ${output} output raw session-ledger tokens; ${overlaps} managed sessions excluded; ${duplicateResponses} copied response records deduplicated${unknown ? '; totals are partial' : ''}. These observed tokens are separate from completed managed attempts; do not add cumulative Goal totals.`,
     `Native unit checks started in UTC bucket: ${startedChecks}; command exit zero ${passedChecks}; nonzero ${failedChecks}; unfinished or unknown ${unknownChecks}; immutable capture source unknown ${unknownCheckSource}. Command exits do not prove source; observed source belongs only to matched immutable capture receipts, not accepted journeys or a newer local candidate.`,

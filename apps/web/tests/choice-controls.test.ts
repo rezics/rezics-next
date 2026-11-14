@@ -76,7 +76,7 @@ test('choice-control call sites use shared controls and native facets retain GET
     'packages/ui/src/components/shelf-table.tsx': [/Checkbox/, /Field/],
     'apps/web/src/threads/review-fields.tsx': [/Checkbox/, /FieldLabel/],
     'apps/web/src/search/search.tsx': [/NativeCheckbox/, /name=/, /value=/],
-    'packages/ui/src/components/document-body.tsx': [/NativeCheckbox/, /disabled/],
+    'packages/editor/src/components/document-body.tsx': [/NativeCheckbox/, /disabled/],
   };
   for (const [path, patterns] of Object.entries(cases)) {
     const source = await readFile(join(root, path), 'utf8');

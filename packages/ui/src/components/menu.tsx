@@ -195,7 +195,7 @@ function DropdownEntries({
           disabled={entry.disabled}
           render={<a {...entryLinkProps(entry)} />}
         >
-          <EntryLabel label={entry.label} current={entry.current} />
+          <EntryLabel label={entry.label} {...(entry.current === undefined ? {} : { current: entry.current })} />
         </D.DropdownMenuItem>
       );
     return (
@@ -207,7 +207,7 @@ function DropdownEntries({
         variant={entry.type === 'destructive' ? 'destructive' : 'default'}
         onClick={() => select(entry)}
       >
-        <EntryLabel label={entry.label} current={entry.current} />
+        <EntryLabel label={entry.label} {...(entry.current === undefined ? {} : { current: entry.current })} />
       </D.DropdownMenuItem>
     );
   });
@@ -555,7 +555,10 @@ export function Menu({
                         className={`flex items-center rounded-xl px-3 text-sm hover:bg-accent aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent ${touchEntryRowClassName}`}
                         onClick={entry.disabled ? undefined : () => close()}
                       >
-                        <EntryLabel label={entry.label} current={entry.current} />
+                        <EntryLabel
+                          label={entry.label}
+                          {...(entry.current === undefined ? {} : { current: entry.current })}
+                        />
                       </a>
                     );
                   return (
@@ -567,7 +570,10 @@ export function Menu({
                       aria-current={entry.current ? 'page' : undefined}
                       onClick={() => select(entry)}
                     >
-                      <EntryLabel label={entry.label} current={entry.current} />
+                      <EntryLabel
+                        label={entry.label}
+                        {...(entry.current === undefined ? {} : { current: entry.current })}
+                      />
                     </Button>
                   );
                 })}

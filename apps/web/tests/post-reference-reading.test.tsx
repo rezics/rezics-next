@@ -3,7 +3,7 @@ import { installPostReadingDom } from './post-reading-dom';
 import { act, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { parseDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
-import type { DocumentMentions } from '@rezics/ui/document-body';
+import type { DocumentMentions } from '@rezics/editor/reader';
 import * as start from '../.storybook/react-start';
 import { preparedPostReading } from '../src/stories/post-reading-fixtures';
 import { m } from '../src/paraglide/messages.js';

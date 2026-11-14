@@ -1,4 +1,11 @@
 import { memoizedValue } from '../memoized.ts';
+import {
+  mergeEditorPreferences,
+  validateEditorPreferencePatch,
+  validateEditorPreferences,
+  type EditorPreferences,
+  type EditorPreferencePatch,
+} from '@rezics/editor/preferences';
 import type { Pool, PoolClient } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -91,6 +98,7 @@ export type AccountPreferences = {
   spoilerLevel: 0 | 1 | 2;
   suitability: 'blur' | 'show';
   shelf: Shelf;
+  editor: EditorPreferences;
   notifications: Notifications;
   version: number;
 };
@@ -100,6 +108,7 @@ export function DEFAULT_ACCOUNT_PREFERENCES(): Readonly<AccountPreferences> {
       spoilerLevel: 0,
       suitability: 'blur',
       shelf: Object.freeze({}),
+      editor: Object.freeze({}),
       notifications: DEFAULT_NOTIFICATIONS,
       version: 0,
     }),
@@ -193,6 +202,7 @@ export type PreferenceChange = {
   spoilerLevel?: 0 | 1 | 2;
   suitability?: 'blur' | 'show';
   shelf?: ShelfPatch | null;
+  editor?: EditorPreferencePatch | null;
   notifications?: NotificationsPatch | null;
 };
 
@@ -386,6 +396,7 @@ export async function readAccountPreferences(
         spoilerLevel: row.spoilerLevel as 0 | 1 | 2,
         suitability: row.suitability as 'blur' | 'show',
         shelf: row.shelf as Shelf,
+        editor: validateEditorPreferences(row.editor) ? row.editor : {},
         notifications: effectiveNotifications(row.notifications as NotificationsPatch),
       }
     : { ...DEFAULT_ACCOUNT_PREFERENCES(), shelf: {}, notifications: { ...DEFAULT_NOTIFICATIONS } };
@@ -413,12 +424,20 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
         (input.spoilerLevel !== undefined && ![0, 1, 2].includes(input.spoilerLevel)) ||
         (input.suitability !== undefined && !['blur', 'show'].includes(input.suitability)) ||
         (input.shelf != null && !validShelfPatch(input.shelf)) ||
+        (input.editor !== undefined && !validateEditorPreferencePatch(input.editor)) ||
         (input.notifications != null && !validNotificationsPatch(input.notifications)) ||
         Object.keys(input).some(
           (key) =>
-            !['accountId', 'key', 'expectedVersion', 'spoilerLevel', 'suitability', 'shelf', 'notifications'].includes(
-              key,
-            ),
+            ![
+              'accountId',
+              'key',
+              'expectedVersion',
+              'spoilerLevel',
+              'suitability',
+              'shelf',
+              'editor',
+              'notifications',
+            ].includes(key),
         )
       )
         throw new ProblemError('invalid_request');
@@ -451,11 +470,15 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
           if (current.version !== input.expectedVersion) throw new ProblemError('conflict');
           const shelf = input.shelf === undefined ? current.shelf : mergeShelf(current.shelf, input.shelf);
           if (shelf === null) throw new ProblemError('invalid_request');
+          const editor =
+            input.editor === undefined ? current.editor : mergeEditorPreferences(current.editor, input.editor);
+          if (editor === null) throw new ProblemError('invalid_request');
           const next = {
             ...current,
             spoilerLevel: input.spoilerLevel ?? current.spoilerLevel,
             suitability: input.suitability ?? current.suitability,
             shelf,
+            editor,
             notifications:
               input.notifications === undefined
                 ? current.notifications
@@ -468,6 +491,7 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
             next.spoilerLevel !== current.spoilerLevel ||
             next.suitability !== current.suitability ||
             canonical(next.shelf) !== canonical(current.shelf) ||
+            canonical(next.editor) !== canonical(current.editor) ||
             canonical(next.notifications) !== canonical(current.notifications);
           if (!hasChanges) return noEffect(next);
           const changed = await set.run(tx, {
@@ -476,6 +500,7 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
             spoiler_level: next.spoilerLevel,
             suitability: next.suitability,
             shelf: next.shelf,
+            editor: next.editor,
             notifications: notificationOverrides(next.notifications),
             expected_version: input.expectedVersion,
           });

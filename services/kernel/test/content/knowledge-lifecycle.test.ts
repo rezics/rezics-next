@@ -329,6 +329,61 @@ test('subtree trash fences descendants and durable restore resumes privately aro
   expect((await f.call('GET', w.privatePath(nestedChild.documentId))).status).toBe(404);
   expect((await f.call('GET', w.privatePath(another.documentId))).status).toBe(200);
 
+  // A new restore episode cannot inherit completed workflow IDs or native page receipts.
+  const activeLifecycle = await f.call('GET', lifecyclePath);
+  const trashedAgain = await f.call(
+    'POST',
+    `/v1/knowledge/documents/${root.documentId}:trash`,
+    w.input(activeLifecycle.value.generation),
+  );
+  expect(trashedAgain.status, JSON.stringify(trashedAgain.value)).toBe(200);
+  const restoredAgain = await f.call(
+    'POST',
+    `/v1/knowledge/documents/${root.documentId}:restore`,
+    w.input(trashedAgain.value.generation),
+  );
+  expect(restoredAgain.value).toMatchObject({ complete: false, reason: 'restoring', state: 'trashed' });
+  const replacement = await f.pool.query<{ operation_id: string; page_number: string }>(
+    `SELECT operation_id,page_number::text FROM content.knowledge_lifecycle_restore
+     WHERE route=$1 AND root_document_id=$2 AND state='running'`,
+    [routeOf(root.documentId), root.documentId],
+  );
+  const replacementId = replacement.rows[0]!.operation_id;
+  expect(replacementId).not.toBe(operationId);
+  expect(replacement.rows[0]!.page_number).toBe('0');
+  expect(
+    await advanceKnowledgeLifecycleRestorePage(f.pool, f.system.access, operationId, () => new Date()),
+  ).toMatchObject({
+    state: 'missing',
+    complete: true,
+  });
+  expect((await f.call('GET', w.privatePath(root.documentId))).status).toBe(404);
+  const replacementFirst = await advanceKnowledgeLifecycleRestorePage(
+    f.pool,
+    f.system.access,
+    replacementId,
+    () => new Date(),
+  );
+  expect(replacementFirst).toMatchObject({
+    state: 'running',
+    complete: false,
+    processedDocuments: '1',
+    pageNumber: '1',
+  });
+  const replacementLast = await advanceKnowledgeLifecycleRestorePage(
+    f.pool,
+    f.system.access,
+    replacementId,
+    () => new Date(),
+  );
+  expect(replacementLast).toMatchObject({ state: 'complete', complete: true });
+  expect((await f.call('GET', w.privatePath(root.documentId))).status).toBe(200);
+  expect((await f.call('GET', w.privatePath(child.documentId))).status).toBe(200);
+  expect((await f.call('GET', w.privatePath(nested.documentId))).status).toBe(404);
+  expect(
+    (await f.call('GET', `/v1/knowledge/documents/${child.documentId}`, undefined, { anonymous: true })).status,
+  ).toBe(404);
+
   // A delayed old selection cannot pass the child's advanced lifecycle generation.
   await f.pool.query(
     `UPDATE content.knowledge_document SET current_publication_id=$3 WHERE route=$1 AND document_id=$2`,

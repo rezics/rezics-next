@@ -52,8 +52,9 @@ import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
 import { downloadMedia, type DownloadContext } from './media-download.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
+import { knowledgeMediaReservationParent } from './knowledge-media.ts';
 
-export type MediaPurpose = 'post-image' | 'cover' | 'avatar' | 'realm-icon' | 'realm-banner';
+export type MediaPurpose = 'post-image' | 'knowledge-image' | 'cover' | 'avatar' | 'realm-icon' | 'realm-banner';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
 export type MediaVariant = Readonly<{
   format: 'webp' | 'avif';
@@ -88,7 +89,7 @@ type MediaMetadataBase = Readonly<{
 export type MediaMetadata =
   | (MediaMetadataBase &
       Readonly<{
-        purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+        purpose: 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner';
         mediaType: string;
         byteCount: number;
       }>)
@@ -101,7 +102,7 @@ export type MediaMetadata =
         source: ImportedSource;
       }>);
 type MediaReservationFields = Readonly<{
-  purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+  purpose: 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner';
   mediaType: string;
   byteCount: number;
   sha256?: string;
@@ -261,11 +262,15 @@ export async function reserveMedia(
   const r = route(containerId);
   if (newThreadTarget && newThreadTarget.thread.route !== r) throw new TypeError('Invalid media target route');
   const avatar = input.purpose === 'avatar';
+  const knowledge = input.purpose === 'knowledge-image';
+  const ownerResource = { route: route(owner.accountId), id: owner.accountId };
+  if (knowledge && (newThreadTarget || partitionOf(ownerResource.route) !== partitionOf(r)))
+    throw new GrantDeniedError();
   const realm = input.purpose === 'realm-icon' || input.purpose === 'realm-banner';
   if (realm && newThreadTarget) throw new GrantDeniedError();
   if (avatar && (containerId !== owner.accountId || owner.clientId !== 'rezics-website' || newThreadTarget))
     throw new GrantDeniedError();
-  if ((input.purpose !== 'post-image' && !avatar && !realm) || !imageTypes.has(input.mediaType))
+  if ((input.purpose !== 'post-image' && !knowledge && !avatar && !realm) || !imageTypes.has(input.mediaType))
     throw new TypeError('Invalid media purpose or type');
   length(input.byteCount);
   if (input.sha256 !== undefined) digest(input.sha256);
@@ -297,10 +302,11 @@ export async function reserveMedia(
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
-    action: realm ? 'realm:manage' : 'media:create',
+    action: knowledge ? 'account:update' : realm ? 'realm:manage' : 'media:create',
     parent: {
-      resource: board ?? { route: r, id: containerId },
+      resource: knowledge ? ownerResource : (board ?? { route: r, id: containerId }),
       async validate(client, time) {
+        if (knowledge) return knowledgeMediaReservationParent(client, containerId, owner.accountId);
         if (realm)
           return (
             (await readRealmHead.run(client, { route: r, id: containerId, at: authoritativeTimeValue(time) })) !== null
@@ -366,7 +372,7 @@ export async function reserveMedia(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      if (avatar || realm) return base.prepare!(attempt);
+      if (avatar || realm || knowledge) return base.prepare!(attempt);
       if (board) {
         boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
           pool: dependencies.pool,
@@ -579,11 +585,21 @@ export async function completeMedia(
     () => new GrantDeniedError(),
   );
   let realmManagement: AccessCheck | null = null;
+  let knowledgeOwnerUpdate: AccessCheck | null = null;
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
       const evidence = await base.prepare?.(attempt);
       const initial = await read(dependencies.pool, mediaId);
+      knowledgeOwnerUpdate = initial?.purpose === 'knowledge-image'
+        ? await accessCheck(
+            dependencies.access,
+            actor,
+            'account:update',
+            { route: route(owner.accountId), id: owner.accountId },
+            commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
+          )
+        : null;
       realmManagement =
         initial?.purpose === 'realm-icon' || initial?.purpose === 'realm-banner'
           ? await accessCheck(
@@ -602,6 +618,7 @@ export async function completeMedia(
       if (
         !row ||
         (row.purpose !== 'post-image' &&
+          row.purpose !== 'knowledge-image' &&
           row.purpose !== 'avatar' &&
           row.purpose !== 'realm-icon' &&
           row.purpose !== 'realm-banner') ||
@@ -616,6 +633,12 @@ export async function completeMedia(
         row.collection_pending
       )
         throw new GrantDeniedError();
+      if (row.purpose === 'knowledge-image') {
+        if (partitionOf(route(owner.accountId)) !== partitionOf(r) ||
+            !knowledgeOwnerUpdate || !(await knowledgeOwnerUpdate(tx, attempt.time)) ||
+            !(await knowledgeMediaReservationParent(tx, body.containerId, owner.accountId)))
+          throw new GrantDeniedError();
+      }
       if (row.purpose === 'realm-icon' || row.purpose === 'realm-banner') {
         const current = await readRealmHead.run(tx, {
           route: r,
@@ -746,6 +769,7 @@ function reservationMetadata(mediaId: MediaId, row: Row): MediaMetadata | null {
   };
   if (
     (row.purpose === 'post-image' ||
+      row.purpose === 'knowledge-image' ||
       row.purpose === 'avatar' ||
       row.purpose === 'realm-icon' ||
       row.purpose === 'realm-banner') &&
