@@ -142,6 +142,7 @@ export function withMentionView(
 }
 
 type Open = { range: MentionRange; rect: DOMRect | null; visit: number };
+type MenuPlacement = { left: number; top: number; maxHeight: number; maxWidth: number };
 type LookupAttempt = {
   visit: number;
   range: MentionRange;
@@ -149,6 +150,36 @@ type LookupAttempt = {
   source: MentionSource;
   timer: ReturnType<typeof setTimeout> | null;
 };
+
+function menuPlacement(rect: DOMRect, menu: HTMLElement | null, minimumHeight: number): MenuPlacement {
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportWidth = Math.max(0, viewport?.width ?? window.innerWidth);
+  const viewportHeight = Math.max(0, viewport?.height ?? window.innerHeight);
+  const horizontalInset = Math.min(8, viewportWidth / 2);
+  const verticalInset = Math.min(8, viewportHeight / 2);
+  const maxWidth = Math.max(0, viewportWidth - horizontalInset * 2);
+  const width = Math.min(256, maxWidth);
+  const left = Math.min(
+    viewportLeft + viewportWidth - horizontalInset - width,
+    Math.max(viewportLeft + horizontalInset, rect.left),
+  );
+  const maxMenuHeight = Math.max(0, viewportHeight - verticalInset * 2);
+  const measuredHeight = menu?.getBoundingClientRect().height ?? 0;
+  const naturalHeight = Math.min(measuredHeight || minimumHeight, maxMenuHeight);
+  const availableBelow = Math.max(0, viewportTop + viewportHeight - verticalInset - rect.bottom - 4);
+  const availableAbove = Math.max(0, rect.top - 4 - (viewportTop + verticalInset));
+  const threshold = Math.min(minimumHeight, naturalHeight);
+  const below = availableBelow >= threshold || availableBelow >= availableAbove;
+  const maxHeight = Math.min(maxMenuHeight, below ? availableBelow : availableAbove);
+  const renderedHeight = Math.min(naturalHeight, maxHeight);
+  const minTop = viewportTop + verticalInset;
+  const maxTop = Math.max(minTop, viewportTop + viewportHeight - verticalInset - renderedHeight);
+  const desiredTop = below ? rect.bottom + 4 : rect.top - renderedHeight - 4;
+  const top = Math.min(maxTop, Math.max(minTop, desiredTop));
+  return { left, top, maxHeight, maxWidth };
+}
 
 function sameRange(left: MentionRange | null | undefined, right: MentionRange | null | undefined): boolean {
   return Boolean(left && right && left.from === right.from && left.to === right.to && left.query === right.query);
@@ -176,7 +207,7 @@ export function MentionMenu({
   const [open, setOpen] = useState<Open | null>(null);
   const [account, setAccount] = useState<MentionAccount | null>(null);
   const [loading, setLoading] = useState(false);
-  const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number }>({ left: 8, top: 8 });
+  const [place, setPlace] = useState<MenuPlacement>({ left: 8, top: 8, maxHeight: 288, maxWidth: 256 });
   const list = useRef<HTMLDivElement>(null);
   const pending = useRef<LookupAttempt | null>(null);
   const latest = useRef({ open, account, loading, source, attempt: pending.current });
@@ -353,18 +384,67 @@ export function MentionMenu({
     }
     handlers.current.update(range, rect, false);
   }, [editor, handlers, isCurrent, visit]);
+  const openFrom = open?.range.from;
+  const openTo = open?.range.to;
+  const openQuery = open?.range.query;
+  const openVisit = open?.visit;
+  const openRectLeft = open?.rect?.left;
+  const openRectTop = open?.rect?.top;
   useLayoutEffect(() => {
-    if (!isCurrent() || open?.visit !== visit || !open?.rect) return;
+    if (
+      !isCurrent() ||
+      openFrom === undefined ||
+      openTo === undefined ||
+      openQuery === undefined ||
+      openVisit !== visit
+    )
+      return;
+
+    const updatePlacement = () => {
+      const current = latest.current.open;
+      const currentRange = key.getState(editor.state)?.range;
+      if (
+        !isCurrent() ||
+        !current ||
+        current.visit !== visit ||
+        current.range.from !== openFrom ||
+        current.range.to !== openTo ||
+        current.range.query !== openQuery ||
+        !sameRange(currentRange, current.range) ||
+        editor.isDestroyed
+      )
+        return;
+
+      try {
+        const coords = editor.view.coordsAtPos(openTo);
+        const rect = new DOMRect(coords.left, coords.top, 0, coords.bottom - coords.top);
+        const next = menuPlacement(rect, list.current, 120);
+        setPlace((previous) =>
+          previous.left === next.left &&
+          previous.top === next.top &&
+          previous.maxHeight === next.maxHeight &&
+          previous.maxWidth === next.maxWidth
+            ? previous
+            : next,
+        );
+      } catch {
+        // Keep the last usable position if the editor cannot measure this range.
+      }
+    };
+
     const viewport = window.visualViewport;
-    const width = viewport?.width ?? window.innerWidth;
-    const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight);
-    const left = Math.max(8, Math.min(open.rect.left, width - 264));
-    setPlace(
-      bottom - open.rect.bottom >= 120
-        ? { left, top: open.rect.bottom + 4 }
-        : { left, bottom: window.innerHeight - open.rect.top + 4 },
-    );
-  }, [isCurrent, open, visit]);
+    updatePlacement();
+    window.addEventListener('scroll', updatePlacement, true);
+    window.addEventListener('resize', updatePlacement);
+    viewport?.addEventListener('scroll', updatePlacement);
+    viewport?.addEventListener('resize', updatePlacement);
+    return () => {
+      window.removeEventListener('scroll', updatePlacement, true);
+      window.removeEventListener('resize', updatePlacement);
+      viewport?.removeEventListener('scroll', updatePlacement);
+      viewport?.removeEventListener('resize', updatePlacement);
+    };
+  }, [editor, isCurrent, openFrom, openQuery, openRectLeft, openRectTop, openTo, openVisit, visit]);
   useLayoutEffect(() => {
     if (!isCurrent() || open?.visit !== visit || !open.range.query || !account) return;
     const dom = editor.view.dom;
@@ -412,7 +492,7 @@ export function MentionMenu({
           value={account?.accountId ?? ''}
           className="rounded-2xl p-1 shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
         >
-          <CommandList label={labels.mentionAccounts}>
+          <CommandList label={labels.mentionAccounts} style={{ maxHeight: place.maxHeight }}>
             <CommandItem value={account.accountId} onSelect={() => choose(shownAttempt, account)}>
               <span className="min-w-0 break-all">
                 @{account.handle}

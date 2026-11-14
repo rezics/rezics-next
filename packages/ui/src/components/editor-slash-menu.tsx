@@ -161,6 +161,43 @@ interface OpenMenu {
   visit: number;
 }
 
+interface MenuPlacement {
+  left: number;
+  top: number;
+  maxHeight: number;
+  maxWidth: number;
+}
+
+function menuPlacement(rect: DOMRect, menu: HTMLElement | null, minimumHeight: number): MenuPlacement {
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportWidth = Math.max(0, viewport?.width ?? window.innerWidth);
+  const viewportHeight = Math.max(0, viewport?.height ?? window.innerHeight);
+  const horizontalInset = Math.min(8, viewportWidth / 2);
+  const verticalInset = Math.min(8, viewportHeight / 2);
+  const maxWidth = Math.max(0, viewportWidth - horizontalInset * 2);
+  const width = Math.min(256, maxWidth);
+  const left = Math.min(
+    viewportLeft + viewportWidth - horizontalInset - width,
+    Math.max(viewportLeft + horizontalInset, rect.left),
+  );
+  const maxMenuHeight = Math.max(0, viewportHeight - verticalInset * 2);
+  const measuredHeight = menu?.getBoundingClientRect().height ?? 0;
+  const naturalHeight = Math.min(measuredHeight || minimumHeight, maxMenuHeight);
+  const availableBelow = Math.max(0, viewportTop + viewportHeight - verticalInset - rect.bottom - 4);
+  const availableAbove = Math.max(0, rect.top - 4 - (viewportTop + verticalInset));
+  const threshold = Math.min(minimumHeight, naturalHeight);
+  const below = availableBelow >= threshold || availableBelow >= availableAbove;
+  const maxHeight = Math.min(maxMenuHeight, below ? availableBelow : availableAbove);
+  const renderedHeight = Math.min(naturalHeight, maxHeight);
+  const minTop = viewportTop + verticalInset;
+  const maxTop = Math.max(minTop, viewportTop + viewportHeight - verticalInset - renderedHeight);
+  const desiredTop = below ? rect.bottom + 4 : rect.top - renderedHeight - 4;
+  const top = Math.min(maxTop, Math.max(minTop, desiredTop));
+  return { left, top, maxHeight, maxWidth };
+}
+
 /**
  * Lists insert and inline commands for the slash before the caret. Focus stays in the editor, so the list is a
  * `command` whose highlighted item the editor drives from its own key handler, with no search field of its own.
@@ -186,7 +223,7 @@ export const SlashMenu = memo(function SlashMenu({
 }) {
   const [open, setOpen] = useState<OpenMenu | null>(null);
   const [index, setIndex] = useState(0);
-  const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const [place, setPlace] = useState<MenuPlacement | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const nextOpenId = useRef(0);
   const commands = availableCommands(slashCommands, editor).filter((command) => command.id !== 'image' || upload);
@@ -300,25 +337,74 @@ export const SlashMenu = memo(function SlashMenu({
     };
   }, [handlers, visit]);
 
+  const openId = open?.id;
+  const openFrom = open?.range.from;
+  const openTo = open?.range.to;
+  const openQuery = open?.range.query;
+  const openVisit = open?.visit;
+  const openRectLeft = open?.rect?.left;
+  const openRectTop = open?.rect?.top;
   useLayoutEffect(() => {
-    if (!isCurrent() || !open || open.visit !== visit) return;
-    if (!open?.rect) {
-      setPlace(null);
+    if (
+      !isCurrent() ||
+      openId === undefined ||
+      openFrom === undefined ||
+      openTo === undefined ||
+      openQuery === undefined ||
+      openVisit !== visit
+    )
       return;
-    }
+
+    const updatePlacement = () => {
+      const current = latest.current.open;
+      const plugin = slashPluginKey.getState(editor.state);
+      if (
+        !isCurrent() ||
+        !current ||
+        current.id !== openId ||
+        current.visit !== visit ||
+        current.range.from !== openFrom ||
+        current.range.to !== openTo ||
+        current.range.query !== openQuery ||
+        !plugin?.active ||
+        plugin.from !== openFrom ||
+        plugin.to !== openTo ||
+        plugin.query !== openQuery ||
+        editor.isDestroyed
+      )
+        return;
+
+      try {
+        const coords = editor.view.coordsAtPos(openTo);
+        const rect = new DOMRect(coords.left, coords.top, 0, coords.bottom - coords.top);
+        const next = menuPlacement(rect, list.current, 240);
+        setPlace((previous) =>
+          previous &&
+          previous.left === next.left &&
+          previous.top === next.top &&
+          previous.maxHeight === next.maxHeight &&
+          previous.maxWidth === next.maxWidth
+            ? previous
+            : next,
+        );
+      } catch {
+        // Keep the last usable position if the editor cannot measure this range.
+      }
+    };
+
     const viewport = window.visualViewport;
-    const top = viewport?.offsetTop ?? 0;
-    const height = viewport?.height ?? window.innerHeight;
-    const width = viewport?.width ?? window.innerWidth;
-    const below = top + height - open.rect.bottom;
-    const above = open.rect.top - top;
-    const left = Math.max(8, Math.min(open.rect.left, width - 264));
-    setPlace(
-      below >= 240 || below >= above
-        ? { left, top: open.rect.bottom + 4 }
-        : { left, bottom: window.innerHeight - open.rect.top + 4 },
-    );
-  }, [isCurrent, open, visit]);
+    updatePlacement();
+    window.addEventListener('scroll', updatePlacement, true);
+    window.addEventListener('resize', updatePlacement);
+    viewport?.addEventListener('scroll', updatePlacement);
+    viewport?.addEventListener('resize', updatePlacement);
+    return () => {
+      window.removeEventListener('scroll', updatePlacement, true);
+      window.removeEventListener('resize', updatePlacement);
+      viewport?.removeEventListener('scroll', updatePlacement);
+      viewport?.removeEventListener('resize', updatePlacement);
+    };
+  }, [editor, isCurrent, openFrom, openId, openQuery, openRectLeft, openRectTop, openTo, openVisit, visit]);
 
   // The list names its options, so the editor points at whichever one carries the highlight.
   useLayoutEffect(() => {
@@ -346,13 +432,18 @@ export const SlashMenu = memo(function SlashMenu({
   }, [editor, isCurrent, open, active, items.length, visit]);
 
   if (!isCurrent() || !open || open.visit !== visit) return null;
-  const position = place?.bottom === undefined ? { left: place?.left ?? 8, top: place?.top ?? 8 } : place;
   return (
     <div
       ref={list}
       data-slot="editor-slash-menu"
       onMouseDown={(event) => event.preventDefault()}
-      style={{ position: 'fixed', ...position }}
+      style={{
+        position: 'fixed',
+        left: place?.left ?? 8,
+        top: place?.top ?? 8,
+        maxHeight: place?.maxHeight,
+        maxWidth: place?.maxWidth,
+      }}
       className="z-50 w-64 max-w-[calc(100vw-1rem)]"
     >
       <Command
@@ -369,7 +460,7 @@ export const SlashMenu = memo(function SlashMenu({
         }}
         className="rounded-2xl p-1 shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
       >
-        <CommandList label={labels.insertBlock}>
+        <CommandList label={labels.insertBlock} style={{ maxHeight: place?.maxHeight }}>
           {items.length ? (
             items.map((command) => (
               <CommandItem key={command.id} value={command.id} onSelect={() => choose(command, open)}>

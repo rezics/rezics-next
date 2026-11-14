@@ -35,6 +35,25 @@ function checked(snapshot: DocumentSnapshot) {
   return snapshot.doc.content?.[0];
 }
 
+function caretRect(editor: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) throw new Error('The editor caret is not available.');
+  return selection.getRangeAt(0).getBoundingClientRect();
+}
+
+function expectWithinViewport(element: HTMLElement) {
+  const rect = element.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft ?? 0;
+  const top = viewport?.offsetTop ?? 0;
+  const right = left + (viewport?.width ?? window.innerWidth);
+  const bottom = top + (viewport?.height ?? window.innerHeight);
+  expect(rect.left).toBeGreaterThanOrEqual(left - 1);
+  expect(rect.right).toBeLessThanOrEqual(right + 1);
+  expect(rect.top).toBeGreaterThanOrEqual(top - 1);
+  expect(rect.bottom).toBeLessThanOrEqual(bottom + 1);
+}
+
 async function openMenu(canvasElement: HTMLElement, keys: string) {
   const canvas = within(canvasElement);
   const textbox = canvas.getByRole('textbox', { name: 'Post' });
@@ -65,6 +84,7 @@ const keyboard = demo('blocks');
 const escaped = demo('text');
 const literal = demo('text');
 const profiles = demo('text', { upload: true });
+const scrolling = demo();
 
 export const FilterCommands: Story = {
   render: () => <filtered.Demo />,
@@ -169,5 +189,48 @@ export const ProfileCommands: Story = {
     expect(profiles.latest.current.profile).toBe('text');
     expect(canvas.queryByRole('listbox')).toBeNull();
     expect(textbox).not.toHaveTextContent('/');
+  },
+};
+
+export const FollowsScrolledCaret: Story = {
+  render: () => (
+    <div data-testid="scroll-host" style={{ height: 220, overflowY: 'auto' }}>
+      <div aria-hidden="true" style={{ height: 80 }} />
+      <scrolling.Demo />
+      <div aria-hidden="true" style={{ height: 320 }} />
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole('textbox', { name: 'Post' });
+    const host = canvas.getByTestId('scroll-host');
+    await userEvent.click(textbox);
+    await userEvent.keyboard('/');
+    const listbox = await canvas.findByRole('listbox', { name: 'Insert block' });
+    const menu = canvasElement.querySelector<HTMLElement>('[data-slot="editor-slash-menu"]');
+    if (!menu) throw new Error('The slash menu was not mounted.');
+    const initialCaret = caretRect(textbox);
+    const initialMenu = menu.getBoundingClientRect();
+    expectWithinViewport(menu);
+
+    host.scrollTop = 32;
+    await waitFor(() => {
+      const caret = caretRect(textbox);
+      const rect = menu.getBoundingClientRect();
+      expect(caret.top).toBeLessThan(initialCaret.top - 16);
+      expect(Math.abs(rect.top - initialMenu.top - (caret.top - initialCaret.top))).toBeLessThan(4);
+      expectWithinViewport(menu);
+    });
+
+    await userEvent.click(within(listbox).getByRole('option', { name: 'Heading 1' }));
+    await waitFor(() => {
+      expect(checked(scrolling.latest.current)?.type).toBe('heading');
+      expect(checked(scrolling.latest.current)?.attrs?.level).toBe(1);
+    });
+    expect(canvas.queryByRole('listbox')).toBeNull();
+    expect(textbox).toHaveFocus();
+    await userEvent.keyboard('Continued');
+    await waitFor(() => expect(checked(scrolling.latest.current)?.content?.[0]?.text).toBe('Continued'));
+    expect(textbox).toHaveFocus();
   },
 };

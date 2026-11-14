@@ -51,6 +51,25 @@ function inserted(instance: ReturnType<typeof demo>) {
   expect(instance.latest.current.doc.content?.[0]?.content?.[0]).toEqual({ type: 'mention', attrs: { accountId } });
   expect(JSON.stringify(instance.latest.current)).not.toContain(handle);
 }
+
+function caretRect(editor: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) throw new Error('The editor caret is not available.');
+  return selection.getRangeAt(0).getBoundingClientRect();
+}
+
+function expectWithinViewport(element: HTMLElement) {
+  const rect = element.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft ?? 0;
+  const top = viewport?.offsetTop ?? 0;
+  const right = left + (viewport?.width ?? window.innerWidth);
+  const bottom = top + (viewport?.height ?? window.innerHeight);
+  expect(rect.left).toBeGreaterThanOrEqual(left - 1);
+  expect(rect.right).toBeLessThanOrEqual(right + 1);
+  expect(rect.top).toBeGreaterThanOrEqual(top - 1);
+  expect(rect.bottom).toBeLessThanOrEqual(bottom + 1);
+}
 const meta = {
   title: 'Components/Editor Mention',
   component: RichTextEditor,
@@ -145,6 +164,7 @@ export const EscapeKeepsText: Story = {
   },
 };
 const literal = demo(false);
+const scrolling = demo();
 export const NoSource: Story = {
   render: () => <literal.Demo />,
   async play({ canvasElement }) {
@@ -153,5 +173,50 @@ export const NoSource: Story = {
     expect(view.queryByRole('listbox')).toBeNull();
     expect(editor).toHaveTextContent(`@${handle}`);
     expect(literal.calls).toHaveLength(0);
+  },
+};
+
+export const FollowsScrolledCaret: Story = {
+  render: () => (
+    <div data-testid="scroll-host" style={{ height: 220, overflowY: 'auto' }}>
+      <div aria-hidden="true" style={{ height: 80 }} />
+      <scrolling.Demo />
+      <div aria-hidden="true" style={{ height: 320 }} />
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const { view, editor } = await type(canvasElement, `@${handle}`);
+    const option = await view.findByRole('option');
+    const menu = canvasElement.querySelector<HTMLElement>('[data-slot="editor-mention"]');
+    const host = view.getByTestId('scroll-host');
+    if (!menu) throw new Error('The mention menu was not mounted.');
+    const initialCaret = caretRect(editor);
+    const initialMenu = menu.getBoundingClientRect();
+    expect(scrolling.calls).toHaveLength(1);
+    expectWithinViewport(menu);
+
+    host.scrollTop = 32;
+    await waitFor(() => {
+      const caret = caretRect(editor);
+      const rect = menu.getBoundingClientRect();
+      expect(caret.top).toBeLessThan(initialCaret.top - 16);
+      expect(Math.abs(rect.top - initialMenu.top - (caret.top - initialCaret.top))).toBeLessThan(4);
+      expectWithinViewport(menu);
+    });
+    await pause(250);
+    expect(scrolling.calls).toHaveLength(1);
+    expect(editor).toHaveFocus();
+
+    await userEvent.click(option);
+    await waitFor(() => inserted(scrolling));
+    expect(view.queryByRole('listbox')).toBeNull();
+    expect(editor).toHaveFocus();
+    await userEvent.keyboard('continued');
+    await waitFor(() => {
+      const content = scrolling.latest.current.doc.content?.[0]?.content;
+      expect(content?.filter((node) => node.type === 'mention')).toHaveLength(1);
+      expect(editor).toHaveTextContent(`@${handle} continued`);
+    });
+    expect(scrolling.calls).toHaveLength(1);
   },
 };
