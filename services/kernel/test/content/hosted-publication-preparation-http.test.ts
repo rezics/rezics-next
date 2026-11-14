@@ -5,6 +5,7 @@ import { routeOf } from '../../src/route/route.ts';
 
 setDefaultTimeout(240_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
+const PREPARATION_CHANGED_EVENT = 'com.rezics.content.hosted-catalogue.preparation.changed.v1';
 
 beforeAll(async () => {
   f = await hostedChaptersFixture();
@@ -79,6 +80,44 @@ async function selectedRelease(catalogueId: string): Promise<string | null> {
 function prepPath(path: string, stageId: string): string {
   return `${path}/publicationPreparations/${stageId}`;
 }
+
+test('progress emits only for a persisted expiry transition and authorized receipt replay emits no duplicate', async () => {
+  const book = await newBook();
+  const started = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    stageId: book.newId(),
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'whole',
+  });
+  expect(started.status).toBe(202);
+  const stageId = started.value.stageId as string, stagePath = prepPath(book.path, stageId);
+  const eventCount = async () =>
+    Number((await f.native.pool.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type=$2',
+      [book.catalogueId, PREPARATION_CHANGED_EVENT],
+    )).rows[0]?.count ?? '0');
+  const eventsBeforeProgress = await eventCount();
+  expect(eventsBeforeProgress).toBeGreaterThan(0);
+
+  const liveKey = crypto.randomUUID(), liveProgress = await f.native.call('POST', `${stagePath}:progress`, {}, { key: liveKey });
+  expect(liveProgress.status).toBe(200);
+  const liveReplay = await f.native.call('POST', `${stagePath}:progress`, {}, { key: liveKey });
+  expect(liveReplay.value).toEqual(liveProgress.value);
+  expect(await eventCount()).toBe(eventsBeforeProgress);
+
+  await f.native.pool.query(
+    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
+     WHERE catalogue_id=$1 AND stage_id=$2`,
+    [book.catalogueId, stageId],
+  );
+  const expiryKey = crypto.randomUUID(), expired = await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey });
+  expect(expired.status).toBe(200);
+  expect(expired.value.stage.state).toBe('expired');
+  expect(await eventCount()).toBe(eventsBeforeProgress + 1);
+  expect((await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey })).value).toEqual(expired.value);
+  expect((await f.native.call('POST', `${stagePath}:progress`, {}, { key: crypto.randomUUID() })).value.stage.state).toBe('expired');
+  expect(await eventCount()).toBe(eventsBeforeProgress + 1);
+});
 
 test('mounted whole and nested selection builds complete private candidates with exact retry and resume', async () => {
   const book = await newBook();
