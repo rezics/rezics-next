@@ -11,6 +11,8 @@ import {
   HostedRootAppendEntry,
   HostedDraftPointEntry,
   HostedReleasePreparationEntry,
+  HostedLegacyBaselineEntry,
+  baselineCopy,
   releaseCopy,
   HostedInventoryVisit,
   HostedDraftPicker,
@@ -42,8 +44,6 @@ import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
 import { historicalReaderSource, type HistoricalReaderSource } from '../threads/historical-reader-provenance';
-import { HostedLegacyBaselineEntry } from '../studio/hosted-legacy-baseline-entry';
-import { baselineCopy } from '../studio/hosted-legacy-baseline-copy';
 
 const searchSchema = v.pipe(
   v.strictObject({

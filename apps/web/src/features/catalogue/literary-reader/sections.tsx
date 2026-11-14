@@ -2,7 +2,7 @@ import { m } from '../../../paraglide/messages.js';
 import type { ReactNode } from 'react';
 import type { SelectedContext } from '@rezics/composition';
 import type { Related } from '../../../subject/types';
-import { CandidateValue } from '../../pages/data';
+import { CandidateValue } from '../../pages/scalar-value';
 import { ExactEditionLink } from '../../pages/cover-list';
 import { pageText, type Snak, type PageLink } from '../../pages/shared';
 import { LanguageTag } from '../../pages/values';

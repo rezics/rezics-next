@@ -74,3 +74,5 @@ export { HostedDraftPointEntry } from './hosted-draft-point-entry';
 
 export { HostedReleasePreparationEntry } from './hosted-release-preparation-entry';
 export { releaseCopy } from './hosted-release-preparation-copy';
+export { HostedLegacyBaselineEntry } from './hosted-legacy-baseline-entry';
+export { baselineCopy } from './hosted-legacy-baseline-copy';
