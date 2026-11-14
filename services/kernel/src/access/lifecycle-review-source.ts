@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import type { NativeSessionRevocationBinding, NativeSessionRevocationResultPort } from '@rezics/auth-contract';
 import type { AccessClient } from '../request/access.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
@@ -257,6 +258,31 @@ async function operatorEffects(
   };
 }
 
+async function continuation(client: AccessClient, route: number, continuationId: string) {
+  const roots = await client.query<{ snapshot: ContinuationSnapshot; digest: string }>(
+    `SELECT jsonb_build_object('route',route,'continuationId',continuation_id,'accountId',account_id,
+      'operationKey',operation_key,'operationDigest',operation_digest,'commandKeyPrefix',command_key_prefix,
+      'barrierReceiptId',barrier_receipt_id,'barrierTransactionId',barrier_transaction_id,
+      'minimumAuthnEpoch',minimum_authn_epoch::text,'priorHandle',prior_handle,
+      'priorOperatorAccountId',prior_operator_account_id,'priorReservationId',prior_reservation_id,
+      'allowlist',allowlist,'createdAt',to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'committedExpiresAt',to_char(committed_expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) AS snapshot, digest
+     FROM access.committed_continuation WHERE route=$1 AND continuation_id=$2 AND octet_length(allowlist::text)<=4096`,
+    [route, continuationId],
+  );
+  const root = roots.rows[0];
+  return root &&
+    root.snapshot.route === route &&
+    root.snapshot.continuationId === continuationId &&
+    routeOf(root.snapshot.accountId) === route &&
+    committedContinuationDigest(root.snapshot) === root.digest &&
+    Array.isArray(root.snapshot.allowlist) &&
+    root.snapshot.allowlist.length <= 4 &&
+    root.snapshot.allowlist.every((e) => e.digest === continuationEntryDigest(e))
+    ? root.snapshot
+    : null;
+}
+
 export async function originalResult(
   client: AccessClient,
   input: {
@@ -323,31 +349,17 @@ export async function originalResult(
   )
     return { receiptId, root: null, noFanout: false };
   const continuationId = derivedId(ROOT_NAMESPACE, `${input.accountId}:${operationKey}`, input.route);
-  const roots = await client.query<{ snapshot: ContinuationSnapshot; digest: string }>(
-    `SELECT jsonb_build_object('route',route,'continuationId',continuation_id,'accountId',account_id,
-      'operationKey',operation_key,'operationDigest',operation_digest,'commandKeyPrefix',command_key_prefix,
-      'barrierReceiptId',barrier_receipt_id,'barrierTransactionId',barrier_transaction_id,
-      'minimumAuthnEpoch',minimum_authn_epoch::text,'priorHandle',prior_handle,
-      'priorOperatorAccountId',prior_operator_account_id,'priorReservationId',prior_reservation_id,
-      'allowlist',allowlist,'createdAt',to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
-      'committedExpiresAt',to_char(committed_expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) AS snapshot, digest
-     FROM access.committed_continuation WHERE route=$1 AND continuation_id=$2 AND octet_length(allowlist::text)<=4096`,
-    [input.route, continuationId],
-  );
-  const root = roots.rows[0];
+  const root = await continuation(client, input.route, continuationId);
   const valid =
     root &&
-    committedContinuationDigest(root.snapshot) === root.digest &&
-    root.snapshot.accountId === input.accountId &&
-    root.snapshot.barrierReceiptId === receiptId &&
-    root.snapshot.barrierTransactionId === row.transactionId &&
-    root.snapshot.minimumAuthnEpoch === value.minimumAuthnEpoch &&
-    root.snapshot.operationDigest === input.digest.toString('hex') &&
-    root.snapshot.commandKeyPrefix === `wf:${createHash('sha256').update(receiptId).digest('hex')}` &&
-    Array.isArray(root.snapshot.allowlist) &&
-    root.snapshot.allowlist.length <= 4 &&
-    root.snapshot.allowlist.every((e) => e.digest === continuationEntryDigest(e));
-  return { receiptId, root: valid ? root.snapshot : null, noFanout: false };
+    root.operationKey === operationKey &&
+    root.accountId === input.accountId &&
+    root.barrierReceiptId === receiptId &&
+    root.barrierTransactionId === row.transactionId &&
+    root.minimumAuthnEpoch === value.minimumAuthnEpoch &&
+    root.operationDigest === input.digest.toString('hex') &&
+    root.commandKeyPrefix === `wf:${createHash('sha256').update(receiptId).digest('hex')}`;
+  return { receiptId, root: valid ? root : null, noFanout: false };
 }
 
 /** This is only Access's permission to reach Auth's step, never Auth's deletion result. */
@@ -355,9 +367,9 @@ async function sessionAuthorization(
   pool: Pool,
   deadline: number,
   root: ContinuationSnapshot,
-): Promise<'recorded' | 'unknown'> {
+): Promise<NativeSessionRevocationBinding | null> {
   const entry = root.allowlist.find((e) => e.step === 'revoke-auth-sessions' && e.target === root.accountId);
-  if (!entry || entry.key !== `${root.commandKeyPrefix}:revoke-auth-sessions`) return 'unknown';
+  if (!entry || entry.key !== `${root.commandKeyPrefix}:revoke-auth-sessions`) return null;
   const key = `${root.route}:committed:${entry.key}`;
   const digest = hash([
     root.route,
@@ -395,7 +407,7 @@ async function sessionAuthorization(
         completion.receiptKey !== key ||
         completion.receiptDigest !== digest.toString('hex')
       )
-        return 'unknown';
+        return null;
       const row = await receipt(client, root.route, SERVICE_ID, 'access.cleanup-continuation.recorded', key);
       if (
         !row ||
@@ -408,11 +420,66 @@ async function sessionAuthorization(
         completion.receiptId !== row.transactionId ||
         !sameHome(home, await activeHome(client, root.route))
       )
-        return 'unknown';
-      return 'recorded';
+        return null;
+      return {
+        accountId: root.accountId,
+        continuationId: root.continuationId,
+        continuationDigest: committedContinuationDigest(root),
+        operationKey: root.operationKey,
+        operationDigest: root.operationDigest,
+        commandKeyPrefix: root.commandKeyPrefix,
+        barrierReceiptId: root.barrierReceiptId,
+        barrierTransactionId: root.barrierTransactionId,
+        minimumAuthnEpoch: root.minimumAuthnEpoch,
+        stepKey: entry.key,
+        stepDigest: entry.digest,
+        authorizationReceiptId: row.transactionId,
+      };
     },
     lifecycleReviewReadOptions,
   );
+}
+
+/** Exact initial root for Auth's mechanical step. This reads no derived fanout
+ * entries, current account or lifecycle history. The caller must still run the
+ * real native authorizeStep command before giving Auth any effect authority. */
+export async function sessionRevocationContinuation(
+  pool: Pool,
+  deadline: number,
+  input: { accountId: string; operationKey: string },
+): Promise<ContinuationSnapshot | null> {
+  const { accountId, operationKey } = structuredClone(input);
+  const route = routeOf(accountId);
+  if (route === null || typeof operationKey !== 'string' || operationKey.length < 1 || operationKey.length > 128)
+    return null;
+  const continuationId = derivedId(ROOT_NAMESPACE, `${accountId}:${operationKey}`, route);
+  return withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const home = await activeHome(client, route);
+      const root = await continuation(client, route, continuationId);
+      return root?.accountId === accountId &&
+        root.operationKey === operationKey &&
+        sameHome(home, await activeHome(client, route))
+        ? root
+        : null;
+    },
+    lifecycleReviewReadOptions,
+  );
+}
+
+/** Corroborate the real authorizeStep result against the same immutable native
+ * root and business receipt before handing the original floor to Auth. */
+export async function authorizedSessionRevocation(
+  pool: Pool,
+  deadline: number,
+  root: ContinuationSnapshot,
+  authorization: { continuationId: string; receiptId: string },
+): Promise<NativeSessionRevocationBinding | null> {
+  if (authorization.continuationId !== root.continuationId) return null;
+  const binding = await sessionAuthorization(pool, deadline, root);
+  return binding?.authorizationReceiptId === authorization.receiptId ? binding : null;
 }
 
 export async function effects(
@@ -421,6 +488,7 @@ export async function effects(
   suspension: boolean,
   source: NonNullable<Awaited<ReturnType<typeof originalResult>>>,
   requestedPageKey?: string,
+  auth?: NativeSessionRevocationResultPort,
 ): Promise<LifecycleEffects> {
   let operator: Pick<LifecycleEffects, 'operator' | 'inspectedPages' | 'terminalSubjects' | 'operatorPage'>;
   try {
@@ -434,23 +502,31 @@ export async function effects(
     operator = { operator: 'unknown', inspectedPages: 0, terminalSubjects: 0 };
   }
   let sessionRevocationAuthorization: LifecycleEffects['sessionRevocationAuthorization'] = 'not_required';
-  if (suspension) {
+  let sessionRevocation: LifecycleEffects['sessionRevocation'] = 'not_required';
+  if (suspension && !source.noFanout) {
     sessionRevocationAuthorization = 'unknown';
-    if (source.noFanout) sessionRevocationAuthorization = 'not_required';
-    else if (source.root) {
+    sessionRevocation = 'unknown';
+    if (source.root) {
       try {
-        sessionRevocationAuthorization = await sessionAuthorization(pool, deadline, source.root);
+        const binding = await sessionAuthorization(pool, deadline, source.root);
+        if (binding) {
+          sessionRevocationAuthorization = 'recorded';
+          // Auth's read runs after releasing Access's connection and keeps the
+          // original request deadline. Its only positive operand is this ACK.
+          if ((await auth?.readSessionRevocationResult(binding, { deadline })) === 'complete')
+            sessionRevocation = 'complete';
+        }
       } catch {
         /* Dependent proof unavailable. */
       }
     }
   }
-  // Neither Auth cleanup nor Semantic account_agent delivery has an original-bound terminal operand here.
-  // Owned operator proofs remain useful without manufacturing a foreign ACK or whole-effect completion.
+  // Semantic account_agent delivery still has no original-bound terminal operand.
+  // Auth's exact ACK does not manufacture whole-effect completion.
   return {
     ...operator,
     sessionRevocationAuthorization,
-    sessionRevocation: suspension ? 'unknown' : 'not_required',
+    sessionRevocation,
     accountAgentSynchronization: 'unknown',
     state: operator.operator === 'pending' ? 'pending' : 'unknown',
   };

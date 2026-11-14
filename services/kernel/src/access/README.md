@@ -689,14 +689,38 @@ attested first-and-last page or the immutable no-fanout event. Multi-page observ
 when the selected page is terminal: this port does not aggregate caller-held observations into a terminal certificate.
 All owned page/child reads are available without a history/account/operator enumeration or a new effect.
 
-There is no authenticated terminal Auth session-revocation operand installed on this suspension path. Its
-`sessionRevocation` is explicitly `unknown`; neither an Access continuation authorization nor a session queue is
-an Auth ACK. The exact owned session-step completion and its corroborating native
-`cleanup-continuation.recorded` business receipt are projected separately as `sessionRevocationAuthorization`;
-even `recorded` proves only Access authorization before Auth's deletion call. Reinstatement creates no new session revocation liability (`not_required`) and does not revive old
-credentials. Both events also feed the native `account_agent` effect; Semantic synchronization has no original-bound
-terminal delivery operand on this path, so `accountAgentSynchronization` remains `unknown`. Neither operation claims
-whole-effect completion, even when its owned operator effects are terminal.
+Native Auth composition installs `readSessionRevocationResult` on the same Access instance. `sessionRevocation`
+is `complete` only when Auth's existing `auth_effect_receipt` has the exact terminal binding: target, original
+continuation ID and immutable digest, operation key/digest, command prefix, barrier receipt/transaction, original
+authentication floor, session-step key/digest and Access authorization receipt. The exact owned session-step
+completion and its corroborating `cleanup-continuation.recorded` business receipt still project separately as
+`sessionRevocationAuthorization`; even `recorded` proves only Access authorization before Auth's deletion call.
+The Auth reader selects one primary key and returns only a completion boolean. Missing composition, absent,
+minimized, mismatched or unavailable terminal evidence remains `unknown`; authorization, a queue, an empty current
+session set, a later suspension and a successful historical workflow step supply no substitute. Reinstatement and
+an original suspension whose immutable event attests no continuation report `not_required` for both session fields.
+Reinstatement never revives old credentials.
+
+Auth's native session deletion and terminal binding commit in one transaction on its existing effect owner. The
+session owner's existing capacity lock bounds deletion to its admitted sessions; only sessions below the original
+floor (including legacy zero floors) are removed. The original floor must fit Auth's existing integer epoch domain.
+Replay compares the entire existing result before deleting anything; a conflicting or minimized result refuses.
+A failed transaction leaves no ACK; a lost response after commit reuses the same ACK when the step resumes. Native
+continuation renewal does not change the immutable binding. Historical successes are not backfilled. The additive
+Auth migration extends existing receipt custody and permits terminal minimization, never rebinding or restoring an
+ACK by update; no second workflow ledger is introduced.
+
+The Auth workflow host also exposes trusted `resumeCommittedSessionRevocation({accountId, operationKey})` for the
+mounted suspension's existing continuation. It uses the real native step authorization and the same Auth effect;
+its initial root lookup is a bounded exact derived ID, never an accumulated fanout allowlist. It creates no
+replacement suspension and is not an HTTP operation. The existing mounted suspension event dispatch
+in `operator-fence-work.ts` starts only operator fanout. Connecting that event's original continuation to this Auth
+entry remains an integration handoff outside these owned paths. The separate approval-based Auth suspension keeps
+its own command binding and cannot stand in for the mounted original. Review itself never drives either effect.
+
+Both events also feed the native `account_agent` effect; Semantic synchronization has no original-bound terminal
+delivery operand on this path, so `accountAgentSynchronization` remains `unknown`. Neither operation claims
+whole-effect completion, even when Auth and the owned operator effects are terminal.
 Foreign home failure refuses the dependent effect claim as `unknown`, while a recorded original remains recorded.
 No physical custody, retention completion, original funding or generic receipt engine extension is introduced.
 
@@ -704,22 +728,31 @@ Call graph: real route -> normal admission -> `readLifecycleReview` -> live nati
 `accessCheck` preparation (released actor/principal/membership/Realm anchors, client scopes/consent, assignment,
 roles, denials and gates) -> exact current actor/floor/home -> canonical Global existence/home and native formula ->
 exact target/home -> for original readback, repeat authority BEFORE native receipt -> event/root -> optional immutable
-page/completion/child receipt homes -> repeat authority -> final exact target/home comparison -> allowlisted response.
+page/completion/child receipt homes -> exact session authorization -> Auth terminal observation -> repeat authority ->
+final exact target/home comparison -> allowlisted response.
 Preparation and all foreign-home reads run after releasing the prior connection, including with pool maximum one.
 Each authority phase mints current native T and releases it after use; every phase retains the original job deadline,
 including PostgreSQL statement/acquisition limits. No retry, new deadline, coordinator advance or effect is hidden here.
 The final snapshot must preserve target transaction/state/floor/fence/identity and source node/epoch/currentness.
+Auth's observation receives that same deadline, bounds checkout/query/transaction/release, and discards uncertain
+queries or late leases. It performs no session, workflow or current-account lookup. Auth storage failures refuse
+only its terminal claim; final native authority and the original overall deadline still govern disclosure.
 
 Literal owned SQL statement and returned-row bounds, excluding the reused installed Access preparation/formula and ordinary HTTP authentication:
 review is at most 22 statements/rows plus four native Access evaluations. Original readback is at most 36 statements/rows
 plus six evaluations before effect observation. One operator page adds at most 509 statements/rows (two for optional
 exact derived membership, two for the page, five per page/child business proof, at most 101 proofs). Thus the maximum
-is 549 owned statements/rows plus six evaluations, including at most four exact native session-authorization
+is 549 Access-owned statements/rows plus six evaluations, including at most four exact native session-authorization
 proof statements/rows. At most 103 receipt reads add at most 412 unsuccessful native key candidates
 beyond those returned rows. Every statement is an existing leading full primary-key seek:
 `core.partition(partition_no)`, `access.account(route,account_id)`, canonical Context,
 `core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key)` (at most five native candidates,
 LIMIT 1; each receipt statement examines at most five primary-key candidates), `core.outbox(partition_no,position,event_seq)`, continuation root/page/entry/completion primary keys.
+One Auth observation adds four transaction-body statements (BEGIN READ ONLY, local timeouts, one
+`auth_effect_receipt(receipt_id)` point, COMMIT), plus the existing Auth producer lease's one setup and two reset
+statements. It returns at most one terminal boolean and two configuration rows, with a binding of at most 4096
+bytes. The combined bound is 556 owned statements and 552 returned row units before reused Access work; no session
+or workflow population contributes to this read. These are source bounds, not measured acceptance results.
 Each nested allowlist is capped at four root entries or 101 page entries. Receipts/events are limited to 2048 UTF-8
 bytes, root allowlist to 4096, page allowlist to 65536, each cursor to 8192 and each home label to 1024; oversized
 native operands refuse the dependent claim. Identity labels are limited to 1024/64 bytes. These guards cap owned
@@ -732,6 +765,10 @@ There is no new ledger or guessed foreign zero. This HTTP path supplies no new w
 `test/access/lifecycle-review.test.ts` authors real current-authority, suspended-target, privacy, principal/digest,
 revoked replay, lost response, native pending/terminal evidence and source-home regressions. They are UNRUN in this
 source delivery; generated transport/consumer regression is also UNRUN. Typing does not prove native acceptance.
+Separate verifier acceptance must exercise an actual original suspension -> Auth completion -> private review;
+resume after an interrupted revocation and after a lost commit response; distinct original suspension/floor
+isolation; missing/minimized terminal evidence remaining unknown; reinstatement/no-fanout disposition; and unchanged
+reviewer authorization. The smallest check, all other checks and migration/acceptance execution are deferred.
 
 ### Account agent verification
 

@@ -91,7 +91,7 @@ export function ErasureProgressView({
   const remainingId = `${id}-remaining`;
   const value = page.status === 'ready' ? page.value : null;
   return (
-    <article className="mx-auto flex w-full min-w-0 max-w-2xl flex-col gap-6 pb-8 [overflow-wrap:anywhere]">
+    <article className="mx-auto flex w-full min-w-0 max-w-4xl flex-col gap-6 pb-8 [overflow-wrap:anywhere]">
       <header className="flex flex-col gap-3">
         <PageHeading id={titleId}>{m.erasure_title()}</PageHeading>
         <p id={introId} className="text-muted-foreground">
@@ -140,47 +140,49 @@ export function ErasureProgressView({
                     : m.erasure_pending_help()}
               </ContentSectionDescription>
             </ContentSectionHeader>
-            <ContentSectionBody className="flex flex-col gap-4">
-              <dl className="grid gap-4">
-                <div className="grid gap-1">
+            <ContentSectionBody className="flex flex-col gap-5">
+              <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-2">
+                <section aria-labelledby={participantsId} className="flex min-w-0 flex-col gap-2">
+                  <h3 id={participantsId} className="font-medium">
+                    {m.erasure_participants()}
+                  </h3>
+                  {value.pendingParticipants.length ? (
+                    <ul className="flex list-disc flex-col gap-2 pl-5">
+                      {value.pendingParticipants.map((name) => (
+                        <li key={name}>{participantLabel(name)}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>{m.erasure_no_pending_names()}</p>
+                  )}
+                </section>
+                <section aria-labelledby={remainingId} className="flex min-w-0 flex-col gap-2">
+                  <h3 id={remainingId} className="font-medium">
+                    {m.erasure_remaining_work()}
+                  </h3>
+                  <ul className="flex list-disc flex-col gap-2 pl-5">
+                    <li>{value.lateItems ? m.erasure_late_yes() : m.erasure_late_no()}</li>
+                    <li>{value.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no()}</li>
+                  </ul>
+                </section>
+                <section aria-labelledby={retainedId} className="flex min-w-0 flex-col gap-2 md:col-span-2">
+                  <h3 id={retainedId} className="font-medium">
+                    {m.erasure_retained_heading()}
+                  </h3>
+                  <p>{value.retentionOutstanding ? m.erasure_retained_yes() : m.erasure_retained_no()}</p>
+                </section>
+              </div>
+              <dl className="grid gap-4 border-t pt-4 sm:grid-cols-2">
+                <div className="grid min-w-0 gap-1">
                   <dt className="font-medium">{m.erasure_barrier()}</dt>
                   <dd>{date(value.at)}</dd>
                   <dd className="text-muted-foreground">{m.erasure_barrier_help()}</dd>
                 </div>
-                <div className="grid gap-1">
+                <div className="grid min-w-0 gap-1">
                   <dt className="font-medium">{m.erasure_completed_at()}</dt>
                   <dd>{value.completedAt ? date(value.completedAt) : m.erasure_not_reported()}</dd>
                 </div>
               </dl>
-              <section aria-labelledby={participantsId} className="flex flex-col gap-2">
-                <h3 id={participantsId} className="font-medium">
-                  {m.erasure_participants()}
-                </h3>
-                {value.pendingParticipants.length ? (
-                  <ul className="list-inside list-disc">
-                    {value.pendingParticipants.map((name) => (
-                      <li key={name}>{participantLabel(name)}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>{m.erasure_no_pending_names()}</p>
-                )}
-              </section>
-              <section aria-labelledby={retainedId} className="flex flex-col gap-2">
-                <h3 id={retainedId} className="font-medium">
-                  {m.erasure_retained_heading()}
-                </h3>
-                <p>{value.retentionOutstanding ? m.erasure_retained_yes() : m.erasure_retained_no()}</p>
-              </section>
-              <section aria-labelledby={remainingId} className="flex flex-col gap-2">
-                <h3 id={remainingId} className="font-medium">
-                  {m.erasure_remaining_work()}
-                </h3>
-                <ul className="flex list-inside list-disc flex-col gap-2">
-                  <li>{value.lateItems ? m.erasure_late_yes() : m.erasure_late_no()}</li>
-                  <li>{value.effectsFrontier ? m.erasure_frontier_yes() : m.erasure_frontier_no()}</li>
-                </ul>
-              </section>
               <details aria-live="off" className="rounded-lg border p-4">
                 <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
                   {m.erasure_details()}
@@ -226,33 +228,39 @@ export function ErasureProgressView({
             </ContentSectionBody>
           </ContentSection>
         ) : (
-          <p id={statusId} role="status">
-            {sessionRecovery && page.status === 'unavailable'
-              ? m.erasure_session_unavailable()
-              : statusText(page.status)}
-          </p>
+          <ContentSection>
+            <ContentSectionHeader>
+              <p id={statusId} role="status" className="font-medium">
+                {sessionRecovery && page.status === 'unavailable'
+                  ? m.erasure_session_unavailable()
+                  : statusText(page.status)}
+              </p>
+            </ContentSectionHeader>
+            {page.status === 'signed-out' ? (
+              <ContentSectionBody>
+                <a
+                  className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center self-start px-3 py-2 font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                  href={erasureSignInHref(returnTo)}
+                >
+                  {m.erasure_sign_in()}
+                </a>
+              </ContentSectionBody>
+            ) : null}
+          </ContentSection>
         )}
+        {reload && page.status !== 'signed-out' ? (
+          <Button
+            className="h-auto min-h-11 max-w-full self-start whitespace-normal py-3"
+            variant="outline"
+            disabled={page.status === 'loading'}
+            aria-controls={progressId}
+            aria-describedby={statusId}
+            onClick={reload}
+          >
+            {sessionRecovery ? m.erasure_retry_session() : m.erasure_reload()}
+          </Button>
+        ) : null}
       </section>
-      {page.status === 'signed-out' ? (
-        <a
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center self-start px-3 py-2 font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-          href={erasureSignInHref(returnTo)}
-        >
-          {m.erasure_sign_in()}
-        </a>
-      ) : null}
-      {reload && page.status !== 'signed-out' ? (
-        <Button
-          className="h-auto min-h-11 max-w-full self-start whitespace-normal py-3"
-          variant="outline"
-          disabled={page.status === 'loading'}
-          aria-controls={progressId}
-          aria-describedby={statusId}
-          onClick={reload}
-        >
-          {sessionRecovery ? m.erasure_retry_session() : m.erasure_reload()}
-        </Button>
-      ) : null}
     </article>
   );
 }

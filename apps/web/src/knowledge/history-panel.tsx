@@ -2,6 +2,16 @@ import { KnowledgeDetails, knowledgeControl } from './workspace';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import type { DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import type { KnowledgePrivateAddress } from './private-knowledge';
 import {
@@ -239,6 +249,20 @@ export function KnowledgeHistoryPanel({
     return m.knowledge_history_unavailable({}, options);
   };
   const state = showComparison ? compareState : pageState;
+  const historyDateFormatter = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'long',
+    timeZone: 'UTC',
+  });
+  const formatHistoryDate = (createdAt: string) =>
+    historyDateFormatter.format(new Date(createdAt));
+  const leftSelectId = `${id}-history-left`;
+  const rightSelectId = `${id}-history-right`;
+  const historyIntroId = `${id}-history-intro`;
+  const leftSummaryId = showComparison && pair ? pair.leftRevisionId : leftRevisionId;
+  const rightSummaryId = showComparison && pair ? pair.rightRevisionId : rightRevisionId;
+  const leftSummaryRow = page?.revisions.find((row) => row.revisionId === leftSummaryId);
+  const rightSummaryRow = page?.revisions.find((row) => row.revisionId === rightSummaryId);
   return (
     <section
       id="knowledge-revisions"
@@ -279,7 +303,7 @@ export function KnowledgeHistoryPanel({
           >
             {showComparison ? m.knowledge_history_comparison({}, options) : m.knowledge_history_heading({}, options)}
           </h2>
-          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          <p id={historyIntroId} className="max-w-prose text-sm leading-relaxed text-muted-foreground">
             {m.knowledge_history_intro({}, options)}
           </p>
           <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
@@ -307,42 +331,161 @@ export function KnowledgeHistoryPanel({
           {!['idle', 'ready'].includes(state) ? (
             <p role={state === 'preparing' ? 'status' : 'alert'}>{failureText(state)}</p>
           ) : null}
-          {showComparison ? (
-            <>
-              {pair ? (
-                <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
-                  {(['left', 'right'] as const).map((side) => (
-                    <div key={side} className="min-w-0">
+          <section
+            className="min-w-0 space-y-5 border-y border-border py-5"
+            aria-label={m.knowledge_history_comparison({}, options)}
+          >
+            <div className="space-y-3">
+              <h3 className="text-base font-semibold">{m.knowledge_history_comparison({}, options)}</h3>
+              <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+                {(['left', 'right'] as const).map((side) => {
+                  const revisionId = side === 'left' ? leftSummaryId : rightSummaryId;
+                  const row = side === 'left' ? leftSummaryRow : rightSummaryRow;
+                  const revision = side === 'left' ? comparison?.left : comparison?.right;
+                  return (
+                    <div key={side} className="min-w-0 space-y-1">
                       <dt className="text-sm font-medium">
                         {side === 'left'
                           ? m.knowledge_history_left({}, options)
                           : m.knowledge_history_right({}, options)}
                       </dt>
-                      <dd className="break-all text-sm">
-                        {side === 'left' ? pair.leftRevisionId : pair.rightRevisionId}
+                      <dd className="min-w-0 space-y-1 text-sm">
+                        {revision?.title || row?.title ? (
+                          <span className="block break-words font-medium [overflow-wrap:anywhere]">
+                            {revision?.title ?? row?.title}
+                          </span>
+                        ) : null}
+                        {row ? (
+                          <time dateTime={row.createdAt} className="block text-muted-foreground">
+                            {formatHistoryDate(row.createdAt)}
+                          </time>
+                        ) : null}
+                        <span className="block break-all font-mono text-xs text-muted-foreground">
+                          {revisionId || '—'}
+                        </span>
                       </dd>
                     </div>
-                  ))}
-                </dl>
-              ) : null}
-              {comparison ? (
-                <KnowledgeHistoryComparisonView
-                  comparison={comparison}
-                  draft={conflictPair ? draft : null}
-                  locale={locale}
-                />
-              ) : null}
-              {pair && !pending && compareState !== 'ready' ? (
+                  );
+                })}
+              </dl>
+            </div>
+            {!showComparison ? (
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                {(['left', 'right'] as const).map((side) => {
+                  const value = side === 'left' ? leftRevisionId : rightRevisionId;
+                  const otherValue = side === 'left' ? rightRevisionId : leftRevisionId;
+                  const selectId = side === 'left' ? leftSelectId : rightSelectId;
+                  const selectedLabel =
+                    side === 'left' ? m.knowledge_history_left({}, options) : m.knowledge_history_right({}, options);
+                  const selectedIsOnPage = page?.revisions.some((row) => row.revisionId === value) ?? false;
+                  return (
+                    <Field key={side}>
+                      <FieldLabel htmlFor={selectId}>{selectedLabel}</FieldLabel>
+                      <Select
+                        value={value || null}
+                        onValueChange={(nextValue) => {
+                          if (!nextValue || !live.current || !isCurrent()) return;
+                          focus.cancel();
+                          if (side === 'left') setLeft(nextValue);
+                          else setRight(nextValue);
+                        }}
+                      >
+                        <SelectTrigger
+                          id={selectId}
+                          aria-describedby={historyIntroId}
+                          className="h-auto min-h-11 w-full min-w-0 whitespace-normal py-2 text-start"
+                          disabled={pending || !page}
+                        >
+                          <SelectValue placeholder={m.knowledge_private_revision({}, options)} />
+                        </SelectTrigger>
+                        <SelectContent align="start">
+                          <SelectGroup>
+                            {value && !selectedIsOnPage ? (
+                              <>
+                                <SelectLabel className="break-all whitespace-normal">
+                                  {selectedLabel}: {value}
+                                </SelectLabel>
+                                <SelectItem value={value} disabled className="min-h-11 whitespace-normal">
+                                  <span className="min-w-0 whitespace-normal break-all">{value}</span>
+                                </SelectItem>
+                              </>
+                            ) : null}
+                            {page?.revisions.map((row) => (
+                              <SelectItem
+                                key={row.revisionId}
+                                value={row.revisionId}
+                                disabled={row.revisionId === otherValue}
+                                className="min-h-14 items-start whitespace-normal py-2"
+                              >
+                                <span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+                                  <span className="block break-words font-medium leading-snug">{row.title}</span>
+                                  <time dateTime={row.createdAt} className="block text-xs text-muted-foreground">
+                                    {formatHistoryDate(row.createdAt)}
+                                  </time>
+                                  <span className="block break-all text-xs text-muted-foreground">
+                                    {row.revisionId}
+                                  </span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  );
+                })}
+              </div>
+            ) : null}
+            <div className="flex min-w-0 flex-wrap items-start gap-3">
+              <Button
+                ref={compareTrigger}
+                type="button"
+                variant="outline"
+                className={control}
+                hidden={showComparison}
+                disabled={
+                  showComparison ||
+                  pending ||
+                  !operations ||
+                  compareAdmission !== 'available' ||
+                  !leftRevisionId ||
+                  !rightRevisionId ||
+                  leftRevisionId === rightRevisionId
+                }
+                onClick={(event) =>
+                  void compare({ leftRevisionId, rightRevisionId }, compareTrigger.current, event)
+                }
+              >
+                {m.knowledge_history_compare({}, options)}
+              </Button>
+              {!showComparison ? (
+                <p
+                  role="status"
+                  className="min-w-0 flex-1 basis-48 text-sm leading-relaxed text-muted-foreground"
+                >
+                  {compareAdmission === 'available'
+                    ? m.knowledge_history_difference_help({}, options)
+                    : failureText(compareAdmission)}
+                </p>
+              ) : pair && !pending && compareState !== 'ready' && compareAdmission === 'available' ? (
                 <Button
                   type="button"
                   variant="outline"
                   className={control}
+                  disabled={!operations}
                   onClick={(event) => void compare(pair, returnTarget.current, event)}
                 >
                   {m.knowledge_history_retry_pair({}, options)}
                 </Button>
+              ) : compareAdmission !== 'available' ? (
+                <p role="status">{failureText(compareAdmission)}</p>
               ) : null}
-            </>
+            </div>
+          </section>
+          {showComparison ? (
+            comparison ? (
+              <KnowledgeHistoryComparisonView comparison={comparison} draft={draft} locale={locale} />
+            ) : null
           ) : null}
           <div hidden={showComparison} className="min-w-0 space-y-5">
             {page ? (
@@ -351,14 +494,16 @@ export function KnowledgeHistoryPanel({
                   {page.revisions.map((row) => (
                     <li key={row.revisionId} className="min-w-0 space-y-3 py-5">
                       <h3 className="font-semibold leading-snug">{row.title}</h3>
-                      <p className="break-all text-sm">{row.revisionId}</p>
+                      <p className="break-all font-mono text-xs text-muted-foreground">{row.revisionId}</p>
                       <time dateTime={row.createdAt} className="block text-sm tabular-nums text-muted-foreground">
-                        {new Intl.DateTimeFormat(locale, {
-                          dateStyle: 'medium',
-                          timeStyle: 'long',
-                          timeZone: 'UTC',
-                        }).format(new Date(row.createdAt))}
+                        {formatHistoryDate(row.createdAt)}
                       </time>
+                      {leftRevisionId === row.revisionId || rightRevisionId === row.revisionId ? (
+                        <p className="flex min-h-11 flex-wrap items-center gap-x-4 text-sm font-medium">
+                          {leftRevisionId === row.revisionId ? m.knowledge_history_left({}, options) : null}
+                          {rightRevisionId === row.revisionId ? m.knowledge_history_right({}, options) : null}
+                        </p>
+                      ) : null}
                       <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
                         <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
                           <div>
@@ -375,33 +520,6 @@ export function KnowledgeHistoryPanel({
                           </div>
                         </dl>
                       </KnowledgeDetails>
-                      <div className="flex min-w-0 flex-wrap gap-x-6 gap-y-2">
-                        {(['left', 'right'] as const).map((side) => (
-                          <label key={side} className="flex min-h-11 min-w-11 cursor-pointer items-center gap-3 py-2">
-                            <input
-                              type="radio"
-                              aria-label={`${side === 'left' ? m.knowledge_history_left({}, options) : m.knowledge_history_right({}, options)}: ${row.revisionId}`}
-                              name={`${id}-${side}`}
-                              value={row.revisionId}
-                              checked={(side === 'left' ? leftRevisionId : rightRevisionId) === row.revisionId}
-                              disabled={pending}
-                              onChange={() => {
-                                if (!live.current || !isCurrent()) return;
-                                focus.cancel();
-                                if (side === 'left') setLeft(row.revisionId);
-                                else setRight(row.revisionId);
-                              }}
-                              className="size-5 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                            />
-                            <span>
-                              {side === 'left'
-                                ? m.knowledge_history_left({}, options)
-                                : m.knowledge_history_right({}, options)}
-                              <span className="sr-only">: {row.revisionId}</span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
                     </li>
                   ))}
                 </ol>
@@ -414,35 +532,20 @@ export function KnowledgeHistoryPanel({
                 ) : null}
               </>
             ) : null}
-            <div className="min-w-0 space-y-3">
-              <p className="break-all text-sm">
-                {m.knowledge_history_left({}, options)}: {leftRevisionId || '—'}
-              </p>
-              <p className="break-all text-sm">
-                {m.knowledge_history_right({}, options)}: {rightRevisionId || '—'}
-              </p>
+            <div role="group" aria-label={m.knowledge_history_heading({}, options)} className="min-w-0 space-y-3">
+              <h3 className="text-sm font-semibold">{m.knowledge_history_heading({}, options)}</h3>
               <div className="flex min-w-0 flex-wrap gap-3">
                 <Button
-                  ref={compareTrigger}
                   type="button"
                   variant="outline"
                   className={control}
                   disabled={
                     pending ||
-                    compareAdmission !== 'available' ||
-                    !leftRevisionId ||
-                    !rightRevisionId ||
-                    leftRevisionId === rightRevisionId
+                    admission !== 'available' ||
+                    !operations ||
+                    !page ||
+                    !navigation.previous.length
                   }
-                  onClick={(event) => void compare({ leftRevisionId, rightRevisionId }, compareTrigger.current, event)}
-                >
-                  {m.knowledge_history_compare({}, options)}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={control}
-                  disabled={pending || !page || !navigation.previous.length}
                   onClick={(event) => void load(previousKnowledgeHistoryPage(navigation), event)}
                 >
                   {m.knowledge_history_previous({}, options)}
@@ -452,7 +555,7 @@ export function KnowledgeHistoryPanel({
                     type="button"
                     variant="outline"
                     className={control}
-                    disabled={pending}
+                    disabled={pending || admission !== 'available' || !operations}
                     onClick={(event) => void load(nextKnowledgeHistoryPage(navigation, page.next!), event)}
                   >
                     {m.knowledge_history_more({}, options)}
@@ -463,7 +566,7 @@ export function KnowledgeHistoryPanel({
                     type="button"
                     variant="outline"
                     className={control}
-                    disabled={pending}
+                    disabled={pending || admission !== 'available' || !operations}
                     onClick={(event) => void load(attempt, event)}
                   >
                     {m.knowledge_private_retry({}, options)}
@@ -473,7 +576,7 @@ export function KnowledgeHistoryPanel({
                   type="button"
                   variant="outline"
                   className={control}
-                  disabled={pending}
+                  disabled={pending || admission !== 'available' || !operations}
                   onClick={(event) => void load(firstKnowledgeHistoryPage(), event)}
                 >
                   {m.knowledge_history_restart({}, options)}
@@ -484,7 +587,6 @@ export function KnowledgeHistoryPanel({
                   {m.knowledge_history_window_edge({}, options)}
                 </p>
               ) : null}
-              {compareAdmission !== 'available' ? <p role="status">{failureText(compareAdmission)}</p> : null}
             </div>
           </div>
         </div>

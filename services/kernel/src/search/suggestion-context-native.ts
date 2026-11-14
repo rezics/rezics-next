@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem-error.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { readListPresentationFacts } from '../semantic/copy-work-application.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { workContextKind, validWorkContext, type WorkContext, type WorkContextStatement } from './work-context.ts';
 import type {
@@ -151,17 +152,19 @@ export function createNativeSuggestionWorkContextReader(input: {
 }): SuggestionWorkContextReader {
   return async ({ subjectIds, languages, deadline }) => {
     const dependencies = { ...input, deadline };
-    const initialRelease = await activeRelease(input.pool);
+    // Keep each Definitions snapshot separate from the projection's owner reads.
+    const readCurrentRelease = () => withReadTransaction(input.pool, (client) => activeRelease(client), deadline);
+    const initialRelease = await readCurrentRelease();
     if (!initialRelease)
       return {
         contexts: subjectIds.map(unavailable),
         async isCurrent() {
-          return true;
+          return (await readCurrentRelease()) === null;
         },
       };
 
     const initial = await readListPresentationFacts(dependencies, subjectIds, { languages, workContext: true });
-    const releaseAfterRead = await activeRelease(input.pool);
+    const releaseAfterRead = await readCurrentRelease();
     if (!releaseAfterRead || releaseAfterRead.digest !== initialRelease.digest)
       throw new ProblemError('search_restart_required');
 
@@ -173,10 +176,10 @@ export function createNativeSuggestionWorkContextReader(input: {
     return {
       contexts,
       async isCurrent() {
-        const releaseBeforeCheck = await activeRelease(input.pool);
+        const releaseBeforeCheck = await readCurrentRelease();
         if (!releaseBeforeCheck || releaseBeforeCheck.digest !== initialRelease.digest) return false;
         const current = await readListPresentationFacts(dependencies, subjectIds, { languages, workContext: true });
-        const releaseAfterCheck = await activeRelease(input.pool);
+        const releaseAfterCheck = await readCurrentRelease();
         return (
           !!releaseAfterCheck &&
           releaseAfterCheck.digest === initialRelease.digest &&

@@ -27,10 +27,15 @@ export type KnowledgePreparation = Readonly<{
 }>;
 export type KnowledgeDiscoveryStore = Readonly<{
   /** Null means this index has not completed installation. Zero is a complete empty observation. */
-  cut(subjectId: string): Promise<string | null>;
-  page(subjectId: string, after: KnowledgeFrontier | null, limit: number): Promise<readonly KnowledgeAssociation[]>;
-  load(id: string): Promise<KnowledgePreparation | null>;
-  save(record: KnowledgePreparation, previousRevision: number | null): Promise<boolean>;
+  cut(subjectId: string, deadline?: number): Promise<string | null>;
+  page(
+    subjectId: string,
+    after: KnowledgeFrontier | null,
+    limit: number,
+    deadline?: number,
+  ): Promise<readonly KnowledgeAssociation[]>;
+  load(id: string, deadline?: number): Promise<KnowledgePreparation | null>;
+  save(record: KnowledgePreparation, previousRevision: number | null, deadline?: number): Promise<boolean>;
   id(): string;
 }>;
 export type KnowledgeDiscoveryRequest = Readonly<{ limit?: number; cursor?: string }>;
@@ -93,13 +98,13 @@ export function createKnowledgeDiscovery(options: {
         typeof decoded.after[1] !== 'number'
       )
         invalidCursor();
-      const retained = await store.load(decoded.after[0]);
+      const retained = await store.load(decoded.after[0], context.deadline);
       if (!retained || retained.expiresAt <= now() || retained.revision !== decoded.after[1]) restart();
       // The confidential token authenticates all request/viewer operands; storage holds only its native locator.
       record = retained;
       previousRevision = retained.revision;
     } else {
-      const through = await store.cut(subjectId);
+      const through = await store.cut(subjectId, context.deadline);
       if (through === null) return { state: 'unavailable' };
       record = {
         id: store.id(),
@@ -128,7 +133,7 @@ export function createKnowledgeDiscovery(options: {
       const budget = KNOWLEDGE_DISCOVERY_STEP_LIMIT - examined;
       // Fetch one lookahead without filtering on the cut. Filtering in SQL could scan unbounded
       // post-cut inserts at old publication times. Every physical row instead spends this step's budget.
-      const rows = await store.page(subjectId, after, budget + 1);
+      const rows = await store.page(subjectId, after, budget + 1, context.deadline);
       const candidates = rows.slice(0, budget);
       for (const candidate of candidates) {
         after = frontier(candidate);
@@ -167,7 +172,7 @@ export function createKnowledgeDiscovery(options: {
       exhausted,
       candidates: ready ? [] : retained,
     };
-    if (!(await store.save(nextRecord, previousRevision))) restart();
+    if (!(await store.save(nextRecord, previousRevision, context.deadline))) restart();
     const next = await encodeSearchCursor(
       tokens,
       binding,

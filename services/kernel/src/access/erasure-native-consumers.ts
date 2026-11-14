@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import type { ErasureDiscoveryPage } from './erasure-progress.ts';
@@ -8,6 +7,11 @@ import { publishedAccountIdentityUndo } from './agent-verification-identity.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/index.ts';
 import type { NativeStoreBlocker } from './erasure-native-stores.ts';
 import { authConsumerBlocker, isAuthConsumerStore, type AuthConsumerRetirement } from './erasure-auth-consumers.ts';
+import type { ContinuationEntry } from './committed-continuations.ts';
+import {
+  originalContinuationEffectReceipt,
+  type ContinuationEffectSource,
+} from './erasure-native-consumer-receipts.ts';
 
 /** Read only the fixed Auth-native phase, anchored to the original source. An
  * accepted obligation, absent Auth row or later global ACK cannot satisfy it. */
@@ -319,32 +323,24 @@ export async function foreignTerminalBlockers(
       // Retirement is before release. Require the actual original release
       // command, never terminal=true or a missing operator hold by itself.
       const source = await withConnection(pool, (tx) =>
-        tx.query<{ operator_account_id: string; command_key_prefix: string | null; terminal: boolean }>(
-          `SELECT s.operator_account_id,s.terminal,c.command_key_prefix FROM access.operator_relation_slot s
+        tx.query<ContinuationEffectSource & { terminal: boolean; allowlist: ContinuationEntry[] | null }>(
+          `SELECT s.subject_account_id AS account_id,s.operator_account_id AS prior_operator_account_id,
+           s.reservation_id AS prior_reservation_id,s.terminal,c.command_key_prefix,c.prior_handle,c.allowlist
+         FROM access.operator_relation_slot s
          LEFT JOIN access.committed_continuation c ON c.route=s.route AND c.account_id=s.subject_account_id
            AND c.prior_reservation_id=s.reservation_id AND c.prior_operator_account_id=s.operator_account_id
+           AND c.allowlist @> '[{"step":"release-operator"}]'::jsonb
          WHERE s.route=$1 AND s.subject_account_id=$2 AND s.reservation_id=$3 LIMIT 1`,
           [...key],
         ),
       );
       const root = source.rows[0];
       if (!root) continue;
+      const entry = root.allowlist?.find((item) => item.step === 'release-operator');
       const released =
         root.terminal &&
-        root.command_key_prefix !== null &&
-        (await withConnection(pool, async (tx) => {
-          const route = routeOf(root.operator_account_id)!;
-          return (
-            (
-              await tx.query(
-                `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
-           AND principal_id='00000000-0000-8000-8000-000000000001'
-           AND command_kind='access.operator.responsibility-released' AND idempotency_key=$2`,
-                [Math.floor(route / 16), `${route}:${root.command_key_prefix}:release-operator`],
-              )
-            ).rowCount === 1
-          );
-        }));
+        entry !== undefined &&
+        (await withConnection(pool, (tx) => originalContinuationEffectReceipt(tx, root, entry)));
       if (!released) blocked.set(JSON.stringify(key), 'native-terminal-consumer');
     }
   }
@@ -408,8 +404,9 @@ export async function continuationEffectBlockers(
       if (!located) return null;
       return (
         (
-          await tx.query<{ account_id: string; allowlist: Array<{ step: string; target: string; key: string }> }>(
-            'SELECT account_id,allowlist FROM access.committed_continuation WHERE route=$1 AND continuation_id=$2',
+          await tx.query<ContinuationEffectSource & { allowlist: ContinuationEntry[] }>(
+            `SELECT account_id,command_key_prefix,prior_operator_account_id,prior_reservation_id,prior_handle,allowlist
+             FROM access.committed_continuation WHERE route=$1 AND continuation_id=$2`,
             [key[0], located],
           )
         ).rows[0] ?? null
@@ -418,32 +415,12 @@ export async function continuationEffectBlockers(
     if (!root) continue;
     for (const entry of root.allowlist) {
       if (entry.step === 'erase-auth-owner') continue;
-      const kinds: Record<string, string> = {
-        'retire-operator': 'access.operator.responsibility-retired',
-        'release-operator': 'access.operator.responsibility-released',
-        'redirect-deleted-handle': 'access.handle-redirected',
-      };
-      const kind = kinds[entry.step];
-      if (!kind) {
+      if (!['retire-operator', 'release-operator', 'redirect-deleted-handle'].includes(entry.step)) {
         blockers.set(JSON.stringify(key), 'continuation-barrier-consumer');
         break;
       }
-      const anchor = entry.step === 'release-operator' ? entry.target.split(':')[0]! : root.account_id;
-      // Handle commands are anchored to the normalized handle, not its former
-      // account's route. Read the original receipt in that physical partition.
-      const route =
-        entry.step === 'redirect-deleted-handle'
-          ? createHash('sha256').update(entry.target).digest().readUInt16BE(0)
-          : routeOf(anchor)!;
-      const proof = await withConnection(pool, (tx) =>
-        tx.query(
-          `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
-         AND principal_id='00000000-0000-8000-8000-000000000001'
-         AND command_kind=$2 AND idempotency_key=$3`,
-          [Math.floor(route / 16), kind, `${route}:${entry.key}`],
-        ),
-      );
-      if (!proof.rowCount) {
+      const completed = await withConnection(pool, (tx) => originalContinuationEffectReceipt(tx, root, entry));
+      if (!completed) {
         blockers.set(JSON.stringify(key), 'native-terminal-consumer');
         break;
       }

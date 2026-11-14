@@ -1,5 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
+import type { NativeSessionRevocationResultPort } from '@rezics/auth-contract';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -21,6 +22,14 @@ import {
 } from './lifecycle-review-source.ts';
 import type { LifecycleReview, LifecycleReviewInput, LifecycleOriginalResult } from './lifecycle-review-contract.ts';
 import { classifyUnavailability } from './unavailable.ts';
+
+const sessionRevocationResults = new WeakMap<Access, NativeSessionRevocationResultPort>();
+/** Installed by the native Auth host on this exact Access instance. No global
+ * Auth database, runtime, session material or request-provided callback. */
+export function installLifecycleSessionRevocationResults(access: Access, port?: NativeSessionRevocationResultPort) {
+  if (port) sessionRevocationResults.set(access, port);
+  else sessionRevocationResults.delete(access);
+}
 
 function declarations() {
   return memoizedValue(declarations, () => [suspensionDeclaration, reinstatementDeclaration] as const);
@@ -184,6 +193,7 @@ export async function readLifecycleReview(
                 original.operationId === 'account.suspend',
                 source,
                 input.operatorPageKey,
+                sessionRevocationResults.get(access),
               ),
             }
           : unknownOriginal();

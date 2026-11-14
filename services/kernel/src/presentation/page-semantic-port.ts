@@ -36,7 +36,7 @@ export type PageSemanticPort = Readonly<{
     type: string,
     available: readonly string[],
   ): string[];
-  activeRelease(pool: Pool | CommandTransaction): Promise<PageActiveRelease | null>;
+  activeRelease(pool: Pool | CommandTransaction, deadline?: number): Promise<PageActiveRelease | null>;
   readItemTypes(client: PageQueryable, ids: readonly string[]): Promise<Map<string, string>>;
   readItemDetails(client: PageQueryable, ids: readonly string[]): Promise<Map<string, PageItemDetails>>;
   readSubjectPageStates(client: PageQueryable, home: number, ids: readonly string[]): Promise<PageSubjectState[]>;
@@ -51,8 +51,11 @@ export type PageSelectedPort = Readonly<{
 }>;
 
 export type PageProfilePort = Readonly<{
-  activeProfile(pool: Pool): Promise<{ digest: string; head: number; profile: PresentationProfile } | null>;
-  readProfile(pool: Pool | CommandTransaction, digest: string): Promise<PresentationProfile | null>;
+  activeProfile(
+    pool: Pool,
+    deadline?: number,
+  ): Promise<{ digest: string; head: number; profile: PresentationProfile } | null>;
+  readProfile(pool: Pool | CommandTransaction, digest: string, deadline?: number): Promise<PresentationProfile | null>;
   publishProfile: typeof publishProfile;
   activateProfile: typeof activateProfile;
   bootstrapProfile(pool: Pool, profile: PresentationProfile): Promise<string>;

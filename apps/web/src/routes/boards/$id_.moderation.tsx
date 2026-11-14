@@ -208,6 +208,7 @@ function ModerationReportsPending() {
   if (tab === 'appeals')
     return (
       <ModerationAppealsView
+        boardId={id}
         appeals={[]}
         targets={[]}
         next={null}
@@ -271,6 +272,7 @@ function ModerationReportsError({ reset, error }: ErrorComponentProps) {
   if (tab === 'appeals') {
     return (
       <ModerationAppealsView
+        boardId={id}
         appeals={[]}
         targets={[]}
         next={null}

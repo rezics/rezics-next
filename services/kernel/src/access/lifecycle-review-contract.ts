@@ -10,7 +10,7 @@ export type LifecycleAdvertisement =
   | { action: 'account:reinstate'; operationId: 'account.reinstate' };
 export type LifecycleEffects = Readonly<{
   state: 'complete' | 'pending' | 'unknown';
-  sessionRevocation: 'unknown' | 'not_required';
+  sessionRevocation: 'complete' | 'unknown' | 'not_required';
   sessionRevocationAuthorization: 'recorded' | 'unknown' | 'not_required';
   accountAgentSynchronization: 'unknown';
   operator: 'complete' | 'pending' | 'unknown';

@@ -1,13 +1,20 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { readAccount } from './access-port.ts';
 import type { KernelClock } from '../clock.ts';
 import type { CommandResult } from '../command/command.ts';
+import { partitionReadClientObservation, withBoundedReadConnection } from '../database/pool.ts';
 import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
+import type { Partition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
+import {
+  createReportedYearSummaryReads,
+  reportedYearRevision,
+  type ReportedYearSummary,
+} from './reported-year-summary.ts';
 
 export const YEARLY_COMPLETION_GOAL_METRIC = 'completed_consumption_occurrences' as const;
 export const YEARLY_COMPLETION_GOAL_TARGET_MIN = 1;
@@ -26,6 +33,13 @@ export type YearlyCompletionGoalTargetRead =
   | Readonly<{ state: 'none'; revision: string | null }>
   | Readonly<{ state: 'set'; target: number; revision: string }>
   | Readonly<{ state: 'unavailable'; reason: 'not_installed' }>;
+
+export type YearlyCompletionGoalRead = Readonly<{
+  target: YearlyCompletionGoalTargetRead;
+  progress:
+    | Readonly<{ state: 'available'; summary: ReportedYearSummary }>
+    | Readonly<{ state: 'unavailable'; reason: 'summary_unavailable' }>;
+}>;
 
 export type YearlyCompletionGoalChangeResult = Readonly<{
   year: number;
@@ -70,77 +84,146 @@ function isMissingInstallation(error: unknown): boolean {
 }
 
 export function createYearlyCompletionGoalReads(dependencies: { pool: Pool }) {
+  const summaryReads = createReportedYearSummaryReads(dependencies);
+  async function read<T>(
+    actor: Actor,
+    year: number,
+    deadline: number,
+    signal: AbortSignal | undefined,
+    includeProgress: boolean,
+    deliver: (value: YearlyCompletionGoalRead) => T,
+  ): Promise<T> {
+    if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
+    if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+    const owner = { ...actor, scopes: [...actor.scopes] };
+    const route = routeOf(owner.accountId);
+    if (route === null || !owner.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
+    const alive = () => {
+      if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+    };
+    alive();
+    const authorize = async (client: PoolClient) => {
+      const current = await readAccount(client, route, owner.accountId);
+      if (
+        !current ||
+        current.kind !== 'actor' ||
+        current.state !== 'active' ||
+        current.fenced ||
+        !Number.isSafeInteger(owner.authnEpoch) ||
+        owner.authnEpoch < 1 ||
+        current.minimumAuthnEpoch > BigInt(owner.authnEpoch)
+      )
+        throw new ProblemError('forbidden');
+    };
+    let captured: { target: YearlyCompletionGoalTargetRead; home: Partition };
+    try {
+      const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
+      captured = await withReadingDashboardReadConnection(dependencies.pool, readOptions, async (client) => {
+        await client.query('BEGIN');
+        await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+          route,
+          owner.accountId,
+        ]);
+        await authorize(client);
+        const { partition: home } = await partitionReadClientObservation(client, partitionOf(route));
+        alive();
+        let row: { target: number | null; revision: string } | undefined;
+        try {
+          row = (
+            await client.query<{ target: number | null; revision: string }>(
+              `SELECT target,revision::text FROM library.yearly_completion_goal
+                   WHERE route=$1 AND account_id=$2 AND year=$3`,
+              [route, owner.accountId, year],
+            )
+          ).rows[0];
+        } catch (error) {
+          if (isMissingInstallation(error)) throw new TargetInstallationUnavailableError(home);
+          throw error;
+        }
+        alive();
+        await client.query('COMMIT');
+        alive();
+        const target: YearlyCompletionGoalTargetRead = !row
+          ? { state: 'none', revision: null }
+          : row.target === null
+            ? { state: 'none', revision: row.revision }
+            : { state: 'set', target: row.target, revision: row.revision };
+        return { target, home };
+      });
+    } catch (error) {
+      if (!(error instanceof TargetInstallationUnavailableError)) throw error;
+      captured = { target: { state: 'unavailable', reason: 'not_installed' }, home: error.home };
+    }
+    let progress: YearlyCompletionGoalRead['progress'] = { state: 'unavailable', reason: 'summary_unavailable' };
+    if (includeProgress) {
+      alive();
+      try {
+        progress = { state: 'available', summary: await summaryReads.summary(owner, year, deadline, signal) };
+      } catch (error) {
+        if (!(error instanceof ProblemError) || error.code !== 'dependency_unavailable') throw error;
+      }
+    }
+    alive();
+    // Reobserve admission outside both source reads, including their unavailable
+    // branches. The captured target revision is independent of the progress head.
+    return withBoundedReadConnection(
+      dependencies.pool,
+      deadline,
+      async (client) => {
+        alive();
+        if (progress.state === 'available') {
+          try {
+            if ((await reportedYearRevision(client, route, owner.accountId)) !== progress.summary.currentness.revision)
+              progress = { state: 'unavailable', reason: 'summary_unavailable' };
+          } catch (error) {
+            if (!(error instanceof ProblemError) || error.code !== 'dependency_unavailable') throw error;
+            progress = { state: 'unavailable', reason: 'summary_unavailable' };
+          }
+          alive();
+        }
+        const { partition: home } = await partitionReadClientObservation(client, captured.home.partitionNo);
+        if (home.node !== captured.home.node || home.epoch !== captured.home.epoch)
+          throw new ProblemError('partition_unavailable');
+        alive();
+        await authorize(client);
+        alive();
+        const result = deliver({ target: captured.target, progress });
+        alive();
+        return result;
+      },
+      {
+        deadlineError: () => new ProblemError('deadline_exceeded'),
+        isUncertainSettledQueryError: () => true,
+      },
+    );
+  }
   return {
-    async target(
+    target(
       actor: Actor,
       year: number,
       deadline: number,
       signal?: AbortSignal,
     ): Promise<YearlyCompletionGoalTargetRead> {
-      if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
-      if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-      const route = routeOf(actor.accountId);
-      if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
-      const alive = () => {
-        if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
-      };
-      alive();
-      try {
-        const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
-        return await withReadingDashboardReadConnection(dependencies.pool, readOptions, async (client) => {
-          await client.query('BEGIN');
-          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-            route,
-            actor.accountId,
-          ]);
-          const authorize = async () => {
-            const owner = await readAccount(client, route, actor.accountId);
-            if (
-              !owner ||
-              owner.kind !== 'actor' ||
-              owner.state !== 'active' ||
-              owner.fenced ||
-              !Number.isSafeInteger(actor.authnEpoch) ||
-              actor.authnEpoch < 1 ||
-              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-            )
-              throw new ProblemError('forbidden');
-          };
-          await authorize();
-          alive();
-          let row: { target: number | null; revision: string } | undefined;
-          try {
-            row = (
-              await client.query<{ target: number | null; revision: string }>(
-                `SELECT target,revision::text FROM library.yearly_completion_goal
-                   WHERE route=$1 AND account_id=$2 AND year=$3`,
-                [route, actor.accountId, year],
-              )
-            ).rows[0];
-          } catch (error) {
-            if (isMissingInstallation(error)) throw new TargetInstallationUnavailableError();
-            throw error;
-          }
-          await authorize();
-          alive();
-          await client.query('COMMIT');
-          alive();
-          if (!row) return { state: 'none', revision: null };
-          return row.target === null
-            ? { state: 'none', revision: row.revision }
-            : { state: 'set', target: row.target, revision: row.revision };
-        });
-      } catch (error) {
-        if (error instanceof TargetInstallationUnavailableError)
-          return { state: 'unavailable', reason: 'not_installed' };
-        if (isMissingInstallation(error)) return { state: 'unavailable', reason: 'not_installed' };
-        throw error;
-      }
+      return read(actor, year, deadline, signal, false, (value) => value.target);
+    },
+    /** Delivery is synchronous so HTTP encoding remains inside final admission. */
+    read<T = YearlyCompletionGoalRead>(
+      actor: Actor,
+      year: number,
+      deadline: number,
+      signal?: AbortSignal,
+      deliver?: (value: YearlyCompletionGoalRead) => T,
+    ): Promise<T> {
+      return read(actor, year, deadline, signal, true, (value) => (deliver ? deliver(value) : (value as T)));
     },
   };
 }
 
-class TargetInstallationUnavailableError extends Error {}
+class TargetInstallationUnavailableError extends Error {
+  constructor(readonly home: Partition) {
+    super('Yearly completion goal is not installed');
+  }
+}
 
 export function createYearlyCompletionGoalCommands(dependencies: { pool: Pool; access?: Access; clock?: KernelClock }) {
   const runner = createLibraryCommandRunner(dependencies);

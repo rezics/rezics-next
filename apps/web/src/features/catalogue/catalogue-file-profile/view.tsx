@@ -27,6 +27,7 @@ import { SubjectFacts } from '../subject-facts-view';
 import type { FactsTransport } from '../subject-facts';
 import { useConsentFocus } from '../statement-consent-focus';
 import { SubjectChangesLink } from '../subject-changes-link';
+import { CatalogueNavigationDecision } from '../catalogue-navigation-decision';
 import { useCatalogueEditorNavigation } from '../publication-editor-navigation';
 import {
   codecProperty,
@@ -543,17 +544,14 @@ function CatalogueFileProfileLive({
                     }}
                   />
                 )}
-                {blocker.status === 'blocked' && (
-                  <div role="dialog" className="space-y-2 rounded-xl border p-4">
-                    <p>{m.release_fidelity_leave({}, o)}</p>
-                    <Button type="button" className={actionClass} onClick={() => blocker.reset?.()}>
-                      {m.library_collection_draft_navigation_stay({}, o)}
-                    </Button>
-                    <Button type="button" variant="outline" className={actionClass} onClick={() => blocker.proceed?.()}>
-                      {m.library_collection_draft_navigation_leave({}, o)}
-                    </Button>
-                  </div>
-                )}
+                <CatalogueNavigationDecision
+                  open={blocker.status === 'blocked'}
+                  locale={locale}
+                  title={m.catalogue_file_title({}, o)}
+                  onStay={() => blocker.reset?.()}
+                  onLeave={() => blocker.proceed?.()}
+                  fallbackFocus={() => heading.current}
+                />
                 <details className="space-y-3">
                   <summary className={summaryClass}>{m.release_fidelity_current_edit({}, o)}</summary>
                   <SubjectFacts

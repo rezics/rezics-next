@@ -173,6 +173,35 @@ type ContextRow = {
   recorded_transaction_id: string | null;
 };
 
+async function readContextOnClient(
+  client: ContextQueryClient,
+  route: number,
+  id: string,
+  authorize: (client: ContextQueryClient) => Promise<boolean>,
+  port: ContextAccessPort,
+): Promise<{ context: ContextRecord; component: { partition: number; epoch: number; position: bigint } } | null> {
+  const partition = await readPartition(client, partitionOf(route));
+  if (!partition) return null;
+  const row = (await readContextStatement.run(client, { route, context_id: id })) as ContextRow | undefined;
+  if (!row || !(await authorize(client))) return null;
+  if (row.kind === 'community') {
+    const creator = await readContextCreator.run(client, { route, context_id: id });
+    if (!creator?.accountId) return null;
+    const account = await port.readAccount(client, routeOf(creator.accountId)!, creator.accountId);
+    if (!account || account.state !== 'active' || account.fenced) return null;
+  }
+  return {
+    context: {
+      id: row.id,
+      kind: row.kind,
+      labels: row.labels,
+      settings: row.settings_id === null ? null : { id: row.settings_id, release: row.settings_release! },
+      defaults: row.defaults,
+    },
+    component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+  };
+}
+
 export async function readContext(
   pool: Pool,
   id: string,
@@ -182,33 +211,20 @@ export async function readContext(
   const route = routeOf(id);
   if (route === null) return null;
   const port = accessPort ?? contextAccess();
-  const partitionNo = partitionOf(route);
-  return port.withReadTransaction(pool, async (client) => {
-    const partition = await readPartition(client, partitionNo);
-    if (!partition) {
-      return null;
-    }
-    const row = (await readContextStatement.run(client, { route, context_id: id })) as ContextRow | undefined;
-    if (!row || !(await authorize(client))) {
-      return null;
-    }
-    if (row.kind === 'community') {
-      const creator = await readContextCreator.run(client, { route, context_id: id });
-      if (!creator?.accountId) return null;
-      const account = await port.readAccount(client, routeOf(creator.accountId)!, creator.accountId);
-      if (!account || account.state !== 'active' || account.fenced) return null;
-    }
-    return {
-      context: {
-        id: row.id,
-        kind: row.kind,
-        labels: row.labels,
-        settings: row.settings_id === null ? null : { id: row.settings_id, release: row.settings_release! },
-        defaults: row.defaults,
-      },
-      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-    };
-  });
+  return port.withReadTransaction(pool, (client) => readContextOnClient(client, route, id, authorize, port));
+}
+
+/** Creation-snapshotted defaults on the caller's connection, with the ordinary Context availability rules.
+ * Authorization and absent-Context policy remain with the caller. Reuse this snapshot across a mutation's views.
+ */
+export async function readContextDefaults(
+  client: ContextQueryClient,
+  id: string,
+): Promise<ContextRecord['defaults']> {
+  if (id === CONTEXT_GLOBAL_ID) return {};
+  const route = routeOf(id);
+  if (route === null) return {};
+  return (await readContextOnClient(client, route, id, async () => true, contextAccess()))?.context.defaults ?? {};
 }
 
 export async function contextSnapshot(

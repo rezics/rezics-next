@@ -31,7 +31,7 @@ export type PublicCreator = Readonly<{
 export type CreatorResolution =
   | { state: 'preparing' }
   | { state: 'unavailable' }
-  | { state: 'current'; creators: Map<string, PublicCreator> };
+  | { state: 'current'; creators: Map<string, PublicCreator>; publicIds: ReadonlySet<string> };
 
 function groups(ids: readonly string[]) {
   const result = new Map<number, { route: number; id: string }[]>();
@@ -163,16 +163,18 @@ function mappingEpoch(mapping: IdentityMapping | undefined): string {
   return mapping.state;
 }
 
-/** Public creator labels/aliases and identity terminals. Pending identity is preparing; moved homes are unavailable. */
+/** Public creator names and item qualifier identities. Pending identity is preparing; moved homes are unavailable. */
 export async function canonicalCreators(
   pool: Pool,
   originals: readonly string[],
   limits: CreditSearchCeilings,
+  itemQualifierIds: readonly string[] = [],
 ): Promise<CreatorResolution> {
   const unique = [...new Set(originals)];
-  if (!unique.length) return { state: 'current', creators: new Map() };
+  const roots = [...new Set([...unique, ...itemQualifierIds])];
+  if (!roots.length) return { state: 'current', creators: new Map(), publicIds: new Set() };
   const states = new Map<string, WorkHeader | null>();
-  let pending = unique;
+  let pending = roots;
   for (let depth = 0; pending.length && depth < 8; depth++) {
     const missing = pending.filter((id) => !states.has(id));
     const loaded = await loadSubjects(pool, missing);
@@ -184,17 +186,32 @@ export async function canonicalCreators(
     }
     pending = [...new Set(next)];
   }
-  const mappings = await identityOf(pool, unique);
+  const mappings = await identityOf(pool, roots);
   if (mappings.some((mapping) => mapping.state === 'pending')) return { state: 'preparing' };
   // Bootstrap, missing-owner and moved homes fail closed: a redirect chain never stands in for unknown identity.
   if (mappings.some((mapping) => mapping.state === 'unavailable')) return { state: 'unavailable' };
-  const mapped = new Map(unique.map((id, index) => [id, mappings[index]!] as const));
+  const mapped = new Map(roots.map((id, index) => [id, mappings[index]!] as const));
+  const missingTerminals = [
+    ...new Set(
+      roots.flatMap((original) => {
+        const mapping = mapped.get(original);
+        return states.get(original)?.visibility === 'visible' &&
+          mapping?.state === 'mapped' &&
+          !states.has(mapping.terminal)
+          ? [mapping.terminal]
+          : [];
+      }),
+    ),
+  ];
+  const loadedTerminals = await loadSubjects(pool, missingTerminals);
+  for (const id of missingTerminals) states.set(id, loadedTerminals.get(id) ?? null);
   const terminals = new Map<string, WorkHeader>();
-  for (const original of unique) {
+  for (const original of roots) {
+    // Witnesses retain original IDs, so a public terminal cannot disclose a concealed original.
+    if (states.get(original)?.visibility !== 'visible') continue;
     const mapping = mapped.get(original);
     if (mapping?.state === 'mapped') {
-      const known = states.get(mapping.terminal);
-      const resolved = known ?? (await loadSubjects(pool, [mapping.terminal])).get(mapping.terminal);
+      const resolved = states.get(mapping.terminal);
       if (!resolved || resolved.visibility !== 'visible' || resolved.redirect) continue;
       terminals.set(original, resolved);
       continue;
@@ -203,7 +220,11 @@ export async function canonicalCreators(
     if (terminal) terminals.set(original, terminal);
   }
   const nameLimit = limits.namesPerCreator * 2 + 1;
-  const nameRows = await loadNames(pool, [...new Set([...terminals.values()].map((row) => row.id))], nameLimit);
+  const creatorTerminals = unique.flatMap((original) => {
+    const terminal = terminals.get(original);
+    return terminal ? [terminal.id] : [];
+  });
+  const nameRows = await loadNames(pool, [...new Set(creatorTerminals)], nameLimit);
   const creators = new Map<string, PublicCreator>();
   for (const original of unique) {
     const terminal = terminals.get(original);
@@ -230,5 +251,5 @@ export async function canonicalCreators(
       ]),
     });
   }
-  return { state: 'current', creators };
+  return { state: 'current', creators, publicIds: new Set(terminals.keys()) };
 }

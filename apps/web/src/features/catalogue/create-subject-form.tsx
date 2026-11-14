@@ -7,7 +7,15 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shad
 import { Input } from '@rezics/ui/shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { DefinitionGuideLink } from './definition-guide-view';
@@ -68,6 +76,19 @@ type CreateItemReview = {
   factTargets?: Record<string, string>;
   facts?: GenericCreateFact[];
 };
+
+function isConnectedVisible(element: HTMLElement | null): element is HTMLElement {
+  if (!element || !element.isConnected || element.closest('[hidden]')) return false;
+  const view = element.ownerDocument.defaultView;
+  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+    if (current.hidden) return false;
+    const style = view?.getComputedStyle(current);
+    if (style && (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse'))
+      return false;
+    if (style && Number(style.opacity) === 0) return false;
+  }
+  return element.getClientRects().length > 0;
+}
 
 /** Read the producer's current label after commit; no property meaning is inferred from an endpoint or ID. */
 function CreationCorrection({
@@ -329,10 +350,73 @@ function CreateSubjectFormLive({
     setItemReview((current) => (current && !current.stale ? { ...current, stale: true } : current));
   }
   const [profileDirty, setProfileDirty] = useState(false);
+  const article = useRef<HTMLElement>(null);
   const outcome = useRef<HTMLDivElement>(null);
+  const outcomeIntent = useRef<{ owner: object; opener: HTMLElement } | null>(null);
+  const keyboardActivation = useRef<{ owner: object; opener: HTMLElement } | null>(null);
+  function retireOutcomeIntent() {
+    outcomeIntent.current = null;
+  }
+  function beginOutcomeIntent(opener: HTMLElement) {
+    const intent = { owner: lifetime, opener };
+    outcomeIntent.current = intent;
+    return intent;
+  }
+  function navigateTo(href: string) {
+    retireOutcomeIntent();
+    keyboardActivation.current = null;
+    onNavigate(href);
+  }
   useLayoutEffect(() => {
-    if (!busy && (created || failure)) outcome.current?.focus();
-  }, [busy, created, failure]);
+    outcomeIntent.current = null;
+    keyboardActivation.current = null;
+    const document = article.current?.ownerDocument;
+    if (!document) return;
+    const clear = () => {
+      outcomeIntent.current = null;
+      keyboardActivation.current = null;
+    };
+    const focusMoved = (event: FocusEvent) => {
+      const target = event.target;
+      if (target === document.body || target === document.documentElement) return;
+      const intent = outcomeIntent.current;
+      if (intent && target !== intent.opener) outcomeIntent.current = null;
+    };
+    const keyMoved = (event: KeyboardEvent) => {
+      keyboardActivation.current = null;
+      if (event.key === 'Tab') outcomeIntent.current = null;
+    };
+    const window = document.defaultView;
+    document.addEventListener('focusin', focusMoved, true);
+    document.addEventListener('pointerdown', clear, true);
+    document.addEventListener('pointermove', clear, true);
+    document.addEventListener('keydown', keyMoved, true);
+    window?.addEventListener('blur', clear);
+    return () => {
+      outcomeIntent.current = null;
+      keyboardActivation.current = null;
+      document.removeEventListener('focusin', focusMoved, true);
+      document.removeEventListener('pointerdown', clear, true);
+      document.removeEventListener('pointermove', clear, true);
+      document.removeEventListener('keydown', keyMoved, true);
+      window?.removeEventListener('blur', clear);
+    };
+  }, [identityIntake?.viewerKey, lifetime, locale, profile?.scope, restoredAcknowledgementId]);
+  useLayoutEffect(() => {
+    const intent = outcomeIntent.current;
+    if (!intent || busy || (!created && !failure)) return;
+    outcomeIntent.current = null;
+    keyboardActivation.current = null;
+    if (intent.owner !== lifetime || !lifetime.active()) return;
+    const target = outcome.current;
+    if (!isConnectedVisible(target)) return;
+    const document = target.ownerDocument;
+    const active = document.activeElement;
+    const openerAvailable = isConnectedVisible(intent.opener) && !intent.opener.matches(':disabled');
+    const openerStillFocused = active === intent.opener && openerAvailable;
+    const focusIsVacant = !active || active === document.body || active === document.documentElement;
+    if (!openerStillFocused && (focusIsVacant || !openerAvailable)) target.focus();
+  }, [busy, created, failure, lifetime]);
   const running = useRef(false);
   const unresolvedDelivery = useRef(false);
   const request = useRef<CreateSubjectCommand | null>(null);
@@ -517,6 +601,8 @@ function CreateSubjectFormLive({
   async function submit(event: FormEvent<HTMLFormElement>) {
     if (!lifetime.active()) return;
     event.preventDefault();
+    const activation = keyboardActivation.current;
+    keyboardActivation.current = null;
     if (
       running.current ||
       session !== 'signed-in' ||
@@ -526,11 +612,14 @@ function CreateSubjectFormLive({
       (directIdentityIntake && (!identityKey || identityConfirmation?.key !== identityKey))
     )
       return;
+    retireOutcomeIntent();
+    const intent = activation?.owner === lifetime ? beginOutcomeIntent(activation.opener) : null;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
     setDirectoryCheckError(null);
     let postStarted = false;
+    let outcomeCommitted = false;
     try {
       if (!request.current) {
         const draft = initialTerms(type, rows);
@@ -538,6 +627,7 @@ function CreateSubjectFormLive({
         if (directoryMode) {
           const selected = directoryType;
           if (!selected || !transport.typeDirectory) {
+            outcomeCommitted = true;
             reject({ ok: false, reason: 'invalid', errors: [{ pointer: '/type', code: 'required' }] });
             return;
           }
@@ -589,6 +679,7 @@ function CreateSubjectFormLive({
         }
         if (!hasCurrentType) draft.errors.push({ pointer: '/type', code: 'unsupported' });
         if (draft.errors.length) {
+          outcomeCommitted = true;
           reject({ ok: false, reason: 'invalid', errors: draft.errors });
           return;
         }
@@ -624,11 +715,13 @@ function CreateSubjectFormLive({
       const result = await transport.submit(request.current);
       if (!lifetime.active()) return;
       if (result.ok) {
+        outcomeCommitted = true;
         confirmed.current = true;
         setCreated(result);
         onCreated?.(result);
-        if (result.reader.state === 'ready') onNavigate(result.reader.href);
+        if (result.reader.state === 'ready') navigateTo(result.reader.href);
       } else {
+        outcomeCommitted = true;
         reject(result);
         if (result.reason === 'unavailable') unresolvedDelivery.current = true;
         // Uncertain delivery and key conflicts retain the exact frozen command. Never silently create a second identity.
@@ -647,31 +740,39 @@ function CreateSubjectFormLive({
     } catch {
       if (!lifetime.active()) return;
       if (postStarted) {
+        outcomeCommitted = true;
         unresolvedDelivery.current = true;
         setFailure({ ok: false, reason: 'unavailable' });
       } else setDirectoryCheckError('unavailable');
     } finally {
+      if (!outcomeCommitted && intent && outcomeIntent.current === intent) outcomeIntent.current = null;
       if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
 
-  async function openCreated() {
+  async function openCreated(keyboard: boolean, opener: HTMLElement) {
     if (!lifetime.active()) return;
     if (!created || running.current) return;
+    retireOutcomeIntent();
+    const intent = keyboard ? beginOutcomeIntent(opener) : null;
     running.current = true;
     setBusy(true);
+    let outcomeCommitted = false;
     try {
       const reader = await transport.read(created.id);
       if (!lifetime.active()) return;
+      outcomeCommitted = true;
       setCreated({ ...created, reader });
       onCreated?.({ ...created, reader });
-      if (reader.state === 'ready') onNavigate(reader.href);
+      if (reader.state === 'ready') navigateTo(reader.href);
     } catch {
       if (!lifetime.active()) return;
+      outcomeCommitted = true;
       setCreated({ ...created, reader: { state: 'unavailable' } });
     } finally {
+      if (!outcomeCommitted && intent && outcomeIntent.current === intent) outcomeIntent.current = null;
       if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
@@ -689,7 +790,10 @@ function CreateSubjectFormLive({
     isActive: () => lifetime.active() && !confirmed.current,
   };
   return (
-    <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+    <article
+      ref={article}
+      className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+    >
       {navigation ? navigation(departure) : <CreateSubjectLifetime {...departure} />}
       {!profile?.hideHeading && !recoveryOnly && (
         <header className="space-y-3">
@@ -738,7 +842,14 @@ function CreateSubjectFormLive({
                       ? m.catalogue_create_reader_denied({}, options)
                       : m.catalogue_create_reader_unavailable({}, options)}
               </p>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void openCreated()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={(event) =>
+                  void openCreated(event.detail === 0 && event.nativeEvent.isTrusted, event.currentTarget)
+                }
+              >
                 {m.catalogue_create_retry({}, options)}
               </Button>
             </>
@@ -787,7 +898,38 @@ function CreateSubjectFormLive({
           {(directoryMode ||
             (usesDefinitions && definitions.data?.ok && (types.length > 0 || hasDraft)) ||
             (!!profile?.metadata?.ready && (types.length > 0 || hasDraft))) && (
-            <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
+            <form
+              className="space-y-6"
+              noValidate
+              onKeyDownCapture={(event: ReactKeyboardEvent<HTMLFormElement>) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement) || target.closest('form') !== event.currentTarget) return;
+                const keyActivatesSubmit = event.key === 'Enter' || event.key === ' ';
+                const submitter = target.closest('button[type="submit"], input[type="submit"], input[type="image"]');
+                if (submitter && keyActivatesSubmit) {
+                  keyboardActivation.current = { owner: lifetime, opener: submitter as HTMLElement };
+                  return;
+                }
+                if (event.key !== 'Enter' || !(target instanceof HTMLInputElement)) return;
+                if (['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'hidden'].includes(target.type))
+                  return;
+                keyboardActivation.current = { owner: lifetime, opener: target };
+              }}
+              onClickCapture={(event: ReactMouseEvent<HTMLFormElement>) => {
+                const target = event.target;
+                if (!(target instanceof Element)) return;
+                const submitter = target.closest('button[type="submit"], input[type="submit"], input[type="image"]');
+                if (!submitter || !event.currentTarget.contains(submitter)) return;
+                if (event.nativeEvent.detail > 0) {
+                  keyboardActivation.current = null;
+                  retireOutcomeIntent();
+                } else if (!keyboardActivation.current && event.nativeEvent.isTrusted) {
+                  keyboardActivation.current = { owner: lifetime, opener: submitter as HTMLElement };
+                }
+              }}
+              onSubmit={(event) => void submit(event)}
+              aria-busy={busy}
+            >
               {rows.map((row, index) => (
                 <fieldset
                   key={index}

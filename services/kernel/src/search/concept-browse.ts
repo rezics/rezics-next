@@ -59,6 +59,9 @@ export type ConceptBrowseSource = Readonly<{
  * and queues only newly inserted keys using indexed deduplication. seal requires an empty frontier.
  * Losing a CAS returns null. Retirement/expiry of the owning plan disables every operation.
  * contains returns a Boolean only for a sealed generation; root membership is included.
+ * Storage binds checkout, statements and transaction cleanup to the original request/worker
+ * lifetime. Deadline failure rejects without retiring progress; a later lease resumes committed
+ * frontier/member pairs from the retained revision, including an empty frontier awaiting seal.
  */
 export type ConceptBrowseStore = Readonly<{
   create(selection: ConceptDescendantSelection, binding: ConceptBrowseBinding): Promise<ConceptBrowseLocator>;

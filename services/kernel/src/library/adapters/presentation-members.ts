@@ -1,7 +1,6 @@
 import { createBuiltinRuntime } from '../builtin-runtime.ts';
 import { attachCollectionListFacts } from '../collection-list-facts.ts';
-import { deadlineClient } from '../access-port.ts';
-import { withConnection } from '../../database/pool.ts';
+import { withCollectionReadSnapshot } from '../collection-read-connection.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { accessCheck } from '../../request/access-check.ts';
 import type { Actor } from '../../request/access.ts';
@@ -56,77 +55,67 @@ export async function readNativeFullMembers(
       },
       { pool: deps.pool, deadline },
     );
-    return withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const viewer =
-          actor.kind === 'account' && routeOf(actor.accountId) !== null
-            ? await ports.accountEligibility.readAccount(client, routeOf(actor.accountId)!, actor.accountId)
-            : null;
-        const allowed = await check(client);
-        if (!sink.seen) sink.row = await collectionRead.run(client, identity);
-        const collection = sink.row;
-        if (!collection || collection.state !== 'active') throw new ProblemError('not_found');
-        // The same exact curator-T fence as BASIC members, before any child read.
-        if (collection.visibility !== 'public') {
-          const curator =
-            collection.curatorAccountId === null
-              ? null
-              : await ports.accountEligibility.readAccount(client, route, collection.curatorAccountId);
-          if (!curator || curator.state === 'deleted') throw new ProblemError('not_found');
-        }
-        // Match Collection reads: public/unlisted disclosure is independent of the private grant branch.
-        if (
-          collection.visibility === 'private' &&
-          !(
-            allowed &&
-            actor.kind === 'account' &&
-            viewer &&
-            viewer.route === routeOf(actor.accountId) &&
-            viewer.accountId === actor.accountId &&
-            viewer.kind === 'actor' &&
-            viewer.state === 'active' &&
-            !viewer.fenced &&
-            Number.isSafeInteger(actor.authnEpoch) &&
-            actor.authnEpoch > 0 &&
-            BigInt(actor.authnEpoch) >= viewer.minimumAuthnEpoch &&
-            actor.scopes.includes('collection:read')
-          )
-        )
-          throw new ProblemError('not_found');
-        if (collection.membershipKind === 'dynamic') {
-          await client.query('COMMIT');
-          return { dynamic: true } as const;
-        }
-        let after: { ordinalKey: string; memberId: string } | null = null;
-        if (options.cursor !== undefined) {
-          const cursor = ports.cursors.decode(deps.tokens, binding, options.cursor);
-          if (
-            !cursor.ok ||
-            cursor.after.length !== 2 ||
-            typeof cursor.after[0] !== 'string' ||
-            !isOrdinalKey(cursor.after[0]) ||
-            typeof cursor.after[1] !== 'string' ||
-            routeOf(cursor.after[1]) !== route
-          )
-            throw new ProblemError('invalid_cursor');
-          if (cursor.epoch !== collection.orderEpoch + 1) throw new ProblemError('stale_cursor');
-          after = { ordinalKey: cursor.after[0], memberId: cursor.after[1] };
-        }
-        const rows = await memberPage.run(client, {
-          route,
-          collection_id: collectionId,
-          after_ordinal_key: after?.ordinalKey ?? null,
-          after_member_id: after?.memberId ?? null,
-          limit: limit + 1,
-        });
-        await client.query('COMMIT');
-        return { rows, epoch: collection.orderEpoch + 1, fence: collection };
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+    // Initial selection and final revalidation release their snapshots within the same request deadline.
+    return withCollectionReadSnapshot(deps.pool, deadline, async (client) => {
+      const viewer =
+        actor.kind === 'account' && routeOf(actor.accountId) !== null
+          ? await ports.accountEligibility.readAccount(client, routeOf(actor.accountId)!, actor.accountId)
+          : null;
+      const allowed = await check(client);
+      if (!sink.seen) sink.row = await collectionRead.run(client, identity);
+      const collection = sink.row;
+      if (!collection || collection.state !== 'active') throw new ProblemError('not_found');
+      // The same exact curator-T fence as BASIC members, before any child read.
+      if (collection.visibility !== 'public') {
+        const curator =
+          collection.curatorAccountId === null
+            ? null
+            : await ports.accountEligibility.readAccount(client, route, collection.curatorAccountId);
+        if (!curator || curator.state === 'deleted') throw new ProblemError('not_found');
       }
+      // Match Collection reads: public/unlisted disclosure is independent of the private grant branch.
+      if (
+        collection.visibility === 'private' &&
+        !(
+          allowed &&
+          actor.kind === 'account' &&
+          viewer &&
+          viewer.route === routeOf(actor.accountId) &&
+          viewer.accountId === actor.accountId &&
+          viewer.kind === 'actor' &&
+          viewer.state === 'active' &&
+          !viewer.fenced &&
+          Number.isSafeInteger(actor.authnEpoch) &&
+          actor.authnEpoch > 0 &&
+          BigInt(actor.authnEpoch) >= viewer.minimumAuthnEpoch &&
+          actor.scopes.includes('collection:read')
+        )
+      )
+        throw new ProblemError('not_found');
+      if (collection.membershipKind === 'dynamic') return { dynamic: true } as const;
+      let after: { ordinalKey: string; memberId: string } | null = null;
+      if (options.cursor !== undefined) {
+        const cursor = ports.cursors.decode(deps.tokens, binding, options.cursor);
+        if (
+          !cursor.ok ||
+          cursor.after.length !== 2 ||
+          typeof cursor.after[0] !== 'string' ||
+          !isOrdinalKey(cursor.after[0]) ||
+          typeof cursor.after[1] !== 'string' ||
+          routeOf(cursor.after[1]) !== route
+        )
+          throw new ProblemError('invalid_cursor');
+        if (cursor.epoch !== collection.orderEpoch + 1) throw new ProblemError('stale_cursor');
+        after = { ordinalKey: cursor.after[0], memberId: cursor.after[1] };
+      }
+      const rows = await memberPage.run(client, {
+        route,
+        collection_id: collectionId,
+        after_ordinal_key: after?.ordinalKey ?? null,
+        after_member_id: after?.memberId ?? null,
+        limit: limit + 1,
+      });
+      return { rows, epoch: collection.orderEpoch + 1, fence: collection };
     });
   }
   const page = await readPage();

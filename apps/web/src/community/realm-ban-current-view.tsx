@@ -46,6 +46,11 @@ export function RealmBanIdentity({
   );
 }
 
+/** The same disclosed account heading anchors both list rows and exact inspection. */
+export function RealmBanEpisodeIdentity({ ban }: { ban: Readonly<RealmBanRow> }) {
+  return <RealmBanIdentity accountId={ban.accountId} identity={ban.account} />;
+}
+
 export function RealmBanEpisodeView({
   ban,
   includeAccount = true,

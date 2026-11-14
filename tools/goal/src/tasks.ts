@@ -64,10 +64,12 @@ import {
   frozenFiles,
   git,
   GitCommandError,
+  initialSourceOnlyDependencyInstallCanBeSkipped,
   installWorktreeDependencies,
   prepareProofWorktree,
   prepareSharedFrozen,
   reportFrozenFormatError,
+  sourceOnlyDependencyInstallCanBeSkipped,
   taskBaseBranch,
   taskBaseHead,
   type FrozenTask,
@@ -879,13 +881,22 @@ export class WorkerTasks {
           current.workspace = { module, taskName: basename(briefFile, '.md') };
           if (current.state === 'ready' && !this.dependenciesMet(current)) current.state = 'held';
         });
-        if (firstUse) installWorktreeDependencies(workspace.worktree, this.settings);
+        if (
+          firstUse &&
+          !sourceOnlyDependencyInstallCanBeSkipped(this.settings, this.store.task(id))
+        )
+          installWorktreeDependencies(workspace.worktree, this.settings);
         prepareSharedFrozen(this.settings, this.store, this.store.task(id));
         return this.store.task(id);
       }
       const brief = submittedBrief;
       const base = brief.proof?.sourceCommit ?? taskBaseHead(this.settings, brief);
       const files = parseFrozenFiles(brief.markdown, brief.paths, this.settings.policy?.brief);
+      const initialInstallInput = {
+        task: { brief, base, worktree, proofAuthorization: authorization },
+        proofCapture: override?.proofCapture !== undefined,
+        pendingPaths: files.map(({ path }) => path),
+      };
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
       const frozen = prepareInitialDispatch({
@@ -900,7 +911,12 @@ export class WorkerTasks {
             this.settings.policy?.merge,
           ),
         ...(brief.kind !== 'verification'
-          ? { installDependencies: () => installWorktreeDependencies(worktree, this.settings) }
+          ? {
+              installDependencies: () => {
+                if (!initialSourceOnlyDependencyInstallCanBeSkipped(this.settings, initialInstallInput))
+                  installWorktreeDependencies(worktree, this.settings);
+              },
+            }
           : {}),
         freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
         removeWorktree: () =>
@@ -2332,8 +2348,11 @@ export class WorkerTasks {
             controller.syncIdle(task.workspace!.module, task.id);
             prepareSharedFrozen(this.settings, this.store, task);
             task = this.store.task(taskId);
-            setupStep = 'installing worktree dependencies';
-            if (!dependencyInstallationMatches(task.worktree)) {
+            if (
+              !dependencyInstallationMatches(task.worktree) &&
+              !sourceOnlyDependencyInstallCanBeSkipped(this.settings, task)
+            ) {
+              setupStep = 'installing worktree dependencies';
               const peer = this.store
                 .tasks()
                 .find(
@@ -2455,7 +2474,11 @@ export class WorkerTasks {
             .split('\0')
             .filter(Boolean);
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
-        if (!files.length && !rebasing) {
+        if (
+          !files.length &&
+          !rebasing &&
+          !sourceOnlyDependencyInstallCanBeSkipped(this.settings, task)
+        ) {
           setupStep = 'installing worktree dependencies';
           installWorktreeDependencies(task.worktree, this.settings);
         }

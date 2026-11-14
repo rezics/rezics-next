@@ -68,7 +68,13 @@ import { AUTH_WORKFLOW_APPLICATION } from './contract/index.ts';
 import { installWorkflowRequestRetention } from './adapters/request-retention.ts';
 import { coordinateMembership } from './membership-workflows.ts';
 import { completeDeletedClientReductionOwner } from './account-workflows.ts';
-import { answerRevocation, REVOKE_SESSIONS_STEP, sessionRevocation, stepFailureMessage } from './session-revocation.ts';
+import {
+  answerRevocation,
+  REVOKE_SESSIONS_STEP,
+  revokeContinuationSessions,
+  sessionRevocation,
+  stepFailureMessage,
+} from './session-revocation.ts';
 import { sanitizedClientIp, verifyTurnstile, type TurnstileConfiguration } from './turnstile.ts';
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
@@ -853,12 +859,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       REVOKE_SESSIONS_STEP,
       async (accountId: string, request?: AccountOperation, operationKey?: string) => {
         if (operationKey) {
-          const root = required(await required(access.readContinuation)(operationKey, accountId));
-          const entry = root.allowlist.find(
-            (item) => item.step === 'revoke-auth-sessions' && item.target === accountId,
-          );
-          if (!entry) denied();
-          await required(access.authorizeContinuation)(root.reference, entry);
+          return revokeContinuationSessions(access, auth.internal, { accountId, operationKey });
         } else if (request) await approved(request);
         return auth.internal.revokeSessions(accountId);
       },
@@ -1998,6 +1999,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         subjectAccountId: input.subjectAccountId,
         headers: input.headers,
       });
+    },
+    /** Trusted worker entry for the mounted suspension's existing continuation.
+     * It starts no replacement suspension or workflow ledger. Its native Auth
+     * effect receipt is also the replay/resume result. Never mounted as HTTP. */
+    resumeCommittedSessionRevocation: async (input: { accountId: string; operationKey: string }) => {
+      active();
+      await revokeContinuationSessions(access, auth.internal, input, true);
     },
     resumeOperation: async (key: string) => {
       const operationKey = requestKey(key);

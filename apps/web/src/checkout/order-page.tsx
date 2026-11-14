@@ -7,11 +7,11 @@ import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetSt
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
-import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 import { useBuyerCurrentOrigin, type BuyerCurrentOrigin } from './buyer-current-origin';
 import { BenefitDetails } from './benefit-details';
 import { OrderAccessRecovery } from './order-access-recovery';
+import { OrderHistoryReceiptFrame } from './order-history-workspace';
 import { formatMinorAmount } from './money';
 import {
   createReconciliationRequest,
@@ -323,239 +323,250 @@ function OrderLifetime({
           : pending
             ? m.order_pending()
             : m.order_failed();
-
+  const hasActions =
+    (order.settlement === 'paid' && order.entitlement.kind === 'unavailable') ||
+    !!order.entitlementId ||
+    (initial.canReconcile && signedIn && canReadOrder) ||
+    (order.settlement === 'failed' && !canceled) ||
+    order.settlement === 'paid' ||
+    canceled ||
+    ((gaveUp && pending) || order.entitlement.kind === 'refresh');
   return (
-    <article className="max-w-3xl min-w-0 space-y-8 text-foreground">
-      <PageHeading className="text-foreground">{heading}</PageHeading>
-      <div
-        className={
-          order.settlement === 'paid'
-            ? 'space-y-5 rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6'
-            : 'flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-4'
-        }
-      >
-        {order.settlement === 'paid' && (
-          <h2 id="receipt-heading" className="text-xl font-semibold">
-            {m.order_receipt()}
-          </h2>
-        )}
-        <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-          <SubjectCover data={order.subject} size="sm" priority />
-          <div className="min-w-0 space-y-4">
-            <p
-              className={
-                order.settlement === 'paid'
-                  ? 'break-words text-lg font-medium'
-                  : 'min-w-0 break-words pt-1 font-serif text-xl text-foreground'
-              }
+    <OrderHistoryReceiptFrame
+      heading={heading}
+      context={
+        <Exposure operation="order.list">
+          <p>
+            <a
+              href={purchaseHistoryHref(locale, 'orders', history)}
+              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
             >
-              {order.subject.subject.title}
-            </p>
-            {order.settlement === 'paid' && (
-              <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2">
-                <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
-                <dd>
-                  <time>
-                    {new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(
-                      new Date(order.createdAt),
-                    )}
-                  </time>
-                </dd>
-              </dl>
-            )}
-            <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2 [&>dd]:mb-3 [&>dd]:break-words sm:[&>dd]:mb-0">
-              <dt className="text-muted-foreground">{m.order_currency()}</dt>
-              <dd>{money?.currency?.toUpperCase() || m.order_currency_unavailable()}</dd>
-              <dt className="text-muted-foreground">
-                {money?.taxBehavior === 'exclusive' ? m.order_recorded_price_exclusive() : m.order_recorded_price()}
-              </dt>
-              <dd>{price || m.statements_amount_unavailable()}</dd>
-              {order.settlement === 'paid' && (
-                <>
-                  <dt className="text-muted-foreground">{m.order_paid_total()}</dt>
-                  <dd>{total || m.order_paid_total_unavailable()}</dd>
-                  <dt className="text-muted-foreground">{m.order_presentment_total()}</dt>
-                  <dd>
-                    {customerTotal && presentment
-                      ? `${customerTotal} ${presentment.currency.toUpperCase()}`
-                      : m.order_presentment_unavailable()}
-                  </dd>
-                  <dt className="text-muted-foreground">{m.order_recorded_tax()}</dt>
-                  <dd>{tax || m.order_tax_unavailable()}</dd>
-                </>
-              )}
-            </dl>
-          </div>
-        </div>
-      </div>
-      <dl className="space-y-1">
-        <dt className="font-medium">{m.order_current_access()}</dt>
-        <dd role="status">{entitlementLabel(order.entitlement)}</dd>
-      </dl>
-      {order.settlement === 'paid' && order.benefit ? (
-        <div
-          onClickCapture={(event) => {
-            if (!benefitOrigin?.isCurrent()) event.preventDefault();
-          }}
-        >
-          <BenefitDetails
-            benefit={order.benefit}
-            creatorName={order.creatorName}
-            locale={locale}
-            active={
-              canUseBenefit &&
-              (!hydrated || benefitOrigin?.isCurrent() === true) &&
-              order.canUseBenefit === true &&
-              order.entitlement.kind === 'current' &&
-              order.entitlement.active
-            }
-            onOpenReader={openPurchaseReader}
-          />
-        </div>
-      ) : null}
-      {order.entitlementId ? (
-        <p>
-          <a
-            href={purchaseHistoryHref(locale, `entitlements/${encodeURIComponent(order.entitlementId)}`, history)}
-            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-          >
-            {m.entitlements_detail_heading()}
-          </a>
-        </p>
-      ) : null}
-      {order.settlement === 'paid' && order.entitlement.kind === 'unavailable' && (
-        <OrderAccessRecovery
-          key={`${origin.id}:${benefitOrigin?.id ?? 'retired'}`}
-          order={order}
-          locale={locale}
-          origin={origin}
-          benefitOrigin={benefitOrigin}
-          enabled={hydrated && canReadOrder && signedIn}
-          setOrder={setOrder}
-        />
-      )}
-      {initial.canReconcile && signedIn && canReadOrder && (
-        <section className="space-y-3" aria-label={m.order_reconcile_action()}>
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full sm:w-auto"
-            disabled={
-              (!command.operation && !csrfToken) ||
-              ['refreshing', 'queued', 'denied', 'conflict'].includes(reconciliation)
-            }
-            onClick={() => void checkStatus()}
-          >
-            {reconciliation === 'refreshing'
-              ? m.order_reconcile_refreshing()
-              : reconciliation === 'retry' || reconciliation === 'unavailable'
-                ? m.order_reconcile_retry()
-                : m.order_reconcile_action()}
-          </Button>
-          <p role="status" className="text-sm text-muted-foreground">
-            {reconciliation === 'queued'
-              ? m.order_reconcile_queued()
-              : reconciliation === 'unavailable'
-                ? m.order_reconcile_unavailable()
-                : reconciliation === 'retry'
-                  ? m.order_reconcile_error()
-                  : reconciliation === 'denied' || reconciliation === 'conflict'
-                    ? m.order_reconcile_denied()
-                    : m.order_reconcile_hint()}
+              {m.nav_orders()}
+            </a>
           </p>
-        </section>
-      )}
-      {confirming && (
-        <Alert role="status">
-          <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>
-        </Alert>
-      )}
-      {order.settlement === 'failed' && !canceled && (
-        <Alert role="status">
-          <AlertDescription className="space-y-3 text-foreground">
-            <p>{m.order_failed_detail()}</p>
-            <a
-              href={`/${locale}/offers/${order.offerId}`}
-              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-            >
-              {m.order_back()}
-            </a>
-          </AlertDescription>
-        </Alert>
-      )}
-      {order.settlement === 'paid' && (
-        <section aria-labelledby="next-step-heading" className="space-y-3">
-          <h2 id="next-step-heading" className="text-xl font-semibold">
-            {m.order_next_step()}
-          </h2>
-          <div className="flex flex-wrap gap-x-5 gap-y-2">
-            <a
-              href={`/${locale}/library`}
-              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-            >
-              {m.order_open_library()}
-            </a>
-            <a
-              href={`/${locale}/offers/${order.offerId}`}
-              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-            >
-              {m.order_back()}
-            </a>
-          </div>
-        </section>
-      )}
-      {canceled && (
-        <Alert role="status">
-          <AlertDescription className="space-y-3 text-foreground">
-            <a
-              href={`/${locale}/offers/${order.offerId}`}
-              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-            >
-              {m.order_back()}
-            </a>
-          </AlertDescription>
-        </Alert>
-      )}
-      {((gaveUp && pending) || order.entitlement.kind === 'refresh') && (
-        <Button
-          variant="outline"
-          size="lg"
-          className="w-full sm:w-auto"
-          disabled={!canReadOrder || !signedIn}
-          onClick={() => {
-            if (current()) window.location.reload();
-          }}
-        >
-          {m.order_refresh()}
-        </Button>
-      )}
-      <Exposure operation="order.list">
-        <p>
-          <a
-            href={purchaseHistoryHref(locale, 'orders', history)}
-            className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-          >
-            {m.nav_orders()}
-          </a>
-        </p>
-      </Exposure>
-      <details className="min-w-0 text-sm">
-        <summary className="min-h-11 cursor-pointer content-center rounded-sm py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-          {m.order_technical_details()}
-        </summary>
-        <dl className="space-y-3 [overflow-wrap:anywhere]">
-          <div>
-            <dt className="text-muted-foreground">{m.order_reference()}</dt>
-            <dd className="mt-1 select-all font-mono">{order.id}</dd>
-          </div>
-          {money?.taxCode ? (
-            <div>
-              <dt className="text-muted-foreground">{m.order_tax_code()}</dt>
-              <dd className="mt-1 select-all font-mono">{money.taxCode}</dd>
+        </Exposure>
+      }
+      primary={
+        <>
+          <div className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6">
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+              <SubjectCover data={order.subject} size="sm" priority />
+              <div className="min-w-0 space-y-4">
+                <p className="min-w-0 break-words text-lg font-medium">{order.subject.subject.title}</p>
+                {order.settlement === 'paid' && (
+                  <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2">
+                    <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
+                    <dd className="min-w-0 break-words">
+                      <time>
+                        {new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(
+                          new Date(order.createdAt),
+                        )}
+                      </time>
+                    </dd>
+                  </dl>
+                )}
+                {order.settlement === 'paid' && (
+                  <h2 id="receipt-heading" className="text-xl font-semibold">
+                    {m.order_receipt()}
+                  </h2>
+                )}
+                <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2 [&>dd]:mb-3 [&>dd]:break-words sm:[&>dd]:mb-0">
+                  <dt className="text-muted-foreground">{m.order_currency()}</dt>
+                  <dd>{money?.currency?.toUpperCase() || m.order_currency_unavailable()}</dd>
+                  <dt className="text-muted-foreground">
+                    {money?.taxBehavior === 'exclusive' ? m.order_recorded_price_exclusive() : m.order_recorded_price()}
+                  </dt>
+                  <dd>{price || m.statements_amount_unavailable()}</dd>
+                  {order.settlement === 'paid' && (
+                    <>
+                      <dt className="text-muted-foreground">{m.order_paid_total()}</dt>
+                      <dd>{total || m.order_paid_total_unavailable()}</dd>
+                      <dt className="text-muted-foreground">{m.order_presentment_total()}</dt>
+                      <dd>
+                        {customerTotal && presentment
+                          ? `${customerTotal} ${presentment.currency.toUpperCase()}`
+                          : m.order_presentment_unavailable()}
+                      </dd>
+                      <dt className="text-muted-foreground">{m.order_recorded_tax()}</dt>
+                      <dd>{tax || m.order_tax_unavailable()}</dd>
+                    </>
+                  )}
+                </dl>
+              </div>
             </div>
-          ) : null}
-        </dl>
-      </details>
-    </article>
+          </div>
+          {confirming && (
+            <Alert role="status">
+              <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>
+            </Alert>
+          )}
+          <section className="min-w-0 space-y-4" aria-labelledby="current-access-heading">
+            <h2 id="current-access-heading" className="text-xl font-semibold">
+              {m.order_current_access()}
+            </h2>
+            <p role="status" className="break-words">
+              {entitlementLabel(order.entitlement)}
+            </p>
+            {order.settlement === 'paid' && order.benefit ? (
+              <div
+                onClickCapture={(event) => {
+                  if (!benefitOrigin?.isCurrent()) event.preventDefault();
+                }}
+              >
+                <BenefitDetails
+                  benefit={order.benefit}
+                  creatorName={order.creatorName}
+                  locale={locale}
+                  active={
+                    canUseBenefit &&
+                    (!hydrated || benefitOrigin?.isCurrent() === true) &&
+                    order.canUseBenefit === true &&
+                    order.entitlement.kind === 'current' &&
+                    order.entitlement.active
+                  }
+                  onOpenReader={openPurchaseReader}
+                />
+              </div>
+            ) : null}
+          </section>
+        </>
+      }
+      actions={
+        hasActions ? (
+          <>
+            {order.entitlementId ? (
+              <p>
+                <a
+                  href={purchaseHistoryHref(locale, `entitlements/${encodeURIComponent(order.entitlementId)}`, history)}
+                  className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+                >
+                  {m.entitlements_detail_heading()}
+                </a>
+              </p>
+            ) : null}
+            {order.settlement === 'paid' && order.entitlement.kind === 'unavailable' && (
+              <OrderAccessRecovery
+                key={`${origin.id}:${benefitOrigin?.id ?? 'retired'}`}
+                order={order}
+                locale={locale}
+                origin={origin}
+                benefitOrigin={benefitOrigin}
+                enabled={hydrated && canReadOrder && signedIn}
+                setOrder={setOrder}
+              />
+            )}
+            {initial.canReconcile && signedIn && canReadOrder && (
+              <section className="space-y-3" aria-label={m.order_reconcile_action()}>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full sm:w-auto"
+                  disabled={
+                    (!command.operation && !csrfToken) ||
+                    ['refreshing', 'queued', 'denied', 'conflict'].includes(reconciliation)
+                  }
+                  onClick={() => void checkStatus()}
+                >
+                  {reconciliation === 'refreshing'
+                    ? m.order_reconcile_refreshing()
+                    : reconciliation === 'retry' || reconciliation === 'unavailable'
+                      ? m.order_reconcile_retry()
+                      : m.order_reconcile_action()}
+                </Button>
+                <p role="status" className="text-sm text-muted-foreground">
+                  {reconciliation === 'queued'
+                    ? m.order_reconcile_queued()
+                    : reconciliation === 'unavailable'
+                      ? m.order_reconcile_unavailable()
+                      : reconciliation === 'retry'
+                        ? m.order_reconcile_error()
+                        : reconciliation === 'denied' || reconciliation === 'conflict'
+                          ? m.order_reconcile_denied()
+                          : m.order_reconcile_hint()}
+                </p>
+              </section>
+            )}
+            {order.settlement === 'failed' && !canceled && (
+              <Alert role="status">
+                <AlertDescription className="space-y-3 text-foreground">
+                  <p>{m.order_failed_detail()}</p>
+                  <a
+                    href={`/${locale}/offers/${order.offerId}`}
+                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                  >
+                    {m.order_back()}
+                  </a>
+                </AlertDescription>
+              </Alert>
+            )}
+            {order.settlement === 'paid' && (
+              <section aria-labelledby="next-step-heading" className="space-y-3">
+                <h2 id="next-step-heading" className="text-xl font-semibold">
+                  {m.order_next_step()}
+                </h2>
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  <a
+                    href={`/${locale}/library`}
+                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                  >
+                    {m.order_open_library()}
+                  </a>
+                  <a
+                    href={`/${locale}/offers/${order.offerId}`}
+                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                  >
+                    {m.order_back()}
+                  </a>
+                </div>
+              </section>
+            )}
+            {canceled && (
+              <Alert role="status">
+                <AlertDescription className="space-y-3 text-foreground">
+                  <a
+                    href={`/${locale}/offers/${order.offerId}`}
+                    className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+                  >
+                    {m.order_back()}
+                  </a>
+                </AlertDescription>
+              </Alert>
+            )}
+            {((gaveUp && pending) || order.entitlement.kind === 'refresh') && (
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full sm:w-auto"
+                disabled={!canReadOrder || !signedIn}
+                onClick={() => {
+                  if (current()) window.location.reload();
+                }}
+              >
+                {m.order_refresh()}
+              </Button>
+            )}
+          </>
+        ) : null
+      }
+      evidence={
+        <details className="min-w-0 text-sm">
+          <summary className="min-h-11 cursor-pointer content-center rounded-sm py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.order_technical_details()}
+          </summary>
+          <dl className="space-y-3 [overflow-wrap:anywhere]">
+            <div>
+              <dt className="text-muted-foreground">{m.order_reference()}</dt>
+              <dd className="mt-1 select-all font-mono">{order.id}</dd>
+            </div>
+            {money?.taxCode ? (
+              <div>
+                <dt className="text-muted-foreground">{m.order_tax_code()}</dt>
+                <dd className="mt-1 select-all font-mono">{money.taxCode}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </details>
+      }
+    />
   );
 }

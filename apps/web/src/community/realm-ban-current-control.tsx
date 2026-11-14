@@ -4,7 +4,12 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
-import { RealmBanEpisodeView, RealmBanIdentity, RealmBanNativeAdvice } from './realm-ban-current-view';
+import {
+  RealmBanEpisodeIdentity,
+  RealmBanEpisodeView,
+  RealmBanIdentity,
+  RealmBanNativeAdvice,
+} from './realm-ban-current-view';
 import { ManagementReview } from './members/management-ui';
 import type { RealmBanLifetime } from './realm-ban-lifetime';
 import {
@@ -172,7 +177,7 @@ export function RealmBanCurrentControl({
         ) : null}
       </div>
       {selection ? (
-        <p className="text-sm">
+        <p className="text-sm [overflow-wrap:anywhere]">
           <bdi>{selection.accountId}</bdi>
         </p>
       ) : null}
@@ -263,7 +268,10 @@ export function RealmBanCurrentObservationView({ observation }: { observation: R
   const { ban } = observation;
   return (
     <div className="space-y-3">
-      <RealmBanEpisodeView ban={ban} />
+      <div className="font-semibold leading-6">
+        <RealmBanEpisodeIdentity ban={ban} />
+      </div>
+      <RealmBanEpisodeView ban={ban} includeAccount={false} />
       <RealmBanNativeAdvice ban={ban} realmId={observation.input.realmId} />
       <p>{m.realm_bans_active()}</p>
       <p>{m.realm_bans_help()}</p>

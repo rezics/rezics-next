@@ -496,6 +496,11 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
   approvalBinding?(context: Context): { operationKey: string; digest: string; commandKeyPrefix: string } | undefined;
   readContinuation?(operationKey: string, accountId: string): Promise<ContinuationView | null>;
   authorizeContinuation?(reference: string, entry: ContinuationEntry): Promise<{ receiptId: string }>;
+  /** Exact native Auth step; no accumulated fanout entries or current floor. */
+  authorizeSessionRevocation?(
+    input: { accountId: string; operationKey: string },
+    context: { deadline: number },
+  ): Promise<import('./native-session-revocation.ts').NativeSessionRevocationBinding>;
   holdHandle?(input: WorkflowHandleTransition): Result<unknown>;
   transitionAccountHandle?(context: Context, input: WorkflowHandleTransition): Result<unknown>;
   finalizeHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
@@ -583,6 +588,8 @@ export interface ProvisioningResult {
 export type NativeWorkflowPair = { accountId: string; reservationId: string };
 export type AutomatedCreationBinding = Omit<Extract<AccountOperation, { kind: 'automated' }>, 'authorization'>;
 export type NativeWorkflowProofPorts = {
+  /** Optional only for older hosts. Absence cannot establish Auth completion. */
+  readSessionRevocationResult?: import('./native-session-revocation.ts').NativeSessionRevocationResultPort['readSessionRevocationResult'];
   /** Optional for older compositions: missing original source always stays pending. */
   readOriginalLifecycleSource?: import('./native-lifecycle-results.ts').OriginalLifecycleSourcePort['readOriginalLifecycleSource'];
   recordPending(input: NativeWorkflowPair & { reference: string }): Promise<void>;
@@ -708,6 +715,7 @@ export type {
   OriginalLifecycleResult,
   OriginalLifecycleResultPort,
 } from './native-lifecycle-results.ts';
+export type { NativeSessionRevocationBinding, NativeSessionRevocationResultPort } from './native-session-revocation.ts';
 export {
   securityResponseLimits,
   securityScopeLimit,

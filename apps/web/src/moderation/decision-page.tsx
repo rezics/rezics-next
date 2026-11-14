@@ -654,7 +654,7 @@ function DecisionVisit({
         clearOutcomeFocus();
       }}
     >
-      <header className="space-y-5">
+      <header className="space-y-4">
         <a href={localizeHref('/inbox')} className={moderationLink}>
           <ArrowLeft className="size-4" aria-hidden="true" />
           {m.decision_back()}
@@ -669,36 +669,209 @@ function DecisionVisit({
             </h1>
           </div>
         </div>
-        <div className="grid min-w-0 gap-5 border-l-2 border-primary pl-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div role="status">
-            <ContentItemHeading level={2} className="text-xs font-medium text-muted-foreground">
+      </header>
+      <ContentItemFrame
+        as="div"
+        className="grid min-w-0 gap-5 p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+      >
+        <section className="min-w-0 space-y-4" aria-labelledby="decision-current-outcome">
+          <div className="border-l-2 border-primary pl-4" role="status">
+            <ContentItemHeading
+              id="decision-current-outcome"
+              level={2}
+              className="text-xs font-medium text-muted-foreground"
+            >
               {m.decision_current_outcome()}
             </ContentItemHeading>
-            <p className="mt-2 text-xl font-semibold tracking-tight">{outcome}</p>
+            <p className="mt-2 break-words text-xl font-semibold tracking-tight">{outcome}</p>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {appeal ? m.decision_outcome_independent() : m.decision_original_effect()}
             </p>
           </div>
-          <div className="min-w-0 space-y-3 text-sm">
-            {decision.appealDeadline ? (
-              <dl className="space-y-1 leading-6">
-                <dt className="font-medium">{m.decision_deadline_label()}</dt>
-                <dd className="text-muted-foreground">
-                  <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
-                </dd>
-              </dl>
-            ) : null}
-            <Button
-              className={moderationControl}
-              variant="outline"
-              disabled={refreshing}
-              onClick={() => void refresh()}
+          {decision.appealDeadline ? (
+            <dl className="space-y-1 text-sm leading-6">
+              <dt className="font-medium">{m.decision_deadline_label()}</dt>
+              <dd className="break-words text-muted-foreground">
+                <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
+              </dd>
+            </dl>
+          ) : null}
+          <Button
+            className={`${moderationControl} w-full sm:w-auto`}
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+          >
+            {refreshing ? m.decision_refreshing() : m.decision_refresh()}
+          </Button>
+        </section>
+        <section
+          className="min-w-0 space-y-4 border-t border-border pt-5 lg:border-s lg:border-t-0 lg:pt-0 lg:ps-6"
+          aria-labelledby="decision-appeal"
+        >
+          <ContentItemHeading id="decision-appeal" level={2} className="text-lg font-semibold">
+            {m.decision_appeal_heading()}
+          </ContentItemHeading>
+          {appeal ? (
+            <div className="space-y-3">
+              <p
+                ref={appeal.outcome ? null : pendingOutcome}
+                tabIndex={appeal.outcome ? undefined : -1}
+                className="flex items-center gap-2 font-medium"
+              >
+                <Check className="size-4 text-primary" aria-hidden="true" />
+                {appeal.outcome ? m.decision_review_heading() : m.decision_appeal_pending()}
+              </p>
+              {appeal.outcome && appeal.statement ? (
+                <blockquote className="border-s-2 border-primary/30 ps-4 whitespace-pre-wrap wrap-anywhere text-sm leading-7">
+                  {appeal.statement}
+                </blockquote>
+              ) : null}
+              {appeal.resolvedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  {m.decision_resolved_label()} <DecisionTime instant={appeal.resolvedAt} now={now} locale={locale} />
+                </p>
+              ) : null}
+            </div>
+          ) : allowed ? (
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const submitter = (event.nativeEvent as SubmitEvent).submitter;
+                const keyboardControl =
+                  submitter instanceof HTMLButtonElement && keyboardClick.current === submitter ? submitter : null;
+                keyboardClick.current = null;
+                void submit(false, keyboardControl);
+              }}
             >
-              {refreshing ? m.decision_refreshing() : m.decision_refresh()}
-            </Button>
-          </div>
-        </div>
-      </header>
+              <label htmlFor="appeal-statement" className="block text-sm font-medium">
+                {m.decision_appeal_prompt()}
+              </label>
+              <Textarea
+                id="appeal-statement"
+                name="statement"
+                value={text}
+                onChange={(event) => {
+                  composition.change(event.target.value);
+                  redraw((value) => value + 1);
+                  setFeedback(null);
+                }}
+                disabled={sending || locked}
+                rows={5}
+                className="min-h-36"
+                aria-describedby="appeal-count appeal-hint"
+                aria-invalid={feedback === 'invalid' || count > 2000}
+              />
+              <p id="appeal-count" className="text-xs text-muted-foreground">
+                {m.decision_appeal_count({ count })}
+              </p>
+              <p id="appeal-hint" className="text-xs leading-6 text-muted-foreground">
+                {m.decision_authority_hint()}
+              </p>
+              <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                {m.moderation_case_details_decision_id()}:{' '}
+                <code dir="ltr" className="select-text break-all">
+                  {decision.id}
+                </code>
+              </p>
+              <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
+                <Button
+                  type="submit"
+                  className={`${moderationControl} w-full sm:w-auto`}
+                  disabled={busy || locked || count < 1 || count > 2000}
+                >
+                  {busy ? m.decision_appeal_sending() : m.decision_appeal_submit()}
+                </Button>
+                {composition.needsDecision && !composition.unresolved ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={`${moderationControl} w-full sm:w-auto`}
+                    onClick={() => departure.requestDiscard()}
+                  >
+                    {m.decision_appeal_discard()}
+                  </Button>
+                ) : null}
+              </div>
+            </form>
+          ) : null}
+          {!allowed && !acknowledged ? (
+            <p className="text-sm leading-6 text-muted-foreground">{adviceMessage}</p>
+          ) : null}
+
+          {acknowledged ? (
+            <div className="space-y-3 border-t border-border pt-4">
+              <p className="text-sm font-medium leading-6" role="status">
+                {m.decision_appeal_acknowledged()}
+              </p>
+              {text ? (
+                <blockquote className="border-s-2 border-border ps-4 whitespace-pre-wrap wrap-anywhere text-sm leading-7">
+                  {text}
+                </blockquote>
+              ) : null}
+            </div>
+          ) : null}
+          {readback?.state === 'unavailable' ? (
+            <p className="border-t border-border pt-4 text-sm leading-6 text-muted-foreground">
+              {m.decision_readback_unavailable()}
+            </p>
+          ) : readbackDecision ? (
+            <p className="border-t border-border pt-4 text-sm leading-6 text-muted-foreground" role="status">
+              {m.decision_current_readback()}: {readbackStatus}
+            </p>
+          ) : null}
+          {feedback ? (
+            <div className="space-y-3 border-l-2 border-border pl-4">
+              <p role="alert" className="text-sm leading-6">
+                {feedbackText}
+              </p>
+              <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
+                {feedback === 'uncertain' ? (
+                  <Button
+                    variant="outline"
+                    className={`${moderationControl} w-full sm:w-auto`}
+                    disabled={busy}
+                    onClick={(event) => {
+                      const keyboardControl = keyboardClick.current === event.currentTarget ? event.currentTarget : null;
+                      keyboardClick.current = null;
+                      void submit(true, keyboardControl);
+                    }}
+                  >
+                    {m.decision_retry_same()}
+                  </Button>
+                ) : null}
+                {composition.unresolved && composition.needsDecision ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={`${moderationControl} w-full sm:w-auto`}
+                    onClick={() => departure.requestDiscard()}
+                  >
+                    {m.decision_appeal_discard()}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {!acknowledged && !composition.unresolved && text && (appeal || !allowed || locked) ? (
+            <div className="space-y-3 border-t border-border pt-4">
+              <p className="text-xs font-medium text-muted-foreground">{m.decision_draft_label()}</p>
+              <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-6">{text}</p>
+              {composition.needsDecision ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={`${moderationControl} w-full sm:w-auto`}
+                  onClick={() => departure.requestDiscard()}
+                >
+                  {m.decision_appeal_discard()}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      </ContentItemFrame>
       <ContentItemFrame as="div" className="grid min-w-0 gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <section className="min-w-0 space-y-4" aria-labelledby="decision-reasons">
           <ContentItemHeading
@@ -759,140 +932,6 @@ function DecisionVisit({
           </div>
         </section>
       </ContentItemFrame>
-      <section className="min-w-0 space-y-4 border-t pt-5" aria-labelledby="decision-appeal">
-        <div className="min-w-0">
-          <ContentItemHeading id="decision-appeal" level={2} className="text-lg font-semibold">
-            {m.decision_appeal_heading()}
-          </ContentItemHeading>
-          {appeal ? (
-            <div className="mt-5 space-y-3">
-              <p
-                ref={appeal.outcome ? null : pendingOutcome}
-                tabIndex={appeal.outcome ? undefined : -1}
-                className="flex items-center gap-2 font-medium"
-              >
-                <Check className="size-4 text-primary" aria-hidden="true" />
-                {appeal.outcome ? m.decision_review_heading() : m.decision_appeal_pending()}
-              </p>
-              {appeal.outcome && appeal.statement ? (
-                <blockquote className="border-s-2 border-primary/30 ps-4 whitespace-pre-wrap wrap-anywhere text-sm leading-7">
-                  {appeal.statement}
-                </blockquote>
-              ) : null}
-              {appeal.resolvedAt ? (
-                <p className="text-xs text-muted-foreground">
-                  {m.decision_resolved_label()} <DecisionTime instant={appeal.resolvedAt} now={now} locale={locale} />
-                </p>
-              ) : null}
-            </div>
-          ) : allowed ? (
-            <form
-              className="mt-5 space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const submitter = (event.nativeEvent as SubmitEvent).submitter;
-                const keyboardControl =
-                  submitter instanceof HTMLButtonElement && keyboardClick.current === submitter ? submitter : null;
-                keyboardClick.current = null;
-                void submit(false, keyboardControl);
-              }}
-            >
-              <label htmlFor="appeal-statement" className="block text-sm font-medium">
-                {m.decision_appeal_prompt()}
-              </label>
-              <Textarea
-                id="appeal-statement"
-                name="statement"
-                value={text}
-                onChange={(event) => {
-                  composition.change(event.target.value);
-                  redraw((value) => value + 1);
-                  setFeedback(null);
-                }}
-                disabled={sending || locked}
-                rows={5}
-                className="min-h-36"
-                aria-describedby="appeal-count appeal-hint"
-                aria-invalid={feedback === 'invalid' || count > 2000}
-              />
-              <p id="appeal-count" className="text-xs text-muted-foreground">
-                {m.decision_appeal_count({ count })}
-              </p>
-              <p id="appeal-hint" className="text-xs leading-6 text-muted-foreground">
-                {m.decision_authority_hint()}
-              </p>
-              <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                {m.moderation_case_details_decision_id()}:{' '}
-                <code dir="ltr" className="select-text break-all">
-                  {decision.id}
-                </code>
-              </p>
-              <Button
-                type="submit"
-                className={`${moderationControl} w-full sm:w-auto`}
-                disabled={busy || locked || count < 1 || count > 2000}
-              >
-                {busy ? m.decision_appeal_sending() : m.decision_appeal_submit()}
-              </Button>
-            </form>
-          ) : (
-            <p className="mt-5 text-sm leading-6 text-muted-foreground">
-              {acknowledged
-                ? m.decision_appeal_acknowledged()
-                : (adviceMessage ?? m.decision_appeal_advice_unavailable())}
-            </p>
-          )}
-          {acknowledged && appeal ? (
-            <p className="mt-4 text-sm leading-6 text-muted-foreground" role="status">
-              {m.decision_appeal_acknowledged()}
-            </p>
-          ) : null}
-          {readback?.state === 'unavailable' ? (
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">{m.decision_readback_unavailable()}</p>
-          ) : readbackDecision ? (
-            <p className="mt-4 text-sm leading-6 text-muted-foreground" role="status">
-              {m.decision_current_readback()}: {readbackStatus}
-            </p>
-          ) : null}
-          {text && (appeal || !allowed) ? (
-            <div className="mt-5 space-y-2 border-t border-border pt-4">
-              <p className="text-xs font-medium text-muted-foreground">{m.decision_draft_label()}</p>
-              <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-6">{text}</p>
-            </div>
-          ) : null}
-          {feedback ? (
-            <div className="mt-5 space-y-3 border-l-2 border-border pl-4">
-              <p role="alert" className="text-sm leading-6">
-                {feedbackText}
-              </p>
-              {feedback === 'uncertain' ? (
-                <Button
-                  variant="outline"
-                  className={moderationControl}
-                  disabled={busy}
-                  onClick={(event) => {
-                    const keyboardControl = keyboardClick.current === event.currentTarget ? event.currentTarget : null;
-                    keyboardClick.current = null;
-                    void submit(true, keyboardControl);
-                  }}
-                >
-                  {m.decision_retry_same()}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-          {composition.needsDecision ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${moderationControl} mt-4`}
-              onClick={() => departure.requestDiscard()}
-            >
-              {m.decision_appeal_discard()}
-            </Button>
-          ) : null}
-        </div>
-      </section>
       <ModerationReference
         fields={[
           { label: m.moderation_case_details_decision_id(), value: decision.id },

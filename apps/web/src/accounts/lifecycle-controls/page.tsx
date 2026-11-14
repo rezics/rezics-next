@@ -272,60 +272,85 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
     setBusy(false);
   }
 
+  const contextIdentity =
+    page.status === 'ready'
+      ? page.account
+      : confirmation?.identity ?? (initial.status === 'ready' ? initial.account : null);
+
   if (retired || !authorized) {
     const revoked = authorityLost(initial) ? initial : page;
     return (
-      <article className="mx-auto flex w-full max-w-2xl flex-col gap-6 pb-8">
-        <PageHeading>{m.lifecycle_title()}</PageHeading>
-        <p role="status">
-          {authorityLost(revoked) ? statusText(revoked.status) : m.thread_authoring_session_changed()}
-        </p>
-        <Button variant="outline" onClick={() => window.location.reload()}>
-          {m.settings_reload()}
-        </Button>
+      <article className="mx-auto flex w-full max-w-2xl flex-col gap-8 pb-8 sm:gap-10">
+        <header className="flex flex-col gap-3">
+          <PageHeading>{m.lifecycle_title()}</PageHeading>
+          <p className="text-muted-foreground">{m.lifecycle_intro()}</p>
+        </header>
+        <ContentSection>
+          <ContentSectionHeader>
+            <ContentSectionTitle className="break-words [overflow-wrap:anywhere]">
+              {contextIdentity ? identityLabel(contextIdentity) : m.lifecycle_target()}
+            </ContentSectionTitle>
+          </ContentSectionHeader>
+          <ContentSectionBody className="flex flex-col gap-4 sm:gap-5">
+            {contextIdentity?.displayName && contextIdentity.handle && (
+              <p className="break-words [overflow-wrap:anywhere]">@{contextIdentity.handle}</p>
+            )}
+            {accountId.current !== null && <AccountDetails accountId={accountId.current} />}
+            <p role="status">
+              {authorityLost(revoked) ? statusText(revoked.status) : m.thread_authoring_session_changed()}
+            </p>
+            <Button className="w-full sm:w-fit" variant="outline" onClick={() => window.location.reload()}>
+              {m.settings_reload()}
+            </Button>
+          </ContentSectionBody>
+        </ContentSection>
       </article>
     );
   }
 
   return (
-    <article className="mx-auto flex w-full max-w-2xl flex-col gap-6 pb-8">
+    <article className="mx-auto flex w-full max-w-2xl flex-col gap-8 pb-8 sm:gap-10">
       <header className="flex flex-col gap-3">
         <PageHeading>{m.lifecycle_title()}</PageHeading>
         <p className="text-muted-foreground">{m.lifecycle_intro()}</p>
       </header>
-      {page.status === 'ready' ? (
-        <ContentSection>
-          <ContentSectionHeader>
-            <ContentSectionTitle className="break-words [overflow-wrap:anywhere]">
-              {identityLabel(page.account)}
-            </ContentSectionTitle>
-          </ContentSectionHeader>
-          <ContentSectionBody className="flex flex-col gap-3">
-            {page.account.displayName && page.account.handle && (
-              <p className="break-words [overflow-wrap:anywhere]">@{page.account.handle}</p>
-            )}
-            <AccountDetails accountId={page.account.id} />
-            <p>{m.lifecycle_state_unavailable()}</p>
-            {offered.length === 0 && <p>{m.lifecycle_capability_unavailable()}</p>}
-          </ContentSectionBody>
-        </ContentSection>
-      ) : (
-        <p role="status">{statusText(page.status)}</p>
-      )}
-      {outcome && (
-        <div role="status" aria-live="polite" className="flex flex-col gap-2">
-          {!['recorded', 'uncertain', 'pending'].includes(outcome.status) && (
-            <h2 className="font-semibold">{m.lifecycle_not_applied()}</h2>
+      <ContentSection>
+        <ContentSectionHeader>
+          <ContentSectionTitle className="break-words [overflow-wrap:anywhere]">
+            {contextIdentity ? identityLabel(contextIdentity) : m.lifecycle_target()}
+          </ContentSectionTitle>
+        </ContentSectionHeader>
+        <ContentSectionBody className="flex flex-col gap-4 sm:gap-5">
+          {contextIdentity?.displayName && contextIdentity.handle && (
+            <p className="break-words [overflow-wrap:anywhere]">@{contextIdentity.handle}</p>
           )}
-          <p>{statusText(outcome.status)}</p>
-        </div>
-      )}
-      <Button variant="outline" disabled={busy} onClick={() => void read()}>
-        {m.lifecycle_read_current()}
-      </Button>
+          {accountId.current !== null && <AccountDetails accountId={accountId.current} />}
+          {page.status === 'ready' ? (
+            <>
+              <p>{m.lifecycle_state_unavailable()}</p>
+              <div className="flex flex-col gap-2 rounded-md bg-muted/40 p-3 sm:p-4">
+                <p className="text-sm font-semibold">{m.lifecycle_action()}</p>
+                {offered.length > 0 ? (
+                  <ul className="flex flex-wrap gap-2">
+                    {offered.map((item) => (
+                      <li className="rounded-full border px-3 py-1 text-sm" key={item}>
+                        {actionLabel(item)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{m.lifecycle_capability_unavailable()}</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <p role="status">{statusText(page.status)}</p>
+          )}
+        </ContentSectionBody>
+      </ContentSection>
       {page.status === 'ready' && (
         <form
-          className="flex flex-col gap-4"
+          className="flex flex-col gap-4 rounded-lg border p-4 sm:gap-5 sm:p-6"
           onSubmit={(event) => {
             event.preventDefault();
             if (
@@ -351,7 +376,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
             });
           }}
         >
-          <fieldset disabled={!canChoose || confirmation !== null} className="flex flex-col gap-4">
+          <fieldset disabled={!canChoose || confirmation !== null} className="flex flex-col gap-4 sm:gap-5">
             <legend className="mb-3 font-semibold">{m.lifecycle_action()}</legend>
             <FieldGroup>
               <Field>
@@ -394,16 +419,21 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
                 <FieldDescription id={reasonHelpId}>{m.lifecycle_reason_help()}</FieldDescription>
               </Field>
             </FieldGroup>
-            <Button type="submit">{m.lifecycle_review()}</Button>
+            <Button className="w-full self-start sm:w-fit" type="submit">
+              {m.lifecycle_review()}
+            </Button>
           </fieldset>
         </form>
       )}
       {confirmation && (
-        <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-lg border p-5">
-          <h2 id={titleId} className="text-lg font-semibold">
+        <section
+          aria-labelledby={titleId}
+          className="flex max-w-full flex-col gap-5 rounded-lg border-2 border-primary/30 bg-card p-4 shadow-sm sm:p-6"
+        >
+          <h2 id={titleId} className="text-lg font-semibold sm:text-xl">
             {m.lifecycle_confirmation()}
           </h2>
-          <dl className="flex flex-col gap-2">
+          <dl className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] sm:gap-y-3">
             <dt className="font-semibold">{m.lifecycle_target()}</dt>
             <dd className="flex min-w-0 flex-col gap-1">
               <p className="break-words font-semibold [overflow-wrap:anywhere]">
@@ -415,24 +445,26 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
               <AccountDetails accountId={confirmation.intent.accountId} />
             </dd>
             <dt className="font-semibold">{m.lifecycle_action()}</dt>
-            <dd>{actionLabel(confirmation.intent.action)}</dd>
+            <dd className="break-words [overflow-wrap:anywhere]">{actionLabel(confirmation.intent.action)}</dd>
             <dt className="font-semibold">{m.lifecycle_reason()}</dt>
-            <dd className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            <dd className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {confirmation.intent.reason ?? m.lifecycle_no_reason()}
             </dd>
           </dl>
-          <p>
+          <p className="rounded-md bg-muted/40 p-3 text-sm leading-relaxed sm:p-4 sm:text-base">
             {confirmation.intent.action === 'suspend' ? m.lifecycle_suspend_effect() : m.lifecycle_reinstate_effect()}
           </p>
           {!locked && (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <Button
+                className="w-full sm:w-fit"
                 disabled={busy || !offered.includes(confirmation.intent.action)}
                 onClick={() => void send(confirmation)}
               >
                 {m.lifecycle_confirm()}
               </Button>
               <Button
+                className="w-full sm:w-fit"
                 variant="outline"
                 disabled={busy}
                 onClick={() => {
@@ -462,8 +494,24 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
               </dl>
             </div>
           </details>
-          {outcome?.status === 'uncertain' && (
+        </section>
+      )}
+      <div className="flex flex-col gap-4 rounded-lg border p-4 sm:gap-5 sm:p-5">
+        {outcome && (
+          <div role="status" aria-live="polite" className="flex flex-col gap-2">
+            {!['recorded', 'uncertain', 'pending'].includes(outcome.status) && (
+              <h2 className="font-semibold">{m.lifecycle_not_applied()}</h2>
+            )}
+            <p>{statusText(outcome.status)}</p>
+          </div>
+        )}
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:flex-wrap">
+          <Button className="w-full sm:w-fit" variant="outline" disabled={busy} onClick={() => void read()}>
+            {m.lifecycle_read_current()}
+          </Button>
+          {confirmation && outcome?.status === 'uncertain' && (
             <Button
+              className="w-full sm:w-fit"
               variant="outline"
               disabled={busy || !lastRead.current || !offered.includes(confirmation.intent.action)}
               onClick={() => void send(confirmation)}
@@ -471,8 +519,8 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
               {m.lifecycle_retry_same()}
             </Button>
           )}
-        </section>
-      )}
+        </div>
+      </div>
       <details>
         <summary className="min-h-11 cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
           {m.lifecycle_technical_details()}

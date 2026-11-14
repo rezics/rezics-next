@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import {
@@ -15,7 +15,7 @@ import {
   type ReferenceDraft,
 } from './reference-model';
 import { referenceCopy } from './reference-copy';
-import { KnowledgeReferenceList, referenceControl, referenceInput } from './reference-view';
+import { KnowledgeReferenceList, ReferenceIdentity, referenceControl, referenceInput } from './reference-view';
 import type { ReferenceInspector } from './reference-read';
 
 type Entry = {
@@ -65,16 +65,115 @@ export function KnowledgeReferenceAuthoring({
   const copy = referenceCopy(locale);
   const heading = useId();
   const fields = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const entryInputRef = useRef<HTMLInputElement>(null);
+  const entryKindRef = useRef<HTMLSelectElement>(null);
+  const sourceBlockRef = useRef<HTMLSelectElement>(null);
+  const entryLegendRef = useRef<HTMLLegendElement>(null);
+  const repairHeadingRef = useRef<HTMLHeadingElement>(null);
+  const editActions = useRef(new Map<string, HTMLButtonElement>());
+  const originAction = useRef<HTMLElement | null>(null);
+  const pendingFocus = useRef<{ token: number; frame: number } | null>(null);
+  const focusToken = useRef(0);
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
   const [editing, setEditing] = useState<Entry | null>(null);
   const [invalid, setInvalid] = useState(false);
   const issues = referenceIssues(draft);
   const blocks = referenceBlocks(draft.body);
+  const cancelFocusRequest = useCallback(() => {
+    if (pendingFocus.current) cancelAnimationFrame(pendingFocus.current.frame);
+    pendingFocus.current = null;
+    focusToken.current++;
+  }, []);
+  function focusable(target: HTMLElement | null): target is HTMLElement {
+    return !!target?.isConnected &&
+      target.getClientRects().length > 0 &&
+      !target.hasAttribute('hidden') &&
+      target.getAttribute('aria-disabled') !== 'true' &&
+      !target.matches(':disabled');
+  }
+  function requestFocus(resolve: () => HTMLElement | null) {
+    cancelFocusRequest();
+    if (disabledRef.current) return;
+    const token = ++focusToken.current;
+    const frame = requestAnimationFrame(() => {
+      if (pendingFocus.current?.token !== token) return;
+      pendingFocus.current = null;
+      const target = resolve();
+      if (!disabledRef.current && focusable(target)) target.focus();
+    });
+    pendingFocus.current = { token, frame };
+  }
+  useEffect(() => {
+    const onWindowBlur = () => cancelFocusRequest();
+    const onPointerDown = () => cancelFocusRequest();
+    const onKeyDown = () => cancelFocusRequest();
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target !== document.body && event.target !== document.documentElement) cancelFocusRequest();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') cancelFocusRequest();
+    };
+    window.addEventListener('blur', onWindowBlur);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', onWindowBlur);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      cancelFocusRequest();
+    };
+  }, [cancelFocusRequest]);
+  useEffect(() => {
+    if (disabled) cancelFocusRequest();
+  }, [cancelFocusRequest, disabled]);
+  function orientEntry() {
+    requestFocus(() => entryInputRef.current ?? entryKindRef.current ?? entryLegendRef.current);
+  }
+  function returnFocusTarget(origin: HTMLElement | null) {
+    if (focusable(origin)) return origin;
+    const add = addRef.current;
+    if (focusable(add)) return add;
+    return headingRef.current;
+  }
+  function finishEntry(event: MouseEvent<HTMLButtonElement>) {
+    const origin = originAction.current;
+    originAction.current = null;
+    setEditing(null);
+    onEditingChange(false);
+    setInvalid(false);
+    if (event.detail === 0) requestFocus(() => returnFocusTarget(origin));
+    else cancelFocusRequest();
+  }
+  function beginAdd(event: MouseEvent<HTMLButtonElement>) {
+    originAction.current = event.currentTarget;
+    onEditingChange(true);
+    setInvalid(false);
+    setEditing({ ...entry({ id: crypto.randomUUID(), role: 'cites', target: null }, draft), kind: 'subject' });
+    if (event.detail === 0) orientEntry();
+    else cancelFocusRequest();
+  }
+  function beginEdit(event: MouseEvent<HTMLButtonElement>, reference: KnowledgeReference) {
+    originAction.current = event.currentTarget;
+    onEditingChange(true);
+    setInvalid(false);
+    setEditing(entry(reference, draft));
+    if (event.detail === 0) orientEntry();
+    else cancelFocusRequest();
+  }
   function field(name: keyof Entry, title: string, maxLength = 256) {
     return (
       <label className="block min-w-0 space-y-2" htmlFor={`${fields}-${name}`}>
         <span className="block text-sm font-medium">{title}</span>
         <Input
           id={`${fields}-${name}`}
+          ref={name === 'subjectId' || name === 'documentId' ? entryInputRef : undefined}
           className={referenceInput}
           value={editing![name]}
           maxLength={maxLength}
@@ -94,6 +193,7 @@ export function KnowledgeReferenceAuthoring({
         <span className="block text-sm font-medium">{title}</span>
         <select
           id={`${fields}-${name}`}
+          ref={name === 'kind' ? entryKindRef : name === 'sourceBlockId' ? sourceBlockRef : undefined}
           value={editing![name]}
           className={`${referenceInput} rounded-md border py-2 text-sm`}
           disabled={disabled}
@@ -107,7 +207,7 @@ export function KnowledgeReferenceAuthoring({
       </label>
     );
   }
-  function apply() {
+  function apply(event: MouseEvent<HTMLButtonElement>) {
     if (!editing) return;
     const e = editing;
     const target = parseReferenceTarget(
@@ -136,168 +236,235 @@ export function KnowledgeReferenceAuthoring({
       ...(e.sourceBlockId ? { sourceBlockId: e.sourceBlockId } : {}),
     };
     onChange(writeReference(draft, reference, e.label));
-    setEditing(null);
-    onEditingChange(false);
-    setInvalid(false);
+    finishEntry(event);
+  }
+  function repair(issue: (typeof issues)[number], event: MouseEvent<HTMLButtonElement>) {
+    const repaired = repairReference(draft, issue);
+    if (issue.kind === 'source') {
+      const sourceBlockId = repaired.references.find((reference) => reference.id === issue.id)?.sourceBlockId ?? '';
+      setEditing((current) => (current?.id === issue.id ? { ...current, sourceBlockId } : current));
+    }
+    onChange(repaired);
+    if (event.detail === 0) {
+      requestFocus(() => {
+        if (editing?.id === issue.id && issue.kind === 'source') return sourceBlockRef.current;
+        if (editing) return entryInputRef.current ?? entryKindRef.current ?? entryLegendRef.current;
+        return repairHeadingRef.current ?? headingRef.current;
+      });
+    } else cancelFocusRequest();
+  }
+  function remove(event: MouseEvent<HTMLButtonElement>, referenceId: string) {
+    const index = draft.references.findIndex((reference) => reference.id === referenceId);
+    const nextId = draft.references[index + 1]?.id ?? draft.references[index - 1]?.id;
+    onChange(removeReference(draft, referenceId));
+    if (event.detail === 0) {
+      requestFocus(() => {
+        if (nextId) {
+          const next = editActions.current.get(nextId);
+          if (next && focusable(next)) return next;
+        }
+        const add = addRef.current;
+        return focusable(add) ? add : headingRef.current;
+      });
+    } else cancelFocusRequest();
   }
   return (
-    <section className="min-w-0 space-y-4 border-t border-border pt-5" aria-labelledby={heading}>
+    <section
+      className="min-w-0 space-y-4 border-t border-border pt-5"
+      aria-labelledby={heading}
+    >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <h3 id={heading} className="text-base font-semibold">
-          {copy.title} ({draft.references.length}/64)
+        <h3 id={heading} ref={headingRef} tabIndex={-1} className="text-base font-semibold">
+          {copy.title} ({draft.references.length}/{referenceLimit})
         </h3>
         <Button
+          ref={addRef}
           type="button"
           variant="outline"
           className={referenceControl}
           disabled={disabled || draft.references.length >= referenceLimit || !!editing}
-          onClick={() => {
-            onEditingChange(true);
-            setEditing({ ...entry({ id: crypto.randomUUID(), role: 'cites', target: null }, draft), kind: 'subject' });
-          }}
+          onClick={beginAdd}
         >
           {copy.add}
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">{copy.max}</p>
-      {issues.length ? (
-        <div className="min-w-0 space-y-3" role="alert">
-          <p>{copy.repairReview}</p>
-          <ul className="min-w-0 space-y-3">
-            {issues.map((issue) => (
-              <li key={`${issue.kind}:${issue.id}`} className="min-w-0 space-y-2">
-                <p className="break-all text-sm">{issue.id}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={referenceControl}
-                  disabled={disabled || (issue.kind === 'unlisted' && draft.references.length >= referenceLimit)}
-                  onClick={() => onChange(repairReference(draft, issue))}
-                >
-                  {copy[issue.kind]}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {draft.references.length ? (
-        <ul className="min-w-0 space-y-3">
-          {draft.references.map((reference) => (
-            <li key={reference.id} className="flex min-w-0 flex-wrap items-center gap-3">
-              <span className="min-w-0 text-sm [overflow-wrap:anywhere]">
-                {referenceLabel(draft.body, reference.id) || reference.id}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                className={referenceControl}
-                disabled={disabled || !!editing}
-                onClick={() => {
-                  onEditingChange(true);
-                  setEditing(entry(reference, draft));
-                }}
-              >
-                {copy.edit}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={referenceControl}
-                disabled={disabled || !!editing}
-                onClick={() => onChange(removeReference(draft, reference.id))}
-              >
-                {copy.remove}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">{copy.empty}</p>
-      )}
-      {editing ? (
-        <fieldset className="min-w-0 space-y-4 rounded-lg border border-border p-4" disabled={disabled}>
-          <legend className="px-1 font-medium">{copy.edit}</legend>
-          <p className="break-all text-sm text-muted-foreground">{editing.id}</p>
-          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-            {select(
-              'kind',
-              copy.kind,
-              <>
-                {editing.kind === 'unavailable' ? <option value="unavailable">{copy.unavailable}</option> : null}
-                <option value="subject">{copy.subject}</option>
-                <option value="document">{copy.live}</option>
-                <option value="revision">{copy.exact}</option>
-              </>,
-            )}
-            {select(
-              'role',
-              copy.role,
-              referenceRoles.map((role) => (
-                <option key={role} value={role}>
-                  {copy.roles[role]}
-                </option>
-              )),
-            )}
-          </div>
-          {editing.kind === 'subject'
-            ? field('subjectId', copy.subjectId, 36)
-            : editing.kind !== 'unavailable'
-              ? field('documentId', copy.documentId, 36)
-              : null}
-          {editing.kind === 'revision' ? (
-            <>
-              {field('revisionId', copy.revisionId, 36)}
-              {field('sha256', copy.digest, 64)}
-              {field('blockId', copy.blockId)}
-            </>
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-6">
+          {issues.length ? (
+            <section className="min-w-0 space-y-3" role="alert" aria-labelledby={`${heading}-repairs`}>
+              <h4 id={`${heading}-repairs`} ref={repairHeadingRef} tabIndex={-1} className="font-medium">
+                {copy.repairReview}
+              </h4>
+              <ul className="min-w-0 space-y-3">
+                {issues.map((issue) => (
+                  <li key={`${issue.kind}:${issue.id}`} className="min-w-0 space-y-2 rounded-lg border border-border p-3">
+                    <details className="min-w-0">
+                      <summary className={`${referenceControl} cursor-pointer`}>{copy.inspect}</summary>
+                      <p className="break-all pt-2 text-sm text-muted-foreground">{issue.id}</p>
+                    </details>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={referenceControl}
+                      disabled={disabled || (issue.kind === 'unlisted' && draft.references.length >= referenceLimit)}
+                      onClick={(event) => repair(issue, event)}
+                    >
+                      {copy[issue.kind]}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
-          {select(
-            'sourceBlockId',
-            copy.sourceBlock,
-            <>
-              <option value="">{copy.whole}</option>
-              {editing.sourceBlockId && !blocks.includes(editing.sourceBlockId) ? (
-                <option value={editing.sourceBlockId}>{editing.sourceBlockId}</option>
+          {editing ? (
+            <fieldset className="min-w-0 space-y-4 rounded-lg border border-border p-4" disabled={disabled}>
+              <legend ref={entryLegendRef} tabIndex={-1} className="px-1 font-medium">
+                {copy.edit}
+              </legend>
+              <details className="min-w-0">
+                <summary className={`${referenceControl} cursor-pointer`}>{copy.inspect}</summary>
+                <p className="break-all pt-2 text-sm text-muted-foreground">{editing.id}</p>
+              </details>
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                {select(
+                  'kind',
+                  copy.kind,
+                  <>
+                    {editing.kind === 'unavailable' ? <option value="unavailable">{copy.unavailable}</option> : null}
+                    <option value="subject">{copy.subject}</option>
+                    <option value="document">{copy.live}</option>
+                    <option value="revision">{copy.exact}</option>
+                  </>,
+                )}
+                {select(
+                  'role',
+                  copy.role,
+                  referenceRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {copy.roles[role]}
+                    </option>
+                  )),
+                )}
+              </div>
+              {editing.kind === 'subject'
+                ? field('subjectId', copy.subjectId, 36)
+                : editing.kind !== 'unavailable'
+                  ? field('documentId', copy.documentId, 36)
+                  : null}
+              {editing.kind === 'revision' ? (
+                <>
+                  {field('revisionId', copy.revisionId, 36)}
+                  {field('sha256', copy.digest, 64)}
+                  {field('blockId', copy.blockId)}
+                </>
               ) : null}
-              {blocks.map((block) => (
-                <option key={block} value={block}>
-                  {block}
-                </option>
-              ))}
-            </>,
+              {select(
+                'sourceBlockId',
+                copy.sourceBlock,
+                <>
+                  <option value="">{copy.whole}</option>
+                  {editing.sourceBlockId && !blocks.includes(editing.sourceBlockId) ? (
+                    <option value={editing.sourceBlockId}>{editing.sourceBlockId}</option>
+                  ) : null}
+                  {blocks.map((block) => (
+                    <option key={block} value={block}>
+                      {block}
+                    </option>
+                  ))}
+                </>,
+              )}
+              {field('label', copy.label, 512)}
+              <p className="text-sm text-muted-foreground">
+                {editing.kind === 'revision' ? copy.exactHint : editing.kind === 'document' ? copy.liveHint : null}
+              </p>
+              {invalid ? <p role="alert">{copy.invalid}</p> : null}
+              <div className="flex flex-wrap gap-3">
+                <Button type="button" className={referenceControl} onClick={apply}>
+                  {copy.apply}
+                </Button>
+                <Button type="button" variant="outline" className={referenceControl} onClick={finishEntry}>
+                  {copy.cancel}
+                </Button>
+              </div>
+            </fieldset>
+          ) : null}
+          {draft.references.length ? (
+            <ul className="min-w-0 space-y-3" aria-label={copy.title}>
+              {draft.references.map((reference) => {
+                const label = referenceLabel(draft.body, reference.id);
+                const targetName =
+                  reference.target === null
+                    ? copy.unavailable
+                    : reference.target.kind === 'subject'
+                      ? copy.subject
+                      : reference.target.kind === 'document'
+                        ? copy.live
+                        : copy.exact;
+                return (
+                  <li key={reference.id} className="min-w-0 rounded-lg border border-border p-3">
+                    <div className="min-w-0 space-y-2">
+                      {label ? (
+                        <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
+                          <span className="font-medium">{copy.label}: </span>{label}
+                        </p>
+                      ) : null}
+                      <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
+                        <span className="font-medium">{copy.role}: </span>{copy.roles[reference.role]}
+                        <span aria-hidden="true"> · </span>
+                        <span className="font-medium">{copy.kind}: </span>{targetName}
+                      </p>
+                      <details className="min-w-0">
+                        <summary className={`${referenceControl} cursor-pointer`}>{copy.inspect}</summary>
+                        <div className="min-w-0 pt-3">
+                          <ReferenceIdentity reference={reference} locale={locale} />
+                        </div>
+                      </details>
+                    </div>
+                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
+                      <Button
+                        ref={(button) => {
+                          if (button) editActions.current.set(reference.id, button);
+                          else editActions.current.delete(reference.id);
+                        }}
+                        type="button"
+                        variant="outline"
+                        className={referenceControl}
+                        disabled={disabled || !!editing}
+                        onClick={(event) => beginEdit(event, reference)}
+                      >
+                        {copy.edit}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={referenceControl}
+                        disabled={disabled || !!editing}
+                        onClick={(event) => remove(event, reference.id)}
+                      >
+                        {copy.remove}
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">{copy.empty}</p>
           )}
-          {field('label', copy.label, 512)}
-          <p className="text-sm text-muted-foreground">
-            {editing.kind === 'revision' ? copy.exactHint : editing.kind === 'document' ? copy.liveHint : null}
-          </p>
-          {invalid ? <p role="alert">{copy.invalid}</p> : null}
-          <div className="flex flex-wrap gap-3">
-            <Button type="button" className={referenceControl} onClick={apply}>
-              {copy.apply}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={referenceControl}
-              onClick={() => {
-                setEditing(null);
-                onEditingChange(false);
-                setInvalid(false);
-              }}
-            >
-              {copy.cancel}
-            </Button>
-          </div>
-        </fieldset>
-      ) : null}
-      <KnowledgeReferenceList
-        body={draft.body}
-        references={draft.references}
-        locale={locale}
-        inspect={inspect}
-        privateTargets={!!inspect}
-      />
+        </div>
+        {draft.references.length ? (
+          <aside className="min-w-0 border-t border-border pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+            <KnowledgeReferenceList
+              body={draft.body}
+              references={draft.references}
+              locale={locale}
+              inspect={inspect}
+              privateTargets={!!inspect}
+            />
+          </aside>
+        ) : null}
+      </div>
     </section>
   );
 }

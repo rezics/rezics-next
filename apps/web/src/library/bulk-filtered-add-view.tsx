@@ -113,6 +113,20 @@ function phaseLabel(phase: string) {
   }
 }
 
+type StageFocusAction = {
+  id: number;
+  stage: 'review' | 'journey';
+  trigger: HTMLButtonElement;
+  activeBefore: Element | null;
+};
+
+function visibleHeading(heading: HTMLHeadingElement | null): heading is HTMLHeadingElement {
+  if (!heading?.isConnected || heading.getClientRects().length === 0 || heading.closest('[hidden], [aria-hidden="true"]'))
+    return false;
+  const style = heading.ownerDocument.defaultView?.getComputedStyle(heading);
+  return style?.display !== 'none' && style?.visibility !== 'hidden';
+}
+
 function FilteredAddLifetime({
   source,
   disabled = false,
@@ -131,7 +145,12 @@ function FilteredAddLifetime({
   const [destination, setDestination] = useState<CollectionDestination | null>(null);
   const [issue, setIssue] = useState<'limit' | 'unsupported' | null>(null);
   const [chooserEpoch, setChooserEpoch] = useState(0);
+  const stageHeading = useRef<HTMLHeadingElement>(null);
+  const destinationHeading = useRef<HTMLHeadingElement>(null);
+  const focusActionId = useRef(0);
+  const focusAction = useRef<StageFocusAction | null>(null);
   const [, rerender] = useState(0);
+  const current = () => live.current && latest.current.owner.isCurrent() && (latest.current.isCurrent?.() ?? true);
   useLayoutEffect(() => {
     live.current = true;
     return () => {
@@ -139,7 +158,37 @@ function FilteredAddLifetime({
       journeyRef.current?.retire();
     };
   }, []);
-  const current = () => live.current && latest.current.owner.isCurrent() && (latest.current.isCurrent?.() ?? true);
+  useLayoutEffect(() => {
+    const action = focusAction.current;
+    if (!action) return;
+    const stage = journey ? 'journey' : 'review';
+    if (action.stage !== stage) {
+      focusAction.current = null;
+      return;
+    }
+    const actionIsCurrent =
+      live.current &&
+      action.id === focusActionId.current &&
+      current() &&
+      (stage === 'journey' ? journeyRef.current === journey : journeyRef.current === null);
+    if (!actionIsCurrent) {
+      focusAction.current = null;
+      return;
+    }
+    const active = action.trigger.ownerDocument.activeElement;
+    const focusStayedWithAction =
+      active === action.activeBefore ||
+      (action.activeBefore === action.trigger &&
+        !action.trigger.isConnected &&
+        active === action.trigger.ownerDocument.body);
+    focusAction.current = null;
+    if (!focusStayedWithAction) return;
+    const target =
+      stage === 'journey'
+        ? [destinationHeading.current, stageHeading.current].find(visibleHeading)
+        : [stageHeading.current].find(visibleHeading);
+    target?.focus();
+  }, [journey, chooserEpoch]);
   const previewAllowed = () =>
     current() &&
     !latest.current.disabled &&
@@ -153,7 +202,7 @@ function FilteredAddLifetime({
     current() &&
     latest.current.owner.operationCurrent('library_operation.get') &&
     latest.current.owner.operationCurrent('library_operation.outcomes');
-  function review() {
+  function review(trigger: HTMLButtonElement) {
     if (!previewAllowed() || !destination || journeyRef.current) return;
     const captured = captureFilteredAdd(source, destination);
     if (!captured.ok) {
@@ -188,6 +237,12 @@ function FilteredAddLifetime({
       () => origin.isCurrent(),
     );
     journeyRef.current = value;
+    focusAction.current = {
+      id: ++focusActionId.current,
+      stage: 'journey',
+      trigger,
+      activeBefore: trigger.ownerDocument.activeElement,
+    };
     setJourney(value);
     setIssue(null);
     void value.preview(owner.credential()!);
@@ -208,9 +263,13 @@ function FilteredAddLifetime({
   if (!owner.isCurrent() || !(isCurrent?.() ?? true)) return null;
   return (
     <section aria-label={m.library_filtered_add_heading()} className="min-w-0 space-y-3 rounded-xl border p-3">
-      <h2 className="font-semibold">{m.library_filtered_add_heading()}</h2>
+      <h2 ref={stageHeading} tabIndex={-1} className="font-semibold">
+        {m.library_filtered_add_heading()}
+      </h2>
       <p>{m.library_filtered_add_population()}</p>
-      <p className="break-all">{m.library_filtered_add_source({ id: source.id })}</p>
+      <p className="break-all">
+        {m.library_filtered_add_source({ id: journey?.capture.request.selection.sourceId ?? source.id })}
+      </p>
       {source.filter === undefined ? null : (
         <details>
           <summary>{m.library_filtered_add_filter()}</summary>
@@ -231,18 +290,22 @@ function FilteredAddLifetime({
               if (current()) setDestination(choice?.destination ?? null);
             }}
           />
-          <Button type="button" disabled={!destination || !previewAllowed()} onClick={review}>
+          <Button
+            type="button"
+            disabled={!destination || !previewAllowed()}
+            onClick={(event) => review(event.currentTarget)}
+          >
             {m.library_filtered_add_preview()}
           </Button>
         </>
       ) : (
         <>
-          <p className="break-words">
+          <h3 ref={destinationHeading} tabIndex={-1} className="break-words font-medium">
             {m.library_filtered_add_destination({
               title: journey.capture.destination.title,
               id: journey.capture.destination.id,
             })}
-          </p>
+          </h3>
           {operation ? (
             <>
               <p>{m.library_filtered_add_count({ count: operation.counts.targets })}</p>
@@ -333,8 +396,14 @@ function FilteredAddLifetime({
             type="button"
             variant="outline"
             disabled={busy || uncertain || state?.phase === 'confirmed'}
-            onClick={() => {
+            onClick={(event) => {
               if (!current() || busy || uncertain) return;
+              focusAction.current = {
+                id: ++focusActionId.current,
+                stage: 'review',
+                trigger: event.currentTarget,
+                activeBefore: event.currentTarget.ownerDocument.activeElement,
+              };
               journey.retire();
               journeyRef.current = null;
               setJourney(null);

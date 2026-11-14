@@ -34,5 +34,13 @@ test('Zone create configure and public schemas retain one authored primary name 
     appearance: {},
     navigation: [{ route: '' }],
   };
-  expect(Compile(ZonePublicSchema()).Check(shell)).toBe(true);
+  const publicShell = Compile(ZonePublicSchema());
+  expect(publicShell.Check(shell)).toBe(true);
+  expect(publicShell.Check({ ...shell, primaryLanguage: null, labels: { en: 'Books' } })).toBe(true);
+  expect(publicShell.Check({ ...shell, primaryLanguage: null, labels: {} })).toBe(true);
+  expect(publicShell.Check({ ...shell, primaryLanguage: null, configuration })).toBe(false);
+  const withheld = { ...configuration, primaryLanguage: null };
+  expect(create.Check({ configuration: withheld, mounts: [], visibility: 'private' })).toBe(false);
+  expect(configure.Check({ configuration: withheld, mounts: [] })).toBe(false);
+  expect(check(withheld)).toContainEqual({ pointer: '/primaryLanguage', code: 'invalid' });
 });

@@ -27,7 +27,7 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
               <h3
                 id={`sale-title-${sale.orderId}`}
-                className="line-clamp-3 min-w-0 break-words font-medium [overflow-wrap:anywhere]"
+                className="min-w-0 whitespace-pre-wrap break-words font-medium [overflow-wrap:anywhere]"
               >
                 {sale.title}
               </h3>

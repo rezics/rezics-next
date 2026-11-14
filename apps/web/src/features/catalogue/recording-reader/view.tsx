@@ -15,6 +15,10 @@ import { useRecordingFactSelection } from './review/selection';
 
 const actionClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const buttonActionClass =
+  `${actionClass} justify-center rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold no-underline hover:bg-muted/40`;
+const navigationActionClass =
+  `${actionClass} w-full justify-center rounded-md border border-border/70 bg-background px-3 py-2 text-center no-underline hover:bg-muted/40 sm:w-auto sm:justify-start`;
 
 const live = () => true;
 
@@ -68,7 +72,9 @@ function qualifierList({
       </li>,
     ];
   });
-  return notes.length ? <ul className="space-y-1 text-sm text-muted-foreground">{notes}</ul> : null;
+  return notes.length ? (
+    <ul className="space-y-1 border-s border-border/60 ps-3 text-sm text-muted-foreground">{notes}</ul>
+  ) : null;
 }
 
 function valueContent({
@@ -106,7 +112,7 @@ function valueContent({
   const qualifiers = qualifierList({ field, fact, read, release, locale, link });
   return (
     <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
-      <div>{value}</div>
+      <div className="min-w-0 text-base leading-relaxed [overflow-wrap:anywhere]">{value}</div>
       {qualifiers}
     </div>
   );
@@ -159,19 +165,24 @@ function FieldGroup({
 }) {
   if (!fields.length) return null;
   return (
-    <section className="min-w-0 space-y-3">
-      <h3 className="text-xl font-semibold">{fieldGroupTitle(group, locale)}</h3>
-      <dl className="min-w-0 space-y-4">
+    <section className="min-w-0 space-y-4">
+      <h3 className="min-w-0 border-b border-border/70 pb-2 text-lg font-semibold leading-snug [overflow-wrap:anywhere] sm:text-xl">
+        {fieldGroupTitle(group, locale)}
+      </h3>
+      <dl className="min-w-0 space-y-6">
         {fields.map((field) => (
           <div
             key={field.property}
-            className="grid min-w-0 gap-y-2 border-b border-border/60 pb-4 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] sm:gap-x-6"
+            className="grid min-w-0 gap-y-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] sm:gap-x-6"
           >
-            <dt lang={field.label.lang ?? undefined} className="min-w-0 font-semibold [overflow-wrap:anywhere]">
+            <dt
+              lang={field.label.lang ?? undefined}
+              className="min-w-0 text-sm font-medium text-muted-foreground [overflow-wrap:anywhere] sm:pt-1"
+            >
               {field.label.text}
             </dt>
-            <dd className="min-w-0 space-y-3">
-              <ul className="min-w-0 space-y-4">
+            <dd className="min-w-0">
+              <ul className="min-w-0 divide-y divide-border/50">
                 {field.facts.map((fact) => {
                   const selected = selectedStatement === fact.id;
                   const statementReturn = recordingStatementReturnHref(returnTo, read.subject.id, fact.id, locale);
@@ -183,7 +194,7 @@ function FieldGroup({
                       data-statement={fact.id}
                       data-recording-statement={fact.id}
                       tabIndex={-1}
-                      className="min-w-0 space-y-2 rounded-sm focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+                      className="min-w-0 space-y-3 rounded-sm py-3 first:pt-0 last:pb-0 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
                     >
                       {valueContent({
                         field,
@@ -194,24 +205,26 @@ function FieldGroup({
                         ...(context ? { context } : {}),
                         link: VisitLink,
                       })}
-                      <button
-                        type="button"
-                        className={actionClass}
-                        aria-expanded={selected}
-                        aria-controls={selected ? 'recording-fact-inspection' : undefined}
-                        onClick={(event) => onInspect(fact.id, event.currentTarget)}
-                        onKeyDown={(event) => {
-                          if (selected && event.key === 'Escape') {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onClose();
-                          }
-                        }}
-                      >
-                        {selected
-                          ? m.recording_reader_close_inspection({}, options(locale))
-                          : m.recording_reader_inspect({}, options(locale))}
-                      </button>
+                      <div className="flex min-w-0 justify-start">
+                        <button
+                          type="button"
+                          className={buttonActionClass}
+                          aria-expanded={selected}
+                          aria-controls={selected ? 'recording-fact-inspection' : undefined}
+                          onClick={(event) => onInspect(fact.id, event.currentTarget)}
+                          onKeyDown={(event) => {
+                            if (selected && event.key === 'Escape') {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onClose();
+                            }
+                          }}
+                        >
+                          {selected
+                            ? m.recording_reader_close_inspection({}, options(locale))
+                            : m.recording_reader_inspect({}, options(locale))}
+                        </button>
+                      </div>
                       {selected ? inspection : null}
                     </li>
                   );
@@ -259,7 +272,7 @@ function FactInspection({
       id="recording-fact-inspection"
       aria-labelledby="recording-fact-inspection-heading"
       tabIndex={-1}
-      className="min-w-0 space-y-4 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+      className="min-w-0 space-y-4 rounded-lg border border-s-border/70 border-s-4 bg-muted/20 p-4 focus:outline-2 focus:outline-offset-2 focus:outline-ring sm:p-5"
       onKeyDown={(event) => {
         if (event.key === 'Escape' && !event.defaultPrevented) {
           event.preventDefault();
@@ -268,22 +281,24 @@ function FactInspection({
         }
       }}
     >
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <h3 id="recording-fact-inspection-heading" className="text-lg font-semibold">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <h3 id="recording-fact-inspection-heading" className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]">
           {m.recording_reader_fact_inspection({}, options(locale))}
         </h3>
-        <button type="button" className={actionClass} onClick={onClose}>
+        <button type="button" className={buttonActionClass} onClick={onClose}>
           {m.recording_reader_close_inspection({}, options(locale))}
         </button>
       </div>
       <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">{groupLabel}</p>
+        <p className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{groupLabel}</p>
         <p className="text-sm [overflow-wrap:anywhere]">
           {m.recording_reader_direction({ field: field.label.text }, options(locale))}
         </p>
       </div>
       <dl className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
-        <dt className="font-semibold">{m.recording_reader_direction_label({}, options(locale))}</dt>
+        <dt className="text-sm font-medium text-muted-foreground [overflow-wrap:anywhere]">
+          {m.recording_reader_direction_label({}, options(locale))}
+        </dt>
         <dd className="min-w-0 [overflow-wrap:anywhere]">
           <span lang={pickText(read.subject.labels, locale).lang ?? undefined}>{subjectTitle}</span>
           <span aria-hidden="true" className="px-2">
@@ -299,7 +314,9 @@ function FactInspection({
             link: returnValue,
           })}
         </dd>
-        <dt className="font-semibold">{m.recording_reader_released_field({}, options(locale))}</dt>
+        <dt className="text-sm font-medium text-muted-foreground [overflow-wrap:anywhere]">
+          {m.recording_reader_released_field({}, options(locale))}
+        </dt>
         <dd lang={field.label.lang ?? undefined} className="min-w-0 [overflow-wrap:anywhere]">
           {field.label.text}
         </dd>
@@ -418,32 +435,53 @@ export function RecordingReader({
   };
 
   return (
-    <article data-slot="recording-reader" className="min-w-0 space-y-6">
-      <h2
-        ref={headingRef}
-        tabIndex={-1}
-        className="text-xl font-semibold focus:outline-2 focus:outline-offset-2 focus:outline-ring"
-      >
-        {visit.state === 'ready' && visit.grain.text ? (
-          <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
-        ) : (
-          m.recording_reader_heading({}, options(locale))
-        )}
-      </h2>
-      {visit.state !== 'ready' ? (
-        <p role={visit.state === 'loading' || visit.state === 'empty' ? 'status' : 'alert'}>{stateCopy}</p>
-      ) : null}
-      {showRecovery ? (
-        <div className="space-y-2" aria-live="polite">
-          {retrying ? <p role="status">{m.recording_reader_retrying({}, options(locale))}</p> : null}
-          <button ref={retryRef} type="button" aria-disabled={retrying} className={actionClass} onClick={handleRetry}>
-            {m.recording_reader_retry({}, options(locale))}
-          </button>
-        </div>
+    <article data-slot="recording-reader" className="min-w-0 space-y-8">
+      <header className="min-w-0 border-b border-border/60 pb-4">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-xl font-semibold leading-snug [overflow-wrap:anywhere] focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+        >
+          {visit.state === 'ready' && visit.grain.text ? (
+            <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
+          ) : (
+            m.recording_reader_heading({}, options(locale))
+          )}
+        </h2>
+      </header>
+      {visit.state !== 'ready' || showRecovery ? (
+        <section className="min-w-0 space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4 sm:p-5">
+          {visit.state !== 'ready' ? (
+            <p
+              role={visit.state === 'loading' || visit.state === 'empty' ? 'status' : 'alert'}
+              className="min-w-0 text-sm leading-relaxed [overflow-wrap:anywhere]"
+            >
+              {stateCopy}
+            </p>
+          ) : null}
+          {showRecovery ? (
+            <div className="flex min-w-0 flex-col items-start gap-2" aria-live="polite">
+              {retrying ? (
+                <p role="status" className="min-w-0 text-sm [overflow-wrap:anywhere]">
+                  {m.recording_reader_retrying({}, options(locale))}
+                </p>
+              ) : null}
+              <button
+                ref={retryRef}
+                type="button"
+                aria-disabled={retrying}
+                className={buttonActionClass}
+                onClick={handleRetry}
+              >
+                {m.recording_reader_retry({}, options(locale))}
+              </button>
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {visit.state === 'ready' && release ? (
-        <>
+        <div className="min-w-0 space-y-8">
           <FieldGroup
             group="details"
             fields={visit.groups.details}
@@ -486,29 +524,37 @@ export function RecordingReader({
             onClose={selection.close}
             inspection={inspection}
           />
-        </>
+        </div>
       ) : null}
 
       {selection.selectedStatement && !selectedFact && (visit.state === 'ready' || visit.state === 'empty') ? (
-        <section aria-live="polite" className="space-y-2 rounded-md border border-border p-4">
-          <p role="status">{m.recording_reader_fact_retired({}, options(locale))}</p>
-          <button type="button" className={actionClass} onClick={selection.restart}>
+        <section
+          aria-live="polite"
+          className="min-w-0 space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4 sm:p-5"
+        >
+          <p role="status" className="min-w-0 text-sm leading-relaxed [overflow-wrap:anywhere]">
+            {m.recording_reader_fact_retired({}, options(locale))}
+          </p>
+          <button type="button" className={buttonActionClass} onClick={selection.restart}>
             {m.recording_reader_restart({}, options(locale))}
           </button>
         </section>
       ) : null}
 
       {incomplete.length ? (
-        <section className="min-w-0 space-y-2" aria-label={m.recording_reader_associations({}, options(locale))}>
+        <section
+          className="min-w-0 space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4 sm:p-5"
+          aria-label={m.recording_reader_associations({}, options(locale))}
+        >
           <ul className="space-y-2 text-sm text-muted-foreground">
             {incomplete.map(({ field }) => (
-              <li key={field.property}>
+              <li key={field.property} className="[overflow-wrap:anywhere]">
                 {m.recording_reader_incomplete({ label: field.label.text }, options(locale))}
               </li>
             ))}
           </ul>
           <Link
-            className={`${linkClass} ${linkColor} ${actionClass}`}
+            className={`${linkClass} ${linkColor} ${navigationActionClass}`}
             href={withSubjectVisitReturn(relations, currentAddress ?? '', locale)}
           >
             {m.subject_relations({}, options(locale))}
@@ -516,15 +562,18 @@ export function RecordingReader({
         </section>
       ) : null}
 
-      <nav aria-label={m.recording_reader_navigation({}, options(locale))} className="flex flex-wrap gap-x-4 gap-y-2">
+      <nav
+        aria-label={m.recording_reader_navigation({}, options(locale))}
+        className="flex min-w-0 flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
+      >
         <Link
-          className={`${linkClass} ${linkColor} ${actionClass}`}
+          className={`${linkClass} ${linkColor} ${navigationActionClass}`}
           href={withSubjectVisitReturn(details, currentAddress ?? '', locale)}
         >
           {m.subject_details({}, options(locale))}
         </Link>
         <Link
-          className={`${linkClass} ${linkColor} ${actionClass}`}
+          className={`${linkClass} ${linkColor} ${navigationActionClass}`}
           href={withSubjectVisitReturn(relations, currentAddress ?? '', locale)}
         >
           {m.subject_relations({}, options(locale))}

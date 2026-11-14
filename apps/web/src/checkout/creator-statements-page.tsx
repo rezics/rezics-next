@@ -5,6 +5,7 @@ import type { MouseEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatement, CreatorStatementsData, StatementFailure } from './creator-statements';
+import { StatementDirectoryFrame } from './creator-statement-workspace';
 import { formatMinorAmount } from './money';
 import { recordedMoneyUnit } from './money-schema';
 import type { StatementWindowControls } from './creator-statement-windows';
@@ -156,51 +157,53 @@ export function CreatorStatementsPage({
         )}
       </div>
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_intro()}</p>
-      {page.kind !== 'ready' ? (
-        <>
-          <StatementNotice kind={page.kind} retryHref={href} {...noticeRetry} />
-          <StatementListPagination page={page} {...pagination} />
-        </>
-      ) : (
-        <>
-          {page.payoutStatements.length === 0 ? (
-            <div className="space-y-2 rounded-xl border bg-card p-5 text-card-foreground" role="status">
-              <p className="font-medium">{cursor ? m.statements_page_empty() : m.statements_empty()}</p>
-              <p className="text-sm text-muted-foreground">{m.statements_empty_hint()}</p>
-            </div>
-          ) : (
-            <ul>
-              {page.payoutStatements.map((statement) => (
-                <ContentItem
-                  key={statement.id}
-                  title={`${statementMonth(statement.period, locale)} · ${statement.currency.toUpperCase()}`}
-                  headingLevel={2}
-                  href={statementHref(locale, statement.id, undefined, cursor)}
-                  state={
-                    <span className="text-sm text-muted-foreground">
-                      {statement.state === 'paid' ? m.statements_paid() : m.statements_open()}
-                    </span>
-                  }
-                  trailing={
-                    <div className="min-w-0 space-y-1 sm:text-right">
-                      <p className="text-sm text-muted-foreground">{m.statements_creator_share()}</p>
-                      <p className="break-words font-semibold">
-                        <StatementAmount
-                          value={statement.creatorShareMinor}
-                          moneyUnit={recordedMoneyUnit(statement)}
-                          currency={statement.currency}
-                          locale={locale}
-                        />
-                      </p>
-                    </div>
-                  }
-                />
-              ))}
-            </ul>
-          )}
-          <StatementListPagination page={page} {...pagination} />
-        </>
-      )}
+      <StatementDirectoryFrame>
+        {page.kind !== 'ready' ? (
+          <>
+            <StatementNotice kind={page.kind} retryHref={href} {...noticeRetry} />
+            <StatementListPagination page={page} {...pagination} />
+          </>
+        ) : (
+          <>
+            {page.payoutStatements.length === 0 ? (
+              <div className="space-y-2 rounded-xl border bg-card p-5 text-card-foreground" role="status">
+                <p className="font-medium">{cursor ? m.statements_page_empty() : m.statements_empty()}</p>
+                <p className="text-sm text-muted-foreground">{m.statements_empty_hint()}</p>
+              </div>
+            ) : (
+              <ul>
+                {page.payoutStatements.map((statement) => (
+                  <ContentItem
+                    key={statement.id}
+                    title={`${statementMonth(statement.period, locale)} · ${statement.currency.toUpperCase()}`}
+                    headingLevel={2}
+                    href={statementHref(locale, statement.id, undefined, cursor)}
+                    state={
+                      <span className="text-sm text-muted-foreground">
+                        {statement.state === 'paid' ? m.statements_paid() : m.statements_open()}
+                      </span>
+                    }
+                    trailing={
+                      <div className="min-w-0 space-y-1 sm:text-right">
+                        <p className="text-sm text-muted-foreground">{m.statements_creator_share()}</p>
+                        <p className="break-words font-semibold">
+                          <StatementAmount
+                            value={statement.creatorShareMinor}
+                            moneyUnit={recordedMoneyUnit(statement)}
+                            currency={statement.currency}
+                            locale={locale}
+                          />
+                        </p>
+                      </div>
+                    }
+                  />
+                ))}
+              </ul>
+            )}
+            <StatementListPagination page={page} {...pagination} />
+          </>
+        )}
+      </StatementDirectoryFrame>
     </section>
   );
 }

@@ -25,11 +25,16 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import {
   authoritativeTimeValue,
   IdempotencyConflictError,
+  releaseOperationalTime,
   runCommand,
+  type AuthoritativeTime,
   type CommandAuthorization,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import { within } from './deadline.ts';
+import { accessCheckout, type AccessWorkAccounting } from './work.ts';
+import { approvalResolutionNativeWork, approvalResolutionReadOptions } from './approval-resolution-work.ts';
+import { readNativeAccessTime } from './native-time.ts';
 import { readAccount } from './account-data.ts';
 import {
   APPROVAL_REFERENCE_PURPOSE,
@@ -43,6 +48,7 @@ import {
 import { resourceAuthorization } from './resource-authorization.ts';
 import { GrantDeniedError } from './resource-access-errors.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
+import { accessCommandAttempt, commandAccessContext } from './command-admission.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import credentialRead from './auth-credential-capability-workflow-read.sql';
 import approvalInsert from './workflow-approvals-insert.sql';
@@ -340,13 +346,16 @@ function businessOperation(operation: NativeOperation): unknown {
   return complete;
 }
 const resourceOf = (descriptor: Descriptor) => ({ route: routeOf(descriptor.target)!, id: descriptor.target });
-function anchor(descriptor: Descriptor) {
+function anchor(descriptor: Descriptor, work?: AccessWorkAccounting) {
   const resource = resourceOf(descriptor);
   return {
     resource,
     async validate(client: Parameters<Access['authorize']>[0]) {
-      if (descriptor.targetKind === 'global') return !!(await clientManagementAnchor.run(client, {}));
-      const account = await readAccount(client, resource.route, resource.id);
+      if (descriptor.targetKind === 'global')
+        return !!(await approvalResolutionNativeWork(work, 'client-anchor', {}, () =>
+          clientManagementAnchor.run(client, {}),
+        ));
+      const account = await readAccount(client, resource.route, resource.id, work);
       return (
         !!account &&
         account.state === 'active' &&
@@ -401,7 +410,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
   function boundary(context: AccessContext): AccessContext {
     requireAccessDeadline(context.deadline);
     requireAllowed(context.pool === config.pool && Number.isFinite(context.deadline));
-    return { pool: config.pool, deadline: context.deadline };
+    // Keep the pool-bound identity, original ledger and caller-owned live time.
+    return context;
   }
   function authorization(
     actor: AccountActor,
@@ -412,29 +422,45 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     requireAccessDeadline(context.deadline);
     requireAllowed(config.actions.has(descriptor.action));
     const authority = resourceAuthorization({
-      access: observeDeadline
-        ? {
-            ...config.access,
-            async prepare(...args) {
-              requireAllowed(config.access.prepare);
-              const evidence = await config.access.prepare(...args);
-              const deadline = permissionEvidenceDeadline(evidence);
-              requireAllowed(deadline !== undefined);
-              observeDeadline(deadline);
-              return evidence;
-            },
-          }
-        : config.access,
+      access:
+        observeDeadline || context.work
+          ? {
+              ...config.access,
+              async prepare(candidate, action, resource, preparation) {
+                requireAllowed(config.access.prepare);
+                // Resource authorization supplies the live command attempt. Carry
+                // the original request ledger into that context without losing its
+                // pool identity or private command-attempt association.
+                const attempt = accessCommandAttempt(preparation);
+                const original = {
+                  ...preparation,
+                  ...(context.work ? { work: context.work } : {}),
+                };
+                const evidence = await config.access.prepare(
+                  candidate,
+                  action,
+                  resource,
+                  attempt ? commandAccessContext(original, attempt) : original,
+                );
+                if (observeDeadline) {
+                  const deadline = permissionEvidenceDeadline(evidence);
+                  requireAllowed(deadline !== undefined);
+                  observeDeadline(deadline);
+                }
+                return evidence;
+              },
+            }
+          : config.access,
       actor,
       action: descriptor.action,
-      anchor: anchor(descriptor),
+      anchor: anchor(descriptor, context.work),
       context: { ...context, partition: partitionOf(routeOf(actor.accountId)!) },
     });
     if (descriptor.action !== 'organization:create') return authority;
     return {
       ...authority,
       async prepare(attempt) {
-        await requireHuman(actor);
+        await requireHuman(actor, context);
         return authority.prepare?.(attempt);
       },
     };
@@ -448,7 +474,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     actor: AccountActor,
     operation: NativeOperation,
     descriptor: Descriptor,
-    deadline: number,
+    context: AccessContext,
     approval?: ApprovalRow,
   ): Promise<Descriptor> {
     if (operation.kind === 'revoke')
@@ -456,20 +482,28 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         ? { action: 'account:manage', target: operation.accountId, targetKind: 'actor' }
         : descriptor;
     if (operation.kind !== 'delete' || actor.accountId === operation.accountId) return descriptor;
-    const subject = await within(deadline, () =>
-      withConnection(config.pool, (client) =>
-        readAccount(deadlineClient(client, deadline), routeOf(operation.accountId)!, operation.accountId),
+    const subject = await accessCheckout(context.work, () =>
+      withBoundedReadConnection(
+        context.pool,
+        context.deadline,
+        (client) => readAccount(client, routeOf(operation.accountId)!, operation.accountId, context.work),
+        approvalResolutionReadOptions,
       ),
     );
     if (subject?.kind === 'organization' && subject.state === 'active') {
-      const owners = await within(deadline, () =>
-        withConnection(config.pool, (client) =>
-          ownersRead.run(deadlineClient(client, deadline), {
-            route: routeOf(operation.accountId)!,
-            organization_id: operation.accountId,
-            member_id: actor.accountId,
-            at: accessClock(config.access)().toISOString(),
-          }),
+      const input = {
+        route: routeOf(operation.accountId)!,
+        organization_id: operation.accountId,
+        member_id: actor.accountId,
+        at: accessClock(config.access)().toISOString(),
+      };
+      const owners = await accessCheckout(context.work, () =>
+        withBoundedReadConnection(
+          context.pool,
+          context.deadline,
+          (client) =>
+            approvalResolutionNativeWork(context.work, 'owners', input, () => ownersRead.run(client, input)),
+          approvalResolutionReadOptions,
         ),
       );
       if (owners && owners.owners > 0)
@@ -479,22 +513,33 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       return { action: 'account:manage', target: subject.operatorAccountId, targetKind: 'either' };
     if (subject?.kind !== 'actor' || subject.state !== 'deleted' || !approval) return descriptor;
     const subjectRoute = routeOf(operation.accountId)!;
-    const priorOperator = await within(deadline, () =>
-      withConnection(config.pool, (client) =>
-        tombstoneOperator.run(deadlineClient(client, deadline), {
-          route: subjectRoute,
-          account_id: operation.accountId,
-          approval_route: approval.route,
-          approval_id: approval.approvalId,
-          partition_no: partitionOf(subjectRoute),
-          actor_id: actor.accountId,
-          idempotency_keys: nativeReceiptKeyCandidates(
-            config.pool,
-            'access.account-tombstoned',
-            actor.accountId,
-            `${subjectRoute}:wf:${hash([actor.accountId, approval.operationKey])}:tombstone`,
+    const input = {
+      route: subjectRoute,
+      account_id: operation.accountId,
+      approval_route: approval.route,
+      approval_id: approval.approvalId,
+      partition_no: partitionOf(subjectRoute),
+      actor_id: actor.accountId,
+      idempotency_keys: nativeReceiptKeyCandidates(
+        context.pool,
+        'access.account-tombstoned',
+        actor.accountId,
+        `${subjectRoute}:wf:${hash([actor.accountId, approval.operationKey])}:tombstone`,
+      ),
+    };
+    const priorOperator = await accessCheckout(context.work, () =>
+      withBoundedReadConnection(
+        context.pool,
+        context.deadline,
+        (client) =>
+          approvalResolutionNativeWork(
+            context.work,
+            'tombstone-operator',
+            input,
+            () => tombstoneOperator.run(client, input),
+            input.idempotency_keys.length,
           ),
-        }),
+        approvalResolutionReadOptions,
       ),
     );
     return priorOperator?.priorOperatorAccountId
@@ -504,8 +549,15 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
   /** A person is an actor without an operator. It may act for a principal through a
    * principal assignment: the approval stores that reference (`requestedBy`), and
    * every step's formula rechecks the assignment and the principal's grant at its T. */
-  async function requireHuman(actor: AccountActor) {
-    const account = await readAccount(config.pool, routeOf(actor.accountId)!, actor.accountId);
+  async function requireHuman(actor: AccountActor, context: AccessContext) {
+    const account = await accessCheckout(context.work, () =>
+      withBoundedReadConnection(
+        context.pool,
+        context.deadline,
+        (client) => readAccount(client, routeOf(actor.accountId)!, actor.accountId, context.work),
+        approvalResolutionReadOptions,
+      ),
+    );
     requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null);
   }
 
@@ -513,60 +565,81 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     actor: AccountActor,
     descriptor: Descriptor,
     context: AccessContext,
-    deadline: number,
   ): Promise<void> {
+    const { deadline } = context;
     requireAccessDeadline(deadline);
     requireAllowed(config.actions.has(descriptor.action) && config.access.prepare);
-    const evidence = await config.access.prepare(actor, descriptor.action, resourceOf(descriptor), {
-      pool: config.pool,
-      deadline,
-    });
-    // The final native formula obtains authoritative SQL T. Identity/principal
-    // preparation has released its connections before this resource checkout.
-    // The actor observation made when the approval was restored is older than
-    // this T: a consent reduction, raised floor or fence in between must deny, so
-    // the actor row is read again after the formula has fixed its T.
-    const allowed = await within(deadline, () =>
-      withConnection(config.pool, async (client) => {
-        const boundedClient = deadlineClient(client, deadline);
-        if (
-          !(await accessEvidence(() => anchor(descriptor).validate(boundedClient), denied, deadline)) ||
-          !(await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
-        )
-          return false;
-        const current = await readAccount(boundedClient, routeOf(actor.accountId)!, actor.accountId);
-        return (
-          !!current &&
-          current.kind === 'actor' &&
-          current.state === 'active' &&
-          !current.fenced &&
-          BigInt(actor.authnEpoch) >= current.minimumAuthnEpoch
-        );
-      }),
-    );
-    requireAccessDeadline(deadline);
-    requireAllowed(allowed);
+    let ownedTime: AuthoritativeTime | undefined;
+    try {
+      // Metered preparation and its final formula share one live native T. Its
+      // source checkout is released before entering the installed prepare port.
+      const time =
+        context.time ??
+        (context.work ? (ownedTime = await readNativeAccessTime(context, accessClock(config.access))) : undefined);
+      const evidence = await within(deadline, () =>
+        config.access.prepare!(actor, descriptor.action, resourceOf(descriptor), {
+          ...context,
+          ...(time ? { time } : {}),
+        }),
+      );
+      // Restoration precedes this formula. Reobserve the actor afterwards so a
+      // floor raise, consent reduction or fence in between still denies.
+      const allowed = await accessCheckout(context.work, () =>
+        withBoundedReadConnection(
+          context.pool,
+          deadline,
+          async (client) => {
+            if (
+              !(await accessEvidence(() => anchor(descriptor, context.work).validate(client), denied, deadline)) ||
+              !(await config.access.authorize(client, actor, descriptor.action, resourceOf(descriptor), evidence, time))
+            )
+              return false;
+            const current = await readAccount(client, routeOf(actor.accountId)!, actor.accountId, context.work);
+            return (
+              !!current &&
+              current.kind === 'actor' &&
+              current.state === 'active' &&
+              !current.fenced &&
+              BigInt(actor.authnEpoch) >= current.minimumAuthnEpoch
+            );
+          },
+          approvalResolutionReadOptions,
+        ),
+      );
+      requireAccessDeadline(deadline);
+      requireAllowed(allowed);
+    } finally {
+      if (ownedTime) releaseOperationalTime(ownedTime);
+    }
   }
   async function validateTransferRecord(
     operation: Extract<AccountOperation, { kind: 'transfer' }>,
-    deadline: number,
+    context: AccessContext,
   ): Promise<void> {
     const subjectRoute = routeOf(operation.previous.subjectAccountId)!;
     const destinationRoute = routeOf(operation.operatorAccountId)!;
-    const subject = await within(deadline, () =>
-      withConnection(config.pool, (client) =>
-        operatorAccount.run(deadlineClient(client, deadline), {
-          route: subjectRoute,
-          account_id: operation.previous.subjectAccountId,
-        }),
+    const subjectInput = { route: subjectRoute, account_id: operation.previous.subjectAccountId };
+    const subject = await accessCheckout(context.work, () =>
+      withBoundedReadConnection(
+        context.pool,
+        context.deadline,
+        (client) =>
+          approvalResolutionNativeWork(context.work, 'operator-account', subjectInput, () =>
+            operatorAccount.run(client, subjectInput),
+          ),
+        approvalResolutionReadOptions,
       ),
     );
-    const destination = await within(deadline, () =>
-      withConnection(config.pool, (client) =>
-        operatorAccount.run(deadlineClient(client, deadline), {
-          route: destinationRoute,
-          account_id: operation.operatorAccountId,
-        }),
+    const destinationInput = { route: destinationRoute, account_id: operation.operatorAccountId };
+    const destination = await accessCheckout(context.work, () =>
+      withBoundedReadConnection(
+        context.pool,
+        context.deadline,
+        (client) =>
+          approvalResolutionNativeWork(context.work, 'operator-account', destinationInput, () =>
+            operatorAccount.run(client, destinationInput),
+          ),
+        approvalResolutionReadOptions,
       ),
     );
     requireAllowed(
@@ -589,18 +662,25 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     requireAllowed(
       subject.operatorAccountId === operation.operatorAccountId && BigInt(subject.version) === expectedVersion + 1n,
     );
-    const oldSlot = await within(deadline, () =>
-      withConnection(config.pool, (client) =>
-        operatorSlot.run(deadlineClient(client, deadline), {
-          route: subjectRoute,
-          subject_id: operation.previous.subjectAccountId,
-          reservation_id: operation.previous.reservationId,
-        }),
+    const slotInput = {
+      route: subjectRoute,
+      subject_id: operation.previous.subjectAccountId,
+      reservation_id: operation.previous.reservationId,
+    };
+    const oldSlot = await accessCheckout(context.work, () =>
+      withBoundedReadConnection(
+        context.pool,
+        context.deadline,
+        (client) =>
+          approvalResolutionNativeWork(context.work, 'operator-slot', slotInput, () =>
+            operatorSlot.run(client, slotInput),
+          ),
+        approvalResolutionReadOptions,
       ),
     );
     // The relation command terminalizes the old slot atomically with publication.
     requireAllowed(oldSlot?.terminal === true && oldSlot.operatorAccountId === operation.previous.operatorAccountId);
-    requireAccessDeadline(deadline);
+    requireAccessDeadline(context.deadline);
   }
   async function resolveSingle(
     reference: string,
@@ -610,12 +690,10 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
   ) {
     const bounded = boundary(context);
     const { operation, descriptor: native } = operationSnapshot(input);
-    const { row, actor } = await within(bounded.deadline, () =>
-      readApprovedIdentity(config.access, config.referenceKeys, reference, bounded),
-    );
+    const { row, actor } = await readApprovedIdentity(config.access, config.referenceKeys, reference, bounded);
     // The reference binds the stored key; caller-supplied resolution metadata must match it.
     requireAllowed(input.operationKey === undefined || input.operationKey === row.operationKey);
-    const descriptor = await operationDescriptor(actor, operation, native, bounded.deadline, row);
+    const descriptor = await operationDescriptor(actor, operation, native, bounded, row);
     requireAllowed(
       !caller ||
         (caller.accountId === actor.accountId &&
@@ -623,7 +701,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           caller.requestedBy === actor.requestedBy &&
           canonicalize([...caller.scopes].sort()) === canonicalize([...actor.scopes].sort())),
     );
-    if (operation.kind === 'organization') await requireHuman(actor);
+    if (operation.kind === 'organization') await requireHuman(actor, bounded);
     requireAllowed(
       operation.kind !== 'revoke' || actor.accountId !== operation.accountId || actor.requestedBy === null,
     );
@@ -631,10 +709,9 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     if (operation.kind === 'automated' && operation.registrationId !== '') {
       if (!creationBinding) throw new WorkflowApprovalUnavailableError();
       requireAllowed(operation.operationKey === row.operationKey);
-      const initial = await creationBinding({
-        registrationId: operation.registrationId,
-        operationKey: row.operationKey,
-      });
+      const initial = await within(bounded.deadline, () =>
+        creationBinding({ registrationId: operation.registrationId, operationKey: row.operationKey }),
+      );
       requireAllowed(initial && initial.registrationId === '' && canonicalize(initial) === canonicalize(row.operation));
       approvedOperation = { ...operation, registrationId: '' };
     }
@@ -643,13 +720,15 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         canonicalize(row.operation) === canonicalize(businessOperation(approvedOperation)),
     );
     const deadline = bounded.deadline;
-    await authorizeActor(actor, descriptor, bounded, deadline);
+    await authorizeActor(actor, descriptor, bounded);
     // A resolved approval is a live, server-owned context. Expose the native
     // barrier only for this closed operation, bound to its target and stable
     // command key. Auth never supplies an arbitrary suspension command or actor.
     const request: LifecycleRequest = Object.freeze({
       actor,
       deadline,
+      ...(bounded.work ? { work: bounded.work } : {}),
+      ...(bounded.time ? { time: bounded.time } : {}),
       ...(operation.kind === 'fence-operator'
         ? {
             suspendOperator: async () =>
@@ -659,7 +738,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                   access: config.access,
                   clock: accessClock(config.access),
                 }).suspend(
-                  { actor, pool: config.pool, deadline },
+                  { ...bounded, actor },
                   {
                     accountId: operation.accountId,
                     key: `wf:${hash([actor.accountId, row.operationKey])}:fence`,
@@ -683,7 +762,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                   access: config.access,
                   clock: accessClock(config.access),
                 }).revoke(
-                  { actor, pool: config.pool, deadline },
+                  { ...bounded, actor },
                   {
                     accountId: operation.accountId,
                     key: `wf:${hash([actor.accountId, row.operationKey])}:revoke`,
@@ -741,7 +820,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     requireAllowed(operationSnapshot(input).operation.kind !== 'transfer-acceptance');
     const source = await resolveSingle(reference, input, bounded, caller);
     if (source.operation.kind === 'transfer') {
-      await validateTransferRecord(source.operation, source.request.deadline);
+      await validateTransferRecord(source.operation, bounded);
       const destination: Descriptor = {
         action: 'account:manage',
         target: source.operation.operatorAccountId,
@@ -759,7 +838,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         };
         await resolveSingle(source.operation.acceptance, acceptance, bounded);
       } else {
-        await authorizeActor(source.actor, destination, bounded, source.request.deadline);
+        await authorizeActor(source.actor, destination, bounded);
       }
     }
     return source.request;
@@ -787,7 +866,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         requireAllowed(actor.accountId !== operation.accountId || actor.requestedBy === null);
       const expires = verifiedKernelExpiry(config.access, actor, bounded);
       const deadline = bounded.deadline;
-      const descriptor = await operationDescriptor(actor, operation, native, deadline);
+      const descriptor = await operationDescriptor(actor, operation, native, bounded);
       const route = routeOf(actor.accountId)!;
       const digest = hash([operationKey, businessOperation(operation)]);
       // A fresh credential approval observes a new floor without changing Auth's
@@ -817,7 +896,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           clock: accessClock(config.access),
           deadline,
           basis,
-          authorization: authorization(actor, descriptor, { pool: config.pool, deadline }),
+          authorization: authorization(actor, descriptor, bounded),
           receipt: {
             actorAccountId: actor.accountId,
             kind: 'access.workflow-approval.binding',
@@ -842,7 +921,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           authorization: authorization(
             actor,
             descriptor,
-            { pool: config.pool, deadline },
+            bounded,
             operation.kind === 'credential'
               ? (value) => {
                   evidenceDeadline = value;
@@ -917,11 +996,22 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         | { route: number; id: string; binding: string }
         | undefined;
       requireAllowed(located && routeOf(located.id) === located.route);
-      const row = await credentialRead.run(bounded.pool, {
+      const input = {
         route: located.route,
         receipt_id: located.id,
         at: accessClock(config.access)().toISOString(),
-      });
+      };
+      const row = await accessCheckout(bounded.work, () =>
+        withBoundedReadConnection(
+          bounded.pool,
+          bounded.deadline,
+          (client) =>
+            approvalResolutionNativeWork(bounded.work, 'consumed-credential', input, () =>
+              credentialRead.run(client, input),
+            ),
+          approvalResolutionReadOptions,
+        ),
+      );
       requireAllowed(row);
       const { data: _native, ...immutable } = row;
       requireAllowed(approvalRowDigest(immutable) === located.binding);
@@ -940,7 +1030,14 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           canonicalize(actor.scopes) === canonicalize(binding.scopes) &&
           actor.requestedBy === null,
       );
-      const subject = await readAccount(config.pool, routeOf(binding.subjectAccountId)!, binding.subjectAccountId);
+      const subject = await accessCheckout(bounded.work, () =>
+        withBoundedReadConnection(
+          bounded.pool,
+          bounded.deadline,
+          (client) => readAccount(client, routeOf(binding.subjectAccountId)!, binding.subjectAccountId, bounded.work),
+          approvalResolutionReadOptions,
+        ),
+      );
       requireAllowed(
         subject &&
           subject.kind === 'actor' &&
@@ -1011,7 +1108,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           },
         },
         async (tx, command) => {
-          const subject = await readAccount(tx, row.route, operation.subjectAccountId);
+          const subject = await readAccount(tx, row.route, operation.subjectAccountId, bounded.work);
           requireAllowed(
             subject &&
               subject.minimumAuthnEpoch === BigInt(operation.subjectEpoch) &&
@@ -1048,13 +1145,13 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     approve: (token: string, input: WorkflowApprovalRequest, context: AccessContext) => approve(token, input, context),
     /** Trusted server workflow port, never an unauthenticated HTTP endpoint. */
     async resolve(reference: string, operation: AccountOperation, context: AccessContext): Promise<LifecycleRequest> {
-      let requestDeadline: number | undefined;
       try {
         const bounded = boundary(context);
-        requestDeadline = bounded.deadline;
         return await resolve(reference, operation, bounded);
       } catch (error) {
-        throwAccessUnavailable(error, requestDeadline);
+        // Bounded reads already distinguish expiry from their first storage
+        // failure. A later wall-clock observation must not overwrite that cause.
+        throwAccessUnavailable(error);
         throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
@@ -1070,14 +1167,12 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       operation: AccountOperation,
       context: AccessContext,
     ): Promise<LifecycleRequest> {
-      let requestDeadline: number | undefined;
       try {
         const bounded = boundary(context);
-        requestDeadline = bounded.deadline;
         const caller = await config.access.authenticate(token, bounded);
         return await resolve(reference, operation, bounded, caller);
       } catch (error) {
-        throwAccessUnavailable(error, requestDeadline);
+        throwAccessUnavailable(error);
         throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;

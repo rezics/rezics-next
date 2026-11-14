@@ -1,9 +1,7 @@
 import { releaseDigest, validateRelease, type Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
-import { deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
-import { deadlineFor } from '../request/deadline.ts';
-import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+import { AccessUnavailableError } from '../access/contract/errors.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { presentProgressSession } from './progress-presentation.ts';
 import type { ProgressDiscoveryFact } from './progress-store.ts';
 import type { ProgressPresentation, ProgressMeasurePresentation } from './progress-model.ts';
@@ -22,15 +20,22 @@ export type ProgressDiscoveryPresentation = {
 export async function presentProgressDiscovery(
   pool: Pool,
   facts: readonly ProgressDiscoveryFact[],
+  deadline: number,
 ): Promise<Map<string, ProgressDiscoveryPresentation>> {
   if (facts.length > 50) throw new RangeError('Progress discovery presentation accepts at most 50 sessions');
   const digests = [...new Set(facts.flatMap(({ profilePin }) => (profilePin ? [profilePin.releaseDigest] : [])))];
   const snapshots = new Map<string, { digest: string; release: Release }>();
   if (digests.length) {
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
-    const rows = await withConnection(pool, (client) =>
-      sessionDiscoveryReleasesPlan({ digests }).run(deadlineClient(client, deadline)),
-    ).catch(() => []);
+    const rows = await withBoundedReadConnection(
+      pool,
+      deadline,
+      (client) => sessionDiscoveryReleasesPlan({ digests }).run(client),
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        // The lifetime keeps settled server errors distinct from uncertain transport failures.
+        isUncertainSettledQueryError: () => true,
+      },
+    );
     for (const row of rows) {
       try {
         if (validateRelease(row.body).length) continue;

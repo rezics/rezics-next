@@ -90,12 +90,25 @@ function entriesOf(
   return entries;
 }
 
-async function expandCreators(pool: Pool, parsed: readonly ParsedCredit[], limits: ReturnType<typeof installedLimits>) {
-  return canonicalCreators(
+/** One dependency meaning for pages, exact witnesses and the whole currentness window. */
+async function expandCredits(pool: Pool, parsed: readonly ParsedCredit[], limits: ReturnType<typeof installedLimits>) {
+  const complete = parsed.filter((credit) => !credit.overflowQualifiers);
+  const resolved = await canonicalCreators(
     pool,
-    parsed.filter((credit) => !credit.overflowQualifiers).map((credit) => credit.targetId),
+    complete.map((credit) => credit.targetId),
     limits,
+    complete.flatMap((credit) => credit.itemQualifierIds),
   );
+  if (resolved.state !== 'current') return resolved;
+  return {
+    state: 'current' as const,
+    creators: resolved.creators,
+    credits: parsed.filter(
+      (credit) =>
+        credit.overflowQualifiers ||
+        (resolved.creators.has(credit.targetId) && credit.itemQualifierIds.every((id) => resolved.publicIds.has(id))),
+    ),
+  };
 }
 
 /** Native CreditSearchSource. Pages admit selected outgoing credits before nested creator expansion. */
@@ -126,10 +139,10 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
       const next = seek.length > limits.creditsPerPage ? selectedCursorOf(pageRows[pageRows.length - 1]!) : null;
       const visible = await discloseCredits(pool, routeKey, pageRows);
       const parsed = await parsePage(pool, cut.work, visible, plan, limits);
-      const creators = await expandCreators(pool, parsed, limits);
+      const creators = await expandCredits(pool, parsed, limits);
       if (creators.state === 'preparing') return { state: 'preparing' };
       if (creators.state === 'unavailable') return { state: 'unavailable' };
-      const entries = entriesOf(parsed, creators.creators, workId);
+      const entries = entriesOf(creators.credits, creators.creators, workId);
       const page: Extract<CreditSearchPage, { state: 'current' }> = {
         state: 'current',
         workId,
@@ -170,8 +183,9 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
         !isDeepStrictEqual(sortQualifiers(credit.qualifiers), sortQualifiers(witness.qualifiers))
       )
         return false;
-      const creators = await canonicalCreators(pool, [credit.targetId], installedLimits(CREDIT_SEARCH_LIMITS));
+      const creators = await expandCredits(pool, [credit], installedLimits(CREDIT_SEARCH_LIMITS));
       if (creators.state === 'preparing' || creators.state === 'unavailable') return 'unavailable';
+      if (creators.credits.length !== 1) return false;
       const creator = creators.creators.get(credit.targetId);
       if (!creator || creator.nameRevision !== witness.nameRevision) return false;
       return creator.names.some((name) => isDeepStrictEqual(name, witness.name));
@@ -193,7 +207,7 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
       const window = seek.slice(0, limits.pages * limits.creditsPerPage);
       const visible = await discloseCredits(pool, routeKey, window);
       const parsed = await parsePage(pool, cut.work, visible, plan, limits);
-      const creators = await expandCreators(pool, parsed, limits);
+      const creators = await expandCredits(pool, parsed, limits);
       if (creators.state !== 'current') return false;
       const later = await workCut(pool, workId);
       return (

@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount, deadlineClient, admitGroup } from './access-port.ts';
-import { GrantDeniedError } from '../access/contract/errors.ts';
+import { readAccount, admitGroup } from './access-port.ts';
+import { AccessUnavailableError, GrantDeniedError } from '../access/contract/errors.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { readPartition } from '../partition/partition.ts';
+import { readPartition, type Partition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -132,13 +133,13 @@ export function createLabelConsolidationReview(deps: {
   async function snapshot<T>(
     actor: AccountActor,
     deadline: number,
-    body: (client: Client, route: number) => Promise<T>,
+    body: (client: Client, route: number, home: Partition) => Promise<T>,
   ) {
-    return withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline),
-        route = routeOf(actor.accountId)!;
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
+    return withBoundedReadOnlyTransaction(
+      deps.pool,
+      deadline,
+      async (client) => {
+        const route = routeOf(actor.accountId)!;
         const current = await readAccount(client, route, actor.accountId);
         if (
           !current ||
@@ -150,19 +151,25 @@ export function createLabelConsolidationReview(deps: {
           current.minimumAuthnEpoch > BigInt(actor.authnEpoch)
         )
           throw new GrantDeniedError();
-        const value = await body(client, route);
-        await client.query('COMMIT');
-        return value;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
+        const home = await readPartition(client, partitionOf(route));
+        if (!home || home.writeState !== 'active' || home.movedTo !== null) throw new GrantDeniedError();
+        return body(client, route, home);
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError: (error) => {
+          throwAccessUnavailable(error);
+          return error;
+        },
+        isUncertainSettledQueryError: () => true,
+      },
+    );
   }
-  return async function review(
+  async function inspect(
     actor: Actor,
     sourceLabelId: string,
     value: LabelConsolidationReviewInput,
+    deadline: number,
   ): Promise<LabelConsolidationReview> {
     if (
       actor.kind !== 'account' ||
@@ -175,7 +182,6 @@ export function createLabelConsolidationReview(deps: {
     const sourceId = id(sourceLabelId),
       input = parse(value);
     if (sourceId === input.targetLabelId) throw invalid();
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const gate = () =>
       admitGroup({
         ...deps,
@@ -205,49 +211,49 @@ export function createLabelConsolidationReview(deps: {
       viewer: actor.accountId,
       query: { selection, limit: input.limit },
     };
-    const page = await snapshot(actor, deadline, async (client, route) => {
-      const current = await labels(client, route);
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition) throw new Error('Missing owner partition');
-      let offset = 0;
-      if (input.cursor !== undefined) {
-        const cursor = await decodeListCursor(deps.tokens, binding, input.cursor, clock());
-        if (
-          !cursor.ok ||
-          cursor.after.length !== 2 ||
-          typeof cursor.after[0] !== 'number' ||
-          !Number.isInteger(cursor.after[0]) ||
-          cursor.after[0] < 1 ||
-          cursor.after[0] >= input.items.length ||
-          typeof cursor.after[1] !== 'string'
-        )
-          throw new ProblemError('invalid_cursor');
-        if (cursor.epoch !== partition.epoch || cursor.after[1] !== partition.position.toString())
-          throw new ProblemError('stale_cursor');
-        offset = cursor.after[0];
-      }
-      return {
-        ...current,
-        offset,
-        epoch: partition.epoch,
-        position: partition.position.toString(),
-        time: await mintReadTime(client, clock),
-      };
-    });
+    let time: AuthoritativeTime | undefined;
     try {
+      const page = await snapshot(actor, deadline, async (client, route, home) => {
+        const current = await labels(client, route);
+        let offset = 0;
+        if (input.cursor !== undefined) {
+          const cursor = await decodeListCursor(deps.tokens, binding, input.cursor, clock());
+          if (
+            !cursor.ok ||
+            cursor.after.length !== 2 ||
+            typeof cursor.after[0] !== 'number' ||
+            !Number.isInteger(cursor.after[0]) ||
+            cursor.after[0] < 1 ||
+            cursor.after[0] >= input.items.length ||
+            typeof cursor.after[1] !== 'string'
+          )
+            throw new ProblemError('invalid_cursor');
+          if (cursor.epoch !== home.epoch || cursor.after[1] !== home.position.toString())
+            throw new ProblemError('stale_cursor');
+          offset = cursor.after[0];
+        }
+        // Own the time before COMMIT so a failed page snapshot cannot retain it.
+        const at = await mintReadTime(client, clock);
+        time = at;
+        return {
+          ...current,
+          offset,
+          epoch: home.epoch,
+          position: home.position.toString(),
+          time: at,
+        };
+      });
       const selected = input.items.slice(page.offset, page.offset + input.limit);
       // Release the owner checkout before native Subject authority acquires its own partition readers.
       const readable = new Set<string>();
       for (const item of selected) {
-        const resolved = await withRequestDeadline(deadline, () =>
-          resolveSubject(deps, actor, item.subjectId, page.time),
-        );
+        requireAccessDeadline(deadline);
+        const resolved = await resolveSubject(deps, actor, item.subjectId, page.time);
         if (resolved?.subjectId === item.subjectId) readable.add(item.subjectId);
       }
-      const result = await snapshot(actor, deadline, async (client, route) => {
+      const result = await snapshot(actor, deadline, async (client, route, home) => {
         const current = await labels(client, route);
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition || partition.epoch !== page.epoch || partition.position.toString() !== page.position)
+        if (home.epoch !== page.epoch || home.position.toString() !== page.position)
           throw new ProblemError('stale_cursor');
         const items: LabelConsolidationReviewItem[] = [];
         for (const item of selected) {
@@ -309,24 +315,35 @@ export function createLabelConsolidationReview(deps: {
       for (let i = 0; i < result.items.length; i++) {
         const item = result.items[i]!;
         if (item.outcome === 'inaccessible') continue;
-        const resolved = await withRequestDeadline(deadline, () =>
-          resolveSubject(deps, actor, item.selected.subjectId, page.time),
-        );
+        requireAccessDeadline(deadline);
+        const resolved = await resolveSubject(deps, actor, item.selected.subjectId, page.time);
         if (resolved?.subjectId !== item.selected.subjectId) result.items[i] = inaccessible(item.selected);
       }
-      await snapshot(actor, deadline, async (client, route) => {
+      // Recheck the owner, labels and assignment generation after all Subject reads have settled.
+      await snapshot(actor, deadline, async (client, route, home) => {
         const current = await labels(client, route);
         if (
           current.sourceLabel.revision !== result.sourceLabel.revision ||
           current.targetLabel.revision !== result.targetLabel.revision
         )
           throw new LibraryConflictError();
+        if (home.epoch !== page.epoch || home.position.toString() !== page.position)
+          throw new ProblemError('stale_cursor');
       });
       if (Buffer.byteLength(JSON.stringify(result)) > LABEL_CONSOLIDATION_REVIEW_LIMITS.responseBytes)
         throw new Error('Consolidation review exceeded its encoded response bound');
+      requireAccessDeadline(deadline);
       return result;
     } finally {
-      releaseOperationalTime(page.time);
+      if (time) releaseOperationalTime(time);
     }
+  }
+  return function review(
+    actor: Actor,
+    sourceLabelId: string,
+    value: LabelConsolidationReviewInput,
+  ): Promise<LabelConsolidationReview> {
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return withRequestDeadline(deadline, () => inspect(actor, sourceLabelId, value, deadline));
   };
 }

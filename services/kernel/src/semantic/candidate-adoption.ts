@@ -15,7 +15,7 @@ import { recordPrivacyReduction } from './public-filter-source.ts';
 import { factDataTypes, isRelationProperty, SubjectInputError } from './item.ts';
 import { holderFacts } from './link-keys.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';
-import { contextSnapshot } from './context.ts';
+import { contextSnapshot, readContextDefaults, type ContextRecord } from './context.ts';
 import registerRelationContext from './relation-context-register.sql';
 import listRelationContexts from './relation-context-list.sql';
 import changeCurrentFacts from './change-current-facts.sql';
@@ -142,7 +142,7 @@ export async function adoptCandidates(
           ? beforeFacts
           : (await slotView(tx, options.subject, options.property, GLOBAL_CONTEXT, {}, slot)).facts;
       const identity = await holderFacts(tx, options.subject, options.release.release);
-      const contextViews = new Map<string, typeof beforeFacts>();
+      const contextViews = new Map<string, { defaults: ContextRecord['defaults']; before: typeof beforeFacts }>();
       if (isRelationProperty(options.release.release, options.property)) {
         if (options.context !== GLOBAL_CONTEXT)
           await registerRelationContext.run(tx, {
@@ -152,11 +152,13 @@ export async function adoptCandidates(
             context_id: options.context,
           });
         else
-          for (const row of await listRelationContexts.run(tx, { route, subject_id: options.subject, slot_id: slot }))
-            contextViews.set(
-              row.context_id,
-              (await slotView(tx, options.subject, options.property, row.context_id, {}, slot)).facts,
-            );
+          for (const row of await listRelationContexts.run(tx, { route, subject_id: options.subject, slot_id: slot })) {
+            const defaults = await readContextDefaults(tx, row.context_id);
+            contextViews.set(row.context_id, {
+              defaults,
+              before: (await slotView(tx, options.subject, options.property, row.context_id, defaults, slot)).facts,
+            });
+          }
       }
       let oldGlobalCount = 0;
       if (options.context === GLOBAL_CONTEXT) {
@@ -283,8 +285,9 @@ export async function adoptCandidates(
             options.context === GLOBAL_CONTEXT
               ? linkChanges(beforeFacts, afterFacts, dataTypes, metadata)
               : contextLinkChanges(globalFacts, beforeFacts, afterFacts, dataTypes, metadata, options.context);
-          for (const [context, before] of contextViews) {
-            const after = (await slotView(tx, options.subject, options.property, context, {}, slot)).facts;
+          for (const [context, view] of contextViews) {
+            const { before, defaults } = view;
+            const after = (await slotView(tx, options.subject, options.property, context, defaults, slot)).facts;
             changes.push(
               ...contextLinkChanges(
                 globalFacts,

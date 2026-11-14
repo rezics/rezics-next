@@ -90,7 +90,7 @@ type ExplorationProps = {
   projection: GraphProjection;
   selected: string;
   selectionConfirmed: boolean;
-  onSelect: (selection: GraphSelection) => void;
+  onSelect: (selection: GraphSelection, opener?: HTMLElement | null) => void;
   locale: string;
 };
 
@@ -116,7 +116,7 @@ function NodeControl({
       className={`${actionClass} w-full justify-start`}
       data-graph-selection={key}
       aria-pressed={confirmed}
-      onClick={() => onSelect({ kind: 'node', id })}
+      onClick={(event) => onSelect({ kind: 'node', id }, event.currentTarget)}
       onKeyDown={onKeyDown}
     >
       <span className="min-w-0" dir="auto">
@@ -144,7 +144,7 @@ function EdgeControl({
       className={`${actionClass} w-full justify-start gap-2`}
       data-graph-selection={key}
       aria-pressed={confirmed}
-      onClick={() => onSelect({ kind: 'edge', ...row.edge })}
+      onClick={(event) => onSelect({ kind: 'edge', ...row.edge }, event.currentTarget)}
     >
       <span className="shrink-0 font-mono text-xs" aria-hidden="true">
         {row.position + 1}
@@ -269,8 +269,9 @@ function GraphDiagram(props: ExplorationProps & { visible: boolean }) {
     event.preventDefault();
     const offset = event.key === 'ArrowDown' ? 1 : -1;
     const next = projection.nodes[(node.position + offset + projection.nodes.length) % projection.nodes.length]!;
-    nodeRefs.current.get(next.id)?.querySelector('button')?.focus();
-    onSelect({ kind: 'node', id: next.id });
+    const target = nodeRefs.current.get(next.id)?.querySelector('button');
+    target?.focus();
+    onSelect({ kind: 'node', id: next.id }, target);
   }
   return (
     <section aria-label={m.graph_explore_diagram({}, o)} className="min-w-0 space-y-3">
@@ -363,6 +364,14 @@ type GraphRoute = GraphBrowserRouteState;
 type GraphRequestKind = 'initial' | 'filter' | 'selection' | 'expansion';
 type GraphRequestInput = Parameters<GraphBrowserTransport['read']>[0];
 type GraphSource = { id: string; locale: string; reader?: string | undefined; transport: GraphBrowserTransport };
+type GraphPresentationDestination = { kind: 'selection'; key: string } | { kind: 'relation' };
+type GraphPresentationIntent = {
+  source: GraphSource;
+  requestId: number;
+  routeKey: string;
+  opener: HTMLElement | null;
+  destination: GraphPresentationDestination;
+};
 type GraphRequestRecord = {
   source: GraphSource;
   route: GraphRoute;
@@ -547,7 +556,7 @@ function GraphBranches({
   branches: GraphTruncation[];
   projection: GraphProjection;
   unavailable: boolean;
-  onContinue: (branch: GraphTruncation) => void;
+  onContinue: (branch: GraphTruncation, opener?: HTMLElement | null) => void;
   locale: string;
 }) {
   const o = option(locale);
@@ -589,7 +598,7 @@ function GraphBranches({
               variant="outline"
               className={actionClass}
               disabled={unavailable}
-              onClick={() => onContinue(branch)}
+              onClick={(event) => onContinue(branch, event.currentTarget)}
             >
               {m.graph_explore_continue({}, o)}
             </Button>
@@ -910,11 +919,10 @@ export function GraphBrowserPage({
   const inspectorId = useId();
   const [viewMode, setViewMode] = useState<'list' | 'diagram'>('list');
   const failureRef = useRef<HTMLParagraphElement>(null);
-  const statusRef = useRef<HTMLParagraphElement>(null);
   const relationRef = useRef<HTMLButtonElement>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const pageRef = useRef<HTMLElement>(null);
-  const focusIntentRef = useRef<{ kind: 'selection'; key: string } | { kind: 'relation' } | null>(null);
+  const presentationIntentRef = useRef<GraphPresentationIntent | null>(null);
   const source = useMemo<GraphSource>(() => ({ id, locale, reader, transport }), [id, locale, reader, transport]);
   const sourceRef = useRef(source);
   sourceRef.current = source;
@@ -952,7 +960,12 @@ export function GraphBrowserPage({
       selection: requestedSelection(target),
     };
   }
-  function runRecord(record: GraphRequestRecord, awaitingRoute = false, localOnly = false) {
+  function runRecord(
+    record: GraphRequestRecord,
+    awaitingRoute = false,
+    localOnly = false,
+    presentation?: { destination: GraphPresentationDestination; opener: HTMLElement | null },
+  ) {
     const previous = currentRef.current;
     if (sessionRef.current.source !== record.source) sessionRef.current = { source: record.source };
     const retainRead =
@@ -966,6 +979,9 @@ export function GraphBrowserPage({
     const controller = new AbortController();
     requestRef.current = controller;
     const requestId = ++sequenceRef.current;
+    presentationIntentRef.current = presentation
+      ? { ...presentation, source: record.source, requestId, routeKey: record.routeKey }
+      : null;
     const pending: GraphPageState = {
       source: record.source,
       route: record.route,
@@ -1042,10 +1058,31 @@ export function GraphBrowserPage({
     () => () => {
       sequenceRef.current += 1;
       requestRef.current?.abort();
-      focusIntentRef.current = null;
+      presentationIntentRef.current = null;
     },
     [source],
   );
+  useEffect(() => {
+    const ownerDocument = pageRef.current?.ownerDocument;
+    if (!ownerDocument) return;
+    function cancelPresentation(event: Event) {
+      const intent = presentationIntentRef.current;
+      if (!intent) return;
+      if (event.type === 'focusin') {
+        const target = event.target;
+        if (target === intent.opener || target === ownerDocument.body || target === ownerDocument.documentElement) return;
+      }
+      presentationIntentRef.current = null;
+    }
+    ownerDocument.addEventListener('focusin', cancelPresentation, true);
+    ownerDocument.addEventListener('pointerdown', cancelPresentation, true);
+    ownerDocument.addEventListener('keydown', cancelPresentation, true);
+    return () => {
+      ownerDocument.removeEventListener('focusin', cancelPresentation, true);
+      ownerDocument.removeEventListener('pointerdown', cancelPresentation, true);
+      ownerDocument.removeEventListener('keydown', cancelPresentation, true);
+    };
+  }, []);
 
   const stateMatchesRoute =
     current.source === source && (current.routeKey === propsRouteKey || !!current.awaitingRoute || !!current.localOnly);
@@ -1089,6 +1126,7 @@ export function GraphBrowserPage({
     kind: GraphRequestKind,
     extra: Partial<GraphRequestInput> = {},
     writeHistory = true,
+    opener?: HTMLElement | null,
   ) {
     const routeTarget = copyRoute(target);
     const targetKey = routeKey(routeTarget);
@@ -1106,52 +1144,71 @@ export function GraphBrowserPage({
       );
       if (!nextAddress) {
         setAddressLimit(true);
-        focusIntentRef.current = null;
+        presentationIntentRef.current = null;
         return;
       }
     }
     setAddressLimit(false);
-    focusIntentRef.current =
+    const nextSelection = requestedSelection(routeTarget);
+    const destination: GraphPresentationDestination =
       kind === 'selection' || kind === 'expansion'
-        ? requestedSelection(routeTarget)
-          ? { kind: 'selection', key: selectedKey(requestedSelection(routeTarget)) }
+        ? nextSelection
+          ? { kind: 'selection', key: selectedKey(nextSelection) }
           : { kind: 'relation' }
         : { kind: 'relation' };
-    runRecord(makeRecord(routeTarget, kind, extra), shouldNavigate, !onNavigate);
+    const activeElement = pageRef.current?.ownerDocument.activeElement as HTMLElement | null | undefined;
+    runRecord(makeRecord(routeTarget, kind, extra), shouldNavigate, !onNavigate, {
+      destination,
+      opener: opener ?? activeElement ?? null,
+    });
     if (shouldNavigate) void onNavigate?.(routeTarget);
   }
 
-  function select(next: GraphSelection) {
+  function select(next: GraphSelection, opener?: HTMLElement | null) {
     if (!read) return;
-    request(routeForSelection(read.query, next), 'selection');
+    request(routeForSelection(read.query, next), 'selection', {}, true, opener);
   }
 
-  function retry() {
+  function retry(opener: HTMLElement) {
     if (!active?.record) return;
-    focusIntentRef.current = active.record.selection
+    const destination: GraphPresentationDestination = active.record.selection
       ? { kind: 'selection', key: selectedKey(active.record.selection) }
       : { kind: 'relation' };
-    runRecord(active.record, false, !onNavigate);
+    runRecord(active.record, false, !onNavigate, { destination, opener });
   }
 
   useEffect(() => {
-    if (!active) return;
-    if (active.status === 'pending' && focusIntentRef.current) statusRef.current?.focus();
+    if (!active || (active.status !== 'success' && active.status !== 'failure')) return;
+    const intent = presentationIntentRef.current;
+    if (
+      !intent ||
+      intent.source !== source ||
+      intent.source !== active.source ||
+      sourceRef.current !== intent.source ||
+      intent.requestId !== active.requestId ||
+      sequenceRef.current !== intent.requestId ||
+      intent.routeKey !== active.routeKey
+    )
+      return;
+    presentationIntentRef.current = null;
+    function isCurrentVisibleTarget(target: HTMLElement | null): target is HTMLElement {
+      return !!target && target.isConnected && !!pageRef.current?.contains(target) && !target.closest('[hidden]');
+    }
     if (active.status === 'failure') {
-      failureRef.current?.focus();
-      focusIntentRef.current = null;
+      if (isCurrentVisibleTarget(failureRef.current)) failureRef.current.focus();
+      return;
     }
-    if (active.status === 'success' && focusIntentRef.current) {
-      const intent = focusIntentRef.current;
-      if (intent.kind === 'selection') {
-        const target = [...(pageRef.current?.querySelectorAll<HTMLButtonElement>('[data-graph-selection]') ?? [])].find(
-          (button) => button.dataset.graphSelection === intent.key && !button.closest('[hidden]'),
-        );
-        (target ?? detailHeadingRef.current ?? relationRef.current)?.focus();
-      } else relationRef.current?.focus();
-      focusIntentRef.current = null;
-    }
-  }, [active?.requestId, active?.status, source]);
+    let target: HTMLElement | null = null;
+    if (intent.destination.kind === 'selection') {
+      target =
+        [...(pageRef.current?.querySelectorAll<HTMLButtonElement>('[data-graph-selection]') ?? [])].find(
+          (button) => button.dataset.graphSelection === intent.destination.key && isCurrentVisibleTarget(button),
+        ) ?? null;
+    } else if (isCurrentVisibleTarget(relationRef.current)) target = relationRef.current;
+    if (!target && isCurrentVisibleTarget(detailHeadingRef.current)) target = detailHeadingRef.current;
+    if (!target && isCurrentVisibleTarget(relationRef.current)) target = relationRef.current;
+    target?.focus();
+  }, [active?.requestId, active?.routeKey, active?.status, source]);
 
   return (
     <article
@@ -1170,7 +1227,7 @@ export function GraphBrowserPage({
       )}
       <p className="max-w-prose text-muted-foreground">{m.graph_explore_intro({}, o)}</p>
       {status === 'pending' && (
-        <p ref={statusRef} role="status" tabIndex={-1}>
+        <p role="status">
           {m.graph_explore_loading({}, o)}
         </p>
       )}
@@ -1179,7 +1236,7 @@ export function GraphBrowserPage({
           <p ref={failureRef} role="alert" tabIndex={-1}>
             {failed}
           </p>
-          <Button type="button" className={actionClass} onClick={retry}>
+          <Button type="button" className={actionClass} onClick={(event) => retry(event.currentTarget)}>
             {m.graph_explore_retry({}, o)}
           </Button>
         </div>
@@ -1192,6 +1249,8 @@ export function GraphBrowserPage({
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
+              const submitter = (event.nativeEvent as SubmitEvent).submitter;
+              const activeElement = event.currentTarget.ownerDocument.activeElement as HTMLElement | null;
               request(
                 {
                   property: String(form.get('property') ?? ''),
@@ -1199,6 +1258,9 @@ export function GraphBrowserPage({
                   depth: Number(form.get('depth') ?? 1),
                 },
                 'filter',
+                {},
+                true,
+                submitter ?? activeElement,
               );
             }}
           >
@@ -1384,8 +1446,8 @@ export function GraphBrowserPage({
               projection={projection!}
               locale={locale}
               unavailable={status === 'pending' || status === 'failure'}
-              onContinue={(entry) =>
-                request(routeForSelection(read.query, selection), 'expansion', { expansion: entry }, false)
+              onContinue={(entry, opener) =>
+                request(routeForSelection(read.query, selection), 'expansion', { expansion: entry }, false, opener)
               }
             />
           )}

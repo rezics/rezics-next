@@ -199,58 +199,60 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
   requireAccessDeadline(deadline);
   const routed = routePartition(page.source.subject);
   if (!routed) return false;
-  const build = rows(
-    await readBuild.run(pool, {
-      partition_no: routed.partition,
-      route: routed.route,
-      subject_id: page.source.subject,
-      meaning_digest: meaning.digest,
-      meaning_type: meaning.type,
-    }),
-  )[0];
-  if (
-    !build ||
-    build.build_id !== page.frontier.build ||
-    BigInt(build.generation) !== page.frontier.generation ||
-    build.owner_epoch !== page.source.epoch ||
-    BigInt(build.source_position) !== page.source.position ||
-    build.terminal_id !== page.source.terminal ||
-    build.subject_revision !== page.source.revision ||
-    build.security_revision !== page.source.securityRevision ||
-    build.current_release !== page.source.currentRelease
-  )
-    return false;
-  const terminal = routePartition(page.source.terminal);
-  if (!terminal) return false;
-  const homes = new Set([routed.partition, terminal.partition]);
-  const dependencies = [
-    ...page.repairLocators.flatMap((locator) => locator.dependencies),
-    ...page.records.flatMap((record) => record.dependencies),
-  ];
-  for (const dependency of dependencies) {
-    // A Semantic privacy head cannot stand in for an original Account tuple.
-    // Until that tuple is retained by this projection build, consent replay is
-    // unknown and cannot produce a verified repair receipt.
-    if (dependency.kind === 'consent') return false;
-    const route = dependency.kind === 'sourceTuple' ? dependency.tuple.route : dependency.route;
-    if (!Number.isInteger(route) || route < 0 || route > 65535) return false;
-    homes.add(partitionOf(route));
-  }
-  // These are the original build's keyed retained heads, not a current catalogue
-  // enumeration or a newly captured replacement for the original Source page.
-  for (const partition of homes) {
-    requireAccessDeadline(deadline);
-    const head = await readReplayHead.run(pool, { build_id: page.frontier.build, partition_no: partition });
+  return inSnapshot(pool, deadline, async (client) => {
+    const build = rows(
+      await readBuild.run(client, {
+        partition_no: routed.partition,
+        route: routed.route,
+        subject_id: page.source.subject,
+        meaning_digest: meaning.digest,
+        meaning_type: meaning.type,
+      }),
+    )[0];
     if (
-      !head ||
-      head.write_state !== 'active' ||
-      head.epoch !== head.owner_epoch ||
-      head.position !== head.current_position
+      !build ||
+      build.build_id !== page.frontier.build ||
+      BigInt(build.generation) !== page.frontier.generation ||
+      build.owner_epoch !== page.source.epoch ||
+      BigInt(build.source_position) !== page.source.position ||
+      build.terminal_id !== page.source.terminal ||
+      build.subject_revision !== page.source.revision ||
+      build.security_revision !== page.source.securityRevision ||
+      build.current_release !== page.source.currentRelease
     )
       return false;
-  }
-  requireAccessDeadline(deadline);
-  return true;
+    const terminal = routePartition(page.source.terminal);
+    if (!terminal) return false;
+    const homes = new Set([routed.partition, terminal.partition]);
+    const dependencies = [
+      ...page.repairLocators.flatMap((locator) => locator.dependencies),
+      ...page.records.flatMap((record) => record.dependencies),
+    ];
+    for (const dependency of dependencies) {
+      // A Semantic privacy head cannot stand in for an original Account tuple.
+      // Until that tuple is retained by this projection build, consent replay is
+      // unknown and cannot produce a verified repair receipt.
+      if (dependency.kind === 'consent') return false;
+      const route = dependency.kind === 'sourceTuple' ? dependency.tuple.route : dependency.route;
+      if (!Number.isInteger(route) || route < 0 || route > 65535) return false;
+      homes.add(partitionOf(route));
+    }
+    // These are the original build's keyed retained heads, not a current catalogue
+    // enumeration or a newly captured replacement for the original Source page.
+    for (const partition of homes) {
+      requireAccessDeadline(deadline);
+      const head = await readReplayHead.run(client, { build_id: page.frontier.build, partition_no: partition });
+      if (
+        !head ||
+        head.write_state !== 'active' ||
+        head.epoch !== head.owner_epoch ||
+        head.position !== head.current_position
+      )
+        return false;
+    }
+    requireAccessDeadline(deadline);
+    return true;
+  });
 }
 
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
@@ -383,7 +385,8 @@ function boundedProjectionReadOptions(deadline: number) {
     deadlineError: () => new AccessUnavailableError('deadline'),
     mapError(error: unknown): unknown {
       try {
-        throwAccessUnavailable(error, deadline);
+        // The physical read race owns deadline selection; keep a settled failure's cause.
+        throwAccessUnavailable(error);
       } catch (mapped) {
         return mapped;
       }

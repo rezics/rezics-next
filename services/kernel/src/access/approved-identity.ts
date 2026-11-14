@@ -12,6 +12,9 @@ import receiptRead from '../command/read-receipt.sql';
 import approvalRead from './workflow-approvals-read.sql';
 import { accessRoot } from './derived-access.ts';
 import { accessClock } from './access-clock.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import { accessCheckout } from './work.ts';
+import { approvalResolutionNativeWork, approvalResolutionReadOptions } from './approval-resolution-work.ts';
 
 export class ApprovalIdentityUnavailableError extends Error {
   readonly status = 503;
@@ -101,17 +104,28 @@ export async function readApprovedIdentity(
   )
     throw new ApprovalIdentityDeniedError();
   const at = accessClock(access)();
-  const row = await approvalRead.run(context.pool, {
+  const approvalInput = {
     route: locator.route as number,
     approval_id: locator.id,
     at: at.toISOString(),
-  });
+  };
+  const row = await accessCheckout(context.work, () =>
+    withBoundedReadConnection(
+      context.pool,
+      context.deadline,
+      (client) =>
+        approvalResolutionNativeWork(context.work, 'approval', approvalInput, () =>
+          approvalRead.run(client, approvalInput),
+        ),
+      approvalResolutionReadOptions,
+    ),
+  );
   if (!row || approvalRowDigest(row) !== locator.binding) throw new ApprovalIdentityDeniedError();
   const expires = Math.min(Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
   if (!Number.isFinite(expires) || at.getTime() >= expires) throw new ApprovalIdentityDeniedError();
   // A row-shaped fixture, restored dump fragment or caller JSON is insufficient:
   // approve must have committed this exact row and reference through core.
-  const receipt = await receiptRead.run(context.pool, {
+  const receiptInput = {
     partition_no: partitionOf(row.route),
     principal_kind: 'account',
     principal_id: row.actorId,
@@ -122,7 +136,22 @@ export async function readApprovedIdentity(
       row.actorId,
       `${row.route}:${row.approvalId}`,
     ),
-  });
+  };
+  const receipt = await accessCheckout(context.work, () =>
+    withBoundedReadConnection(
+      context.pool,
+      context.deadline,
+      (client) =>
+        approvalResolutionNativeWork(
+          context.work,
+          'creation-receipt',
+          receiptInput,
+          () => receiptRead.run(client, receiptInput),
+          receiptInput.idempotency_keys.length,
+        ),
+      approvalResolutionReadOptions,
+    ),
+  );
   const response = receipt?.response as { reference?: unknown; expiresAt?: unknown } | undefined;
   if (
     !receipt ||

@@ -1,3 +1,4 @@
+import { Pool } from 'pg';
 import { characterDocumentProperties } from '../../semantic/character-public-reading-documents.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
 import { readItemDetails, readItemTypes, readSubjectPageStates } from '../../semantic/public-subject-facts.ts';
@@ -13,7 +14,10 @@ import type { PageExecution, SelectedPageSnapshot } from '../page-contract.ts';
 export function createNativePageSemanticPort(): PageSemanticPort {
   return Object.freeze({
     characterDocumentProperties,
-    activeRelease,
+    activeRelease: (pool: Parameters<PageSemanticPort['activeRelease']>[0], deadline?: number) =>
+      pool instanceof Pool
+        ? withReadTransaction(pool, (client) => activeRelease(client), deadline)
+        : activeRelease(pool),
     readItemTypes,
     readItemDetails,
     readSubjectPageStates,

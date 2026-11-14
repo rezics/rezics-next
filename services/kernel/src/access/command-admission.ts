@@ -1,5 +1,8 @@
 import { readNativePermissionAccount } from './account-authority.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import type { QueryConfig } from 'pg';
+import type { AccessClient } from '../request/access.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
@@ -7,6 +10,26 @@ import { AuthenticationError, type Access, type AccessContext, type AccountActor
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './deadline.ts';
 import { accessRoot } from './derived-access.ts';
+
+/** Keep physical checkout inside the native account query's existing work frame. */
+function commandAccountClient(pool: AccessContext['pool'], deadline: number): AccessClient {
+  const client = Object.create(pool) as AccessClient;
+  client.query = ((query: QueryConfig | string, values?: unknown[]) =>
+    withBoundedReadConnection(pool, deadline, (connection) => connection.query(query, values), {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error: unknown) {
+        try {
+          throwAccessUnavailable(error);
+        } catch (mapped) {
+          if (mapped instanceof Error && mapped !== error) mapped.cause = error;
+          return mapped;
+        }
+        return error;
+      },
+      isUncertainSettledQueryError: () => true,
+    })) as AccessClient['query'];
+  return deadlineClient(client, deadline);
+}
 
 /** A marker is held only in this registry and always carries a live executor time.
  * Request JSON, copied contexts and booleans cannot mark a read as a command.
@@ -88,7 +111,7 @@ export async function actingCommandAccount(
   return admission
     ? admission(actor, context)
     : readAccount(
-        deadlineClient(context.pool, context.deadline),
+        commandAccountClient(context.pool, context.deadline),
         Number.parseInt(actor.accountId.slice(24, 28), 16),
         actor.accountId,
       );
@@ -166,8 +189,12 @@ export function createCommandAdmission(
       const account = within(deadline, async () => {
         const original = snapshot.account;
         const current = context.work
-          ? await readNativePermissionAccount(deadlineClient(context.pool, deadline), actor.accountId, context.work)
-          : await readAccount(deadlineClient(context.pool, deadline), original.route, actor.accountId);
+          ? await readNativePermissionAccount(
+              commandAccountClient(context.pool, deadline),
+              actor.accountId,
+              context.work,
+            )
+          : await readAccount(commandAccountClient(context.pool, deadline), original.route, actor.accountId);
         if (current?.state === 'suspended') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
         return current &&
           current.accountId === original.accountId &&

@@ -43,6 +43,7 @@ import {
   type PasskeyAssertion,
 } from './passkeys.ts';
 import { credentialEffects } from './credential-effects.ts';
+import { revokeNativeSessions } from './native-session-revocation.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
@@ -1940,6 +1941,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       ...authority.internal,
       async revokeSessions(accountId, cleanup) {
+        if (cleanup && 'original' in cleanup) {
+          if (cleanup.original.accountId !== accountId) throw new Denied();
+          return revokeNativeSessions(database, cleanup.original, cleanup.deadline);
+        }
         if (cleanup?.boundedCleanup) return authority.cleanupFencedSessions(accountId, cleanup.barrier);
         await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },

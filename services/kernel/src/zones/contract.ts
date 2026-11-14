@@ -101,7 +101,8 @@ export function ZonePublicSchema() {
         id: routedUuidSchema,
         revision: revisionSchema,
         labels: publicLabelsSchema(),
-        primaryLanguage: t.Optional(literalUnion(UI_LOCALES)),
+        // Null preserves explicit naming when its language is withheld; omission means legacy.
+        primaryLanguage: t.Optional(t.Union([literalUnion(UI_LOCALES), t.Null()])),
         visibility: visibilitySchema,
         appearance: appearanceSchema(),
         navigation: t.Array(navigationItemSchema(), { maxItems: MAX_ZONE_PAGES }),

@@ -21,6 +21,7 @@ export function RealmParticipationView({
   onRetry,
   memberLabel,
   admittedAction,
+  leaveRecovery = false,
   summaryRef,
 }: {
   state: MemberState | 'loading' | 'unavailable';
@@ -33,6 +34,7 @@ export function RealmParticipationView({
   onRetry: () => void;
   memberLabel?: string | undefined;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
+  leaveRecovery?: boolean;
   summaryRef?: Ref<HTMLElement>;
 }) {
   const headingId = useId();
@@ -95,11 +97,6 @@ export function RealmParticipationView({
               {problem.outcome === 'closed' ? m.realm_change_closed() : m.realm_change_failed()}
             </p>
           ) : null}
-          {visibility === 'protected' ? (
-            <p data-visibility="protected" className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-              {state === 'member' && !problem ? m.realm_protected_note() : m.realm_protected_admission()}
-            </p>
-          ) : null}
         </div>
         <ListRowControl
           data-content-item-slot="actions"
@@ -110,7 +107,7 @@ export function RealmParticipationView({
               <Badge className="h-auto max-w-full whitespace-normal py-1 text-start">
                 {memberLabel ?? m.realm_state_member()}
               </Badge>
-              {admittedAction === undefined || admittedAction === 'leave' ? (
+              {!leaveRecovery && (admittedAction === undefined || admittedAction === 'leave') ? (
                 <Button
                   key="leave"
                   size="lg"
@@ -126,6 +123,7 @@ export function RealmParticipationView({
             </>
           ) : null}
           {state === 'none' &&
+          !leaveRecovery &&
           !problem &&
           (visibility === 'public' || (visibility === 'unknown' && admittedAction === 'join')) &&
           (admittedAction === undefined || admittedAction === 'join') ? (
@@ -140,7 +138,7 @@ export function RealmParticipationView({
               {m.realm_join()}
             </Button>
           ) : null}
-          {problem || state === 'unavailable' || (pending && refresh !== 'checking') ? (
+          {!leaveRecovery && (problem || state === 'unavailable' || (pending && refresh !== 'checking')) ? (
             <Button
               key="retry"
               type="button"
@@ -153,6 +151,15 @@ export function RealmParticipationView({
             </Button>
           ) : null}
         </ListRowControl>
+        {visibility === 'protected' ? (
+          <p
+            data-content-item-slot="explanation"
+            data-visibility="protected"
+            className="max-w-prose text-sm leading-relaxed text-muted-foreground"
+          >
+            {state === 'member' && !problem ? m.realm_protected_note() : m.realm_protected_admission()}
+          </p>
+        ) : null}
       </ContentItemFrame>
     </section>
   );

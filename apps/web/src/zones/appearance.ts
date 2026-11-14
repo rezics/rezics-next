@@ -8,7 +8,7 @@ export type ZonePublic = {
   id: string;
   revision: string;
   labels: ZoneConfiguration['labels'];
-  primaryLanguage?: ZoneLanguage;
+  primaryLanguage?: ZoneLanguage | null;
   visibility: 'private' | 'unlisted' | 'public';
   appearance: ZoneAppearance;
   navigation: { route: string }[];

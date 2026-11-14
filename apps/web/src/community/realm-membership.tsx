@@ -293,8 +293,13 @@ function NativeMembership({
     else completed.focus.cancel();
   }, [completed, attempt, onCompleted]);
 
-  const message = (() => {
-    if (attempt) return busyNow ? m.realm_membership_checking() : m.realm_membership_command_uncertain();
+  const standingMessage = (() => {
+    if (source.viewer.state !== 'member') return null;
+    if (source.viewer.membership === 'pending') return m.realm_state_pending();
+    if (source.viewer.membership === 'member') return m.realm_state_member();
+    return null;
+  })();
+  const admissionMessage = (() => {
     if (source.viewer.state === 'banned' || source.actions.participate === 'banned') return m.realm_banned();
     if (source.viewer.state === 'orphaned' || source.actions.participate === 'orphaned')
       return m.realm_claim_orphaned();
@@ -303,11 +308,8 @@ function NativeMembership({
     if (source.actions.participate === 'denied') return m.realm_native_access_denied();
     if (source.actions.participate === 'unavailable') return m.realm_membership_unavailable();
     if (source.actions.participate === 'sign-in') return m.realm_sign_in_to_join();
-    if (source.actions.participate === 'admitted' && source.viewer.state === 'member') {
-      if (source.viewer.membership === 'pending') return m.realm_state_pending();
-      if (source.viewer.membership === 'member') return m.realm_state_member();
-    }
-    if (joinCandidate) {
+    if (source.actions.participate === 'admitted' && source.viewer.state === 'member') return null;
+    if (joinCandidate && !attempt) {
       if (visibility === 'protected') return m.realm_protected_admission();
       if (joinAdvice.isFetching || joinAdvice.isPending) return m.realm_membership_loading();
       if (joinAdvice.data?.state === 'refused') return m.realm_membership_advice_refused();
@@ -318,6 +320,7 @@ function NativeMembership({
     }
     return null;
   })();
+  const operationMessage = attempt ? m.realm_membership_command_uncertain() : null;
 
   async function submit(
     action: 'join' | 'leave' | null,
@@ -379,13 +382,15 @@ function NativeMembership({
     (joinAdvice.isFetching || joinAdvice.isPending || joinAdvice.isError || joinAdvice.data?.state === 'unavailable');
   const adviceRetryDisabled = joinAdvice.isFetching || !caller.isReady() || !current();
 
-  if (!message && !action && !signIn && !attempt && !adviceRetry) return null;
+  if (!standingMessage && !admissionMessage && !operationMessage && !action && !signIn && !attempt && !adviceRetry)
+    return null;
   return (
     <section
       ref={summary}
       tabIndex={-1}
       aria-label={m.realm_membership_label()}
-      className="flex min-w-0 flex-wrap items-center gap-3"
+      aria-busy={busyNow || joinAdvice.isFetching}
+      className="min-w-0 space-y-3 [overflow-wrap:anywhere]"
       data-slot="realm-membership"
       data-member-state={source.viewer.state === 'member' ? source.viewer.membership : source.viewer.state}
       data-native-advice={
@@ -400,46 +405,70 @@ function NativeMembership({
               : (joinAdvice.data?.state ?? source.actions.participate)
       }
     >
-      {message ? (
-        <p role="status" className="max-w-prose text-sm text-muted-foreground">
-          {message}
-        </p>
-      ) : null}
-      {attempt ? (
-        <>
+      <div data-slot="current-status" className="min-w-0 space-y-1 empty:hidden">
+        {standingMessage ? (
+          <p role="status" className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            {standingMessage}
+          </p>
+        ) : null}
+        {admissionMessage ? (
+          <p role="status" className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            {admissionMessage}
+          </p>
+        ) : null}
+        {operationMessage ? (
+          <p role="status" className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            {operationMessage}
+          </p>
+        ) : null}
+      </div>
+      <div data-slot="actions" className="flex min-w-0 flex-wrap items-center gap-3 empty:hidden">
+        {attempt ? (
+          <>
+            <Button
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-6 py-2 text-start text-base"
+              disabled={busyNow || !current() || !caller.isCurrent() || session !== 'signed-in' || !subject || !csrfToken}
+              onClick={(event) => void submit(null, event, attempt)}
+            >
+              {m.realm_membership_command_retry()}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start"
+              disabled={busyNow}
+              onClick={discardAttempt}
+            >
+              {m.realm_membership_command_discard()}
+            </Button>
+          </>
+        ) : signIn ? (
           <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
-            disabled={busyNow || !current() || !caller.isCurrent() || session !== 'signed-in' || !subject || !csrfToken}
-            onClick={(event) => void submit(null, event, attempt)}
+            nativeButton={false}
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-6 py-2 text-start text-base"
+            render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
           >
-            {busyNow ? m.realm_membership_checking() : m.realm_membership_command_retry()}
+            {m.realm_sign_in_to_join()}
           </Button>
-          <Button variant="outline" disabled={busyNow} onClick={discardAttempt}>
-            {m.realm_membership_command_discard()}
+        ) : action ? (
+          <Button
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-6 py-2 text-start text-base"
+            disabled={session !== 'signed-in' || !subject || !csrfToken || !current() || (action === 'join' && !canJoin)}
+            onClick={(event) => void submit(action, event)}
+          >
+            {action === 'join' ? m.realm_join() : m.realm_leave()}
           </Button>
-        </>
-      ) : signIn ? (
-        <Button
-          nativeButton={false}
-          className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
-          render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
-        >
-          {m.realm_sign_in_to_join()}
-        </Button>
-      ) : action ? (
-        <Button
-          className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
-          disabled={session !== 'signed-in' || !subject || !csrfToken || !current() || (action === 'join' && !canJoin)}
-          onClick={(event) => void submit(action, event)}
-        >
-          {action === 'join' ? m.realm_join() : m.realm_leave()}
-        </Button>
-      ) : null}
-      {adviceRetry ? (
-        <Button variant="outline" disabled={adviceRetryDisabled} onClick={() => void joinAdvice.refetch()}>
-          {joinAdvice.isFetching ? m.realm_membership_loading() : m.realm_membership_retry()}
-        </Button>
-      ) : null}
+        ) : null}
+        {adviceRetry ? (
+          <Button
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start"
+            disabled={adviceRetryDisabled}
+            onClick={() => void joinAdvice.refetch()}
+          >
+            {joinAdvice.isFetching ? m.realm_membership_loading() : m.realm_membership_retry()}
+          </Button>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -829,6 +858,7 @@ function PersonalMembership({
         summaryRef={summary}
         memberLabel={memberLabel}
         admittedAction={admittedAction}
+        leaveRecovery={!!currentRecovery}
         state={
           currentPending && !currentProblem
             ? 'pending'

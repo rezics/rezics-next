@@ -4,6 +4,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { insightsDiaryHref, insightsHref, insightsSearch } from './address';
 import { useInsightsReading, type InsightsReader, type InsightsState } from './current';
+import { InsightsWorkspace } from './insights-workspace';
 import {
   AllTimePanel,
   AssessmentsPanel,
@@ -60,111 +61,132 @@ export function ReadingInsightsView({
               : state.kind === 'loading'
                 ? m.library_insights_loading()
                 : m.library_insights_changed();
-  return (
-    <article className="mx-auto min-w-0 max-w-6xl space-y-6 px-4 py-8 text-foreground [overflow-wrap:anywhere]">
-      <header className="space-y-3">
-        <a href={`/${locale}/library`} className={insightLink}>
-          {m.nav_library()}
-        </a>
-        <PageHeading>{m.library_insights_title()}</PageHeading>
-        <p className="max-w-prose text-muted-foreground">{m.library_insights_intro()}</p>
-        <form onSubmit={selectYear} className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label htmlFor="insights-year" className="block text-sm font-medium">
-              {m.library_insights_year()}
-            </label>
-            <input
-              id="insights-year"
-              name="year"
-              inputMode="numeric"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              aria-invalid={invalid || state.kind === 'invalid'}
-              aria-describedby={invalid || state.kind === 'invalid' ? 'insights-year-error' : undefined}
-              className={`${control} w-28`}
-            />
-          </div>
-          <button type="submit" className={control}>
-            {m.library_insights_open_year()}
-          </button>
-          <button
-            type="button"
-            className={control}
-            onClick={onRefresh}
-            disabled={!canRefresh || state.kind === 'loading' || year === undefined}
-          >
-            {m.library_insights_refresh()}
-          </button>
-        </form>
-        {invalid || state.kind === 'invalid' ? (
-          <p id="insights-year-error" role="alert">
-            {m.library_insights_invalid_year()}
-          </p>
-        ) : null}
-      </header>
-      {!value ? (
-        <div role="status" className="space-y-3 rounded-xl border border-border p-5">
-          <p>{notice}</p>
-          {state.kind === 'changed' && !canRefresh && year !== undefined ? (
-            <a className={insightLink} href={insightsHref(year, locale)}>
-              {m.library_insights_open_year()}
-            </a>
-          ) : null}
-          {state.kind === 'signed-out' || state.kind === 'retired' ? (
-            <a
-              className={insightLink}
-              href={`/auth/sign-in?return_to=${encodeURIComponent(year === undefined ? `/${locale}/library/insights` : insightsHref(year, locale))}`}
-            >
-              {m.account_sign_in()}
-            </a>
-          ) : null}
+  const intro = (
+    <div className="space-y-3">
+      <a href={`/${locale}/library`} className={insightLink}>
+        {m.nav_library()}
+      </a>
+      <PageHeading>{m.library_insights_title()}</PageHeading>
+      <p className="max-w-prose text-muted-foreground">{m.library_insights_intro()}</p>
+    </div>
+  );
+  const actions = (
+    <div className="min-w-0 space-y-2">
+      <form onSubmit={selectYear} className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <label htmlFor="insights-year" className="block text-sm font-medium">
+            {m.library_insights_year()}
+          </label>
+          <input
+            id="insights-year"
+            name="year"
+            inputMode="numeric"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            aria-invalid={invalid || state.kind === 'invalid'}
+            aria-describedby={invalid || state.kind === 'invalid' ? 'insights-year-error' : undefined}
+            className={`${control} w-28`}
+          />
         </div>
-      ) : (
-        <>
-          <p className="text-sm text-muted-foreground">{m.library_insights_independent()}</p>
-          <nav aria-label={m.library_insights_diary()} className="flex flex-wrap gap-x-4">
-            <a
-              href={insightsDiaryHref(value.actions.diary, locale)}
-              className={insightLink}
-              onClick={(event) => {
-                if (!current()) event.preventDefault();
-              }}
-            >
-              {m.library_insights_diary()}
-            </a>
-            {value.panels.reportedYear.status === 'failed'
-              ? [
-                  ...value.actions.months.map((action) => ({ action, label: monthName(action.month) })),
-                  { action: value.actions.unallocatedMonth, label: m.library_insights_unallocated() },
-                ].map(({ action, label }) => (
-                  <a
-                    key={label}
-                    className={insightLink}
-                    href={insightsDiaryHref(action, locale)}
-                    onClick={(event) => {
-                      if (!current()) event.preventDefault();
-                    }}
-                  >
-                    {label}
-                  </a>
-                ))
-              : null}
-          </nav>
-          <div className="grid min-w-0 gap-6 lg:grid-cols-2">
-            <InsightsPanel id="insights-all-time" title={m.library_insights_all_time()} value={value.panels.allTime}>
-              {(panel) => <AllTimePanel value={panel} />}
-            </InsightsPanel>
-            <InsightsPanel id="insights-profiles" title={m.library_insights_profiles()} value={value.panels.profiles}>
-              {(panel) => <ProfilesPanel value={panel} />}
-            </InsightsPanel>
-          </div>
+        <button type="submit" className={control}>
+          {m.library_insights_open_year()}
+        </button>
+        <button
+          type="button"
+          className={control}
+          onClick={onRefresh}
+          disabled={!canRefresh || state.kind === 'loading' || year === undefined}
+        >
+          {m.library_insights_refresh()}
+        </button>
+      </form>
+      {invalid || state.kind === 'invalid' ? (
+        <p id="insights-year-error" role="alert">
+          {m.library_insights_invalid_year()}
+        </p>
+      ) : null}
+    </div>
+  );
+  const status = value ? (
+    <p className="text-sm text-muted-foreground">{m.library_insights_independent()}</p>
+  ) : (
+    <div role="status" className="space-y-3">
+      <p>{notice}</p>
+      {state.kind === 'changed' && !canRefresh && year !== undefined ? (
+        <a className={insightLink} href={insightsHref(year, locale)}>
+          {m.library_insights_open_year()}
+        </a>
+      ) : null}
+      {state.kind === 'signed-out' || state.kind === 'retired' ? (
+        <a
+          className={insightLink}
+          href={`/auth/sign-in?return_to=${encodeURIComponent(year === undefined ? `/${locale}/library/insights` : insightsHref(year, locale))}`}
+        >
+          {m.account_sign_in()}
+        </a>
+      ) : null}
+    </div>
+  );
+  return (
+    <InsightsWorkspace
+      intro={intro}
+      year={year}
+      actions={actions}
+      status={status}
+      allTime={
+        value ? (
+          <InsightsPanel
+            id="insights-all-time"
+            title={m.library_insights_all_time()}
+            value={value.panels.allTime}
+          >
+            {(panel) => <AllTimePanel value={panel} />}
+          </InsightsPanel>
+        ) : null
+      }
+      reportedYear={
+        value ? (
           <InsightsPanel
             id="insights-year-panel"
             title={m.library_insights_reported_year({ year: value.year })}
             value={value.panels.reportedYear}
+            failedContent={
+              value.panels.reportedYear.status === 'failed' ? (
+                <nav aria-label={m.library_insights_diary()} className="flex flex-wrap gap-x-4">
+                  <a
+                    href={insightsDiaryHref(value.actions.diary, locale)}
+                    className={insightLink}
+                    onClick={(event) => {
+                      if (!current()) event.preventDefault();
+                    }}
+                  >
+                    {m.library_insights_diary()}
+                  </a>
+                  {[
+                    ...value.actions.months.map((action) => ({ action, label: monthName(action.month) })),
+                    { action: value.actions.unallocatedMonth, label: m.library_insights_unallocated() },
+                  ].map(({ action, label }) => (
+                    <a
+                      key={label}
+                      className={insightLink}
+                      href={insightsDiaryHref(action, locale)}
+                      onClick={(event) => {
+                        if (!current()) event.preventDefault();
+                      }}
+                    >
+                      {label}
+                    </a>
+                  ))}
+                </nav>
+              ) : null
+            }
           >
             {(panel) => <YearPanel value={panel} actions={value.actions} current={current} />}
           </InsightsPanel>
+        ) : null
+      }
+      currentProgress={
+        value ? (
           <InsightsPanel
             id="insights-progress"
             title={m.library_insights_current_progress()}
@@ -172,6 +194,17 @@ export function ReadingInsightsView({
           >
             {(panel) => <ProgressPanel value={panel} />}
           </InsightsPanel>
+        ) : null
+      }
+      profiles={
+        value ? (
+          <InsightsPanel id="insights-profiles" title={m.library_insights_profiles()} value={value.panels.profiles}>
+            {(panel) => <ProfilesPanel value={panel} />}
+          </InsightsPanel>
+        ) : null
+      }
+      assessments={
+        value ? (
           <InsightsPanel
             id="insights-assessments"
             title={m.library_insights_assessments()}
@@ -179,9 +212,9 @@ export function ReadingInsightsView({
           >
             {(panel) => <AssessmentsPanel value={panel} />}
           </InsightsPanel>
-        </>
-      )}
-    </article>
+        ) : null
+      }
+    />
   );
 }
 

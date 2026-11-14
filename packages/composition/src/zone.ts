@@ -32,9 +32,9 @@ export function zonePrimaryLanguage(
   return zone.primaryLanguage ?? UI_LOCALES.find((language) => !!zone.labels[language]?.trim());
 }
 
-/** Consume only the caller's readable map; this function cannot recover withheld names. */
+/** Consume only readable names. A null primary is withheld; only omission permits legacy fallback. */
 export function pickZoneName(
-  zone: Pick<ZoneConfiguration, 'labels' | 'primaryLanguage'>,
+  zone: { labels: ZoneConfiguration['labels']; primaryLanguage?: ZoneLanguage | null },
   requested: string,
 ): { text: string; lang?: string } {
   const language =

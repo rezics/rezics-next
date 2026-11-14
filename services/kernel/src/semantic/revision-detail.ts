@@ -12,6 +12,7 @@ import { readCandidateDisclosure } from './disclosure.ts';
 import { candidateSources, fencedIds } from './fences.ts';
 import { withReadTransaction } from './read.ts';
 import { currentAcceptance, slotView } from './slots.ts';
+import { readContextDefaults } from './context.ts';
 import { loadRelated } from './related-subject-read.ts';
 import { type SubjectComponent } from './subject.ts';
 import readContext from './context-public-exists.sql';
@@ -222,7 +223,8 @@ export async function readRevisionDetail(
     if (row?.kind === 'candidate' || row?.kind === 'decision') {
       const candidate = row.candidate!;
       const decision = await currentAcceptance(client, input.subject, candidate, context);
-      const view = await slotView(client, input.subject, row.property, context, {}, row.slot);
+      const defaults = await readContextDefaults(client, context);
+      const view = await slotView(client, input.subject, row.property, context, defaults, row.slot);
       const current = view.facts.find((fact) => fact.statement_id === candidate);
       const reading: Reading = {
         decision,

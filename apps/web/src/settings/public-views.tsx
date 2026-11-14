@@ -56,71 +56,91 @@ export function PublicViewsCard({
   };
   return (
     <ContentSection>
-      <ContentSectionHeader>
+      <ContentSectionHeader className="space-y-3">
         <ContentSectionTitle>
           <h2>{m.settings_public_activity_heading()}</h2>
         </ContentSectionTitle>
-        <ContentSectionDescription>
-          {m.settings_public_activity_text()} {m.settings_profile_visibility_help()}
+        <ContentSectionDescription className="max-w-3xl leading-6">
+          {m.settings_public_activity_text()}
         </ContentSectionDescription>
-        <ContentSectionDescription>{m.settings_public_activity_save_help()}</ContentSectionDescription>
+        <ContentSectionDescription className="max-w-3xl leading-6">
+          {m.settings_profile_visibility_help()}
+        </ContentSectionDescription>
       </ContentSectionHeader>
-      <ContentSectionBody className="space-y-4" aria-busy={busy}>
-        <ProfileFeedback editor={editor} scope="views" writable={writable} readable={canRead} showReaderReload />
-        <div role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
-          {changed && !closed && !busy && !state.attempt && state.phase !== 'uncertain'
-            ? m.settings_public_activity_unsaved()
-            : null}
+      <ContentSectionBody className="space-y-5" aria-busy={busy}>
+        <div className="max-w-3xl overflow-hidden rounded-lg border">
+          {profile ? (
+            <div className="divide-y">
+              {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (
+                <label
+                  key={view}
+                  htmlFor={`${ids}-${view}`}
+                  className="block min-h-14 w-full cursor-pointer px-4 py-3"
+                >
+                  <Field orientation="horizontal">
+                    <FieldContent className="min-w-0 flex-1">
+                      <FieldTitle className="whitespace-normal break-words">{viewLabels[view]}</FieldTitle>
+                    </FieldContent>
+                    <Switch
+                      id={`${ids}-${view}`}
+                      checked={profile.publicViews[view]}
+                      className="shrink-0"
+                      disabled={closed || busy || !profileFieldAdmitted('publicViews', state.editing, view)}
+                      onCheckedChange={(checked) => {
+                        editor.edit({ publicViews: { ...profile.publicViews, [view]: checked } });
+                      }}
+                    />
+                  </Field>
+                </label>
+              ))}
+              {profile.kind === 'organization' ? (
+                <label
+                  htmlFor={`${ids}-speakers`}
+                  className="block min-h-14 w-full cursor-pointer px-4 py-3"
+                >
+                  <Field orientation="horizontal">
+                    <FieldContent className="min-w-0 flex-1">
+                      <FieldTitle className="whitespace-normal break-words">{m.settings_public_speakers()}</FieldTitle>
+                    </FieldContent>
+                    <Switch
+                      id={`${ids}-speakers`}
+                      checked={profile.speakersListed === true}
+                      className="shrink-0"
+                      disabled={closed || busy || !profileFieldAdmitted('speakersListed', state.editing)}
+                      onCheckedChange={(checked) => {
+                        editor.edit({ speakersListed: checked });
+                      }}
+                    />
+                  </Field>
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="space-y-4 border-t bg-muted/20 p-4 sm:p-5">
+            <p className="break-words text-sm leading-6 text-muted-foreground">
+              {m.settings_public_activity_save_help()}
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
+                {changed && !closed && !busy && !state.attempt && state.phase !== 'uncertain'
+                  ? m.settings_public_activity_unsaved()
+                  : null}
+              </div>
+              {changed && !busy ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 w-full max-w-sm justify-start whitespace-normal break-words py-2 text-left sm:w-auto"
+                  disabled={closed || !!state.attempt || commandWaiting || !canSubmitPatch}
+                  onClick={() => void editor.submit('views')}
+                >
+                  {m.settings_profile_save_activity()}
+                </Button>
+              ) : null}
+            </div>
+            <ProfileFeedback editor={editor} scope="views" writable={writable} readable={canRead} showReaderReload />
+          </div>
         </div>
-        {profile ? (
-          <>
-            {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (
-              <label key={view} htmlFor={`${ids}-${view}`} className="block min-h-11 w-full py-3">
-                <Field orientation="horizontal">
-                  <FieldContent className="min-w-0">
-                    <FieldTitle>{viewLabels[view]}</FieldTitle>
-                  </FieldContent>
-                  <Switch
-                    id={`${ids}-${view}`}
-                    checked={profile.publicViews[view]}
-                    disabled={closed || busy || !profileFieldAdmitted('publicViews', state.editing, view)}
-                    onCheckedChange={(checked) => {
-                      editor.edit({ publicViews: { ...profile.publicViews, [view]: checked } });
-                    }}
-                  />
-                </Field>
-              </label>
-            ))}
-            {profile.kind === 'organization' ? (
-              <label htmlFor={`${ids}-speakers`} className="block min-h-11 w-full py-3">
-                <Field orientation="horizontal">
-                  <FieldContent className="min-w-0">
-                    <FieldTitle>{m.settings_public_speakers()}</FieldTitle>
-                  </FieldContent>
-                  <Switch
-                    id={`${ids}-speakers`}
-                    checked={profile.speakersListed === true}
-                    disabled={closed || busy || !profileFieldAdmitted('speakersListed', state.editing)}
-                    onCheckedChange={(checked) => {
-                      editor.edit({ speakersListed: checked });
-                    }}
-                  />
-                </Field>
-              </label>
-            ) : null}
-            {changed && !busy ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-2 h-auto min-h-11 w-full max-w-sm justify-start whitespace-normal break-words py-2 text-left"
-                disabled={closed || !!state.attempt || commandWaiting || !canSubmitPatch}
-                onClick={() => void editor.submit('views')}
-              >
-                {m.settings_profile_save_activity()}
-              </Button>
-            ) : null}
-          </>
-        ) : null}
       </ContentSectionBody>
     </ContentSection>
   );

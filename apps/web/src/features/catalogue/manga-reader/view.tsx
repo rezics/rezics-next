@@ -201,6 +201,12 @@ export function MangaReader({
     subject.type === 'schema:ComicSeries'
       ? m.manga_reader_series({}, options(locale))
       : m.manga_reader_volume({}, options(locale));
+  const streamLabel =
+    view === 'editions'
+      ? m.manga_reader_editions({}, options(locale))
+      : view === 'contents'
+        ? m.manga_reader_parts({}, options(locale))
+        : undefined;
   const title = pageText(subject.labels, locale, originalLanguage(subject));
   const Link = link;
   const port = useWorkReading(reading);
@@ -220,7 +226,7 @@ export function MangaReader({
         data-slot="manga-reader"
         data-state={retired ? 'stale' : state}
         aria-labelledby="manga-reader-title"
-        className={`${port.sectionClass} min-w-0 rounded-lg border border-border p-4 sm:p-6`}
+        className={`${port.sectionClass} min-w-0 space-y-5 rounded-lg border border-border p-4 sm:p-6`}
         onFocusCapture={(event) => {
           focused.current = event.target;
         }}
@@ -233,6 +239,15 @@ export function MangaReader({
         >
           {m.manga_reader_title({}, options(locale))}
         </h2>
+        <div className="min-w-0 space-y-1">
+          <p className="min-w-0 text-lg leading-snug font-semibold [overflow-wrap:anywhere]">
+            <span lang={title.lang}>{title.text || m.subject_value_unlabelled({}, options(locale))}</span>
+          </p>
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {typeLabel}
+            {streamLabel ? ` · ${streamLabel}` : ''}
+          </p>
+        </div>
         {retired ? (
           <div role="status" className="space-y-2 text-sm text-muted-foreground">
             <p>{m.manga_reader_stale({}, options(locale))}</p>
@@ -267,15 +282,17 @@ export function MangaReader({
                   )
                 : ''}
             </p>
-            <p className="text-sm text-muted-foreground">
-              <span lang={title.lang}>{title.text || m.subject_value_unlabelled({}, options(locale))}</span>
-              {` · ${typeLabel}`}
-            </p>
-            <ul className="space-y-1 text-sm text-muted-foreground">
+            <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
               {states.map(({ key, label, status, next, kind }) => (
-                <li key={key} role="status">
-                  <p>
-                    {label ? `${label}: ` : ''}
+                <li key={key} role="status" className="min-w-0 space-y-2 rounded-md border border-border p-3">
+                  <h3 className="font-medium [overflow-wrap:anywhere]">
+                    {streamLabel ??
+                      (kind === 'editions'
+                        ? m.manga_reader_editions({}, options(locale))
+                        : m.manga_reader_parts({}, options(locale)))}
+                    {label ? ` · ${label}` : ''}
+                  </h3>
+                  <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
                     {statusText(status, locale)}
                   </p>
                   {status === 'unavailable' ? (
@@ -327,31 +344,35 @@ export function MangaReader({
                 </li>
               ))}
             </ul>
-            <p className="text-sm text-muted-foreground">{m.manga_reader_chapters_unsupported({}, options(locale))}</p>
-            {measures.length > 0 && (
-              <ul className="space-y-1 text-sm">
-                {measures.map((measure) => (
-                  <li key={measure.key}>
-                    {m.manga_reader_public_count(
-                      {
-                        label: measure.label || measure.property,
-                        count: measure.count.value,
-                        accuracy:
-                          measure.count.relation === 'exact'
-                            ? m.manga_reader_exact({}, options(locale))
-                            : m.manga_reader_at_least({}, options(locale)),
-                      },
-                      options(locale),
-                    )}
-                    {measure.continued ? ` · ${m.manga_reader_more_window({}, options(locale))}` : ''}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="text-sm text-muted-foreground">{m.manga_reader_public_count_scope({}, options(locale))}</p>
+            <div className="min-w-0 space-y-2 border-t border-border pt-4 text-sm text-muted-foreground">
+              <p className="[overflow-wrap:anywhere]">{m.manga_reader_chapters_unsupported({}, options(locale))}</p>
+              {measures.length > 0 && (
+                <ul className="space-y-1">
+                  {measures.map((measure) => (
+                    <li key={measure.key} className="[overflow-wrap:anywhere]">
+                      {m.manga_reader_public_count(
+                        {
+                          label: measure.label || measure.property,
+                          count: measure.count.value,
+                          accuracy:
+                            measure.count.relation === 'exact'
+                              ? m.manga_reader_exact({}, options(locale))
+                              : m.manga_reader_at_least({}, options(locale)),
+                        },
+                        options(locale),
+                      )}
+                      {measure.continued ? ` · ${m.manga_reader_more_window({}, options(locale))}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="[overflow-wrap:anywhere]">{m.manga_reader_public_count_scope({}, options(locale))}</p>
+            </div>
             {groups.size > 0 && (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">{m.manga_reader_native_order({}, options(locale))}</p>
+              <section className="min-w-0 space-y-3">
+                <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                  {m.manga_reader_native_order({}, options(locale))}
+                </p>
                 {[...groups.entries()].map(([key, group]) => (
                   <section key={key} className="min-w-0 space-y-2">
                     <h3 className="text-base font-medium [overflow-wrap:anywhere]">
@@ -360,7 +381,7 @@ export function MangaReader({
                         : m.manga_reader_parts({}, options(locale))}
                       {group.relation ? ` · ${group.relation}` : ''}
                     </h3>
-                    <ul className="divide-y divide-border">
+                    <ul className="min-w-0 divide-y divide-border">
                       {group.rows.map((row) => {
                         const label = row.label || m.subject_value_unlabelled({}, options(locale));
                         const type = rowType(row, locale);
@@ -371,43 +392,47 @@ export function MangaReader({
                             data-statement-id={row.statementId}
                             data-node={row.node}
                             data-selected={selectedRow ? 'true' : undefined}
-                            className="space-y-2 py-2"
+                            className="min-w-0 space-y-3 py-3"
                           >
-                            <Link
-                              href={withSubjectVisitReturn(
-                                subjectHref({ id: row.id, label: row.label }, locale).href,
-                                selectedAddress(row),
-                                locale,
-                              )}
-                              lang={row.labelLanguage}
-                              className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center font-medium [overflow-wrap:anywhere]`}
-                            >
-                              {label}
-                            </Link>
-                            <button
-                              ref={(element) => {
-                                if (element) rowControls.current.set(row.key, element);
-                                else rowControls.current.delete(row.key);
-                              }}
-                              type="button"
-                              aria-expanded={selectedRow}
-                              className="ms-2 inline-flex min-h-11 min-w-11 items-center rounded-sm px-2 text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                              onClick={() => {
-                                if (retiredVisit.current) return;
-                                originHandled.current = true;
-                                select(selectedRow ? null : row.key);
-                                setMissingOrigin(false);
-                              }}
-                            >
-                              {selectedRow
-                                ? m.manga_reader_close_inspection({}, options(locale))
-                                : m.manga_reader_inspect({}, options(locale))}
-                            </button>
+                            <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                              <Link
+                                href={withSubjectVisitReturn(
+                                  subjectHref({ id: row.id, label: row.label }, locale).href,
+                                  selectedAddress(row),
+                                  locale,
+                                )}
+                                lang={row.labelLanguage}
+                                className={`${linkClass} ${linkColor} inline-flex min-h-11 w-full min-w-0 max-w-full items-start rounded-md border border-border bg-background px-3 py-3 text-start font-medium [overflow-wrap:anywhere]`}
+                              >
+                                {label}
+                              </Link>
+                              <button
+                                ref={(element) => {
+                                  if (element) rowControls.current.set(row.key, element);
+                                  else rowControls.current.delete(row.key);
+                                }}
+                                type="button"
+                                aria-expanded={selectedRow}
+                                className="inline-flex min-h-11 w-full min-w-11 items-center justify-center rounded-md border border-primary/40 bg-primary/5 px-3 text-sm font-medium text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto sm:justify-self-end"
+                                onClick={() => {
+                                  if (retiredVisit.current) return;
+                                  originHandled.current = true;
+                                  select(selectedRow ? null : row.key);
+                                  setMissingOrigin(false);
+                                }}
+                              >
+                                {selectedRow
+                                  ? m.manga_reader_close_inspection({}, options(locale))
+                                  : m.manga_reader_inspect({}, options(locale))}
+                              </button>
+                            </div>
                             {(type || row.notes.length > 0) && (
-                              <ul className="pl-3 text-sm text-muted-foreground">
+                              <ul className="min-w-0 space-y-1 border-s-2 border-border ps-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
                                 {type ? <li>{type}</li> : null}
                                 {row.notes.map((note) => (
-                                  <li key={`${row.key}:${note}`}>{note}</li>
+                                  <li key={`${row.key}:${note}`} className="[overflow-wrap:anywhere]">
+                                    {note}
+                                  </li>
                                 ))}
                               </ul>
                             )}
@@ -427,7 +452,7 @@ export function MangaReader({
                     </ul>
                   </section>
                 ))}
-              </div>
+              </section>
             )}
           </>
         )}

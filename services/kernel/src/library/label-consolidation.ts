@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount, deadlineClient, admitGroup } from './access-port.ts';
+import { readAccount, admitGroup } from './access-port.ts';
 import { shareAccount } from './access-port.ts';
-import { GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
+import { AccessUnavailableError, GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -11,7 +12,7 @@ import {
   releaseOperationalTime,
   runCommand,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { boundedReadWindow, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -292,11 +293,11 @@ export function createLabelConsolidationCommands(deps: {
     deadline: number,
     body: (client: Client, route: number) => Promise<T>,
   ) {
-    return withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline),
-        route = routeOf(owner.accountId)!;
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
+    return withBoundedReadOnlyTransaction(
+      pool,
+      deadline,
+      async (client) => {
+        const route = routeOf(owner.accountId)!;
         const current = await readAccount(client, route, owner.accountId);
         if (
           !current ||
@@ -308,18 +309,30 @@ export function createLabelConsolidationCommands(deps: {
           current.minimumAuthnEpoch > BigInt(owner.authnEpoch)
         )
           throw new GrantDeniedError();
-        const result = await body(client, route);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
+        return body(client, route);
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error) {
+          throwAccessUnavailable(error);
+          return error;
+        },
+        isUncertainSettledQueryError: () => true,
+      },
+    );
   }
 
   async function currentTime(owner: AccountActor, deadline: number) {
-    return snapshot(owner, deadline, (client) => mintReadTime(client, clock));
+    let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
+    try {
+      return await snapshot(owner, deadline, async (client) => {
+        time = await mintReadTime(client, clock);
+        return time;
+      });
+    } catch (error) {
+      if (time) releaseOperationalTime(time);
+      throw error;
+    }
   }
 
   async function resolveSelection(
@@ -328,12 +341,17 @@ export function createLabelConsolidationCommands(deps: {
     time: Awaited<ReturnType<typeof currentTime>>,
     deadline: number,
   ) {
-    for (const item of items) {
-      const resolved = await withRequestDeadline(deadline, () =>
-        resolveSubject(deps, owner, item.selected.subjectId, time),
-      );
-      if (resolved?.subjectId !== item.selected.subjectId) throw new LibraryConflictError();
-    }
+    await boundedReadWindow(
+      items,
+      4,
+      async (item) => {
+        const resolved = await withRequestDeadline(deadline, () =>
+          resolveSubject(deps, owner, item.selected.subjectId, time, { pool, deadline }),
+        );
+        if (resolved?.subjectId !== item.selected.subjectId) throw new LibraryConflictError();
+      },
+      () => requireAccessDeadline(deadline),
+    );
   }
 
   async function readPlan(
@@ -673,7 +691,9 @@ export function createLabelConsolidationCommands(deps: {
     time: Awaited<ReturnType<typeof currentTime>>,
     deadline: number,
   ) {
-    const readable = await withRequestDeadline(deadline, () => resolveSubject(deps, owner, item.subjectId, time));
+    const readable = await withRequestDeadline(deadline, () =>
+      resolveSubject(deps, owner, item.subjectId, time, { pool, deadline }),
+    );
     if (readable?.subjectId !== item.subjectId) return 'inaccessible' as const;
     return snapshot(owner, deadline, async (client, route) => {
       const source = await readPersonalLabel(client, route, owner.accountId, plan.sourceLabelId),
@@ -806,7 +826,9 @@ export function createLabelConsolidationCommands(deps: {
     if (item.stage === 'target_accepted') {
       const time = await currentTime(owner, deadline);
       try {
-        const readable = await withRequestDeadline(deadline, () => resolveSubject(deps, owner, item.subjectId, time));
+        const readable = await withRequestDeadline(deadline, () =>
+          resolveSubject(deps, owner, item.subjectId, time, { pool, deadline }),
+        );
         if (readable?.subjectId !== item.subjectId) {
           await finishItem(
             owner,
@@ -1117,12 +1139,21 @@ export function createLabelConsolidationCommands(deps: {
         items: await readItems(client, owner, sourceLabelId, confirmationId),
       }));
       if (!before.plan) throw new LibraryNotFoundError();
-      const accessible = new Set<string>();
-      for (const item of before.items) {
-        const resolved = await withRequestDeadline(deadline, () => resolveSubject(deps, owner, item.subjectId, time));
-        if (resolved?.subjectId === item.subjectId) accessible.add(item.subjectId);
-      }
-      return snapshot(owner, deadline, async (client) => {
+      // Native Subject preparation owns its checkouts outside the owner snapshot.
+      const accessible = new Set(
+        await boundedReadWindow(
+          before.items,
+          4,
+          async (item) => {
+            const resolved = await withRequestDeadline(deadline, () =>
+              resolveSubject(deps, owner, item.subjectId, time, { pool, deadline }),
+            );
+            return resolved?.subjectId === item.subjectId ? item.subjectId : null;
+          },
+          () => requireAccessDeadline(deadline),
+        ),
+      );
+      const value: LabelConsolidationResult = await snapshot(owner, deadline, async (client) => {
         const plan = await readPlan(client, owner, sourceLabelId, confirmationId, at),
           items = await readItems(client, owner, sourceLabelId, confirmationId);
         if (!plan) throw new LibraryNotFoundError();
@@ -1151,12 +1182,38 @@ export function createLabelConsolidationCommands(deps: {
           }),
         };
       });
+      await gate(owner, 'library_entry:read', deadline);
+      value.items = await boundedReadWindow(
+        value.items,
+        4,
+        async (item) => {
+          if (!item.selected) return item;
+          const subjectId = item.selected.subjectId;
+          const resolved = await withRequestDeadline(deadline, () =>
+            resolveSubject(deps, owner, subjectId, time, { pool, deadline }),
+          );
+          return resolved?.subjectId === subjectId ? item : { item: item.item, status: 'inaccessible' as const };
+        },
+        () => requireAccessDeadline(deadline),
+      );
+      await snapshot(owner, deadline, async () => {});
+      return value;
     } finally {
       releaseOperationalTime(time);
     }
   }
 
-  return { confirm, apply: beginApply, retry: beginRetry, cancel, result };
+  // Internal callers receive the same operation lifetime as HTTP callers, including resume and status readback.
+  const operation = <Args extends unknown[], Result>(run: (...args: Args) => Promise<Result>) =>
+    (...args: Args) => withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => run(...args));
+
+  return {
+    confirm: operation(confirm),
+    apply: operation(beginApply),
+    retry: operation(beginRetry),
+    cancel: operation(cancel),
+    result: operation(result),
+  };
 }
 
 /** Scheduled native expiry cleanup. One ordered due-index page per owner partition; parent cascade removes <=16 items. */

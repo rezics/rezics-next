@@ -55,7 +55,9 @@ Semantic account-agent synchronization also remains explicitly unknown for both 
 explicit bounded native operator page-key read; the adapter does not traverse it.
 The existing page receives native facts and recorded outcomes through its unchanged data consumer. Its captured
 identity, consequence/recovery wording, details, immutable intent, synchronous exclusion and conservative new-effect
-lock stay intact, including its existing unavailable-state prose. No page, style, story or locale is redesigned.
+lock stay intact, including its existing unavailable-state prose. The page groups target identity and available
+actions before the frozen consequence review, then presents the recorded result and current-read recovery.
+Technical details remain optional; current consequences and unresolved recovery remain visible.
 A later BFF response loss remains uncertain until a supported explicit original replay/read can return a result;
 a current selection read alone carries no original key and cannot resolve that result. Refresh loses the in-memory
 intent. No automatic retry, custody proof or whole-feature completion is claimed.

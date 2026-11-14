@@ -27,7 +27,9 @@ import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { gitOutputError } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
+import { sourceOnlyCompletionEligible } from './prompts.ts';
 import { installShared } from './shared-dependencies.ts';
+import { isMoneyPath } from './worker-check-budget.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Settings, Task } from './types.ts';
 
@@ -216,6 +218,29 @@ export function installWorktreeDependencies(worktree: string, settings: Settings
   installShared(worktree, undefined, undefined, settings.policy);
 }
 
+export function sourceOnlyDependencyInstallCanBeSkipped(settings: Settings, task: Task): boolean {
+  return sourceOnlyCompletionEligible({
+    task,
+    stateDirectory: settings.stateDirectory,
+    policy: settings.policy,
+  });
+}
+
+/** Apply the same launch policy while initial setup is still before Task creation. */
+export function initialSourceOnlyDependencyInstallCanBeSkipped(
+  settings: Settings,
+  input: {
+    task: Pick<Task, 'brief' | 'base' | 'worktree' | 'proofAuthorization'>;
+    proofCapture?: boolean;
+    pendingPaths?: readonly string[];
+  },
+): boolean {
+  if (input.proofCapture || input.pendingPaths?.some(isMoneyPath)) return false;
+  // sourceOnlyCompletionEligible reads only these fields from Task. Its callback runs after checkout and before freeze.
+  const candidate = { ...input.task, currentAttempt: 0 } as Task;
+  return sourceOnlyDependencyInstallCanBeSkipped(settings, candidate);
+}
+
 export function branchHead(settings: Settings, branch: string, createFromMain: boolean): string {
   const reference = `refs/heads/${branch}`;
   try {
@@ -359,7 +384,8 @@ export function ensureWorktree(settings: Settings, task: Task): void {
       git(settings.mainCheckout, ['worktree', 'prune'], settings.policy?.merge);
       git(settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch], settings.policy?.merge);
     }
-    if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree, settings);
+    if (task.brief.kind !== 'verification' && !sourceOnlyDependencyInstallCanBeSkipped(settings, task))
+      installWorktreeDependencies(task.worktree, settings);
   } finally {
     lease.release();
   }

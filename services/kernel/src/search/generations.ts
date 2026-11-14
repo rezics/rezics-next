@@ -3,6 +3,8 @@ import { subjectListingSource } from '../library/listing-counts.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import { readCreditIndexSnapshot } from './credit-index.ts';
 import { withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness, subjectSource } from './native-bindings.ts';
 import type {
@@ -37,7 +39,7 @@ import {
 } from './discovery-documents.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { validateObservation } from './indexer.ts';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './discovery-api.ts';
 import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
 import {
@@ -64,7 +66,7 @@ import {
   subjectGenerations,
   subjectIndexName,
 } from './indices.ts';
-import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { SearchUnavailableError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { readFreshness } from './freshness.ts';
 import reconcile from './reconcile.sql';
@@ -112,10 +114,10 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 async function readPartitions(
-  pool: Pool,
+  client: PoolClient,
   consumer: string,
 ): Promise<Map<number, { head: bigint; checkpoint: bigint }>> {
-  const rows = (await reconcile.run(pool, { consumer })) as ReconcileRow[];
+  const rows = (await reconcile.run(client, { consumer })) as ReconcileRow[];
   return new Map(rows.map((row) => [row.partition, { head: numeric(row.head), checkpoint: numeric(row.checkpoint) }]));
 }
 
@@ -138,14 +140,25 @@ function countSnapshot(value: unknown): CountSnapshot {
   return { position: value.position, count: value.count };
 }
 
-async function sourceCounts(source: SubjectSource, partitions: number[]): Promise<Map<number, CountSnapshot>> {
+async function sourceCounts(
+  source: SubjectSource,
+  partitions: number[],
+  deadline: number,
+  check: () => void,
+): Promise<Map<number, CountSnapshot>> {
+  check();
   const counts = new Map<number, CountSnapshot>();
   for (let offset = 0; offset < partitions.length; offset += 8) {
     const batch = partitions.slice(offset, offset + 8);
     // Drain every dispatched observation even when one receipt is invalid.
     const values = await Promise.allSettled(
-      batch.map(async (partition) => [partition, countSnapshot(await source.count(partition))] as const),
+      batch.map(async (partition) => {
+        check();
+        const value = await withRequestDeadline(deadline, () => source.count(partition));
+        return [partition, countSnapshot(value)] as const;
+      }),
     );
+    check();
     for (const value of values) {
       if (value.status === 'rejected') throw value.reason;
       const [partition, snapshot] = value.value;
@@ -224,200 +237,275 @@ export async function rebuildSubjects(options: {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0)
     throw new RangeError('timeoutMs must be a non-negative finite number');
 
+  const deadline = Date.now() + timeoutMs;
   const lock = subjectAlias(options.prefix);
-  const client = await options.pool.connect();
-  let locked = false;
+  const lifetime = new AbortController();
+  let generation = 1;
+  const timeoutError = () => new RebuildError('timeout', generation);
+  const remaining = () => {
+    const milliseconds = deadline - Date.now();
+    if (lifetime.signal.aborted || milliseconds <= 0) throw timeoutError();
+    return Math.max(1, Math.min(2_147_483_647, Math.floor(milliseconds)));
+  };
+  const check = () => {
+    remaining();
+  };
+  const poll = async () => {
+    await sleep(Math.min(pollMs, remaining()));
+    check();
+  };
+  // Helpers retain their native observation/recovery behavior, with every physical request bounded.
+  const search: OpenSearch = {
+    ...options.search,
+    async request<T>(
+      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
+      path: string,
+      body?: unknown,
+      requestOptions?: SearchRequestOptions,
+    ) {
+      const response = await options.search.request<T>(method, path, body, {
+        ...requestOptions,
+        timeoutMs: Math.min(requestOptions?.timeoutMs ?? Infinity, remaining()),
+        signal: requestOptions?.signal ? AbortSignal.any([lifetime.signal, requestOptions.signal]) : lifetime.signal,
+      });
+      check();
+      return response;
+    },
+  };
+
+  let connection: PoolClient | undefined;
+  let released = false;
+  let lockMayBeHeld = false;
   let discard: Error | undefined;
-  try {
+  const release = () => {
+    if (!connection || released) return;
+    released = true;
+    if (lockMayBeHeld) discard ??= new Error('Search rebuild advisory lock custody is uncertain');
+    if (discard) discardConnection(connection, discard);
+    connection.release(discard);
+  };
+  const rebuild = async (client: PoolClient): Promise<{ generation: number; previous: number | null }> => {
+    // A lost lock response is custody, too: never return that session to the pool.
+    lockMayBeHeld = true;
     const row = (await lockRebuild.run(client, { alias: lock })) as { locked: boolean | null };
-    locked = row.locked === true;
-  } catch (error) {
-    discard = error instanceof Error ? error : new Error(String(error));
-    discardConnection(client, discard);
-    client.release(discard);
-    throw error;
-  }
-  if (!locked) {
-    client.release();
-    const state = await subjectGenerations(options.search, options.prefix);
-    throw new RebuildError('running', state.generations.at(-1) ?? 1);
-  }
-  try {
-    const state = await subjectGenerations(options.search, options.prefix);
-    const previous = state.active;
-    const highest = state.generations.at(-1) ?? 0;
-    const calendarFormat = options.calendarFormat === undefined ? 1 : options.calendarFormat;
-    // Advanced checkpoints cannot replay documents through a different physical writer codec.
-    const resumable =
-      highest > (previous ?? 0) &&
-      (await readSubjectSortFormat(options.search, options.prefix, highest)) === SUBJECT_SORT_FORMAT &&
-      (await readSubjectCalendarMappingFormat(options.search, options.prefix, highest)) === calendarFormat &&
-      (await readSubjectCreditMappingFormat(options.search, options.prefix, highest)) === 1;
-    const generation = resumable ? highest : highest + 1;
-    if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
-      throw new RebuildError('limit', generation);
-    await createSubjectIndex(options.search, options.prefix, generation, calendarFormat ?? undefined);
-    const format = await readSubjectSortFormat(options.search, options.prefix, generation);
-    if (format !== SUBJECT_SORT_FORMAT)
-      throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
-    if ((await readSubjectCalendarMappingFormat(options.search, options.prefix, generation)) !== calendarFormat)
-      throw new SearchUnavailableError('Search rebuild requires the requested calendar projection');
-    if ((await readSubjectCreditMappingFormat(options.search, options.prefix, generation)) !== 1)
-      throw new SearchUnavailableError('Search rebuild requires the credited-name projection');
-    await options.runner.refresh();
-
-    if (options.publication === 'native') {
-      const deadline = Date.now() + timeoutMs;
-      for (;;) {
-        const published = await subjectGenerations(options.search, options.prefix);
-        if (published.active === generation) return { generation, previous };
-        if (published.active !== previous) throw new RebuildError('running', generation);
-        if (Date.now() >= deadline) throw new RebuildError('timeout', generation);
-        await sleep(pollMs);
-      }
+    if (row.locked !== true && row.locked !== false)
+      throw new Error('Search rebuild advisory lock custody could not be established');
+    lockMayBeHeld = row.locked;
+    if (!lockMayBeHeld) {
+      const state = await subjectGenerations(search, options.prefix);
+      throw new RebuildError('running', state.generations.at(-1) ?? 1);
     }
+    try {
+      const state = await subjectGenerations(search, options.prefix);
+      const previous = state.active;
+      const highest = state.generations.at(-1) ?? 0;
+      generation = highest > (previous ?? 0) ? highest : highest + 1;
+      const calendarFormat = options.calendarFormat === undefined ? 1 : options.calendarFormat;
+      // Advanced checkpoints cannot replay documents through a different physical writer codec.
+      const resumable =
+        highest > (previous ?? 0) &&
+        (await readSubjectSortFormat(search, options.prefix, highest)) === SUBJECT_SORT_FORMAT &&
+        (await readSubjectCalendarMappingFormat(search, options.prefix, highest)) === calendarFormat &&
+        (await readSubjectCreditMappingFormat(search, options.prefix, highest)) === 1;
+      generation = resumable ? highest : highest + 1;
+      if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
+        throw new RebuildError('limit', generation);
+      await createSubjectIndex(search, options.prefix, generation, calendarFormat ?? undefined);
+      const format = await readSubjectSortFormat(search, options.prefix, generation);
+      if (format !== SUBJECT_SORT_FORMAT)
+        throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
+      if ((await readSubjectCalendarMappingFormat(search, options.prefix, generation)) !== calendarFormat)
+        throw new SearchUnavailableError('Search rebuild requires the requested calendar projection');
+      if ((await readSubjectCreditMappingFormat(search, options.prefix, generation)) !== 1)
+        throw new SearchUnavailableError('Search rebuild requires the credited-name projection');
+      check();
+      await options.runner.refresh();
+      check();
 
-    const consumer = subjectConsumer(options.prefix, generation);
-    const deadline = Date.now() + timeoutMs;
-    while ((await readFreshness(options.pool, consumer)).behind > 0) {
-      if (Date.now() >= deadline) throw new RebuildError('timeout', generation);
-      await sleep(pollMs);
-    }
-
-    const index = subjectIndexName(options.prefix, generation);
-    let pending = new Map<number, { head: bigint; checkpoint: bigint }>();
-    let lastCounts = new Map<number, PartitionCount>();
-    const mismatches = new Map<number, PartitionCount>();
-    for (let round = 0; round < rounds; round += 1) {
-      const before = await readPartitions(options.pool, consumer);
-      const source = await sourceCounts(options.source, [...before.keys()]);
-      const indexed = await indexCounts(options.search, index);
-      const after = await readPartitions(options.pool, consumer);
-      pending = new Map();
-      for (const [partition, start] of before) {
-        const finish = after.get(partition);
-        const snapshot = source.get(partition)!;
-        const sourceCount = snapshot.count;
-        const indexedCount = indexed.get(partition) ?? 0;
-        const counts = { partition, indexed: indexedCount, source: sourceCount };
-        lastCounts.set(partition, counts);
-        const quiet =
-          finish !== undefined &&
-          start.head === start.checkpoint &&
-          finish.head === finish.checkpoint &&
-          start.head === finish.head &&
-          snapshot.position === start.head;
-        if (quiet) {
-          if (indexedCount !== sourceCount) mismatches.set(partition, counts);
-          else mismatches.delete(partition);
-        } else {
-          pending.set(partition, finish ?? start);
+      if (options.publication === 'native') {
+        for (;;) {
+          const published = await subjectGenerations(search, options.prefix);
+          check();
+          if (published.active === generation) return { generation, previous };
+          if (published.active !== previous) throw new RebuildError('running', generation);
+          await poll();
         }
       }
-      const added = await sourceCounts(
-        options.source,
-        [...after.keys()].filter((partition) => !before.has(partition)),
-      );
-      for (const [partition, finish] of after) {
-        if (!before.has(partition)) {
-          pending.set(partition, finish);
-          const counts = {
-            partition,
-            indexed: indexed.get(partition) ?? 0,
-            source: added.get(partition)!.count,
-          };
+
+      const consumer = subjectConsumer(options.prefix, generation);
+      // Only checkpoint lag is needed here; read it on the bounded lock session in autocommit.
+      while ([...(await readPartitions(client, consumer)).values()].some(({ head, checkpoint }) => head > checkpoint))
+        await poll();
+
+      const index = subjectIndexName(options.prefix, generation);
+      let pending = new Map<number, { head: bigint; checkpoint: bigint }>();
+      let lastCounts = new Map<number, PartitionCount>();
+      const mismatches = new Map<number, PartitionCount>();
+      for (let round = 0; round < rounds; round += 1) {
+        check();
+        const before = await readPartitions(client, consumer);
+        const source = await sourceCounts(options.source, [...before.keys()], deadline, check);
+        const indexed = await indexCounts(search, index);
+        const after = await readPartitions(client, consumer);
+        pending = new Map();
+        for (const [partition, start] of before) {
+          const finish = after.get(partition);
+          const snapshot = source.get(partition)!;
+          const sourceCount = snapshot.count;
+          const indexedCount = indexed.get(partition) ?? 0;
+          const counts = { partition, indexed: indexedCount, source: sourceCount };
           lastCounts.set(partition, counts);
+          const quiet =
+            finish !== undefined &&
+            start.head === start.checkpoint &&
+            finish.head === finish.checkpoint &&
+            start.head === finish.head &&
+            snapshot.position === start.head;
+          if (quiet) {
+            if (indexedCount !== sourceCount) mismatches.set(partition, counts);
+            else mismatches.delete(partition);
+          } else {
+            pending.set(partition, finish ?? start);
+          }
         }
-      }
-      for (const [partition, indexedCount] of indexed) {
-        if (!before.has(partition) && !after.has(partition)) {
-          mismatches.set(partition, { partition, indexed: indexedCount, source: 0 });
+        const added = await sourceCounts(
+          options.source,
+          [...after.keys()].filter((partition) => !before.has(partition)),
+          deadline,
+          check,
+        );
+        for (const [partition, finish] of after) {
+          if (!before.has(partition)) {
+            pending.set(partition, finish);
+            const counts = {
+              partition,
+              indexed: indexed.get(partition) ?? 0,
+              source: added.get(partition)!.count,
+            };
+            lastCounts.set(partition, counts);
+          }
         }
+        for (const [partition, indexedCount] of indexed) {
+          if (!before.has(partition) && !after.has(partition)) {
+            mismatches.set(partition, { partition, indexed: indexedCount, source: 0 });
+          }
+        }
+        check();
+        if (mismatches.size > 0) {
+          throw new RebuildError(
+            'mismatch',
+            generation,
+            [...mismatches.values()].sort((a, b) => a.partition - b.partition),
+          );
+        }
+        if (pending.size === 0) break;
+        if (round + 1 < rounds) await poll();
       }
-      if (mismatches.size > 0) {
+      if (pending.size > 0) {
         throw new RebuildError(
-          'mismatch',
+          'busy',
           generation,
-          [...mismatches.values()].sort((a, b) => a.partition - b.partition),
+          [...pending.keys()]
+            .map((partition) => lastCounts.get(partition) ?? { partition, indexed: 0, source: 0 })
+            .sort((a, b) => a.partition - b.partition),
         );
       }
-      if (pending.size === 0) break;
-      if (round + 1 < rounds) await sleep(pollMs);
-    }
-    if (pending.size > 0) {
-      throw new RebuildError(
-        'busy',
-        generation,
-        [...pending.keys()]
-          .map((partition) => lastCounts.get(partition) ?? { partition, indexed: 0, source: 0 })
-          .sort((a, b) => a.partition - b.partition),
-      );
-    }
 
-    const activatedAt = new Date().toISOString();
-    const calendarIncarnation =
-      calendarFormat === 1 ? await markSubjectCalendarReady(options.search, options.prefix, generation) : undefined;
-    await observedWrite(
-      () =>
-        options.search.request('PUT', `/${index}/_mapping`, {
-          _meta: {
-            name_sort_format: format,
-            activated_at: activatedAt,
-            ...(calendarFormat === 1
-              ? {
-                  calendar_range_format: 1,
-                  calendar_range_ready: 1,
-                  calendar_range_incarnation: calendarIncarnation,
-                }
-              : {}),
-          },
-        }),
-      async () => {
-        const response = await options.search.request<unknown>('GET', `/${index}/_mapping`);
-        if (!record(response) || response.status !== 200 || !record(response.body)) return false;
-        const names = Object.keys(response.body);
-        if (names.length !== 1 || names[0] !== index) return false;
-        const entry = response.body[index];
-        if (!record(entry) || !record(entry.mappings) || !record(entry.mappings.properties)) return false;
-        const meta = entry.mappings._meta;
-        if (!record(meta) || meta.name_sort_format !== format || meta.activated_at !== activatedAt) return false;
-        if (calendarFormat !== 1)
-          return !Object.hasOwn(meta, 'calendar_range_ready') && !Object.hasOwn(meta, 'calendar_range_incarnation');
-        if (
-          meta.calendar_range_format !== 1 ||
-          meta.calendar_range_ready !== 1 ||
-          meta.calendar_range_incarnation !== calendarIncarnation
-        )
-          return false;
-        return (await readSubjectIndexUuid(options.search, options.prefix, generation)) === calendarIncarnation;
-      },
-      'Search generation activation mapping could not be established',
-    );
-    const actions: unknown[] = [];
-    if (previous !== null)
-      actions.push({
-        remove: { index: subjectIndexName(options.prefix, previous), alias: subjectAlias(options.prefix) },
-      });
-    actions.push({ add: { index, alias: subjectAlias(options.prefix) } });
-    await observedWrite(
-      () => options.search.request('POST', '/_aliases', { actions }),
-      async () => {
-        const final = await subjectGenerations(options.search, options.prefix);
-        return final.active === generation && final.generations.includes(generation);
-      },
-      'Search generation alias activation could not be established',
-    );
-    return { generation, previous };
-  } finally {
-    try {
-      const row = (await unlockRebuild.run(client, { alias: lock })) as { unlocked: boolean | null };
-      if (row.unlocked !== true) throw new Error('Search rebuild advisory lock was not held');
-    } catch (error) {
-      discard = error instanceof Error ? error : new Error(String(error));
+      check();
+      const activatedAt = new Date().toISOString();
+      const calendarIncarnation =
+        calendarFormat === 1 ? await markSubjectCalendarReady(search, options.prefix, generation) : undefined;
+      await observedWrite(
+        () =>
+          search.request('PUT', `/${index}/_mapping`, {
+            _meta: {
+              name_sort_format: format,
+              activated_at: activatedAt,
+              ...(calendarFormat === 1
+                ? {
+                    calendar_range_format: 1,
+                    calendar_range_ready: 1,
+                    calendar_range_incarnation: calendarIncarnation,
+                  }
+                : {}),
+            },
+          }),
+        async () => {
+          const response = await search.request<unknown>('GET', `/${index}/_mapping`);
+          if (!record(response) || response.status !== 200 || !record(response.body)) return false;
+          const names = Object.keys(response.body);
+          if (names.length !== 1 || names[0] !== index) return false;
+          const entry = response.body[index];
+          if (!record(entry) || !record(entry.mappings) || !record(entry.mappings.properties)) return false;
+          const meta = entry.mappings._meta;
+          if (!record(meta) || meta.name_sort_format !== format || meta.activated_at !== activatedAt) return false;
+          if (calendarFormat !== 1)
+            return !Object.hasOwn(meta, 'calendar_range_ready') && !Object.hasOwn(meta, 'calendar_range_incarnation');
+          if (
+            meta.calendar_range_format !== 1 ||
+            meta.calendar_range_ready !== 1 ||
+            meta.calendar_range_incarnation !== calendarIncarnation
+          )
+            return false;
+          return (await readSubjectIndexUuid(search, options.prefix, generation)) === calendarIncarnation;
+        },
+        'Search generation activation mapping could not be established',
+      );
+      const actions: unknown[] = [];
+      if (previous !== null)
+        actions.push({
+          remove: { index: subjectIndexName(options.prefix, previous), alias: subjectAlias(options.prefix) },
+        });
+      actions.push({ add: { index, alias: subjectAlias(options.prefix) } });
+      await observedWrite(
+        () => search.request('POST', '/_aliases', { actions }),
+        async () => {
+          const final = await subjectGenerations(search, options.prefix);
+          return final.active === generation && final.generations.includes(generation);
+        },
+        'Search generation alias activation could not be established',
+      );
+      check();
+      return { generation, previous };
     } finally {
-      if (discard) discardConnection(client, discard);
-      client.release(discard);
+      try {
+        const row = (await unlockRebuild.run(client, { alias: lock })) as { unlocked: boolean | null };
+        if (row.unlocked !== true) throw new Error('Search rebuild advisory lock was not held');
+        lockMayBeHeld = false;
+      } catch (error) {
+        discard ??= error instanceof Error ? error : new Error(String(error));
+      }
     }
+  };
+  try {
+    return await withBoundedReadLifetime(
+      async (work) => {
+        // The rebuild owns a session lock, not a native snapshot. Do not install withConnection's
+        // nested-checkout guard: Source and the runner still need short reads on this exact Pool.
+        connection = await options.pool.connect();
+        try {
+          return await work(connection);
+        } finally {
+          release();
+        }
+      },
+      (client, error) => {
+        discard ??= error;
+        discardConnection(client, error);
+      },
+      deadline,
+      rebuild,
+      {
+        deadlineError: timeoutError,
+        mapError: (error) => (Date.now() >= deadline ? timeoutError() : error),
+        isUncertainSettledQueryError: () => true,
+      },
+    );
+  } finally {
+    lifetime.abort();
+    // Also retire custody when an outer deadline wins before the callback unwinds. A queued
+    // checkout that arrives later is retired by the lifetime and released by its own finally.
+    release();
   }
 }
 
