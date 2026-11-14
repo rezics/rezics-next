@@ -61,7 +61,7 @@ function PreparedShellPreview({ visitor = 'Signed In', count = false, session, l
                 entry.kind === 'creation' ? { ...entry, label: longCreationLabel() } : entry,
               ),
             ]
-          : undefined
+          : []
       }
       communities={
         member ? (

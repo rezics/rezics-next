@@ -105,6 +105,8 @@ function threads(kind: 'review' | 'discussion', id: string, member: boolean) {
   return (kind === 'review' ? animeReviewTitles : discussionTitles).map(
     (title, index): ReturnType<typeof communityThread> => {
       const base = communityThread(kind, false, subject);
+      // This fixture factory supplies an available opening post for both thread kinds.
+      const firstPost = base.firstPost as Extract<typeof base.firstPost, { availability: 'available' }>;
       const boardId = animeId(kind === 'review' ? 80 : 81);
       // Subject-local identity prevents a Season review opening the Series' thread.
       const subjectIndex = animeSubjects.findIndex((row) => row.id === id);
@@ -116,7 +118,7 @@ function threads(kind: 'review' | 'discussion', id: string, member: boolean) {
         title,
         licence: 'CC0-1.0',
         firstPost: {
-          ...base.firstPost,
+          ...firstPost,
           id: animeId(30000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index),
           threadId,
           boardId,
