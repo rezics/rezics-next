@@ -332,17 +332,23 @@ async function mutate(
       return evidence;
     },
   };
+  const commandOptions = {
+    ...principalCommandIdentity(actor),
+    partition: partitionOf(route),
+    deadline: context.deadline,
+    clock: deps.clock,
+    receipt,
+  };
+  const replay = await preflightCommandReceipt<HostedCommandValue>(deps.pool, {
+    ...commandOptions,
+    authorization: base,
+  });
+  if (replay) return replay;
+
   const revisionId = newId(route);
   return runCommand<HostedCommandValue>(
     deps.pool,
-    {
-      ...principalCommandIdentity(actor),
-      partition: partitionOf(route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      receipt,
-      authorization,
-    },
+    { ...commandOptions, authorization },
     async (tx, { transactionId, time }) => {
       const current = await hostedCatalogue(tx, catalogueId, true);
       // Preconditions belong after the receipt seam: a committed exact retry survives later edits.
@@ -483,6 +489,17 @@ async function mutatePoint(
       return evidence;
     },
   };
+  if (input.operation === 'insert') {
+    const replay = await preflightCommandReceipt<HostedCommandValue>(deps.pool, {
+      ...principalCommandIdentity(actor),
+      partition: partitionOf(route),
+      deadline: context.deadline,
+      clock: deps.clock,
+      receipt,
+      authorization: base,
+    });
+    if (replay) return replay;
+  }
   const revisionId = newId(route);
   return runCommand<HostedCommandValue>(
     deps.pool,

@@ -71,15 +71,18 @@ offset order preserves native preorder and exact targets. Empty withdrawal verif
 but reads no descriptor or placement rows. The shared release validator still rejects duplicate and unknown IDs
 and missing ancestors, then assigns dense sibling positions and preorder; the direct publish selection cap remains 512.
 
-Selection preparation follows `hostedPostAuthorization.prepare`; only the catalogue locator runs before native
-Post authorship/container visibility/participation, authority-anchor and authoritative-time `post:revise` admission.
-It reads the expected immutable structure/selected rows with the original partition/deadline, then validates target
-attachments outside the write transaction. Keep complete preparation only for that invocation's attempt time; every
-retry re-admits and rereads, so failed preparation cannot lend a later transaction earlier selections. This admits
-reads, not mutation. Transactional authorization still consumes the single-use proof and rechecks the container
-before receipts, with existing finalization. For admitted authors selection/attachment errors precede receipts;
-head/publication CAS follows them. Empty withdrawal, exact replay, responses, events and the existing 512-placement
-compatibility limits stay unchanged; prepared selection batches use the 1,024-ID cap below.
+Decision: hosted structure create/revise/root append/direct publish, point insertion and chapter-target update first
+run `preflightCommandReceipt` with the original kind, key, digest, principal, partition and deadline under
+`hostedPostAuthorization`. Current Post authorship/container visibility/participation, authority-anchor and
+authoritative-time `post:revise` admission still precede receipt lookup. An authorized exact hit returns the stored
+response and command position without reading a mutable release selection or probing attached sources. A miss runs
+the full preparation: direct publish reads its expected immutable structure/selected rows, and each changed exact
+target is checked with native metadata and its retained original observation outside the write transaction. The
+ordinary command then repeats authorization and receipt lookup, consumes the single-use proof, rechecks/finalizes the
+container, and applies head/publication CAS atomically with immutable rows, receipt and event. Fresh selection and
+attachment failures still write nothing; stale CAS follows preparation. Digest conflicts and minimized results keep
+their native command behavior. Empty withdrawal, responses, events and the existing 512-placement compatibility
+limits stay unchanged; prepared selection batches use the 1,024-ID cap below.
 
 ## Versioned outline adoption
 
