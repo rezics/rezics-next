@@ -16,6 +16,7 @@ export type LibraryDestination =
   | 'follow-counts'
   | 'logs'
   | 'goals'
+  | 'insights'
   | { collectionId: string };
 export type LibraryNavigationEntry = {
   id: string;
@@ -79,6 +80,12 @@ export function libraryNavigationEntries(
     tabs.push(collectionEntry(collection));
   }
   tabs.push(
+    {
+      id: 'insights',
+      label: m.library_insights_title(),
+      href: `/${locale}/library/insights`,
+      current: current === 'insights',
+    },
     {
       id: 'tracked',
       label: m.library_nav_tracked_entries(),
