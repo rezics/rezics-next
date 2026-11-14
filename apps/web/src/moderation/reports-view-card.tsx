@@ -254,13 +254,13 @@ export function ReportReviewCard({
 
   return (
     <ContentItemFrame as="article" className="min-w-0 space-y-6 p-4 sm:p-6" aria-labelledby={`${id}-title`}>
-      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+      <header className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 space-y-2">
-          <ContentItemHeading id={`${id}-title`} level={2} className="space-y-2 [overflow-wrap:anywhere]">
-            <span className="block text-xs font-medium text-muted-foreground">
-              {m.moderation_reports_tab()} · {targetKind}
-            </span>
-            <span className="block text-xl font-semibold">{submittedReason(report.reason)}</span>
+          <p className="text-xs font-medium text-muted-foreground">
+            {m.moderation_reports_tab()} · {targetKind}
+          </p>
+          <ContentItemHeading id={`${id}-title`} level={2} className="text-xl font-semibold [overflow-wrap:anywhere]">
+            {submittedReason(report.reason)}
           </ContentItemHeading>
           <p className="text-xs leading-6 text-muted-foreground">
             {m.moderation_queue_submitted()}{' '}
@@ -273,55 +273,18 @@ export function ReportReviewCard({
             </time>
           </p>
         </div>
-        <Badge variant="secondary">{status}</Badge>
+        <Badge variant="secondary" className="w-fit self-start">
+          {status}
+        </Badge>
       </header>
-      <section aria-labelledby={`${id}-submission`} className="min-w-0 space-y-3">
-        <ContentItemHeading id={`${id}-submission`} level={3} className="text-sm font-semibold">
-          {m.moderation_queue_submission()}
-        </ContentItemHeading>
-        <dl className="space-y-3 text-sm leading-7">
-          <div>
-            <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
-            <dd className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">
-              {submittedReason(report.reason)}
-            </dd>
-          </div>
-          {report.evidence ? (
-            <div>
-              <dt className="text-muted-foreground">{m.moderation_submitted_evidence_label()}</dt>
-              <dd className="mt-1 max-w-prose whitespace-pre-wrap [overflow-wrap:anywhere]">{report.evidence}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </section>
-      <div className="grid min-w-0 gap-6 border-t pt-5 lg:grid-cols-2">
-        <section aria-labelledby={`${id}-revision`} className="min-w-0 space-y-3">
-          <ContentItemHeading id={`${id}-revision`} level={3} className="text-sm font-semibold">
-            {m.moderation_reported_revision_label()}
-          </ContentItemHeading>
-          {reportedRevisionState && reportedRevisionState !== 'available' ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {reportedRevisionState === 'taken-down'
-                ? m.moderation_target_taken_down()
-                : reportedRevisionState === 'erased'
-                  ? m.moderation_target_deleted()
-                  : reportedRevisionState === 'withheld'
-                    ? m.moderation_target_withheld()
-                    : m.moderation_target_unavailable()}
-            </p>
-          ) : null}
-          <div className="min-w-0 border-l-2 pl-3 text-sm leading-7">
-            {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
-          </div>
-        </section>
-        <section aria-labelledby={`${id}-current`} className="min-w-0 space-y-3">
-          <ContentItemHeading id={`${id}-current`} level={3} className="text-sm font-semibold">
+      {currentContext ? (
+        <section aria-labelledby={`${id}-current-context`} className="min-w-0 space-y-3 border-t pt-5">
+          <ContentItemHeading id={`${id}-current-context`} level={3} className="text-sm font-semibold">
             {m.moderation_current_target_label()}
           </ContentItemHeading>
           {currentContext}
-          <div className="min-w-0 border-l-2 pl-3 text-sm leading-7">{moderationTargetContent(target)}</div>
         </section>
-      </div>
+      ) : null}
       {report.outcome || confirmed ? (
         <ModerationActionRegion title={m.decision_current_outcome()}>
           <div
@@ -473,6 +436,58 @@ export function ReportReviewCard({
           </Collapsible>
         </div>
       )}
+      <section className="min-w-0 space-y-5 border-t pt-5">
+        <section aria-labelledby={`${id}-submission`} className="min-w-0 space-y-3">
+          <ContentItemHeading id={`${id}-submission`} level={3} className="text-sm font-semibold">
+            {m.moderation_queue_submission()}
+          </ContentItemHeading>
+          <dl className="space-y-3 text-sm leading-7">
+            <div>
+              <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
+              <dd className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">
+                {submittedReason(report.reason)}
+              </dd>
+            </div>
+          </dl>
+          {report.evidence ? (
+            <details className="min-w-0 border-t pt-2">
+              <summary className="min-h-11 cursor-pointer rounded-sm py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.moderation_submitted_evidence_label()}
+              </summary>
+              <p className="mt-1 max-w-prose whitespace-pre-wrap text-sm leading-7 [overflow-wrap:anywhere]">
+                {report.evidence}
+              </p>
+            </details>
+          ) : null}
+        </section>
+        <div className="grid min-w-0 gap-6 border-t pt-5 lg:grid-cols-2">
+          <section aria-labelledby={`${id}-revision`} className="min-w-0 space-y-3">
+            <ContentItemHeading id={`${id}-revision`} level={3} className="text-sm font-semibold">
+              {m.moderation_reported_revision_label()}
+            </ContentItemHeading>
+            {reportedRevisionState && reportedRevisionState !== 'available' ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {reportedRevisionState === 'taken-down'
+                  ? m.moderation_target_taken_down()
+                  : reportedRevisionState === 'erased'
+                    ? m.moderation_target_deleted()
+                    : reportedRevisionState === 'withheld'
+                      ? m.moderation_target_withheld()
+                      : m.moderation_target_unavailable()}
+              </p>
+            ) : null}
+            <div className="min-w-0 border-l-2 pl-3 text-sm leading-7">
+              {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
+            </div>
+          </section>
+          <section aria-labelledby={`${id}-current`} className="min-w-0 space-y-3">
+            <ContentItemHeading id={`${id}-current`} level={3} className="text-sm font-semibold">
+              {m.moderation_current_target_label()}
+            </ContentItemHeading>
+            <div className="min-w-0 border-l-2 pl-3 text-sm leading-7">{moderationTargetContent(target)}</div>
+          </section>
+        </div>
+      </section>
       <ModerationReference
         label={m.moderation_queue_details_reference()}
         fields={[

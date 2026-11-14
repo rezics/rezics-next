@@ -286,7 +286,15 @@ export function WorkbenchCaseDetail({
         </WorkbenchCaseReturnLink>
         <header className="space-y-4">
           {boardId ? <ModerationScope kind="board" id={boardId} admitted={isCurrent()} /> : null}
-          <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
+          <h1 className="min-w-0 space-y-1 text-2xl font-semibold [overflow-wrap:anywhere]">
+            <span className="block text-xs font-medium text-muted-foreground">{m.moderation_reports_tab()}</span>
+            <span className="block">
+              {m.moderation_queue_details_report_id()}{' '}
+              <code dir="ltr" className="select-text break-all font-mono text-base font-normal">
+                {report.id}
+              </code>
+            </span>
+          </h1>
         </header>
         <ReportReviewCard
           report={report}
