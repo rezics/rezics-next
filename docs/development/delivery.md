@@ -160,12 +160,16 @@ Size complete writable outcomes and refill eligible capacity before workers exit
 actual process starts and first-source checkpoints, and continue dispatch without waiting for a fixed batch or a list
 from the supermanager. Follow [Brief preflight](#brief-preflight) for verification dependencies.
 
-Workers may choose repair order within their scope and propose adjacent work. Managers coordinate ownership and write
-boundaries, and own priority, assignment, start recovery and integration follow-through. When first source stalls,
-inspect the rendered prompt and identify the first writable file or function, observed behavior, owner boundaries and
-next independent step. Remove unnecessary context, conflicting instructions and stale check demands; preserve useful
-active work and avoid repeating the prompt. The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation)
-assigns implementation to workers; the controller executes admission, retries and landings.
+Workers repair within scope and continuously surface evidenced, valuable independent outcomes while working, without
+waiting to finish. Each proposal gives the user-visible outcome, source witness, first editable files and exact
+dependency, if any. Managers merge related proposals, avoid duplicate ownership, coordinate write boundaries, start
+eligible work and park only genuine dependencies; they own priority, assignment, start recovery and integration
+follow-through. Proposal production is a duty, not an artificial quota, second audit or substitute for coding. When
+first source stalls, inspect the rendered prompt and identify the first writable file or function, observed behavior,
+owner boundaries and next independent step. Remove unnecessary context, conflicting instructions and stale check
+demands; preserve useful active work and avoid repeating the prompt.
+The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns implementation to workers; the
+controller executes admission, retries and landings.
 
 Managers and workers communicate directly with the owner who can act. Managers settle reversible cross-Goal
 decisions peer to peer: the producer owns its interface and the outcome owner decides shared choices after one
