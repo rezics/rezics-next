@@ -12,7 +12,7 @@ Paths are the expected work, not a fence: change what the outcome needs and list
 
 When two requirements conflict, follow the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue. A blocker is only a conflict where every choice breaks an owner-document rule (quote both), or a tool or infrastructure failure persisting after {{task.toolFailureRetries}} retries, reported as a `tool` blocker starting with the exact error line. Code another Goal has not delivered is not a blocker: build to its documented contract and name it.
 
-Commit each coherent working step. Failures on base are not yours; name them. Fix tests that passed on base but fail now.
+Commit each coherent working step. Failures on base are not yours; name them. {{task.checkFailureFollowThrough}}
 Before finishing, propose the next evidenced independent outcome and paths to your manager. Continue owned repairs;
 the manager schedules new scope. No filler.
 
