@@ -12227,7 +12227,7 @@
   "studio_revision_previous": "バージョンの前のページ",
   "studio_revision_next": "バージョンの次のページ",
   "studio_revision_retry": "指定したバージョンページを再試行",
-  "studio_revision_navigation_failed": "指定したページを読み込めませんでした。最後に読み込んだページを表示しています。再試行するか、最初のページを選んでください。",
+  "studio_revision_navigation_failed": "指定したページを読み込めませんでした。再試行するか、最初のページからやり直してください。",
   "studio_revision_review_changed": "バージョンまたは作業中の下書きが変更されました。作業中の文章を置き換える前に、コピー内容をもう一度確認してください。",
   "studio_revision_region": "文書のバージョン",
   "studio_revision_heading": "バージョン",

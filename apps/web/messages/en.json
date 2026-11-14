@@ -12227,7 +12227,7 @@
   "studio_revision_previous": "Previous versions page",
   "studio_revision_next": "Next versions page",
   "studio_revision_retry": "Retry requested versions page",
-  "studio_revision_navigation_failed": "The requested page could not be loaded. Your last admitted page is still shown; retry that request or choose First.",
+  "studio_revision_navigation_failed": "The requested page could not be loaded. Retry this request or start from the first page.",
   "studio_revision_review_changed": "The version or working draft changed. Review this copy again before replacing the working text.",
   "studio_revision_region": "Document versions",
   "studio_revision_heading": "Versions",

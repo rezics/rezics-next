@@ -77,11 +77,13 @@ test('sparse Next, failed Previous and retry preserve the admitted page and exac
     await f.controller.loadVersions();
     f.respond({ items: [], nextCursor: 'opaque:2?+/=' });
     await f.controller.loadVersions(true);
+    f.respond({ items: [], nextCursor: 'opaque:3?+/=' });
+    await f.controller.loadVersions(true);
     const admitted = f.controller.snapshot();
     expect(admitted.versionNavigation).toEqual({
       admitted: true,
-      cursor: 'opaque:1+/=',
-      predecessors: [null],
+      cursor: 'opaque:2?+/=',
+      predecessors: [null, 'opaque:1+/='],
       staged: null,
     });
     f.fail(true);
@@ -89,16 +91,17 @@ test('sparse Next, failed Previous and retry preserve the admitted page and exac
     expect(f.controller.snapshot().versions).toBe(admitted.versions);
     expect(f.controller.snapshot().versionNavigation).toEqual({
       ...admitted.versionNavigation,
-      staged: { cursor: null, movement: 'previous' },
+      staged: { cursor: 'opaque:1+/=', movement: 'previous' },
     });
     expect(await f.controller.navigateVersions('retry')).toBe(false);
     expect(f.port.versions).toHaveBeenLastCalledWith(
-      { projectId: 'project', postId: 'post', cursor: null },
+      { projectId: 'project', postId: 'post', cursor: 'opaque:1+/=' },
       expect.any(AbortSignal),
     );
     f.fail(false);
+    f.respond({ items: [], nextCursor: 'opaque:2?+/=' });
     await f.controller.navigateVersions('retry');
-    expect(f.controller.snapshot().versionNavigation.predecessors).toEqual([]);
+    expect(f.controller.snapshot().versionNavigation.predecessors).toEqual([null]);
     // Empty pages do not prevent following their native continuation.
     await f.controller.loadVersions(true);
     expect(f.port.versions).toHaveBeenLastCalledWith(

@@ -94,11 +94,12 @@ fixtures; their supplied successful saves and unavailable publication do not est
 ## Saved-version language
 
 Decision: Book and column version comparison uses complete `studio_revision_*` messages in all eight launch locales,
-reusing shared history and cancellation messages. Replacement review names the supplied title and precise saved
-timestamp, with separate complete prompts for clean and dirty working text. Titles, exact IDs, digests and timestamps
-remain intact; the saved timestamp retains its semantic `time` element. Comparison shows the selected exact version
-beside the current saved draft, while unsaved working text stays in the editor. Copy remains a deliberate draft-only
-action under the existing permissions, pending/upload and unresolved-command guards; publication stays separate.
+reusing shared history and cancellation messages. Replacement review names the supplied title and localized saved
+time, with separate complete prompts for clean and dirty working text. Titles, exact IDs and digests remain intact;
+each saved time retains its exact native datetime and an inspectable unmodified timestamp. Comparison shows the
+selected exact version beside the current saved draft, while unsaved working text stays in the editor. Copy remains
+a deliberate draft-only action under the existing permissions, pending/upload and unresolved-command guards;
+publication stays separate.
 
 Decision: saved-version navigation keeps one native metadata page of at most 20 rows, eight predecessor
 cursors and one staged address. Previous, Next and explicit First commit their coordinate only after success;
@@ -106,7 +107,9 @@ retry reuses the failed cursor, including a null first-page cursor. Sparse pages
 unavailability never infers cursor expiry. No page/body cache, refill, prefetch or row read is added. Comparison uses
 independent shared structured/wide-content reader visits. Copy review binds the inspected exact version and working
 document; replacement refreshes the review and requires another deliberate acknowledgement. Copy retains history
-position. Saved times use the interface locale with the exact native datetime and technical identity preserved.
+position through later saves of the same document; only explicit navigation changes the admitted page. The current
+saved reader retains its own disclosures while another exact version is inspected. Saved times use the interface
+locale with the exact native datetime and technical identity preserved.
 
 Sources read for bounded browsing before design: this Saved-version language section, `revisions.tsx`, controller
 versions/inspect/restore and their selection callers, `contract.ts`, `post-revision-headers.ts`,
@@ -117,11 +120,17 @@ Sources read before design: this owner document, `revisions.tsx`, `controller.ts
 [acceptance](../../../../docs/goals/web.md#acceptance), and Impeccable's Operate refinement and craft-floor guidance.
 The native one-page header continuation and explicitly selected body reader already support this workflow.
 
-Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-saved-version-language.test.tsx`.
-The focused mounted regression covers both profiles in every launch locale, sparse paging, translated comparison,
-exact disclosure, clean/dirty replacement review, unchanged identities and draft-only copy. Native authoring, keyboard,
-phone/desktop visual review, legacy parity and promoted-commit acceptance remain separate obligations. Source checks
-are catalogue key/argument parity, the changed-UI detector, changed-file formatting and the affected Web typecheck.
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test src/studio/version-navigation.test.ts
+ tests/studio-version-browsing.test.tsx tests/studio-saved-version-language.test.tsx
+ tests/studio-post-revision-headers.test.tsx`. Existing saved-version assertions remain, with only localized date
+presentation, catalogue size and explicit navigation labels updated. Focused additions cover bounded coordinates,
+failed Previous/First retry, sparse continuation, independent reader IDs/disclosures, tab and post-save position
+retention, stale copy review, locale/admission retirement and late keyboard focus. The illustrative `studio-version-browsing.stories.tsx` uses the
+installed controller/view, native-shaped metadata pages and separate exact body replies for both profiles. Its named
+states are comparison, empty-with-next, failed Previous retry and dirty draft copy review; locales and viewports are
+selected manually. Native authoring/comparison/copy, keyboard and phone/desktop visual review, original Book parity,
+Storybook, compiler and promoted-commit acceptance remain unverified. This source-only delivery inspects the actual
+diff and transitions; it submits no optional test, typecheck, build, browser or capture.
 
 ## Native author outline window
 

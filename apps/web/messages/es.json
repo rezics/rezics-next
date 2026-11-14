@@ -12227,7 +12227,7 @@
   "studio_revision_previous": "Página anterior de versiones",
   "studio_revision_next": "Página siguiente de versiones",
   "studio_revision_retry": "Reintentar la página de versiones solicitada",
-  "studio_revision_navigation_failed": "No se pudo cargar la página solicitada. Se sigue mostrando la última página cargada; reintenta la solicitud o elige la primera página.",
+  "studio_revision_navigation_failed": "No se pudo cargar la página solicitada. Reintenta la solicitud o empieza desde la primera página.",
   "studio_revision_review_changed": "La versión o el borrador de trabajo ha cambiado. Revisa la copia de nuevo antes de reemplazar el texto de trabajo.",
   "studio_revision_region": "Versiones del documento",
   "studio_revision_heading": "Versiones",

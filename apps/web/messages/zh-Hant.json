@@ -12227,7 +12227,7 @@
   "studio_revision_previous": "上一頁版本",
   "studio_revision_next": "下一頁版本",
   "studio_revision_retry": "重試要求的版本頁",
-  "studio_revision_navigation_failed": "無法載入要求的頁面。仍顯示上次載入的頁面；請重試該要求或選擇首頁。",
+  "studio_revision_navigation_failed": "無法載入要求的頁面。請重試該要求或從首頁重新開始。",
   "studio_revision_review_changed": "版本或工作草稿已變更。取代工作文字前，請重新審閱此次複製。",
   "studio_revision_region": "文件版本",
   "studio_revision_heading": "版本",
