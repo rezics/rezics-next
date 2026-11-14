@@ -207,9 +207,7 @@ test('an unfinished-hour preview leaves the later measured scheduled send availa
   const h = fixture();
   const bucket = '2026-10-31T06:00:00.000Z';
   try {
-    expect(() =>
-      assertHourlyEfficiencyBucketEnded(parseUtcHour(bucket), new Date('2026-10-31T06:43:29.000Z')),
-    ).toThrow(
+    expect(() => assertHourlyEfficiencyBucketEnded(parseUtcHour(bucket), new Date('2026-10-31T06:43:29.000Z'))).toThrow(
       'cannot send an hourly efficiency report for unfinished UTC bucket',
     );
     const preview = await renderHourlyEfficiencyReport(h.db, {

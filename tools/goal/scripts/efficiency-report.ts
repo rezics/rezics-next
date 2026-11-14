@@ -47,7 +47,8 @@ function parseArguments(args: string[]): Arguments {
 }
 
 function parsePrivateDutyContext(value: unknown): HourlyPrivateDutyContext {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid hourly private-duty context');
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('invalid hourly private-duty context');
   const context = value as Partial<HourlyPrivateDutyContext>;
   if (
     typeof context.label !== 'string' ||
