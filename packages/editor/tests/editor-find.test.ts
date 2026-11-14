@@ -130,6 +130,25 @@ test('portable shortcuts handle shifted digits while leaving native layout and c
   );
 });
 
+test('portable Ctrl-Alt bindings remain available when AltGraph and composition are inactive', () => {
+  const heading = event({ key: '1', code: 'Digit1', keyCode: 49, shiftKey: false, altKey: true });
+  expect(editorShortcutMatches(heading, 'Mod-Alt-1')).toBe(true);
+  expect(editorShortcutMatches(heading, 'Ctrl-Alt-1')).toBe(true);
+  expect(editorShortcutMatches(heading, 'Mod-1')).toBe(false);
+  expect(
+    editorShortcutMatches(event({ key: 'c', code: 'KeyC', keyCode: 67, shiftKey: false, altKey: true }), 'Mod-Alt-c'),
+  ).toBe(true);
+  for (const native of [
+    { isComposing: true },
+    { key: 'Process' },
+    { key: 'Dead' },
+    { keyCode: 229 },
+    { getModifierState: (key: string) => key === 'AltGraph' },
+  ]) {
+    expect(editorShortcutMatches({ ...heading, ...native }, 'Mod-Alt-1')).toBe(false);
+  }
+});
+
 test('control preferences hide and order commands without changing their source vocabulary', () => {
   const commands = [{ id: 'bold' }, { id: 'table' }, { id: 'link' }];
   expect(

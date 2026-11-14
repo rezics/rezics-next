@@ -39,8 +39,7 @@ export function editorShortcutMatches(event: ShortcutEvent, chord: string): bool
     event.isComposing ||
     event.keyCode === 229 ||
     ['Process', 'Dead'].includes(event.key) ||
-    event.getModifierState?.('AltGraph') ||
-    (event.ctrlKey && event.altKey && !event.metaKey)
+    event.getModifierState?.('AltGraph')
   )
     return false;
   const parts = chord.split('-');
