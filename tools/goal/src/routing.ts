@@ -1,4 +1,4 @@
-import { agentAdapter, isAgentCli, pinnedModelProfile, requireOriginalProofProfile } from './agents.ts';
+import { isAgentCli, pinnedModelProfile, requireOriginalProofProfile } from './agents.ts';
 import { readFileSync } from 'node:fs';
 import type { Brief, Effort, Profile, TaskClass } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
@@ -98,8 +98,6 @@ export function parseRouting(value: unknown, policy = defaultPolicy.routing): Ro
     return experiment;
   });
   const consultation = parseProfile(table.consultation, 'consultation');
-  if (agentAdapter(consultation.cli).supportsConsultation?.(consultation) === false)
-    throw new Error('consultation must use Codex Sol medium');
   // Routing files number their versions; a positive integer is read as its label.
   const version =
     typeof table.version === 'number' && Number.isSafeInteger(table.version) && table.version > 0

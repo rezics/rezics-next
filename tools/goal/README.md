@@ -1011,6 +1011,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.watchdog.processPollingCommands`              | `2`                                                                        | Recent process-inspection commands before reporting repeated polling.                                                                                                                       |
 | `policy.watchdog.longAttemptReportMs`                 | `3600000`                                                                  | Minimum interval between reports for the same long attempt (ms).                                                                                                                            |
 | `policy.width.workerThreshold`                        | `10`                                                                       | Confirmed live workers below which an eligible Goal receives a width event.                                                                                                                 |
+| `policy.width.residentSourceMinimum`                  | `60`                                                                       | Confirmed source writers below which the configured resident receives one native width event per low episode.                                                                                |
 | `policy.width.bucketMs`                               | `900000`                                                                   | Width-event deduplication bucket duration (ms).                                                                                                                                             |
 | `policy.width.pageSize`                               | `64`                                                                       | Active task rows per width-snapshot database page.                                                                                                                                          |
 | `policy.width.sweepYieldItems`                        | `8`                                                                        | Goal snapshots processed before yielding the width sweep.                                                                                                                                   |
@@ -2939,6 +2940,22 @@ the earlier one (see [shared inbox](#shared-inbox)). Operator-paused, budget-lim
 managers are protected; automatic inbox parks remain eligible.
 The single host-scheduled daily step audit stays visible in counts but has no backlog to refill, so it does not send
 a width event. Its dispatch failures and queue delays still use the existing flow notices.
+
+The same token-free width sweep notifies the configured resident supermanager when actual source-writing concurrency
+falls below `policy.width.residentSourceMinimum`, including when every ready queue is empty. It counts the canonical
+managed `sourceWriters` projection and confirmed code-only writing identities; check waits, unknown identities and
+dead processes do not count. The native `width` mail includes per-manager live source and managed ready counts, so the
+resident can direct refill and start repairs. SQLite retains one low episode across host restarts. The notice rearms
+only after a later sweep observes concurrency at or above the threshold; no extra timer or model polling is added.
+Read it through the registered resident's existing `inbox read <manager>` command.
+
+The code-only launcher owns `<state>/code-only-writers.json` and replaces it atomically while maintaining lifecycle
+under its launch lock. Its format is `{ "version": 1, "writers": [{ "id": "...", "manager": "...", "goal": "...",
+"phase": "writing", "identity": { "pid": 123, "start": "456", "boot": "...", "group": 123 }, "worktree": "..." }] }`.
+Optional profile, source, unit and owned-path fields are ignored by the listener. Only `writing` rows whose complete
+process identity is live count; duplicate identities, including identities already owned by a current managed
+attempt, count once. The launcher updates the phase or removes the row when source writing ends. An unreadable
+registry is disclosed in the low-width event and contributes no confirmed writers.
 
 Total stopped counts include preserved stops. Width and backlog expiry share a stopped-action classifier: unresolved
 cancellation stays with its existing controller custody, and a terminal original proof already routed to its owner

@@ -1,10 +1,44 @@
 import { expect, test } from 'bun:test';
 import { agentReportingEvidence } from './agents.ts';
-import { openDb } from './db.ts';
+import { migrate, openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
-import { formatWidthSnapshot, readWidthSnapshot, sweepWidthGovernor } from './width-governor.ts';
+import { formatWidthSnapshot, readWidthSnapshot, sweepWidthGovernor, widthGovernorMigrations } from './width-governor.ts';
+
+test('width migrations preserve either version-two history and converge on both tables', () => {
+  const receiver = `CREATE TABLE width_governor_receiver_deliveries (
+    goal TEXT NOT NULL, bucket INTEGER NOT NULL, manager TEXT NOT NULL, delivered_at TEXT NOT NULL,
+    PRIMARY KEY(goal, bucket, manager));`;
+  const resident = `CREATE TABLE width_resident_episodes (
+    manager TEXT PRIMARY KEY, episode INTEGER NOT NULL, low INTEGER NOT NULL, observed_at TEXT NOT NULL);`;
+  for (const versionTwo of [undefined, receiver, resident]) {
+    const db = openDb(':memory:');
+    try {
+      if (versionTwo) {
+        migrate(db, [widthGovernorMigrations[0], { module: 'width-governor', version: 2, sql: versionTwo }]);
+        if (versionTwo === receiver)
+          db.exec("INSERT INTO width_governor_receiver_deliveries VALUES ('content', 1, 'supermanager', 'before')");
+        else db.exec("INSERT INTO width_resident_episodes VALUES ('supermanager', 4, 1, 'before')");
+      }
+      migrate(db, widthGovernorMigrations);
+      migrate(db, widthGovernorMigrations);
+      if (versionTwo !== receiver)
+        db.exec("INSERT INTO width_governor_receiver_deliveries VALUES ('content', 1, 'supermanager', 'after')");
+      if (versionTwo !== resident)
+        db.exec("INSERT INTO width_resident_episodes VALUES ('supermanager', 4, 1, 'after')");
+      expect(db.query('SELECT delivered_at FROM width_governor_receiver_deliveries').get()).toEqual({
+        delivered_at: versionTwo === receiver ? 'before' : 'after',
+      });
+      expect(db.query('SELECT episode, observed_at FROM width_resident_episodes').get()).toEqual({
+        episode: 4,
+        observed_at: versionTwo === resident ? 'before' : 'after',
+      });
+    } finally {
+      db.close();
+    }
+  }
+});
 
 test('reporting distinguishes Codex, other known agents, and absent or unrecognized provider evidence', () => {
   expect(agentReportingEvidence('codex')).toEqual({ codex: true, unknown: false });

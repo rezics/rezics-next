@@ -106,7 +106,9 @@ and record reversible assumptions when justified; preserve authorization, money,
 acceptance obligations. Do not represent a temporary adapter or mock as installed behavior.
 
 Declared paths never hold a task. Overlapping tasks run side by side; use the controller's rebase process or
-[direct source integration](#direct-source-integration) to resolve conflicts without losing required behavior. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
+[direct source integration](#direct-source-integration) to resolve conflicts without losing required behavior. Shared
+READMEs, fake data, messages, package manifests and routes are not dependencies merely because multiple tasks edit
+them. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
 
 Prefer the oldest ready dependency. Do not restart a live attempt for an unchanged contract. Check actual task state
 immediately before changing it.

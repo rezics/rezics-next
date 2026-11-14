@@ -737,19 +737,15 @@ export class ManagerSessions {
       this.hasUserMessageTurn(state, state.threadId, state.activeTurnId!)
     )
       this.admitParkedOperatorTurn(state, state.threadId, state.activeTurnId!);
+    if (
+      method === 'thread/goal/updated' &&
+      state.goalState?.status === 'active' &&
+      state.waitingForInbox &&
+      state.activeTurnId === null
+    )
+      state.waitingForInbox = false;
     this.save(state);
     if (state.status === 'running') {
-      if (
-        method === 'thread/goal/updated' &&
-        state.waitingForInbox &&
-        state.goalState?.status === 'active' &&
-        !this.isParkedTurnInProgress(state, state.threadId, state.activeTurnId)
-      ) {
-        // An idle Goal should stay parked. This catches provider or external reactivation before another
-        // goal-generated continuation can replace the event-driven wait.
-        await this.pauseRemote(state, 'automatic');
-        return;
-      }
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
