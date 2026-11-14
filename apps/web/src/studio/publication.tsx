@@ -1,11 +1,11 @@
 import { useEffect, useId, useState } from 'react';
-import { documentText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { ExactVersionDetails } from './revisions';
 import { bookTocRows } from './book-toc';
 import type { StudioController, StudioState } from './controller';
+import { ArticlePublicationBody } from './publication-body';
 
 export function StudioPublication({ controller, state }: { controller: StudioController; state: StudioState }) {
   const review = state.review;
@@ -155,7 +155,7 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
               </p>
               <div>
                 <h4>{m.studio_account_review_body({}, options)}</h4>
-                <pre className="studio-reviewed-body">{documentText(review.articleSnapshot.body)}</pre>
+                <ArticlePublicationBody review={review} isCurrent={() => controller.snapshot().review === review} />
               </div>
             </section>
           ) : null}
