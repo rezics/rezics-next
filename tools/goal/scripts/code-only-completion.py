@@ -208,7 +208,7 @@ def retain_evidence(completion, record, retry_source):
     execution['observedAt'] = now()
 
 
-def finish(path, *, main, state, bun=None, retry_source=False):
+def finish(path, *, main, state, bun=None, delivery_helper=None, retry_source=False):
     path, main, state = Path(path).resolve(), Path(main).resolve(), Path(state).resolve()
     record = json.loads(path.read_text())
     completions = state / 'code-only' / 'completions'
@@ -253,8 +253,9 @@ def finish(path, *, main, state, bun=None, retry_source=False):
         atomic(target, completion)
         if not completion.get('delivery'):
             try:
-                # Always invoke the supported helper in configured Main, never in the worker checkout.
-                helper = main / 'tools/goal/src/code-only-completion.ts'
+                # A source receiving adapter may pin the supported helper before Main publication.
+                helper = (Path(delivery_helper).resolve() if delivery_helper
+                          else main / 'tools/goal/src/code-only-completion.ts')
                 runtime = Path(bun).resolve() if bun else main / 'node_modules/.bin/bun'
                 env = dict(os.environ, GOAL_MAIN_CHECKOUT=str(main), GOAL_STATE_DIRECTORY=str(state))
                 call = subprocess.run([str(runtime), str(helper), str(target)], cwd=main, env=env,
@@ -292,9 +293,11 @@ if __name__ == '__main__':
     parser.add_argument('--state', default=os.environ.get('GOAL_STATE_DIRECTORY'),
                         required=not os.environ.get('GOAL_STATE_DIRECTORY'))
     parser.add_argument('--bun', help='Absolute Bun executable; defaults to configured Main/node_modules/.bin/bun')
+    parser.add_argument('--delivery-helper', help='Explicit supported native helper during source receiving; defaults to configured Main')
     parser.add_argument('--retry-source', action='store_true', help='Retry failed source/log evidence capture')
     args = parser.parse_args()
-    result = finish(args.record, main=args.main, state=args.state, bun=args.bun, retry_source=args.retry_source)
+    result = finish(args.record, main=args.main, state=args.state, bun=args.bun,
+                    delivery_helper=args.delivery_helper, retry_source=args.retry_source)
     print(json.dumps(result))
     if any(result.get(key) for key in ('deliveryError', 'sourceErrors', 'handoffError', 'registryError')):
         raise SystemExit(1)
