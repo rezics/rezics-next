@@ -1,10 +1,11 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { readAccount } from './access-port.ts';
 import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
+import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 
 export const READING_INSIGHTS_ASSESSMENT_REVISION_LIMIT = 16;
 export const MAX_READING_INSIGHTS_ASSESSMENT_BYTES = 16_384;
@@ -58,7 +59,7 @@ type RevisionRow = {
   historical_unknown: string;
   values: { units: number; occurrences: string }[];
 };
-type Snapshot = { head: Head; revisions: RevisionRow[] };
+type Snapshot = { head: Head | null; revisions: RevisionRow[] };
 
 const headSql = `SELECT COALESCE(p.initialized_sessions,0)::text AS initialized,
   COALESCE(a.retained_sessions,0)::text AS retained,
@@ -101,7 +102,7 @@ function unavailable(
 }
 
 function present(snapshot: Snapshot | undefined): ReadingInsightsAssessments {
-  if (!snapshot) return unavailable('not_installed');
+  if (!snapshot?.head) return unavailable('not_installed');
   const { head } = snapshot;
   if (head.initialized !== head.retained) return unavailable('initializing', head);
   if (!head.ready) return unavailable('maintenance_unavailable', head);
@@ -155,26 +156,29 @@ export function createReadingInsightsAssessmentReads(deps: { pool: Pool }) {
     };
     alive();
     const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
-    return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
+    const authorize = async (client: PoolClient) => {
+      const owner = await readAccount(client, route, actor.accountId);
+      if (
+        !owner ||
+        owner.kind !== 'actor' ||
+        owner.state !== 'active' ||
+        owner.fenced ||
+        !Number.isSafeInteger(actor.authnEpoch) ||
+        actor.authnEpoch < 1 ||
+        owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+      )
+        throw new ProblemError('forbidden');
+    };
+    const selected = await withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
       await client.query('BEGIN');
       await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
         route,
         actor.accountId,
       ]);
-      const authorize = async () => {
-        const owner = await readAccount(client, route, actor.accountId);
-        if (
-          !owner ||
-          owner.kind !== 'actor' ||
-          owner.state !== 'active' ||
-          owner.fenced ||
-          !Number.isSafeInteger(actor.authnEpoch) ||
-          actor.authnEpoch < 1 ||
-          owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-        )
-          throw new ProblemError('forbidden');
-      };
-      await authorize();
+      await authorize(client);
+      const home = await readPartition(client, partitionOf(route));
+      if (!home || home.writeState !== 'active' || home.movedTo !== null)
+        throw new ProblemError('partition_unavailable');
       await client.query('SAVEPOINT reading_insights_assessment_schema');
       let snapshot: Snapshot | undefined;
       let installed = true;
@@ -195,16 +199,38 @@ export function createReadingInsightsAssessmentReads(deps: { pool: Pool }) {
       const encoded = JSON.stringify(value);
       if (new TextEncoder().encode(encoded).byteLength > MAX_READING_INSIGHTS_ASSESSMENT_BYTES)
         throw new ProblemError('dependency_unavailable');
-      await authorize();
-      if (installed && snapshot) {
+      await authorize(client);
+      if (installed && snapshot?.head) {
         const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
         if (JSON.stringify(latest) !== JSON.stringify(snapshot.head)) throw new ProblemError('dependency_unavailable');
       }
       alive();
       await client.query('COMMIT');
       alive();
-      return value;
+      return { value, home };
     });
+    alive();
+    await withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
+      await client.query('BEGIN');
+      await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+        route,
+        actor.accountId,
+      ]);
+      await authorize(client);
+      const home = await readPartition(client, partitionOf(route));
+      if (
+        !home ||
+        home.writeState !== 'active' ||
+        home.movedTo !== null ||
+        home.node !== selected.home.node ||
+        home.epoch !== selected.home.epoch
+      )
+        throw new ProblemError('partition_unavailable');
+      alive();
+      await client.query('COMMIT');
+      alive();
+    });
+    return selected.value;
   }
   return { assessments };
 }
