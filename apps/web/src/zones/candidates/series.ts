@@ -27,12 +27,17 @@ export const SERIES_CANDIDATE_SUBJECTS = [
   },
 ] as const;
 
-const routePaths = ["", "book-series", "creative-works"] as const;
-const routeNavigation = routePaths.map((route) => ({ route }));
+export const SERIES_CANDIDATE_ROUTES = [
+  "",
+  "book-series",
+  "creative-works",
+] as const;
+type SeriesCandidateRoute = (typeof SERIES_CANDIDATE_ROUTES)[number];
+const routeNavigation = SERIES_CANDIDATE_ROUTES.map((route) => ({ route }));
 const seriesLabels = seriesStarter.labels as ZonePublic["labels"];
 
 function starterDocument(
-  route: (typeof routePaths)[number],
+  route: SeriesCandidateRoute,
   notice?: string,
 ): CompositionDocument {
   const page = seriesStarter.pages.find(
@@ -70,11 +75,11 @@ function starterDocument(
 
 const homeNotices = {
   preview:
-    "Development preview: both records are fictional. No series membership or ordering is asserted, and this is not an adopted official site.",
+    "Gated development preview: both records are fictional. Their names imply no membership or reading sequence, and this is not an adopted official site.",
   readyEmpty:
-    "Development preview: this source read is ready and has no matching series. The authored page and its empty slots remain visible.",
+    "Gated development preview: this source read is ready and has no matching series. The authored page and its empty slots remain visible.",
   sparse:
-    "Development preview: one fictional record is available. Optional facts, artwork, translations, membership, and ordering are absent.",
+    "Gated development preview: one fictional record is available. Optional facts, artwork, translations, membership, and ordering are absent.",
 } as const;
 
 export const SERIES_CANDIDATE_DOCUMENTS = {
@@ -83,32 +88,12 @@ export const SERIES_CANDIDATE_DOCUMENTS = {
   sparse: starterDocument("", homeNotices.sparse),
   bookSeries: starterDocument(
     "book-series",
-    "This authored route is static. It does not run the saved book-series scope or assert which works belong to a series. Use Zone navigation to return to Series.",
+    "This authored route is static in the gated development preview. It does not run the saved book-series scope or assert which works belong to a series. Use Zone navigation to return to Series.",
   ),
   creativeWorks: starterDocument(
     "creative-works",
-    "This authored route is static. It does not run the saved creative-works scope or infer membership from a name. Use Zone navigation to return to Series.",
+    "This authored route is static in the gated development preview. It does not run the saved creative-works scope or infer membership from a name. Use Zone navigation to return to Series.",
   ),
-  subject: (label: string, description: string): CompositionDocument => ({
-    root: { props: {} },
-    content: [
-      {
-        type: "Heading",
-        props: { id: "series-subject-title", text: label, level: 1 },
-      },
-      {
-        type: "Text",
-        props: { id: "series-subject-description", text: description },
-      },
-      {
-        type: "Text",
-        props: {
-          id: "series-subject-absence",
-          text: "This fictional preview record contains no membership or sequence facts.",
-        },
-      },
-    ],
-  }),
 };
 
 export function seriesCandidateZone(id: string): ZonePublic {
@@ -123,26 +108,11 @@ export function seriesCandidateZone(id: string): ZonePublic {
   };
 }
 
-function listRead(
-  subjects: readonly (typeof SERIES_CANDIDATE_SUBJECTS)[number][],
-) {
-  return {
-    status: 200,
-    subjects: subjects.map(({ id, type, label }) => ({
-      id,
-      type,
-      types: [type],
-      label: { value: label, language: "en" },
-    })),
-    next: null,
-  };
-}
-
-function routePage(
+export function seriesCandidateZonePage(
   id: string,
-  route: (typeof routePaths)[number],
+  route: SeriesCandidateRoute,
   document: CompositionDocument,
-  reads: Record<string, unknown> = {},
+  reads: Record<string, unknown>,
 ): ZonePageResponse {
   return {
     profile: "development-preview:series",
@@ -152,43 +122,6 @@ function routePage(
     zone: seriesCandidateZone(id),
   };
 }
-
-export const SERIES_CANDIDATE_PAGES = {
-  preview: routePage(
-    SERIES_CANDIDATE_IDS.preview,
-    "",
-    SERIES_CANDIDATE_DOCUMENTS.home,
-    {
-      works: listRead(SERIES_CANDIDATE_SUBJECTS),
-    },
-  ),
-  readyEmpty: routePage(
-    SERIES_CANDIDATE_IDS.readyEmpty,
-    "",
-    SERIES_CANDIDATE_DOCUMENTS.readyEmpty,
-    {
-      works: listRead([]),
-    },
-  ),
-  sparse: routePage(
-    SERIES_CANDIDATE_IDS.sparse,
-    "",
-    SERIES_CANDIDATE_DOCUMENTS.sparse,
-    {
-      works: listRead([SERIES_CANDIDATE_SUBJECTS[0]]),
-    },
-  ),
-  bookSeries: routePage(
-    SERIES_CANDIDATE_IDS.preview,
-    "book-series",
-    SERIES_CANDIDATE_DOCUMENTS.bookSeries,
-  ),
-  creativeWorks: routePage(
-    SERIES_CANDIDATE_IDS.preview,
-    "creative-works",
-    SERIES_CANDIDATE_DOCUMENTS.creativeWorks,
-  ),
-};
 
 export function seriesCandidateSubject(subjectId: string) {
   return SERIES_CANDIDATE_SUBJECTS.find((subject) => subject.id === subjectId);

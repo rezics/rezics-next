@@ -12,7 +12,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          "Development preview of the inert Series starter. Records are fictional; no official site or public dynamic release is claimed.",
+          "Gated development preview of the inert Series starter. Records are fictional; no official site or public dynamic release is claimed.",
       },
     },
   },
@@ -52,7 +52,7 @@ async function returnToSeries(
 }
 
 export const DevelopmentPreview: Story = {
-  name: "Development preview · admitted fictional records",
+  name: "Gated development preview · admitted fictional records",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.preview),
   play: async ({ canvasElement }) => {
     const canvas = await visibleHeading(canvasElement, "Series");
@@ -71,7 +71,7 @@ export const DevelopmentPreview: Story = {
       SERIES_CANDIDATE_SUBJECTS[0].label,
     );
     await expect(
-      subject.getByText(/no membership or sequence facts/i),
+      subject.getByText(/no series membership or ordering facts/i),
     ).toBeVisible();
     await userEvent.click(
       subject.getByRole("link", { name: "Series", exact: true }),
@@ -81,7 +81,7 @@ export const DevelopmentPreview: Story = {
 };
 
 export const BookSeriesRoute: Story = {
-  name: "Development preview · static book-series route",
+  name: "Gated development preview · static book-series route",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.preview, "book-series"),
   play: async ({ canvasElement }) =>
     returnToSeries(
@@ -92,7 +92,7 @@ export const BookSeriesRoute: Story = {
 };
 
 export const CreativeWorksRoute: Story = {
-  name: "Development preview · static creative-works route",
+  name: "Gated development preview · static creative-works route",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.preview, "creative-works"),
   play: async ({ canvasElement }) =>
     returnToSeries(
@@ -103,7 +103,7 @@ export const CreativeWorksRoute: Story = {
 };
 
 export const ReadyEmpty: Story = {
-  name: "Development preview · ready empty",
+  name: "Gated development preview · ready empty",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.readyEmpty),
   play: async ({ canvasElement }) => {
     const canvas = await visibleHeading(canvasElement, "Series");
@@ -117,7 +117,7 @@ export const ReadyEmpty: Story = {
 };
 
 export const Sparse: Story = {
-  name: "Development preview · sparse home",
+  name: "Gated development preview · sparse home",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.sparse),
   play: async ({ canvasElement }) => {
     const canvas = await visibleHeading(canvasElement, "Series");
@@ -134,7 +134,7 @@ export const Sparse: Story = {
 };
 
 export const PlatformClosed: Story = {
-  name: "Development preview · gated by platform closed (403)",
+  name: "Gated development preview · platform closed (403)",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.platformClosed),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -149,7 +149,7 @@ export const PlatformClosed: Story = {
 };
 
 export const SemanticNotReady: Story = {
-  name: "Development preview · deferred while semantic is not ready (503)",
+  name: "Gated development preview · deferred while semantic is not ready (503)",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.semanticNotReady),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -164,7 +164,7 @@ export const SemanticNotReady: Story = {
 };
 
 export const ConcealedPrivate: Story = {
-  name: "Development preview · concealed private Zone (404)",
+  name: "Gated development preview · concealed private Zone (404)",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.private),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -176,7 +176,7 @@ export const ConcealedPrivate: Story = {
 };
 
 export const ConcealedMissing: Story = {
-  name: "Development preview · concealed missing Zone (404)",
+  name: "Gated development preview · concealed missing Zone (404)",
   render: () => seriesPage(SERIES_CANDIDATE_IDS.missing),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
