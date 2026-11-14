@@ -201,14 +201,27 @@ export const TargetEditAndClear: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.library_yearly_goal_edit() }));
-    await userEvent.type(canvas.getByRole('textbox', { name: m.library_yearly_goal_target() }), '12');
+    const input = canvas.getByRole('textbox', { name: m.library_yearly_goal_target() });
+    await expect(input).toHaveFocus();
+    await userEvent.type(input, '0');
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: m.library_yearly_goal_save() })).toHaveFocus();
     await userEvent.keyboard('{Enter}');
+    await expect(input).toHaveFocus();
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await userEvent.clear(input);
+    await userEvent.type(input, '12');
+    await userEvent.keyboard('{Enter}');
     await expect(await canvas.findByText(m.library_yearly_goal_target_revision({ revision: '1' }))).toBeInTheDocument();
+    await expect(canvasElement.querySelector('[tabindex="-1"]')).toHaveFocus();
     await userEvent.click(canvas.getByRole('button', { name: m.library_yearly_goal_clear() }));
     const confirm = canvas.getByRole('button', { name: m.library_yearly_goal_clear() });
-    confirm.focus();
+    await expect(confirm).toHaveFocus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: m.library_yearly_goal_cancel() })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('button', { name: m.library_yearly_goal_clear() })).toHaveFocus();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_yearly_goal_clear() }));
     await userEvent.keyboard('{Enter}');
     await expect(await canvas.findByText(m.library_yearly_goal_target_revision({ revision: '2' }))).toBeInTheDocument();
     await expect(canvas.getByText(m.library_yearly_goal_target_none())).toBeInTheDocument();
@@ -232,8 +245,11 @@ export const UncertainDelivery: Story = {
     await userEvent.type(canvas.getByRole('textbox', { name: m.library_yearly_goal_target() }), '8');
     await userEvent.click(canvas.getByRole('button', { name: m.library_yearly_goal_save() }));
     await expect(await canvas.findByText(m.library_yearly_goal_uncertain())).toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: m.library_yearly_goal_retry_exact() }));
+    const retry = canvas.getByRole('button', { name: m.library_yearly_goal_retry_exact() });
+    await expect(retry).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
     await expect(await canvas.findByText(m.library_yearly_goal_target_revision({ revision: '1' }))).toBeInTheDocument();
+    await expect(canvasElement.querySelector('[tabindex="-1"]')).toHaveFocus();
   },
 };
 export const StaleRevisionReview: Story = {
@@ -243,11 +259,15 @@ export const StaleRevisionReview: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: m.library_yearly_goal_edit() }));
     await userEvent.type(canvas.getByRole('textbox', { name: m.library_yearly_goal_target() }), '7');
     await userEvent.click(canvas.getByRole('button', { name: m.library_yearly_goal_save() }));
-    await userEvent.click(await canvas.findByRole('button', { name: m.library_yearly_goal_refresh() }));
+    const refresh = await canvas.findByRole('button', { name: m.library_yearly_goal_refresh() });
+    await expect(refresh).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
     await expect(canvas.getByRole('textbox', { name: m.library_yearly_goal_target() })).toHaveValue('7');
+    await expect(canvas.getByRole('textbox', { name: m.library_yearly_goal_target() })).toHaveFocus();
     await expect(await canvas.findByText(m.library_yearly_goal_review())).toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: m.library_yearly_goal_save() }));
+    await userEvent.keyboard('{Enter}');
     await expect(await canvas.findByText(m.library_yearly_goal_target_revision({ revision: '9' }))).toBeInTheDocument();
+    await expect(canvasElement.querySelector('[tabindex="-1"]')).toHaveFocus();
   },
 };
 export const AcknowledgedWithReadbackFailure: Story = {

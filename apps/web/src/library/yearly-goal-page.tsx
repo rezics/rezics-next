@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { ReportedYearSummary } from './private-diary/native';
@@ -6,6 +6,8 @@ import type { NativeYearlyGoal } from './yearly-goal-native';
 
 const control =
   'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border px-4 py-2 text-sm underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const focusIndicator = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const useFocusEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 export type YearlyGoalSnapshot = NativeYearlyGoal;
 
@@ -50,6 +52,15 @@ type Operation =
   | 'review'
   | Exclude<YearlyGoalWriteResult['state'], 'applied' | 'retired'>;
 type PendingIntent = { command: YearlyGoalCommand; sender: YearlyGoalPageApi['write'] };
+type FocusDestination = 'edit-input' | 'edit-action' | 'clear-action' | 'clear-confirm' | 'result';
+type FocusRequest = {
+  destination: FocusDestination;
+  revision: number;
+  generation: number;
+  year?: number;
+  viewerSubject: string | null;
+  api: YearlyGoalPageApi;
+};
 
 async function readCurrent(api: YearlyGoalPageApi, year: number): Promise<YearlyGoalReadResult> {
   try {
@@ -91,7 +102,94 @@ function YearlyGoalScreen({
   const generation = useRef(0);
   const inFlight = useRef(false);
   const unresolved = useRef<PendingIntent | undefined>(undefined);
+  const focusRevision = useRef(0);
+  const applyingFocus = useRef(false);
+  const focusRequest = useRef<FocusRequest | undefined>(undefined);
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const editActionRef = useRef<HTMLButtonElement>(null);
+  const clearActionRef = useRef<HTMLButtonElement>(null);
+  const clearConfirmRef = useRef<HTMLButtonElement>(null);
+  const targetResultRef = useRef<HTMLElement>(null);
+  const refreshActionRef = useRef<HTMLButtonElement>(null);
+  const retryExactRef = useRef<HTMLButtonElement>(null);
+  const readbackRetryRef = useRef<HTMLButtonElement>(null);
+  const resultStatusRef = useRef<HTMLElement>(null);
+  const [focusSequence, setFocusSequence] = useState(0);
   const live = () => api !== undefined && (api.current?.() ?? true);
+
+  function requestFocus(destination: FocusDestination) {
+    if (!api || !live()) return;
+    focusRequest.current = {
+      destination,
+      revision: focusRevision.current,
+      generation: generation.current,
+      year,
+      viewerSubject,
+      api,
+    };
+    setFocusSequence((sequence) => sequence + 1);
+  }
+
+  function resultFocusTarget(): HTMLElement | null | 'wait' {
+    if (busy || loaded.state === 'loading') return 'wait';
+    if (operation === 'uncertain') return retryExactRef.current;
+    if (operation === 'stale') return refreshActionRef.current;
+    if (operation === 'review') {
+      if (mode === 'edit') return editInputRef.current;
+      if (mode === 'clear') return clearConfirmRef.current;
+    }
+    if (operation === 'denied') return resultStatusRef.current;
+    if (operation === 'invalid') return readbackRetryRef.current ?? resultStatusRef.current;
+    if (operation === 'unavailable' || operation === 'key-conflict' || operation === 'erased')
+      return readbackRetryRef.current ?? resultStatusRef.current;
+    if (loaded.state === 'ready') return targetResultRef.current;
+    return resultStatusRef.current;
+  }
+
+  function focusTarget(destination: FocusDestination): HTMLElement | null | 'wait' {
+    if (destination === 'edit-input') return editInputRef.current;
+    if (destination === 'edit-action') return editActionRef.current;
+    if (destination === 'clear-action') return clearActionRef.current;
+    if (destination === 'clear-confirm') return clearConfirmRef.current;
+    return resultFocusTarget();
+  }
+
+  useEffect(() => {
+    const onFocusIn = () => {
+      if (!applyingFocus.current) {
+        focusRevision.current += 1;
+        focusRequest.current = undefined;
+      }
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
+  }, []);
+
+  useFocusEffect(() => {
+    const request = focusRequest.current;
+    if (!request) return;
+    if (
+      request.revision !== focusRevision.current ||
+      request.generation !== generation.current ||
+      request.year !== year ||
+      request.viewerSubject !== viewerSubject ||
+      request.api !== api ||
+      !live()
+    ) {
+      focusRequest.current = undefined;
+      return;
+    }
+    const target = focusTarget(request.destination);
+    if (target === 'wait') return;
+    focusRequest.current = undefined;
+    if (!target?.isConnected) return;
+    applyingFocus.current = true;
+    try {
+      target.focus();
+    } finally {
+      applyingFocus.current = false;
+    }
+  }, [focusSequence, loaded, mode, operation, year, viewerSubject, api]);
 
   useEffect(() => {
     const current = ++generation.current;
@@ -108,6 +206,7 @@ function YearlyGoalScreen({
     return () => {
       if (generation.current === current) generation.current += 1;
       unresolved.current = undefined;
+      focusRequest.current = undefined;
     };
   }, [api, sessionState, viewerSubject, year]);
 
@@ -116,6 +215,7 @@ function YearlyGoalScreen({
 
   async function refreshCurrent(purpose: 'conflict' | 'manual' | 'readback') {
     if (!api || year === undefined || !live() || inFlight.current || unresolved.current) return;
+    requestFocus('result');
     inFlight.current = true;
     const current = generation.current;
     setOperation('refreshing');
@@ -198,6 +298,7 @@ function YearlyGoalScreen({
     const intent = { command, sender: api.write.bind(api) };
     unresolved.current = intent;
     setAcknowledged(false);
+    requestFocus('result');
     void send(intent);
   }
 
@@ -205,11 +306,13 @@ function YearlyGoalScreen({
     event.preventDefault();
     if (!live() || inFlight.current || unresolved.current) return;
     if (!/^[0-9]+$/.test(draft)) {
+      requestFocus('edit-input');
       setInvalidTarget(true);
       return;
     }
     const target = Number(draft);
     if (!Number.isSafeInteger(target) || target < 1 || target > 1000) {
+      requestFocus('edit-input');
       setInvalidTarget(true);
       return;
     }
@@ -222,15 +325,27 @@ function YearlyGoalScreen({
     setDraft(snapshot.target.state === 'set' ? String(snapshot.target.target) : '');
     setOperation(null);
     setInvalidTarget(false);
+    requestFocus('edit-input');
     setMode('edit');
   }
 
   function cancel() {
-    if (live() && !inFlight.current && !unresolved.current) setMode('view');
+    if (!live() || inFlight.current || unresolved.current) return;
+    requestFocus(mode === 'edit' ? 'edit-action' : 'clear-action');
+    setMode('view');
+  }
+
+  function beginClear() {
+    if (!live() || inFlight.current || unresolved.current) return;
+    requestFocus('clear-confirm');
+    setMode('clear');
   }
 
   const retryExact = () => {
-    if (pending && unresolved.current === pending) void send(pending);
+    if (pending && unresolved.current === pending) {
+      requestFocus('result');
+      void send(pending);
+    }
   };
 
   return (
@@ -312,13 +427,21 @@ function YearlyGoalScreen({
             {sessionState === 'signed-in' && loaded.state === 'loading' ? (
               <p role="status">{m.library_yearly_goal_loading()}</p>
             ) : null}
-            {sessionState === 'signed-in' && loaded.state === 'denied' ? <p role="status">{m.ctxw_denied()}</p> : null}
+            {sessionState === 'signed-in' && loaded.state === 'denied' ? (
+              <p ref={resultStatusRef} role="status" tabIndex={-1} className={focusIndicator}>
+                {m.ctxw_denied()}
+              </p>
+            ) : null}
             {sessionState === 'signed-in' && loaded.state === 'retired' ? (
-              <p role="status">{m.library_yearly_goal_signed_out()}</p>
+              <p ref={resultStatusRef} role="status" tabIndex={-1} className={focusIndicator}>
+                {m.library_yearly_goal_signed_out()}
+              </p>
             ) : null}
             {sessionState === 'signed-in' && loaded.state === 'unavailable' ? (
               <>
-                <p role="status">{m.library_yearly_goal_unavailable()}</p>
+                <p ref={resultStatusRef} role="status" tabIndex={-1} className={focusIndicator}>
+                  {m.library_yearly_goal_unavailable()}
+                </p>
                 {api && operation === null ? (
                   <button
                     type="button"
@@ -337,7 +460,9 @@ function YearlyGoalScreen({
                   <p role="status">{m.library_yearly_goal_target_unavailable()}</p>
                 ) : snapshot.target.state === 'none' ? (
                   <div>
-                    <p>{m.library_yearly_goal_target_none()}</p>
+                    <p ref={targetResultRef} tabIndex={-1} className={focusIndicator}>
+                      {m.library_yearly_goal_target_none()}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {snapshot.target.revision === null
                         ? m.library_yearly_goal_never_set()
@@ -346,7 +471,9 @@ function YearlyGoalScreen({
                   </div>
                 ) : (
                   <div>
-                    <p className="text-2xl font-semibold">{snapshot.target.target}</p>
+                    <p ref={targetResultRef} tabIndex={-1} className={`text-2xl font-semibold ${focusIndicator}`}>
+                      {snapshot.target.target}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {m.library_yearly_goal_target_revision({ revision: snapshot.target.revision })}
                     </p>
@@ -358,6 +485,7 @@ function YearlyGoalScreen({
                     <form className="grid max-w-sm gap-3" onSubmit={submitTarget}>
                       <label htmlFor="yearly-goal-target-value">{m.library_yearly_goal_target()}</label>
                       <input
+                        ref={editInputRef}
                         id="yearly-goal-target-value"
                         type="text"
                         inputMode="numeric"
@@ -365,7 +493,10 @@ function YearlyGoalScreen({
                         minLength={1}
                         maxLength={4}
                         value={draft}
-                        onChange={(event) => setDraft(event.currentTarget.value)}
+                        onChange={(event) => {
+                          setDraft(event.currentTarget.value);
+                          if (invalidTarget) setInvalidTarget(false);
+                        }}
                         aria-invalid={invalidTarget || undefined}
                         aria-describedby={invalidTarget ? 'yearly-goal-target-error' : undefined}
                         className="min-h-11 rounded-lg border bg-background px-3"
@@ -389,7 +520,13 @@ function YearlyGoalScreen({
                   ) : mode === 'clear' ? (
                     <div className="flex flex-wrap items-center gap-3">
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
-                        <button type="button" className={control} disabled={busy} onClick={() => commandFor(null)}>
+                        <button
+                          ref={clearConfirmRef}
+                          type="button"
+                          className={control}
+                          disabled={busy}
+                          onClick={() => commandFor(null)}
+                        >
                           {m.library_yearly_goal_clear()}
                         </button>
                       ) : (
@@ -403,18 +540,23 @@ function YearlyGoalScreen({
                   ) : (
                     <div className="flex flex-wrap gap-3">
                       {snapshot.viewer.actions.editTarget.allowed ? (
-                        <button type="button" className={control} disabled={busy} onClick={beginEdit}>
+                        <button
+                          ref={editActionRef}
+                          type="button"
+                          className={control}
+                          disabled={busy}
+                          onClick={beginEdit}
+                        >
                           {m.library_yearly_goal_edit()}
                         </button>
                       ) : null}
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
                         <button
+                          ref={clearActionRef}
                           type="button"
                           className={control}
                           disabled={busy}
-                          onClick={() => {
-                            if (live() && !inFlight.current && !unresolved.current) setMode('clear');
-                          }}
+                          onClick={beginClear}
                         >
                           {m.library_yearly_goal_clear()}
                         </button>
@@ -434,27 +576,42 @@ function YearlyGoalScreen({
             {operation === 'stale' ? (
               <div className="space-y-3" role="alert">
                 <p>{m.library_yearly_goal_stale()}</p>
-                <button type="button" className={control} onClick={() => void refreshCurrent('conflict')}>
+                <button
+                  ref={refreshActionRef}
+                  type="button"
+                  className={control}
+                  onClick={() => void refreshCurrent('conflict')}
+                >
                   {m.library_yearly_goal_refresh()}
                 </button>
               </div>
             ) : null}
             {operation === 'review' ? (
-              <button type="button" className={control} onClick={() => void refreshCurrent('conflict')}>
+              <button
+                ref={refreshActionRef}
+                type="button"
+                className={control}
+                onClick={() => void refreshCurrent('conflict')}
+              >
                 {m.library_yearly_goal_refresh()}
               </button>
             ) : null}
             {operation === 'uncertain' ? (
               <div className="space-y-3" role="alert">
                 <p>{m.library_yearly_goal_uncertain()}</p>
-                <button type="button" className={control} onClick={retryExact}>
+                <button ref={retryExactRef} type="button" className={control} onClick={retryExact}>
                   {m.library_yearly_goal_retry_exact()}
                 </button>
               </div>
             ) : null}
             {operation === 'denied' ? <p role="alert">{m.ctxw_denied()}</p> : null}
             {['unavailable', 'key-conflict', 'erased', 'invalid'].includes(operation ?? '') ? (
-              <button type="button" className={control} onClick={() => void refreshCurrent('readback')}>
+              <button
+                ref={readbackRetryRef}
+                type="button"
+                className={control}
+                onClick={() => void refreshCurrent('readback')}
+              >
                 {m.library_selection_retry()}
               </button>
             ) : null}

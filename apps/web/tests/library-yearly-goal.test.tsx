@@ -119,6 +119,7 @@ async function click(container: HTMLElement, label: string) {
   const button = [...container.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
   if (!button) throw new Error(`Missing button: ${label}`);
   await act(async () => {
+    button.focus();
     button.click();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   });
@@ -227,8 +228,18 @@ test('mounted owner reads native progress, sets and clears a target, and reads b
     expect(page.container.querySelector('a[href="/en/library/history?year=2026"]')).not.toBeNull();
 
     await click(page.container, m.library_yearly_goal_edit());
-    await setTargetInput(page.container, '12');
+    expect(window.document.activeElement).toBe(page.container.querySelector('#yearly-goal-target-value'));
+    await click(page.container, m.library_yearly_goal_cancel());
+    expect(window.document.activeElement?.textContent).toBe(m.library_yearly_goal_edit());
+    await click(page.container, m.library_yearly_goal_edit());
+    await setTargetInput(page.container, '0');
     await submitTarget(page.container);
+    expect(page.container.querySelector('#yearly-goal-target-value')?.getAttribute('aria-invalid')).toBe('true');
+    expect(window.document.activeElement).toBe(page.container.querySelector('#yearly-goal-target-value'));
+    await setTargetInput(page.container, '12');
+    expect(page.container.querySelector('#yearly-goal-target-value')?.hasAttribute('aria-invalid')).toBe(false);
+    await submitTarget(page.container);
+    expect(window.document.activeElement?.textContent).toBe('12');
     expect(native.calls[0]).toMatchObject({
       year: 2026,
       metric: 'completed_consumption_occurrences',
@@ -240,7 +251,12 @@ test('mounted owner reads native progress, sets and clears a target, and reads b
     expect(page.container.textContent).toContain('Target revision 1');
 
     await click(page.container, m.library_yearly_goal_clear());
+    expect(window.document.activeElement?.textContent).toBe(m.library_yearly_goal_clear());
+    await click(page.container, m.library_yearly_goal_cancel());
+    expect(window.document.activeElement?.textContent).toBe(m.library_yearly_goal_clear());
     await click(page.container, m.library_yearly_goal_clear());
+    await click(page.container, m.library_yearly_goal_clear());
+    expect(window.document.activeElement?.textContent).toContain(m.library_yearly_goal_target_none());
     expect(native.calls[1]).toMatchObject({ target: null, expectedRevision: '1' });
     expect(native.order).toEqual(['read:2026', 'write:12', 'read:2026', 'write:null', 'read:2026']);
     expect(page.container.textContent).toContain('No target has been set.');
@@ -303,12 +319,14 @@ test('uncertain delivery retries the exact native command and resolves its recei
     await setTargetInput(page.container, '5');
     await submitTarget(page.container);
     expect(page.container.textContent).toContain(m.library_yearly_goal_uncertain());
+    expect(window.document.activeElement?.textContent).toBe(m.library_yearly_goal_retry_exact());
     expect(native.order).toEqual(['read:2026', 'write:5']);
     await click(page.container, m.library_yearly_goal_retry_exact());
     expect(commands).toHaveLength(2);
     expect(commands[1]).toEqual(commands[0]);
     expect(native.order).toEqual(['read:2026', 'write:5', 'write:5', 'read:2026']);
     expect(page.container.textContent).toContain('Target revision 1');
+    expect(window.document.activeElement?.textContent).toBe('5');
   } finally {
     await page.dispose();
   }
@@ -341,15 +359,57 @@ test('a stale revision keeps the proposal until explicit refresh and review agai
     await setTargetInput(page.container, '9');
     await submitTarget(page.container);
     expect(page.container.textContent).toContain(m.library_yearly_goal_stale());
+    expect(window.document.activeElement?.textContent).toBe(m.library_yearly_goal_refresh());
     expect(reads).toBe(1);
     await click(page.container, m.library_yearly_goal_refresh());
     expect(page.container.querySelector<HTMLInputElement>('#yearly-goal-target-value')?.value).toBe('9');
     expect(page.container.textContent).toContain(m.library_yearly_goal_review());
     expect(page.container.textContent).toContain('Target revision 7');
+    expect(window.document.activeElement).toBe(page.container.querySelector('#yearly-goal-target-value'));
     await submitTarget(page.container);
     expect(commands[1]).toMatchObject({ target: 9, expectedRevision: '7' });
     expect(commands[1]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
     expect(page.container.textContent).toContain('Target revision 8');
+    expect(window.document.activeElement?.textContent).toBe('9');
+  } finally {
+    await page.dispose();
+  }
+});
+
+test('a delayed save does not reclaim focus after the reader moves to another control', async () => {
+  const writing = deferred<YearlyGoalWriteResult>();
+  const commands: YearlyGoalCommand[] = [];
+  let reads = 0;
+  let target: YearlyGoalSnapshot['target'] = { state: 'none', revision: null };
+  const api: YearlyGoalPageApi = {
+    async read(year) {
+      reads += 1;
+      return { state: 'ready', value: nativeYearlyGoalSnapshot(year, target) };
+    },
+    write(command) {
+      commands.push(command);
+      return writing.promise.then((result) => {
+        if (result.state === 'applied') target = { state: 'set', target: command.target!, revision: '1' };
+        return result;
+      });
+    },
+  };
+  const page = await mountPage(api);
+  try {
+    await click(page.container, m.library_yearly_goal_edit());
+    await setTargetInput(page.container, '6');
+    await submitTarget(page.container);
+    const elsewhere = page.container.querySelector<HTMLAnchorElement>('a[href="/en/library"]')!;
+    await act(async () => elsewhere.focus());
+    await act(async () => {
+      writing.resolve({ state: 'applied' });
+      await writing.promise;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+    expect(reads).toBe(2);
+    expect(commands).toHaveLength(1);
+    expect(page.container.textContent).toContain('Target revision 1');
+    expect(window.document.activeElement).toBe(elsewhere);
   } finally {
     await page.dispose();
   }
@@ -463,9 +523,17 @@ test('acknowledgement survives failed readback; explicit refresh never resends t
 
 test('source, locale and same-account reader replacement retire drafts and late write acknowledgements', async () => {
   const writing = deferred<YearlyGoalWriteResult>();
+  let oldReads = 0;
+  let oldWrites = 0;
   const oldApi: YearlyGoalPageApi = {
-    read: async (year) => ({ state: 'ready', value: nativeYearlyGoalSnapshot(year) }),
-    write: () => writing.promise,
+    read: async (year) => {
+      oldReads += 1;
+      return { state: 'ready', value: nativeYearlyGoalSnapshot(year) };
+    },
+    write: () => {
+      oldWrites += 1;
+      return writing.promise;
+    },
   };
   const next = nativeApi({ state: 'set', target: 7, revision: '2' });
   const page = await mountPage(oldApi);
@@ -473,13 +541,19 @@ test('source, locale and same-account reader replacement retire drafts and late 
     await click(page.container, m.library_yearly_goal_edit());
     await setTargetInput(page.container, '99');
     await submitTarget(page.container);
-    await page.render(2026, 'owner', next.api);
+    const movedFocus = page.container.querySelector<HTMLAnchorElement>('a[href="/en/library"]')!;
+    await act(async () => movedFocus.focus());
+    await page.render(2027, 'viewer-b', next.api);
+    const focusAfterReplacement = window.document.activeElement;
     expect(page.container.querySelector('#yearly-goal-target-value')).toBeNull();
     expect(page.container.textContent).toContain('Target revision 2');
     await act(async () => {
       writing.resolve({ state: 'applied' });
       await writing.promise;
     });
+    expect(oldReads).toBe(1);
+    expect(oldWrites).toBe(1);
+    expect(window.document.activeElement).toBe(focusAfterReplacement);
     expect(page.container.textContent).not.toContain(m.library_yearly_goal_saved());
     expect(page.container.textContent).not.toContain('99');
     await click(page.container, m.library_yearly_goal_edit());
