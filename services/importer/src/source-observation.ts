@@ -227,7 +227,7 @@ export function safeObservationSummary(input: {
   };
 }
 
-export function headFromInspection(head: ImportSourceObservationHead): ObservationHeadRead {
+export function headFromInspection(subjectId: string, head: ImportSourceObservationHead): ObservationHeadRead {
   if (head.state === 'empty')
     return head.digest === null && head.observation === null
       ? { kind: 'absent' }
@@ -237,16 +237,33 @@ export function headFromInspection(head: ImportSourceObservationHead): Observati
   if (
     typeof digest !== 'string' ||
     !DIGEST.test(digest) ||
-    !observation || observation.digest !== digest ||
+    !observation || observation.digest !== digest || observation.payloadVersion !== 1 ||
+    observation.provenance?.kind !== 'unversioned' || observation.provenance.digest !== digest ||
     (head.state !== 'published' && head.state !== 'cleared')
   )
     return { kind: 'unavailable', code: 'source_observation_unavailable' };
   const payload = observation.payload;
+  const fields = head.state === 'cleared'
+    ? ['sourceAlias', 'sourceRecordId', 'count', 'asOf']
+    : ['sourceAlias', 'sourceRecordId', 'count', 'asOf', 'scale', 'mean', 'figures', 'licence', 'attribution'];
   if (
+    !payload || typeof payload !== 'object' || Array.isArray(payload) ||
+    !Object.keys(payload).every((key) => fields.includes(key)) ||
+    typeof observation.sourceAlias !== 'string' || payload.sourceAlias !== observation.sourceAlias ||
+    typeof observation.sourceRecordId !== 'string' || payload.sourceRecordId !== observation.sourceRecordId ||
+    typeof observation.asOf !== 'string' || payload.asOf !== observation.asOf ||
+    !Number.isSafeInteger(payload.count) || payload.count < 0 || payload.count > 2_147_483_647 ||
     (head.state === 'cleared' ? payload.count !== 0 : payload.count <= 0) ||
     (payload.count > 0 && (!('scale' in payload) || !('mean' in payload)))
   )
     return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  // Verify the persisted envelope, without creating an identity for a mutable row.
+  try {
+    if (sourceObservation(subjectId, SOURCE_OBSERVATION_PROVIDER, payload).digest !== digest)
+      return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  } catch {
+    return { kind: 'unavailable', code: 'source_observation_unavailable' };
+  }
   return {
     kind: 'head',
     head: {
