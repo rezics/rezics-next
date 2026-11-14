@@ -32,6 +32,9 @@ const release = definitions.release as Release;
 export const bookStoryLabels = {
   author: release.properties['schema:author']?.labels.en,
   bookType: release.types['schema:Book']?.labels.en,
+  position: release.properties['schema:position']?.labels.en,
+  translator: release.properties['schema:translator']?.labels.en,
+  publisher: release.properties['schema:publisher']?.labels.en,
 };
 let assertion = 10000;
 const snak = (property: string, content: unknown): Snak => ({
@@ -306,6 +309,22 @@ export const bookSubjects: Subject[] = [
   subject(bookId(21), 'skos:Concept', 'Memory and belonging'),
 ];
 export const bookSubjectMap = new Map(bookSubjects.map((item) => [item.id, item]));
+/** Keep Book page property and qualifier names available through the page's existing related-label fallback. */
+const bookPropertyRelated: SubjectRead['related'] = (() => {
+  const entries = new Map<string, SubjectRead['related'][string]>();
+  const include = (property: string) => {
+    const labels = release.properties[property]?.labels;
+    if (labels) entries.set(property, { labels });
+  };
+  for (const item of bookSubjects) {
+    for (const statement of Object.values(item.statements).flat()) {
+      include(statement.property.id);
+      statement.qualifiers.forEach(({ property }) => include(property.id));
+      statement.references.flatMap(({ parts }) => parts).forEach(({ property }) => include(property.id));
+    }
+  }
+  return Object.fromEntries(entries);
+})();
 for (const item of bookSubjects) {
   item.relationCounts = Object.fromEntries(
     Object.entries(item.statements)
@@ -395,7 +414,8 @@ export function bookSynopsisDocument(id: string): AuthoredDocument {
 /** Page reads embed the separately disclosed native document, keyed by its exact statement. */
 export function bookPageSubjectRead(id: string, locale: string, context: string) {
   const read = bookSubjectRead(id, locale, context);
-  if (!read.subject.statements['schema:abstract']?.length) return read;
+  const pageRead = { ...read, related: { ...read.related, ...bookPropertyRelated } };
+  if (!read.subject.statements['schema:abstract']?.length) return pageRead;
   const document = bookSynopsisDocument(id);
-  return { ...read, documents: { [document.candidateId]: document } };
+  return { ...pageRead, documents: { [document.candidateId]: document } };
 }

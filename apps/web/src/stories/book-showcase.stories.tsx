@@ -111,10 +111,20 @@ async function bookReady(context: Context) {
     ),
   );
   await waitFor(() => {
-    const image = context.canvasElement.querySelector<HTMLImageElement>('[data-slot="subject-header"] img');
+    const image = Array.from(
+      context.canvasElement.querySelectorAll<HTMLImageElement>('[data-slot="subject-header"] img'),
+    ).find((candidate) => {
+      const bounds = candidate.getBoundingClientRect();
+      const style = window.getComputedStyle(candidate);
+      return bounds.width > 0 && bounds.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    });
+    expect(image).toBeDefined();
     expect(image?.naturalWidth).toBeGreaterThan(0);
     expect(image?.currentSrc).toContain(`/media/${bookSummary(book.id, getLocale()).cover?.media}/webp-`);
   });
+  const facts = context.canvasElement.querySelector('[data-slot="subject-facts"]');
+  await expect(facts).toHaveTextContent(new RegExp(`^${bookStoryLabels.author!}$`, 'im'));
+  await expect(facts).toHaveTextContent(new RegExp(`^${bookStoryLabels.position!}$`, 'im'));
   await expect(context.canvasElement).not.toHaveTextContent(/unlabelled/i);
 }
 async function historyTo(context: Context, direction: 'back' | 'forward', view: View) {
@@ -382,6 +392,8 @@ export const EditionReturnInteraction: Story = {
     const frameUrl = window.location.href;
     await pageReady(context);
     const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(new RegExp(`^${bookStoryLabels.translator!}$`, 'i'))).toBeVisible();
+    await expect(await canvas.findByText(new RegExp(`^${bookStoryLabels.publisher!}$`, 'i'))).toBeVisible();
     const returnLink = (
       await canvas.findAllByRole('link', { name: bookSummary(book.id, getLocale()).label.value })
     )[0]!;

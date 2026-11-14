@@ -500,7 +500,7 @@ export const routes: FakeRoute[] = [
         match![1] === bookSparse.id || (query.get('place') ?? GLOBAL) !== GLOBAL
           ? []
           : threadRows(kind, match![1]!, request.headers.has('authorization')),
-        6,
+        Number(query.get('limit') ?? 6),
         kind === 'review' ? 'reviews' : 'threads',
         query.get('cursor') ?? undefined,
         `${match?.[1]}:threads:${kind}:${query.get('place') ?? GLOBAL}`,
