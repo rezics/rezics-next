@@ -98,9 +98,10 @@ test('native assignment reads admit empty pages only while the current owner hom
     await expect(commands.listAssignments(actor, { labelId: label.id })).rejects.toBeInstanceOf(GrantDeniedError);
     await expect(commands.listAssignments(actor, { subjectId })).rejects.toBeInstanceOf(GrantDeniedError);
   } finally {
-    await f.pool.query(
-      'UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1',
-      [partition, home.writeState, home.movedTo],
-    );
+    await f.pool.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
+      partition,
+      home.writeState,
+      home.movedTo,
+    ]);
   }
 });

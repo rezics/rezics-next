@@ -114,27 +114,31 @@ test('native label point and catalogue reads require the current credential and 
     )
   ).rows[0]!;
   try {
-    await f.pool.query(
-      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
-      [route, actor.accountId, actor.authnEpoch + 1],
-    );
+    await f.pool.query('UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2', [
+      route,
+      actor.accountId,
+      actor.authnEpoch + 1,
+    ]);
     await expect(labels.readLabel(actor, label.id)).rejects.toBeInstanceOf(GrantDeniedError);
     await expect(labels.listLabels(actor)).rejects.toBeInstanceOf(GrantDeniedError);
-    await f.pool.query(
-      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
-      [route, actor.accountId, account.floor],
-    );
+    await f.pool.query('UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2', [
+      route,
+      actor.accountId,
+      account.floor,
+    ]);
     await f.pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);
     await expect(labels.readLabel(actor, label.id)).rejects.toBeInstanceOf(GrantDeniedError);
     await expect(labels.listLabels(actor)).rejects.toBeInstanceOf(GrantDeniedError);
   } finally {
-    await f.pool.query(
-      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
-      [route, actor.accountId, account.floor],
-    );
-    await f.pool.query(
-      'UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1',
-      [partition, home.writeState, home.movedTo],
-    );
+    await f.pool.query('UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2', [
+      route,
+      actor.accountId,
+      account.floor,
+    ]);
+    await f.pool.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
+      partition,
+      home.writeState,
+      home.movedTo,
+    ]);
   }
 });

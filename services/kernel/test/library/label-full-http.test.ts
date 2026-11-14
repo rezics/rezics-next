@@ -182,17 +182,19 @@ test('mounted FULL assignment enrichment is withheld when the owner credential c
   const denied = expect(response).rejects.toBeInstanceOf(GrantDeniedError);
   try {
     await enrichmentStarted;
-    await f.pool.query(
-      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
-      [route, owner.actor.accountId, (BigInt(account.floor) + 1n).toString()],
-    );
+    await f.pool.query('UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2', [
+      route,
+      owner.actor.accountId,
+      (BigInt(account.floor) + 1n).toString(),
+    ]);
     finishEnrichment();
     await denied;
   } finally {
     finishEnrichment();
-    await f.pool.query(
-      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
-      [route, owner.actor.accountId, account.floor],
-    );
+    await f.pool.query('UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2', [
+      route,
+      owner.actor.accountId,
+      account.floor,
+    ]);
   }
 });

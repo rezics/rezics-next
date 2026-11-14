@@ -2,10 +2,7 @@ import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { currentCommandWorkAssociation, currentLibraryOperationAccounting } from '../command/work-context.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import {
-  followAccountAuthorizationWork,
-  followSubjectSummaryObservationWork,
-} from './follow-operation-bounds.ts';
+import { followAccountAuthorizationWork, followSubjectSummaryObservationWork } from './follow-operation-bounds.ts';
 import { sessionCoreCommandAttemptWork, sessionPartitionWork } from './session-operation-bounds.ts';
 import labelInsert from './label-store-insert.sql';
 import labelRead from './label-store-read.sql';
@@ -339,14 +336,18 @@ export function labelCommandAttemptComponent(
 }
 
 function labelReadControl(sql: string): Bound {
-  return sqlBound(sql, {}, {
-    candidateKeys: 0,
-    nativeRows: 0,
-    points: 0,
-    emptySeeks: 0,
-    output: {},
-    outputRows: 0,
-  });
+  return sqlBound(
+    sql,
+    {},
+    {
+      candidateKeys: 0,
+      nativeRows: 0,
+      points: 0,
+      emptySeeks: 0,
+      output: {},
+      outputRows: 0,
+    },
+  );
 }
 
 /** Current owner and home admission, priced for both selection and final re-admission. */

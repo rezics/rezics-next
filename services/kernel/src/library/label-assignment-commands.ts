@@ -672,24 +672,27 @@ export function createLabelAssignmentCommands(deps: {
                   })
                 : null;
             const last = rows.at(-1);
-            return attachLabelReadHome({
-              ...(full && parent ? { label: { id: parent.id, name: parent.name, revision: parent.revision } } : {}),
-              assignments: tiles
-                ? assignments.map((row) => ({ ...row, libraryEntry: tiles.get(row.subjectId) ?? null }))
-                : assignments,
-              next:
-                rows.length === limit && last
-                  ? await encodeListCursor(
-                      tokens,
-                      binding,
-                      {
-                        epoch: partition.epoch,
-                        after: [labelId ? last.subjectId : last.labelId, partition.position.toString()],
-                      },
-                      now,
-                    )
-                  : null,
-            }, partition);
+            return attachLabelReadHome(
+              {
+                ...(full && parent ? { label: { id: parent.id, name: parent.name, revision: parent.revision } } : {}),
+                assignments: tiles
+                  ? assignments.map((row) => ({ ...row, libraryEntry: tiles.get(row.subjectId) ?? null }))
+                  : assignments,
+                next:
+                  rows.length === limit && last
+                    ? await encodeListCursor(
+                        tokens,
+                        binding,
+                        {
+                          epoch: partition.epoch,
+                          after: [labelId ? last.subjectId : last.labelId, partition.position.toString()],
+                        },
+                        now,
+                      )
+                    : null,
+              },
+              partition,
+            );
           });
         }),
       );
