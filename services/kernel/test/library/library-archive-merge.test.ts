@@ -335,6 +335,7 @@ test('canonical provider and checkpoint evidence is retained privately without b
       catalogue_id: uploadId,
       publication_revision_id: uploadId,
       occurrence_id: uploadId,
+      target_post_id: uploadId,
       target_revision_id: uploadId,
       target_sha256: 'b'.repeat(64),
       bodyLanguage: null,

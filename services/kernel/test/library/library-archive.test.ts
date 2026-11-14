@@ -261,6 +261,7 @@ test('hosted checkpoint evidence keeps default or selected body language beside 
     catalogue_id: first,
     publication_revision_id: second,
     occurrence_id: label,
+    target_post_id: first,
     target_revision_id: second,
     target_sha256: 'a'.repeat(64),
     document_block_id: 'paragraph-1',
@@ -277,6 +278,9 @@ test('hosted checkpoint evidence keeps default or selected body language beside 
       treatment: 'retained-unsupported',
     });
   }
+  const withoutPost: Record<string, unknown> = { ...checkpoint };
+  delete withoutPost.target_post_id;
+  refuses(archive([withoutPost as ArchiveRecord]), 'invalid_record');
   refuses(archive([{ ...checkpoint, bodyLanguage: 'en-us' }]), 'invalid_record');
   refuses(archive([{ ...checkpoint, target_sha256: 'other-body' }]), 'invalid_record');
 });

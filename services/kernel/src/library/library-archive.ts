@@ -468,6 +468,7 @@ function hostedReadingRecord(row: ObjectValue) {
         'catalogue_id',
         'publication_revision_id',
         'occurrence_id',
+        'target_post_id',
         'target_revision_id',
         'target_sha256',
         'document_block_id',
@@ -480,6 +481,7 @@ function hostedReadingRecord(row: ObjectValue) {
     !uuid(row.catalogue_id) ||
     !uuid(row.publication_revision_id) ||
     !uuid(row.occurrence_id) ||
+    !uuid(row.target_post_id) ||
     !uuid(row.target_revision_id) ||
     typeof row.target_sha256 !== 'string' ||
     !/^[0-9a-f]{64}$/.test(row.target_sha256) ||

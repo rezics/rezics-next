@@ -96,11 +96,12 @@ own section; no importer-to-journal provenance link or new completion is inferre
 
 ## Exact hosted checkpoints
 
-`hostedReading` retains the saved Subject, catalogue/publication/occurrence address, exact target revision and
+`hostedReading` retains the saved Subject, catalogue/publication/occurrence address, required exact target Post ID, revision and
 SHA-256, document block/offset, checkpoint revision and changed time. Optional nullable `bodyLanguage` accompanies
 that exact address: omission or null selects the semantic default, while a canonical language tag selects its
 separate exact body. Decoding preserves omission, null and tags without changing revision or digest. These private
-records remain unsupported recovery evidence; they grant no Content access and never resolve or install a body.
+records require `target_post_id` alongside `target_revision_id` and `target_sha256`;
+no Post is inferred from an occurrence or default body. They remain unsupported recovery evidence; they grant no Content access and never resolve or install a body.
 
 The existing `readHostedReadingExportPage` owner hook supplies an account/Subject keyset of at most 17 checkpoint
 rows, with fixed UUID/digest/revision fields, bounded language/position fields and no chapter/document bytes.

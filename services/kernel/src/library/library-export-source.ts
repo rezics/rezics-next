@@ -93,6 +93,7 @@ export type ProviderExportRecord =
 /** The installed owner hook supplies the exact saved checkpoint; no current body is resolved. */
 export type HostedReadingExportRecord = Omit<Awaited<ReturnType<typeof readHostedReadingExportPage>>[number], 'key'> & {
   section: 'hostedReading';
+  target_post_id: string;
   bodyLanguage?: string | null;
   subject_id_reference: { id: string; href: string };
 };

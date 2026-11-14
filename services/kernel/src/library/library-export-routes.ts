@@ -217,6 +217,7 @@ const hostedReadingRecord = t.Object(
     catalogue_id: text,
     publication_revision_id: text,
     occurrence_id: text,
+    target_post_id: text,
     target_revision_id: text,
     target_sha256: text,
     bodyLanguage: t.Optional(nullable),

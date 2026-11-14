@@ -103,7 +103,9 @@ unavailable resume when current authority withholds bytes; it never silently cha
 TOC withdrawal removes current `for_subject` discovery; historical exact reads remain on Content
 resolve. Ordinary Entry/Progress keep Book page units. Private facts grant no read access and join
 account erasure. Canonical Library export includes private checkpoints through
-`readHostedReadingExportPage`; exact address and optional nullable `bodyLanguage` remain retained recovery evidence. Fewest tests: current discovery
+`readHostedReadingExportPage`; required exact Post/revision/SHA and optional nullable `bodyLanguage` remain retained
+recovery evidence. The archive field is `target_post_id`; omission never infers a Post from the occurrence.
+Fewest tests: current discovery
 and empty TOC, CAS save/get/clear, withheld resume keeping the address, position bounds.
 
 Acceptance choice: focused source fixtures pin those states; native/browser acceptance stays in the
