@@ -107,9 +107,22 @@ const timestampFact = t.Union([
 ]);
 const nativeRecord = t.Object(
   {
-    section: t.Union(
-      exportSections.filter((section) => section !== 'hostedReading').map((section) => t.Literal(section)),
-    ),
+    section: t.Union([
+      t.Literal('entries'),
+      t.Literal('labels'),
+      t.Literal('assignments'),
+      t.Literal('sessions'),
+      t.Literal('holdings'),
+      t.Literal('collections'),
+      t.Literal('collectionPins'),
+      t.Literal('bangumiUploads'),
+      t.Literal('bangumiEvidence'),
+      t.Literal('malImports'),
+      t.Literal('units'),
+      t.Literal('history'),
+      t.Literal('occurrences'),
+      t.Literal('malEvidence'),
+    ]),
   },
   { additionalProperties: true },
 );
