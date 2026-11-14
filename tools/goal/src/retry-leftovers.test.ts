@@ -123,18 +123,25 @@ test('a retry setup failure reports an environment event to the owning manager',
   }
 });
 
-test('proof remains fail closed and genuine leftover Git errors keep their task diagnosis', async () => {
+test('proof admission fails closed before retained-source inspection', async () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
+      current.brief = { ...current.brief, kind: 'verification' };
+    });
+    await expect(h.tasks.retry(task.id)).rejects.toThrow();
+    expect(h.store.task(task.id).currentAttempt).toBe(0);
+    expect(h.store.events(task.id).some((event) => event.kind === 'retry-setup-failed')).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a genuine leftover Git error keeps its task diagnosis without a shared timeout incident', async () => {
   const h = harness(recordingCli);
   const previousIndex = process.env.GIT_INDEX_FILE;
   try {
-    const proof = h.tasks.dispatch(h.briefFile);
-    h.store.updateTask({ taskId: proof.id, attempt: 0 }, (current) => {
-      current.brief = { ...current.brief, kind: 'verification' };
-    });
-    await expect(h.tasks.retry(proof.id)).rejects.toThrow();
-    expect(h.store.task(proof.id).currentAttempt).toBe(0);
-    expect(h.store.events(proof.id).some((event) => event.kind === 'retry-setup-failed')).toBe(false);
-
     h.settings.integration.operationsManager = 'operations';
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox);
@@ -178,7 +185,9 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
         { enqueue() {} },
         new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory),
       );
-    const tasks = [h.tasks.dispatch(h.briefFile), h.tasks.dispatch(h.briefFile)];
+    const secondBrief = join(h.settings.stateDirectory, 'source-second.md');
+    writeFileSync(secondBrief, `${readFileSync(h.briefFile, 'utf8')}\n<!-- distinct timeout-folding task -->\n`);
+    const tasks = [h.tasks.dispatch(h.briefFile), h.tasks.dispatch(secondBrief)];
     for (const task of tasks) {
       await runAndStop(h, firstJob, task.id);
       const worktree = h.store.task(task.id).worktree;
