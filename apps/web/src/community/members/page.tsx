@@ -9,6 +9,14 @@ import { boundedRealmMemberPage, type MemberIdentity, type RealmMembersSource } 
 import { MemberAddition } from './addition';
 import { SelectedRealmMemberContext } from './selected-account';
 import { RealmBansPanel } from '../realm-bans-panel';
+import {
+  ManagementField,
+  ManagementIdentity,
+  ManagementNotice,
+  ManagementReference,
+  ManagementReferences,
+  ManagementRow,
+} from './management-ui';
 
 const addWithAccountsWorkflow: NonNullable<RealmMembersSource['addMember']> = async (intent) =>
   (await import('./commands')).addSelectedRealmMember(intent);
@@ -20,16 +28,7 @@ export type MembersCaller = {
 const standalone: MembersCaller = { current: () => true };
 
 function Identity({ identity }: { identity: MemberIdentity }) {
-  return (
-    <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
-      <p className="font-semibold">
-        <bdi>{identity.label}</bdi>
-      </p>
-      <p className="font-mono text-sm text-muted-foreground">
-        <bdi>{identity.reference}</bdi>
-      </p>
-    </div>
-  );
+  return <ManagementIdentity label={<bdi>{identity.label}</bdi>} reference={identity.reference} />;
 }
 
 /** Renders one producer-backed page and one explicit selected observation at a time. */
@@ -174,20 +173,26 @@ export function RealmMembersPage({
   }
 
   return (
-    <article className="min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
-      <header className="space-y-2">
+    <article className="min-w-0 w-full max-w-5xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+      <header className="space-y-3 border-b pb-5">
         <h1 id={id} ref={heading} tabIndex={-1} className="text-3xl font-semibold">
           {m.realm_members_heading()}
         </h1>
         <p className="max-w-prose text-muted-foreground">{m.realm_members_management_only()}</p>
         {read.kind === 'ready' ? (
-          <p>
-            <bdi>{read.page.realm.label}</bdi>
-          </p>
+          <div className="space-y-1">
+            <p className="text-lg font-medium">
+              <bdi>{read.page.realm.label}</bdi>
+            </p>
+            <p className="text-sm text-muted-foreground">{m.realm_management_bounded_help()}</p>
+          </div>
         ) : null}
       </header>
       {read.kind === 'ready' && !selection ? (
-        <form className="flex max-w-xl flex-wrap items-end gap-3" onSubmit={inspectAccount}>
+        <form
+          className="flex max-w-2xl flex-wrap items-end gap-3 rounded-xl border bg-muted/20 p-4"
+          onSubmit={inspectAccount}
+        >
           <div className="min-w-0 flex-1 space-y-2">
             <label htmlFor={`${id}-account`} className="text-sm font-medium">
               {m.realm_bans_inspect_account()}
@@ -198,6 +203,8 @@ export function RealmMembersPage({
               autoComplete="off"
               spellCheck={false}
               maxLength={36}
+              aria-invalid={accountIdInvalid || undefined}
+              aria-describedby={accountIdInvalid ? `${id}-invalid-account` : undefined}
               value={accountIdDraft}
               onChange={(event) => {
                 setAccountIdDraft(event.target.value);
@@ -205,11 +212,11 @@ export function RealmMembersPage({
               }}
             />
           </div>
-          <Button type="submit" variant="outline" className="min-h-11 whitespace-normal">
+          <Button type="submit" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-start">
             {m.realm_members_lookup_account()}
           </Button>
           {accountIdInvalid ? (
-            <p role="alert" className="w-full text-sm">
+            <p id={`${id}-invalid-account`} role="alert" className="w-full text-sm">
               {m.realm_members_invalid_account_id()}
             </p>
           ) : null}
@@ -229,6 +236,30 @@ export function RealmMembersPage({
           <h2 id={`${id}-inspection`} ref={inspection} tabIndex={-1} className="text-xl font-semibold">
             {m.realm_members_inspection()}
           </h2>
+          {selected.kind === 'ready' ? (
+            <>
+              <div className="space-y-3 border-b pb-4">
+                <Identity identity={selected.identity} />
+                <p className="text-sm font-medium">
+                  {selected.membership === 'current'
+                    ? m.realm_members_current()
+                    : selected.membership === 'pending'
+                      ? m.realm_members_pending()
+                      : selected.membership === 'none'
+                        ? m.realm_members_nonmember()
+                        : m.realm_members_actions_unavailable()}
+                </p>
+                <ManagementReferences>
+                  <ManagementField label={m.realm_bans_details_account()}>
+                    <ManagementReference>{selected.identity.accountId}</ManagementReference>
+                  </ManagementField>
+                  <ManagementField label={m.realm_review_realm()}>
+                    <ManagementReference>{realmId}</ManagementReference>
+                  </ManagementField>
+                </ManagementReferences>
+              </div>
+            </>
+          ) : null}
           {actionableSelected && read.kind === 'ready' ? (
             <MemberAddition
               key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}:${actionableSelected.membershipEpisode}`}
@@ -252,16 +283,6 @@ export function RealmMembersPage({
           ) : null}
           {selected.kind === 'ready' ? (
             <>
-              <Identity identity={selected.identity} />
-              <p>
-                {selected.membership === 'current'
-                  ? m.realm_members_current()
-                  : selected.membership === 'pending'
-                    ? m.realm_members_pending()
-                    : selected.membership === 'none'
-                      ? m.realm_members_nonmember()
-                      : m.realm_members_actions_unavailable()}
-              </p>
               {read.kind === 'ready' && selected.kind === 'ready' ? (
                 <SelectedRealmMemberContext.Provider value={selectedMember}>
                   <div className="space-y-4">
@@ -277,29 +298,35 @@ export function RealmMembersPage({
               ) : null}
             </>
           ) : (
-            <p role="status">
+            <ManagementNotice>
               {selected.kind === 'loading'
                 ? m.realm_members_loading()
                 : selected.kind === 'concealed'
                   ? m.realm_members_concealed()
-                  : selected.kind === 'changed'
-                    ? m.realm_members_changed()
-                    : selected.kind === 'failed'
-                      ? m.realm_members_selected_failed()
-                      : m.realm_members_selected_unavailable()}
-            </p>
+                  : selected.kind === 'denied'
+                    ? m.realm_members_selected_denied()
+                    : selected.kind === 'changed'
+                      ? m.realm_members_changed()
+                      : selected.kind === 'failed'
+                        ? m.realm_members_selected_failed()
+                        : m.realm_members_selected_unavailable()}
+            </ManagementNotice>
           )}
           <div className="flex flex-wrap gap-3">
             {selected.kind === 'failed' || selected.kind === 'unavailable' ? (
               <Button
                 variant="outline"
-                className="min-h-11 whitespace-normal"
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                 onClick={() => void visit.retrySelected()}
               >
                 {m.realm_members_retry_selected()}
               </Button>
             ) : null}
-            <Button variant="outline" className="min-h-11 whitespace-normal" onClick={close}>
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              onClick={close}
+            >
               {m.realm_members_back()}
             </Button>
           </div>
@@ -307,35 +334,42 @@ export function RealmMembersPage({
       ) : read.kind === 'ready' ? (
         <section aria-labelledby={id} className="space-y-5">
           {read.page.rows.length ? (
-            <ul className="space-y-3">
+            <ul className="min-w-0 rounded-xl border px-3 sm:px-1">
               {read.page.rows.map((row, index) => (
-                <li
+                <ManagementRow
                   key={row.kind === 'concealed' ? `concealed-${index}` : row.identity.accountId}
-                  className="min-w-0 space-y-3 rounded-xl border p-4"
-                >
-                  {row.kind === 'concealed' ? (
-                    <p>{m.realm_members_concealed()}</p>
-                  ) : (
-                    <>
-                      <Identity identity={row.identity} />
-                      <p className="text-sm">
-                        {row.membership === 'current' ? m.realm_members_current() : m.realm_members_pending()}
+                  title={row.kind === 'concealed' ? m.realm_members_concealed() : <bdi>{row.identity.label}</bdi>}
+                  metadata={
+                    row.kind === 'disclosed' ? (
+                      <p className="text-muted-foreground">
+                        <ManagementReference>{row.identity.reference}</ManagementReference>
                       </p>
+                    ) : undefined
+                  }
+                  state={
+                    row.kind === 'disclosed' ? (
+                      <span className="max-w-full rounded-md bg-muted px-2 py-1 text-xs">
+                        {row.membership === 'current' ? m.realm_members_current() : m.realm_members_pending()}
+                      </span>
+                    ) : undefined
+                  }
+                  actions={
+                    row.kind === 'disclosed' ? (
                       <Button
                         ref={(node) => {
                           if (node) rowButtons.current.set(row.identity.accountId, node);
                           else rowButtons.current.delete(row.identity.accountId);
                         }}
                         variant="outline"
-                        className="min-h-11 max-w-full whitespace-normal text-start"
+                        className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                         aria-label={m.realm_members_inspect_account({ account: row.identity.reference })}
                         onClick={() => void visit.select(row.identity.accountId)}
                       >
                         {m.realm_members_inspect()}
                       </Button>
-                    </>
-                  )}
-                </li>
+                    ) : undefined
+                  }
+                />
               ))}
             </ul>
           ) : (
@@ -346,7 +380,7 @@ export function RealmMembersPage({
               {visit.canPrevious() ? (
                 <Button
                   variant="outline"
-                  className="min-h-11 whitespace-normal"
+                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                   onClick={() => movePage(visit.previousAddress(), visit.previous)}
                 >
                   {m.realm_members_previous()}
@@ -355,7 +389,7 @@ export function RealmMembersPage({
               {visit.canFirst() ? (
                 <Button
                   variant="outline"
-                  className="min-h-11 whitespace-normal"
+                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                   onClick={() => movePage(visit.firstAddress(), visit.first)}
                 >
                   {m.realm_members_first()}
@@ -364,7 +398,7 @@ export function RealmMembersPage({
               {read.page.next !== null ? (
                 <Button
                   variant="outline"
-                  className="min-h-11 whitespace-normal"
+                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                   onClick={() => movePage(visit.moreAddress(), visit.more)}
                 >
                   {m.realm_members_more()}
@@ -391,7 +425,7 @@ export function RealmMembersPage({
           {read.kind === 'failed' || read.kind === 'unavailable' || read.kind === 'preparing' ? (
             <Button
               variant="outline"
-              className="min-h-11 whitespace-normal"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
               onClick={() => movePage(snapshot.address, visit.retryPage)}
             >
               {m.realm_members_retry_page()}

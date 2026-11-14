@@ -5,6 +5,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
 import { RealmBanEpisodeView, RealmBanIdentity, RealmBanNativeAdvice } from './realm-ban-current-view';
+import { ManagementReview } from './members/management-ui';
 import type { RealmBanLifetime } from './realm-ban-lifetime';
 import {
   admitRealmBanCurrent,
@@ -105,7 +106,10 @@ export function RealmBanCurrentControl({
   }
 
   return (
-    <section aria-labelledby={`${id}-heading`} className="min-w-0 max-w-xl space-y-3 wrap-anywhere">
+    <section
+      aria-labelledby={`${id}-heading`}
+      className="min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4 wrap-anywhere"
+    >
       <h3 id={`${id}-heading`} className="font-semibold">
         {m.realm_bans_inspect_heading()}
       </h3>
@@ -204,7 +208,7 @@ export function RealmBanCurrentControl({
             {m.realm_bans_unban()}
           </Button>
           {confirmation === result ? (
-            <div role="group" aria-labelledby={`${id}-unban`} className="space-y-3">
+            <ManagementReview title={m.realm_bans_unban_confirm()} aria-labelledby={`${id}-unban`}>
               <h4 id={`${id}-unban`} className="font-medium">
                 {m.realm_bans_unban_confirm()}
               </h4>
@@ -237,7 +241,7 @@ export function RealmBanCurrentControl({
                   {m.realm_bans_cancel()}
                 </Button>
               </div>
-            </div>
+            </ManagementReview>
           ) : null}
         </>
       ) : null}

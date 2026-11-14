@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type MouseEvent,
 } from 'react';
-import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -33,10 +33,11 @@ import {
   unavailableRealmBanCurrent,
   type InspectRealmBanCurrent,
 } from './realm-ban-current';
-import { RealmBanEpisodeView, RealmBanNativeAdvice } from './realm-ban-current-view';
+import { RealmBanEpisodeView, RealmBanIdentity, RealmBanNativeAdvice } from './realm-ban-current-view';
 import { useCommunityManagementAdmission } from './community-management';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import type { SelectedRealmMember } from './members/selected-account';
+import { ManagementRow, ManagementReview } from './members/management-ui';
 
 export type RealmBansControlProps = {
   realmId: string;
@@ -879,9 +880,16 @@ function RealmBansVisit({
       aria-busy={busy || view.state === 'loading'}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 ref={pageHeading} tabIndex={-1} id={`${id}-title`} className="text-xl font-semibold">
-          {m.realm_bans_heading()}
-        </h2>
+        <div className="min-w-0 space-y-1">
+          <h2 ref={pageHeading} tabIndex={-1} id={`${id}-title`} className="text-xl font-semibold">
+            {m.realm_bans_heading()}
+          </h2>
+          {view.state === 'ready' && view.page.context?.state === 'available' ? (
+            <p className="text-sm text-muted-foreground">
+              <bdi>{view.page.context.realmTitle}</bdi> · <bdi>{view.page.context.spaceTitle}</bdi>
+            </p>
+          ) : null}
+        </div>
         <div className="flex min-w-0 flex-wrap gap-2">
           {view.state === 'ready' ? (
             <Button
@@ -1046,12 +1054,7 @@ function RealmBansVisit({
               {m.realm_bans_ban()}
             </Button>
             {banConfirm && selected ? (
-              <ContentItemFrame
-                as="div"
-                role="group"
-                aria-labelledby={`${id}-ban-confirm`}
-                className="min-w-0 space-y-3 wrap-anywhere p-4"
-              >
+              <ManagementReview title={m.realm_bans_ban_confirm()} destructive aria-labelledby={`${id}-ban-confirm`}>
                 <ContentItemHeading
                   level={3}
                   id={`${id}-ban-confirm`}
@@ -1102,7 +1105,7 @@ function RealmBansVisit({
                     {m.realm_bans_cancel()}
                   </Button>
                 </div>
-              </ContentItemFrame>
+              </ManagementReview>
             ) : null}
           </form>
           {selectedMember && selectedMember.realmId === realmId ? (
@@ -1182,7 +1185,11 @@ function RealmBansVisit({
                 </p>
               ) : null}
               {selectedReview && selectedMember.current() ? (
-                <div role="group" aria-labelledby={`${id}-selected-review`} className="space-y-3 rounded-lg border p-4">
+                <ManagementReview
+                  title={selectedReview === 'ban' ? m.realm_bans_ban() : m.realm_bans_unban_confirm()}
+                  destructive={selectedReview === 'ban'}
+                  aria-labelledby={`${id}-selected-review`}
+                >
                   <h4 id={`${id}-selected-review`} className="font-medium">
                     {selectedReview === 'ban' ? m.realm_bans_ban() : m.realm_bans_unban_confirm()}
                   </h4>
@@ -1255,14 +1262,9 @@ function RealmBansVisit({
                       {m.realm_bans_cancel()}
                     </Button>
                   </div>
-                </div>
+                </ManagementReview>
               ) : null}
             </section>
-          ) : null}
-          {view.page.context?.state === 'available' ? (
-            <p className="text-sm">
-              <bdi>{view.page.context.spaceTitle}</bdi> / <bdi>{view.page.context.realmTitle}</bdi>
-            </p>
           ) : null}
           <RealmBanCurrentControl
             key={renderGeneration}
@@ -1301,16 +1303,15 @@ function RealmBansVisit({
           {view.page.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">{m.realm_bans_empty()}</p>
           ) : (
-            <ul aria-label={m.realm_bans_current()} className="min-w-0 space-y-3">
+            <ul aria-label={m.realm_bans_current()} className="min-w-0 rounded-xl border px-3 sm:px-1">
               {view.page.items.map((ban) => (
-                <ContentItem
+                <ManagementRow
                   key={ban.accountId}
-                  title={m.realm_bans_details_banned_heading()}
+                  title={<RealmBanIdentity accountId={ban.accountId} identity={ban.account} />}
                   headingLevel={4}
-                  className="wrap-anywhere [&_h4]:line-clamp-none [&_h4]:whitespace-normal"
                   metadata={
                     <div className="min-w-0 flex-1 space-y-3">
-                      <RealmBanEpisodeView ban={ban} />
+                      <RealmBanEpisodeView ban={ban} includeAccount={false} />
                       <RealmBanNativeAdvice ban={ban} realmId={realmId} />
                     </div>
                   }
@@ -1339,11 +1340,9 @@ function RealmBansVisit({
                   }
                   preview={
                     confirm === ban.accountId ? (
-                      <ContentItemFrame
-                        as="div"
-                        role="group"
+                      <ManagementReview
+                        title={m.realm_bans_unban_confirm()}
                         aria-labelledby={`${id}-unban-${ban.accountId}`}
-                        className="min-w-0 space-y-3 wrap-anywhere p-4"
                       >
                         <ContentItemHeading
                           level={4}
@@ -1401,7 +1400,7 @@ function RealmBansVisit({
                             {m.realm_bans_cancel()}
                           </Button>
                         </div>
-                      </ContentItemFrame>
+                      </ManagementReview>
                     ) : undefined
                   }
                 />

@@ -1,9 +1,16 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { ArrowRight, Check, CircleHelp, RefreshCw, ShieldCheck } from 'lucide-react';
-import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../shell/page-heading';
 import { m } from '../paraglide/messages.js';
+import {
+  ManagementField,
+  ManagementReference as Reference,
+  ManagementReferences,
+  ManagementReview,
+  ManagementRow,
+} from './members/management-ui';
 import { getLocale } from '../paraglide/runtime.js';
 import {
   createRealmClaimReview,
@@ -48,87 +55,57 @@ function OriginalDate({ value }: { value: string }) {
     </time>
   );
 }
-function Reference({ children }: { children: string }) {
-  return (
-    <span
-      dir="ltr"
-      className="inline-block max-w-full select-all whitespace-normal break-all font-mono text-xs leading-6"
-    >
-      {children}
-    </span>
-  );
-}
 function ReferenceDetails({ realmId, requestId }: { realmId: string; requestId?: string }) {
   return (
-    <details className="min-w-0 text-sm">
-      <summary className="min-h-11 min-w-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-        {m.realm_review_details_heading()}
-      </summary>
-      <dl className="min-w-0 space-y-3 py-3">
-        <div className="min-w-0">
-          <dt className="text-muted-foreground">{m.realm_review_realm()}</dt>
-          <dd>
-            <Reference>{realmId}</Reference>
-          </dd>
-        </div>
-        {requestId ? (
-          <div className="min-w-0">
-            <dt className="text-muted-foreground">{m.realm_review_request_reference()}</dt>
-            <dd>
-              <Reference>{requestId}</Reference>
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-    </details>
+    <ManagementReferences>
+      <ManagementField label={m.realm_review_realm()}>
+        <Reference>{realmId}</Reference>
+      </ManagementField>
+      {requestId ? (
+        <ManagementField label={m.realm_review_request_reference()}>
+          <Reference>{requestId}</Reference>
+        </ManagementField>
+      ) : null}
+    </ManagementReferences>
   );
 }
-function RequestDetails({ request }: { request: RealmClaimReviewRequest }) {
+function ClaimantName({ request }: { request: RealmClaimReviewRequest }) {
+  const label =
+    request.claimant?.label.trim() && request.claimant.label !== 'Claimant'
+      ? request.claimant.label
+      : m.realm_review_claimant();
+  return request.claimant?.href ? (
+    <a
+      href={request.claimant.href}
+      className="inline-block min-h-11 max-w-full content-center rounded-md underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <bdi>{label}</bdi>
+    </a>
+  ) : (
+    <bdi>{label}</bdi>
+  );
+}
+function RequestDetails({ request, compact = false }: { request: RealmClaimReviewRequest; compact?: boolean }) {
   return (
-    <div className="w-full min-w-0 space-y-4">
-      <p className="font-medium">
-        {request.claimant?.href ? (
-          <a
-            href={request.claimant.href}
-            className="inline-block min-h-11 max-w-full content-center rounded-md underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            {request.claimant.label.trim() && request.claimant.label !== 'Claimant'
-              ? request.claimant.label
-              : m.realm_review_claimant()}
-          </a>
-        ) : (
-          <span>
-            {request.claimant?.label.trim() && request.claimant.label !== 'Claimant'
-              ? request.claimant.label
-              : m.realm_review_claimant()}
-          </span>
-        )}
-      </p>
-      <dl className="grid w-full min-w-0 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-        <div className="min-w-0 sm:col-span-2">
-          <dt className="text-muted-foreground">{m.realm_review_claimant()}</dt>
-          <dd>
-            <Reference>{request.claimantAccountId}</Reference>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">{m.realm_claim_requested_at()}</dt>
-          <dd>
-            <OriginalDate value={request.requestedAt} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
-          <dd>
-            <OriginalDate value={request.orphanedAt} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">{m.realm_claim_eligible_at()}</dt>
-          <dd>
-            <OriginalDate value={request.claimEligibleAt} />
-          </dd>
-        </div>
+    <div className="w-full min-w-0 space-y-3">
+      {!compact ? (
+        <p className="font-medium">
+          <ClaimantName request={request} />
+        </p>
+      ) : null}
+      <dl className="grid w-full min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+        <ManagementField label={m.realm_review_claimant()} className="sm:col-span-2 xl:col-span-3">
+          <Reference>{request.claimantAccountId}</Reference>
+        </ManagementField>
+        <ManagementField label={m.realm_claim_requested_at()}>
+          <OriginalDate value={request.requestedAt} />
+        </ManagementField>
+        <ManagementField label={m.realm_claim_orphaned_at()}>
+          <OriginalDate value={request.orphanedAt} />
+        </ManagementField>
+        <ManagementField label={m.realm_claim_eligible_at()}>
+          <OriginalDate value={request.claimEligibleAt} />
+        </ManagementField>
       </dl>
     </div>
   );
@@ -311,6 +288,13 @@ function RealmClaimReviewContent({
           </p>
           <PageHeading>{m.realm_review_heading()}</PageHeading>
           <p className="text-pretty leading-7 text-muted-foreground">{m.realm_review_intro()}</p>
+          {page?.realmPresentation?.state === 'available' ? (
+            <div className="space-y-2">
+              <p className="font-medium">{page.realmPresentation.name}</p>
+              <p className="text-sm text-muted-foreground">{page.realmPresentation.description}</p>
+            </div>
+          ) : null}
+          {page ? <ReferenceDetails realmId={realmId} /> : null}
         </div>
         {canRestart && !state.busy && state.outcome !== 'uncertain' ? (
           <div className="flex flex-wrap gap-3">
@@ -356,7 +340,7 @@ function RealmClaimReviewContent({
           </Button>
         )}
       </header>
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-10">
+      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-10">
         <section aria-labelledby={`${id}-queue`} className="min-w-0 space-y-5">
           <div className="space-y-1">
             <h2
@@ -367,13 +351,6 @@ function RealmClaimReviewContent({
             >
               {m.realm_review_queue()}
             </h2>
-            {page?.realmPresentation?.state === 'available' ? (
-              <div className="space-y-2">
-                <p className="font-medium">{page.realmPresentation.name}</p>
-                <p className="text-sm text-muted-foreground">{page.realmPresentation.description}</p>
-              </div>
-            ) : null}
-            {page ? <ReferenceDetails realmId={realmId} /> : null}
           </div>
           <div aria-live="polite" aria-atomic="true" className="space-y-4">
             {state.outcome === 'conflict' ? (
@@ -511,7 +488,7 @@ function RealmClaimReviewContent({
               tabIndex={-1}
               className="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              <ContentItemFrame as="div" className="space-y-5 p-5 sm:p-6">
+              <ManagementReview title={m.realm_review_confirm_heading()} aria-labelledby={`${id}-confirm`}>
                 <div className="space-y-2">
                   <ContentItemHeading level={3} id={`${id}-confirm`} className="text-lg font-semibold">
                     {m.realm_review_confirm_heading()}
@@ -554,21 +531,18 @@ function RealmClaimReviewContent({
                     {m.realm_review_cancel()}
                   </Button>
                 </div>
-              </ContentItemFrame>
+              </ManagementReview>
             </section>
           ) : null}
           {page && !confirming ? (
             <>
               {page.claimRequests.length ? (
-                <ul aria-labelledby={`${id}-queue`} className="min-w-0 space-y-4">
+                <ul aria-labelledby={`${id}-queue`} className="min-w-0 rounded-xl border px-3 sm:px-1">
                   {page.claimRequests.map((request) => (
-                    <ContentItem
+                    <ManagementRow
                       key={request.requestId}
-                      title={m.realm_review_details_request_heading()}
-                      headingLevel={3}
-                      className="[&_h3]:line-clamp-none [&_h3]:whitespace-normal [&_h3]:[overflow-wrap:anywhere]"
-                      metadata={<RequestDetails request={request} />}
-                      preview={<ReferenceDetails realmId={request.realmId} requestId={request.requestId} />}
+                      title={<ClaimantName request={request} />}
+                      metadata={<RequestDetails request={request} compact />}
                       state={
                         <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
                           {m.realm_review_pending()}
@@ -595,7 +569,9 @@ function RealmClaimReviewContent({
                           <ArrowRight aria-hidden="true" />
                         </Button>
                       }
-                    />
+                    >
+                      <ReferenceDetails realmId={request.realmId} requestId={request.requestId} />
+                    </ManagementRow>
                   ))}
                 </ul>
               ) : (
@@ -636,7 +612,7 @@ function RealmClaimReviewContent({
             </Button>
           ) : null}
         </section>
-        <aside className="space-y-5 border-t pt-6 text-sm leading-7 text-muted-foreground lg:border-t-0 lg:border-s lg:ps-6 lg:pt-0">
+        <aside className="space-y-5 border-t pt-6 text-sm leading-7 text-muted-foreground xl:border-t-0 xl:border-s xl:ps-6 xl:pt-0">
           <h2 className="flex items-center gap-2 font-semibold text-foreground">
             <CircleHelp className="size-4" aria-hidden="true" />
             {m.realm_review_guidance_heading()}
