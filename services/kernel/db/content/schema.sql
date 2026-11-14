@@ -1194,6 +1194,24 @@ $$;
 
 
 --
+-- Name: hosted_occurrence_subtree_height(jsonb); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.hosted_occurrence_subtree_height(encoded jsonb) RETURNS smallint
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$
+  SELECT (
+    SELECT (field.value->1->>'value')::smallint
+    FROM jsonb_array_elements(
+      CASE WHEN encoded->>'kind'='object' THEN encoded->'value' ELSE '[]'::jsonb END
+    ) AS field(value)
+    WHERE field.value->>0 = 'subtreeHeight'
+    LIMIT 1
+  )
+$$;
+
+
+--
 -- Name: knowledge_block_ids(bytea); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -2183,6 +2201,8 @@ CREATE TABLE content.hosted_occurrence_state_version (
     subtree_size bigint NOT NULL,
     occurrence_state jsonb,
     is_deleted boolean NOT NULL,
+    subtree_height smallint,
+    CONSTRAINT hosted_occurrence_state_depth_bounds CHECK (((subtree_height IS NULL) OR ((subtree_height >= 0) AND (subtree_height <= 16)))),
     CONSTRAINT hosted_occurrence_state_version_check CHECK (((is_deleted AND (occurrence_state IS NULL) AND (parent_occurrence_id IS NULL) AND (subtree_size = 0)) OR ((NOT is_deleted) AND (occurrence_state IS NOT NULL) AND (subtree_size > 0)))),
     CONSTRAINT hosted_occurrence_state_version_check1 CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
     CONSTRAINT hosted_occurrence_state_version_check2 CHECK (((parent_occurrence_id IS NULL) OR (route = ((get_byte(uuid_send(parent_occurrence_id), 10) * 256) + get_byte(uuid_send(parent_occurrence_id), 11))))),
@@ -2205,6 +2225,12 @@ CREATE TABLE content.hosted_order_node_version (
     tree_parent_id uuid,
     node_state jsonb,
     is_deleted boolean NOT NULL,
+    subtree_height smallint,
+    maximum_subtree_height smallint,
+    maximum_subtree_occurrence_id uuid,
+    CONSTRAINT hosted_order_node_depth_bounds CHECK (((subtree_height IS NULL) OR ((subtree_height >= 0) AND (subtree_height <= 16)))),
+    CONSTRAINT hosted_order_node_max_depth_bounds CHECK (((maximum_subtree_height IS NULL) OR ((maximum_subtree_height >= 0) AND (maximum_subtree_height <= 16)))),
+    CONSTRAINT hosted_order_node_max_depth_pair CHECK ((((maximum_subtree_height IS NULL) AND (maximum_subtree_occurrence_id IS NULL)) OR ((maximum_subtree_height IS NOT NULL) AND (maximum_subtree_occurrence_id IS NOT NULL)))),
     CONSTRAINT hosted_order_node_version_check CHECK (((is_deleted AND (node_state IS NULL)) OR ((NOT is_deleted) AND (node_state IS NOT NULL)))),
     CONSTRAINT hosted_order_node_version_check1 CHECK ((route = ((get_byte(uuid_send(node_id), 10) * 256) + get_byte(uuid_send(node_id), 11)))),
     CONSTRAINT hosted_order_node_version_check2 CHECK (((tree_parent_id IS NULL) OR (route = ((get_byte(uuid_send(tree_parent_id), 10) * 256) + get_byte(uuid_send(tree_parent_id), 11))))),
@@ -6741,6 +6767,13 @@ CREATE INDEX hosted_migration_input_owner_idx ON content.hosted_migration_input 
 --
 
 CREATE INDEX hosted_migration_input_reference_source_idx ON content.hosted_migration_input_reference USING btree (route, catalogue_id, source_revision_id, input_id);
+
+
+--
+-- Name: hosted_occurrence_child_depth_asof; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_occurrence_child_depth_asof ON content.hosted_occurrence_state_version USING btree (route, catalogue_id, generation_id, parent_occurrence_id, COALESCE(subtree_height, content.hosted_occurrence_subtree_height(occurrence_state)) DESC, occurrence_id, sequence DESC) WHERE ((NOT is_deleted) AND (COALESCE(subtree_height, content.hosted_occurrence_subtree_height(occurrence_state)) IS NOT NULL));
 
 
 --
