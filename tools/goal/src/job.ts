@@ -97,6 +97,7 @@ import {
   TaskHeldForDependenciesError,
   type WorkerTasks,
   type RetryOptions,
+  ReportedRetrySetupError,
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
@@ -296,6 +297,9 @@ export class WorkerJob implements GateOutcomeSink {
       }
       await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
     } catch (error) {
+      // The child already settled the attempt and notified the one operations owner. A nonzero child exit
+      // would replay the full diagnostic into the supermanager inbox as an unrelated host-level error.
+      if (error instanceof ReportedRetrySetupError) return;
       if (error instanceof PoolUnavailableError) {
         const current = this.tasks.store.task(taskId);
         this.deferPoolRefusal({ taskId, attempt: current.currentAttempt });
@@ -306,7 +310,7 @@ export class WorkerJob implements GateOutcomeSink {
   }
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
-      if (!(error instanceof StaleAttemptError)) throw error;
+      if (!(error instanceof StaleAttemptError) && !(error instanceof ReportedRetrySetupError)) throw error;
     });
     this.pending.add(handled);
     // Observe errors immediately while retaining them for drain(). Background work has no caller, and a dropped

@@ -75,7 +75,8 @@ import { webModule, WorkspaceController } from './workspace.ts';
 import { captureLaunchContext } from './launch-context.ts';
 import { consumeApplicableBriefProposal, recordReplacementBrief } from './durable-follow-up.ts';
 import { toolIncidentRetryAllowed } from './tool-incidents.ts';
-import { dependencyInstallationMatches } from './shared-dependencies.ts';
+import { DependencyInstallError, dependencyInstallationMatches } from './shared-dependencies.ts';
+import { BoundedProcessError } from './install-process.ts';
 import { prepareInitialDispatch } from './dispatch-preparation.ts';
 import {
   requireUrgentDispatch,
@@ -102,6 +103,29 @@ type DispatchProofCapture = {
   backlogProposal: BacklogProofProposal;
 };
 type DispatchBriefOverride = { markdown: string; proofCapture?: DispatchProofCapture };
+
+export class ReportedRetrySetupError extends Error {
+  constructor(readonly failure: DependencyInstallError) {
+    super(failure.message, { cause: failure });
+  }
+}
+
+/** One operational action per shared failure signature; each attempt keeps its own complete diagnosis. */
+export function reportRetryInstallFailure(
+  inbox: SqliteManagerInbox,
+  ownership: { manager: string; operations: string; taskId: string; attempt: number },
+  error: DependencyInstallError,
+): ReportedRetrySetupError {
+  const cause = error.cause;
+  const reason = cause instanceof BoundedProcessError && cause.timedOut ? 'timed out' : 'failed';
+  const summary = `Worktree dependency setup ${reason}. Repair shared dependency admission, then retry affected tasks without replacing their worktrees. Details are in task launch-failed events.`;
+  inbox.record(ownership.manager, {
+    managerId: ownership.manager, taskId: ownership.taskId, kind: 'environment', summary, attempt: ownership.attempt,
+  });
+  // A stable summary without per-task identity uses the inbox's existing repeat fold, including across host restarts.
+  inbox.deliver({ managerId: ownership.operations, kind: 'environment', summary });
+  return new ReportedRetrySetupError(error);
+}
 
 export class PageDataSessionUnavailableError extends Error {
   constructor(message: string) {
@@ -2394,11 +2418,26 @@ export class WorkerTasks {
           this.store.saveRetryIntent(next, {});
           this.store.event(next, 'proof-capacity-queued', { goal: task.brief.goal });
         } else if (!retryPrepared) {
+          const inbox = new SqliteManagerInbox(
+            this.store.db,
+            this.settings.integration.inboxDirectory,
+            undefined,
+            this.settings.policy?.inbox,
+          );
+          const manager = this.store.task(taskId).brief.manager;
+          if (error instanceof DependencyInstallError) {
+            throw reportRetryInstallFailure(inbox, {
+              manager,
+              operations: this.settings.integration.operationsManager ?? this.settings.integration.supermanager,
+              taskId,
+              attempt: next.attempt,
+            }, error);
+          }
           const detail = String(error)
             .replace(/[\r\n]+/g, ' ')
             .slice(0, (this.settings.policy ?? defaultPolicy).worker.retrySetupCharacters);
           const event = {
-            managerId: this.store.task(taskId).brief.manager,
+            managerId: manager,
             taskId,
             kind: 'environment' as const,
             summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(
@@ -2406,12 +2445,7 @@ export class WorkerTasks {
               (this.settings.policy ?? defaultPolicy).worker.summaryCharacters,
             ),
           };
-          new SqliteManagerInbox(
-            this.store.db,
-            this.settings.integration.inboxDirectory,
-            undefined,
-            this.settings.policy?.inbox,
-          ).deliver(event);
+          inbox.deliver(event);
         }
         throw error;
       }
