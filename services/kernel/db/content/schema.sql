@@ -2705,9 +2705,11 @@ CREATE TABLE content.hosted_publication_staging_step (
     processed integer NOT NULL,
     result_state text NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    result_preparation jsonb,
     CONSTRAINT hosted_publication_staging_step_check CHECK ((route = ((get_byte(uuid_send(step_id), 10) * 256) + get_byte(uuid_send(step_id), 11)))),
     CONSTRAINT hosted_publication_staging_step_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT hosted_publication_staging_step_phase_check CHECK ((phase = ANY (ARRAY['whole'::text, 'selection'::text, 'closure'::text]))),
+    CONSTRAINT hosted_publication_staging_step_phase_check CHECK ((phase = ANY (ARRAY['whole'::text, 'selection'::text, 'closure'::text, 'candidate_begin'::text, 'candidate_page'::text, 'exhausted'::text, 'terminal'::text]))),
+    CONSTRAINT hosted_publication_staging_step_preparation_check CHECK (((result_preparation IS NULL) OR ((jsonb_typeof(result_preparation) = 'object'::text) AND (octet_length((result_preparation)::text) <= 8192) AND ((result_preparation ->> 'catalogueId'::text) = (catalogue_id)::text) AND ((result_preparation ->> 'stageId'::text) = (stage_id)::text)))),
     CONSTRAINT hosted_publication_staging_step_processed_check CHECK (((processed >= 0) AND (processed <= 20))),
     CONSTRAINT hosted_publication_staging_step_result_state_check CHECK ((result_state = ANY (ARRAY['more'::text, 'ready'::text, 'failed'::text])))
 );
