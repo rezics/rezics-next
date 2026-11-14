@@ -482,11 +482,9 @@ function MusicContextReadingBound({
     stream: selectedStream,
     cursor: cursorIntent,
   });
-  const currentReturn =
-    safeVia ??
-    (!realm && selectedContext === candidateContext
-      ? (safeReturn ?? subjectHref({ id, label: title }, locale).href)
-      : undefined);
+  const defaultReturn =
+    !realm && selectedContext === candidateContext ? subjectHref({ id, label: title }, locale).href : undefined;
+  const currentReturn = safeVia ?? safeReturn ?? defaultReturn;
   const canCorrect =
     routeAddressMatches &&
     !!profile &&

@@ -56,7 +56,7 @@ function entriesOf(url: URL): Record<string, unknown> | undefined {
   return search;
 }
 
-/** Graph returns keep their own anchor; ordinary returns match the current Subject and Context when known. */
+/** Admit exact companion returns independently of the view's Global-only default Subject fallback. */
 export function validatedMusicContextReturn(
   value: unknown,
   locale: string,
