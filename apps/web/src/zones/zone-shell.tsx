@@ -26,7 +26,7 @@ import type { ReadCredentialMode } from '../session/reader';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
-import { NotFoundPage, StatusPage } from '../shell/shell';
+import { NotFoundPage } from '../shell/shell';
 import { RouteState } from '../shell/route-state';
 import type { PagePaths } from '../shell/head';
 import {
