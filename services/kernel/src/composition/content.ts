@@ -38,6 +38,12 @@ import type { ContentAmbient, ContentApplication } from '../content/contract/ind
 import { createNativeHostedReadingPort } from '../content/adapters/hosted-reading.ts';
 import { bindHostedReadingPort } from '../library/hosted-reading-bind.ts';
 import type { HostedDependencies } from '../content/index.ts';
+import { createNativeContentShelfTitleCurrentAccess } from '../access/adapters/shelf-title.ts';
+import { createNativeContentShelfTitleProvenanceObserver } from '../content/shelf-title-provenance.ts';
+import type { Access } from '../request/access.ts';
+import { composeContentShelfTitleInputs } from '../library/shelf-title-inputs-composition.ts';
+import type { ContentShelfTitleInputs } from '../library/shelf-title-content-source.ts';
+import type { Pool } from 'pg';
 
 /** This process root chooses each foreign supplier. No supplier performs I/O at installation. */
 export function composeContentFeed(): FeedProducerCapabilities {
@@ -105,6 +111,19 @@ export function composeContentFeed(): FeedProducerCapabilities {
 export function composeContentReading(): void {
   bindContentAccess(createNativeContentAccess());
   bindReadingPageCapabilities(createNativeReadingPageCapabilities(createNativeAccessReadingPorts()));
+}
+
+/** Ordinary Server/Kernel supplier assembly; every read remains lazy until a shelf operation requests it. */
+export function composeNativeContentShelfTitleInputs(
+  pool: Pool,
+  routeKey: Uint8Array,
+  resolveAccess: () => Access,
+): ContentShelfTitleInputs {
+  const titles = createNativeContentShelfTitleProvenanceObserver(pool, routeKey);
+  return composeContentShelfTitleInputs(
+    titles,
+    createNativeContentShelfTitleCurrentAccess(pool, resolveAccess),
+  );
 }
 
 /** Library hosted-reading save/get consume this Content mapper. Kernel supplies live hosted deps. */

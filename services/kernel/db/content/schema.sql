@@ -7813,6 +7813,13 @@ CREATE TRIGGER source_fence_identity BEFORE INSERT OR DELETE OR UPDATE ON conten
 
 
 --
+-- Name: source_fences source_fence_publication_authority; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER source_fence_publication_authority AFTER INSERT OR DELETE OR UPDATE ON content.source_fences FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: subject_thread subject_thread_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 

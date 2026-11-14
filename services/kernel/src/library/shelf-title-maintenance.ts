@@ -4,8 +4,9 @@ import type { KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { withConnection } from '../database/pool.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
-import { createLibraryCommandRunner } from './command-support.ts';
+import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { requireRoute } from './collection-command-work.ts';
 import { shelfTitleKey } from './shelf-title-key.ts';
 import {
@@ -93,6 +94,7 @@ export function createShelfTitlePreparation(deps: {
   const runner = createLibraryCommandRunner(deps);
   return async (actor: Actor, key: string, rawLanguages: readonly string[]): Promise<ShelfTitlePreparation> => {
     if (actor.kind !== 'account' || !actor.scopes.includes('library_entry:list')) throw new ProblemError('forbidden');
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const languages = titleLanguages(rawLanguages);
     const policy = shelfTitlePolicy(languages);
     const owner = { route: requireRoute(actor.accountId), accountId: actor.accountId };
@@ -102,11 +104,12 @@ export function createShelfTitlePreparation(deps: {
         action: 'library_entry:list',
         kind: 'library.shelf.title.prepare',
         requestKey: key,
+        deadline,
         input: { policy },
         async prepare() {
           // Unavailable evidence is deferred until the fresh body, preserving exact receipt replay.
           try {
-            const basis = await currentShelfTitleBasis(deps.titleSource, owner, languages, actor);
+            const basis = await currentShelfTitleBasis(deps.titleSource, owner, languages, actor, deadline);
             // currentShelfTitleBasis reports the missing producer before any native candidate work.
             if (!deps.titleSource)
               throw new (ShelfReadUnavailableError())('Content shelfTitleInputs.observe installation');
@@ -123,6 +126,7 @@ export function createShelfTitlePreparation(deps: {
                   basis,
                   selected.map((row) => row.subject_id),
                   actor,
+                  deadline,
                 )
               : { status: 'current' as const, entries: [] };
             if (labels.status !== 'current')
@@ -145,7 +149,7 @@ export function createShelfTitlePreparation(deps: {
               };
             });
             // The whole source basis, including disclosure/ownership, is checked after the batched reads.
-            if (basis !== (await currentShelfTitleBasis(deps.titleSource, owner, languages, actor)))
+            if (basis !== (await currentShelfTitleBasis(deps.titleSource, owner, languages, actor, deadline)))
               throw new (ShelfReadUnavailableError())(
                 'Content unchanged whole-source basis after the exact title batch',
               );

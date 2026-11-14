@@ -22,13 +22,19 @@ export type ShelfTitleLabels = {
  * Implementations must not acquire one Subject per Entry or manufacture currentness from cached labels.
  */
 export interface ShelfTitleSource {
-  basis(owner: ShelfOwner, languages: readonly string[], viewer: AccountActor): Promise<ShelfTitleBasis>;
+  basis(
+    owner: ShelfOwner,
+    languages: readonly string[],
+    viewer: AccountActor,
+    deadline: number,
+  ): Promise<ShelfTitleBasis>;
   labels(
     owner: ShelfOwner,
     languages: readonly string[],
     basis: string,
     subjectIds: readonly string[],
     viewer: AccountActor,
+    deadline: number,
   ): Promise<{ status: 'current'; entries: readonly ShelfTitleLabels[] } | { status: 'unavailable' }>;
 }
 
@@ -55,10 +61,11 @@ export async function currentShelfTitleBasis(
   owner: ShelfOwner,
   languages: readonly string[],
   viewer: AccountActor,
+  deadline: number,
 ): Promise<string> {
   if (!source)
     throw new (ShelfReadUnavailableError())('Content shelfTitleInputs.observe complete-source producer installation');
-  const current = await source.basis(owner, languages, viewer);
+  const current = await source.basis(owner, languages, viewer, deadline);
   if (
     current.status !== 'current' ||
     typeof current.version !== 'string' ||

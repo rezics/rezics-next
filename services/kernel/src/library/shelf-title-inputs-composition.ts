@@ -7,9 +7,18 @@ import { titleLanguages, type ShelfTitleLabels } from './shelf-title-source.ts';
 
 type CurrentVersion = { status: 'unavailable' } | { status: 'current'; version: string };
 type CurrentDecision = { subjectId: string; allowed: boolean };
+type CurrentAccessSession = {
+  status: 'current';
+  version: string;
+  decide(subjects: readonly string[]): Promise<
+    | { status: 'unavailable' }
+    | { status: 'current'; version: string; decisions: readonly CurrentDecision[] }
+  >;
+  currentVersion(): Promise<CurrentVersion>;
+};
 
 /**
- * Released native Semantic observation. Its bounded whole-source version covers labels, original languages,
+ * Content's Semantic observation contract: its bounded whole-source version covers labels, original languages,
  * identities, redirects and source ownership independently of requested IDs, and stays stable across Library-only
  * writes. An empty subjects list reads only that basis; an exact subjects list returns every requested original with
  * its resolved source identity. Each call releases its native snapshots before resolving, and never scans or reads
@@ -21,24 +30,22 @@ export interface ContentShelfTitleNativeObserver {
     languages: readonly string[];
     viewer: AccountActor;
     subjects: readonly string[];
+    deadline: number;
   }): Promise<{ status: 'unavailable' } | { status: 'current'; version: string; entries: readonly ShelfTitleLabels[] }>;
 }
 
 /**
- * Current Access observation for one owner and viewer. `readVersion` covers disclosure for the complete
- * title source regardless of requested IDs, and stays stable across Library-only writes. Each decision batch
- * applies current `subject:read` authority and returns that same complete version; callers may pass at most 64 exact
- * IDs per batch. Every method releases its native snapshots before resolving.
+ * Current Access observation for one owner and viewer. `begin` captures disclosure for the complete title source
+ * regardless of requested IDs and stays stable across Library-only writes. Each decision batch applies current
+ * `subject:read` authority and returns that same complete version; callers may pass at most 64 exact IDs per batch.
+ * Every method releases its native snapshots before resolving.
  */
 export interface ContentShelfTitleCurrentAccess {
-  readVersion(input: { owner: ShelfOwner; viewer: AccountActor }): Promise<CurrentVersion>;
-  decide(input: {
+  begin(input: {
     owner: ShelfOwner;
     viewer: AccountActor;
-    subjects: readonly string[];
-  }): Promise<
-    { status: 'unavailable' } | { status: 'current'; version: string; decisions: readonly CurrentDecision[] }
-  >;
+    deadline: number;
+  }): Promise<CurrentAccessSession | { status: 'unavailable' }>;
 }
 
 const unavailable = { status: 'unavailable' as const };
@@ -52,12 +59,14 @@ type Request = {
   languages: string[];
   viewer: AccountActor;
   subjects: string[];
+  deadline: number;
 };
 
 function ownerAndViewer(input: Request) {
   return {
     owner: { ...input.owner },
-    viewer: { ...input.viewer, scopes: [...input.viewer.scopes] },
+    // Access authentication binds proof to this exact actor object.
+    viewer: input.viewer,
   };
 }
 
@@ -66,6 +75,7 @@ function titleInput(input: Request, subjects = input.subjects) {
     ...ownerAndViewer(input),
     languages: [...input.languages],
     subjects: [...subjects],
+    deadline: input.deadline,
   };
 }
 
@@ -74,6 +84,7 @@ function request(input: {
   languages: readonly string[];
   viewer: AccountActor;
   subjects: readonly string[];
+  deadline: number;
 }): Request {
   if (
     !input.owner ||
@@ -84,6 +95,7 @@ function request(input: {
     input.viewer.accountId !== input.owner.accountId
   )
     throw new TypeError('Invalid Content shelf title owner');
+  if (!Number.isFinite(input.deadline)) throw new TypeError('Content shelf titles require the request deadline');
   if (
     !Array.isArray(input.subjects) ||
     input.subjects.length > maxOriginals ||
@@ -94,8 +106,10 @@ function request(input: {
   return {
     owner: { ...input.owner },
     languages: titleLanguages(input.languages),
-    viewer: { ...input.viewer, scopes: [...input.viewer.scopes] },
+    // Preserve the native authenticated identity through Access proof preparation.
+    viewer: input.viewer,
     subjects: [...input.subjects],
+    deadline: input.deadline,
   };
 }
 
@@ -179,8 +193,17 @@ export function composeContentShelfTitleInputs(
       const input = request(untrustedInput);
       try {
         // The Access interval starts before the native title read and remains open through all batched decisions.
-        const accessStart = await access.readVersion(ownerAndViewer(input));
-        if (accessStart.status !== 'current' || !validVersion(accessStart.version)) return unavailable;
+        const accessSession = await access.begin({
+          ...ownerAndViewer(input),
+          deadline: input.deadline,
+        });
+        if (
+          accessSession.status !== 'current' ||
+          !validVersion(accessSession.version) ||
+          typeof accessSession.decide !== 'function' ||
+          typeof accessSession.currentVersion !== 'function'
+        )
+          return unavailable;
 
         const title = await titles.observe(titleInput(input));
         if (title.status !== 'current' || !validVersion(title.version)) return unavailable;
@@ -190,20 +213,19 @@ export function composeContentShelfTitleInputs(
         const decisionSubjects = [...new Set(rows.flatMap((row) => [row.subjectId, row.sourceId]))];
         for (let offset = 0; offset < decisionSubjects.length; offset += accessBatchSize) {
           const batch = decisionSubjects.slice(offset, offset + accessBatchSize);
-          const observed = await access.decide({ ...ownerAndViewer(input), subjects: [...batch] });
+          const observed = await accessSession.decide([...batch]);
           if (
             observed.status !== 'current' ||
             !validVersion(observed.version) ||
-            observed.version !== accessStart.version
+            observed.version !== accessSession.version
           )
             return unavailable;
           const decisions = exactDecisions(batch, observed.decisions);
           if (!decisions || batch.some((id) => decisions.get(id) !== true)) return unavailable;
         }
 
-        // These serial rechecks overlap the title and Access observations at a common stable version.
-        const accessEnd = await access.readVersion(ownerAndViewer(input));
-        if (accessEnd.status !== 'current' || accessEnd.version !== accessStart.version) return unavailable;
+        // Finish the complete title/provenance check before the final Access clock read. That clock
+        // also covers Content source-fence invalidations, so it is the observation's last native read.
         const titleEnd = await titles.observe(titleInput(input, []));
         if (
           titleEnd.status !== 'current' ||
@@ -212,10 +234,12 @@ export function composeContentShelfTitleInputs(
           titleEnd.entries.length !== 0
         )
           return unavailable;
+        const accessEnd = await accessSession.currentVersion();
+        if (accessEnd.status !== 'current' || accessEnd.version !== accessSession.version) return unavailable;
 
         return {
           status: 'current' as const,
-          version: versionBinding(input, title.version, accessStart.version),
+          version: versionBinding(input, title.version, accessSession.version),
           entries: rows.map((row) => ({ state: 'disclosed' as const, ...row })),
         };
       } catch {

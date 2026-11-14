@@ -113,10 +113,11 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
       epoch: number,
       generationBinding: { generationId: string; ownerEpoch: string },
     ) => Promise<T>,
+    requestDeadline = deadlineFor(WORK_STEP_DEADLINE_MS),
   ): Promise<T> {
     const account = owner(actor, progress);
     const route = routeOf(account.accountId)!;
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const deadline = requestDeadline;
     return withRequestDeadline(deadline, async () => {
       if (progress) await admitShelfRead(deps, actor, deadline);
       const resource = { route, id: account.accountId };
@@ -265,11 +266,12 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         throw new ProblemError('invalid_argument');
       }
       const titleOwner = { route: routeOf(account.accountId)!, accountId: account.accountId };
+      const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
       // Authorize natively, release that snapshot, then acquire complete foreign observations.
-      if (value.orderBy === 'title') await snapshot(actor, true, async () => null);
+      if (value.orderBy === 'title') await snapshot(actor, true, async () => null, deadline);
       const titleBasis =
         value.orderBy === 'title'
-          ? await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account)
+          ? await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account, deadline)
           : null;
       const pageResult = await snapshot(actor, true, async (client, route, accountId, epoch, generation) => {
         const typeId = await resolve(client, route, accountId, type);
@@ -352,10 +354,10 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
               ? await deps.cursors.encode(deps.tokens, binding, { epoch, after: [key, last.subjectId] }, deps.clock())
               : null,
         };
-      });
+      }, deadline);
       if (
         titleBasis !== null &&
-        titleBasis !== (await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account))
+        titleBasis !== (await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account, deadline))
       )
         throw new (ShelfReadUnavailableError())('unchanged current title/disclosure basis');
       return pageResult;

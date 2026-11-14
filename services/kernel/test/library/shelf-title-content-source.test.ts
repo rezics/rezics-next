@@ -16,6 +16,7 @@ const viewer = {
   scopes: ['library_entry:list'],
 };
 const subjectId = newId(0x7b20);
+const deadline = Date.now() + 60_000;
 const disclosed = {
   state: 'disclosed' as const,
   subjectId,
@@ -35,6 +36,7 @@ test('one complete-source observation batches exact originals and retains missin
       expect(input.languages).toEqual(['fr', 'en']);
       expect(input.owner).toEqual(owner);
       expect(input.viewer).toBe(viewer);
+      expect(input.deadline).toBe(deadline);
       return {
         status: 'current',
         version: 'whole-source:1',
@@ -42,9 +44,9 @@ test('one complete-source observation batches exact originals and retains missin
       };
     },
   });
-  const basis = await source.basis(owner, ['FR', 'en'], viewer);
+  const basis = await source.basis(owner, ['FR', 'en'], viewer, deadline);
   if (basis.status !== 'current') throw new Error('Expected basis');
-  const labels = await source.labels(owner, ['fr', 'en'], basis.version, [subjectId, missingId], viewer);
+  const labels = await source.labels(owner, ['fr', 'en'], basis.version, [subjectId, missingId], viewer, deadline);
   if (labels.status !== 'current') throw new Error('Expected complete batch');
   expect(calls).toEqual([[], [subjectId, missingId]]);
   expect(labels.entries.map((row) => shelfTitleKey(row.labels, ['fr', 'en'], row.originalLanguage).coverage)).toEqual([
@@ -59,11 +61,13 @@ test('rename, redirect, source-owner and disclosure basis changes retire the cap
   const source = createContentShelfTitleSource({
     observe: async (input) => ({ status: 'current', version, entries: input.subjects.length ? [disclosed] : [] }),
   });
-  const basis = await source.basis(owner, ['en'], viewer);
+  const basis = await source.basis(owner, ['en'], viewer, deadline);
   if (basis.status !== 'current') throw new Error('Expected basis');
   for (const change of ['rename', 'redirect', 'source-owner', 'disclosure']) {
     version = `whole-source:${change}`;
-    expect(await source.labels(owner, ['en'], basis.version, [subjectId], viewer)).toEqual({ status: 'unavailable' });
+    expect(await source.labels(owner, ['en'], basis.version, [subjectId], viewer, deadline)).toEqual({
+      status: 'unavailable',
+    });
   }
   version = 'whole-source:1';
   for (const [languages, actor] of [
@@ -72,13 +76,15 @@ test('rename, redirect, source-owner and disclosure basis changes retire the cap
     [['en'], { ...viewer, clientId: newId(owner.route) }],
     [['en'], { ...viewer, scopes: [] }],
   ] as const)
-    expect(await source.labels(owner, languages, basis.version, [subjectId], actor)).toEqual({ status: 'unavailable' });
+    expect(await source.labels(owner, languages, basis.version, [subjectId], actor, deadline)).toEqual({
+      status: 'unavailable',
+    });
 });
 
 test('partial, duplicate, unknown and hidden identities fail closed instead of manufacturing missing titles', async () => {
   let observed: Observation = { status: 'current', version: 'whole-source:1', entries: [] };
   const source = createContentShelfTitleSource({ observe: async () => observed });
-  const basis = await source.basis(owner, [], viewer);
+  const basis = await source.basis(owner, [], viewer, deadline);
   if (basis.status !== 'current') throw new Error('Expected basis');
   for (const entries of [
     [],
@@ -89,10 +95,12 @@ test('partial, duplicate, unknown and hidden identities fail closed instead of m
     [{ ...disclosed, sourceId: 'unknown' }],
   ]) {
     observed = { status: 'current', version: 'whole-source:1', entries };
-    expect(await source.labels(owner, [], basis.version, [subjectId], viewer)).toEqual({ status: 'unavailable' });
+    expect(await source.labels(owner, [], basis.version, [subjectId], viewer, deadline)).toEqual({
+      status: 'unavailable',
+    });
   }
   observed = { status: 'unavailable' };
-  expect(await source.basis(owner, [], viewer)).toEqual({ status: 'unavailable' });
+  expect(await source.basis(owner, [], viewer, deadline)).toEqual({ status: 'unavailable' });
 });
 
 test('oversized and inexact batches never reach Content, while 100 subjects use one batch', async () => {
@@ -104,7 +112,7 @@ test('oversized and inexact batches never reach Content, while 100 subjects use 
     },
   });
   for (const ids of [Array.from({ length: 101 }, () => newId(0x7b20)), [subjectId, subjectId], ['unknown']])
-    await expect(source.labels(owner, [], 'basis', ids, viewer)).rejects.toBeInstanceOf(RangeError);
+    await expect(source.labels(owner, [], 'basis', ids, viewer, deadline)).rejects.toBeInstanceOf(RangeError);
   expect(calls).toBe(0);
   expect(
     await source.labels(
@@ -113,6 +121,7 @@ test('oversized and inexact batches never reach Content, while 100 subjects use 
       'basis',
       Array.from({ length: 100 }, () => newId(0x7b20)),
       viewer,
+      deadline,
     ),
   ).toEqual({
     status: 'unavailable',

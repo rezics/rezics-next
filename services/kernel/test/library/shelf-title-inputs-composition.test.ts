@@ -14,6 +14,7 @@ const viewer = {
 };
 const originalId = newId(0x7b20);
 const redirectedId = newId(0x7c30);
+const deadline = Date.now() + 60_000;
 
 test('the composed adapter preserves exact originals, authorizes redirects and keeps visible empty labels', async () => {
   const accessBatches: string[][] = [];
@@ -22,6 +23,8 @@ test('the composed adapter preserves exact originals, authorizes redirects and k
     composeContentShelfTitleInputs(
       {
         async observe(input) {
+          expect(input.viewer).toBe(viewer);
+          expect(input.deadline).toBe(deadline);
           return {
             status: 'current',
             version: 'titles:1',
@@ -40,24 +43,34 @@ test('the composed adapter preserves exact originals, authorizes redirects and k
         },
       },
       {
-        readVersion: async () => ({ status: 'current', version: 'access:1' }),
-        async decide(input) {
-          accessBatches.push([...input.subjects]);
+        async begin(input) {
+          expect(input.viewer).toBe(viewer);
+          expect(input.deadline).toBe(deadline);
           return {
             status: 'current',
             version: 'access:1',
-            decisions: input.subjects.map((subjectId) => ({
-              subjectId,
-              allowed: allowRedirect || subjectId !== redirectedId,
-            })),
+            async decide(subjects) {
+              accessBatches.push([...subjects]);
+              return {
+                status: 'current',
+                version: 'access:1',
+                decisions: subjects.map((subjectId) => ({
+                  subjectId,
+                  allowed: allowRedirect || subjectId !== redirectedId,
+                })),
+              };
+            },
+            async currentVersion() {
+              return { status: 'current', version: 'access:1' };
+            },
           };
         },
       },
     ),
   );
-  const basis = await source.basis(owner, ['en'], viewer);
+  const basis = await source.basis(owner, ['en'], viewer, deadline);
   if (basis.status !== 'current') throw new Error('Expected complete basis');
-  const result = await source.labels(owner, ['en'], basis.version, [originalId], viewer);
+  const result = await source.labels(owner, ['en'], basis.version, [originalId], viewer, deadline);
   if (result.status !== 'current') throw new Error('Expected disclosed title');
   expect(accessBatches).toEqual([[originalId, redirectedId]]);
   expect(result.entries).toEqual([
@@ -71,7 +84,53 @@ test('the composed adapter preserves exact originals, authorizes redirects and k
   ]);
 
   allowRedirect = false;
-  expect(await source.labels(owner, ['en'], basis.version, [originalId], viewer)).toEqual({ status: 'unavailable' });
+  expect(await source.labels(owner, ['en'], basis.version, [originalId], viewer, deadline)).toEqual({
+    status: 'unavailable',
+  });
+});
+
+test('the complete title basis finishes before the final Access disclosure and fence clock', async () => {
+  const order: string[] = [];
+  const composed = composeContentShelfTitleInputs(
+    {
+      async observe(input) {
+        order.push(input.subjects.length ? 'title batch' : 'title basis');
+        return {
+          status: 'current',
+          version: 'titles:1',
+          entries: input.subjects.length
+            ? [{ subjectId: originalId, sourceId: originalId, sourceBasis: 'owner:1', labels: { en: 'Name' } }]
+            : [],
+        };
+      },
+    },
+    {
+      async begin() {
+        order.push('Access begin');
+        return {
+          status: 'current',
+          version: 'access:1',
+          async decide(subjects) {
+            order.push('Access decisions');
+            return {
+              status: 'current',
+              version: 'access:1',
+              decisions: subjects.map((subjectId) => ({ subjectId, allowed: true })),
+            };
+          },
+          async currentVersion() {
+            order.push('Access final');
+            return { status: 'current', version: 'access:1' };
+          },
+        };
+      },
+    },
+  );
+
+  const result = await composed.observe({ owner, languages: ['en'], viewer, subjects: [originalId], deadline });
+  expect(result.status).toBe('current');
+  expect(order.at(-2)).toBe('title basis');
+  expect(order.at(-1)).toBe('Access final');
 });
 
 test('unrequested source and disclosure changes retire the complete observation', async () => {
@@ -95,23 +154,34 @@ test('unrequested source and disclosure changes retire the complete observation'
           },
         },
         {
-          async readVersion() {
-            if (++accessVersionReads === 4 && change === 'disclosure') accessVersion = 'access:2';
-            return { status: 'current', version: accessVersion };
-          },
-          async decide(input) {
+          async begin(input) {
+            expect(input.deadline).toBe(deadline);
+            const version = accessVersion;
+            accessVersionReads++;
             return {
               status: 'current',
-              version: accessVersion,
-              decisions: input.subjects.map((subjectId) => ({ subjectId, allowed: true })),
+              version,
+              async decide(subjects) {
+                return {
+                  status: 'current',
+                  version: accessVersion,
+                  decisions: subjects.map((subjectId) => ({ subjectId, allowed: true })),
+                };
+              },
+              async currentVersion() {
+                if (++accessVersionReads === 4 && change === 'disclosure') accessVersion = 'access:2';
+                return { status: 'current', version: accessVersion };
+              },
             };
           },
         },
       ),
     );
-    const basis = await source.basis(owner, ['en'], viewer);
+    const basis = await source.basis(owner, ['en'], viewer, deadline);
     if (basis.status !== 'current') throw new Error('Expected initial basis');
-    expect(await source.labels(owner, ['en'], basis.version, [originalId], viewer)).toEqual({ status: 'unavailable' });
+    expect(await source.labels(owner, ['en'], basis.version, [originalId], viewer, deadline)).toEqual({
+      status: 'unavailable',
+    });
   }
 });
 
@@ -141,29 +211,41 @@ test('a mid-observation revoke fails closed and a fresh stable four-batch observ
         },
       },
       {
-        readVersion: async () => ({ status: 'current', version: accessVersion }),
-        async decide(input) {
-          const observedVersion = accessVersion;
-          batches.push([...input.subjects]);
-          if (revokeAfterFirstBatch && batches.length === 1) accessVersion = 'access:2';
+        async begin(input) {
+          expect(input.viewer).toBe(viewer);
+          expect(input.deadline).toBe(deadline);
           return {
             status: 'current',
-            version: observedVersion,
-            decisions: input.subjects.map((subjectId) => ({ subjectId, allowed: true })),
+            version: accessVersion,
+            async decide(subjects) {
+              const observedVersion = accessVersion;
+              batches.push([...subjects]);
+              if (revokeAfterFirstBatch && batches.length === 1) accessVersion = 'access:2';
+              return {
+                status: 'current',
+                version: observedVersion,
+                decisions: subjects.map((subjectId) => ({ subjectId, allowed: true })),
+              };
+            },
+            async currentVersion() {
+              return { status: 'current', version: accessVersion };
+            },
           };
         },
       },
     ),
   );
-  const initial = await source.basis(owner, ['en'], viewer);
+  const initial = await source.basis(owner, ['en'], viewer, deadline);
   if (initial.status !== 'current') throw new Error('Expected initial basis');
-  expect(await source.labels(owner, ['en'], initial.version, originals, viewer)).toEqual({ status: 'unavailable' });
+  expect(await source.labels(owner, ['en'], initial.version, originals, viewer, deadline)).toEqual({
+    status: 'unavailable',
+  });
   expect(batches.slice(0, 2).map((batch) => batch.length)).toEqual([64, 64]);
 
   revokeAfterFirstBatch = false;
-  const fresh = await source.basis(owner, ['en'], viewer);
+  const fresh = await source.basis(owner, ['en'], viewer, deadline);
   if (fresh.status !== 'current') throw new Error('Expected fresh authorized basis');
-  const recovered = await source.labels(owner, ['en'], fresh.version, originals, viewer);
+  const recovered = await source.labels(owner, ['en'], fresh.version, originals, viewer, deadline);
   if (recovered.status !== 'current') throw new Error('Expected stable authorized batch');
   expect(batches.slice(2).map((batch) => batch.length)).toEqual([64, 64, 64, 8]);
   expect(recovered.entries.map((row) => row.subjectId)).toEqual(originals);
@@ -185,14 +267,24 @@ test('a failed current Access observation retires the whole batch without exposi
         },
       },
       {
-        readVersion: async () => ({ status: 'current', version: 'access:1' }),
-        decide: async () => {
-          throw new Error('Access source failed');
+        async begin() {
+          return {
+            status: 'current',
+            version: 'access:1',
+            decide: async () => {
+              throw new Error('Access source failed');
+            },
+            async currentVersion() {
+              return { status: 'current', version: 'access:1' };
+            },
+          };
         },
       },
     ),
   );
-  const basis = await source.basis(owner, ['en'], viewer);
+  const basis = await source.basis(owner, ['en'], viewer, deadline);
   if (basis.status !== 'current') throw new Error('Expected basis');
-  expect(await source.labels(owner, ['en'], basis.version, [originalId], viewer)).toEqual({ status: 'unavailable' });
+  expect(await source.labels(owner, ['en'], basis.version, [originalId], viewer, deadline)).toEqual({
+    status: 'unavailable',
+  });
 });

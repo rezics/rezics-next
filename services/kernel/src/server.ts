@@ -23,6 +23,9 @@ import {
 } from './composition/runtime-defaults.ts';
 import { composeSemanticDomain } from './composition/semantic.ts';
 import { bindDefaultSemanticDomain } from './semantic/adapters/index.ts';
+import { composeNativeContentShelfTitleInputs } from './composition/content.ts';
+import type { ContentShelfTitleInputs } from './library/shelf-title-content-source.ts';
+import type { Access } from './request/access.ts';
 
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -62,7 +65,7 @@ export type ServerConfig = {
   searchNativePorts?: SearchNativePorts;
   receiptKeys?: KeyRing;
   commerce: CommerceConfig | null;
-  content: ContentRuntime;
+  content: ContentRuntime & { shelfTitleInputs?: ContentShelfTitleInputs };
   search?: SearchConfig;
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
@@ -144,6 +147,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   let discovery: DefaultDiscoverySearch | undefined;
   let workClient: ReturnType<typeof createWorkClient> | undefined;
   let contentWorkflows: Promise<NativeAuthorErasureWorkflows> | undefined;
+  let shelfTitleAccess: Access | undefined;
   const workflows = (): Promise<NativeAuthorErasureWorkflows> =>
     (contentWorkflows ??= (async () => {
       // Keep Sharp and the worker implementation out of API startup. This
@@ -242,6 +246,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       clock: defaults.clock,
       access: defaults.access,
       onAccessReady(access, viewerActions) {
+        shelfTitleAccess = access;
         composeLibraryDomain({
           pool,
           access,
@@ -287,7 +292,16 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
           );
         }
       },
-      content: { ...config.content, workflows: operationWorkflows },
+      content: {
+        ...config.content,
+        shelfTitleInputs:
+          config.content.shelfTitleInputs ??
+          composeNativeContentShelfTitleInputs(pool, config.routeKey, () => {
+            if (!shelfTitleAccess) throw new Error('Server shelf-title Access composition is incomplete');
+            return shelfTitleAccess;
+          }),
+        workflows: operationWorkflows,
+      },
       ratePeer: (request) => peers.get(request),
       ...(search === undefined
         ? {}

@@ -109,6 +109,7 @@ import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
 import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import { createContentShelfTitleSource, type ContentShelfTitleInputs } from '../library/shelf-title-content-source.ts';
+import { composeNativeContentShelfTitleInputs } from '../composition/content.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
 import { readViewerPersonalActionsPage, type ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
@@ -196,7 +197,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   content?: ContentRuntime &
     Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
       readConsent?: CurrentConsentReader;
-      /** Complete-input title observations; absent until Content installs its native producer. */
+      /** Explicit host override; ordinary Kernel composition installs the native producer when absent. */
       shelfTitleInputs?: ContentShelfTitleInputs;
       now?: () => number;
       id?: () => string;
@@ -850,7 +851,13 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   });
   const shelfTitleSource = dependencies.content?.shelfTitleInputs
     ? createContentShelfTitleSource(dependencies.content.shelfTitleInputs)
-    : dependencies.shelves?.titleSource;
+    : (dependencies.shelves?.titleSource ??
+      createContentShelfTitleSource(
+        composeNativeContentShelfTitleInputs(dependencies.pool, dependencies.routeKey, () => {
+          if (!composedActions) throw new KernelAccessCompositionError();
+          return resolveAccess({ actions: composedActions, realmRoleReader });
+        }),
+      ));
   const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
     ...(dependencies.typeSourceObserved ? { typeSourceObserved: dependencies.typeSourceObserved } : {}),
     ...(dependencies.loanHttpWork === undefined ? {} : { loanHttpWork: dependencies.loanHttpWork }),

@@ -2116,35 +2116,55 @@ generation removes at most 100 old keys per command before building. Account mai
 pages. The derivative stores normalized bytes and native selection/source/version references, never display labels.
 
 Decision: retain one selected-language title generation per account; selecting another language policy replaces it
-through bounded cleanup and preparation, while title preferences remain unavailable until native readiness is exposed.
+through bounded cleanup and preparation.
 
-`ShelfTitleSource` is the complete-input Content integration port, supplied as `shelves.titleSource`. Its whole-source
-basis must include current viewer disclosure, identity, title, redirect and source-owner changes. Hidden/denied identities
-are unavailable inputs, distinct from visible identities without a label. Source calls finish outside Library
-transactions. Each title page requires the installed population and exact language/source basis, and rechecks that
-basis after releasing its native read. Cursors bind account authentication lifetime, language/key policy, native
-generation/population, source basis and every selected predicate. The native reader selects directional key/Subject
-ranges with missing labels last and enriches only the returned rows; the page never sorts loaded rows.
+Decision: ordinary title composition binds Semantic field provenance, exact Content fences and Access's fixed disclosure clock under the original request deadline.
+
+Content enumerates every title-label and original-language support tuple,
+deduplicates exact imported identities, reads source fences in independent anchored snapshots of at most 100 tuples,
+and omits fenced fields while preserving empty disclosed labels. Semantic's 1 MiB provenance cap conservatively
+bounds this to at most 65,536 tuples and 656 fence snapshots; the current Access phase checks at most 200 original and
+terminal IDs in four 64-ID decision batches. The fixed 4,096-row Access disclosure clock includes Content source-fence
+transitions and is rechecked after Semantic's final whole-source basis read. Each snapshot releases before Library
+starts a transaction, so title ordering is based on a complete stable title/disclosure/fence source.
+
+`ShelfTitleSource` is the complete-input Content integration port. Ordinary Kernel and Server composition lazily bind
+Semantic's exact per-field provenance, Content's imported source-fence reads and a current Access session, without
+startup I/O. Direct hosts may still supply `content.shelfTitleInputs` or `shelves.titleSource`. Hidden/denied identities
+are unavailable inputs,
+distinct from visible identities without a label.
+Source calls finish outside Library transactions. Each title page requires the installed population and exact
+language/source basis, and rechecks that basis after releasing its native read. Cursors bind account authentication
+lifetime, language/key policy, native generation/population, source basis and every selected predicate. The native
+reader selects directional key/Subject ranges with missing labels last and enriches only returned rows; the page never
+sorts loaded rows.
 
 `GET /v1/libraryEntries?orderBy=title&direction=asc|desc` uses `Accept-Language` for selection; native rows add
 `titleCoverage: 'labelled' | 'missing'`. `POST /v1/libraryShelfTitlePreparation` uses the same language header and existing
 Entry-list authority and idempotency header, returning `{installation:'pending'|'installed',prepared:0..100}`.
-Content can install complete-input observations through `content.shelfTitleInputs`; `createContentShelfTitleSource`
-adapts that producer to the exact native port for both preparation and reads. It rejects partial/duplicate/foreign
-batches, undisclosed identities and changed source bases; a disclosed identity with no label remains missing coverage.
+`createContentShelfTitleSource` adapts complete-input observations to the exact native port for preparation and reads.
+It rejects partial/duplicate/foreign batches, undisclosed identities and changed source bases; a disclosed identity
+with no label remains missing coverage.
 Decision: bracket each exact native title batch and max-64 current Access decision batches with complete Access and
 title-basis versions; any drift or denial retires the whole observation.
+Decision: ordinary Server composition supplies the native Semantic observer and an action-catalogue-resolved Access
+session; one authenticated `AccountActor` reference and the request's original absolute deadline cross every source and
+decision batch, while explicit host injection remains supported.
 
-`composeContentShelfTitleInputs` is the receiving implementation: it combines injected title observations and Access
-decisions into `ContentShelfTitleInputs`, checking both original and resolved identities and preserving visible empty
-label maps. The actual Semantic callable and its installation through `content.shelfTitleInputs` remain unimplemented;
-their absence keeps preparation pending and does not claim native readiness.
-Decision: keep the retained title URL in preparation until Content delivers its complete-source callable and official
-root client; Library reports whether producer installation, whole-source observation, exact disclosed batch or stable
-post-batch basis is missing. A version string alone is not a substitute for the producer's complete observation.
-Receiving the published native client, automatic preparation and the native independent 64/512/4096 full-caller
-measurements remain in the continuation. Installed typing, focused cases and rendered review are separate observations;
-no native growth or rendered proof is claimed here.
+`composeContentShelfTitleInputs` is the receiving implementation: it combines Semantic's callable and Access decisions
+into `ContentShelfTitleInputs`, checking both original and terminal identities and preserving visible empty label maps.
+Access snapshots use the fixed 4096-home authority vector at the beginning and end of each observation, prepare the
+authenticated actor twice, and use at most four max-64 decision batches for 100 originals and 100 distinct terminals.
+The new Access organization-membership and Content source-fence triggers synchronously advance that vector. Library
+generation writes do not advance it.
+
+Native capability acceptance still depends on unresolved owner changes. Semantic's current whole-source basis hashes
+`core.partition.position`, which Library preparation itself advances; Semantic must replace it with an ID-independent
+title/identity/source-owner revision. Semantic and Content must also supply or adopt the exact provenance mapping
+needed to call Content `readFences` for each title source. Until that mapping exists, this receiving adapter cannot
+admit source fences; the installed source wiring must not be described as satisfying fence disclosure. The separate
+Community membership invalidator for `community.realm_member` is also required for the complete Access vector. Their
+ready gaps are recorded in the Goal inbox and continuation note.
 
 ## FULL personal shelf row facts
 

@@ -23,6 +23,7 @@ const actor = {
   scopes: ['library_entry:list', 'progress_session:list'],
 };
 const owner = { route, accountId };
+const deadline = Date.now() + 60_000;
 afterEach(() => mock.restore());
 
 test('title policy and cursor query distinguish language precedence, state, Type and direction', () => {
@@ -41,7 +42,7 @@ test('title policy and cursor query distinguish language precedence, state, Type
 });
 
 test('denied/hidden/partial title observations stay unavailable; visible missing labels are explicit', async () => {
-  const missingProducer = currentShelfTitleBasis(undefined, owner, ['en'], actor);
+  const missingProducer = currentShelfTitleBasis(undefined, owner, ['en'], actor, deadline);
   await expect(missingProducer).rejects.toBeInstanceOf(ShelfReadUnavailableError());
   await expect(missingProducer).rejects.toMatchObject({
     binding: 'Content shelfTitleInputs.observe complete-source producer installation',
@@ -51,6 +52,7 @@ test('denied/hidden/partial title observations stay unavailable; visible missing
     owner,
     ['en'],
     actor,
+    deadline,
   );
   await expect(incompleteSource).rejects.toBeInstanceOf(ShelfReadUnavailableError());
   await expect(incompleteSource).rejects.toMatchObject({

@@ -17,6 +17,7 @@ export interface ContentShelfTitleInputs {
     languages: readonly string[];
     viewer: AccountActor;
     subjects: readonly string[];
+    deadline: number;
   }): Promise<
     | { status: 'unavailable' }
     | {
@@ -32,16 +33,23 @@ const validVersion = (value: string) => typeof value === 'string' && value.lengt
 
 /** Exact adapter for the native Library port, installed only by trusted Content composition. */
 export function createContentShelfTitleSource(inputs: ContentShelfTitleInputs): ShelfTitleSource {
-  function request(owner: ShelfOwner, languages: readonly string[], viewer: AccountActor, subjects: readonly string[]) {
+  function request(
+    owner: ShelfOwner,
+    languages: readonly string[],
+    viewer: AccountActor,
+    subjects: readonly string[],
+    deadline: number,
+  ) {
     if (routeOf(owner.accountId) !== owner.route || viewer.accountId !== owner.accountId)
       throw new TypeError('Invalid Content shelf title owner');
+    if (!Number.isFinite(deadline)) throw new TypeError('Content shelf titles require the request deadline');
     if (
       subjects.length > 100 ||
       new Set(subjects).size !== subjects.length ||
       subjects.some((id) => routeOf(id) === null)
     )
       throw new RangeError('Content shelf titles require at most 100 exact subjects');
-    return { owner: { ...owner }, languages: titleLanguages(languages), viewer, subjects: [...subjects] };
+    return { owner: { ...owner }, languages: titleLanguages(languages), viewer, subjects: [...subjects], deadline };
   }
 
   // The source version alone is not portable across owners, language policies or viewer lifetimes.
@@ -64,15 +72,15 @@ export function createContentShelfTitleSource(inputs: ContentShelfTitleInputs): 
   }
 
   return {
-    async basis(owner, languages, viewer) {
-      const input = request(owner, languages, viewer, []);
+    async basis(owner, languages, viewer, deadline) {
+      const input = request(owner, languages, viewer, [], deadline);
       const observed = await inputs.observe(input);
       if (observed.status !== 'current' || !validVersion(observed.version) || observed.entries.length !== 0)
         return unavailable;
       return { status: 'current', version: binding(input, observed.version) };
     },
-    async labels(owner, languages, basis, subjectIds, viewer) {
-      const input = request(owner, languages, viewer, subjectIds);
+    async labels(owner, languages, basis, subjectIds, viewer, deadline) {
+      const input = request(owner, languages, viewer, subjectIds, deadline);
       const observed = await inputs.observe(input);
       if (
         observed.status !== 'current' ||
