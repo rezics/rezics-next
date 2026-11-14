@@ -19,10 +19,12 @@ import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { identityLive, sameProcess } from './process.ts';
 import {
   cleanupReceiptPath,
+  detachedGroupTerminal,
   isCheckId,
   isPhysicalRunId,
   physicalHistoryPath,
   remoteRunCustodyPath,
+  runnerReadyPath,
   validateRunnerIdentity,
   writeAtomicJson,
   type RunnerIdentity,
@@ -322,7 +324,7 @@ type CheckEvidence = {
   host?: unknown;
   native?: unknown;
   remoteExpected?: unknown;
-  terminalProof?: { local?: unknown; resultKnown?: unknown; remote?: unknown };
+  terminalProof?: { local?: unknown; resultKnown?: unknown; remote?: unknown; observedAt?: unknown };
   signal?: unknown;
   schema?: unknown;
   remoteRun?: { host?: unknown; id?: unknown };
@@ -379,7 +381,7 @@ function terminalPhysicalHistory(worktree: string, checkId: string, physicalRunI
   const history = readCheckEvidence(
     join(worktree, '.temp', 'goal', 'checks', 'custody', 'history', `${checkId}.${physicalRunId}.json`),
   );
-  return Boolean(
+  const matchingRun = Boolean(
     history?.version === 1 &&
     history.id === checkId &&
     history.cwd === worktree &&
@@ -388,10 +390,15 @@ function terminalPhysicalHistory(worktree: string, checkId: string, physicalRunI
     Number.isInteger(history.exitCode) &&
     (exitCode === undefined || history.exitCode === exitCode) &&
     history.terminalProof?.local === true &&
-    history.terminalProof?.resultKnown === true &&
-    (history.remoteExpected === true
-      ? history.terminalProof?.remote === true
-      : history.remoteExpected === false && history.terminalProof?.remote === null),
+    history.terminalProof?.resultKnown === true,
+  );
+  if (!matchingRun || !history) return false;
+  if (history.remoteExpected === true && history.terminalProof?.remote === true) return true;
+  if (history.remoteExpected === false && history.terminalProof?.remote === null) return true;
+  return (
+    history.remoteExpected === true &&
+    history.terminalProof?.remote === null &&
+    failedRemoteBindingNeverDispatched(worktree, checkId, physicalRunId, history, exitCode)
   );
 }
 
@@ -402,6 +409,90 @@ function ownedRunnerIdentity(value: unknown): RunnerIdentity | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** A failed runner handshake proves no remote work only with its matching receipt, log, empty binding and dead group. */
+function failedRemoteBindingNeverDispatched(
+  worktree: string,
+  checkId: string,
+  physicalRunId: string,
+  history: CheckEvidence,
+  expectedExitCode?: number,
+): boolean {
+  const error = 'worker-check: invalid remote custody binding';
+  const owner = history.ownership;
+  const code = expectedExitCode ?? history.exitCode;
+  const resultSource = readOptionalCheckEvidence(
+    join(worktree, '.temp', 'goal', 'checks', 'results', `${checkId}.json`),
+  );
+  const readySource = readOptionalCheckEvidence(runnerReadyPath(worktree, checkId, physicalRunId));
+  const remoteSource = readOptionalCheckEvidence(remoteRunCustodyPath(worktree, physicalRunId));
+  if (
+    !Number.isInteger(code) ||
+    !owner ||
+    typeof owner.taskId !== 'string' ||
+    !isCheckId(owner.taskId) ||
+    !Number.isSafeInteger(owner.attempt) ||
+    Number(owner.attempt) < 1 ||
+    typeof history.terminalProof?.observedAt !== 'string' ||
+    !Number.isFinite(Date.parse(history.terminalProof.observedAt)) ||
+    resultSource.state !== 'present' ||
+    readySource.state !== 'present' ||
+    remoteSource.state !== 'absent'
+  )
+    return false;
+
+  const result = resultSource.value;
+  const ready = readySource.value;
+  const runner = ownedRunnerIdentity(history.runnerIdentity);
+  if (
+    result.id !== checkId ||
+    result.cwd !== worktree ||
+    result.ownership?.taskId !== owner.taskId ||
+    result.ownership.attempt !== owner.attempt ||
+    result.status !== 'finished' ||
+    result.exitCode !== code ||
+    result.physicalRunId !== physicalRunId ||
+    result.log !== history.log ||
+    !checkEvidenceArgv(result.argv) ||
+    !checkEvidenceArgv(history.argv) ||
+    !isDeepStrictEqual(result.argv, history.argv) ||
+    !runner ||
+    history.runnerHost !== hostname() ||
+    !detachedGroupTerminal(runner) ||
+    (result.runnerIdentity !== undefined &&
+      !isDeepStrictEqual(ownedRunnerIdentity(result.runnerIdentity), runner)) ||
+    Object.keys(ready).sort().join(',') !== 'error,physicalRunId,status' ||
+    ready.status !== 'failed' ||
+    ready.physicalRunId !== physicalRunId ||
+    ready.error !== error ||
+    existsSync(join(worktree, '.temp', 'goal', 'checks', 'cancellations', `${checkId}.json`)) ||
+    existsSync(join(worktree, '.temp', 'goal', 'checks', 'custody', 'cancelled', `${checkId}.json`)) ||
+    existsSync(join(worktree, '.temp', 'goal', 'checks', 'custody', 'stopping', `${checkId}.${physicalRunId}.json`))
+  )
+    return false;
+
+  if (typeof history.log !== 'string' || isAbsolute(history.log)) return false;
+  const root = resolve(worktree);
+  const logPath = resolve(root, history.log);
+  const relativeLog = relative(root, logPath);
+  if (!relativeLog || relativeLog === '..' || relativeLog.startsWith(`..${sep}`) || isAbsolute(relativeLog)) return false;
+  let log: string;
+  try {
+    log = readFileSync(logPath, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (['ENOENT', 'EACCES', 'EPERM', 'EISDIR', 'ENOTDIR', 'ELOOP'].includes(code ?? '')) return false;
+    throw error;
+  }
+  return (
+    log
+      .trimEnd()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .at(-1) === error
+  );
 }
 
 function checkEvidenceArgv(value: unknown): value is string[] {
@@ -2497,7 +2588,7 @@ function terminalMigrationSetupDefect(
   return matches === 1;
 }
 
-/** Preserve strict compiler-failure admission and add only the exact retained setup defect. */
+/** Admit retained compiler failures, the exact setup defect, or a separately accepted source-only amendment. */
 export function workerCheckHostTerminalSourceRepair(input: {
   directory?: string;
   worktree: string;
@@ -2506,6 +2597,7 @@ export function workerCheckHostTerminalSourceRepair(input: {
   attempt: number;
   checkIds: readonly string[];
   pendingCommand?: readonly string[];
+  allowUnavailableSourceAmendment?: boolean;
 }): boolean {
   const settled = workerCheckHostTypingSettlement(input);
   if (settled.ok) return false;
@@ -2515,6 +2607,13 @@ export function workerCheckHostTerminalSourceRepair(input: {
         JSON.stringify(input.pendingCommand) === JSON.stringify(settled.command)) &&
       workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) === 'terminal'
     );
+  if (
+    input.allowUnavailableSourceAmendment &&
+    input.pendingCommand !== undefined &&
+    JSON.stringify(input.pendingCommand) === JSON.stringify(settled.command) &&
+    workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) === 'terminal'
+  )
+    return true;
   return terminalMigrationSetupDefect(input, settled);
 }
 
@@ -2599,8 +2698,8 @@ export function workerCheckHostStaleTypingFailureSelection(input: {
 }
 
 /**
- * A recorded compiler failure requires source repair. Missing or drifted compiler evidence retains the completed
- * source pending typing-only proof, without authorizing landing or a source-writing retry.
+ * A recorded compiler failure requires source repair. Missing or drifted evidence remains unavailable and retains
+ * completed source pending acceptance; this classification alone never authorizes landing or a source-writing retry.
  * Failing tests alone keep today's handling. Exempt briefs skip this guard.
  */
 export function workerCheckHostTypingSettlement(input: {

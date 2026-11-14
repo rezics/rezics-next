@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFile
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
-import { cleanupReceiptPath, remoteRunCustodyPath } from '../../../scripts/check-custody.ts';
+import { cleanupReceiptPath, remoteRunCustodyPath, runnerReadyPath } from '../../../scripts/check-custody.ts';
 import { openDb } from './db.ts';
 import { STOPPED_TASK_LIMIT_MS, sweepBacklog } from './backlog.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -405,6 +405,74 @@ test('a retained setup receipt admits source repair through the original owned c
     ).toBe(false);
   } finally {
     controller.close();
+    worktree.close();
+  }
+});
+
+test('a failed remote binding proves terminal custody only with its exact no-dispatch evidence', () => {
+  const worktree = temporaryDirectory();
+  try {
+    const taskId = randomUUID();
+    const checkId = randomUUID();
+    const physicalRunId = randomUUID();
+    const command = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    const checks = join(worktree.path, '.temp', 'goal', 'checks');
+    const results = join(checks, 'results');
+    const historyDirectory = join(checks, 'custody', 'history');
+    const readyDirectory = join(checks, 'custody', 'ready');
+    const remoteDirectory = join(checks, 'custody', 'remote');
+    const log = `.temp/goal/checks/${checkId}.log`;
+    const localIdentity = processIdentity();
+    if (!localIdentity) throw new Error('Could not identify the local boot for the terminal group fixture');
+    const runnerIdentity = { pid: 2_000_000_000, start: '1', boot: localIdentity.boot, group: 2_000_000_000 };
+    const record = {
+      id: checkId,
+      cwd: worktree.path,
+      argv: command,
+      log,
+      ownership: { taskId, attempt: 1 },
+      status: 'finished',
+      exitCode: 1,
+      physicalRunId,
+      runnerHost: hostname(),
+      runnerPid: runnerIdentity.pid,
+      runnerIdentity,
+    };
+    const physical = {
+      version: 1,
+      ...record,
+      remoteExpected: true,
+      terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+    };
+    mkdirSync(results, { recursive: true });
+    mkdirSync(historyDirectory, { recursive: true });
+    mkdirSync(readyDirectory, { recursive: true });
+    writeFileSync(join(results, `${checkId}.json`), JSON.stringify(record));
+    writeFileSync(join(historyDirectory, `${checkId}.${physicalRunId}.json`), JSON.stringify(physical));
+    writeFileSync(join(worktree.path, log), 'worker-check: invalid remote custody binding\n');
+
+    const custody = () => workerCheckHostAttemptCheckCustody(worktree.path, taskId, 1, [checkId]);
+    expect(custody()).toBe('unknown');
+    writeFileSync(runnerReadyPath(worktree.path, checkId, physicalRunId), JSON.stringify({
+      status: 'failed',
+      physicalRunId,
+      error: 'worker-check: invalid remote custody binding',
+    }));
+    writeFileSync(join(worktree.path, log), 'worker-check: a different setup failure\n');
+    expect(custody()).toBe('unknown');
+
+    writeFileSync(join(worktree.path, log), 'worker-check: invalid remote custody binding\n');
+    expect(custody()).toBe('terminal');
+    mkdirSync(remoteDirectory, { recursive: true });
+    writeFileSync(remoteRunCustodyPath(worktree.path, physicalRunId), '{}');
+    expect(custody()).toBe('unknown');
+    unlinkSync(remoteRunCustodyPath(worktree.path, physicalRunId));
+
+    const cancellations = join(checks, 'cancellations');
+    mkdirSync(cancellations, { recursive: true });
+    writeFileSync(join(cancellations, `${checkId}.json`), JSON.stringify({ schema: 1, id: checkId, signal: 15 }));
+    expect(custody()).toBe('unknown');
+  } finally {
     worktree.close();
   }
 });

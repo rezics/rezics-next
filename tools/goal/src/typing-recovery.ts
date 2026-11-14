@@ -44,9 +44,9 @@ import {
 const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
 
 /**
- * Release a queued source repair through the normal retry transaction only for a current retained compiler failure
- * or the exact supported setup defect, with terminal custody for every check. Stopped attempts keep their stop proof;
- * exited attempts use their captured branch head when recorded and retained source identity for legacy omissions.
+ * Release a queued source repair through normal retry admission only for a retained compiler failure, the exact
+ * supported setup defect, or an accepted source-only amendment with unavailable compiler evidence. Every check must
+ * have terminal custody. Stopped attempts keep their stop proof; exited attempts keep their captured source head.
  */
 export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
   const { store, settings } = tasks;
@@ -73,6 +73,7 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
     const attemptEvents = store.events(task.id, ref.attempt);
     let validStoppedRetry = false;
     let validExitedAmendment = false;
+    let acceptedSourceOnlyAmendment = false;
     let exitedProgressEventRecorded = false;
     let exitedCapturedHeadMatches = false;
     let exitedCurrentHead: string | null = null;
@@ -150,6 +151,9 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
           (identity) => identity !== null && sameProcess(identity),
         ),
       );
+      acceptedSourceOnlyAmendment =
+        validExitedAmendment &&
+        sourceOnlyCompletionEligible({ task, stateDirectory: settings.stateDirectory, policy: settings.policy });
     }
     if (!validStoppedRetry && !validExitedAmendment) return false;
 
@@ -173,6 +177,7 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       attempt: ref.attempt,
       checkIds: attempt.checks ?? [],
       ...(attempt.typingEvidencePending?.command ? { pendingCommand: attempt.typingEvidencePending.command } : {}),
+      ...(acceptedSourceOnlyAmendment ? { allowUnavailableSourceAmendment: true } : {}),
     };
     if (!workerCheckHostTerminalSourceRepair(proofInput)) return false;
 
