@@ -891,6 +891,9 @@ Core-minted read time and one transferred direct-owner reservation. Everything, 
 that Source's canonical prefixes and current membership; reaction-only Liked uses the Content source version,
 independently of Library's fact head. Empty native Everything/Liked and Continue unions remain pure logical reads.
 Raw metadata and retained scope identity discovery never execute a built-in members query recursively.
+Each built-in descriptor, directory listing, proof of an empty member page, and source version observation uses one
+bounded repeatable-read snapshot with its original deadline. The retained original-input primitive keeps its
+no-deadline contract.
 
 Admitted built-in filters use `createSearchScopeForService`, native id/source order, `sourcePrefix` and current
 `evaluate` on that same service. Search's additive `work(result)` returns the actual preparation/evaluation receipt

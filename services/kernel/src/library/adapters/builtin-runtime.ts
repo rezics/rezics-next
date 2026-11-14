@@ -5,8 +5,8 @@ import { nextOwnerPin } from '../owner-index-metadata.ts';
 import type { Pool, PoolClient } from 'pg';
 import { createBuiltinOwnerAdmission, createBuiltinMembersApplication } from '../application/index.ts';
 import type { NativeLibraryPresentationPorts } from './presentation.ts';
-import { deadlineClient } from '../access-port.ts';
-import { withConnection } from '../../database/pool.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction, withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import type { Access, Actor, AccountActor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
@@ -58,6 +58,20 @@ function descriptor(accountId: string, key: BuiltinCollectionKey): BuiltinCollec
 }
 type Client = Pick<PoolClient, 'query'>;
 type ReadScope = 'collection:read' | 'collection:update' | 'collection:delete';
+const boundedSnapshotOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  mapError(error: unknown) {
+    try {
+      throwAccessUnavailable(error);
+    } catch (mapped) {
+      return mapped;
+    }
+    return error;
+  },
+  isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+  isUncertainSettledQueryError: () => true,
+};
+
 async function nativePresence(client: Client, actor: AccountActor) {
   const { rows } = await client.query<{
     entry: boolean;
@@ -85,18 +99,23 @@ export function createNativeBuiltinRuntime(
 ) {
   const admitted = createBuiltinOwnerAdmission(ports.accountEligibility);
   async function snapshot<T>(operation: (client: Client) => Promise<T>, deadline = deadlineFor(WORK_STEP_DEADLINE_MS)) {
-    return withConnection(config.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    let operationFailed = false;
+    let operationFailure: unknown;
+    const read = async (client: PoolClient) => {
       try {
-        const result = await operation(client);
-        await client.query('COMMIT');
-        return result;
+        return await operation(client);
       } catch (error) {
-        await client.query('ROLLBACK');
+        operationFailed = true;
+        operationFailure = error;
         throw error;
       }
-    });
+    };
+    return withBoundedReadOnlyTransaction(config.pool, deadline, read, boundedSnapshotOptions).catch(
+      (error: unknown) => {
+        if (operationFailed) throw operationFailure;
+        throw error;
+      },
+    );
   }
   async function read(
     actor: Actor,
