@@ -12,7 +12,7 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { PeopleNamesEntry, type PeopleNamesReading } from '../src/features/catalogue/people-names/entry';
-import { namesReturn } from '../src/features/catalogue/work-names/navigation';
+import { namesReturn, NamesTermsReturn } from '../src/features/catalogue/work-names/navigation';
 import { contextHref } from '../src/features/pages/context-navigation';
 import { personReaderExample } from '../src/features/catalogue/person-reader/examples';
 import { characterRelationshipsFixture } from '../src/kernel/fake/character-relationships';
@@ -52,8 +52,16 @@ async function mounted(
   document.body.append(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'one' });
+  const hiddenFocus: Element[] = [];
+  host.addEventListener('focusin', (event) => {
+    const target = event.target as HTMLElement;
+    for (let parent = target.parentElement; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS' && !(parent as HTMLDetailsElement).open && parent.firstElementChild !== target)
+        hiddenFocus.push(target);
+  });
   try {
     await run(host, (node) => act(async () => root.render(h(QueryClientProvider, { client }, node))), client);
+    expect(hiddenFocus).toEqual([]);
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -63,8 +71,10 @@ async function mounted(
   }
 }
 
-for (const kind of ['Person', 'Character'] as const)
-  test(`${kind} profile preparation retains its supplied-name view and Sources return; changed or missing returns recover`, async () => {
+for (const [kind, destination] of (['Person', 'Character'] as const).flatMap((kind) =>
+  (['sources', 'terms'] as const).map((destination) => [kind, destination] as const),
+))
+  test(`${kind} profile preparation retains its supplied-name view and ${destination} return; changed or missing returns recover`, async () => {
     await mounted(async (host, draw, client) => {
       client.setQueryData(['session'], { state: 'signed-out' });
       const person = personReaderExample(),
@@ -93,6 +103,12 @@ for (const kind of ['Person', 'Character'] as const)
             locale: 'en',
             returnTo: new URLSearchParams(location.searchStr).get('via')!,
           });
+        if (location.pathname.endsWith('/terms'))
+          return h(NamesTermsReturn, {
+            id: current.subject.id,
+            locale: 'en',
+            via: new URLSearchParams(location.searchStr).get('via')!,
+          });
         return h(Component, {
           public: current,
           release,
@@ -103,6 +119,7 @@ for (const kind of ['Person', 'Character'] as const)
       }
       await act(async () => router.load());
       await draw(h(RouterProvider, { router }));
+      expect(host.querySelector<HTMLDetailsElement>('[data-slot="people-profile-details"]')?.open).toBe(false);
       await act(async () => {
         host.querySelector<HTMLDetailsElement>('[data-slot="people-profile-details"]')!.open = true;
         host.querySelector<HTMLDetailsElement>('#supplied-names details')!.open = true;
@@ -160,13 +177,13 @@ for (const kind of ['Person', 'Character'] as const)
       const modified = new window.MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true });
       await act(async () => sources.dispatchEvent(modified));
       expect(modified.defaultPrevented).toBe(false);
-      await act(async () => sources.click());
+      await act(async () => (destination === 'sources' ? sources : terms).click());
       await act(async () => router.load());
-      if (kind === 'Person') expect(host.textContent).toContain('unavailable');
+      if (kind === 'Person' && destination === 'sources') expect(host.textContent).toContain('unavailable');
       expect(host.querySelector('input')).toBeNull();
       const saved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
       expect(saved.window).toMatchObject({ query: 'Mél', expanded: true, groups: [{ index: 0, page: 1, open: true }] });
-      expect(saved.focus).toBe('sources');
+      expect(saved.focus).toBe(destination);
       expect(JSON.stringify(saved)).not.toContain('Mél—旅人 39');
       expect(new TextEncoder().encode(JSON.stringify(saved)).length).toBeLessThanOrEqual(8192);
       current = structuredClone(current);
@@ -178,7 +195,16 @@ for (const kind of ['Person', 'Character'] as const)
       await act(async () => prepare({ ...prepared }));
       expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('Mél');
       expect(host.textContent).toContain('Mél—旅人 39');
-      expect(document.activeElement === host.querySelector('[data-names-sources] a')).toBe(true);
+      expect(document.activeElement === host.querySelector(`[data-names-${destination}] a`)).toBe(true);
+      const details = host.querySelector<HTMLDetailsElement>('[data-slot="people-profile-details"]')!;
+      expect(details.open).toBe(true);
+      await act(async () => {
+        details.open = false;
+        details.dispatchEvent(new window.Event('toggle'));
+      });
+      await act(async () => prepare({ ...prepared }));
+      await draw(h(RouterProvider, { router }));
+      expect(details.isConnected && !details.open).toBe(true);
       for (const anchor of host.querySelectorAll<HTMLAnchorElement>('[data-names-sources] a, [data-names-terms] a')) {
         const returnedVia = new URL(new URL(anchor.href).searchParams.get('via')!, 'https://rezics.invalid');
         expect(returnedVia.searchParams.get('realm')).toBe(realm);
@@ -194,9 +220,11 @@ for (const kind of ['Person', 'Character'] as const)
       await act(async () => router.load());
       expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('Mél');
       expect(host.textContent).toContain('Mél—旅人 39');
-      expect(document.activeElement?.textContent).toBe(host.querySelector('[data-names-sources] a')?.textContent);
-      expect(document.activeElement === host.querySelector('[data-names-sources] a')).toBe(true);
-      await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
+      expect(document.activeElement?.textContent).toBe(
+        host.querySelector(`[data-names-${destination}] a`)?.textContent,
+      );
+      expect(document.activeElement === host.querySelector(`[data-names-${destination}] a`)).toBe(true);
+      await act(async () => host.querySelector<HTMLAnchorElement>(`[data-names-${destination}] a`)!.click());
       await act(async () => router.load());
       const nextSaved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
       current = structuredClone(current);
@@ -212,7 +240,7 @@ for (const kind of ['Person', 'Character'] as const)
       expect(host.textContent).not.toContain('Mél—旅人 39');
       expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('');
       expect(document.activeElement?.tagName).toBe('SUMMARY');
-      await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
+      await act(async () => host.querySelector<HTMLAnchorElement>(`[data-names-${destination}] a`)!.click());
       await act(async () => router.load());
       const returnTo = host.querySelector<HTMLAnchorElement>('a')!.getAttribute('href')!;
       current = structuredClone(current);
@@ -280,10 +308,17 @@ test('Context and release replacement permanently retire actions and late copy/a
   });
 });
 
-for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'connected', 'budget'] as const)
-  test(`fresh exact-name Sources return: ${outcome}`, async () => {
-    await mounted(async (host, draw) => {
-      let current = personReaderExample().read;
+for (const [kind, outcome] of (['Person', 'Character'] as const).flatMap((kind) =>
+  (['surviving', 'removed', 'language', 'role', 'window', 'connected', 'budget'] as const).map(
+    (outcome) => [kind, outcome] as const,
+  ),
+))
+  test(`${kind} fresh exact-name Sources return: ${outcome}`, async () => {
+    await mounted(async (host, draw, client) => {
+      client.setQueryData(['session'], { state: 'signed-out' });
+      const fixture = kind === 'Person' ? personReaderExample() : characterRelationshipsFixture();
+      const Component = kind === 'Person' ? PersonReader : CharacterReader;
+      let current = 'read' in fixture ? fixture.read : fixture.character;
       const spelling = 'Exact—Mél/旅 24';
       const language = outcome === 'budget' ? 'en-' + 'a-'.repeat(4500) + 'a' : 'ja';
       current.subject.labels = { en: 'Selected', ja: '旅人' };
@@ -307,19 +342,20 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
           'div',
           {},
           returning && outcome === 'connected' && h('button', { autoFocus: true, id: 'visitor-focus' }, 'Keep focus'),
-          h(PeopleNamesEntry, {
-            reading: {
-              public: current,
-              locale: 'en',
-              link: ({ href, ...props }) => h('a', { ...props, href: contextHref(href, realm) }),
-            },
-            adviceLoader: async () => ({ viewer: 'signed-in', actions: { state: 'ready', actions: [] } }),
+          h(Component, {
+            public: current,
+            release: fixture.release,
+            locale: 'en',
+            link: ({ href, ...props }) => h('a', { ...props, href: contextHref(href, realm) }),
           }),
         );
       }
       await act(async () => router.load());
       await draw(h(RouterProvider, { router }));
-      host.querySelector('details')!.open = true;
+      for (const details of host.querySelectorAll<HTMLDetailsElement>(
+        '[data-slot="people-profile-details"], #supplied-names > details',
+      ))
+        details.open = true;
       const group = host.querySelector<HTMLDetailsElement>(`[data-name-language="${language}"]`)!;
       group.open = true;
       await act(async () => [...group.querySelectorAll('button')].find((b) => b.textContent === 'More names')!.click());

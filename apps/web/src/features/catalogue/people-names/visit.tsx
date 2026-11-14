@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { PlainLink, type PageLink } from '../../pages/shared';
 import { NamesHandoff, type NamesReturnStatus, type NamesWindow } from '../work-names/navigation';
@@ -15,6 +15,7 @@ type Visit = {
   lifetime: ReturnType<typeof useNamesLifetime>;
   adviceLoader: NamesAdviceLoader;
   address: ReturnType<typeof peopleNamesAddress>;
+  onReturnReveal?: ((token: string | undefined) => void) | undefined;
 };
 
 /** Consume the original handoff; keep native Sources and Terms policy with their destinations. */
@@ -53,7 +54,15 @@ type Restoration = {
   focusTargets: import('../work-names/navigation').NamesFocusTargets;
 };
 function AdvisedVisit(props: Visit & Restoration) {
-  const { lifetime, adviceLoader } = props;
+  const { lifetime, adviceLoader, onReturnReveal } = props;
+  const intent = useId();
+  const reveal = props.returnStatus !== 'none' && props.names.state === 'ready' ? intent : undefined;
+  // Observe admission here; the navigation owner must wait for the caller's reveal commit before focus.
+  // Keep this intent stable when exact-name recovery changes only its fallback target or advice settles.
+  useLayoutEffect(() => {
+    onReturnReveal?.(lifetime.current() ? reveal : undefined);
+  }, [onReturnReveal, reveal, lifetime]);
+  useLayoutEffect(() => () => onReturnReveal?.(undefined), [onReturnReveal]);
   const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader);
   return <CurrentNames {...props} {...advice} />;
 }

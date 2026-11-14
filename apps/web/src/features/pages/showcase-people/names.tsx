@@ -5,12 +5,14 @@ import { PeopleNamesEntry } from '../../catalogue/people-names/entry';
 /** Keep the existing Person/Character mounting and its disclosed page/link adapter. */
 export function SuppliedNames({
   reading,
+  onReturnReveal,
 }: {
   reading: { public: SubjectRead; locale: string; link?: PageLink; release?: object; reader?: object };
+  onReturnReveal?: ((token: string | undefined) => void) | undefined;
 }) {
   return (
     <div className="min-h-11 min-w-0 [overflow-wrap:anywhere]" data-slot="supplied-names">
-      <PeopleNamesEntry reading={reading} />
+      <PeopleNamesEntry reading={reading} onReturnReveal={onReturnReveal} />
     </div>
   );
 }

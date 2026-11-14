@@ -189,6 +189,7 @@ export function PersonReader(reading: Reading) {
 
 function PersonFacts(reading: Reading) {
   const { public: read, release, locale } = reading;
+  const [namesReveal, revealNames] = useState<string>();
   const o = options(locale);
   const groups = personGroups(release, read, locale);
   const label = pickText(read.subject.labels, locale).text;
@@ -248,13 +249,13 @@ function PersonFacts(reading: Reading) {
       <Link className={control} href="#connections">
         {m.showcase_people_credits({}, o)}
       </Link>
-      <ProfileDetails locale={locale}>
+      <ProfileDetails locale={locale} reveal={namesReveal}>
         {secondary.map(renderGroup)}
         <ProfileFields
           reading={reading}
           fields={scalars.filter((field) => field.facts.length > 0 && !essential.has(field.id))}
         />
-        <SuppliedNames reading={reading} />
+        <SuppliedNames reading={reading} onReturnReveal={revealNames} />
         <Link className={control} href={catalogueEntries.people({ id: read.subject.id, label, locale }).href}>
           {m.person_reader_correct({}, o)}
         </Link>

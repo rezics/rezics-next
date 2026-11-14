@@ -19,9 +19,11 @@ export type { NamesAdviceLoader } from '../work-names/advice';
 export function PeopleNamesEntry({
   reading,
   adviceLoader = loadNamesAdvice,
+  onReturnReveal,
 }: {
   reading: PeopleNamesReading;
   adviceLoader?: NamesAdviceLoader;
+  onReturnReveal?: ((token: string | undefined) => void) | undefined;
 }) {
   const { subject } = reading.public;
   // Supplied names do not depend on display preferences. PeopleFacts owns their profile disclosure boundary.
@@ -46,8 +48,18 @@ export function PeopleNamesEntry({
   const host = useRef<HTMLDivElement>(null);
   const focused = useRef<EventTarget | null>(null);
   useLayoutEffect(() => {
-    if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
-      host.current?.querySelector<HTMLElement>('summary')?.focus();
+    if (
+      focused.current instanceof Element &&
+      !focused.current.isConnected &&
+      document.activeElement === document.body
+    ) {
+      let target = host.current?.querySelector<HTMLElement>('summary');
+      // A retired row may have belonged to a profile the visitor has since collapsed.
+      for (let parent = target?.parentElement; parent; parent = parent.parentElement)
+        if (parent.tagName === 'DETAILS' && !(parent as HTMLDetailsElement).open && parent.firstElementChild !== target)
+          target = parent.querySelector<HTMLElement>(':scope > summary') ?? undefined;
+      if (target?.isConnected) target.focus();
+    }
   }, [lifetime.generation, lifetime.retired]);
   const names = useMemo(() => peopleNames(subject, reading.locale), [subject, reading.locale]);
   const address = peopleNamesAddress(subject, names, reading.locale);
@@ -59,7 +71,10 @@ export function PeopleNamesEntry({
         focused.current = event.target;
       }}
     >
-      <PeopleNamesVisit key={lifetime.generation} {...{ names, reading, lifetime, adviceLoader, address }} />
+      <PeopleNamesVisit
+        key={lifetime.generation}
+        {...{ names, reading, lifetime, adviceLoader, address, onReturnReveal }}
+      />
     </div>
   );
 }

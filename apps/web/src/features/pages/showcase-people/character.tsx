@@ -1,5 +1,5 @@
 import { pickText } from '@rezics/composition';
-import { useContext, useLayoutEffect, useRef } from 'react';
+import { useContext, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { characterGroups } from '../../catalogue/character-profile';
 import { CharacterProfileEntry } from '../../catalogue/character-profile-entry';
@@ -22,6 +22,7 @@ import { ProfileDetails } from '../shared';
 
 /** Supplied facts and the existing bounded associations share one native fact visit. */
 export function CharacterReader(input: ProfileReading & { associations?: CharacterAssociations }) {
+  const [namesReveal, revealNames] = useState<string>();
   const reading = { ...input, documents: input.documents ?? input.public.documents };
   const groups = characterGroups(reading.release);
   const documents = (reading.release.types[reading.public.subject.type]?.properties ?? []).filter(
@@ -49,10 +50,10 @@ export function CharacterReader(input: ProfileReading & { associations?: Charact
             </a>
           </nav>
           {input.associations && <CharacterPublicReading {...input.associations} />}
-          <ProfileDetails locale={reading.locale}>
+          <ProfileDetails locale={reading.locale} reveal={namesReveal}>
             <CharacterFacts reading={reading} kind="measurements" fields={groups.measurements} />
             <CharacterFacts reading={reading} kind="identifiers" fields={groups.identifiers} />
-            <SuppliedNames reading={reading} />
+            <SuppliedNames reading={reading} onReturnReveal={revealNames} />
             <CharacterProfileEntry
               id={reading.public.subject.id}
               label={label.text}
