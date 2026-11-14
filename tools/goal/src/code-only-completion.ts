@@ -56,12 +56,14 @@ export function deliverCodeOnlyCompletion(path: string, settings = loadSettings(
       ).get(key) as { id: number; manager: string } | null;
       const completionPrefix = `Code-only launch observation ${JSON.stringify(completion.id)}.`;
       const legacyPrefix = `Code-only completion ${JSON.stringify(completion.id)}.`;
+      const plainLegacyPrefix = `Code-only completion ${completion.id}.`;
       const findCompletion = () => db.query(
         `SELECT id, manager FROM manager_inbox
          WHERE sender = 'system:code-only' AND kind = 'handoff'
-           AND (substr(summary, 1, ?) = ? OR substr(summary, 1, ?) = ?)
+           AND (substr(summary, 1, ?) = ? OR substr(summary, 1, ?) = ? OR substr(summary, 1, ?) = ?)
          ORDER BY id ASC LIMIT 1`,
-      ).get(completionPrefix.length, completionPrefix, legacyPrefix.length, legacyPrefix)
+      ).get(completionPrefix.length, completionPrefix, legacyPrefix.length, legacyPrefix,
+        plainLegacyPrefix.length, plainLegacyPrefix)
         as { id: number; manager: string } | null;
       // No time window: a committed native row resolves a restart before the local marker,
       // even after the ordinary inbox fold has expired or the manager has consumed the message.
