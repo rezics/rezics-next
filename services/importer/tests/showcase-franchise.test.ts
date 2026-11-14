@@ -516,7 +516,9 @@ test('current graph identities recover after reopen while current siblings keep 
 
     const first = await deliver();
     expect(first.proposed.some((edge) => edge.vndbRelation)).toBe(false);
-    expect(first.unresolved).toContainEqual(expect.objectContaining({ reason: 'current_relation_endpoint_identity_mismatch:v17102' }));
+    expect(first.unresolved).toContainEqual(
+      expect.objectContaining({ reason: 'current_relation_endpoint_identity_mismatch:v17102' }),
+    );
     expect(first.proposed.some((edge) => edge.source === 'bangumi')).toBe(true);
 
     db.close();

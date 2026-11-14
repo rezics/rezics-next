@@ -93,8 +93,7 @@ export function currentProviderIdentity(
 
   const identity = providerSourceIdentity(input.provider, input.externalId, input.expectedType);
   if (!identity) return 'unknown';
-  if (identity.kind === 'source-tuple')
-    return subject.id === input.nativeSubjectId ? 'current' : 'identity_mismatch';
+  if (identity.kind === 'source-tuple') return subject.id === input.nativeSubjectId ? 'current' : 'identity_mismatch';
   if (identity.nativeType !== undefined && input.expectedType !== identity.nativeType) return 'wrong_type';
 
   const allowCanonicalRedirect = input.allowCanonicalRedirect ?? identity.canonicalRedirect;

@@ -59,10 +59,7 @@ import {
   type GraphEdgeDraft,
   type UnresolvedEdge,
 } from './cross-media-bindings.ts';
-import {
-  currentProviderIdentity,
-  providerSourceIdentity,
-} from './cross-media-current-identity.ts';
+import { currentProviderIdentity, providerSourceIdentity } from './cross-media-current-identity.ts';
 import {
   attachShowcaseWorkLinks,
   resolveShowcaseWorkLinkHandoffs,

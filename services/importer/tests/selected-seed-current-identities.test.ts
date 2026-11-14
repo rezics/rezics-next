@@ -4,7 +4,13 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
-import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia, type CrossMediaPort, type CrossMediaTables } from '../src/cross-media-seed.ts';
+import {
+  crossMediaAliases,
+  planCrossMediaSeed,
+  seedCrossMedia,
+  type CrossMediaPort,
+  type CrossMediaTables,
+} from '../src/cross-media-seed.ts';
 import { seedDevelopmentShowcase, type ShowcaseRequest } from '../src/showcase-persona.ts';
 import { ShowcaseJournal } from '../src/showcase-journal.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -94,7 +100,9 @@ test('unchanged seed rereads Work identities and restores the same bindings afte
     const extras = { providers: ['bangumi', 'vndb'] as const, mediaDeadlineMs: 0 };
     const first = await seedCrossMedia(plan, state, port, undefined, extras);
     expect(first.readings.filter((row) => row.source === 'vndb').map((row) => row.externalId)).toEqual(['v2']);
-    expect(first.gaps).toContainEqual(expect.objectContaining({ property: 'wdt:P3180', record: { external_id: 'v1' } }));
+    expect(first.gaps).toContainEqual(
+      expect.objectContaining({ property: 'wdt:P3180', record: { external_id: 'v1' } }),
+    );
     expect(first.readings.some((row) => row.externalId === '10380')).toBe(true);
     const writeCount = commands.length;
 
@@ -141,7 +149,9 @@ test('unchanged seed rereads Work identities and restores the same bindings afte
       expect(collections.sources.map((row) => row.status)).toEqual(['missing-source', 'current']);
       expect(collections.sources[1]).toMatchObject({ externalId: 'v2', value: { subjectId: subjectId(999) } });
       expect(publicReads).toHaveLength(2);
-      expect(collections.collections.filter((row) => row.view !== 'grid').every((row) => row.status === 'missing-source')).toBe(true);
+      expect(
+        collections.collections.filter((row) => row.view !== 'grid').every((row) => row.status === 'missing-source'),
+      ).toBe(true);
     } finally {
       journal.close();
     }
