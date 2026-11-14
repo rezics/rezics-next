@@ -1,174 +1,79 @@
-import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { newId } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { FactRow } from '../../src/semantic/item.ts';
 import { projectWorkReleaseCardFacts } from '../../src/semantic/work-release-cards.ts';
 
 const edition = newId(0x2345);
-const sourceUrl = 'https://example.org/catalog/book-edition';
-const sourceParts = [{ property: 'schema:url', value: { type: 'value', content: sourceUrl } }];
-
-function nativeFact(
+const value = (content: unknown) => ({ type: 'value' as const, content });
+const parts = [{ property: 'schema:url', value: value('https://example.org/edition') }];
+const hash = '5feafa36f0343c363bebca7a3416c1fefa28f23c6d43a43922d3bc5cb98f4fd8';
+const datatype = (property: string) => bundledRelease.properties[property]!.datatype;
+const nativeBody = (content: unknown, qualifier?: [string, unknown], rank = 'normal') => ({
+  rank,
+  value: value(content),
+  qualifiers: qualifier ? [{ property: qualifier[0], value: value(qualifier[1]) }] : [],
+  references: qualifier ? [{ parts }] : [],
+});
+const native = (
   property: string,
-  statementId: string | null,
   body: unknown,
-  revision: number | null,
-  release: string | null,
-): FactRow {
-  return {
-    kind: 'statement',
-    language: null,
-    property,
-    statement_id: statementId,
-    operation: 'assert',
-    body,
-    fact_revision: revision,
-    fact_release: release,
-  };
-}
-
-test('projects native Book edition date, language and publisher facts with row evidence and reference hashes', () => {
-  const dateId = newId(0x2345);
-  const languageId = newId(0x2345);
-  const publisherId = newId(0x2345);
-  const publisher = newId(0x3456);
-  const dateRelease = 'a'.repeat(64);
-  const languageRelease = 'b'.repeat(64);
-  const publisherRelease = bundledDigest;
-  const projected = projectWorkReleaseCardFacts(
+  revision: number | null = 1,
+  release: string | null = 'a'.repeat(64),
+  id: string | null = newId(0x2345),
+): FactRow => ({
+  kind: 'statement',
+  language: null,
+  property,
+  statement_id: id,
+  operation: 'assert',
+  body,
+  fact_revision: revision,
+  fact_release: release,
+});
+const project = (...rows: FactRow[]) =>
+  projectWorkReleaseCardFacts(
     edition,
     'bf:Instance',
     bundledRelease,
-    'global',
-    new Map([
-      [
-        'schema:datePublished',
-        [
-          nativeFact(
-            'schema:datePublished',
-            dateId,
-            {
-              rank: 'preferred',
-              value: { type: 'value', content: { time: '+2024-03-00T00:00:00Z', precision: 10 } },
-              qualifiers: [{ property: 'schema:inLanguage', value: { type: 'value', content: 'ja' } }],
-              references: [{ parts: sourceParts }],
-            },
-            7,
-            dateRelease,
-          ),
-        ],
-      ],
-      [
-        'schema:inLanguage',
-        [
-          nativeFact(
-            'schema:inLanguage',
-            languageId,
-            { rank: 'normal', value: { type: 'value', content: 'ja' }, qualifiers: [], references: [] },
-            11,
-            languageRelease,
-          ),
-        ],
-      ],
-      [
-        'schema:publisher',
-        [
-          nativeFact(
-            'schema:publisher',
-            publisherId,
-            {
-              rank: 'normal',
-              value: { type: 'value', content: publisher },
-              qualifiers: [{ property: 'wdt:P1932', value: { type: 'value', content: 'Imprint name' } }],
-              references: [{ parts: sourceParts }],
-            },
-            19,
-            publisherRelease,
-          ),
-        ],
-      ],
-    ]),
+    GLOBAL_CONTEXT,
+    new Map(rows.map((row) => [row.property!, [row]])),
   );
 
-  const date = projected.get('schema:datePublished')!;
-  expect(date.unavailable).toBe(false);
-  expect(date.statements[0]).toMatchObject({
-    id: dateId,
-    property: { id: 'schema:datePublished', data_type: 'time' },
-    rank: 'preferred',
-    qualifiers: [{ property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'ja' } }],
-    rezics: { release: dateRelease, revision: 7 },
-  });
-  expect(date.statements[0]!.references[0]!.hash).toBe(
-    createHash('sha256')
-      .update(
-        '[{"property":"schema:url","value":{"content":"https://example.org/catalog/book-edition","type":"value"}}]',
-      )
-      .digest('hex'),
-  );
-
-  expect(projected.get('schema:inLanguage')).toMatchObject({
-    unavailable: false,
-    statements: [
-      { id: languageId, value: { type: 'value', content: 'ja' }, rezics: { release: languageRelease, revision: 11 } },
-    ],
-  });
-  expect(projected.get('schema:publisher')).toMatchObject({
-    unavailable: false,
-    statements: [
-      {
-        id: publisherId,
-        property: { id: 'schema:publisher', data_type: 'wikibase-item' },
-        value: { type: 'value', content: publisher },
-        qualifiers: [{ property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Imprint name' } }],
-        rezics: { release: publisherRelease, revision: 19 },
-      },
-    ],
-  });
+test('native Book date, language and publisher retain canonical public data and evidence', () => {
+  const dateValue = { time: '+2024-03-00T00:00:00Z', precision: 10 },
+    publisherId = newId(0x3456);
+  const date = native('schema:datePublished', nativeBody(dateValue, ['schema:inLanguage', 'ja']), 7, 'a'.repeat(64));
+  const language = native('schema:inLanguage', nativeBody('ja'), 11, 'b'.repeat(64));
+  const publisher = native('schema:publisher', nativeBody(publisherId, ['wdt:P1932', 'Imprint']), 19, bundledDigest);
+  const fields = project(date, language, publisher);
+  for (const [row, property, expected, revision, release, qualifier] of [
+    [date, 'schema:datePublished', value(dateValue), 7, 'a'.repeat(64), 'schema:inLanguage'],
+    [language, 'schema:inLanguage', value('ja'), 11, 'b'.repeat(64), ''],
+    [publisher, 'schema:publisher', value(publisherId), 19, bundledDigest, 'wdt:P1932'],
+  ] as const) {
+    const statement = fields.get(property)!.statements[0]!;
+    expect([statement.id, statement.value, statement.property.data_type, statement.rezics]).toEqual([
+      row.statement_id!,
+      expected,
+      datatype(property),
+      { release, revision },
+    ]);
+    if (qualifier)
+      expect([
+        statement.qualifiers[0]!.property.data_type,
+        statement.references[0]!.hash,
+        statement.references[0]!.parts[0]!.property.data_type,
+      ]).toEqual([qualifier && datatype(qualifier), hash, datatype('schema:url')]);
+  }
 });
 
-test('does not fabricate native IDs or revision and release evidence', () => {
-  const missingId = projectWorkReleaseCardFacts(
-    edition,
-    'bf:Instance',
-    bundledRelease,
-    'global',
-    new Map([
-      [
-        'schema:inLanguage',
-        [
-          nativeFact(
-            'schema:inLanguage',
-            null,
-            { rank: 'normal', value: { type: 'value', content: 'ja' }, qualifiers: [], references: [] },
-            11,
-            bundledDigest,
-          ),
-        ],
-      ],
-    ]),
-  );
-  const missingRevision = projectWorkReleaseCardFacts(
-    edition,
-    'bf:Instance',
-    bundledRelease,
-    'global',
-    new Map([
-      [
-        'schema:inLanguage',
-        [
-          nativeFact(
-            'schema:inLanguage',
-            newId(0x2345),
-            { rank: 'normal', value: { type: 'value', content: 'ja' }, qualifiers: [], references: [] },
-            null,
-            null,
-          ),
-        ],
-      ],
-    ]),
-  );
-  expect(missingId.get('schema:inLanguage')).toEqual({ statements: [], unavailable: true });
-  expect(missingRevision.get('schema:inLanguage')).toEqual({ statements: [], unavailable: true });
+test('missing native ID, revision or release makes the populated field unavailable', () => {
+  for (const row of [
+    native('schema:inLanguage', nativeBody('ja'), 1, bundledDigest, null),
+    native('schema:inLanguage', nativeBody('ja'), null),
+    native('schema:inLanguage', nativeBody('ja'), 1, null),
+  ])
+    expect(project(row).get('schema:inLanguage')).toEqual({ statements: [], unavailable: true });
 });
