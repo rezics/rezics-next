@@ -63,9 +63,13 @@ function fixture(extra: NodeJS.ProcessEnv = {}) {
   return { ...temporary, env, command };
 }
 
-type Hosted = { child: ChildProcess; exited: Promise<void>; ready: Promise<void>; pid: number };
+type Hosted = { child: ChildProcess; exited: Promise<void>; ready: Promise<void>; pid: number; diagnostics(): string };
 function startHost(env: NodeJS.ProcessEnv): Hosted {
   const child = spawn(process.execPath, [runtime, '_manager-host'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let diagnostics = '';
+  child.stderr?.on('data', (chunk) => {
+    diagnostics = `${diagnostics}${String(chunk)}`.slice(-4096);
+  });
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   const ready = new Promise<void>((resolve, reject) => {
     const lines = createInterface({ input: child.stdout! });
@@ -76,7 +80,23 @@ function startHost(env: NodeJS.ProcessEnv): Hosted {
     });
     child.once('exit', (code) => reject(new Error(`host exited before ready (${code})`)));
   });
-  return { child, exited, ready, pid: child.pid! };
+  return { child, exited, ready, pid: child.pid!, diagnostics: () => diagnostics };
+}
+
+function hostShutdownEvidence(stateDirectory: string, host: Hosted, identity: ProcessIdentity): string {
+  let registry = 'unreadable';
+  try {
+    registry = readFileSync(join(stateDirectory, 'manager-app-servers.json'), 'utf8');
+  } catch (error) {
+    registry = (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'removed' : String(error);
+  }
+  let handoff = 'absent';
+  try {
+    handoff = readFileSync(join(stateDirectory, 'manager-app-servers-handoff.json'), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') handoff = String(error);
+  }
+  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${host.diagnostics()}`;
 }
 
 function children(pid: number): ProcessIdentity[] {
@@ -245,6 +265,7 @@ test('the app-server a host owns exits with the host', async () => {
     expect(server).toBeDefined();
     host.child.kill('SIGTERM');
     await host.exited;
+    if (server && sameProcess(server)) throw new Error(hostShutdownEvidence(f.path, host, server));
     expect(server && sameProcess(server)).toBe(false);
   } finally {
     await cleanHosted(f.path, host, server ? [server] : []);
@@ -536,6 +557,7 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
     expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
     third.child.kill('SIGTERM');
     await third.exited;
+    if (sameProcess(recovered.identity)) throw new Error(hostShutdownEvidence(f.path, third, recovered.identity));
     expect(sameProcess(recovered.identity)).toBe(false);
   } finally {
     await cleanHosted(f.path, third);
