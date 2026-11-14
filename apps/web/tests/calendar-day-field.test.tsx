@@ -61,9 +61,7 @@ describe('CalendarDayField', () => {
     expect(dayButton(grid, end)).toHaveFocus();
     await user.keyboard('{PageUp}');
     expect(dialog.querySelector<HTMLElement>('[aria-live="polite"]')!).toHaveTextContent(
-      new Intl.DateTimeFormat(getLocale(), { month: 'long', year: 'numeric' }).format(
-        calendarDayDate('2024-02-01')!,
-      ),
+      new Intl.DateTimeFormat(getLocale(), { month: 'long', year: 'numeric' }).format(calendarDayDate('2024-02-01')!),
     );
     expect([...grid.querySelectorAll('button')].filter((button) => button.tabIndex === 0)).toHaveLength(1);
   });
@@ -137,9 +135,7 @@ describe('CalendarDayField', () => {
     await user.click(trigger);
     const opened = await screen.findByRole('dialog', { name: 'Date' });
     expect(dayButton(within(opened).getByRole('grid'), '2024-02-29')).toHaveFocus();
-    rerender(
-      <CalendarDayField id="date" label="Date" value="2024-02-29" disabled onChange={onChange} />,
-    );
+    rerender(<CalendarDayField id="date" label="Date" value="2024-02-29" disabled onChange={onChange} />);
     expect(trigger).toBeDisabled();
     expect(screen.queryByRole('dialog', { name: 'Date' })).not.toBeInTheDocument();
     await user.keyboard('{Enter}');

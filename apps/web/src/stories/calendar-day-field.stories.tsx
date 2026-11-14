@@ -117,6 +117,8 @@ export const PhoneKeyboardJourney: Story = {
     await body.findByRole('dialog', { name: m.library_copy_disposed() });
     await userEvent.click(page.getByRole('button', { name: 'Disable date field' }));
     await waitFor(() => expect(disabledField).toBeDisabled());
-    await waitFor(() => expect(body.queryByRole('dialog', { name: m.library_copy_disposed() })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(body.queryByRole('dialog', { name: m.library_copy_disposed() })).not.toBeInTheDocument(),
+    );
   },
 };
