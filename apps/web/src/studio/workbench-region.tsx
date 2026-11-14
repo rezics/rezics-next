@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 
 /** Collapsing a region preserves its mounted command, confirmation and form owners. */
@@ -36,4 +36,60 @@ export function WorkbenchRegion({
       </div>
     </section>
   );
+}
+
+type AuthoringSelection = {
+  generation: string;
+  target: HTMLElement;
+  text: { start: number; end: number; direction: 'forward' | 'backward' | 'none' } | null;
+  range: Range | null;
+};
+
+/** DOM selection only: the shared editor remains the document and undo owner. */
+export function useAuthoringSelection(canvas: RefObject<HTMLElement | null>, generation: string) {
+  const saved = useRef<AuthoringSelection | null>(null);
+  return {
+    remember(target: HTMLElement) {
+      if (target instanceof window.HTMLInputElement || target instanceof window.HTMLTextAreaElement) {
+        saved.current = {
+          generation,
+          target,
+          text: {
+            start: target.selectionStart ?? 0,
+            end: target.selectionEnd ?? 0,
+            direction: target.selectionDirection ?? 'none',
+          },
+          range: null,
+        };
+      } else if (target.isContentEditable || target.getAttribute('role') === 'textbox') {
+        const selection = target.ownerDocument.getSelection();
+        saved.current = {
+          generation,
+          target,
+          text: null,
+          range: selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null,
+        };
+      }
+    },
+    restore() {
+      const selection = saved.current;
+      // Copying a saved version deliberately replaces the editor; its detached caret must not be restored.
+      if (!selection || selection.generation !== generation) {
+        canvas.current?.querySelector<HTMLElement>('[role="textbox"], input')?.focus({ preventScroll: true });
+        return;
+      }
+      selection.target.focus({ preventScroll: true });
+      if (selection.text) {
+        (selection.target as HTMLInputElement | HTMLTextAreaElement).setSelectionRange(
+          selection.text.start,
+          selection.text.end,
+          selection.text.direction,
+        );
+      } else if (selection.range) {
+        const current = selection.target.ownerDocument.getSelection()!;
+        current.removeAllRanges();
+        current.addRange(selection.range);
+      }
+    },
+  };
 }

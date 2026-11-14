@@ -61,7 +61,13 @@ export function RevisionBody({
   );
 }
 
-type VersionProps = { controller: StudioController; state: StudioState; presentation: StudioPresentation };
+type VersionProps = {
+  controller: StudioController;
+  state: StudioState;
+  presentation: StudioPresentation;
+  /** Closing the workspace history retires readers and focus, while keeping its bounded page and copy review. */
+  active?: boolean;
+};
 
 /** Replacement retires local disclosures and focus as well as the controller's version coordinates. */
 export function StudioVersions(props: VersionProps) {
@@ -85,7 +91,7 @@ export function StudioVersions(props: VersionProps) {
 type FocusTicket = { cancel: () => void; live: () => boolean };
 
 /** Only the explicit keyboard command may orient; a focus move, hidden tab or replacement cancels it. */
-function useVersionMovement(controller: StudioController, root: RefObject<HTMLElement | null>) {
+function useVersionMovement(controller: StudioController, root: RefObject<HTMLElement | null>, active: boolean) {
   const ticket = useRef<FocusTicket | null>(null);
   const [pending, setPending] = useState<{ ticket: FocusTicket; target: RefObject<HTMLHeadingElement | null> } | null>(
     null,
@@ -96,7 +102,7 @@ function useVersionMovement(controller: StudioController, root: RefObject<HTMLEl
       ticket.current?.cancel();
       ticket.current = null;
     },
-    [controller, locale],
+    [controller, locale, active],
   );
   useLayoutEffect(() => {
     if (!pending) return;
@@ -148,17 +154,19 @@ function useVersionMovement(controller: StudioController, root: RefObject<HTMLEl
   };
 }
 
-function VersionVisit({ controller, state, presentation }: VersionProps) {
+function VersionVisit({ controller, state, presentation, active = true }: VersionProps) {
   const root = useRef<HTMLElement>(null);
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const comparisonHeading = useRef<HTMLHeadingElement>(null);
-  const move = useVersionMovement(controller, root);
+  const activity = useRef(active);
+  activity.current = active;
+  const move = useVersionMovement(controller, root, active);
   const locale = getLocale();
   const options = { locale };
   const selected = state.selected;
   const historical = state.historical;
   const readingCurrent = useCallback(
-    () => controller.current() && getLocale() === locale && Boolean(root.current?.isConnected),
+    () => activity.current && controller.current() && getLocale() === locale && Boolean(root.current?.isConnected),
     [controller, locale],
   );
   const historicalCurrent = useCallback(
@@ -270,7 +278,7 @@ function VersionVisit({ controller, state, presentation }: VersionProps) {
           {m.studio_revision_load({}, options)}
         </Button>
       ) : null}
-      {state.inspectedVersion ? (
+      {state.inspectedVersion && active ? (
         <div className="studio-comparison">
           <div>
             <h3 ref={comparisonHeading} tabIndex={-1}>

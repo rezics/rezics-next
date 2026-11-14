@@ -102,42 +102,61 @@ revision lifecycle, and keeps local acknowledged-revision publication separate f
 exact document operations use a focused Content public entry that exposes only those operations and required types;
 implementation stays in Content and Studio remains the receiving owner.
 
-Shared Studio puts the document first, with compact phone navigation and unframed wide navigation.
+Shared Studio puts the document first; Shell owns its sidebar and phone drawer.
 [Editing language](workspace-language.md) owns localized feedback and evidence.
 
 ## Writing workbench
 
-Decision: one installed Book/column workbench presents the recognizable work title, ordered draft outline and
-predominant document canvas. The compact document toolbar owns Save, Write, Preview and Versions. Draft maintenance,
-exact identity, workspace help and publication occupy labelled secondary regions. Navigation precedes the canvas
-on phones and sits beside it on wide screens. Column series context stays distinct from independent articles;
-Book parts retain their nested native order. Missing document titles use existing localized untitled or unavailable
-wording, while the editable title remains empty. Exact Post, revision and digest identity stays in labelled details.
+Decision: Book chapters and Column drafts live in the main Shell sidebar through
+`ShellContextNavigation({ label, children })` from `shell/contextual-navigation.tsx`. Shell owns placement, the phone
+drawer, dismissal and focus restoration; Studio contributes one mounted navigation subtree, never a second aside,
+responsive disclosure or navigation column inside the content width. The center contains one document canvas.
+Book parts retain their native nested order. The draft inventory lists only documents not already placed in that
+outline, avoiding repeated chapter navigation. Column series context stays distinct from independent articles.
+The original `pages-studio-workbench--book` story renders this same workspace and controller in AppShell.
 
-Disclosure changes visibility, never controller or form lifetime. Editor undo/uploads, selected comparison and
-replacement confirmation survive view changes. Dirty text and discard confirmation keep draft actions visible;
-active publication review and receipt keep publication visible. Session failures, unknown results, same-intent retry,
-read-only access and publication unavailability remain visible outside collapsed secondary content. Book-start
-recovery stays outside the disabled document fieldset so its frozen same-intent retry remains actionable. Preparation and
-legacy readiness links belong in the publication region, not above the work heading. Generated producer binding,
-held activation consumer, exact operands, source permission and money rules retain their existing owners.
+The document toolbar offers Save and one action that changes between Preview and Write. Version history is a
+secondary disclosure opened only by an explicit action; it temporarily occupies the canvas and closes back to the
+same writing canvas. Opening history requests its first bounded metadata page only when none is retained. Reopening
+keeps the admitted page, inspected version and copy confirmation; explicit First/Previous/Next and retry keep their
+existing controller semantics. Closing retires history readers, inspectors and pending keyboard focus, while the
+bounded metadata and confirmation stay local. History does not silently copy or reload a draft. Copying a saved
+version still requires its separate current confirmation and is the deliberate editor replacement.
 
-Source-first choice: implement and commit the workbench and focused regression sources; run the final brief's required
-Web typecheck only. Acceptance execution, native/browser/keyboard/visual review, Storybook builds and captures are
-deferred to the dev verifier. Existing standalone review IDs and scripted walks stay intact. Manual routed workbench
-reviews use the same component and controller; they cover populated Book/column, dirty switching, selected comparison
-and independently unavailable publication preparation without claiming native publication.
+One selected editor stays mounted across preview and history, preserving working text, undo, upload ownership and
+authoring selection. Closing Preview or history restores the last title selection or body caret;
+a deliberate saved-version copy starts the replacement editor without restoring a detached caret. Keyboard opening
+orients to the history heading; pointer opening keeps the initiating control. Draft selection uses the existing
+save/discard/keep-editing guard and current command permissions. The supplied rich working preview and first-save
+composer retain their existing snapshot and native command owners.
 
-Sources read before design: this guide and [editing language](workspace-language.md), `workspace.tsx`, `contract.ts`,
-controller entry points, workspace callers, `hosted-draft-picker-view.tsx`, `hosted-history-view.tsx`, `revisions.tsx`,
-`hosted-release-preparation-view.tsx`, the existing preparation/native-draft stories and focused language regressions,
-and the read-only main checkout's reference index. Installed Impeccable documents were absent from the permitted
-skill/reference locations; no launcher, installation or PATH change is required for this local hierarchy repair.
+Draft maintenance, exact saved provenance, workspace help and publication remain secondary. Unsaved text and discard
+confirmation keep draft actions visible; active publication review and acknowledgement keep publication visible.
+Unknown commands and exact retry remain visible outside disclosures. Book-start recovery stays outside both disabled
+fieldsets so its frozen same-intent retry remains actionable. Missing titles keep localized untitled/unavailable
+presentation while the title input remains empty. Publication, final whole-Book binding, native activation and producer
+contracts retain their existing owners.
 
-Deferred acceptance: `bun run --cwd apps/web test tests/studio-workspace-language.test.tsx
- tests/studio-saved-version-language.test.tsx src/studio/workbench-region.test.tsx`. Existing autosave, frozen replay,
-dirty-switch and publication-lock assertions stay in the shared language regression. Manual stories are review
-fixtures; their supplied successful saves and unavailable publication do not establish native or promoted acceptance.
+Cost: one selected editor, no additional document store, one existing bounded organizer and history page, and no new
+fetch effect, polling, per-row body hydration or prefetch. Sidebar contributions retain their mounted form owners.
+
+Source-first choice: commit product and focused acceptance source; diff/format review only. Compiler, tests, build,
+browser/captures, old-editor parity, native acceptance and eight-locale phone/desktop/keyboard verification are deferred
+to the separate verifier. Story IDs remain stable. Stories illustrate supplied responses, not native publication.
+
+Sources read before this layout decision: this guide and [editing language](workspace-language.md), `workspace.tsx`,
+`studio.css`, `workbench-region.tsx`, `workbench-copy.ts`, `book-organizer.tsx`, `revisions.tsx`, controller exports and
+version/save/selection entry points, `contract.ts`, route callers, the shared rich editor's props and focus lifecycle,
+`hosted-draft-picker-view.tsx`, Shell's README and AppShell, ordinary workbench stories and focused workspace,
+working-preview and native-draft tests, the declared module map and the read-only main checkout's `.reference/INDEX.md`.
+The brief's legacy editor comparison is behavioral guidance (one document/preview frame, selection-backed preview,
+state-preserving reconfiguration); its named commit and paths are unavailable in this checkout's legacy refs, so no
+legacy source is ported and old-editor parity remains unverified.
+
+Focused acceptance source covers Book/Column selection from one context contribution, unsaved text/undo/caret across
+Preview and history close, explicit bounded history reads, protected replacement, and dirty-switch choices. Existing
+locale, autosave, unknown-intent replay and publication assertions remain. Obsolete local-navigation selectors and
+peer-mode keyboard expectations are adapted to the Shell-owned navigation and the concise toolbar.
 
 ## Working preview
 

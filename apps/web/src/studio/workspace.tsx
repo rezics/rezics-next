@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -34,7 +35,8 @@ import { HostedDraftPickerView } from './hosted-draft-picker-view';
 import type { HostedDraftPicker } from './hosted-draft-picker';
 import { HostedReleaseReaderLink } from './hosted-release-reader-link-action';
 import type { HostedReleaseReaderBinding } from './hosted-release-reader-link';
-import { WorkbenchRegion } from './workbench-region';
+import { WorkbenchRegion, useAuthoringSelection } from './workbench-region';
+import { ShellContextNavigation } from '../shell/contextual-navigation';
 import { workbenchCopy } from './workbench-copy';
 import './studio.css';
 
@@ -97,8 +99,13 @@ export function StudioWorkbench({
     starter?.snapshot ?? noSnapshot,
   );
   const startingBook = starter?.locked() ?? false;
-  const [tab, setTab] = useState<'write' | 'preview' | 'versions'>(() => (state.historical ? 'versions' : 'write'));
-  const [navigation, setNavigation] = useState(false);
+  const [view, setView] = useState<'write' | 'preview'>('write');
+  const [historyOpen, setHistoryOpen] = useState(Boolean(state.historical));
+  const [historyVisited, setHistoryVisited] = useState(Boolean(state.historical));
+  const [returnToAuthoring, setReturnToAuthoring] = useState(false);
+  const [focusHistory, setFocusHistory] = useState(false);
+  const writingCanvas = useRef<HTMLElement>(null);
+  const historyHeading = useRef<HTMLHeadingElement>(null);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
   const [nativeDraftRisk, setNativeDraftRisk] = useState(false);
@@ -120,7 +127,14 @@ export function StudioWorkbench({
   const documentTitle = selected?.title.trim() || m.own_drafts_no_title({}, options);
   const workTitle = input.title.trim() || m.own_drafts_no_title({}, options);
   const postId = selected?.source.revision.exact.postId ?? null;
+  const placedPosts = new Set(
+    state.structure?.placements.flatMap((placement) =>
+      placement.target.kind === 'chapter' ? [placement.target.document.postId] : [],
+    ),
+  );
+  const draftDocuments = state.documents.items.filter((document) => !placedPosts.has(document.postId));
   const editorGeneration = selected?.editorGeneration ?? 0;
+  const authoringSelection = useAuthoringSelection(writingCanvas, `${postId}:${editorGeneration}`);
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
   const unresolved = controller.hasUnresolvedCommand();
   const atRisk = Boolean(
@@ -140,13 +154,6 @@ export function StudioWorkbench({
   useEffect(() => {
     if (!state.operation) draftPicker?.retainSelection(selected?.source ?? null);
   }, [draftPicker, selected?.source, state.operation]);
-  useEffect(() => {
-    const wideLayout = window.matchMedia('(min-width: 64rem)');
-    const syncNavigation = () => setNavigation(wideLayout.matches);
-    syncNavigation();
-    wideLayout.addEventListener('change', syncNavigation);
-    return () => wideLayout.removeEventListener('change', syncNavigation);
-  }, []);
   useEffect(() => {
     onDepartureRiskChange?.(atRisk);
     return () => onDepartureRiskChange?.(false);
@@ -186,25 +193,51 @@ export function StudioWorkbench({
   }, [controller, selected, blocked, state.issue]);
   useEffect(() => {
     if (postId && previousPost.current !== postId) {
-      setTab('write');
+      setView('write');
+      setHistoryOpen(false);
+      setHistoryVisited(false);
       setDiscard(false);
       editorHeading.current?.focus({ preventScroll: true });
     }
     previousPost.current = postId;
   }, [postId]);
 
-  function keepWideNavigationOpen() {
-    if (window.matchMedia('(min-width: 64rem)').matches) setNavigation(true);
-    else setNavigation(false);
+  useLayoutEffect(() => {
+    if (!returnToAuthoring || historyOpen || view !== 'write') return;
+    authoringSelection.restore();
+    setReturnToAuthoring(false);
+  }, [returnToAuthoring, historyOpen, view, authoringSelection]);
+
+  function closePreview() {
+    setView('write');
+    setReturnToAuthoring(true);
   }
+  function closeHistory() {
+    setHistoryOpen(false);
+    setView('write');
+    setReturnToAuthoring(true);
+  }
+  function showHistory(keyboard: boolean) {
+    setHistoryVisited(true);
+    setHistoryOpen(true);
+    // A request belongs to this deliberate action, never to a render or an effect.
+    if (!state.versions && !state.historical && !state.versionNavigation.staged) void controller.loadVersions();
+    if (keyboard) setFocusHistory(true);
+  }
+  useLayoutEffect(() => {
+    if (!focusHistory || !historyOpen) return;
+    historyHeading.current?.focus({ preventScroll: true });
+    setFocusHistory(false);
+  }, [focusHistory, historyOpen]);
+
   function open(post: string) {
     if (post === postId) return;
     if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
       setPendingOpen(post);
       return;
     }
-    keepWideNavigationOpen();
-    setTab('write');
+    setView('write');
+    setHistoryOpen(false);
     void controller.open(post);
   }
   async function continueToDraft(save: boolean) {
@@ -215,8 +248,8 @@ export function StudioWorkbench({
     } else controller.discard();
     if (await controller.open(target)) {
       setPendingOpen(null);
-      keepWideNavigationOpen();
-      setTab('write');
+      setView('write');
+      setHistoryOpen(false);
     }
   }
   if (!port.isCurrent()) return <p role="status">{m.studio_workspace_ended({}, { locale: getLocale() })}</p>;
@@ -295,127 +328,108 @@ export function StudioWorkbench({
           </div>
         </section>
       ) : null}
-      <fieldset
-        className="studio-layout min-w-0"
-        disabled={startingBook}
-        style={
-          input.nativeDrafts && !selected
-            ? { gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateAreas: "'sidebar' 'document'" }
-            : undefined
-        }
-      >
-        <aside className="studio-sidebar" aria-label={m.studio_workspace_navigation({}, options)}>
-          <details
-            open={navigation}
-            onToggle={(event) => setNavigation(event.currentTarget.open)}
-            className="studio-mobile-navigation"
+      <ShellContextNavigation label={m.studio_workspace_navigation({}, options)}>
+        <fieldset className="studio-context-navigation studio-stack" disabled={startingBook}>
+          {state.structure ? (
+            <BookOrganizer
+              controller={controller}
+              state={state}
+              onOpen={open}
+              {...(bookHistory ? { history: bookHistory } : {})}
+            />
+          ) : null}
+          <section
+            aria-label={
+              input.profile.kind === 'book'
+                ? m.studio_workspace_drafts({}, options)
+                : m.studio_workspace_articles({}, options)
+            }
+            className="studio-stack"
           >
-            <summary>
+            <h2>
               {input.profile.kind === 'book'
-                ? m.studio_workspace_book_navigation({}, options)
-                : m.studio_workspace_article_navigation({}, options)}
-            </summary>
-            <div className="studio-stack">
-              {state.structure ? (
-                <BookOrganizer
-                  controller={controller}
-                  state={state}
-                  onOpen={open}
-                  {...(bookHistory ? { history: bookHistory } : {})}
-                />
-              ) : null}
-              <section
-                aria-label={
-                  input.profile.kind === 'book'
-                    ? m.studio_workspace_drafts({}, options)
-                    : m.studio_workspace_articles({}, options)
-                }
-                className="studio-stack"
-              >
-                <h2>
-                  {input.profile.kind === 'book'
-                    ? m.studio_workspace_drafts({}, options)
-                    : m.studio_workspace_articles({}, options)}
-                </h2>
-                <p className="studio-help">
-                  {input.profile.kind === 'book'
-                    ? m.studio_workspace_book_drafts_help({}, options)
-                    : m.studio_workspace_article_drafts_help({}, options)}
-                </p>
-                {draftPicker ? (
-                  <HostedDraftPickerView
-                    picker={draftPicker}
-                    disabled={atRisk || Boolean(selected?.invalid)}
-                    onSelect={(post) => void controller.open(post)}
-                  />
-                ) : null}
-                <ol className="studio-draft-list">
-                  {state.documents.items.map((document) => (
-                    <li key={document.postId}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        aria-current={postId === document.postId ? 'page' : undefined}
-                        disabled={blocked || document.openable === false}
-                        onClick={() => open(document.postId)}
-                      >
-                        {document.openable === false
-                          ? document.title.trim() || m.own_drafts_selection_unavailable({}, options)
-                          : document.title.trim() || m.own_drafts_no_title({}, options)}
-                      </Button>
-                      <span className="studio-help">
-                        {document.openable === false
-                          ? m.studio_account_continue_drafts({}, { locale: getLocale() })
-                          : document.state === 'published'
-                            ? m.studio_workspace_published_document({}, options)
-                            : document.state === 'protected'
-                              ? m.studio_workspace_protected_document({}, options)
-                              : document.state === 'taken_down'
-                                ? m.studio_workspace_taken_down({}, options)
-                                : m.studio_workspace_private_draft({}, options)}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-                {!state.documents.items.length ? <p>{m.studio_workspace_empty_page({}, options)}</p> : null}
-                {state.documents.nextCursor ? (
+                ? m.studio_workspace_drafts({}, options)
+                : m.studio_workspace_articles({}, options)}
+            </h2>
+            <p className="studio-help">
+              {input.profile.kind === 'book'
+                ? m.studio_workspace_book_drafts_help({}, options)
+                : m.studio_workspace_article_drafts_help({}, options)}
+            </p>
+            {draftPicker ? (
+              <HostedDraftPickerView
+                picker={draftPicker}
+                disabled={atRisk || Boolean(selected?.invalid)}
+                onSelect={open}
+              />
+            ) : null}
+            <ol className="studio-draft-list">
+              {draftDocuments.map((document) => (
+                <li key={document.postId}>
                   <Button
                     type="button"
-                    variant="outline"
-                    disabled={blocked}
-                    onClick={() => void controller.loadDocuments()}
+                    variant="ghost"
+                    aria-current={postId === document.postId ? 'page' : undefined}
+                    disabled={blocked || document.openable === false}
+                    onClick={() => open(document.postId)}
                   >
-                    {controller.failedPageCursor() === state.documents.nextCursor
-                      ? m.own_drafts_retry({}, { locale: getLocale() })
-                      : m.studio_workspace_next({}, options)}
+                    {document.openable === false
+                      ? document.title.trim() || m.own_drafts_selection_unavailable({}, options)
+                      : document.title.trim() || m.own_drafts_no_title({}, options)}
                   </Button>
-                ) : null}
-                {input.nativeDrafts ? (
-                  <NativeDraftComposer
-                    key={`${input.visitKey}:${locale}`}
-                    controller={controller}
-                    disabled={
-                      !input.canCreateDraft ||
-                      blocked ||
-                      Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)
-                    }
-                    onDepartureRiskChange={setNativeDraftRisk}
-                    onCommandPendingChange={setNativeCreationPending}
-                  />
-                ) : input.canCreateDraft ? (
-                  <NewDraft
-                    controller={controller}
-                    disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
-                  />
-                ) : null}
-              </section>
-              <details className="studio-technical">
-                <summary>{copy.workDetails}</summary>
-                <p>{m.studio_workspace_private_help({}, options)}</p>
-              </details>
-            </div>
+                  <span className="studio-help">
+                    {document.openable === false
+                      ? m.studio_account_continue_drafts({}, { locale: getLocale() })
+                      : document.state === 'published'
+                        ? m.studio_workspace_published_document({}, options)
+                        : document.state === 'protected'
+                          ? m.studio_workspace_protected_document({}, options)
+                          : document.state === 'taken_down'
+                            ? m.studio_workspace_taken_down({}, options)
+                            : m.studio_workspace_private_draft({}, options)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            {!draftDocuments.length ? <p>{m.studio_workspace_empty_page({}, options)}</p> : null}
+            {state.documents.nextCursor ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={blocked}
+                onClick={() => void controller.loadDocuments()}
+              >
+                {controller.failedPageCursor() === state.documents.nextCursor
+                  ? m.own_drafts_retry({}, { locale: getLocale() })
+                  : m.studio_workspace_next({}, options)}
+              </Button>
+            ) : null}
+            {input.nativeDrafts ? (
+              <NativeDraftComposer
+                key={`${input.visitKey}:${locale}`}
+                controller={controller}
+                disabled={
+                  !input.canCreateDraft ||
+                  blocked ||
+                  Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)
+                }
+                onDepartureRiskChange={setNativeDraftRisk}
+                onCommandPendingChange={setNativeCreationPending}
+              />
+            ) : input.canCreateDraft ? (
+              <NewDraft
+                controller={controller}
+                disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
+              />
+            ) : null}
+          </section>
+          <details className="studio-technical">
+            <summary>{copy.workDetails}</summary>
+            <p>{m.studio_workspace_private_help({}, options)}</p>
           </details>
-        </aside>
+        </fieldset>
+      </ShellContextNavigation>
+      <fieldset className="studio-layout min-w-0" disabled={startingBook}>
         <div id={`${id}-document`} className="studio-document" tabIndex={-1}>
           {selected ? (
             <>
@@ -446,26 +460,45 @@ export function StudioWorkbench({
                 ) : null}
               </header>
               <div className="studio-document-toolbar">
-                <nav className="studio-action-row" aria-label={m.studio_workspace_views({}, options)}>
-                  {(['write', 'preview', 'versions'] as const).map((view) => (
+                <div className="studio-action-row" role="group" aria-label={m.studio_workspace_views({}, options)}>
+                  {historyOpen ? (
                     <Button
-                      key={view}
                       type="button"
-                      variant={tab === view ? 'default' : 'outline'}
-                      aria-pressed={tab === view}
-                      disabled={
-                        tab === 'write' && view !== 'write' && Boolean(selected.snapshotPending || selected.uploading)
-                      }
-                      onClick={() => setTab(view)}
+                      variant="outline"
+                      aria-expanded={true}
+                      aria-controls={`${id}-history`}
+                      onClick={closeHistory}
                     >
-                      {view === 'write'
-                        ? m.studio_workspace_write({}, options)
-                        : view === 'preview'
-                          ? m.studio_workspace_preview({}, options)
-                          : m.studio_workspace_versions({}, options)}
+                      {copy.closeHistory}
                     </Button>
-                  ))}
-                </nav>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-controls={`${id}-canvas`}
+                      disabled={view === 'write' && Boolean(selected.snapshotPending || selected.uploading)}
+                      onClick={() => (view === 'preview' ? closePreview() : setView('preview'))}
+                    >
+                      {view === 'preview'
+                        ? m.studio_workspace_write({}, options)
+                        : m.studio_workspace_preview({}, options)}
+                    </Button>
+                  )}
+                  {!historyOpen ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      aria-expanded={false}
+                      aria-controls={`${id}-history`}
+                      disabled={blocked || selected.snapshotPending || selected.uploading}
+                      onClick={(event) =>
+                        showHistory(event.detail === 0 && document.activeElement === event.currentTarget)
+                      }
+                    >
+                      {m.studio_workspace_versions({}, options)}
+                    </Button>
+                  ) : null}
+                </div>
                 <Button
                   type="button"
                   disabled={
@@ -483,9 +516,12 @@ export function StudioWorkbench({
                   {m.studio_workspace_save({}, options)}
                 </Button>
               </div>
-              {/* Keep the editor mounted across previews so its undo and upload owners survive tab changes. */}
+              {/* Visibility never replaces the editor, its selection, undo or upload owners. */}
               <section
-                hidden={tab !== 'write'}
+                id={`${id}-canvas`}
+                ref={writingCanvas}
+                hidden={view !== 'write' || historyOpen}
+                onBlurCapture={(event) => authoringSelection.remember(event.target)}
                 aria-label={m.studio_workspace_write_region({}, options)}
                 className="studio-writing-canvas studio-stack"
               >
@@ -580,7 +616,7 @@ export function StudioWorkbench({
                   </div>
                 </WorkbenchRegion>
               </section>
-              {tab === 'preview' ? (
+              {view === 'preview' && !historyOpen ? (
                 <WorkingPreview
                   controller={controller}
                   selected={selected}
@@ -590,9 +626,32 @@ export function StudioWorkbench({
                   locale={locale}
                 />
               ) : null}
-              <div hidden={tab !== 'versions'}>
-                <StudioVersions key={postId} controller={controller} state={state} presentation={presentation} />
-              </div>
+              {historyVisited ? (
+                <section
+                  id={`${id}-history`}
+                  hidden={!historyOpen}
+                  className="studio-history-canvas studio-stack"
+                  aria-labelledby={`${id}-history-heading`}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape' && !event.defaultPrevented) {
+                      event.preventDefault();
+                      closeHistory();
+                    }
+                  }}
+                >
+                  <h2 id={`${id}-history-heading`} ref={historyHeading} tabIndex={-1}>
+                    {m.studio_workspace_versions({}, options)}
+                  </h2>
+                  <p className="studio-help">{copy.historyHelp}</p>
+                  <StudioVersions
+                    key={postId}
+                    controller={controller}
+                    state={state}
+                    presentation={presentation}
+                    active={historyOpen}
+                  />
+                </section>
+              ) : null}
             </>
           ) : (
             <section className="studio-empty">
