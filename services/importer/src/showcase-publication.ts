@@ -70,6 +70,7 @@ import {
   subjectId,
   subjectType,
   type AdoptionSnapshot,
+  type CandidateRank,
   type CandidatePage,
   type CandidateRead,
   type CoverVariant,
@@ -1920,7 +1921,7 @@ async function publishShowcasePhases(
     const adoptionKey = groupKey(childId, 'skos:broader');
     adoptionSnapshots.set(adoptionKey, currentAdoption);
     const priorSelection = Array.isArray(previous?.selection) ? previous.selection : [];
-    const selections = new Map<string, 'normal' | 'preferred'>();
+    const selections = new Map<string, CandidateRank>();
     let parentRetirementUnavailable = false;
     for (const item of priorSelection) {
       if (!item?.candidate) continue;
@@ -1933,7 +1934,7 @@ async function publishShowcasePhases(
         }
         continue;
       }
-      selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
+      selections.set(item.candidate, item.rank);
     }
     if (parentRetirementUnavailable) {
       for (const { binding, assertion } of group.edges)
@@ -2188,7 +2189,7 @@ async function publishShowcasePhases(
         continue;
       }
     }
-    const selections = new Map<string, 'normal' | 'preferred'>();
+    const selections = new Map<string, CandidateRank>();
     for (const item of priorSelection) {
       if (!item?.candidate) continue;
       const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
@@ -2217,7 +2218,7 @@ async function publishShowcasePhases(
           );
         if (explicitlyWithdrawn || parentWithheld || staleCurrentAssociation) continue;
       }
-      selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
+      selections.set(item.candidate, item.rank);
     }
     for (const candidateId of group.ids) selections.set(candidateId, selections.get(candidateId) ?? 'normal');
     if (selections.size > showcaseLimits.reviewPage) {

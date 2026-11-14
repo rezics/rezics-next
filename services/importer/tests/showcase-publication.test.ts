@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteResult } from '@rezics/definitions/bulk';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import {
@@ -34,7 +34,7 @@ import {
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
-import { prepareShowcaseTags } from '../src/showcase-tags.ts';
+import { prepareShowcaseTagParentPublications, prepareShowcaseTags } from '../src/showcase-tags.ts';
 import { finalizeSeedResult, formatSeedArtifactHandoff, formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -59,6 +59,31 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
   const tagConceptId = '00000000-0000-4000-8000-000000000042';
   const tagSchemeUri = vndbPublicTagScheme('cont');
   const tagConceptUri = vndbPublicTagConceptUri('cont', 'g105');
+  const graphParentId = randomUUID();
+  const graphParentUri = vndbPublicTagConceptUri('cont', 'g106');
+  const graphParentBinding = {
+    child: 'g105',
+    parent: 'g106',
+    main: false,
+    category: 'cont' as const,
+    path: '/tags_parents/g105/g106',
+    childId: tagConceptId,
+    parentId: graphParentId,
+    schemeId: tagSchemeId,
+    childUri: tagConceptUri,
+    parentUri: graphParentUri,
+    schemeUri: tagSchemeUri,
+    releaseDigest: bundledDigest,
+  };
+  const graphParentRefresh = {
+    category: 'cont' as const,
+    tagId: 'g105',
+    childId: tagConceptId,
+    schemeId: tagSchemeId,
+    childUri: tagConceptUri,
+    schemeUri: tagSchemeUri,
+    releaseDigest: bundledDigest,
+  };
   subjects.set(tagSchemeId, {
     id: tagSchemeId,
     type: 'skos:ConceptScheme',
@@ -76,6 +101,16 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
     },
   });
+  subjects.set(graphParentId, {
+    id: graphParentId,
+    type: 'skos:Concept',
+    sourceExternalId: 'vocabulary:vndb.tag.cont:g106',
+    labels: { und: 'Related tag' },
+    statements: {
+      'schema:url': [{ value: { type: 'value', content: graphParentUri } }],
+      'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
+    },
+  });
   const bySource = new Map<string, string>();
   const candidateByKey = new Map<string, string>();
   const candidates = new Map<
@@ -84,7 +119,19 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
   >();
   const synopsisDocuments = new Map<string, { document: string; digest: string; language: string }>();
   const accepted = new Set<string>();
-  const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
+  type NativeRank = 'normal' | 'preferred' | 'deprecated';
+  type AdoptionSelection = { candidate: string; rank: NativeRank }[];
+  type AdoptionBody = {
+    context: string;
+    property: string;
+    mode: 'inherit' | 'replace' | 'suppress';
+    expected_head: number | null;
+    selection: AdoptionSelection;
+  };
+  const adopted = new Map<string, { head: number; selection: AdoptionSelection }>();
+  const adoptionWrites: { subjectId: string; body: AdoptionBody }[] = [];
+  const seededAcceptedCandidates = new Set<string>();
+  const retainedAbstractCandidates = new Set<string>();
   const publicReadIds = new Set<string>();
   const publicReads = new Map<string, any>();
   const acceptanceCalls: { candidateId: string; body: unknown; idempotencyKey: string }[] = [];
@@ -238,6 +285,48 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     });
   try {
     let preparedTags = await prepareSelectedTags();
+    const parentPublication = await prepareShowcaseTagParentPublications({
+      evidence: [graphParentBinding],
+      port,
+      journal,
+    });
+    const graphParentCandidateId = parentPublication.acknowledgements[0]!.candidateId!;
+    const graphParentCandidate = candidates.get(graphParentCandidateId)!;
+    const graphUnrelatedId = randomUUID();
+    const graphUnrelatedParentId = randomUUID();
+    const graphParentStatement = graphParentCandidate.statement;
+    if (graphParentStatement.value.type !== 'value') throw new Error('Graph parent fixture requires a value');
+    const graphUnrelatedStatement: BatchStatement = {
+      ...graphParentStatement,
+      value: { ...graphParentStatement.value, content: graphUnrelatedParentId },
+    };
+    subjects.set(graphUnrelatedParentId, {
+      id: graphUnrelatedParentId,
+      type: 'skos:Concept',
+      sourceExternalId: 'manual:unrelated-parent',
+      labels: { en: 'Unrelated parent' },
+      statements: {
+        'schema:url': [{ value: { type: 'value', content: 'https://fixture.test/unrelated-parent' } }],
+        'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
+      },
+    });
+    candidates.set(graphUnrelatedId, {
+      id: graphUnrelatedId,
+      source: null,
+      statement: graphUnrelatedStatement,
+      head: null,
+    });
+    accepted.add(graphParentCandidateId);
+    accepted.add(graphUnrelatedId);
+    seededAcceptedCandidates.add(graphParentCandidateId);
+    seededAcceptedCandidates.add(graphUnrelatedId);
+    adopted.set(`${tagConceptId}\0skos:broader`, {
+      head: 2,
+      selection: [
+        { candidate: graphParentCandidateId, rank: 'deprecated' },
+        { candidate: graphUnrelatedId, rank: 'deprecated' },
+      ],
+    });
     const seed = () =>
       seedShowcaseVndbReleases({
         tables,
@@ -287,7 +376,14 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
               (candidate) =>
                 (candidate.source?.external_id === subjects.get(id)?.sourceExternalId &&
                   candidate.statement.property.id === query.property) ||
-                (candidate.id === unrelatedId && id === workId && query.property === 'schema:name'),
+                (candidate.id === unrelatedId && id === workId && query.property === 'schema:name') ||
+                (retainedAbstractCandidates.has(candidate.id) &&
+                  id === workId &&
+                  query.property === 'schema:abstract') ||
+                (candidate.id === graphUnrelatedId && id === tagConceptId && query.property === 'skos:broader') ||
+                (candidate.source?.external_id === graphParentBinding.path &&
+                  id === tagConceptId &&
+                  query.property === 'skos:broader'),
             )
             .map((candidate) => ({
               ...candidate,
@@ -317,8 +413,10 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
           context: string;
           property: string;
           mode: 'inherit' | 'replace' | 'suppress';
-          selection: { candidate: string; rank: 'normal' | 'preferred' }[];
+          expected_head: number | null;
+          selection: AdoptionSelection;
         };
+        adoptionWrites.push({ subjectId: id, body: structuredClone(action) });
         const key = `${id}\0${action.property}`;
         const next = { head: (adopted.get(key)?.head ?? 0) + 1, selection: action.selection };
         adopted.set(key, next);
@@ -490,6 +588,9 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       tagAssociationRefreshes: preparedTags.associationRefreshes,
       tagWeightObservations: preparedTags.tagWeightObservations,
       tagWeightRefreshes: preparedTags.tagWeightRefreshes,
+      tagParentEvidence: [graphParentBinding],
+      tagParentAcknowledgements: parentPublication.acknowledgements,
+      tagParentRefreshes: [graphParentRefresh],
     };
     // A fresh public reader can see the native Subject before its source identifier is adopted.
     // Publication must recover that exact original create target without rewriting seed identity evidence.
@@ -508,7 +609,35 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(firstInput.readings.some((reading) => reading.externalId === '101')).toBe(false);
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
-    expect(accepted.size).toBe(0);
+    expect(accepted).toEqual(seededAcceptedCandidates);
+    const graphReplacement = adoptionWrites.find(
+      (write) => write.subjectId === tagConceptId && write.body.property === 'skos:broader',
+    );
+    const expectedGraphSelection: AdoptionSelection = [
+      { candidate: graphParentCandidateId, rank: 'normal' },
+      { candidate: graphUnrelatedId, rank: 'deprecated' },
+    ].sort((left, right) => left.candidate.localeCompare(right.candidate));
+    expect(graphReplacement?.body).toEqual({
+      context: globalContext,
+      property: 'skos:broader',
+      mode: 'replace',
+      expected_head: 2,
+      selection: expectedGraphSelection,
+    });
+    expect(adopted.get(`${tagConceptId}\0skos:broader`)?.selection).toEqual(expectedGraphSelection);
+    expect(subjects.get(tagConceptId)!.statements['skos:broader']).toEqual(
+      expectedGraphSelection.map(({ candidate }) => candidates.get(candidate)!.statement),
+    );
+    const graphReadback = await review.reviewedCandidates(tagConceptId, {
+      context: globalContext,
+      property: 'skos:broader',
+    });
+    expect(graphReadback.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: graphParentCandidateId, rank: 'normal' }),
+        expect.objectContaining({ id: graphUnrelatedId, rank: 'deprecated' }),
+      ]),
+    );
     const synopses = [...candidates.values()].filter(
       (candidate) => candidate.statement.property.id === 'schema:abstract',
     );
@@ -640,6 +769,35 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     refuseAcceptance = false;
+    const sourceSynopsis = synopses.find((candidate) => candidate.source?.external_id === '101')!;
+    const retainedAbstractSelection: AdoptionSelection = [
+      { candidate: randomUUID(), rank: 'normal' },
+      { candidate: randomUUID(), rank: 'preferred' },
+      { candidate: randomUUID(), rank: 'deprecated' },
+    ];
+    for (const selection of retainedAbstractSelection) {
+      const statement: BatchStatement = {
+        ...sourceSynopsis.statement,
+        value: {
+          type: 'value',
+          content: {
+            language: 'en',
+            document: { type: 'text', value: `Previously reviewed ${selection.rank} synopsis` },
+          },
+        },
+        references: [],
+      };
+      candidates.set(selection.candidate, {
+        id: selection.candidate,
+        source: null,
+        statement,
+        head: null,
+      });
+      accepted.add(selection.candidate);
+      seededAcceptedCandidates.add(selection.candidate);
+      retainedAbstractCandidates.add(selection.candidate);
+    }
+    adopted.set(`${workId}\0schema:abstract`, { head: 1, selection: retainedAbstractSelection });
     const tagAcceptanceCallsBeforeReplay = acceptanceCalls.filter(
       (call) => call.candidateId === membershipCandidateId,
     ).length;
@@ -713,7 +871,34 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       candidateKeys.set(call.idempotencyKey, call.candidateId);
     }
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
-    expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
+    const expectedAbstractSelection: AdoptionSelection = [
+      ...retainedAbstractSelection,
+      { candidate: sourceSynopsis.id, rank: 'normal' },
+    ].sort((left, right) => left.candidate.localeCompare(right.candidate));
+    const abstractReplacement = adoptionWrites.find(
+      (write) => write.subjectId === workId && write.body.property === 'schema:abstract',
+    );
+    expect(abstractReplacement?.body).toEqual({
+      context: globalContext,
+      property: 'schema:abstract',
+      mode: 'replace',
+      expected_head: 1,
+      selection: expectedAbstractSelection,
+    });
+    const abstractReadback = await review.reviewedCandidates(workId, {
+      context: globalContext,
+      property: 'schema:abstract',
+    });
+    expect(abstractReadback.candidates).toEqual(
+      expect.arrayContaining(
+        expectedAbstractSelection.map((selection) =>
+          expect.objectContaining({ id: selection.candidate, rank: selection.rank }),
+        ),
+      ),
+    );
+    expect(accepted).toEqual(
+      new Set([...acknowledged.map((entry) => entry.candidateId!), ...seededAcceptedCandidates]),
+    );
     expect(
       replayed.published
         .find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')
@@ -722,18 +907,32 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     for (const candidate of synopses) {
       const subject = [...subjects.values()].find((item) => item.sourceExternalId === candidate.source?.external_id)!;
       expect(accepted.has(candidate.id)).toBe(true);
-      expect(adopted.get(`${subject.id}\0schema:abstract`)?.selection).toEqual([
-        { candidate: candidate.id, rank: 'normal' },
-      ]);
-      expect(subject.statements['schema:abstract']).toEqual([candidate.statement]);
+      const currentSelection = adopted.get(`${subject.id}\0schema:abstract`)!.selection;
+      expect(currentSelection).toEqual(
+        subject.id === workId
+          ? [
+              ...retainedAbstractSelection,
+              { candidate: candidate.id, rank: 'normal' },
+            ].sort((left, right) => left.candidate.localeCompare(right.candidate))
+          : [{ candidate: candidate.id, rank: 'normal' }],
+      );
+      expect(subject.statements['schema:abstract']).toEqual(
+        currentSelection.map(({ candidate: selectedCandidate }) => candidates.get(selectedCandidate)!.statement),
+      );
       expect(publicReadIds.has(subject.id)).toBe(true);
-      expect(publicReads.get(subject.id)?.subject?.statements?.['schema:abstract']).toEqual([
+      const publicAbstractRows = publicReads.get(subject.id)?.subject?.statements?.['schema:abstract'];
+      expect(publicAbstractRows).toContainEqual(
         expect.objectContaining({
           id: candidate.id,
           rank: 'normal',
           value: { type: 'value', content: synopsisDocuments.get(candidate.id) },
         }),
-      ]);
+      );
+      if (subject.id === workId)
+        for (const retained of retainedAbstractSelection)
+          expect(publicAbstractRows).toContainEqual(
+            expect.objectContaining({ id: retained.candidate, rank: retained.rank }),
+          );
       const publishedSynopsis = replayed.published
         .find((record) => record.provider === 'bangumi' && record.sourceKey === candidate.source?.external_id)
         ?.assertions.find((assertion) => assertion.candidateId === candidate.id);
@@ -948,6 +1147,9 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       tagAssociationRefreshes: preparedTags.associationRefreshes,
       tagWeightObservations: preparedTags.tagWeightObservations,
       tagWeightRefreshes: preparedTags.tagWeightRefreshes,
+      tagParentEvidence: [graphParentBinding],
+      tagParentAcknowledgements: parentPublication.acknowledgements,
+      tagParentRefreshes: [graphParentRefresh],
     };
     publicReadIds.clear();
     const resumed = await publishShowcase({
@@ -965,14 +1167,17 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       code: 'vocabulary-binding-missing',
     });
     expect(resumed.status).toBe('incomplete');
-    expect(resumed.published.map((record) => record.subjectId).sort()).toEqual([...workIds].sort());
+    expect(resumed.published.map((record) => record.subjectId).sort()).toEqual(
+      [...new Set([...workIds, tagConceptId])].sort(),
+    );
     expect(accepted).toEqual(
-      new Set(
-        journal
+      new Set([
+        ...journal
           .acknowledgedCommands()
           .filter((entry) => entry.candidateId)
           .map((entry) => entry.candidateId!),
-      ),
+        ...seededAcceptedCandidates,
+      ]),
     );
     const relation = resumed.published
       .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
