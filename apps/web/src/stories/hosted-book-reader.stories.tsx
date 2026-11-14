@@ -1,16 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createKernelClient } from '@rezics/client';
 import { useEffect, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { HostedBookReader, type HostedBookReaderProps } from '../books/reader/hosted-book-reader';
 import { HostedBookCheckpointControls } from '../books/reader/checkpoint-controls';
-import { createHostedBookNavigation } from '../books/reader/route';
+import { createHostedBookNavigation, HostedBookVisitView, parseHostedBookSearch, hostedBookSubjectHref, type HostedBookVisit } from '../books/reader/route';
+import { readHostedDiscovery } from '../books/reader/discovery';
+import { observeHostedBookVisit } from '../books/reader/visit';
 import { hostedBookAddressHref } from '../books/reader/address';
 import {
   createIllustrativeHostedBook,
   illustrativeBookIds,
+  illustrativeBookCursor,
+  illustrativeBookLastCursor,
   type IllustrativeBookState,
 } from '../books/reader/illustrative-source';
 import type {
@@ -407,5 +412,160 @@ export const FailedPreviousRetry: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.book_reader_retry() }));
     await canvas.findByText('Dawn, an echo / 再読');
     await expect(canvas.queryByText('Dawn / 黎明')).toBeNull();
+  },
+};
+
+type CatalogueState = 'multiple' | 'sparse' | 'direct' | 'failed' | 'selected';
+
+/** Actual route composition and native response decoder, with only illustrative HTTP/Router seams. */
+function CatalogueJourney({ state }: { state: CatalogueState }) {
+  const [runtime] = useState(() => {
+    const book = createIllustrativeHostedBook();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
+    return { book, client, navigation: createHostedBookNavigation() };
+  });
+  const locale = getLocale();
+  const [href, setHref] = useState(() => hostedBookSubjectHref(illustrativeBookIds.post, locale,
+    state === 'multiple' || state === 'selected' ? undefined : illustrativeBookCursor));
+  const [retry, setRetry] = useState(0);
+  const [visit, setVisit] = useState<{ href: string; locale: string; value: HostedBookVisit } | null>(null);
+  const [transportReady, setTransportReady] = useState(false);
+  useEffect(() => {
+    let current = true;
+    const fallback = globalThis.fetch;
+    const transport: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      if (!url.pathname.startsWith(`/v1/hostedCatalogues/${illustrativeBookIds.catalogue}`)) return fallback(input, init);
+      const { api } = await runtime.book.ready;
+      const query = Object.fromEntries(url.searchParams) as Parameters<typeof api.children>[1];
+      const occurrence = url.pathname.split('/occurrences/')[1]?.split('/')[0];
+      const result = url.pathname.endsWith('/children')
+        ? await api.children(illustrativeBookIds.catalogue, query)
+        : url.pathname.endsWith('/navigation')
+          ? await api.navigate(illustrativeBookIds.catalogue, occurrence!, {
+              ...query, direction: url.searchParams.get('direction') as 'previous' | 'next',
+            })
+          : url.pathname.endsWith('/metadata')
+            ? await api.metadata(illustrativeBookIds.catalogue, occurrence!, query)
+            : occurrence
+              ? await api.resolve(illustrativeBookIds.catalogue, occurrence, query)
+              : await api.catalogue(illustrativeBookIds.catalogue, query);
+      return Response.json(result.state === 'ready' ? result.value : {}, { status: result.state === 'ready' ? 200 : 503 });
+    };
+    globalThis.fetch = transport;
+    void runtime.book.ready.then(() => { if (current) setTransportReady(true); });
+    return () => {
+      current = false;
+      if (globalThis.fetch === transport) globalThis.fetch = fallback;
+      runtime.navigation.retire();
+      runtime.client.clear();
+    };
+  }, [runtime]);
+  useEffect(() => {
+    if (!transportReady) return;
+    const controller = new AbortController();
+    const load = async () => {
+      const url = new URL(href, window.location.origin);
+      const search = parseHostedBookSearch(Object.fromEntries(url.searchParams));
+      const catalogueId = decodeURIComponent(url.pathname.split('/').at(-2)!);
+      let value: HostedBookVisit;
+      if (search.view === 'catalogues') {
+        const native = createKernelClient('https://illustrative-discovery.test', { fetch: async () => {
+          if (state === 'failed' && retry === 0) {
+            return Response.json({}, { status: 503 });
+          }
+          const row = { catalogueId: illustrativeBookIds.catalogue, revisionId: illustrativeBookIds.release,
+            sourceRevisionId: illustrativeBookIds.structure, threadId: illustrativeBookIds.thread, kind: 'publication',
+            title: 'The observatory, the coast, and the long way home / 天文台から海へ' };
+          return Response.json({ subjectId: illustrativeBookIds.post,
+            items: search.cursor === illustrativeBookCursor ? [] : [row],
+            nextCursor: !search.cursor ? illustrativeBookCursor : search.cursor === illustrativeBookCursor ? illustrativeBookLastCursor : null,
+          });
+        } });
+        const read = await readHostedDiscovery(native, null, catalogueId, search.cursor, controller.signal);
+        value = read.state === 'ready' ? { state: 'catalogues', page: read.value } : read;
+      } else {
+        const { api } = await runtime.book.ready;
+        value = await observeHostedBookVisit(api, { catalogueId, locale, search }, { kind: 'anonymous' }, m.book_reader_title());
+      }
+      if (!controller.signal.aborted) setVisit({ href, locale, value });
+    };
+    void load();
+    return () => controller.abort();
+  }, [runtime, state, href, locale, retry, transportReady]);
+  const url = new URL(href, 'https://illustrative-reader.test');
+  const location = { catalogueId: decodeURIComponent(url.pathname.split('/').at(-2)!),
+    search: parseHostedBookSearch(Object.fromEntries(url.searchParams)) };
+  return (
+    <QueryClientProvider client={runtime.client}>
+      <main className="min-w-0">
+        <p role="note" className="mx-auto max-w-3xl px-4 pt-4 text-xs text-muted-foreground">
+          Illustrative native-format pages through the actual chooser and reader composition. Each activation rereads
+          its exact address. These examples do not establish native catalogue-to-reader acceptance.
+        </p>
+        {visit?.href === href && visit.locale === locale ? (
+          <HostedBookVisitView visit={visit.value} locale={locale} navigation={runtime.navigation} location={location}
+            navigate={(target) => {
+              const path = new URL(target, window.location.origin).pathname;
+              if (path !== new URL(href, window.location.origin).pathname) runtime.navigation.retireReading();
+              setVisit(null);
+              setHref(target);
+            }}
+            reload={() => { setVisit(null); setRetry((value) => value + 1); }} />
+        ) : <p role="status" className="px-4 py-8">{m.book_reader_loading()}</p>}
+      </main>
+    </QueryClientProvider>
+  );
+}
+
+export const MultipleCataloguePages: Story = {
+  render: () => <CatalogueJourney state="multiple" />,
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_catalogues_more() }));
+    await canvas.findByText(m.book_reader_catalogues_empty());
+    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_catalogues_more() }));
+    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_catalogues_previous() }));
+    await canvas.findByText(m.book_reader_catalogues_empty());
+    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_catalogues_first() }));
+    await expect(canvas.queryByRole('link', { name: m.book_reader_catalogues_previous() })).toBeNull();
+  },
+};
+export const SparseCatalogueContinuation: Story = { render: () => <CatalogueJourney state="sparse" /> };
+export const DirectCatalogueEntry: Story = {
+  render: () => <CatalogueJourney state="direct" />,
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.book_reader_catalogues_empty());
+    await expect(canvas.queryByRole('link', { name: m.book_reader_catalogues_previous() })).toBeNull();
+    await expect(canvas.getByRole('link', { name: m.book_reader_catalogues_first() })).toBeVisible();
+  },
+};
+export const FailedCatalogueRetry: Story = {
+  render: () => <CatalogueJourney state="failed" />,
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.book_reader_retry() }));
+    await canvas.findByText(m.book_reader_catalogues_empty());
+  },
+};
+export const SelectedCatalogueReturn: Story = {
+  render: () => <CatalogueJourney state="selected" />,
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_catalogues_more() }));
+    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_catalogues_more() }));
+    await userEvent.click(await canvas.findByRole('link', { name: /The observatory/ }));
+    const back = await canvas.findByRole('link', { name: m.book_reader_catalogues_return() });
+    await expect(new URL(back.getAttribute('href')!, window.location.origin).searchParams.get('cursor')).toBe(illustrativeBookLastCursor);
+    await userEvent.click(back);
+    await canvas.findByRole('link', { name: /The observatory/ });
+    await expect(canvas.getByRole('link', { name: m.book_reader_catalogues_previous() })).toBeVisible();
   },
 };

@@ -11,11 +11,12 @@ view. The reader uses Library's native hosted-reading checkpoint with explicit s
 positions; no automatic write or ordinary Progress conversion occurs. Hosts use the declared `books/reader/route.tsx`
 composition entry.
 
-The entry's `hostedBookNavigationForRouter` owns the bounded contents/focus visit and its subscriptions. File routes
-supply their existing Router and QueryClient. Search-only loader replacement retains that Router's visit; successful
-session replacement and `pagehide` retire its coordinates and pending focus. A pathname departure also removes the
-session, page and route subscriptions and the Router entry, so returning starts empty. Frozen release, occurrence,
-contents return and Back/Forward rereads keep their existing meaning.
+The entry's `hostedBookNavigationForRouter` owns the bounded contents/chooser/focus visit and its subscriptions.
+File routes supply their existing Router and QueryClient. Search-only loader replacement retains that Router's
+visit; successful session replacement and `pagehide` retire its coordinates and pending focus. Moving between Book
+reader paths retires chapter/contents coordinates while preserving the independent chooser window. Leaving the Book
+reader route removes its session, page and route subscriptions and Router entry, so returning starts empty. Frozen
+release, occurrence, contents return and Back/Forward rereads keep their existing meaning.
 
 Existing [reader stories](../../stories/hosted-book-reader.stories.tsx) cover `MultipleContentsPages`,
 `NestedLevelReturn`, `FailedPreviousRetry` and `RetiredReading`; these states need no additional variants for entry
@@ -29,9 +30,10 @@ preload cache or stale route payload: `staleTime: 0`, `gcTime: 0`, `shouldReload
 The default catalogue visit is the current public publication's root contents. Subject discovery uses the same
 route with `view=catalogues`; its path ID is then the Subject ID. It calls the generated
 `subjects({id}).hostedCatalogues.get` once with `includeTitle=1`, `limit=20` and the original optional opaque cursor
-on initial, continuation and Retry reads. Empty and sparse windows retain More when supplied, and Retry rereads
-the same URL. Each row opens its disclosed publication and retains `subject` in subsequent exact chapter and
-contents links. `readHostedBookVisit` prepares the native Web
+on initial, continuation and Retry reads. Empty and sparse windows retain More when supplied. Previous uses retained
+predecessor evidence, First page restarts the current Subject chooser, and Retry rereads the same URL. Each row opens
+its disclosed publication and retains `subject` and the independent chooser return descriptor in subsequent exact
+chapter and contents links. `readHostedBookVisit` prepares the native Web
 session, reads the current publication with the installed generated catalogue operation, resolves any frozen
 release and selected occurrence, and produces `NativeHostedBookAdmission` for this visit. An omitted or empty
 catalogue title uses the localized Book title; it does not refuse an otherwise readable chapter. Credentials never enter URLs or
@@ -276,6 +278,16 @@ Only their destination selectors change from buttons to canonical links; their o
 installed native response shapes. Its named states are `saved`, `unknown-save`, `unknown-clear`, `failed-read` and
 `replaced-visit`; all use locale globals and wrapping 44px controls. These fixtures and interaction sources do not
 claim native save/Continue, keyboard, phone/desktop visual or retirement acceptance; those remain verifier-owned.
+
+`MultipleCataloguePages`, `SparseCatalogueContinuation`, `DirectCatalogueEntry`, `FailedCatalogueRetry` and
+`SelectedCatalogueReturn` mount the real chooser/reader route composition with illustrative native-format responses.
+Their local HTTP and Router seams retain only the explicit address, abort replaced reads and restore the HTTP seam
+on unmount. These named stories add no native acceptance claim. The chooser regression source pins one bounded list
+read per explicit traversal/retry/return, sparse Previous, first-page restart, modified links, exact frozen release
+and chooser operands, keyboard/pointer focus, browser Back/Forward, failed selected admission and expired direct entry.
+Coordinate cases pin the eight-predecessor bound, pending-render stability, scope replacement and 4,096-character URL
+limits. Execution, mounted native catalogue-to-reader return, phone/desktop keyboard, theme and locale acceptance
+remain verifier-owned; original complete Book acceptance remains open.
 
 `tests/hosted-book-reader.test.tsx` retains original bounds, exact operands, reuse, sparse retry, move, focus,
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native

@@ -26,13 +26,17 @@ export function createBookCatalogueNavigation() {
     generation: () => generation,
     retire,
     bind(identity: string) {
-      if (scope !== null && scope !== identity) retire();
+      const changed = scope !== null && scope !== identity;
+      if (changed) retire();
       scope = identity;
+      return changed;
     },
     stage(cursor: string | null, movement: Movement = 'exact') {
       window = { ...window, staged: { cursor, movement, from: window.current } };
     },
     observe(cursor: string | null) {
+      // Rerendering the old admitted page while a new read is pending must retain that staged traversal.
+      if (window.current?.cursor === cursor && window.staged?.cursor !== cursor) return;
       const target = { cursor };
       const staged = window.staged?.cursor === cursor ? window.staged : null;
       let pages = window.pages;

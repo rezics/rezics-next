@@ -33,10 +33,13 @@ export const Route = createFileRoute('/books/$id/read')({
 
 function BookReaderPending() {
   const search = Route.useSearch();
+  const catalogues = search.view === 'catalogues';
   const contents = search.view === 'contents' || (search.view === undefined && !search.occurrence);
   return (
     <main aria-busy="true" className="mx-auto grid max-w-3xl gap-4 px-4 py-8">
-      <h1 className="text-2xl font-semibold">{contents ? m.book_reader_contents() : m.book_reader_title()}</h1>
+      <h1 className="text-2xl font-semibold">
+        {catalogues ? m.book_reader_catalogues_heading() : contents ? m.book_reader_contents() : m.book_reader_title()}
+      </h1>
       <p role="status">{m.book_reader_loading()}</p>
       {contents ? <p className="text-sm text-muted-foreground">{m.book_reader_contents_recovery()}</p> : null}
     </main>
