@@ -157,11 +157,7 @@ test('hosted authoring receipts replay after source erasure without probes or ne
     const failuresStart = observer.records.length;
     const unauthorized = await send(`${path}:insertDraftPoint`, insertInput, insertKey, true);
     expect(unauthorized.status).toBe(403);
-    const conflict = await send(
-      `${path}:insertDraftPoint`,
-      { ...insertInput, title: 'Different request' },
-      insertKey,
-    );
+    const conflict = await send(`${path}:insertDraftPoint`, { ...insertInput, title: 'Different request' }, insertKey);
     expect(conflict.status).toBe(409);
     const freshStatuses: number[] = [];
     for (const command of commands)
