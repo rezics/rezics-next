@@ -2,7 +2,8 @@ import type { Pool } from 'pg';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import { accessCheck, deadlineClient } from './domain-ports.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { realmReadEligibility } from './realm-read.ts';
@@ -20,6 +21,14 @@ export const COMMUNITY_SITEMAP_MAX_LIMIT = 1000;
 const CANDIDATES_PER_ITEM = 4;
 const ZERO_ID = '00000000-0000-0000-0000-000000000000';
 const ANONYMOUS: Actor = Object.freeze({ kind: 'anonymous' });
+const boundedReadOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  mapError(error: unknown) {
+    if (error instanceof AccessUnavailableError) return error;
+    const reason = classifyUnavailability(error);
+    return reason ? new AccessUnavailableError(reason) : error;
+  },
+};
 
 export type CommunitySitemapInput = { cursor?: string; limit?: number };
 export type SitemapRealmItem = Static<ReturnType<typeof SitemapRealmItemSchema>>;
@@ -147,10 +156,10 @@ async function activeAddress(
   spaceId: string,
   address: string,
 ): Promise<boolean> {
-  return withConnection(dependencies.pool, async (client) => {
+  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
     const claim = await readSpaceAddress(deadlineClient(client, deadline), address);
     return claim?.spaceId === spaceId;
-  });
+  }, boundedReadOptions);
 }
 
 function candidatePosition(candidate: Candidate): Position {
@@ -185,19 +194,20 @@ function sameSpaceSource(current: SpaceSource, initial: NonNullable<SpaceSource>
 
 async function candidates(
   dependencies: CommunitySitemapDependencies,
+  deadline: number,
   feed: Feed,
   after: Position | null,
   limit: number,
 ): Promise<Candidate[]> {
   const params = { route: after?.route ?? -1, id: after?.id ?? ZERO_ID, limit };
-  return withConnection(dependencies.pool, async (client) => {
+  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
     if (feed === 'realms') {
       const rows = await realmsPage.run(client, params);
       return rows.map((row) => ({ route: row.route, id: row.realm_id }));
     }
     const rows = await spacesPage.run(client, params);
     return rows.map((row) => ({ route: row.route, id: row.space_id }));
-  });
+  }, boundedReadOptions);
 }
 
 async function listedRealm(
@@ -207,21 +217,24 @@ async function listedRealm(
   at: string,
 ): Promise<SitemapRealmItem | null> {
   const params = { ...candidate, at };
-  const initial = await withConnection(dependencies.pool, (client) =>
-    readRealmHead.run(deadlineClient(client, deadline), params),
+  const initial = await withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    (client) => readRealmHead.run(deadlineClient(client, deadline), params),
+    boundedReadOptions,
   );
   if (!initial) return null;
   const realmCheck = await anonymousCheck(dependencies, deadline, 'realm', candidate.route, candidate.id);
   const spaceCheck = await anonymousCheck(dependencies, deadline, 'space', candidate.route, initial.space_id);
-  const admitted = await withConnection(dependencies.pool, async (client) => {
+  const admitted = await withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
     const home = deadlineClient(client, deadline);
     return (await realmCheck(home)) && (await spaceCheck(home));
-  });
+  }, boundedReadOptions);
   if (!admitted) return null;
   if (initial.address !== null && !(await activeAddress(dependencies, deadline, initial.space_id, initial.address)))
     return null;
 
-  return withConnection(dependencies.pool, async (client) => {
+  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
     const home = deadlineClient(client, deadline);
     if (!(await realmCheck(home)) || !(await spaceCheck(home))) return null;
     const board = await newestRealmBoard.run(home, candidate);
@@ -244,7 +257,7 @@ async function listedRealm(
         board?.created_at ?? null,
       ),
     };
-  });
+  }, boundedReadOptions);
 }
 
 async function listedSpace(
@@ -255,20 +268,20 @@ async function listedSpace(
 ): Promise<SitemapSpaceItem | null> {
   const check = await anonymousCheck(dependencies, deadline, 'space', candidate.route, candidate.id);
   const params = { ...candidate, at };
-  const initial = await withConnection(dependencies.pool, async (client) => {
+  const initial = await withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
     const home = deadlineClient(client, deadline);
     if (!(await check(home))) return null;
     return readSpace.run(home, params);
-  });
+  }, boundedReadOptions);
   if (!initial || initial.address === null || initial.revision_created_at === null) return null;
   if (!(await activeAddress(dependencies, deadline, candidate.id, initial.address))) return null;
-  return withConnection(dependencies.pool, async (client) => {
+  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
     const home = deadlineClient(client, deadline);
     if (!(await check(home))) return null;
     const head = await readSpace.run(home, params);
     if (!sameSpaceSource(head, initial) || head.address === null || head.revision_created_at === null) return null;
     return { id: candidate.id, address: head.address, lastModified: sitemapTimestamp(head.revision_created_at) };
-  });
+  }, boundedReadOptions);
 }
 
 async function list<Item extends SitemapRealmItem | SitemapSpaceItem>(
@@ -279,7 +292,7 @@ async function list<Item extends SitemapRealmItem | SitemapSpaceItem>(
 ): Promise<CommunitySitemapPage<Item>> {
   const limit = pageLimit(input);
   let position = await positionOf(dependencies, feed, input.cursor);
-  const rows = await candidates(dependencies, feed, position, limit * CANDIDATES_PER_ITEM);
+  const rows = await candidates(dependencies, deadline, feed, position, limit * CANDIDATES_PER_ITEM);
   const items: Item[] = [];
   const at = observedAt(dependencies);
   let finished = rows.length < limit * CANDIDATES_PER_ITEM;
