@@ -1,4 +1,4 @@
-import { withConnection } from '../database/pool.ts';
+import { withReadConnection } from './read-connection.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { ContentBoardDependencies } from './boards.ts';
@@ -122,7 +122,7 @@ async function listSitemap(
       // Read only the board we will process. Charging a prefetched board without advancing to it could lose it
       // when the page runs out of budget; advancing past it could lose its threads.
       const after = position?.boardId;
-      const rows = await withConnection(dependencies.pool, (client) =>
+      const rows = await withReadConnection(dependencies.pool, deadline, ({ client }) =>
         pageBoards.run(client, { route: after ? routeOf(after)! : -1, board_id: after ?? ZERO_ID, limit: 1 }),
       );
       if (!rows.length) {
