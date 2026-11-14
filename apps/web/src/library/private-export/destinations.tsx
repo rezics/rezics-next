@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { actionClass } from './controls';
@@ -11,21 +12,40 @@ const items: readonly { id: ArchiveRecoveryDestination; href: string; label: () 
   { id: 'progress', href: '/library/recover-progress', label: () => m.library_archive_progress_title() },
 ];
 
-/** Signed-in Library portability visits. Each recovery still requires a deliberate upload or original-archive reuse. */
+/** Each recovery owns its upload/reuse, review and confirmation. Export itself restores nothing. */
 export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveRecoveryDestination }) {
+  const headingId = useId();
+  if (current === 'export') {
+    const destinations = [
+      { href: '/library/recover-collections', label: m.library_export_restore_collections(), description: m.library_export_restore_collections_help() },
+      { href: '/library/recover-archive', label: m.library_export_restore_entries(), description: m.library_export_restore_entries_help() },
+      { href: '/library/recover-progress', label: m.library_export_restore_progress(), description: m.library_export_restore_progress_help() },
+    ];
+    return (
+      <section aria-labelledby={headingId} className="space-y-4 border-t pt-6">
+        <h2 id={headingId} className="text-lg font-semibold">{m.library_export_restore_heading()}</h2>
+        <p className="text-sm text-muted-foreground">{m.library_export_restore_help()}</p>
+        <nav aria-label={m.library_archive_destinations()}>
+          <ul className="divide-y">
+            {destinations.map((item) => (
+              <li key={item.href} className="space-y-1 py-3 first:pt-0">
+                <a className={`${actionClass} -ml-3 inline-flex items-center font-medium underline underline-offset-4`}
+                  href={localizeHref(item.href)}>{item.label}</a>
+                <p className="text-sm text-muted-foreground">{item.description}</p>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </section>
+    );
+  }
   return (
     <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
-      {items
-        .filter((item) => item.id !== current)
-        .map((item) => (
-          <a
-            key={item.href}
-            className={`${actionClass} inline-flex items-center underline`}
-            href={localizeHref(item.href)}
-          >
-            {item.label()}
-          </a>
-        ))}
+      {items.filter((item) => item.id !== current).map((item) => (
+        <a key={item.href} className={`${actionClass} inline-flex items-center underline`} href={localizeHref(item.href)}>
+          {item.label()}
+        </a>
+      ))}
     </nav>
   );
 }
