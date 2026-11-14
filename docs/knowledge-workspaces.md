@@ -264,6 +264,11 @@ published by its author is distinct from resolver-fetched text. Legally permitte
 content with attribution, not a hidden target cache. Current erasure and moderation policy still governs retained
 copies. Access control cannot retract bytes a recipient already downloaded or prevent deliberate manual disclosure.
 
+Public reads expose `sha256` for the disclosed representation and `sourceSha256` for the immutable selected source
+revision. Public export selections retain both with their exact publication ID; authoring selections use their
+canonical `sha256`. Exact managed citations use the source digest, while downloaded-byte verification uses the
+representation digest. Neither digest grants access or causes target bodies to be loaded during reference checks.
+
 Decision: The Web editor retains each admitted reference manifest beside its compatible body and freezes both in
 create/revise intents, including exact uncertain retries. Inline reference editing requires explicit Apply or Cancel;
 body/manifest inconsistencies require explicit component restoration, unavailable-entry retention, duplicate removal,
@@ -302,9 +307,22 @@ component is `rezics.knowledge.reference` version `1`, with only `{referenceId}`
 stores the finite-role typed manifest separately. Missing targets become unavailable markers without target IDs.
 Block IDs, component IDs, reference IDs, manifest source anchors and local `#block` links are regenerated on copy;
 external exact locators and unrelated opaque payloads are preserved. Provenance retains the original permitted
-source selection, and public output withholds authoring-origin provenance. Knowledge has no media claim destination;
-public media nodes become unavailable markers and copy creates no media claims. Managed media and lifecycle
-acceptance remain with their owner integrations before opening the capability.
+source selection, and public output withholds authoring-origin provenance. Copy creates no new media ownership or
+claims: an independently retained source context must remain currently readable, otherwise its media is unavailable.
+
+Knowledge media reuses Content's uploader-bound reservation, processing, variants, claim and moderation machinery.
+The destination is an existing owned Knowledge document, never a surrogate Post. Claim during a saved revision
+validates the ordinary current notebook/account authority, same-home destination, uploader and exact managed IDs;
+the immutable revision retains its bounded managed-media membership. Private uploads that are not in the selected
+revision cannot become public through publication of that document.
+
+Private media reads retain current Knowledge ancestry and owner admission. Public media URLs carry an explicit
+exact Knowledge source context and recheck current publication eligibility, exact revision/source digest, membership
+and current Media moderation/erasure before serving bytes or derivatives. They are not globally readable blob URLs.
+Withdrawal, trash or terminal lifecycle conceals this context immediately, including delayed derivative work. Public
+projection/export emits only admitted source-gated managed media; unclaimed, foreign or opaque signed locators remain
+unavailable markers. Rendering and editor bindings consume the same ordinary media port, without a separate grant
+engine or eager body/reference hydration. Media and lifecycle acceptance remain required before opening capability.
 
 The export digest is SHA-256 over RFC 8785 JSON of all envelope fields except `sha256`; `selection.sha256` hashes
 only the selected representation's canonical Document bytes. Both can be checked independently of storage. There
