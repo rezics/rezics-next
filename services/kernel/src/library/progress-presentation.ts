@@ -1,7 +1,9 @@
 import type { Release } from '@rezics/definitions';
+import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { readRelease } from '../semantic/definitions.ts';
+import { DefinitionInputError, readRelease } from '../semantic/definitions.ts';
 import type {
   ProgressInputRules,
   ProgressMeasurePresentation,
@@ -76,44 +78,48 @@ export function presentProgressSession(
 
 /** One detail, one exact release, one current profile; all owning/foreign snapshots are released between reads. */
 export async function prepareProgressPresentation(deps: LibraryProfileSourceDependencies, fact: Fact) {
+  requireAccessDeadline(deps.deadline);
   const { session, pin } = fact;
   let snapshot: Snapshot = null;
-  let source: LibraryProfileSource = null;
-  let anchor: Awaited<ReturnType<typeof readLibraryProfileAnchor>> = null;
-  let version: Awaited<ReturnType<typeof readLibraryProfileAnchor>> = null;
   if (pin) {
-    try {
-      const release = await consumeSessionWork('presentation-release', sessionReleaseWork(pin.releaseDigest), () =>
-        readRelease(deps.pool, pin.releaseDigest, { composed: false }),
-      );
-      if (release) snapshot = { digest: pin.releaseDigest, release };
-    } catch {
-      // Optional historic display dependency: missing/failed required release never selects a different one.
-    }
-  }
-  try {
-    const observed = await consumeSessionWork('presentation-source', sessionSourceWork(session.subjectId, true), () =>
-      readLibraryProfileSourceObservation(deps, session.subjectId),
+    const release = await consumeSessionWork('presentation-release', sessionReleaseWork(pin.releaseDigest), () =>
+      withBoundedReadConnection(
+        deps.pool,
+        deps.deadline,
+        async (client) => {
+          try {
+            return await readRelease(client, pin.releaseDigest, { composed: false });
+          } catch (error) {
+            // Malformed retained meaning is unavailable; native failures still fail the detail.
+            if (error instanceof DefinitionInputError) return null;
+            throw error;
+          }
+        },
+        {
+          deadlineError: () => new AccessUnavailableError('deadline'),
+          isUncertainSettledQueryError: () => true,
+        },
+      ),
     );
-    source = observed?.source ?? null;
-    anchor = observed?.anchor ?? null;
-  } catch {
-    // Failed or concealed current evidence cannot prove that a capability was retired.
+    if (release) snapshot = { digest: pin.releaseDigest, release };
   }
+  const observed = await consumeSessionWork('presentation-source', sessionSourceWork(session.subjectId, true), () =>
+    readLibraryProfileSourceObservation(deps, session.subjectId),
+  );
+  const source = observed?.source ?? null;
+  const anchor = observed?.anchor ?? null;
+  let version: Awaited<ReturnType<typeof readLibraryProfileAnchor>> = null;
   if (session.versionSubjectId !== null) {
     if (session.versionSubjectId === session.subjectId) version = anchor;
     else {
-      try {
-        version = await consumeSessionWork(
-          'presentation-version',
-          sessionSourceWork(session.versionSubjectId, false),
-          () => readLibraryProfileAnchor(deps, session.versionSubjectId!),
-        );
-      } catch {
-        // Version summaries have their own current disclosure, independent of historical display.
-      }
+      version = await consumeSessionWork(
+        'presentation-version',
+        sessionSourceWork(session.versionSubjectId, false),
+        () => readLibraryProfileAnchor(deps, session.versionSubjectId!),
+      );
     }
   }
+  requireAccessDeadline(deps.deadline);
   return consumeSessionWork(
     'presentation-values',
     sessionPresentationWork(session.measures?.length ?? 1),
@@ -129,6 +135,7 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
       })),
       disclosure: { subject: source !== null, versionSubject: version !== null },
       async verify(at: AuthoritativeTime) {
+        requireAccessDeadline(deps.deadline);
         const current = { ...deps, at };
         if (anchor) {
           const final = await consumeSessionWork(
@@ -159,6 +166,7 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
           )
         )
           throw new ProblemError('semantic_not_ready');
+        requireAccessDeadline(deps.deadline);
       },
     }),
   );
