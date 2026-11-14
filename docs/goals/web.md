@@ -655,8 +655,9 @@ VNDB field limits and native admission live in [Personal VNDB list import](../li
 
 Web owns Storybook publication and publisher/capture custody, including reconciliation of retained handles.
 A retained handle without its original live process is dead. The paused control-plane manager has no publication role.
-Publish one clean current-dev snapshot through the existing build and six smoke scenarios, then verify the public
-build revision and story index. Metadata clients identify themselves with a descriptive application User-Agent.
+Follow the [review publication cadence](../development/storybook.md#review-publication-cadence): publish the committed
+development snapshot, verify its public revision and index, and run the retained checks asynchronously.
+Metadata clients identify themselves with a descriptive application User-Agent.
 Publication does not establish native journey, visual or main-promotion acceptance.
 
 Owns `apps/web/**`, `apps/auth/**`, `packages/ui/**` and `packages/document/**`.

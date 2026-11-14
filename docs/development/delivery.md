@@ -25,6 +25,12 @@ the current critical path. Archived scope and historical task counts do not meas
 
 ## Source batches
 
+During a maintainer-authorized frontend code-only window, assign complete source outcomes and use the available
+worker capacity for implementation. Do not spend that window writing or running tests, typing or browser matrices
+unless the maintainer specifically requires them. Preserve existing tests for the asynchronous verifier, record
+unverified behavior honestly, and repair reported failures in the owning module. This does not relax money movement
+or authorization rules, nor turn source delivery into release acceptance.
+
 Keep enough independent, ready source work for available workers. A brief names one coherent outcome,
 the installed interfaces, the write boundary, and what the worker can complete if one seam is blocked.
 Use the [sizing target](efficiency.md#output-and-flow) to avoid both fragments and oversized assignments.
