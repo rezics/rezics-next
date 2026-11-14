@@ -907,8 +907,8 @@ licence nor adapter approval. Imports still omits `score`, `score_details` and `
 Profile policy does not depend on alias spelling. Other providers remain rejected in mounted strict parameters,
 response/event schemas, native types and database constraints.
 
-Decision: keep legacy VNDB response shapes unless a writer opts into observation metadata with
-`expectedObservation`; Bangumi responses always identify their unversioned observation.
+Decision: native provider projections always retain and expose their stored unversioned observation digest.
+A missing stored identity requires explicit maintenance; consumers never infer it from mutable statistics.
 Both write operations accept `sourceAlias` using the existing fence grammar (`^[a-z][a-z0-9_-]{0,31}$`).
 Omission and the explicit provider ID bind the same tuple and preserve existing VNDB receipt digests. Aliases
 select the facts-fence home, never a provider profile. A custom alias is retained in responses. There is one
@@ -1030,7 +1030,10 @@ successful Bangumi import is inferred. The real typed client is regenerated thro
 Web's `apps/web/src/features/pages/subject-ratings.ts` and `subject-ratings-view.tsx` already load/render the array
 separately from native figures. Their optional provenance fields remain source-compatible. Web owns the named
 **Bangumi source-figure reader** follow-on: provider label, exact alias/record provenance, scale/asOf and UI tests.
-Imports owns **Source observation CAS refresh** using this exact positive/clear digest contract.
+Imports owns **Source observation CAS refresh** using this exact positive/clear digest contract. Its current
+head lookup consumes the protected observation inspection response, preserving empty/published/cleared states
+without deriving identity from the positive-only public statistics list. A transport missing inspection is
+unavailable; a locally retained digest cannot substitute for a current native head.
 
 #### Immutable source observation inspection
 
@@ -1038,14 +1041,15 @@ Imports owns **Source observation CAS refresh** using this exact positive/clear 
 `source_statistic:write` action. Every response includes the exact current head, including an empty slot or a clear
 tombstone, and the `expectedObservation` values accepted by the existing put and clear CAS writers. `?digest=`
 selects that exact retained digest and returns it as `selectedObservation` without replacing it with today's head.
-`?history=true` starts a signed one-row keyset page; `?cursor=` continues it. Native rows descend by committed
-per-subject/provider `nativeOrder`, not provider `asOf`; the raw bounded lookahead determines `nextCursor`. Retained
-observations without native order remain marked `legacy: true` with `nativeOrder: null` and are traversed by their
-stored digest. `payloadVersion` is explicit, and `provenance` labels the content digest as unversioned provider
+`?history=true` starts a signed one-row keyset page; `?cursor=` continues it. All rows descend by one immutable per-subject/provider internal `seek_order`; the raw bounded lookahead
+determines `nextCursor`. The traversal key is storage position, never historical chronology. Known committed
+`nativeOrder` remains exact; observations without that fact retain `legacy: true` and `nativeOrder: null`.
+During one-time conversion, known native positions keep their relative order above unknown positions, whose
+digest order supplies deterministic traversal without asserting original chronology. `payloadVersion` is explicit, and `provenance` labels the content digest as unversioned provider
 provenance. The exported response schema is the actual route DTO for the generated Imports API43 and Web clients.
 
 Decision: inspection always includes the current head; an optional digest resolves that exact retained observation,
-while signed history uses descending committed local order and marks legacy rows as unversioned.
+while signed history uses one indexed storage traversal and preserves unknown native order.
 
 Decision: history consumes one raw position even when concealed, returning empty items with continuation when
 another raw position exists; a changed source observation returns a conflict for retry with the original cursor.
@@ -1058,11 +1062,9 @@ returns 409 without a new cursor. A final required-source takedown still returns
 failures; callers retain the supplied cursor for an identical retry or explicitly restart. The signed cursor uses
 the native token envelope and binds caller, client, delegator, scopes, route, Subject, provider, Subject home and
 Subject epoch, query shape and expiry. Provider tuple homes can differ from the Subject home and from one another.
-History keeps its initial native order ceiling and captures the legacy digest ceiling when traversal reaches that
-boundary. A removed cursor boundary returns conflict so the caller can retry the original frontier.
+History keeps its initial storage seek ceiling across every continuation. A removed cursor boundary returns conflict so the caller can retry the original frontier.
 
-Decision: history cursors retain the initial native order ceiling and capture the legacy digest ceiling when traversal
-reaches that boundary; continuations reject missing retained boundary rows.
+Decision: history cursors retain one initial seek ceiling; continuations reject missing retained boundary rows.
 
 Decision: fence each provider tuple in its own home and bind history cursors to the Subject home epoch.
 
@@ -1091,13 +1093,30 @@ facts-fence rules. The response is capped at 68,000 serialized bytes and each im
 checked against its stored digest and the 32,768-byte payload limit. The endpoint performs no write, receipt lookup,
 provider request, ballot read or source-history sort.
 
+#### Explicit observation materialization
+
+`materializeSourceObservations(pool, { route, subjectId, source, limit? })` is offline maintenance for one
+subject/provider slot, never called by runtime reads or writes. It locks the Subject and reads at most 257
+envelopes, refusing slots above the chosen bound (maximum 256) before mutation. It validates canonical digests,
+preserves figures, original transaction IDs, aliases, dates, licences and attribution, and materializes a missing
+head from its retained projection once. Unknown native order stays null. It assigns stable storage seek keys,
+checks persisted envelope/head/projection readback, and commits atomically. Mixed initialized/uninitialized
+traversals fail rather than invalidate established cursors. Fences and erased records are neither altered nor
+recreated. Empty slots and retained clear observations remain distinct.
+
+The transition migration adds seek keys without an unbounded data backfill. Retained slots must pass bounded
+maintenance before runtime use; unconverted or inconsistent slots return unavailable. After all retained slots
+are converted and native readback is accepted, validate `source_statistic_observation_seek_order_present` and
+set `seek_order NOT NULL`. Fresh baselines already require nonnull seek keys. Runtime current, exact and history
+paths only consume persisted envelopes; no virtual head or lazy writer adoption remains.
+
 #### Operation Cost: source-observation inspection
 
 - Touches: current-only uses two head metadata queries; exact uses four metadata queries returning at most four
-  rows; history uses six returning potentially eight rows across a native/legacy boundary. Each metadata statement
+  rows; history uses four returning at most six metadata rows. Each metadata statement
   also reads the Subject partition epoch through the fixed partition key, without adding a metadata round trip.
   Hydration uses one
-  immutable batch (at most two rows) and, independently, one legacy scalar read; mixed hydration charges both.
+  immutable batch (at most two rows). There is no mutable payload reconstruction.
   Up to three distinct tuples (current, candidate, lookahead), each potentially in a different home, receive
   initial/final repeatable-read snapshots. Each snapshot dispatches BEGIN, partition authority, exact fence facts
   and COMMIT: six snapshots add 24 local SQL, including 12 transaction controls, plus catalogue freshness work
@@ -1108,14 +1127,13 @@ provider request, ballot read or source-history sort.
   resolutions (redirect, identity, Context/citation/disclosure and Access observations). These are independent current observations, not one atomic
   snapshot; their inherited owner bounds and participating pools remain additional to the local SQL count.
 - Bound: all metadata/payload queries bind route, Subject and provider. Exact uses the primary key; history uses
-  the partial `(route, subject_id, source, local_order DESC)` or legacy `(route, subject_id, source, digest DESC)`
-  index, each selecting at most two physical ordered positions. A continuation checks its exact retained boundary by
+  the unique `(route, subject_id, source, seek_order DESC)` index, selecting at most two physical ordered positions. A continuation checks its exact retained boundary by
   key in the same bounded metadata query. Each provider tuple is fenced and compared in its own home; the cursor's
   home and epoch are the Subject home and epoch. The native token binds caller, client, delegator, scopes, query
-  shape, expiry and retained native/legacy ceilings. No full-history sort is permitted. Head, candidate and
+  shape, expiry and one retained seek ceiling. No full-history sort is permitted. Head, candidate and
   lookahead metadata are reobserved before return. Only disclosed head/selection payloads are materialized,
   with at most two item validations/canonicalizations/hashes after deduplicated I/O. The schema admits immutable
-  JSONB at 32,768 bytes; legacy scalar field bounds remain their writer's admission. Application payload and
+  JSONB at 32,768 bytes. Application payload and
   68,000-byte response checks occur after acquisition/materialization and are not peak-memory bounds. Growth captures
   actual materialized payload, retained item and serialized response byte lengths; admitted source counts are not
   measured byte ceilings. Account for
@@ -1131,7 +1149,7 @@ provider request, ballot read or source-history sort.
   prefix/residual plans, plus actual payload/item/response bytes. The existing source-statistic isolation growth
   suite owns registered write-command phases. `test/rating/source-observation-http.test.ts` uses real Access and
   fence commands to pin
-  concealed raw continuation, exact native/legacy selection, caller/home/epoch/expiry cursor bindings, new-head
+  concealed raw continuation, exact known/unknown-order selection, caller/home/epoch/expiry cursor bindings, new-head
   continuation, payload/final-fill changes, caller/Subject revocation, same-cursor retry and existing CAS recovery.
   Full inherited authentication, runner and peak-memory ceilings remain controller acceptance obligations; a source
   assertion or failed check setup does not establish them.

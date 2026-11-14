@@ -532,6 +532,11 @@ export class InspectionStore {
         'changed',
         'prepared',
         'cursor',
+        'skipped',
+        'kind_new',
+        'kind_changed',
+        'kind_unchanged',
+        'kind_vanished',
       ],
       run_entries: [
         'source',
@@ -750,19 +755,9 @@ export class InspectionStore {
     signal?: AbortSignal,
   ): NonNullable<InspectionDocument['generation']> {
     if (signal?.aborted) throw new InspectionFailure('Inspection was cancelled.', 130);
-    const generationColumns = new Set(
-      this.database
-        .query('PRAGMA table_info(run_generations)')
-        .all()
-        .map((row) => (row as { name: string }).name),
-    );
-    const skipped = generationColumns.has('skipped') ? 'skipped' : 'NULL AS skipped';
-    const kinds = generationColumns.has('kind_new')
-      ? 'kind_new,kind_changed,kind_unchanged,kind_vanished'
-      : 'NULL AS kind_new,NULL AS kind_changed,NULL AS kind_unchanged,NULL AS kind_vanished';
     const row = this.database
       .query(
-        `SELECT id,seq,status,threshold,prior,supplied,survivors,invalid,classified,resolved,expected,prepared,${skipped},${kinds}
+        `SELECT id,seq,status,threshold,prior,supplied,survivors,invalid,classified,resolved,expected,prepared,skipped,kind_new,kind_changed,kind_unchanged,kind_vanished
         FROM run_generations WHERE source=? AND id=?`,
       )
       .get(source, id) as GenerationRow | null;

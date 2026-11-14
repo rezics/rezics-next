@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { SourceObservationReadResponse } from '../../src/rating/source-observation-read.ts';
+import { materializeSourceObservations } from '../../src/rating/source-observation-maintenance.ts';
 import { sourceObservation } from '../../src/rating/source-provider.ts';
 import payloadQuery from '../../src/rating/source-observation-read-payload.sql';
 import headQuery from '../../src/rating/source-observation-read-head.sql';
@@ -63,7 +64,7 @@ function historyBinding(id: string, caller: IsolationActor): CursorBinding {
       subjectId: id,
       source: 'bangumi',
       query: 'history=true',
-      order: 'native.local-order-desc+legacy.digest-desc.v1',
+      order: 'storage.seek-order-desc.v1',
       pageSize: 1,
     },
   };
@@ -214,11 +215,12 @@ test('history fences each provider identity in its own home and keeps the cursor
   expect(last.history!.nextCursor).toBeNull();
 });
 
-test('history traverses immutable native rows into legacy rows and exact legacy digests', async () => {
+test('bounded materialization preserves unknown native order in canonical current, exact and history reads', async () => {
   const id = await fixture.createSubject();
   const legacy = value('131');
   const route = routeOf(id);
   if (route === null) throw new Error('Fixture Subject has no route');
+  const originalTransaction = crypto.randomUUID();
   await fixture.database.pool.query(
     `INSERT INTO rating.source_statistic
        (route, subject_id, source, source_record_id, scale_min, scale_max, mean, count, as_of,
@@ -235,11 +237,26 @@ test('history traverses immutable native rows into legacy rows and exact legacy 
       legacy.asOf,
       legacy.licence,
       legacy.attribution,
-      crypto.randomUUID(),
+      originalTransaction,
       legacy.sourceAlias,
     ],
   );
+  await json(await inspect(id), 503);
+  await materializeSourceObservations(fixture.database.pool, { route, subjectId: id, source: 'bangumi' });
   const legacyDigest = sourceObservation(id, 'bangumi', legacy).digest;
+  const converted = await json(await inspect(id, `?digest=${legacyDigest}`));
+  expect(converted.head.digest).toBe(legacyDigest);
+  expect(converted.head.observation).toEqual(converted.selectedObservation);
+  expect(converted.selectedObservation.payload).toEqual(legacy);
+  expect(converted.selectedObservation.nativeOrder).toBeNull();
+  const provenance = await fixture.database.pool.query(
+    `SELECT transaction_id::text AS transaction_id FROM rating.source_statistic_observation
+     WHERE route=$1 AND subject_id=$2 AND source='bangumi' AND digest=$3`,
+    [route, id, legacyDigest],
+  );
+  expect(provenance.rows[0]!.transaction_id).toBe(originalTransaction);
+  await materializeSourceObservations(fixture.database.pool, { route, subjectId: id, source: 'bangumi' });
+  expect((await json(await inspect(id))).head).toEqual(converted.head);
   const current = { ...value('132'), asOf: '2026-11-02', expectedObservation: legacyDigest };
   const stored = await json(await write(id, current));
   const nativePage = await page(id);

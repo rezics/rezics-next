@@ -178,7 +178,7 @@ test('the importer writes and refreshes a labelled statistic without creating na
   await problem(await request('PUT', path, first, 'importer', null), 400);
   await problem(await request('PUT', path, { ...first, extra: true }, 'importer'), 400);
   await json(await request('PUT', path, first, 'importer'));
-  const expected = [{ source: 'vndb', ...first }];
+  const expected = [{ source: 'vndb', ...first, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', first).digest } }];
   expect(await json(await request('GET', `/v1/subjects/${subjectId}/source-statistics`))).toEqual(expected);
 
   const refreshed = { ...first, sourceRecordId: 'v18', mean: 9.1, count: 1500, asOf: '2026-10-15' };

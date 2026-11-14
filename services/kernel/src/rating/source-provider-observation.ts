@@ -1,11 +1,9 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { validSourceFigures, type SourceFigures } from './source-figures.ts';
 import { SOURCE_OBSERVATION_PAYLOAD_VERSION, sourceObservation, type SourceObservation } from './source-provider.ts';
 import lock from './source-provider-lock.sql';
 import head from './source-provider-head.sql';
 import observe from './source-provider-observe.sql';
-import list from './source-statistic-list.sql';
 
 export type ObservationBinding = { route: number; subjectId: string; source: string; value: SourceObservation };
 export type ObservationHead = {
@@ -17,46 +15,17 @@ export type ObservationHead = {
   payloadVersion: number;
   nativeOrder: string | null;
   lastOrder: string;
+  lastSeekOrder: string;
 };
-export type ObservationOrder = Readonly<{ localOrder: string | null; lastOrder: string }>;
+export type ObservationOrder = Readonly<{ localOrder: string; lastOrder: string; seekOrder: string; lastSeekOrder: string }>;
 
 /** The head is one indexed subject/provider lookup, never a history selection or source-home join. */
 export async function lockSourceObservation(tx: CommandTransaction, input: ObservationBinding) {
   const key = { route: input.route, subject_id: input.subjectId };
   if (!(await lock.run(tx, key))) return { exists: false, current: null } as const;
   const current = await head.run(tx, { ...key, source: input.source });
-  if (current) return { exists: true, current: current as ObservationHead };
-  // Existing VNDB rows predate observation identities. Adopt their exact payload lazily;
-  // never fabricate an observation time or a provider revision during migration.
-  const legacy = (await list.run(tx, key)).find((row) => row.source === input.source);
-  if (!legacy) return { exists: true, current: null } as const;
-  const figures = legacy.figures == null ? undefined : legacy.figures;
-  if (figures !== undefined && !validSourceFigures(input.source, figures, Number(legacy.count)))
-    throw new ProblemError('partition_unavailable');
-  const value = {
-    sourceAlias: legacy.sourceAlias as string,
-    sourceRecordId: legacy.sourceRecordId as string,
-    ...(figures === undefined ? {} : { figures: figures as SourceFigures }),
-    scale: { min: Number(legacy.scaleMin), max: Number(legacy.scaleMax) },
-    mean: Number(legacy.mean),
-    count: Number(legacy.count),
-    asOf: legacy.asOf as string,
-    licence: legacy.licence as string,
-    attribution: legacy.attribution as string,
-  };
-  return {
-    exists: true,
-    current: {
-      ...sourceObservation(input.subjectId, input.source, value),
-      sourceAlias: value.sourceAlias,
-      sourceRecordId: value.sourceRecordId,
-      asOf: value.asOf,
-      payloadVersion: SOURCE_OBSERVATION_PAYLOAD_VERSION,
-      nativeOrder: null,
-      lastOrder: '0',
-      legacy: true,
-    },
-  };
+  if (!current || current.needsMaterialization) throw new ProblemError('partition_unavailable');
+  return { exists: true, current: current.digest === null ? null : (current as ObservationHead) } as const;
 }
 
 /** Older observations never win, including against a cleared head. Equal dates require
@@ -99,5 +68,7 @@ export async function saveSourceObservation(
     payload_version: SOURCE_OBSERVATION_PAYLOAD_VERSION,
     local_order: order.localOrder,
     last_order: order.lastOrder,
+    seek_order: order.seekOrder,
+    last_seek_order: order.lastSeekOrder,
   });
 }

@@ -68,9 +68,10 @@ async function transaction<T>(
       throw expired();
     }
     client = connection;
-    const query: Query = (text, values) => {
+    const query: Query = <Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]) => {
       if (retired) return Promise.reject(expired());
-      return connection.query({ text, values, query_timeout: remaining() });
+      remaining();
+      return connection.query<Row>(text, values);
     };
     await query(readOnly ? 'BEGIN READ ONLY' : 'BEGIN');
     await query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [

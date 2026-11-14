@@ -1271,16 +1271,17 @@ export function createMalImport(deps: Dependencies) {
           }
           await save(index, 'label');
         }
+        const label = item.label;
         const parent = await withBoundedReadConnection(pool, deadline, (client) =>
           deadlineClient(client, deadline).query<{ revision: number; name: string }>(
             `SELECT revision,normalized_name AS name FROM library.personal_label
              WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL`,
-            [route, a.accountId, item.label.id],
+            [route, a.accountId, label.id],
           ),
         );
         if (
-          parent.rows[0]?.revision !== item.label.revision ||
-          (item.label.name !== undefined && parent.rows[0]?.name !== item.label.name)
+          parent.rows[0]?.revision !== label.revision ||
+          (label.name !== undefined && parent.rows[0]?.name !== label.name)
         )
           throw new LibraryConflictError();
         if (item.outcome) {
@@ -1293,7 +1294,7 @@ export function createMalImport(deps: Dependencies) {
               `SELECT assignment_id FROM library.label_assignment
                WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4
                  AND deleted_at IS NULL AND slot_no IS NOT NULL`,
-              [route, a.accountId, review.target, item.label.id],
+              [route, a.accountId, review.target, label.id],
             ),
           );
           item.before = before.rows.length > 0;
@@ -1302,17 +1303,17 @@ export function createMalImport(deps: Dependencies) {
         if (signal.aborted || Date.now() + 100 >= deadline) break;
         const assigned = await assignments.assignLabel(
           actor,
-          item.label.id,
+          label.id,
           { subjectId: review.target! },
           `${item.key}:assign`,
-          { ...fence, label: item.label },
+          { ...fence, label },
         );
         record(assigned);
         const unchanged = assigned.value.unchanged ?? item.before;
         item.outcome = {
           value: selection.value,
           status: selection.status === 'duplicate' || unchanged ? 'unchanged' : 'accepted',
-          labelId: item.label.id,
+          labelId: label.id,
           assignment: assigned.value.assignment,
           reason: selection.status === 'duplicate' ? selection.reason : unchanged ? 'already-assigned' : null,
         };

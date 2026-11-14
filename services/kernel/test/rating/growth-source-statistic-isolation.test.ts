@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { sourceObservation } from '../../src/rating/source-provider.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
@@ -229,7 +230,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         key,
       });
       const committed = await json(write);
-      expect(committed).toEqual({ source: 'vndb', ...fixedStatistic });
+      expect(committed).toEqual({ source: 'vndb', ...fixedStatistic, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', fixedStatistic).digest } });
 
       const replay = await fixture.request('PUT', path, {
         actor: fixture.actors.importer,
@@ -243,7 +244,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         actor: fixture.actors.importer,
       });
       const result = await json(read);
-      expect(result).toEqual([{ source: 'vndb', ...fixedStatistic }]);
+      expect(result).toEqual([{ source: 'vndb', ...fixedStatistic, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', fixedStatistic).digest } }]);
       return { committed, replayed, result };
     },
   });

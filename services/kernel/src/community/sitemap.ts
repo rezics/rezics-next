@@ -26,7 +26,9 @@ const boundedReadOptions = {
   mapError(error: unknown) {
     if (error instanceof AccessUnavailableError) return error;
     const reason = classifyUnavailability(error);
-    return reason ? new AccessUnavailableError(reason) : error;
+    return reason === 'deadline' || reason === 'contention' || reason === 'overloaded'
+      ? new AccessUnavailableError(reason)
+      : error;
   },
 };
 
