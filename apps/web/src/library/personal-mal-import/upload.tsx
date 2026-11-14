@@ -1,3 +1,4 @@
+import { ImportDetails } from '../personal-list-import/presentation';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -63,28 +64,31 @@ export function MalRetainedUpload({ busy, onOpen }: { busy: boolean; onOpen: (id
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   return (
-    <form
-      className="space-y-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (input.current?.reportValidity()) onOpen(input.current.value);
-      }}
-    >
-      <label className="block" htmlFor={id}>
-        {m.library_mal_label_upload_id()}
-      </label>
-      <input
-        ref={input}
-        id={id}
-        className="min-h-11 w-full min-w-0 border p-2"
-        required
-        pattern="[0-9a-fA-F-]{36}"
-        autoComplete="off"
-        disabled={busy}
-      />
-      <MalAction type="submit" disabled={busy}>
-        {m.library_mal_label_reopen()}
-      </MalAction>
-    </form>
+    <ImportDetails title={m.library_import_retained()}>
+      <p>{m.library_import_reopen_help()}</p>
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (input.current?.reportValidity()) onOpen(input.current.value);
+        }}
+      >
+        <label className="block" htmlFor={id}>
+          {m.library_mal_label_upload_id()}
+        </label>
+        <input
+          ref={input}
+          id={id}
+          className="min-h-11 w-full min-w-0 border p-2"
+          required
+          pattern="[0-9a-fA-F-]{36}"
+          autoComplete="off"
+          disabled={busy}
+        />
+        <MalAction type="submit" disabled={busy}>
+          {m.library_mal_label_reopen()}
+        </MalAction>
+      </form>
+    </ImportDetails>
   );
 }

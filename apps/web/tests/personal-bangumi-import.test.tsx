@@ -403,6 +403,10 @@ test('preview does not apply, explicit target replacement and exact uncertain re
   expect(JSON.parse(previews[0]!).format).toBe(BANGUMI_FORMAT);
   expect(applies).toHaveLength(0);
   expect(host.textContent).toContain('Show 1');
+  const item = host.querySelector('article[data-bangumi-row="0"]')!;
+  expect(item.textContent).toContain(m.library_import_state());
+  expect(item.querySelector('header')!.textContent).toContain(m.library_bangumi_identifier({ value: '1' }));
+  expect(item.querySelector('[data-import-chosen-target]')).not.toBeNull();
   expect(host.textContent).toContain(m.library_bangumi_rate_none());
   expect(host.textContent).toContain(m.library_bangumi_unknown_summary());
   const target = host.querySelector('[data-bangumi-target]') as HTMLInputElement;
@@ -753,4 +757,32 @@ test('growth at 10, 50 and 100 rows stays within native page, apply and retained
     expect(discarded.stage).toBe('removed');
     expect(discarded.page).toEqual([]);
   }
+});
+
+test('a retained cancelled Bangumi upload reopens one bounded page for read-only item inspection', async () => {
+  const f = recordingPort(1);
+  const readPage = f.port.page;
+  const reads: unknown[] = [];
+  f.port.page = async (command) => {
+    reads.push(command);
+    const response = await readPage(command);
+    if (response.kind === 'page') response.page.cancelled = true;
+    return response;
+  };
+  await mount(f.port);
+  const retained = host.querySelector('input[autocomplete="off"]') as HTMLInputElement;
+  await act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(retained, id);
+    retained.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  await click(m.library_anilist_reopen());
+  expect(reads).toEqual([{ kind: 'page', uploadId: id, after: -1 }]);
+  expect(f.previews).toHaveLength(0);
+  await click(m.library_bangumi_return_review());
+  const item = host.querySelector('article[data-bangumi-row="0"]')!;
+  expect(item.closest('[hidden]')).toBeNull();
+  expect(item.textContent).toContain('Show 1');
+  expect(button(m.library_bangumi_save_review())?.disabled).toBe(true);
+  expect(button(m.library_bangumi_continue_confirm())?.disabled).toBe(true);
+  expect(f.applies).toHaveLength(0);
 });

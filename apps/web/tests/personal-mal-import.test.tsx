@@ -1041,6 +1041,7 @@ test('native adapter preserves the score guard and replays an uncertain apply wi
 
 test('retained upload reopens private native evidence and results without a second upload', async () => {
   const opened: string[] = [];
+  let assignmentReads = 0;
   const unavailable = async () => ({ kind: 'unavailable' as const });
   const current = row({
     outcome: {
@@ -1065,6 +1066,10 @@ test('retained upload reopens private native evidence and results without a seco
       opened.push(command.id);
       return { kind: 'page', page: pageOf([current]) };
     },
+    assignments: async (subjectId) => {
+      assignmentReads++;
+      return { kind: 'assignments', assignments: [{ id, subjectId, labelId: subject, revision: 4 }] };
+    },
     source: async () => ({ kind: 'source', xml: '<myanimelist><my_tags>A &amp; B</my_tags></myanimelist>' }),
   });
   const input = host.querySelector('input[autocomplete=off]') as HTMLInputElement;
@@ -1072,9 +1077,14 @@ test('retained upload reopens private native evidence and results without a seco
   await act(() => input.form!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   await settle();
   expect(opened).toEqual([id]);
+  expect(assignmentReads).toBe(0);
   await click(m.library_mal_label_results());
+  expect(assignmentReads).toBe(0);
   expect(host.textContent).toContain('accepted');
   expect(host.textContent).toContain(subject);
+  await click(m.library_anilist_labels_read());
+  expect(assignmentReads).toBe(1);
+  expect(host.querySelector('[data-mal-outcome]')!.textContent).toContain(m.library_mal_label_current());
 });
 
 test('refused replacement cannot confirm a retained score review after page navigation', async () => {

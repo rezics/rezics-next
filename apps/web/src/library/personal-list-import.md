@@ -137,3 +137,37 @@ fixtures. The importer pin is `showcase-personal-list.test.ts` for sealed previe
 Progress, cancel/delete and independent FULL Library. Native HTTP, coordinator and entry-metadata keep existing
 assertions. Native guard and exact-self cases remain Kernel capability repairs; native, browser and growth acceptance
 stay with controller verification.
+
+Decision: compose all four private import visits as upload, bounded item review, explicit confirmation and results.
+Keep supplied title, provider identity, matching state and chosen target together; place independent Library, score
+and label controls in that item's card. Source evidence, exact keys and reopen identifiers use labelled secondary
+details. Keep AniList's review subtree mounted through confirmation and results so label-search intent and native
+review ownership survive returning; label confirmation remains a separate native operation. Use one metadata index
+per bounded render, without row hydration or refill. Preserve replacement/privacy warnings and unknown-command
+custody at confirmation. Empty pages and unacknowledged results offer review and Library return.
+
+Verification decision: deliver source and focused composition acceptance for the dev verifier. Compiler, test, native
+mounted journey and keyboard/eight-locale phone/desktop checks remain unverified. Repair defects established by earlier
+check results without submitting a new optional check under the current source-only policy.
+Design sources: this owner; the AniList, MAL and Bangumi presentation owners; and each provider's existing page,
+review, row, confirmation and results components. Installed Impeccable `reference/craft-floor.md` was absent from the
+available skill/reference directories; it is guidance, not a prerequisite.
+
+Decision: MAL current label assignments are an explicit action within the item's result, separate from the apply
+acknowledgement. A target change or unmount retires an outstanding assignment response; opening results does not
+hydrate each row. Bangumi reuses its native label-receipt presentation in results without mounting a second label
+reader. Its existing page loader adopts the returned upload identity so a retained page can reopen in a fresh visit;
+the page shows only the supplied item count when the producer has supplied no upload total. Cancelled AniList and
+Bangumi reviews can be inspected without returning the native controller to an admitting stage.
+
+Stories use the existing routed hosts and actual provider pages with illustrative contract-shaped responses and
+sample exports. Opening performs no scripted interactions, forces no locale and changes no viewport. Review,
+replacement, uncertain retry, partial results and Library return are reached through the production controls.
+Focused acceptance adds AniList mounted label-search retention, MAL explicit assignment readback and Bangumi retained
+cancelled inspection; existing target retirement, zero/clear and exact-retry assertions remain unchanged. The necessary
+additional source path is `personal-bangumi-import/controller.ts`; acceptance files are the existing provider tests.
+
+An earlier Web typecheck exposed existing fixture drift in `kernel/fake/a-collection-review.ts`,
+`kernel/fake/anime-showcase.ts` and `kernel/fixtures/collection-showcase.ts`. The coordinated repair narrows known
+fixture values to their current public types and removes a collection cursor access absent from the read contract;
+provider behavior and native consent protocols are unchanged.

@@ -1,3 +1,6 @@
+import type { ReactNode } from 'react';
+import type { AniListRow, AniListRowMeta } from './contract';
+import { ImportDetails, ImportEmpty } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { AniListJourneySnapshot } from './controller';
 import { AniListAction } from './controls';
@@ -12,6 +15,7 @@ export function AniListReviewPage({
   onNext,
   onConfirm,
   onRefreshQuestion,
+  renderLabels,
 }: {
   snap: AniListJourneySnapshot;
   busy: boolean;
@@ -20,11 +24,15 @@ export function AniListReviewPage({
   onNext: () => void;
   onConfirm: () => void;
   onRefreshQuestion: () => void;
+  renderLabels?: (row: AniListRow, meta: AniListRowMeta | undefined) => ReactNode;
 }) {
+  const metadata = new Map(snap.meta.map((row) => [row.ordinal, row]));
   const reviewed = snap.meta.filter((row) => row.reviewId).length;
   return (
     <section className="space-y-6" data-anilist-stage="review">
-      <p>
+      <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
+      <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
+      <p role="status">
         {m.library_anilist_page_status({
           shown: snap.page.length,
           total: snap.count,
@@ -39,39 +47,39 @@ export function AniListReviewPage({
       ) : null}
       {snap.completeness?.hasNextChunk ? <p>{m.library_anilist_slice()}</p> : <p>{m.library_anilist_not_complete()}</p>}
       {snap.cancelled ? <p role="status">{m.library_anilist_canceled()}</p> : null}
-      <div
-        className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3"
-        data-anilist-standard-question
-      >
-        <div className="min-w-0 space-y-1">
-          {snap.question ? (
-            <>
-              <p className="font-medium">{snap.question.label}</p>
-              <p className="[overflow-wrap:anywhere]">
-                {snap.question.meaning ?? m.library_anilist_question_meaning_unavailable()}
+      <ImportDetails title={m.library_import_score()}>
+        <div className="flex flex-wrap items-start justify-between gap-3" data-anilist-standard-question>
+          <div className="min-w-0 space-y-1">
+            {snap.question ? (
+              <>
+                <p className="font-medium">{snap.question.label}</p>
+                <p className="[overflow-wrap:anywhere]">
+                  {snap.question.meaning ?? m.library_anilist_question_meaning_unavailable()}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {m.library_anilist_question_scale({
+                    min: snap.question.scale.min,
+                    max: snap.question.scale.max,
+                    step: snap.question.scale.displayStep,
+                  })}{' '}
+                  · {m.library_anilist_question_revision({ revision: snap.question.revision })}
+                </p>
+              </>
+            ) : (
+              <p role="status">
+                {snap.questionPending ? m.library_anilist_question_loading() : m.library_anilist_question_unavailable()}
               </p>
-              <p className="text-sm text-muted-foreground">
-                {m.library_anilist_question_scale({
-                  min: snap.question.scale.min,
-                  max: snap.question.scale.max,
-                  step: snap.question.scale.displayStep,
-                })}{' '}
-                · {m.library_anilist_question_revision({ revision: snap.question.revision })}
-              </p>
-            </>
-          ) : (
-            <p role="status">
-              {snap.questionPending ? m.library_anilist_question_loading() : m.library_anilist_question_unavailable()}
-            </p>
-          )}
+            )}
+          </div>
+          <AniListAction type="button" variant="outline" disabled={busy} onClick={onRefreshQuestion}>
+            {m.library_anilist_question_refresh()}
+          </AniListAction>
         </div>
-        <AniListAction type="button" variant="outline" disabled={busy} onClick={onRefreshQuestion}>
-          {m.library_anilist_question_refresh()}
-        </AniListAction>
-      </div>
+      </ImportDetails>
+      {snap.page.length === 0 ? <ImportEmpty /> : null}
       <ul className="space-y-6">
         {snap.page.map((row) => {
-          const meta = snap.meta.find((item) => item.ordinal === row.ordinal);
+          const meta = metadata.get(row.ordinal);
           return (
             <li key={row.ordinal}>
               <AniListRowReview
@@ -84,7 +92,9 @@ export function AniListReviewPage({
                 busy={busy || snap.cancelled}
                 onSave={onSave}
                 onChoose={onChoose}
-              />
+              >
+                {renderLabels?.(row, meta)}
+              </AniListRowReview>
             </li>
           );
         })}

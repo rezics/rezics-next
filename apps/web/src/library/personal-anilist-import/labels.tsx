@@ -5,7 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListLabelSelection, AniListLabelTargetsResult, AniListRowMeta } from './contract';
 import { AniListAction, AniListCheck } from './controls';
 import { AniListTargetSearch } from './target';
-import { aniListTitle } from './meaning';
+import { ImportDetails } from '../personal-list-import/presentation';
 import { AniListLabelResult } from './results';
 
 /** One retained row, one bounded target-search page; native evidence is never reconstructed from JSON. */
@@ -71,25 +71,22 @@ export function AniListLabelAdoption({
     setTargets(response.kind === 'label-targets' ? response : null);
   }
   return (
-    <article
-      className="min-w-0 space-y-4 rounded-lg border p-4 [overflow-wrap:anywhere]"
-      data-anilist-label-row={row.ordinal}
-    >
-      <h3 className="text-lg font-medium">
-        {m.library_anilist_labels_title()} · {aniListTitle(row.source.evidence, m.library_anilist_untitled())}
-      </h3>
+    <article className="min-w-0 space-y-4 border-t pt-4 [overflow-wrap:anywhere]" data-anilist-label-row={row.ordinal}>
+      <h4 className="font-semibold">{m.library_import_labels()}</h4>
       <p>{m.library_anilist_labels_independent()}</p>
-      <dl className="space-y-1 text-sm" data-anilist-label-evidence>
-        <dt>{m.library_anilist_labels_membership()}</dt>
-        <dd>{evidence.membership}</dd>
-        <dt>{m.library_anilist_group()}</dt>
-        <dd>{evidence.grouping}</dd>
-        <dt>{m.library_anilist_labels_tags()}</dt>
-        <dd>
-          {evidence.tagEvidence.entry} · {evidence.tagEvidence.media} · {evidence.tagEvidence.membership}
-        </dd>
-      </dl>
-      <p className="text-sm">{evidence.reason}</p>
+      <ImportDetails>
+        <dl className="space-y-1 text-sm" data-anilist-label-evidence>
+          <dt>{m.library_anilist_labels_membership()}</dt>
+          <dd>{evidence.membership}</dd>
+          <dt>{m.library_anilist_group()}</dt>
+          <dd>{evidence.grouping}</dd>
+          <dt>{m.library_anilist_labels_tags()}</dt>
+          <dd>
+            {evidence.tagEvidence.entry} · {evidence.tagEvidence.media} · {evidence.tagEvidence.membership}
+          </dd>
+        </dl>
+        <p className="text-sm">{evidence.reason}</p>
+      </ImportDetails>
       <AniListTargetSearch
         disabled={locked}
         value={labels.subjectId}
@@ -144,9 +141,11 @@ export function AniListLabelAdoption({
           return (
             <li key={value.key} className="space-y-2 rounded border p-3" data-anilist-label-key={value.key}>
               <p>{value.value}</p>
-              <p className="text-sm">
-                {value.key} · {value.origin} · {String(value.member)}
-              </p>
+              <ImportDetails>
+                <p>
+                  {value.key} · {value.origin} · {String(value.member)}
+                </p>
+              </ImportDetails>
               {selectable ? (
                 <>
                   <AniListCheck

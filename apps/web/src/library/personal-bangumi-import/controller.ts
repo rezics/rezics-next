@@ -245,6 +245,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       return snapshot();
     }
     const current = response.page;
+    uploadId = current.uploadId;
     page = current.rows;
     after = cursor;
     next = current.next;

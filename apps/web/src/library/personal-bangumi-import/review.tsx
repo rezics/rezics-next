@@ -1,3 +1,4 @@
+import { ImportEmpty } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { BangumiJourneySnapshot } from './controller';
 import type { BangumiImportPort, BangumiLabelPanelState } from './contract';
@@ -8,6 +9,7 @@ import type { BangumiVisit } from './visit';
 export function BangumiReviewPage({
   snap,
   busy,
+  navigationLocked = busy,
   port,
   visit,
   labelPanels,
@@ -19,6 +21,7 @@ export function BangumiReviewPage({
 }: {
   snap: BangumiJourneySnapshot;
   busy: boolean;
+  navigationLocked?: boolean;
   port: BangumiImportPort;
   visit: BangumiVisit;
   labelPanels: Record<string, BangumiLabelPanelState>;
@@ -31,20 +34,22 @@ export function BangumiReviewPage({
   onNext: () => void;
   onConfirm: () => void;
 }) {
+  const metadata = new Map(snap.meta.map((row) => [row.ordinal, row]));
   const reviewed = snap.meta.filter((row) => row.reviewToken).length;
   return (
     <section className="space-y-6" data-bangumi-stage="review">
-      <p>
-        {m.library_bangumi_page_status({
-          shown: snap.page.length,
-          total: snap.count,
-          after: snap.after + 1,
-        })}
+      <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
+      <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
+      <p role="status">
+        {snap.count === 0
+          ? m.library_import_retained_page({ shown: snap.page.length })
+          : m.library_bangumi_page_status({ shown: snap.page.length, total: snap.count, after: snap.after + 1 })}
       </p>
       {snap.cancelled ? <p role="status">{m.library_bangumi_canceled()}</p> : null}
+      {snap.page.length === 0 ? <ImportEmpty /> : null}
       <ul className="space-y-6">
         {snap.page.map((row) => {
-          const meta = snap.meta.find((item) => item.ordinal === row.ordinal);
+          const meta = metadata.get(row.ordinal);
           return (
             <li key={row.ordinal}>
               <BangumiRowReview
@@ -65,11 +70,15 @@ export function BangumiReviewPage({
       </ul>
       <div className="flex flex-wrap gap-3">
         {snap.next !== null ? (
-          <BangumiAction type="button" variant="outline" disabled={busy} onClick={onNext}>
+          <BangumiAction type="button" variant="outline" disabled={navigationLocked} onClick={onNext}>
             {m.library_bangumi_next_page()}
           </BangumiAction>
         ) : null}
-        <BangumiAction type="button" disabled={busy || snap.cancelled || reviewed === 0} onClick={onConfirm}>
+        <BangumiAction
+          type="button"
+          disabled={navigationLocked || snap.cancelled || reviewed === 0}
+          onClick={onConfirm}
+        >
           {m.library_bangumi_continue_confirm()}
         </BangumiAction>
       </div>

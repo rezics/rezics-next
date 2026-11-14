@@ -1,3 +1,4 @@
+import { ImportDetails, ImportEmpty } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { MalOwnVoteReadback, MalPage, MalQuestion } from './contract';
 import { MalAction } from './controls';
@@ -42,23 +43,28 @@ export function MalReviewPage({
   });
   return (
     <section className="space-y-6" data-mal-stage="review">
-      <p>
+      <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
+      <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
+      <p role="status">
         {m.library_mal_page_status({
           shown: page.rows.length,
           total: page.total,
           after: after + 1,
         })}
       </p>
-      <div className="space-y-2 rounded-md border p-3">
-        {question ? (
-          <p role="status">{m.library_mal_question_loaded({ label: question.label, revision: question.revision })}</p>
-        ) : questionUnavailable ? (
-          <p role="status">{m.library_mal_question_unavailable()}</p>
-        ) : null}
-        <MalAction type="button" variant="outline" disabled={busy || questionLoading} onClick={onReadQuestion}>
-          {questionLoading ? m.library_mal_reading_question() : m.library_mal_read_question()}
-        </MalAction>
-      </div>
+      <ImportDetails title={m.library_mal_native_score_question()}>
+        <div className="space-y-2">
+          {question ? (
+            <p role="status">{m.library_mal_question_loaded({ label: question.label, revision: question.revision })}</p>
+          ) : questionUnavailable ? (
+            <p role="status">{m.library_mal_question_unavailable()}</p>
+          ) : null}
+          <MalAction type="button" variant="outline" disabled={busy || questionLoading} onClick={onReadQuestion}>
+            {questionLoading ? m.library_mal_reading_question() : m.library_mal_read_question()}
+          </MalAction>
+        </div>
+      </ImportDetails>
+      {page.rows.length === 0 ? <ImportEmpty /> : null}
       {page.canceled ? <p role="status">{m.library_mal_canceled()}</p> : null}
       <ul className="space-y-6">
         {page.rows.map((row) => (

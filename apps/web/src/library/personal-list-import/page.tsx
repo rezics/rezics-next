@@ -1,3 +1,4 @@
+import { ImportDetails, ImportJourney, ImportReturn } from './presentation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLibraryWorkspaceAdmission } from '../library-workspace-admission';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -142,20 +143,23 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
   const locked = snap.busy || !!snap.retryCommand;
   const showSourceRetry = snap.notice?.kind === 'unknown' && snap.notice.command.kind === 'source';
   return (
-    <main ref={main} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+    <main ref={main} className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_vndb_title()}</PageHeading>
+      <ImportJourney stage={snap.stage} />
       {snap.page && snap.reviewCurrent ? (
-        <p className="text-sm">
-          <a
-            className="underline underline-offset-2"
-            href={vndbReviewHref({ uploadId: snap.page.uploadId, offset: snap.offset })}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {m.library_vndb_reopen_review()}
-          </a>{' '}
-          {m.library_vndb_reopen_help()}
-        </p>
+        <ImportDetails title={m.library_import_retained()}>
+          <p className="text-sm">
+            <a
+              className="underline underline-offset-2"
+              href={vndbReviewHref({ uploadId: snap.page.uploadId, offset: snap.offset })}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {m.library_vndb_reopen_review()}
+            </a>{' '}
+            {m.library_vndb_reopen_help()}
+          </p>
+        </ImportDetails>
       ) : null}
       {libraryReturn && snap.stage === 'upload' ? <CurrentImportLibrary visit={visit} returned /> : null}
       {noticeText(snap.notice) ? (
@@ -180,14 +184,16 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
       {snap.stage === 'review' ? (
         <>
           {snap.limits ? (
-            <p className="text-sm text-muted-foreground">
-              {m.library_vndb_native_limits({
-                xml: snap.limits.bytes,
-                wire: snap.limits.wireBytes,
-                rows: snap.limits.rows,
-                page: snap.limits.page,
-              })}
-            </p>
+            <ImportDetails>
+              <p className="text-sm text-muted-foreground">
+                {m.library_vndb_native_limits({
+                  xml: snap.limits.bytes,
+                  wire: snap.limits.wireBytes,
+                  rows: snap.limits.rows,
+                  page: snap.limits.page,
+                })}
+              </p>
+            </ImportDetails>
           ) : null}
           <VndbReviewPage
             snap={snap}
@@ -221,7 +227,7 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
         <>
           <VndbResultPage
             snap={snap}
-            busy={snap.busy}
+            busy={locked}
             onResume={() => void act((current) => current.resume())}
             onReview={() => void act((current) => current.backToReview())}
             onDiscard={() => void act((current) => current.discard())}
@@ -273,6 +279,7 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
           ) : null}
         </div>
       ) : null}
+      <ImportReturn />
       <VndbDeparture
         active={!!snap.uploadId && snap.stage !== 'removed' && (snap.stage !== 'results' || locked)}
         locked={locked}
