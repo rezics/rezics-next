@@ -599,13 +599,12 @@ export async function removeFinishedWorktree(
     for (let index = 0; index < taskBackfill.examined; index++) io.observe?.('maintenance-backfill-task-row');
     const candidates = store.worktreeMaintenanceCandidates(MAINTENANCE_CANDIDATE_BATCH_SIZE, false);
     const gitDeadlineMs = Math.min(Date.now() + 10_000, options.deadlineMs ?? Infinity);
-    let gitWorkStarted = false;
     const roots = worktreeRoots(settings);
     const pressureWaits = { value: 0 };
     const completed: typeof candidates = [];
     let removedId: string | null = null;
     for (const candidate of candidates) {
-      if (options.signal?.aborted || (gitWorkStarted && Date.now() >= gitDeadlineMs)) break;
+      if (options.signal?.aborted || Date.now() >= gitDeadlineMs) break;
       store.advanceWorktreeMaintenance(candidate);
       const task = candidate.task;
       let taskLease: DirectoryLease;
@@ -643,7 +642,6 @@ export async function removeFinishedWorktree(
         }
 
         if (existsSync(join(current.worktree, '.temp/check-git-publications'))) {
-          gitWorkStarted = true;
           const custody = await sweepCheckGit(current.worktree, (io.now ?? Date.now)(), {
             deadlineMs: gitDeadlineMs,
             ...(options.signal ? { signal: options.signal } : {}),

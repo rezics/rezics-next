@@ -5,6 +5,8 @@ import { completedUtcHour, parseUtcHour, previousUtcHours, type UtcHour } from '
 import { sendHourlyEfficiencyReport } from '../src/efficiency-report-delivery.ts';
 import {
   captureHourlyEfficiencyObservation,
+  hourlyReportStage,
+  type ReportStageObserver,
   measureProductLineObservation,
   readFrozenHourlyEfficiencyReport,
   renderHourlyEfficiencyReport,
@@ -42,12 +44,17 @@ function parseArguments(args: string[]): Arguments {
 
 async function main(args: string[]): Promise<void> {
   const parsed = parseArguments(args);
+  const observeStage: ReportStageObserver | undefined = parsed.scheduled
+    ? (stage, event, wallMs, cpuMs) =>
+        console.error(`hourly-report stage=${stage} event=${event} wallMs=${wallMs} cpuMs=${cpuMs}`)
+    : undefined;
+  const stage = <T>(name: string, action: () => T): T => hourlyReportStage(observeStage, name, action);
   const now = new Date();
   const bucket = parsed.bucket ? parseUtcHour(parsed.bucket) : completedUtcHour(now);
   if (parsed.send) assertHourlyEfficiencyBucketEnded(bucket, now);
 
-  const settings = loadSettings();
-  const db = openDb(join(settings.stateDirectory, 'goal.sqlite'), settings.policy?.storage);
+  const settings = stage('settings', () => loadSettings());
+  const db = stage('database', () => openDb(join(settings.stateDirectory, 'goal.sqlite'), settings.policy?.storage));
   try {
     const existing = readFrozenHourlyEfficiencyReport(db, bucket.start);
     let report: string;
@@ -55,26 +62,23 @@ async function main(args: string[]): Promise<void> {
       report = existing.report;
     } else if (parsed.send) {
       const previous = readFrozenHourlyEfficiencyReport(db, previousUtcHours(bucket.start, 1)[0]!.start);
-      const productLineMeasurement = measureProductLineObservation(
-        process.cwd(),
-        bucket.start,
-        now,
-        previous?.observation.sourceRevision,
+      const productLineMeasurement = stage('product-lines', () =>
+        measureProductLineObservation(process.cwd(), bucket.start, now, previous?.observation.sourceRevision),
       );
-      const capture = captureHourlyEfficiencyObservation(db, {
-        bucket: bucket.start,
-        policy: settings.policy,
-        now,
-        productLineMeasurement,
-      });
+      const capture = stage('capture', () =>
+        captureHourlyEfficiencyObservation(db, {
+          bucket: bucket.start,
+          policy: settings.policy,
+          now,
+          productLineMeasurement,
+          ...(observeStage ? { observeStage } : {}),
+        }),
+      );
       report = capture.snapshot.report;
     } else {
       const previous = readFrozenHourlyEfficiencyReport(db, previousUtcHours(bucket.start, 1)[0]!.start);
-      const productLineMeasurement = measureProductLineObservation(
-        process.cwd(),
-        bucket.start,
-        now,
-        previous?.observation.sourceRevision,
+      const productLineMeasurement = stage('product-lines', () =>
+        measureProductLineObservation(process.cwd(), bucket.start, now, previous?.observation.sourceRevision),
       );
       report = await renderHourlyEfficiencyReport(db, {
         bucket: bucket.start,
@@ -89,6 +93,8 @@ async function main(args: string[]): Promise<void> {
       console.log('Delivery: dry report; not sent.');
       return;
     }
+    observeStage?.('delivery', 'start', 0, 0);
+    const deliveryStarted = Date.now();
     const delivery = await sendHourlyEfficiencyReport(
       db,
       bucket.start,
@@ -101,6 +107,7 @@ async function main(args: string[]): Promise<void> {
         ? { managerId: settings.integration.supermanager, stateDirectory: settings.stateDirectory }
         : undefined,
     );
+    observeStage?.('delivery', 'finish', Date.now() - deliveryStarted, 0);
     const detail = delivery.detail ? ` (${delivery.detail})` : '';
     const disposition = `Delivery: ${delivery.disposition}${detail}.`;
     console.log(parsed.scheduled ? disposition : `${report}\n${disposition}`);
