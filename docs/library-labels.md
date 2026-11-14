@@ -81,6 +81,11 @@ The additive command action names are:
 These actions reuse `personal_library`, owner partitioning, native Access admission and the existing `library_entry`
 scopes. They add no resource type or scope and change no Collection action. The accepted HTTP paths are:
 
+**PRIVATE READ LIFETIME DECISION:** Catalogue, point, assignment and post-enrichment admission reads carry the original
+request deadline through checkout and transaction cleanup. An expired checkout sends no SQL; an uncertain transaction
+discards its client, so the next authorized visit returns the same selected private data with current owner and home
+admission.
+
 - `GET /v1/libraryLabels`: optional `q`, `cursor`, `limit`; returns `200 {labels:[{id,name,revision}],next}`.
 - `POST /v1/libraryLabels`: `{name}`; returns `201 {label:{id,revision}}`.
 - `PATCH /v1/libraryLabels/{id}`: `{name,revision}`; returns `200 {label:{id,revision}}`.

@@ -1,14 +1,14 @@
 import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import accountShare from '../access/account-share.sql';
-import { deadlineClient, readAccountCommandState } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { readAccountCommandState } from './access-port.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { runLibraryBoundedOperation } from './collection-command-work.ts';
 import { labelReadAdmissionWork } from './label-operation-bounds.ts';
+import { withLabelReadConnection } from './label-read-connection.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 
@@ -62,17 +62,9 @@ export async function reAdmitLabelRead(
       'library.label.read.final-admission',
       labelReadAdmissionWork(route, actor.accountId, 'READ COMMITTED'),
       () =>
-        withConnection(pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
-          try {
-            const home = await admitLabelRead(client, actor, route);
-            if (home.epoch !== expectedHomeEpoch) throw new GrantDeniedError();
-            await client.query('COMMIT');
-          } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-          }
+        withLabelReadConnection(pool, deadline, 'READ COMMITTED', async (client) => {
+          const home = await admitLabelRead(client, actor, route);
+          if (home.epoch !== expectedHomeEpoch) throw new GrantDeniedError();
         }),
     ),
   );

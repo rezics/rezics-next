@@ -30,6 +30,8 @@ test('library code takes every deadline from deadlineFor with one wall-clock wor
       'collections.ts',
       'command-support.ts',
       'follows.ts',
+      'label-assignment-commands.ts',
+      'label-commands.ts',
       'subject-anchor.ts',
       'views.ts',
     ].sort(),

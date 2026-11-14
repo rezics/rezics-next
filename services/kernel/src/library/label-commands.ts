@@ -3,7 +3,6 @@ import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { newId, routeOf } from '../route/route.ts';
@@ -14,6 +13,7 @@ import {
   createLibraryCommandRunner,
   type LibraryCommandBody,
   type LibraryCommandExecutionPlan,
+  WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
 import { LibraryNotFoundError, sameAccountRoute } from './collection-command-work.ts';
 import { LibraryConflictError } from './entry-errors.ts';
@@ -24,6 +24,7 @@ import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from 
 import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { admitLabelRead, type LabelReadHome } from './label-read-admission.ts';
+import { withLabelReadConnection } from './label-read-connection.ts';
 import {
   composeLabelOperation,
   executeLabelOperation,
@@ -140,21 +141,14 @@ export function createPersonalLabelCommands(config: {
   async function snapshot<T>(
     actor: Actor,
     action: string,
+    deadline: number,
     body: (client: Client, owner: AccountActor, route: number, home: LabelReadHome) => Promise<T>,
   ) {
     const owner = account(actor, action);
     const route = routeOf(owner.accountId)!;
-    return withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-      try {
-        const home = await admitLabelRead(client, owner, route);
-        const result = await body(client, owner, route, home);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+    return withLabelReadConnection(pool, deadline, 'REPEATABLE READ', async (client) => {
+      const home = await admitLabelRead(client, owner, route);
+      return body(client, owner, route, home);
     });
   }
 
@@ -449,6 +443,7 @@ export function createPersonalLabelCommands(config: {
   function readLabel(actor: Actor, labelId: string): Promise<Label> {
     const owner = account(actor, 'library_entry:read');
     const route = routeOf(owner.accountId)!;
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const plan = composeLabelOperation(
       labelPointReadPlan({ route, accountId: owner.accountId, labelId }),
       [
@@ -463,7 +458,7 @@ export function createPersonalLabelCommands(config: {
       true,
     );
     return executeLabelOperation(plan, () =>
-      snapshot(actor, 'library_entry:read', async (client, owner, route) => {
+      snapshot(actor, 'library_entry:read', deadline, async (client, owner, route) => {
         sameAccountRoute(owner.accountId, labelId);
         const label = await store.readPersonalLabel(client, route, owner.accountId, labelId);
         if (!label) throw new LibraryNotFoundError();
@@ -491,6 +486,7 @@ export function createPersonalLabelCommands(config: {
       throw new RangeError(`Page limit must be an integer from 1 to ${LABEL_PAGE_MAX}`);
     const owner = account(actor, 'library_entry:list');
     const route = routeOf(owner.accountId)!;
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const hasCursor = parsed.cursor !== undefined;
     const composed = composeLabelOperation(
       labelCataloguePlan({
@@ -518,7 +514,7 @@ export function createPersonalLabelCommands(config: {
       true,
     );
     return executeLabelOperation(composed, () =>
-      snapshot(actor, 'library_entry:list', async (client, owner, route, partition) => {
+      snapshot(actor, 'library_entry:list', deadline, async (client, owner, route, partition) => {
         const binding = {
           route: 'library_label.list',
           viewer: owner.accountId,

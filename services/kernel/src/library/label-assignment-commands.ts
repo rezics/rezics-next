@@ -1,6 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { deadlineClient } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
@@ -11,7 +10,6 @@ import {
   type AuthoritativeTime,
   type CommandResult,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -35,6 +33,7 @@ import { readShelfGeneration } from './shelf-reader-generation.ts';
 import { readLibraryEntryTiles, type LibraryEntryTile } from './library-entry-tiles.ts';
 import { readPersonalLabel } from './label-store.ts';
 import { admitLabelRead, attachLabelReadHome, type LabelReadHome } from './label-read-admission.ts';
+import { withLabelReadConnection } from './label-read-connection.ts';
 import { readLibraryProfileAnchor } from './profile-source.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
@@ -127,19 +126,10 @@ export function createLabelAssignmentCommands(deps: {
     deadline: number,
     body: (client: Client, route: number, home: LabelReadHome) => Promise<T>,
   ) {
-    return withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline),
-        route = routeOf(actor.accountId)!;
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-      try {
-        const home = await admitLabelRead(client, actor, route);
-        const result = await body(client, route, home);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+    const route = routeOf(actor.accountId)!;
+    return withLabelReadConnection(pool, deadline, 'REPEATABLE READ', async (client) => {
+      const home = await admitLabelRead(client, actor, route);
+      return body(client, route, home);
     });
   }
   async function mutate(
