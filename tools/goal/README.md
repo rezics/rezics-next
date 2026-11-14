@@ -3356,8 +3356,10 @@ briefs written or moved back since the turn began count as decisions and reset t
 
 For Codex managers, matched work completion persists inbox-wait intent and pauses native Goal autonomy. The manager
 remains running on the same thread with its objective, budget and usage. Real mail waits unread during pool or allowance
-holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. Activation can
-start the turn first; the host rejoins and steers it. User pauses and native budget, usage, blocked and complete states
+holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. The first
+delivery on a new host connection rejoins the original thread before activation. A viewer can already have loaded the
+thread, and steering it does not subscribe the controller to completion events; without the rejoin, native autonomy
+can keep running after work finishes. Activation may start the turn first; the subscribed host steers it. User pauses and native budget, usage, blocked and complete states
 retain their meaning. Blocked Goals accept admitted explicit inbox turns without reactivation. Empty wakeups and
 recovery leave idle threads parked. See the
 [OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).

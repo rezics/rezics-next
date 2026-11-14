@@ -1531,8 +1531,28 @@ export class ManagerSessions {
     if ((idleWake || state.activeTurnId === null) && this.services.canStartTurn && !this.services.canStartTurn(state))
       return;
     const client = await this.transport.client(state.pool);
-    await this.transport.rebindCodexViewer(state, state.threadId!, client);
-    state.goalState = await this.transport.getGoal(client, state.threadId!);
+    const threadId = state.threadId!;
+    await this.transport.rebindCodexViewer(state, threadId, client);
+    state.goalState = await this.transport.getGoal(client, threadId);
+    const permitsDelivery = () =>
+      state.goalState?.status === 'active' || state.goalState?.status === (idleWake ? 'paused' : 'blocked');
+    if (!permitsDelivery()) {
+      this.save(state);
+      return;
+    }
+    // turn/steer can succeed on a thread loaded by a viewer without registering this host for turn events.
+    // Rejoin while still parked so native activation cannot finish work without a controller observing it.
+    const resumed = await this.transport.rejoinForDelivery(client, state, threadId);
+    if (resumed) {
+      if (resumed.latestTurn?.id === state.activeTurnId && resumed.latestTurn.status !== 'inProgress')
+        this.turnEnded(state, resumed.latestTurn.id, resumed.latestTurn.status);
+      this.adoptActiveTurn(state, resumed.activeTurnId);
+      state.goalState = await this.transport.getGoal(client, threadId);
+      if (!permitsDelivery()) {
+        this.save(state);
+        return;
+      }
+    }
     if (idleWake) {
       if (state.goalState?.status === 'paused') {
         // Native autonomy may start a turn as soon as the Goal becomes active.
@@ -1545,11 +1565,6 @@ export class ManagerSessions {
       }
       state.waitingForInbox = false;
       this.save(state);
-    } else if (state.goalState?.status !== 'active' && state.goalState?.status !== 'blocked') {
-      // A running manager can still receive an admitted manual turn while its native Goal is blocked.
-      // Keep that native state intact; only a real inbox event may take the existing explicit turn path.
-      this.save(state);
-      return;
     }
     await this.transport.rebindCodexViewer(state, state.threadId!, client, {
       restoreExited: state.goalState?.status === 'active',
