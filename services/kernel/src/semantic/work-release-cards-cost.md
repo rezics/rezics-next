@@ -42,3 +42,13 @@ the membership page and cards against their separate ceilings.
 The growth acceptance runs the composed native producer at 64, 512 and 4,096 unrelated Subjects while holding the
 actual page keys fixed and adding obsolete selected-Subject history. It measures examined rows and keyed statements
 from captured plans; unrelated population and obsolete history do not supply a query bound.
+
+### Scalar source-fence addition
+
+For `S` selected scalar statement rows, where `S ≤ 20 × 12 × 32 = 7,680`, exact provenance is read with
+`candidateSources` in batches of at most 256 per edition-home partition. The query count is
+`Σ ceil(Sₕ / 256)` across addressed edition homes, with at most 20 homes; existing partition bindings are reused.
+Valid imported Source tuples are deduplicated
+by `fencedIds` and read from their own tuple homes in batches of at most 100; for `Tₕ` distinct tuples in a source-home
+partition, that adds `ceil(Tₕ / 100)` fence statements. Agent and authored facts do not add fence tuples. These reads
+stay in the selected producer snapshot; no source-history enumeration or guessed subject-home fence lookup is added.

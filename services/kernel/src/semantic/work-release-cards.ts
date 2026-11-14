@@ -9,6 +9,7 @@ import listOutboundLinks from './list-outbound-links-by-property.sql';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Statement } from './item.ts';
 import { withReadTransaction } from './read.ts';
+import { applyWorkReleaseCardFieldFences } from './work-release-card-field-fences.ts';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import type { WorkReleaseCardMembershipLink, WorkReleaseCardsInput } from './copy-work-reader-port.ts';
 import {
@@ -188,6 +189,8 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
 
     const relationCandidatesByPartition = new Map<number, RelationKey[]>();
     const relationFacts = new Map<string, FactRow>();
+    const scalarFields: { subject: string; property: string; field: SelectedField }[] = [];
+    const clientsByHome = new Map<number, CommandTransaction>();
     const typeById = new Map(memberships.map(({ id, type }) => [id, type]));
     await withReadTransaction(input.pool, async (client) => {
       const homes = new Map<number, string[]>();
@@ -199,6 +202,7 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
       }
       for (const [home, batch] of homes) {
         const local = (await partitionReadClient(client, home)) as CommandTransaction;
+        clientsByHome.set(home, local);
         for (const id of batch) {
           const fields = new Map<string, SelectedField>();
           for (const property of requested.get(id) ?? []) {
@@ -257,11 +261,15 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
             }
             const view = await effectiveSlotFacts(local, id, property, context, defaults);
             const facts = view.facts.filter((fact) => fact.kind === 'statement');
-            fields.set(property, { facts: [...facts], withheld: !!view.resolution });
+            const field = { facts: [...facts], withheld: !!view.resolution };
+            fields.set(property, field);
+            scalarFields.push({ subject: id, property, field });
           }
           selected.set(id, fields);
         }
       }
+
+      await applyWorkReleaseCardFieldFences(client, input.routeKey, clientsByHome, scalarFields);
 
       for (const [home, candidates] of relationCandidatesByPartition) {
         const local = (await partitionReadClient(client, home)) as CommandTransaction;
@@ -298,9 +306,11 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
     }
 
     const targetIds = new Set<string>();
-    for (const fields of projected.values()) {
-      for (const field of fields.values()) {
-        if (field.unavailable) continue;
+    for (const [id, fields] of projected) {
+      const selectedFields = selected.get(id);
+      for (const [property, field] of fields) {
+        if (field.unavailable || selectedFields?.get(property)?.withheld || selectedFields?.get(property)?.unavailable)
+          continue;
         for (const statement of field.statements) {
           if (
             statement.property.data_type === 'wikibase-item' &&

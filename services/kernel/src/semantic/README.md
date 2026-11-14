@@ -1283,6 +1283,8 @@ Decision: work-release card fields batch selected native facts through Semantic'
 
 Decision: work-release comparison scalar fields use the effective native slot selection: Global compact facts or current adoption only; Context inheritance filters that selection by current Context rejections and honors defaults, suppression and replacement, while ordinary reads retain rejected candidates.
 
+Decision: release-card scalar fields resolve selected candidate provenance through Semantic's native Source readers; a taken tuple withholds the whole field, while incomplete provenance marks only that field unavailable.
+
 The pure copy-work request and result vocabulary lives in `copy-work-disclosure-contract.ts`; native dependencies and the Search evidence contract live in `copy-work-reader-port.ts`. `copy-work-application.ts` owns the reading operation and exposes compatibility facades for the existing read entry points. `composition/semantic-copy-work.ts` binds the Semantic native readers and Search evidence adapter, and `runtime-defaults.ts` installs that binding before serving requests. Native current relation, release, list, facet and work accounting implementations remain their owning producers. Direct tests of those public readers install the same application as the process runtime.
 
 `readCopyWorkDisclosure(deps, {identities, languages?})` is the native batch for
