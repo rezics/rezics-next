@@ -4658,6 +4658,8 @@
   "library_collection_description_reader_collapse": "説明を折りたたむ",
   "library_collection_description_reader_expand": "説明の全文を読む",
   "library_collection_details": "コレクションの詳細",
+  "library_collection_create_departure_description": "保存していないコレクションの詳細は失われます。離れてもコレクションは作成されません。",
+  "library_collection_create_departure_unknown": "このリクエストですでにコレクションが作成されている可能性があります。元のリクエストを再試行するには、このページに留まってください。離れると、このページの復旧用リクエストは破棄されます。作成済みのコレクションは取り消されません。",
   "library_collection_draft_navigation_description": "未保存のメタデータ、並び順、メモは失われます。離れても変更は保存されません。",
   "library_collection_draft_navigation_leave": "離れる",
   "library_collection_draft_navigation_pending": "処理中のコマンド、または結果が不明なコマンドがあります。離れる前に、このページで既存のコマンドの結果を確認してください。",

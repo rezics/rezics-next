@@ -4658,6 +4658,8 @@
   "library_collection_description_reader_collapse": "收起描述",
   "library_collection_description_reader_expand": "阅读完整描述",
   "library_collection_details": "收藏集详情",
+  "library_collection_create_departure_description": "未保存的收藏集详情将丢失。离开不会创建收藏集。",
+  "library_collection_create_departure_unknown": "此请求可能已经创建了收藏集。留在此页可重试原始请求。离开会丢弃本页用于恢复结果的请求，但不会撤销已经完成的创建。",
   "library_collection_draft_navigation_description": "未保存的元数据、成员顺序和备注将会丢失。离开不会保存更改。",
   "library_collection_draft_navigation_leave": "离开",
   "library_collection_draft_navigation_pending": "有命令正在处理，或结果尚不确定。请留在此页，确认现有命令的结果后再离开。",

@@ -4658,6 +4658,8 @@
   "library_collection_description_reader_collapse": "Contraer descripción",
   "library_collection_description_reader_expand": "Leer la descripción completa",
   "library_collection_details": "Detalles de la colección",
+  "library_collection_create_departure_description": "Se perderán los detalles de la colección que no hayas guardado. Salir no crea una colección.",
+  "library_collection_create_departure_unknown": "Es posible que esta solicitud ya haya creado la colección. Quédate para reintentar la solicitud original. Al salir se descarta la solicitud de recuperación de esta página y no se deshace una creación.",
   "library_collection_draft_navigation_description": "Se perderán los metadatos, el orden y las notas sin guardar. Salir no guarda los cambios.",
   "library_collection_draft_navigation_leave": "Salir",
   "library_collection_draft_navigation_pending": "Hay una operación pendiente o su resultado es incierto. Quédate aquí y resuelve la operación existente antes de salir.",

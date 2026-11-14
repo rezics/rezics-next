@@ -4658,6 +4658,8 @@
   "library_collection_description_reader_collapse": "Beschreibung einklappen",
   "library_collection_description_reader_expand": "Vollständige Beschreibung lesen",
   "library_collection_details": "Sammlungsdetails",
+  "library_collection_create_departure_description": "Deine ungespeicherten Sammlungsdetails gehen verloren. Beim Verlassen wird keine Sammlung erstellt.",
+  "library_collection_create_departure_unknown": "Diese Anfrage hat die Sammlung möglicherweise bereits erstellt. Bleibe hier, um die ursprüngliche Anfrage erneut zu senden. Beim Verlassen geht die Wiederherstellungsanfrage dieser Seite verloren; eine erstellte Sammlung wird nicht rückgängig gemacht.",
   "library_collection_draft_navigation_description": "Ungespeicherte Metadaten, die Reihenfolge und Notizen gehen verloren. Beim Verlassen wird nichts gespeichert.",
   "library_collection_draft_navigation_leave": "Verlassen",
   "library_collection_draft_navigation_pending": "Ein Befehl läuft noch oder sein Ergebnis ist unklar. Bleibe hier und kläre den bestehenden Befehl vor dem Verlassen.",

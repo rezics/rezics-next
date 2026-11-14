@@ -4658,6 +4658,8 @@
   "library_collection_description_reader_collapse": "Replier la description",
   "library_collection_description_reader_expand": "Lire la description complète",
   "library_collection_details": "Détails de la collection",
+  "library_collection_create_departure_description": "Les détails non enregistrés de votre collection seront perdus. Quitter ne crée pas de collection.",
+  "library_collection_create_departure_unknown": "Cette demande a peut-être déjà créé la collection. Restez pour réessayer la demande initiale. Quitter abandonne la demande de récupération de cette page et n’annule pas une création.",
   "library_collection_draft_navigation_description": "Les métadonnées, l’ordre et les notes non enregistrés seront perdus. Quitter n’enregistre aucune modification.",
   "library_collection_draft_navigation_leave": "Quitter",
   "library_collection_draft_navigation_pending": "Une commande est en cours ou son résultat est incertain. Restez ici et résolvez la commande existante avant de quitter.",

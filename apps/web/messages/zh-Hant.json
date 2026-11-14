@@ -4658,6 +4658,8 @@
   "library_collection_description_reader_collapse": "收起描述",
   "library_collection_description_reader_expand": "閱讀完整描述",
   "library_collection_details": "收藏集詳情",
+  "library_collection_create_departure_description": "未儲存的收藏集詳細資料將遺失。離開不會建立收藏集。",
+  "library_collection_create_departure_unknown": "此請求可能已經建立了收藏集。留在此頁可重試原始請求。離開會捨棄本頁用於恢復結果的請求，但不會撤銷已完成的建立。",
   "library_collection_draft_navigation_description": "尚未儲存的中繼資料、成員順序和備註將會遺失。離開不會儲存變更。",
   "library_collection_draft_navigation_leave": "離開",
   "library_collection_draft_navigation_pending": "有命令正在處理，或結果尚未確定。請留在此頁，確認現有命令的結果後再離開。",

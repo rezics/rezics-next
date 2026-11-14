@@ -1,4 +1,5 @@
 import { CollectionPresentationSummary } from '../../library/showcase-collection/presentation';
+import { useCollectionDraftNavigation } from '../../library/collection-draft-navigation';
 import { collectionTextIssue } from '../../library/collection-text-input';
 import { CollectionTextInputHelp, collectionTextInputAttributes } from '../../library/collection-text-input-field';
 import { useOperation } from '../../kernel/exposure';
@@ -75,6 +76,7 @@ export function NewCollectionForm({
   const [visibility, setVisibility] = useState<CollectionVisibility | ''>('');
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState(false);
+  const [retired, setRetired] = useState(false);
   const [kind, setKind] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
   const [textSubmitted, setTextSubmitted] = useState(false);
@@ -92,6 +94,20 @@ export function NewCollectionForm({
     };
   }, []);
 
+  function retire() {
+    const current = lifetime.current;
+    current.active = false;
+    current.locked = false;
+    current.intent = null;
+    setRetired(true);
+  }
+  const draftNavigation = useCollectionDraftNavigation({
+    dirty: !retired && (Boolean(title.trim() || description.trim()) || visibility !== '' || kind !== null),
+    locked: !retired && (pending || uncertain),
+    isCurrent: () => lifetime.current.active,
+    creation: { commandMayHaveApplied: pending || uncertain, discard: retire },
+  });
+
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const current = lifetime.current;
@@ -100,7 +116,6 @@ export function NewCollectionForm({
     current.locked = true;
     setPending(true);
     setFailure('');
-    let navigating = false;
     try {
       if (!current.intent) {
         const form = new FormData(event.currentTarget);
@@ -124,7 +139,8 @@ export function NewCollectionForm({
       const result = await intent.sender({ data: intent.data, headers: intent.headers });
       if (!current.active) return;
       if (result.ok) {
-        navigating = true;
+        // Retire synchronously before navigation so beforeunload and an older departure cannot compete.
+        retire();
         window.location.assign(`/${getLocale()}/collections/${encodeURIComponent(result.id)}`);
         return;
       }
@@ -144,7 +160,7 @@ export function NewCollectionForm({
         setFailure(m.library_publication_unknown());
       }
     } finally {
-      if (current.active && !navigating) {
+      if (current.active) {
         current.locked = false;
         setPending(false);
       }
@@ -158,10 +174,11 @@ export function NewCollectionForm({
       onSubmit={(event) => void create(event)}
       data-collection-create-workbench
     >
+      {draftNavigation}
       <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
       <fieldset
         className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]"
-        disabled={pending || uncertain}
+        disabled={retired || pending || uncertain}
       >
         <section
           className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6"
@@ -211,7 +228,7 @@ export function NewCollectionForm({
               submitted={textSubmitted}
             />
           </Field>
-          <VisibilityField onChange={setVisibility} value={visibility} disabled={pending || uncertain} />
+          <VisibilityField onChange={setVisibility} value={visibility} disabled={retired || pending || uncertain} />
           <div className="space-y-2 border-t border-border pt-4" data-collection-create-members>
             <h3 className="font-medium">{m.library_collection_members()}</h3>
             <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
@@ -233,7 +250,7 @@ export function NewCollectionForm({
                 kind={kind}
                 onKindChange={setKind}
                 coverMediaId={null}
-                disabled={pending || uncertain}
+                disabled={retired || pending || uncertain}
               />
             </div>
           </details>
@@ -255,7 +272,7 @@ export function NewCollectionForm({
       <div className="sticky bottom-3 z-20 flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
         <Button
           className="h-auto min-h-11 max-w-full whitespace-normal px-5 py-3"
-          disabled={pending || visibility === ''}
+          disabled={retired || pending || visibility === ''}
           aria-busy={pending}
           type="submit"
         >

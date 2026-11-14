@@ -4658,6 +4658,8 @@
   "library_collection_description_reader_collapse": "Collapse description",
   "library_collection_description_reader_expand": "Read full description",
   "library_collection_details": "Collection details",
+  "library_collection_create_departure_description": "Your unsaved Collection details will be lost. Leaving does not create a Collection.",
+  "library_collection_create_departure_unknown": "This request may already have created the Collection. Stay to retry the original request. Leaving discards this page’s recovery request and does not undo a creation.",
   "library_collection_draft_navigation_description": "Your unsaved metadata, member order and notes will be lost. Leaving does not save any changes.",
   "library_collection_draft_navigation_leave": "Leave",
   "library_collection_draft_navigation_pending": "A command is pending or its outcome is uncertain. Stay here and resolve the existing command before leaving.",

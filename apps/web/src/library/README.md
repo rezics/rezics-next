@@ -437,6 +437,16 @@ main checkout's `.reference/INDEX.md`. Impeccable references were absent from th
 fallback uses installed shared UI and tokens. Focused acceptance source and named authoring stories accompany the
 change; test, typing, build, browser, native and visual execution remain deferred to the verifier.
 
+Decision: new Collection drafts reuse `useCollectionDraftNavigation`; meaningful title/description, explicit
+visibility or a presentation choice requests Stay/Leave. Review disclosure and whitespace alone stay pristine.
+Stay keeps fields and the original sender, credential, key and body, including across same-viewer CSRF rotation.
+A definite native refusal permits correction; a lost response permits only the original exact retry. Creation's
+Leave retires this caller and its recovery intent, with explicit guidance that a pending or uncertain command may
+already have applied; it neither cancels nor recreates that command. Pending Collection edits keep their existing
+Stay-only policy. Successful creation retires departure protection before opening the supplied Collection, and
+retires any older requested destination. Viewer/admission retirement cancels a new caller's unresolved departure;
+late acknowledgements cannot navigate a replacement caller. State is O(1), with no new native calls or persistence.
+
 ## Collection publication
 
 Decision: the publication page offers the mounted whole-query command alongside explicit selection. Whole-query
