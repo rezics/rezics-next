@@ -5,6 +5,20 @@
 People can discover, contribute, discuss, collect and buy through accessible, localized interfaces, using the same
 capabilities and disclosure rules on every page and device.
 
+## Frontend reconstruction priority
+
+Web's primary implementation priority is rebuilding the actual frontend experience: common components, page
+hierarchy, responsive layout, navigation and useful product interactions. The manager discovers shared causes,
+assigns complete independent source outcomes and uses the authorized worker capacity to deliver them. Storybook
+fixtures and tests are tools for that work, not substitutes for improving the application.
+
+Review delivery means published, visually inspectable and manually usable pages with coherent data and working
+routes. Publish source increments promptly under the [review cadence](../development/storybook.md#review-publication-cadence).
+During the authorized code-only window, test work must not consume the implementation queue or delay review
+publication. Subsequent checks identify repairs; their results remain distinct from source and visual delivery.
+Preserve native authorization and money semantics. The complete release obligations below remain independent of
+the current reconstruction and review cycle.
+
 ## Done when
 
 - The site and Auth applications run locally through documented commands. Routing, navigation, localization and
