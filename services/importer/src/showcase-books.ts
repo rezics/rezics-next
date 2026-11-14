@@ -475,9 +475,9 @@ export async function planShowcaseBooks(input: {
     role: CreatorRole;
     personId: number;
     expectedType: 1 | 2;
+    draft: BangumiCreatorCreditDraft;
   }[] = [];
   const creatorIds = new Set<number>();
-  const credits: BangumiCreatorCreditDraft[] = [];
   let selectedCreditRows = 0;
   const creditOverflowFamilies = new Set<string>();
   for await (const row of input.tables.rows('bangumi', 'subject-persons', BOOK_TABLE_SCAN_LIMITS['subject-persons'])) {
@@ -533,10 +533,14 @@ export async function planShowcaseBooks(input: {
       continue;
     }
     creatorIds.add(personId);
-    creatorAssociations.push({ family, row, role: role.role, personId, expectedType: role.expectedType });
-    credits.push(
-      bangumiStaffDraft({ subject_id: subjectId, person_id: personId, position: row.position as number }, 1),
-    );
+    creatorAssociations.push({
+      family,
+      row,
+      role: role.role,
+      personId,
+      expectedType: role.expectedType,
+      draft: bangumiStaffDraft({ subject_id: subjectId, person_id: personId, position: row.position as number }, 1),
+    });
   }
 
   const creatorRows = new Map<number, Row>();
@@ -590,8 +594,7 @@ export async function planShowcaseBooks(input: {
     revision: null,
     payload,
   }));
-  const admittedPersonKeys = new Set([...acceptedCreatorRows].map((person) => `person:${asId(person.id)}`));
-  const admittedCredits = credits.filter((draft) => admittedPersonKeys.has(draft.person));
+  const admittedCredits = acceptedCreatorAssociations.map((association) => association.draft);
 
   const records: SourceRecord[] = [];
   for (const selected of selectedFamilyRecords)
