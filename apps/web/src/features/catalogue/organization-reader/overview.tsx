@@ -105,7 +105,7 @@ export function OrganizationOverview({
   );
   const o = { locale: locale as never };
   return (
-    <section aria-label={m.organization_reader_title({}, o)} className="min-w-0 space-y-3">
+    <section aria-label={m.organization_reader_title({}, o)} className="min-w-0 space-y-5 [overflow-wrap:anywhere]">
       {value ? (
         <OrganizationReader
           read={value}
@@ -121,24 +121,26 @@ export function OrganizationOverview({
         />
       ) : (
         <>
-          <h2 tabIndex={-1} className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring">
+          <h2 tabIndex={-1} className="text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring">
             {m.organization_reader_title({}, o)}
           </h2>
-          <p role="status" aria-live="polite">
-            {pending
-              ? m.candidate_loading({}, o)
-              : failed
-                ? m.organization_reader_failed({}, o)
-                : m.organization_reader_unavailable({}, o)}
-          </p>
-          {!pending && (
-            <a
-              className="inline-flex min-h-11 items-center underline focus-visible:outline-2 focus-visible:outline-ring"
-              href={href}
-            >
-              {m.organization_reader_refresh({}, o)}
-            </a>
-          )}
+          <div className="min-w-0 max-w-3xl space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5">
+            <p role="status" aria-live="polite" className="leading-relaxed text-muted-foreground">
+              {pending
+                ? m.candidate_loading({}, o)
+                : failed
+                  ? m.organization_reader_failed({}, o)
+                  : m.organization_reader_unavailable({}, o)}
+            </p>
+            {!pending && (
+              <a
+                className="inline-flex min-h-11 max-w-full items-center rounded-md border border-border bg-background px-3 py-2 text-left underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                href={href}
+              >
+                {m.organization_reader_refresh({}, o)}
+              </a>
+            )}
+          </div>
         </>
       )}
     </section>
