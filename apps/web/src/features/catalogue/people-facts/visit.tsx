@@ -111,10 +111,15 @@ function FactVisit({
     const origin = visit.source;
     const field = origin.ownerDocument.getElementById(factFieldAnchor(visit.field));
     setVisit(undefined);
-    if (origin.isConnected && !origin.closest('[hidden], [inert]')) origin.focus();
-    else {
-      setChanged(true);
-      field?.focus();
+    const surviving = origin.isConnected && !origin.closest('[hidden], [inert]');
+    if (!surviving) setChanged(true);
+    const target = surviving ? origin : field;
+    if (target) {
+      // A native inspection can outlive a collapsed secondary profile section.
+      for (let ancestor = target.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        if (ancestor.tagName === 'DETAILS') (ancestor as HTMLDetailsElement).open = true;
+      }
+      target.focus();
     }
   }
   const address = visit && factAddress(reading, visit.statement);
