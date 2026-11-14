@@ -126,6 +126,7 @@ export function createScopePreparation(
       const retained = createConceptBrowseStore(config.pool, config.prefix, record.scope_id, {
         expiresAt: Number(record.expires_at),
         leaseUntil: deadline,
+        deadline,
         reserve: ({ statements, rows, bytes }) =>
           work.consume({ ...zeroScopeWork(), statements, nativeRows: rows, bytes }),
       });

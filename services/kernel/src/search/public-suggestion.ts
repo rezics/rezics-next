@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { BoundedReadDeadlineError, withBoundedReadConnection } from '../database/pool.ts';
 import type { PublicFilterNativeSource } from '../semantic/index.ts';
 import type { PublicFilterCost, PublicFilterSource } from '../semantic/index.ts';
 import { createPublicFilterConsumerOperations } from './public-filter-consumer.ts';
@@ -106,7 +107,7 @@ export async function createPublicSuggestionOperations(
           cost,
         });
         const preparing = (): PublicSuggestionQuery => ({ status: 'preparing', queried, cost });
-        if (context.deadline <= Date.now()) return unavailable('deadline');
+        if (!Number.isSafeInteger(context.deadline) || context.deadline <= Date.now()) return unavailable('deadline');
         if (!nativeSource(config.source)) return unavailable('source_pending');
         const acquired = await custody.acquire(queried, context);
         add(acquired.cost);
@@ -167,8 +168,9 @@ export async function createPublicSuggestionOperations(
               response.body[config.physicalTarget]?.settings?.index?.uuid === queried.consumer.incarnation
             );
           }
-          if (!(await sameIncarnation())) return unavailable('incarnation_changed');
+          const initialIncarnation = await sameIncarnation();
           if (context.deadline <= Date.now()) return unavailable('deadline');
+          if (!initialIncarnation) return unavailable('incarnation_changed');
           const response = await config.search.request<{
             pit_id?: string;
             hits: {
@@ -285,10 +287,14 @@ export async function createPublicSuggestionOperations(
               encode(retainedExecution),
               window,
             ],
-            query_timeout: Math.max(1, context.deadline - Date.now()),
           };
           add({ ...emptyCost(), inputKeys: 3, dependencyPoints: 3, resultWrites: 1 });
-          const retainedWindow = await config.pool.query(retainWindow);
+          const retainedWindow = await withBoundedReadConnection(
+            config.pool,
+            context.deadline,
+            (client) => client.query(retainWindow),
+            { isUncertainSettledQueryError: () => true },
+          );
           if (retainedWindow.rowCount !== 1) return unavailable('observation_lost');
           if (context.deadline <= Date.now()) return unavailable('deadline');
           const final = await config.source.readPrivacyReductionHeads(
@@ -299,8 +305,13 @@ export async function createPublicSuggestionOperations(
           if (cost.inputKeys > 1000) return preparing();
           if (final.status !== 'observed') return unavailable('source_pending');
           if (!sourceObservationIsDisclosable(final)) return preparing();
-          if (!(await sameIncarnation())) return unavailable('incarnation_changed');
+          const finalIncarnation = await sameIncarnation();
+          if (context.deadline <= Date.now()) return unavailable('deadline');
+          if (!finalIncarnation) return unavailable('incarnation_changed');
           return { status: 'queried', queried, execution, start: started.start, result: hits, cost };
+        } catch (error) {
+          if (error instanceof BoundedReadDeadlineError) return unavailable('deadline');
+          throw error;
         } finally {
           const released = await custody.release(acquired.use, context);
           add(released.cost);

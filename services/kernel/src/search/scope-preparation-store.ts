@@ -19,6 +19,7 @@ import {
 import type { SearchHit } from './query.ts';
 import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { ConceptBrowseBinding, ConceptDescendantSelection } from './concept-browse.ts';
+import { cleanupConceptBrowses } from './concept-browse-store.ts';
 import orderedStateSql from './scope-ordered-state.sql';
 import orderedSaveSql from './scope-ordered-save.sql';
 import orderedPageSql from './scope-ordered-page.sql';
@@ -131,54 +132,6 @@ export type ScopePreparationRecord = {
 export function createScopePreparationStore(pool: Pool, prefix: string, work?: WorkClient) {
   function query<Row extends QueryResultRow = QueryResultRow>(deadline: number, sql: string, values: unknown[]) {
     return withScopePreparationConnection(pool, deadline, (client) => client.query<Row>(sql, values));
-  }
-  // Keep maintenance cleanup in the same finite lifetime as due scheduling. These are
-  // the existing eight-plan / 128-key cleanup windows, with no population-sized delete.
-  async function cleanup(deadline: number) {
-    await query(
-      deadline,
-      `UPDATE search.scope_preparation SET state='retained',revision=revision+1,lease_until=0
-      WHERE (partition_no,prefix,scope_id) IN (
-        SELECT partition_no,prefix,scope_id FROM search.scope_preparation
-        WHERE partition_no=0 AND prefix=$1 AND definition->>'kind'='concept'
-          AND state IN ('capture','ready') AND expires_at<=$2
-        ORDER BY expires_at,scope_id LIMIT 8 FOR UPDATE SKIP LOCKED
-      )`,
-      [prefix, Date.now()],
-    );
-    await withScopePreparationTransaction(pool, deadline, async (client) => {
-      const retired = await client.query<{ scope_id: string }>(
-        `SELECT scope_id FROM search.scope_preparation
-        WHERE partition_no=0 AND prefix=$1 AND definition->>'kind'='concept' AND state='retained'
-          AND frontier->>'cleaned' IS DISTINCT FROM 'true'
-        ORDER BY scope_id LIMIT 8 FOR UPDATE SKIP LOCKED`,
-        [prefix],
-      );
-      for (const { scope_id } of retired.rows) {
-        for (const [table, key] of [
-          ['scope_preparation_concept_frontier', 'parent'],
-          ['scope_preparation_concept_member', 'concept'],
-        ] as const) {
-          const keys = await client.query<{ key: string }>(
-            `SELECT ${key} AS key FROM search.${table}
-            WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 ORDER BY ${key} LIMIT 128 FOR UPDATE`,
-            [prefix, scope_id],
-          );
-          for (const row of keys.rows)
-            await client.query(
-              `DELETE FROM search.${table} WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND ${key}=$3`,
-              [prefix, scope_id, row.key],
-            );
-        }
-        await client.query(
-          `UPDATE search.scope_preparation SET frontier='{"kind":"concept","cleaned":true}'
-          WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND state='retained'
-            AND NOT EXISTS (SELECT 1 FROM search.scope_preparation_concept_frontier WHERE partition_no=0 AND prefix=$1 AND scope_id=$2)
-            AND NOT EXISTS (SELECT 1 FROM search.scope_preparation_concept_member WHERE partition_no=0 AND prefix=$1 AND scope_id=$2)`,
-          [prefix, scope_id],
-        );
-      }
-    });
   }
   return {
     async retain(
@@ -561,7 +514,7 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
     },
     async due(deadline = scopePreparationDeadline()): Promise<void> {
       if (!work) return;
-      await cleanup(deadline);
+      await cleanupConceptBrowses(pool, prefix, Date.now(), deadline);
       await withScopePreparationTransaction(pool, deadline, async (client) => {
         const rows = await client.query<{ scope_id: string; revision: string }>(
           `UPDATE search.scope_preparation
