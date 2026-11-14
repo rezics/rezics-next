@@ -54,7 +54,8 @@ selections; selections edited after dispatch remain local drafts. Reading curren
 Account, credential, occurrence, source lifetime or return-context replacement retires the caller. Retirement cancels
 an open departure decision and suppresses focus return to old controls. Late command results cannot restore that
 dialog or write into the replacement. Only the existing reader lifetime may retain a dispatched command through a
-read replacement; no unsent draft is persisted. Reopen and delete retain their existing command ownership.
+read replacement; no unsent draft is persisted. Occurrence reopen and retirement follow the lifecycle recovery
+rules below.
 
 The boundary derives constant local state from four selections and the existing command. It adds no request,
 writer, cache or persistence. Navigation confirmation supplies no native authority.
@@ -63,3 +64,33 @@ Acceptance source: `private-journal-draft-navigation.test.tsx` and `private-occu
 mounted departure, Clear, settled saves, independent editing and original retry, retirement and replacements.
 The named journal stories are in `stories/private-diary.stories.tsx`. Compiler, tests, native, keyboard, phone,
 themes, all eight locales and browser acceptance are deferred to the verifier.
+
+## Occurrence lifecycle recovery
+
+Decision: Cancel is available only before dispatch; retain one frozen lifecycle request and its captured sender in
+this occurrence's existing reader lifetime for exact Retry, while current reads and conflict review stay separate.
+
+An unsent review captures action, occurrence, viewer, credential, revision and key. Cancel returns to its launcher
+without changing journal selections. Dispatch removes Cancel and prevents another action or a journal write from
+replacing the unresolved request. Pending and unknown results have distinct messages. Original Retry reuses every
+captured operand and sender, even after current observations change. Reading the selected current occurrence never
+proves that original write; its state and revision remain explicitly labeled observations. There is no new read
+endpoint, polling, history scan, per-row request, persistence or departure mechanism.
+
+Journal fields remain editable while lifecycle recovery is pending or unknown. Lifecycle responses do not alter the
+journal's submitted comparison, original save, newer selections or shared Stay/Leave decision. Acknowledged retirement
+uses the existing terminal history navigation. A lifecycle conflict releases the refused request, rereads the existing
+selected occurrence and exposes recovery outside the journal editor. A fresh revision must be explicitly reviewed
+before another lifecycle review captures a new command. Viewer, credential, source or mutation permission replacement
+retires inappropriate controls and late effects without reporting a failed mutation. Reader retirement cannot restore
+old controls. Focus follows deliberate review/cancel or response recovery only while the person stays in that control.
+
+Design sources read before implementation: this owner, the linked Library journal/history owner,
+`occurrence-detail.tsx`, the exported `occurrence-server.ts` contracts, the journal departure adapter and focused
+occurrence/departure tests, `stories/private-diary.stories.tsx`, and the read-only main checkout `.reference/INDEX.md`.
+Native authorization and reopen/retire transports retain their existing contracts.
+
+Acceptance source adds unsent cancellation, pending and unknown preservation, exact replay after an independent read,
+newer journal fields and departure, lifecycle conflict without opening the journal editor, and reader/authority
+retirement with late results. Source review does not establish execution: occurrence/departure suites, compiler,
+native lifecycle/journal acceptance and phone/desktop/theme/locale/keyboard/promotion remain with the verifier.

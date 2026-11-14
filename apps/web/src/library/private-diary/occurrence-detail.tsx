@@ -61,12 +61,20 @@ type LifecycleCommand = {
   revision: number;
 };
 
+type LifecycleIntent = Readonly<{
+  data: Readonly<LifecycleCommand>;
+  send: typeof changeOccurrenceLifecycle;
+}>;
+
 type PrivateJournal = Extract<JournalReadResult, { kind: 'ready' }>['journal'];
 type JournalCustody = {
   command?: JournalCommand;
   basis?: PrivateJournal;
   flight?: object;
   listeners?: Set<() => void>;
+  lifecycle?: LifecycleIntent;
+  lifecycleFlight?: object;
+  lifecycleConflictRevision?: number;
 };
 // Only the existing progress-reader lifetime can retain a dispatched command through a read replacement.
 // Only a dispatched command and its original comparison survive here. Neither authorizes a current read.
@@ -132,11 +140,34 @@ export function PrivateOccurrenceControls(props: {
   const location = useLocation();
   const read = useOperation('progress_session.read');
   const journalRead = useOperation('progress_session_journal.read');
-  const source = useRef({ lifetime: props.lifetime, generation: 0 });
-  if (source.current.lifetime !== props.lifetime)
-    source.current = { lifetime: props.lifetime, generation: source.current.generation + 1 };
-  if (owner.state !== 'signed-in' || !owner.csrfToken || !read || !journalRead || !props.isCurrent())
+  const identity = JSON.stringify([
+    owner.state,
+    owner.subject,
+    owner.csrfToken,
+    props.session.id,
+    props.session.subjectId,
+    props.session.versionSubjectId,
+    location.search.history,
+    read,
+    journalRead,
+  ]);
+  const source = useRef({ lifetime: props.lifetime, identity, generation: 0 });
+  if (source.current.lifetime !== props.lifetime || source.current.identity !== identity) {
+    const previous = source.current.lifetime && journalCommands.get(source.current.lifetime);
+    if (previous) {
+      delete previous.lifecycle;
+      delete previous.lifecycleConflictRevision;
+    }
+    source.current = { lifetime: props.lifetime, identity, generation: source.current.generation + 1 };
+  }
+  if (owner.state !== 'signed-in' || !owner.csrfToken || !read || !journalRead || !props.isCurrent()) {
+    const previous = props.lifetime && journalCommands.get(props.lifetime);
+    if (previous) {
+      delete previous.lifecycle;
+      delete previous.lifecycleConflictRevision;
+    }
     return <p role="status">{m.library_occurrence_unavailable()}</p>;
+  }
   return (
     <PrivateJournalDraftNavigation
       key={JSON.stringify([
@@ -185,7 +216,7 @@ function OccurrenceControls({
       },
       [custody],
     ),
-    () => custody.flight,
+    () => custody.flight ?? custody.lifecycleFlight,
     () => undefined,
   );
   const [busy, setBusy] = useState(false);
@@ -271,12 +302,37 @@ function OccurrenceControls({
   const [refusedField, setRefusedField] = useState<string | null>(null);
   const [conflictRevision, setConflictRevision] = useState<number | null>(null);
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
-  const [lifecycleCommand, setLifecycleCommand] = useState<LifecycleCommand | null>(null);
+  const heldLifecycle = custody.lifecycle;
+  const retainedLifecycle =
+    heldLifecycle &&
+    heldLifecycle.data.sessionId === session.id &&
+    heldLifecycle.data.viewer === currentViewer &&
+    heldLifecycle.data.csrfToken === csrfToken &&
+    (heldLifecycle.data.action === 'reopen' ? reopenAllowed : retireAllowed)
+      ? heldLifecycle
+      : null;
+  if (heldLifecycle && !retainedLifecycle) {
+    delete custody.lifecycle;
+    delete custody.lifecycleConflictRevision;
+  }
+  const [lifecycleCommand, setLifecycleCommand] = useState<LifecycleIntent | null>(retainedLifecycle);
+  // This ref closes the gap between activation and rendering: no second review can replace the first intent.
+  const lifecycleChoice = useRef<LifecycleIntent | null>(retainedLifecycle);
+  const lifecycleDispatched = lifecycleCommand !== null && custody.lifecycle === lifecycleCommand;
+  const lifecyclePending = lifecycleDispatched && !!custody.lifecycleFlight;
+  const lifecyclePanel = useRef<HTMLDivElement>(null);
+  const lifecycleSubmit = useRef<HTMLButtonElement>(null);
+  const lifecycleLauncher = useRef<HTMLButtonElement | null>(null);
+  const lifecycleRecovery = useRef<HTMLButtonElement>(null);
+  const lifecycleFocus = useRef<{ from: Element | null; to: 'submit' | 'launcher' | 'recovery' } | null>(null);
+  const lifecycleReading = useRef(false);
+  const [readingLifecycle, setReadingLifecycle] = useState(false);
   const [lifecycleNotice, setLifecycleNotice] = useState<
-    'conflict' | 'uncertain' | 'missing' | 'retired' | 'saved' | null
-  >(null);
-  const [lifecycleConflictRevision, setLifecycleConflictRevision] = useState<number | null>(null);
-  const [confirmAction, setConfirmAction] = useState<'reopen' | 'retire' | null>(null);
+    'conflict' | 'uncertain' | 'saved' | null
+  >(retainedLifecycle ? 'uncertain' : null);
+  const [lifecycleConflictRevision, setLifecycleConflictRevision] = useState<number | null>(
+    custody.lifecycleConflictRevision ?? null,
+  );
   const [terminal, setTerminal] = useState(false);
   const authority = useRef({ journalUpdateAllowed, reopenAllowed, retireAllowed, generation: 0 });
   if (
@@ -298,11 +354,29 @@ function OccurrenceControls({
     setJournalNotice(custody.command ? 'uncertain' : null);
     setConflictRevision(null);
     setReviewedRevision(null);
-    setLifecycleCommand(null);
-    setLifecycleNotice(null);
-    setLifecycleConflictRevision(null);
-    setConfirmAction(null);
   }, [journalUpdateAllowed, reopenAllowed, retireAllowed]);
+
+  const lifecycleAuthority = useRef({ reopenAllowed, retireAllowed, generation: 0 });
+  if (
+    lifecycleAuthority.current.reopenAllowed !== reopenAllowed ||
+    lifecycleAuthority.current.retireAllowed !== retireAllowed
+  ) {
+    lifecycleAuthority.current = {
+      reopenAllowed,
+      retireAllowed,
+      generation: lifecycleAuthority.current.generation + 1,
+    };
+    delete custody.lifecycle;
+    delete custody.lifecycleConflictRevision;
+    lifecycleChoice.current = null;
+    lifecycleFocus.current = null;
+  }
+  useEffect(() => {
+    setLifecycleCommand(custody.lifecycle ?? null);
+    lifecycleChoice.current = custody.lifecycle ?? null;
+    setLifecycleNotice(custody.lifecycle ? 'uncertain' : null);
+    setLifecycleConflictRevision(custody.lifecycleConflictRevision ?? null);
+  }, [reopenAllowed, retireAllowed]);
 
   const leaving = useRef(false);
   const departed = useRef(false);
@@ -338,6 +412,21 @@ function OccurrenceControls({
     currentRef.current.csrfToken === command.csrfToken &&
     currentRef.current.isCurrent();
 
+  useEffect(() => {
+    const request = lifecycleFocus.current;
+    lifecycleFocus.current = null;
+    if (!request || !enabled || !isCurrent() || departed.current || leaving.current) return;
+    const active = document.activeElement;
+    if (active !== request.from && (request.from?.isConnected || active !== document.body)) return;
+    const target =
+      request.to === 'submit'
+        ? lifecycleSubmit.current
+        : request.to === 'launcher'
+          ? lifecycleLauncher.current
+          : lifecycleRecovery.current;
+    if (target?.isConnected && !target.disabled) target.focus();
+  }, [lifecycleCommand, lifecycleNotice, lifecycleConflictRevision, session.revision]);
+
   usePrivateJournalDraftNavigation({
     identity: departureIdentity,
     isCurrent: () => live.current && !departed.current && !leaving.current && !terminal && enabled && isCurrent(),
@@ -372,7 +461,16 @@ function OccurrenceControls({
   }, [leaveRetiredDetail, query.data?.kind]);
 
   async function sendJournal(command: JournalCommand) {
-    if (!currentRef.current.journalUpdateAllowed || !stillCurrent(command) || flight.current || custody.flight) return;
+    if (
+      !currentRef.current.journalUpdateAllowed ||
+      !stillCurrent(command) ||
+      flight.current ||
+      custody.flight ||
+      custody.lifecycle ||
+      custody.lifecycleFlight ||
+      lifecycleChoice.current
+    )
+      return;
     if (custody.command && custody.command !== command) return;
     if (!custody.command) submittedDraft.current = draft;
     custody.command ??= command;
@@ -459,6 +557,8 @@ function OccurrenceControls({
       !body ||
       !journalUpdateAllowed ||
       journalCommand ||
+      lifecycleChoice.current ||
+      custody.lifecycleFlight ||
       busy ||
       terminal ||
       !currentViewer ||
@@ -479,80 +579,127 @@ function OccurrenceControls({
     setRefusedField(null);
   }
 
-  async function submitLifecycle(command: LifecycleCommand) {
+  function restoreLifecycleFocus(to: 'launcher' | 'recovery') {
+    if (lifecyclePanel.current?.contains(document.activeElement))
+      lifecycleFocus.current = { from: document.activeElement, to };
+  }
+
+  async function submitLifecycle(intent: LifecycleIntent) {
+    const command = intent.data;
     if (
+      lifecycleChoice.current !== intent ||
+      (custody.lifecycle && custody.lifecycle !== intent) ||
       !(command.action === 'reopen' ? currentRef.current.reopenAllowed : currentRef.current.retireAllowed) ||
       !stillCurrent(command) ||
-      flight.current
+      flight.current ||
+      custody.flight ||
+      custody.command ||
+      custody.lifecycleFlight
     )
       return;
+    // Only dispatch seals the review. Every replay uses this exact data and the sender captured at review.
+    custody.lifecycle = intent;
+    const attempt = {};
+    custody.lifecycleFlight = attempt;
+    custody.listeners?.forEach((listener) => listener());
     flight.current = true;
-    const generation = authority.current.generation;
+    const generation = lifecycleAuthority.current.generation;
     setBusy(true);
     setLifecycleNotice(null);
-    const result = await changeOccurrenceLifecycle({ data: command }).catch(() => ({ kind: 'uncertain' as const }));
+    const result = await intent.send({ data: command }).catch(() => ({ kind: 'uncertain' as const }));
+    if (custody.lifecycleFlight === attempt) delete custody.lifecycleFlight;
+    custody.listeners?.forEach((listener) => listener());
     flight.current = false;
     if (!stillCurrent(command)) return;
     setBusy(false);
-    if (generation !== authority.current.generation) return;
-    if (!(command.action === 'reopen' ? currentRef.current.reopenAllowed : currentRef.current.retireAllowed)) {
-      setLifecycleCommand(null);
-      setLifecycleNotice(null);
+    if (generation !== lifecycleAuthority.current.generation || custody.lifecycle !== intent) return;
+    if (result.kind === 'uncertain') {
+      setLifecycleNotice('uncertain');
       return;
     }
+    delete custody.lifecycle;
+    lifecycleChoice.current = null;
+    setLifecycleCommand(null);
     if (result.kind === 'saved') {
-      setLifecycleCommand(null);
-      setConfirmAction(null);
+      restoreLifecycleFocus('launcher');
+      delete custody.lifecycleConflictRevision;
       setLifecycleConflictRevision(null);
       if (result.session.state === 'retired') {
         leaveRetiredDetail();
+        return;
       }
       setLifecycleNotice('saved');
       void router.invalidate();
       return;
     }
     if (result.kind === 'conflict') {
-      setLifecycleCommand(null);
-      setConfirmAction(null);
+      restoreLifecycleFocus('recovery');
+      custody.lifecycleConflictRevision = command.revision;
       setLifecycleConflictRevision(command.revision);
       setLifecycleNotice('conflict');
       void router.invalidate();
       return;
     }
-    if (result.kind === 'uncertain') {
-      setLifecycleCommand(command);
-      setLifecycleNotice('uncertain');
-      return;
-    }
-    setLifecycleCommand(null);
-    setLifecycleNotice(result.kind);
-    if (result.kind === 'missing' || result.kind === 'retired') {
-      leaveRetiredDetail();
-    }
+    leaveRetiredDetail();
   }
 
-  function chooseLifecycle(action: 'reopen' | 'retire') {
+  function chooseLifecycle(action: 'reopen' | 'retire', launcher: HTMLButtonElement) {
     if (
       !(action === 'reopen' ? reopenAllowed : retireAllowed) ||
       !isCurrent() ||
       !currentViewer ||
       !csrfToken ||
       terminal ||
+      departed.current ||
+      leaving.current ||
       busy ||
+      flight.current ||
+      custody.flight ||
+      custody.command ||
+      custody.lifecycle ||
+      custody.lifecycleFlight ||
+      lifecycleChoice.current ||
       journalCommand !== null ||
       review !== null ||
       lifecycleConflictRevision !== null
     )
       return;
-    setConfirmAction(action);
-    setLifecycleCommand({
-      action,
-      sessionId: session.id,
-      viewer: currentViewer,
-      csrfToken,
-      revision: session.revision,
-      key: crypto.randomUUID(),
+    const intent: LifecycleIntent = Object.freeze({
+      data: Object.freeze({
+        action,
+        sessionId: session.id,
+        viewer: currentViewer,
+        csrfToken,
+        revision: session.revision,
+        key: crypto.randomUUID(),
+      }),
+      send: changeOccurrenceLifecycle,
     });
+    lifecycleLauncher.current = launcher;
+    lifecycleFocus.current = { from: document.activeElement, to: 'submit' };
+    lifecycleChoice.current = intent;
+    setLifecycleCommand(intent);
+    setLifecycleNotice(null);
+  }
+
+  function cancelLifecycleReview(intent: LifecycleIntent) {
+    if (!stillCurrent(intent.data) || custody.lifecycle || lifecycleChoice.current !== intent) return;
+    restoreLifecycleFocus('launcher');
+    lifecycleChoice.current = null;
+    setLifecycleCommand(null);
+  }
+
+  async function readLifecycleCurrent() {
+    if (!enabled || !isCurrent() || departed.current || leaving.current || lifecycleReading.current) return;
+    lifecycleReading.current = true;
+    setReadingLifecycle(true);
+    try {
+      // The selected occurrence's existing read is an observation, never a receipt for the original write.
+      await router.invalidate();
+    } finally {
+      lifecycleReading.current = false;
+      if (live.current && !departed.current && !leaving.current) setReadingLifecycle(false);
+    }
   }
 
   if (terminal || query.data?.kind === 'missing' || query.data?.kind === 'retired') {
@@ -606,7 +753,7 @@ function OccurrenceControls({
               type="button"
               variant="outline"
               className="min-h-11 w-full sm:w-auto"
-              disabled={!journalUpdateAllowed || busy}
+              disabled={!journalUpdateAllowed || (busy && !custody.lifecycle)}
               onClick={() => {
                 if (enabled && isCurrent()) setEditing(true);
               }}
@@ -632,7 +779,7 @@ function OccurrenceControls({
                   field={field}
                   selection={draft[field]}
                   value={working[field]}
-                  disabled={!journalUpdateAllowed || (!journalCommand && (busy || review !== null))}
+                  disabled={!journalUpdateAllowed || (!journalCommand && review !== null)}
                   invalid={!parsedDraft.ok && parsedDraft.field === field}
                   refused={refusedField === field}
                   onChange={(selection) => {
@@ -694,6 +841,8 @@ function OccurrenceControls({
                 busy ||
                 !body ||
                 journalCommand !== null ||
+                lifecycleCommand !== null ||
+                !!custody.lifecycleFlight ||
                 (conflictRevision !== null && reviewedRevision !== journal.revision)
               }
             >
@@ -790,38 +939,25 @@ function OccurrenceControls({
               ) : null}
             </div>
           ) : null}
-          {lifecycleConflictRevision !== null ? (
-            <div role="group" aria-label={m.library_occurrence_conflict()} className="space-y-2">
-              <p>{m.library_occurrence_conflict()}</p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  if (!isCurrent()) return;
-                  if (session.revision !== lifecycleConflictRevision) {
-                    setLifecycleConflictRevision(null);
-                    setLifecycleNotice(null);
-                  } else void router.invalidate();
-                }}
-              >
-                {session.revision !== lifecycleConflictRevision
-                  ? m.library_occurrence_review_latest()
-                  : m.library_occurrence_read_current()}
-              </Button>
-            </div>
-          ) : null}
         </form>
       ) : null}
 
       {reopenAllowed || retireAllowed ? (
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap gap-2">
             {reopenAllowed && (session.state === 'completed' || session.state === 'abandoned') ? (
               <button
                 type="button"
-                className="min-h-11 rounded-md border px-3"
-                disabled={lifecycleConflictRevision !== null || busy || journalCommand !== null || review !== null}
-                onClick={() => chooseLifecycle('reopen')}
+                className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                disabled={
+                  lifecycleCommand !== null ||
+                  lifecycleConflictRevision !== null ||
+                  busy ||
+                  !!custody.lifecycleFlight ||
+                  journalCommand !== null ||
+                  review !== null
+                }
+                onClick={(event) => chooseLifecycle('reopen', event.currentTarget)}
               >
                 {m.library_occurrence_reopen()}
               </button>
@@ -829,59 +965,124 @@ function OccurrenceControls({
             {retireAllowed ? (
               <button
                 type="button"
-                className="min-h-11 rounded-md border px-3"
-                disabled={lifecycleConflictRevision !== null || busy || journalCommand !== null || review !== null}
-                onClick={() => chooseLifecycle('retire')}
+                className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                disabled={
+                  lifecycleCommand !== null ||
+                  lifecycleConflictRevision !== null ||
+                  busy ||
+                  !!custody.lifecycleFlight ||
+                  journalCommand !== null ||
+                  review !== null
+                }
+                onClick={(event) => chooseLifecycle('retire', event.currentTarget)}
               >
                 {m.library_occurrence_retire()}
               </button>
             ) : null}
           </div>
-          {confirmAction ? (
-            <div className="flex flex-wrap gap-2" role="group" aria-label={m.library_occurrence_confirm_heading()}>
-              <p className="w-full">
-                {confirmAction === 'reopen'
+          {lifecycleCommand ? (
+            <div
+              ref={lifecyclePanel}
+              className="min-w-0 space-y-3 rounded-md border p-3"
+              role="group"
+              aria-label={m.library_occurrence_confirm_heading()}
+            >
+              <p>
+                {lifecycleCommand.data.action === 'reopen'
                   ? m.library_occurrence_confirm_reopen()
                   : m.library_occurrence_confirm_retire()}
               </p>
+              <p className="text-sm text-muted-foreground">
+                {m.library_occurrence_lifecycle_basis({ revision: lifecycleCommand.data.revision })}
+              </p>
+              {lifecycleDispatched ? (
+                <>
+                  <p role="status">
+                    {lifecyclePending ? m.library_occurrence_lifecycle_pending() : m.library_occurrence_uncertain()}
+                  </p>
+                  <p>{m.library_occurrence_lifecycle_retry_help()}</p>
+                </>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  ref={lifecycleSubmit}
+                  type="button"
+                  className="min-h-11 whitespace-normal rounded-md bg-primary px-4 py-2 text-primary-foreground [overflow-wrap:anywhere]"
+                  disabled={busy || lifecyclePending || !!custody.flight}
+                  onClick={() => void submitLifecycle(lifecycleCommand)}
+                >
+                  {lifecycleDispatched
+                    ? m.library_occurrence_lifecycle_retry()
+                    : m.library_occurrence_confirm_heading()}
+                </button>
+                {!lifecycleDispatched ? (
+                  <button
+                    type="button"
+                    className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                    onClick={() => cancelLifecycleReview(lifecycleCommand)}
+                  >
+                    {m.library_progress_cancel()}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                    disabled={readingLifecycle || lifecyclePending}
+                    onClick={() => void readLifecycleCurrent()}
+                  >
+                    {m.library_occurrence_lifecycle_read_current()}
+                  </button>
+                )}
+              </div>
+              {lifecycleDispatched ? <LifecycleObservation session={session} /> : null}
+            </div>
+          ) : null}
+          {lifecycleConflictRevision !== null ? (
+            <div
+              role="group"
+              aria-label={m.library_occurrence_conflict()}
+              className="min-w-0 space-y-3 rounded-md border p-3"
+            >
+              <p role="alert">{m.library_occurrence_conflict()}</p>
+              <LifecycleObservation session={session} />
               <button
+                ref={lifecycleRecovery}
                 type="button"
-                className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground"
-                disabled={busy}
-                onClick={() => lifecycleCommand && void submitLifecycle(lifecycleCommand)}
-              >
-                {m.library_occurrence_confirm_heading()}
-              </button>
-              <button
-                type="button"
-                className="min-h-11 rounded-md border px-3"
+                className="min-h-11 whitespace-normal rounded-md border px-3 py-2 [overflow-wrap:anywhere]"
+                disabled={readingLifecycle || busy}
                 onClick={() => {
-                  setConfirmAction(null);
-                  setLifecycleCommand(null);
+                  if (!enabled || !isCurrent() || departed.current || leaving.current) return;
+                  if (session.revision !== lifecycleConflictRevision) {
+                    delete custody.lifecycleConflictRevision;
+                    setLifecycleConflictRevision(null);
+                    setLifecycleNotice(null);
+                  } else void readLifecycleCurrent();
                 }}
               >
-                {m.library_progress_cancel()}
+                {session.revision !== lifecycleConflictRevision
+                  ? m.library_occurrence_review_latest()
+                  : m.library_occurrence_lifecycle_read_current()}
               </button>
             </div>
           ) : null}
-          {lifecycleCommand && lifecycleNotice === 'uncertain' ? (
-            <button
-              type="button"
-              className="min-h-11 rounded-md border px-3"
-              disabled={busy}
-              onClick={() => void submitLifecycle(lifecycleCommand)}
-            >
-              {m.library_rich_entry_retry()}
-            </button>
-          ) : null}
-          {lifecycleNotice === 'uncertain' ? <p role="status">{m.library_occurrence_uncertain()}</p> : null}
           {lifecycleNotice === 'saved' ? <p role="status">{m.library_occurrence_reopened()}</p> : null}
-          {lifecycleNotice === 'missing' || lifecycleNotice === 'retired' ? (
-            <p role="status">{m.library_occurrence_retired()}</p>
-          ) : null}
         </div>
       ) : null}
     </section>
+  );
+}
+
+function LifecycleObservation({ session }: { session: ProgressSessionView }) {
+  const state =
+    session.state === 'active'
+      ? m.library_progress_state_active()
+      : session.state === 'completed'
+        ? m.library_progress_state_completed()
+        : m.library_progress_state_abandoned();
+  return (
+    <p className="text-sm text-muted-foreground" role="status">
+      {m.library_occurrence_lifecycle_observed({ state, revision: session.revision })}
+    </p>
   );
 }
 
