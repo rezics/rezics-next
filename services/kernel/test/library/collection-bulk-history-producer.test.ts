@@ -16,7 +16,12 @@ import { executeCollectionRemoveTarget } from '../../src/library/collection-bulk
 import type { BulkAdmission, BulkDependencies, TargetCommand } from '../../src/library/bulk-contract.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { createCollectionBatchFixture, batchScopes, entryKey, type CollectionBatchFixture } from './support/collection-batch-fixture.ts';
+import {
+  createCollectionBatchFixture,
+  batchScopes,
+  entryKey,
+  type CollectionBatchFixture,
+} from './support/collection-batch-fixture.ts';
 import { testTokens } from '../support/test-kernel.ts';
 
 let f: CollectionBatchFixture;
@@ -170,9 +175,7 @@ async function expectTargetHistory(
       const decoded = decodeLocator('outbox-event/v1', locator);
       return (
         decoded.artifactType === artifact_type &&
-        outbox.rows.some(
-          (event) => decoded.position === BigInt(event.position) && decoded.eventSeq === event.event_seq,
-        )
+        outbox.rows.some((event) => decoded.position === BigInt(event.position) && decoded.eventSeq === event.event_seq)
       );
     })
     .map(({ account_id, roles }) => ({ account_id, roles }))
@@ -192,7 +195,11 @@ test('remote add and remove receipts retain verified actor and curator roles wit
   const actor = f.owner.actor;
   const curator = await f.identity(batchScopes, 1);
   const collection = (
-    await f.commands.createCollection(curator.actor, { title: 'Remote bulk custody', visibility: 'private' }, entryKey())
+    await f.commands.createCollection(
+      curator.actor,
+      { title: 'Remote bulk custody', visibility: 'private' },
+      entryKey(),
+    )
   ).value;
   await f.grant(collection.id, actor.accountId);
   const subjectId = await f.createSubject('game');
@@ -211,7 +218,11 @@ test('remote add and remove receipts retain verified actor and curator roles wit
   };
   const add = await capture(
     actor,
-    { action: 'add_to_collection', collectionId: collection.id, selection: { kind: 'explicit', targets: [{ subjectId }] } },
+    {
+      action: 'add_to_collection',
+      collectionId: collection.id,
+      selection: { kind: 'explicit', targets: [{ subjectId }] },
+    },
     [target],
   );
   const added = await executeCollectionAddTarget(add.dependencies, add.command);
@@ -260,13 +271,21 @@ test('a sealed curator locator fence rolls back the remote target receipt and Co
   const actor = f.owner.actor;
   const curator = await f.identity(batchScopes, 2);
   const collection = (
-    await f.commands.createCollection(curator.actor, { title: 'Fenced bulk custody', visibility: 'private' }, entryKey())
+    await f.commands.createCollection(
+      curator.actor,
+      { title: 'Fenced bulk custody', visibility: 'private' },
+      entryKey(),
+    )
   ).value;
   await f.grant(collection.id, actor.accountId);
   const subjectId = await f.createSubject('game');
   const command = await capture(
     actor,
-    { action: 'add_to_collection', collectionId: collection.id, selection: { kind: 'explicit', targets: [{ subjectId }] } },
+    {
+      action: 'add_to_collection',
+      collectionId: collection.id,
+      selection: { kind: 'explicit', targets: [{ subjectId }] },
+    },
     [
       {
         kind: 'subject',
