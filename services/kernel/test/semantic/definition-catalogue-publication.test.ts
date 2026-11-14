@@ -4,7 +4,7 @@ import {
   buildCatalogue,
   catalogueBytes,
   catalogueDigest,
-  compatibilityKind,
+  exactTypeKind,
   parseCatalogueJson,
   releaseDigest,
   validateRelease,
@@ -148,7 +148,7 @@ test('An authorized publisher uploads bounded catalogue artifacts spanning more 
         objects.set(digest, bytes);
       },
     };
-    const initial = await buildCatalogue({ releases: [legacy], compatibility: 'all' }, store);
+    const initial = await buildCatalogue({ releases: [legacy], typeKinds: 'all' }, store);
     async function upload(digest: string, persona: 'publisher' | 'denied' = 'publisher', key?: string) {
       const artifact = parseCatalogueJson(objects.get(digest)!, 4194304) as Record<string, unknown>;
       const format = artifact.format;
@@ -208,20 +208,20 @@ test('An authorized publisher uploads bounded catalogue artifacts spanning more 
     const pin = await buildCatalogue(
       {
         releases: [...releases, legacy],
-        compatibility: 'all',
+        typeKinds: 'all',
         declarations: [
           {
-            ...compatibilityKind(releases[2]!, releaseDigest(releases[2]!), 'scale:T1151'),
+            ...exactTypeKind(releases[2]!, releaseDigest(releases[2]!), 'scale:T1151'),
             id: 'kind:First',
             auto: { eligible: true, precedence: 7 },
           },
           {
-            ...compatibilityKind(releases[2]!, releaseDigest(releases[2]!), 'scale:T1151'),
+            ...exactTypeKind(releases[2]!, releaseDigest(releases[2]!), 'scale:T1151'),
             id: 'kind:Second',
             auto: { eligible: true, precedence: 7 },
           },
           {
-            ...compatibilityKind(releases[2]!, releaseDigest(releases[2]!), 'scale:T1151'),
+            ...exactTypeKind(releases[2]!, releaseDigest(releases[2]!), 'scale:T1151'),
             id: 'kind:Control\u0000exact',
             labels: { en: 'Zero\u0000label' },
             auto: { eligible: false, precedence: 0 },
@@ -354,7 +354,7 @@ test('An authorized publisher uploads bounded catalogue artifacts spanning more 
     expect((await call('GET', `/v1/definitions/releases/${legacyDigest}`)).body.release).toEqual(legacy);
     expect((await call('GET', '/v1/definitions/active')).body.digest).toBe(legacyDigest);
     const unsupported = {
-      ...compatibilityKind(releases[0]!, releaseDigest(releases[0]!), 'scale:T0000'),
+      ...exactTypeKind(releases[0]!, releaseDigest(releases[0]!), 'scale:T0000'),
       auto: { eligible: false, precedence: 0 },
       condition: {
         op: 'filter',

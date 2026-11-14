@@ -1,5 +1,5 @@
 import {
-  compatibilityKind,
+  exactTypeKind,
   lookupCatalogueKind,
   parseKindDeclaration,
   readCatalogueArtifact,
@@ -31,7 +31,7 @@ export function createCompilerApplication(host: CompilerHost): CompilerApplicati
     verifyCatalogue: (pin, reader) => verifyCatalogue(pin, reader, host),
     lookupCatalogueKind: (pin, id, reader) => lookupCatalogueKind(pin, id, reader, host),
     readCatalogueArtifact,
-    compatibilityKind: (release, digest, typeId) => compatibilityKind(release, digest, typeId, host),
+    exactTypeKind: (release, digest, typeId) => exactTypeKind(release, digest, typeId, host),
   });
 }
 
@@ -45,5 +45,5 @@ export {
   lookupCatalogueKind,
   parseKindDeclaration,
   readCatalogueArtifact,
-  compatibilityKind,
+  exactTypeKind,
 };

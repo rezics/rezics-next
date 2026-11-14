@@ -52,7 +52,7 @@ async function main(argv: readonly string[]) {
     // The manifest has no total member limit. Each referenced artifact retains its own byte/work envelope.
     const manifest = object(
       parseCatalogueJson(await readCatalogueLocalBytes(inputPath, Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER),
-      ['releases', 'declarations', 'compatibility'],
+      ['releases', 'declarations', 'typeKinds'],
     );
     function paths(value: unknown, required: boolean): string[] {
       if (value === undefined && !required) return [];
@@ -67,12 +67,12 @@ async function main(argv: readonly string[]) {
     }
     const releasePaths = paths(manifest.releases, true);
     const declarationPaths = paths(manifest.declarations, false);
-    let compatibility: 'all' | DefinitionTypePin[] = [];
-    if (manifest.compatibility === 'all') compatibility = 'all';
-    else if (manifest.compatibility !== undefined) {
-      if (!Array.isArray(manifest.compatibility))
-        catalogueFail('invalid', 'compatibility must be "all" or exact Type pins');
-      compatibility = manifest.compatibility.map((value) => {
+    let typeKinds: 'all' | DefinitionTypePin[] = [];
+    if (manifest.typeKinds === 'all') typeKinds = 'all';
+    else if (manifest.typeKinds !== undefined) {
+      if (!Array.isArray(manifest.typeKinds))
+        catalogueFail('invalid', 'typeKinds must be "all" or exact Type pins');
+      typeKinds = manifest.typeKinds.map((value) => {
         const pin = object(value, ['releaseDigest', 'typeId']);
         assertCatalogueDigest(pin.releaseDigest);
         assertKindId(pin.typeId);
@@ -95,7 +95,7 @@ async function main(argv: readonly string[]) {
       );
     const directory = catalogueLocalPath(option('--output'));
     const pin = await nativeCompiler().buildCatalogue(
-      { releases, declarations, compatibility },
+      { releases, declarations, typeKinds },
       catalogueFileStore(directory),
     );
     await publishCatalogueRoot(directory, pin);

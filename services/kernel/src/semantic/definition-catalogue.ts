@@ -1,6 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
 import {
-  CatalogueArtifactError,
   CATALOGUE_FORMAT,
   KIND_FORMAT,
   KIND_REDUCTION,
@@ -8,8 +7,6 @@ import {
   catalogueFail,
   parseCataloguePin,
   assertKindId,
-  compatibilityKind,
-  RELEASE_LIMITS,
   type KindCataloguePin,
   type PinnedKindDeclaration,
   type KindDeclarationV1,
@@ -24,7 +21,6 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { withReadTransaction } from './read.ts';
 import { DefinitionAccessDeniedError } from './contract/definition-values.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
-import { readRelease } from './definition-release-read.ts';
 import { globalReadEligibility } from './eligibility.ts';
 import {
   catalogueKey,
@@ -448,31 +444,4 @@ export function createNativeDefinitionCatalogue({
       );
     },
   };
-}
-/** Explicit bounded historical adapter. It never fabricates a catalogue root or changes a Release1 digest. */
-export async function legacyReleaseKinds(pool: Pool, digest: string, ids: readonly string[]) {
-  if (
-    !ids.length ||
-    ids.length > 100 ||
-    new Set(ids).size !== ids.length ||
-    catalogueBytes(ids).length > MAX_RESPONSE_BYTES
-  )
-    catalogueFail('invalid', 'Expected 1–100 bounded legacy keys');
-  ids.forEach(assertKindId);
-  const release = await readRelease(pool, digest, { composed: false });
-  if (!release) return null;
-  if (Object.keys(release.types).length > RELEASE_LIMITS.types || catalogueBytes(release).length > RELEASE_LIMITS.bytes)
-    unavailable();
-  try {
-    const values = ids.map((id) => ({
-      id,
-      releaseDigest: digest,
-      declaration: Object.hasOwn(release.types, id) ? compatibilityKind(release, digest, id) : null,
-    }));
-    if (catalogueBytes(values).length > MAX_RESPONSE_BYTES) unavailable();
-    return values;
-  } catch (error) {
-    if (error instanceof CatalogueArtifactError) unavailable();
-    throw error;
-  }
 }

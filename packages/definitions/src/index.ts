@@ -5,7 +5,7 @@ export { publicationLimits, PUBLICATION_LIMITS } from './publication-constructio
 export { chooseLabel, languageRanges } from './language.ts';
 export {
   buildCatalogue,
-  compatibilityKind,
+  exactTypeKind,
   lookupCatalogueKind,
   parseKindDeclaration,
   readCatalogueArtifact,
