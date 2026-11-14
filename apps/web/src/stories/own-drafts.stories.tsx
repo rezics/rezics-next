@@ -1,16 +1,18 @@
-import { fromPlainText } from '@rezics/document';
+import { fromMarkdown, fromPlainText, withDocumentIds, type DocumentSnapshot } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
-import type { CurrentPost } from '../threads/actions';
+import type { RevisedPost } from '../threads/actions';
+import { prepareWriting, type SavedWriting } from '../threads/local-writing-draft';
 import { OwnDraftsPage } from '../threads/own-drafts/page';
 import type {
   OwnDraftCommands,
   OwnDraftEntry,
   OwnDraftIdentity,
   OwnDraftLocale,
+  OwnDraftLocalWritingReader,
   OwnDraftPageData,
   OwnDraftReader,
 } from '../threads/own-drafts/model';
@@ -21,6 +23,65 @@ const postId = '0192f3a0-6c1e-7b2a-9d4e-000000000003';
 const boardId = '0192f3a0-6c1e-7b2a-9d4e-000000000004';
 const revisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000005';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000006';
+const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000009';
+const nextRevision = '0192f3a0-6c1e-7b2a-9d4e-000000000008';
+
+/** Illustrative documents using the installed schema; no attachment or identity reads. */
+function structuredDraft(source: string): DocumentSnapshot {
+  const prose = fromMarkdown([
+    `## ${source} / 観測記録`,
+    '日本語の本文。 The supplied document language stays separate from the interface.',
+    '> A quotation remains a quotation.',
+    '- First observation\n- Second observation',
+    '1. Inspect both sources\n2. Choose deliberately',
+    '[Supplied reference](https://example.test/field-notes)',
+    `Before the spoiler. >!${source}: the hidden conclusion.!< After the spoiler.`,
+    `\`\`\`typescript\nconst observation = '${'wide-token-'.repeat(24)}';\n  console.log(observation);\n\`\`\``,
+  ].join('\n\n'), 'blocks');
+  return {
+    ...prose,
+    doc: withDocumentIds({
+      ...prose.doc,
+      content: [
+        ...prose.doc.content!,
+        {
+          type: 'table',
+          attrs: { lang: 'ja' },
+          content: [
+            { type: 'tableRow', content: ['Direction / 方角', 'Observation / 観測', 'Context / 文脈', 'Status / 状態'].map((text) => ({ type: 'tableHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] })) },
+            { type: 'tableRow', content: ['North / 北', 'A complete wide table cell with an unbroken value: ' + 'observation'.repeat(12), 'Keep the original order and all supplied text.', 'Saved / 保存済み'].map((text) => ({ type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] })) },
+          ],
+        },
+        { type: 'image', attrs: { src: mediaId, alt: 'Field notes illustration without a supplied derivative' } },
+        { type: 'media', attrs: { src: mediaId, kind: 'file', caption: 'Field notes attachment; no download presentation supplied' } },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Unresolved supplied mention: ' }, { type: 'mention', attrs: { accountId } }] },
+      ],
+    }),
+  };
+}
+
+function examplePost(body: DocumentSnapshot, visibility: 'draft' | 'published' = 'draft') {
+  return {
+    id: postId,
+    threadId,
+    revisionId: nextRevision,
+    securityRevision: 'illustrative-security-revision',
+    route: 0,
+    authorId: accountId,
+    parentId: null,
+    subjectIds: [subjectId],
+    boardId,
+    visibility,
+    sha256: 'a'.repeat(64),
+    voteCitation: null,
+    body,
+    mediaIds: [mediaId],
+    availability: 'available',
+    licence: 'LicenseRef-rezics-terms',
+    createdAt: '2026-10-28T09:42:00.000Z',
+    revisedAt: '2026-10-28T10:42:00.000Z',
+  } satisfies RevisedPost;
+}
 
 function entry(overrides: Partial<OwnDraftEntry> = {}): OwnDraftEntry {
   return {
@@ -70,7 +131,12 @@ type StoryArgs = {
     | 'uncertain'
     | 'read-only'
     | 'erase-review'
-    | 'long';
+    | 'long'
+    | 'structured-server'
+    | 'structured-recovery'
+    | 'browser-unknown'
+    | 'structured-save'
+    | 'structured-publish';
 };
 
 const longTitles: Record<OwnDraftLocale, string> = {
@@ -85,6 +151,7 @@ const longTitles: Record<OwnDraftLocale, string> = {
 };
 
 function readerFor(scenario: StoryArgs['scenario'], locale: OwnDraftLocale): OwnDraftReader {
+  const structured = scenario.startsWith('structured-') || scenario === 'browser-unknown';
   return {
     async list(request) {
       if (scenario === 'denied') return 'denied';
@@ -96,6 +163,7 @@ function readerFor(scenario: StoryArgs['scenario'], locale: OwnDraftLocale): Own
       if (scenario === 'sparse') return nativePage([], 'ready', 'opaque-native-cursor');
       return nativePage([
         entry({
+          ...(structured ? { mediaIds: [mediaId], language: 'ja', kind: 'review' } : {}),
           title: scenario === 'long' ? Array.from({ length: 4 }, () => longTitles[locale]).join(' · ') : entry().title,
         }),
         entry({
@@ -113,7 +181,8 @@ function readerFor(scenario: StoryArgs['scenario'], locale: OwnDraftLocale): Own
     },
     async resume(request) {
       if (scenario === 'concealed') return 'concealed';
-      const selected = entry({ id: request.id });
+      const structuredSelection = structured && request.id === postId;
+      const selected = entry({ id: request.id, mediaIds: structuredSelection ? [mediaId] : [] });
       return {
         revision: revisionId,
         post: {
@@ -121,7 +190,9 @@ function readerFor(scenario: StoryArgs['scenario'], locale: OwnDraftLocale): Own
           threadId: request.threadId,
           parentId: null,
           mediaIds: selected.mediaIds,
-          body: fromPlainText('The exact selected draft body stays in this private inspection.', 'blocks'),
+          body: structuredSelection
+            ? structuredDraft('Server field notes')
+            : fromPlainText('The exact selected draft body stays in this private inspection.', 'blocks'),
         },
       };
     },
@@ -130,41 +201,48 @@ function readerFor(scenario: StoryArgs['scenario'], locale: OwnDraftLocale): Own
 
 function commandsFor(scenario: StoryArgs['scenario']): OwnDraftCommands {
   return {
-    async write() {
+    async write(input) {
       if (scenario === 'conflict')
         return {
           ok: false,
           reason: 'stale',
-          currentPost: {
-            id: postId,
-            threadId,
-            revisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000008',
-            securityRevision: 'story-security-revision',
-            route: 0,
-            authorId: accountId,
-            parentId: null,
-            subjectIds: [subjectId],
-            boardId,
-            visibility: 'draft',
-            sha256: 'story-digest',
-            voteCitation: null,
-            body: fromPlainText('Current native head after another edit', 'blocks'),
-            mediaIds: [],
-            availability: 'available',
-            licence: 'LicenseRef-rezics-terms',
-            createdAt: '2026-10-28T09:42:00.000Z',
-            revisedAt: '2026-10-28T10:42:00.000Z',
-          } as unknown as CurrentPost,
+          currentPost: examplePost(fromPlainText('Current native head after another edit', 'blocks')),
         };
+      if (scenario === 'structured-save' || scenario === 'structured-publish')
+        return { ok: true, post: examplePost(input.body, input.action === 'publish' ? 'published' : 'draft') };
       return { ok: false, reason: 'unavailable' };
     },
     async erase() {
       return { ok: false, reason: 'unavailable' };
     },
     async readback() {
+      if (scenario === 'structured-save' || scenario === 'structured-publish')
+        return {
+          state: 'available',
+          revision: nextRevision,
+          visibility: scenario === 'structured-publish' ? 'published' : 'draft',
+          body: structuredDraft('Current post field notes'),
+          mediaIds: [mediaId],
+        };
       return 'unavailable';
     },
   };
+}
+
+function browserReaderFor(scenario: StoryArgs['scenario']): OwnDraftLocalWritingReader | undefined {
+  if (scenario !== 'structured-recovery' && scenario !== 'browser-unknown') return undefined;
+  const payload = prepareWriting('Independent browser field notes', structuredDraft('Browser field notes'));
+  const writing: SavedWriting = {
+    slot: 0,
+    actor: accountId,
+    scope: { kind: 'thread', boardId, subjects: [subjectId] },
+    revision: 'illustrative-browser-revision',
+    updated: Date.parse('2026-10-28T10:12:00.000Z'),
+    bytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength,
+    state: scenario === 'browser-unknown' ? 'unknown' : 'unsent',
+    payload,
+  };
+  return { load: async () => writing };
 }
 
 function OwnDraftStory(args: StoryArgs) {
@@ -181,7 +259,17 @@ function OwnDraftStory(args: StoryArgs) {
     () => (args.scenario === 'read-only' ? undefined : commandsFor(args.scenario)),
     [args.scenario],
   );
-  return <OwnDraftsPage identity={identity} active reader={reader} {...(commands ? { commands } : {})} />;
+  const localWritingReader = useMemo(() => browserReaderFor(args.scenario), [args.scenario]);
+  return (
+    <>
+      {args.scenario === 'structured-save' || args.scenario === 'structured-publish' ? (
+        <aside role="note" className="border-b border-border bg-muted p-4 text-sm">
+          Illustrative successful command and current read using installed contracts. This fixture does not establish native save or publication evidence.
+        </aside>
+      ) : null}
+      <OwnDraftsPage identity={identity} active reader={reader} {...(commands ? { commands } : {})} {...(localWritingReader ? { localWritingReader } : {})} />
+    </>
+  );
 }
 
 const meta = {
@@ -327,3 +415,94 @@ const returnFromUnknownErase: NonNullable<Story['play']> = async ({ canvasElemen
   await expect(view.getByRole('button', { name: m.own_drafts_retry_erase({}, { locale }) })).toBeVisible();
 };
 export const EraseRecovery: Story = { play: returnFromUnknownErase };
+
+const inspectStructured: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
+  const view = within(canvasElement);
+  await userEvent.click(
+    (await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!,
+  );
+  const server = within(await view.findByRole('article', { name: m.own_drafts_server_source({}, { locale: args.locale }) }));
+  const heading = server.getByRole('heading', { name: 'Server field notes / 観測記録' });
+  await expect(heading).toHaveAttribute('id');
+  await expect(server.getByRole('table')).toBeVisible();
+  await expect(server.getByText('First observation')).toBeVisible();
+  await expect(server.getByText('A quotation remains a quotation.')).toBeVisible();
+  await expect(server.getByRole('link', { name: 'Supplied reference' })).toHaveAttribute('href', 'https://example.test/field-notes');
+  await expect(server.getByRole('img', { name: 'Field notes illustration without a supplied derivative' })).toHaveTextContent(m.content_edition_image_unavailable({}, { locale: args.locale }));
+  await expect(server.getByRole('button', { name: m.wide_document_code_inspect({}, { locale: args.locale }) })).toBeVisible();
+  await expect(view.getByRole('heading', { level: 1 })).toHaveFocus();
+};
+
+export const StructuredServer: Story = {
+  args: { scenario: 'structured-server' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: inspectStructured,
+};
+export const StructuredRecovery: Story = {
+  args: { scenario: 'structured-recovery' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async (context) => {
+    await inspectStructured(context);
+    const view = within(context.canvasElement);
+    const locale = context.args.locale;
+    const browser = within(view.getByRole('region', { name: m.own_drafts_browser_source({}, { locale }) }));
+    const heading = browser.getByRole('heading', { name: 'Browser field notes / 観測記録' });
+    await expect(heading).toHaveAttribute('id');
+    await expect(heading.id).not.toBe(view.getByRole('heading', { name: 'Server field notes / 観測記録' }).id);
+    await expect(browser.getByRole('table')).toBeVisible();
+    await expect(browser.getByText(m.thread_draft_attachments({}, { locale }))).toBeVisible();
+    await expect(view.queryByRole('textbox')).not.toBeInTheDocument();
+    const reveal = browser.getByRole('button', { name: m.thread_reveal_spoiler({}, { locale }) });
+    reveal.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(browser.getByText('Browser field notes: the hidden conclusion.')).toBeVisible();
+    await expect(view.getByRole('article').querySelector('[aria-expanded="false"]')).not.toBeNull();
+    await userEvent.click(browser.getByRole('button', { name: m.own_drafts_use_browser({}, { locale }) }));
+    await expect(view.queryByRole('heading', { name: 'Server field notes / 観測記録' })).not.toBeInTheDocument();
+    await expect(context.canvasElement.querySelector('[role="textbox"].ProseMirror')).toHaveTextContent('Browser field notes / 観測記録');
+  },
+};
+export const BrowserUnknown: Story = {
+  args: { scenario: 'browser-unknown' },
+  play: async (context) => {
+    await inspectStructured(context);
+    const view = within(context.canvasElement);
+    const locale = context.args.locale;
+    await expect(view.getByText(m.thread_draft_unknown({}, { locale }))).toBeVisible();
+    await expect(view.getByRole('button', { name: m.own_drafts_use_browser({}, { locale }) })).toBeDisabled();
+    await expect(view.getByRole('heading', { name: 'Browser field notes / 観測記録' })).toBeVisible();
+  },
+};
+
+const readStructured: NonNullable<Story['play']> = async (context) => {
+  await inspectStructured(context);
+  const view = within(context.canvasElement);
+  const locale = context.args.locale;
+  await userEvent.click(view.getByRole('button', { name: m.own_drafts_use_server({}, { locale }) }));
+  await userEvent.click(await view.findByRole('button', {
+    name: context.args.scenario === 'structured-publish' ? m.own_drafts_publish() : m.thread_edit_save(),
+  }));
+  await expect(view.queryByRole('heading', { name: 'Current post field notes / 観測記録' })).not.toBeInTheDocument();
+  await userEvent.click(await view.findByRole('button', { name: m.own_drafts_readback({}, { locale }) }));
+  const readback = within(await view.findByRole('article', { name: m.own_drafts_readback_heading({}, { locale }) }));
+  await expect(readback.getByRole('heading', { name: 'Current post field notes / 観測記録' })).toBeVisible();
+  await expect(readback.getByRole('table')).toBeVisible();
+  await expect(readback.getByRole('button', { name: m.thread_reveal_spoiler({}, { locale }) })).toHaveAttribute('aria-expanded', 'false');
+  await expect(view.getByText(m.own_drafts_submitted_context({}, { locale }))).toBeVisible();
+};
+
+export const StructuredSaveReadback: Story = {
+  args: { scenario: 'structured-save' },
+  play: readStructured,
+};
+export const StructuredPublishedReadback: Story = {
+  args: { scenario: 'structured-publish' },
+  play: readStructured,
+};
+export const StructuredGerman: Story = { args: { scenario: 'structured-recovery', locale: 'de' }, play: inspectStructured };
+export const StructuredSpanish: Story = { args: { scenario: 'structured-recovery', locale: 'es' }, play: inspectStructured };
+export const StructuredFrench: Story = { args: { scenario: 'structured-recovery', locale: 'fr' }, play: inspectStructured };
+export const StructuredJapanese: Story = { args: { scenario: 'structured-recovery', locale: 'ja' }, play: inspectStructured };
+export const StructuredKorean: Story = { args: { scenario: 'structured-recovery', locale: 'ko' }, play: inspectStructured };
+export const StructuredSimplifiedChinese: Story = { args: { scenario: 'structured-recovery', locale: 'zh-Hans' }, play: inspectStructured };
+export const StructuredTraditionalChinese: Story = { args: { scenario: 'structured-recovery', locale: 'zh-Hant' }, play: inspectStructured };

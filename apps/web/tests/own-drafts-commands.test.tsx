@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { fromPlainText } from '@rezics/document';
+import { fromMarkdown, fromPlainText } from '@rezics/document';
 import { admittedOwnDraftAction, type OwnDraftReader, type OwnDraftWriteInput } from '../src/threads/own-drafts/model';
 import type { RevisedPost } from '../src/threads/actions';
 import { accountId, identity, mountOwnDrafts, row, selected } from './own-drafts-fixture';
@@ -91,7 +91,10 @@ test('publish sends the selected revision and separates acknowledgement from pub
   const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
   const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000012';
   const entry = row({ mediaIds: [mediaId], subjectIds: [subjectId], language: 'ja', licence: 'CC-BY-4.0' });
-  const body = fromPlainText('Published current body', 'blocks');
+  const body = fromMarkdown(
+    '## Published current body\n\n> Current quotation\n\n- Current list item\n\nBefore >!Current secret!< after.\n\n```ts\nconst current = true;\n```',
+    'blocks',
+  );
   const inspected = selected(entry);
   const editorBody = {
     ...inspected.post.body,
@@ -158,6 +161,14 @@ test('publish sends the selected revision and separates acknowledgement from pub
     expect(fixture.host.textContent).toContain('The save request was acknowledged');
     await fixture.click('Read current post');
     expect(fixture.host.textContent).toContain('retained draft at revision saved-revision');
+    expect(fixture.host.querySelector('article h2')?.textContent).toBe('Published current body');
+    expect(fixture.host.querySelector('article blockquote')?.textContent).toBe('Current quotation');
+    expect(fixture.host.querySelector('article ul li')?.textContent).toBe('Current list item');
+    expect(fixture.host.querySelector('article pre code')?.textContent).toContain('const current = true;');
+    const savedHeading = fixture.host.querySelector('article h2')?.id;
+    expect(savedHeading).toBeTruthy();
+    await fixture.click('Reveal spoiler');
+    expect(fixture.host.querySelector('article .document-spoiler-revealed')?.textContent).toBe('Current secret');
     await fixture.click('Restart inventory');
     await fixture.click('Inspect draft privately');
     await fixture.click('Use server-saved body in editor');
@@ -187,6 +198,11 @@ test('publish sends the selected revision and separates acknowledgement from pub
     await fixture.click('Read current post');
     expect(fixture.host.textContent).toContain('published post at revision published-revision');
     expect(fixture.host.textContent).toContain('Published current body');
+    expect(fixture.host.querySelector('article h2')?.id).not.toBe(savedHeading);
+    expect(fixture.host.querySelector('article .document-spoiler-revealed')).toBeNull();
+    expect(fixture.host.querySelector('article [data-slot="post-reading-body"]')?.getAttribute('lang')).toBe('');
+    expect(fixture.host.textContent).toContain(entry.title!);
+    expect(fixture.host.querySelector('time')?.dateTime).toBe(entry.savedAt);
   } finally {
     await fixture.close();
   }

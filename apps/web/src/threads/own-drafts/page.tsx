@@ -55,6 +55,7 @@ type EraseIntent = Readonly<{
   revisionId: string;
   idempotencyKey: string;
   title: string;
+  savedAt: string;
 }>;
 type EraseState =
   | { state: 'review' | 'sending' | 'uncertain'; intent: EraseIntent }
@@ -63,6 +64,10 @@ type CommandFeedback = {
   intentId: number;
   action: 'save' | 'publish' | 'erase';
   postId: string;
+  submitted: Pick<OwnDraftEntry, 'title' | 'revisionId' | 'savedAt'> & {
+    source: 'server' | 'browser';
+    sourceRevision: string;
+  };
   state: 'acknowledged' | 'reading' | 'readback';
   readback?: OwnDraftReadback;
 };
@@ -112,42 +117,73 @@ function OwnDraftCommandFeedback({
       : feedback.action === 'publish'
         ? m.own_drafts_ack_publish({}, { locale })
         : m.own_drafts_ack_erase({}, { locale });
+  const readback =
+    feedback.state === 'readback' && typeof feedback.readback === 'object' ? feedback.readback : null;
   return (
-    <section id={id} tabIndex={-1} className="space-y-2 rounded-lg border border-border p-4" aria-live="polite">
-      {feedback.state === 'acknowledged' ? <p role="status">{acknowledgement}</p> : null}
+    <section
+      id={id}
+      tabIndex={-1}
+      className="min-w-0 space-y-4 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
+    >
+      <header className="space-y-2">
+        <h2 className="text-lg font-semibold">{feedback.submitted.title ?? m.own_drafts_no_title({}, { locale })}</h2>
+        <p className="text-sm font-medium">{m.own_drafts_submitted_context({}, { locale })}</p>
+        <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+          <dt className="text-muted-foreground">{m.own_drafts_source({}, { locale })}</dt>
+          <dd>
+            {feedback.submitted.source === 'server'
+              ? m.own_drafts_server_source({}, { locale })
+              : m.own_drafts_browser_source({}, { locale })}
+          </dd>
+          <dt className="text-muted-foreground">{m.own_drafts_revision({}, { locale })}</dt>
+          <dd>{feedback.submitted.sourceRevision}</dd>
+          {feedback.submitted.source === 'browser' ? (
+            <>
+              <dt className="text-muted-foreground">
+                {m.own_drafts_server_source({}, { locale })} · {m.own_drafts_revision({}, { locale })}
+              </dt>
+              <dd>{feedback.submitted.revisionId}</dd>
+            </>
+          ) : null}
+          <dt className="text-muted-foreground">{m.own_drafts_saved_at({}, { locale })}</dt>
+          <dd>
+            <time dateTime={feedback.submitted.savedAt}>{timestamp(feedback.submitted.savedAt, locale)}</time>
+          </dd>
+        </dl>
+      </header>
+      <p role="status">{acknowledgement}</p>
       {feedback.state === 'reading' ? <p role="status">{m.own_drafts_readback_reading({}, { locale })}</p> : null}
       {feedback.state === 'acknowledged' ? (
         <Button type="button" className={control} onClick={onReadback}>
           {m.own_drafts_readback({}, { locale })}
         </Button>
       ) : null}
-      {feedback.state === 'readback' &&
-      typeof feedback.readback === 'object' &&
-      feedback.readback.state === 'available' ? (
-        <>
+      {readback?.state === 'available' ? (
+        <article
+          className="min-w-0 space-y-3 rounded-md border border-border/60 p-3"
+          aria-label={m.own_drafts_readback_heading({}, { locale })}
+        >
+          <h3 className="font-medium">{m.own_drafts_readback_heading({}, { locale })}</h3>
           <p role="status">
-            {(feedback.readback.visibility === 'published'
+            {(readback.visibility === 'published'
               ? m.own_drafts_readback_published
-              : feedback.readback.visibility === 'draft'
+              : readback.visibility === 'draft'
                 ? m.own_drafts_readback_draft
-                : m.own_drafts_readback_other)({ revision: feedback.readback.revision }, { locale })}
+                : m.own_drafts_readback_other)({ revision: readback.revision }, { locale })}
           </p>
-          {feedback.readback.body ? (
-            <article className="rounded-md border border-border/60 p-3 [overflow-wrap:anywhere]">
-              <OwnDraftBodyPreview
-                document={feedback.readback.body}
-                source="readback"
-                visitKey={JSON.stringify([id, feedback.intentId, feedback.postId, feedback.readback.revision])}
-                documentLanguage={null}
-                locale={locale}
-                current={current}
-              />
-            </article>
-          ) : null}
-        </>
+          {readback.body ? (
+            <OwnDraftBodyPreview
+              document={readback.body}
+              source="readback"
+              visitKey={JSON.stringify([id, feedback.intentId, feedback.postId, readback.revision])}
+              documentLanguage={null}
+              locale={locale}
+              current={current}
+            />
+          ) : <p>{m.own_drafts_readback_body_unavailable({}, { locale })}</p>}
+        </article>
       ) : null}
-      {feedback.state === 'readback' &&
-      !(typeof feedback.readback === 'object' && feedback.readback.state === 'available') ? (
+      {feedback.state === 'readback' && !readback ? (
         <p role="status">{m.own_drafts_readback_no_proof({}, { locale })}</p>
       ) : null}
     </section>
@@ -648,7 +684,12 @@ function BoundOwnDraftsPage({
     )
       return;
     if (!admittedOwnDraftAction(readySelection.entry, identity.accountId, 'edit')) return;
-    if (source === 'browser' && (localWritingState?.state !== 'ready' || localWritingState.writing.state !== 'unsent' || !localWritingState.writing.payload.body))
+    if (
+      source === 'browser' &&
+      (localWritingState?.state !== 'ready' ||
+        localWritingState.writing.state !== 'unsent' ||
+        !localWritingState.writing.payload.body)
+    )
       return;
     commandController.current?.abort();
     readbackSequence.current++;
@@ -673,6 +714,19 @@ function BoundOwnDraftsPage({
       intentId: ++commandFeedbackSequence.current,
       action,
       postId: entry.id,
+      submitted: {
+        title: entry.title,
+        revisionId: entry.revisionId,
+        source: editingSource ?? 'server',
+        sourceRevision:
+          editingSource === 'browser' && localWriting?.state === 'ready'
+            ? localWriting.writing.revision
+            : entry.revisionId,
+        savedAt:
+          editingSource === 'browser' && localWriting?.state === 'ready'
+            ? new Date(localWriting.writing.updated).toISOString()
+            : entry.savedAt,
+      },
       state: 'acknowledged',
     });
   };
@@ -734,6 +788,7 @@ function BoundOwnDraftsPage({
         revisionId: readySelection.selection.revision,
         idempotencyKey: crypto.randomUUID(),
         title: readySelection.entry.title ?? m.own_drafts_no_title({}, { locale }),
+        savedAt: readySelection.entry.savedAt,
       },
     });
   };
@@ -785,6 +840,13 @@ function BoundOwnDraftsPage({
             intentId: ++commandFeedbackSequence.current,
             action: 'erase',
             postId: intent.postId,
+            submitted: {
+              title: intent.title,
+              revisionId: intent.revisionId,
+              sourceRevision: intent.revisionId,
+              savedAt: intent.savedAt,
+              source: 'server',
+            },
             state: 'acknowledged',
           });
         } else if (result.reason === 'unavailable') {
@@ -882,7 +944,7 @@ function BoundOwnDraftsPage({
         >
           {m.own_drafts_return({}, { locale })}
         </Button>
-        <h1 ref={selectionHeading} tabIndex={-1} className="text-2xl font-semibold">
+        <h1 ref={selectionHeading} tabIndex={-1} className="text-2xl font-semibold [overflow-wrap:anywhere]">
           {title}
         </h1>
         {eraseRecovery}
@@ -904,8 +966,11 @@ function BoundOwnDraftsPage({
               {' · '}
               {m.own_drafts_licence({}, { locale })}: {selection.entry.licence}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
               {m.own_drafts_revision({}, { locale })}: {selection.entry.revisionId}
+              {' · '}
+              {m.own_drafts_saved_at({}, { locale })}{' '}
+              <time dateTime={selection.entry.savedAt}>{timestamp(selection.entry.savedAt, locale)}</time>
             </p>
           </>
         ) : null}
@@ -932,75 +997,61 @@ function BoundOwnDraftsPage({
         {selection.state === 'ready' ? (
           <>
             {editingSource && commands ? (
-              <OwnDraftEditor
-                identity={identity}
-                entry={selection.entry}
-                selection={selection.selection}
-                source={editingSource}
-                browserWriting={localWriting?.state === 'ready' ? localWriting.writing : null}
-                commands={commands}
-                authority={selection.selection}
-                current={() =>
-                  current() &&
-                  editorAdmission.current.selection === selection.selection &&
-                  editorAdmission.current.source === editingSource
-                }
-                onRevisionReplacement={retireRevision}
-                onCancel={() => {
-                  recoveryFocus.current = `${controlId}-${editingSource}-source`;
-                  setEditingSource(null);
-                }}
-                onAcknowledged={acknowledged}
-              />
+              <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
+                <OwnDraftEditor
+                  identity={identity}
+                  entry={selection.entry}
+                  selection={selection.selection}
+                  source={editingSource}
+                  browserWriting={localWriting?.state === 'ready' ? localWriting.writing : null}
+                  commands={commands}
+                  authority={selection.selection}
+                  current={() =>
+                    current() &&
+                    editorAdmission.current.selection === selection.selection &&
+                    editorAdmission.current.source === editingSource
+                  }
+                  onRevisionReplacement={retireRevision}
+                  onCancel={() => {
+                    recoveryFocus.current = `${controlId}-${editingSource}-source`;
+                    setEditingSource(null);
+                  }}
+                  onAcknowledged={acknowledged}
+                />
+                <p className="text-sm text-muted-foreground">{m.own_drafts_write_recovery_hint({}, { locale })}</p>
+              </div>
             ) : (
-              <>
-                <article className="min-w-0 rounded-lg border border-border p-4 [overflow-wrap:anywhere]">
-                  <h2 className="sr-only">{m.own_drafts_body_heading({}, { locale })}</h2>
+              <section className="min-w-0 space-y-4" aria-labelledby={`${controlId}-choose-body`}>
+                <header className="space-y-2">
+                  <h2 id={`${controlId}-choose-body`} className="text-lg font-semibold">
+                    {m.own_drafts_choose_body({}, { locale })}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">{m.own_drafts_body_choice_hint({}, { locale })}</p>
+                </header>
+                <article
+                  className="min-w-0 space-y-4 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
+                  aria-labelledby={`${controlId}-server-heading`}
+                >
+                  <h3 id={`${controlId}-server-heading`} className="font-semibold">
+                    {m.own_drafts_server_source({}, { locale })}
+                  </h3>
                   <OwnDraftBodyPreview
                     document={documentForInspection(selection.selection)}
                     source="server"
-                    visitKey={JSON.stringify([identityKey, selectionGeneration.current, selection.entry.id, selection.selection.revision])}
+                    visitKey={JSON.stringify([
+                      identityKey,
+                      selectionGeneration.current,
+                      selection.entry.id,
+                      selection.selection.revision,
+                    ])}
                     documentLanguage={selection.entry.language}
                     locale={locale}
-                    current={() => current() && editorAdmission.current.selection === selection.selection && editorAdmission.current.source === null}
+                    current={() =>
+                      current() &&
+                      editorAdmission.current.selection === selection.selection &&
+                      editorAdmission.current.source === null
+                    }
                   />
-                  <section className="mt-5 space-y-2" aria-label={m.own_drafts_subjects({}, { locale })}>
-                    <h3 className="font-medium">{m.own_drafts_subjects({}, { locale })}</h3>
-                    {selection.entry.subjectIds.length ? (
-                      <ul className="flex flex-wrap gap-2">
-                        {selection.entry.subjectIds.map((id) => (
-                          <li key={id}>
-                            <a
-                              className="underline"
-                              href={subjectHref({ id, label: '' }, locale).href}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {m.own_drafts_inspect_subject({}, { locale })}: <code>{id}</code>
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>{m.own_drafts_no_references({}, { locale })}</p>
-                    )}
-                  </section>
-                  <section className="mt-4 space-y-2" aria-label={m.own_drafts_media({}, { locale })}>
-                    <h3 className="font-medium">{m.own_drafts_media({}, { locale })}</h3>
-                    {selection.entry.mediaIds.length ? (
-                      <ul className="flex flex-wrap gap-2">
-                        {selection.entry.mediaIds.map((id) => (
-                          <li key={id}>{id}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>{m.own_drafts_no_references({}, { locale })}</p>
-                    )}
-                  </section>
-                </article>
-                <section className="space-y-3 rounded-lg border border-border p-4">
-                  <h2 className="font-medium">{m.own_drafts_choose_body({}, { locale })}</h2>
-                  <p className="text-sm text-muted-foreground">{m.own_drafts_body_choice_hint({}, { locale })}</p>
                   {commands && admittedOwnDraftAction(selection.entry, identity.accountId, 'edit') ? (
                     <Button
                       type="button"
@@ -1012,54 +1063,108 @@ function BoundOwnDraftsPage({
                       {m.own_drafts_use_server({}, { locale })}
                     </Button>
                   ) : null}
-                  {localWriting?.state === 'loading' ? (
-                    <p role="status">{m.own_drafts_browser_loading({}, { locale })}</p>
-                  ) : null}
-                  {localWriting?.state === 'unavailable' ? (
-                    <p role="status">{m.own_drafts_browser_unavailable({}, { locale })}</p>
-                  ) : null}
-                  {localWriting?.state === 'ready' ? (
-                    <div className="space-y-2 rounded-md bg-muted/40 p-3">
-                      <p className="font-medium">{m.own_drafts_browser_source({}, { locale })}</p>
+                  <section
+                    className="space-y-2 border-t border-border pt-4"
+                    aria-label={m.own_drafts_subjects({}, { locale })}
+                  >
+                    <h4 className="font-medium">{m.own_drafts_subjects({}, { locale })}</h4>
+                    {selection.entry.subjectIds.length ? (
+                      <ul className="flex flex-wrap gap-2">
+                        {selection.entry.subjectIds.map((id) => (
+                          <li key={id}>
+                            <a
+                              className="inline-flex min-h-11 items-center underline"
+                              href={subjectHref({ id, label: '' }, locale).href}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {m.own_drafts_inspect_subject({}, { locale })}: <code>{id}</code>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p>{m.own_drafts_no_references({}, { locale })}</p>}
+                  </section>
+                  <section className="space-y-2" aria-label={m.own_drafts_media({}, { locale })}>
+                    <h4 className="font-medium">{m.own_drafts_media({}, { locale })}</h4>
+                    {selection.entry.mediaIds.length ? (
+                      <ul className="flex flex-wrap gap-2">
+                        {selection.entry.mediaIds.map((id) => <li key={id}><code>{id}</code></li>)}
+                      </ul>
+                    ) : <p>{m.own_drafts_no_references({}, { locale })}</p>}
+                  </section>
+                </article>
+                {localWriting?.state === 'loading' ? (
+                  <p role="status">{m.own_drafts_browser_loading({}, { locale })}</p>
+                ) : null}
+                {localWriting?.state === 'unavailable' ? (
+                  <p role="status">{m.own_drafts_browser_unavailable({}, { locale })}</p>
+                ) : null}
+                {localWriting?.state === 'ready' ? (
+                  <section
+                    className="min-w-0 space-y-3 rounded-lg border border-border bg-muted/40 p-4 [overflow-wrap:anywhere]"
+                    aria-labelledby={`${controlId}-browser-heading`}
+                  >
+                    <header className="space-y-1">
+                      <h3 id={`${controlId}-browser-heading`} className="font-semibold">
+                        {m.own_drafts_browser_source({}, { locale })}
+                      </h3>
+                      {localWriting.writing.payload.title ? (
+                        <p className="font-medium">{localWriting.writing.payload.title}</p>
+                      ) : null}
                       <p className="text-sm text-muted-foreground">
                         {m.thread_draft_dated(
                           { date: timestamp(new Date(localWriting.writing.updated).toISOString(), locale) },
                           { locale },
                         )}
                       </p>
-                      {localWriting.writing.state === 'unknown' ? (
-                        <p role="status">{m.thread_draft_unknown({}, { locale })}</p>
-                      ) : (
-                        <>
-                          <OwnDraftBodyPreview
-                            document={localWriting.writing.payload.body}
-                            fallbackText={localWriting.writing.payload.text}
-                            source="browser"
-                            visitKey={JSON.stringify([localWritingKey, selectionGeneration.current, localWriting.writing.revision])}
-                            documentLanguage={null}
-                            locale={locale}
-                            current={() => current() && editorAdmission.current.selection === selection.selection && editorAdmission.current.source === null}
-                          />
-                          {localWriting.writing.payload.attachmentRepair ? (
-                            <p>{m.thread_draft_attachments({}, { locale })}</p>
-                          ) : null}
-                          {commands && admittedOwnDraftAction(selection.entry, identity.accountId, 'edit') ? (
-                            <Button
-                              type="button"
-                              className={control}
-                              disabled={!localWriting.writing.payload.body || eraseState?.state === 'uncertain' || eraseState?.state === 'sending'}
-                              id={`${controlId}-browser-source`}
-                              onClick={() => startEditor('browser')}
-                            >
-                              {m.own_drafts_use_browser({}, { locale })}
-                            </Button>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-                  ) : null}
-                </section>
-              </>
+                      <p className="text-sm text-muted-foreground">
+                        {m.own_drafts_revision({}, { locale })}: {localWriting.writing.revision}
+                      </p>
+                    </header>
+                    <OwnDraftBodyPreview
+                      document={localWriting.writing.payload.body}
+                      fallbackText={localWriting.writing.payload.text}
+                      source="browser"
+                      visitKey={JSON.stringify([
+                        localWritingKey,
+                        selectionGeneration.current,
+                        localWriting.writing.revision,
+                        localWriting.writing.state,
+                      ])}
+                      documentLanguage={null}
+                      locale={locale}
+                      current={() =>
+                        current() &&
+                        editorAdmission.current.selection === selection.selection &&
+                        editorAdmission.current.source === null
+                      }
+                    />
+                    {localWriting.writing.payload.attachmentRepair ? (
+                      <p role="status">{m.thread_draft_attachments({}, { locale })}</p>
+                    ) : null}
+                    {localWriting.writing.state === 'unknown' ? (
+                      <p role="status">{m.thread_draft_unknown({}, { locale })}</p>
+                    ) : null}
+                    {commands && admittedOwnDraftAction(selection.entry, identity.accountId, 'edit') ? (
+                      <Button
+                        type="button"
+                        className={control}
+                        disabled={
+                          localWriting.writing.state === 'unknown' ||
+                          !localWriting.writing.payload.body ||
+                          eraseState?.state === 'uncertain' ||
+                          eraseState?.state === 'sending'
+                        }
+                        id={`${controlId}-browser-source`}
+                        onClick={() => startEditor('browser')}
+                      >
+                        {m.own_drafts_use_browser({}, { locale })}
+                      </Button>
+                    ) : null}
+                  </section>
+                ) : null}
+              </section>
             )}
             {commands && admittedOwnDraftAction(selection.entry, identity.accountId, 'erase') ? (
               eraseState?.state === 'review' ? (

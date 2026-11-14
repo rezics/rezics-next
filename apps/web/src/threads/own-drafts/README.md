@@ -52,7 +52,15 @@ Decision: Render the supplied structured server, browser and readback bodies thr
 caller with separate source/visit identities, heading anchors, disclosure and wide-inspector lifetimes. A browser
 text fallback is explicitly labelled and cannot resume without its structured body. Supplied block language remains
 intact; unknown browser/readback document language stays unknown rather than inheriting the interface locale.
-No reference, attachment or media lookup is added.
+No reference, attachment or media lookup is added. Browser repair and unknown-submission notices stay beside its
+explicit choice; an unknown browser copy remains inspectable but cannot resume. Acknowledgement retains the
+submitted title, source, source revision and saved time separately from the later current read; browser submission
+also names the selected server revision used by the native command.
+
+The installed document schema has no footnote node or disclosure port. This caller preserves supported structured
+nodes and spoiler disclosure without inventing footnote payloads; any future footnote contract belongs to Document.
+Focused rich-preview acceptance extends the existing resume and command suites; execution and keyboard/visual
+review remain with the separate verifier.
 
 ## Cost
 
