@@ -67,7 +67,6 @@ import {
   publicValueStatementCurrent,
   publicValueStatementMatches,
   readCurrentCandidatePages,
-  sameAdoptionSelection,
   selectedSynopsisOnPublicRead,
   servedCoverVariants,
   servedVariantDecisionCurrent,
@@ -2011,134 +2010,161 @@ async function publishShowcasePhases(
   );
   for (const [childId, group] of parentGroups) {
     const refresh = parentRefreshByChild.get(childId);
-    if (group.refresh && refresh) {
-      const refreshState = await parentRefreshEvidence(refresh);
-      if (refreshState === 'unavailable') {
-        for (const { binding, assertion } of group.edges) {
-          setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh read is unavailable');
-          unavailableParentCandidateIds.add(assertion.candidateId);
-          unavailableParentPaths.add(binding.path);
-        }
-        omissions.push({ provider: 'vndb', sourceKey: refresh.tagId, code: 'public-view-unavailable' });
-        continue;
-      }
-      if (refreshState === 'retired') {
-        for (const { binding, assertion } of group.edges)
-          setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh binding is retired');
-        withheldParentTags.add(refresh.tagId);
-        omissions.push({ provider: 'vndb', sourceKey: refresh.tagId, code: 'vocabulary-binding-not-current' });
-      }
-    }
-    const edges = group.edges.filter(({ assertion }) => parentAccepted.has(assertion.candidateId));
-    let page: CandidatePage;
-    try {
-      page = await candidatePage(
-        { review: input.review, id: childId, property: 'skos:broader', journal: input.journal },
-        pageCache,
-      );
-    } catch {
-      for (const { binding, assertion } of group.edges) {
-        setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent adoption read is unavailable');
-        unavailableParentCandidateIds.add(assertion.candidateId);
-        unavailableParentPaths.add(binding.path);
-      }
-      continue;
-    }
-    if (!page.complete || (page.adoption && !Array.isArray(page.adoption.selection))) {
-      for (const { binding, assertion } of group.edges) {
-        setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent selection is incomplete');
-        unavailableParentCandidateIds.add(assertion.candidateId);
-        unavailableParentPaths.add(binding.path);
-      }
-      continue;
-    }
-    const currentEdges: typeof edges = [];
-    for (const edge of edges) {
-      const fence = input.review.fence
-        ? await showcaseTagParentSourceFence(input.review.fence, edge.binding)
-        : 'unavailable';
-      const candidate = page.candidates.find((item) => item.id === edge.assertion.candidateId);
-      const bindingState = await parentBindingEvidence(edge.binding);
-      if (
-        fence !== 'open' ||
-        bindingState !== 'current' ||
-        !candidate ||
-        candidate.decision !== 'accepted' ||
-        !showcaseSourceMatches(candidate.source, edge.assertion.source) ||
-        !showcaseStatementMatches(candidate.statement, edge.assertion.statement)
-      ) {
-        if (bindingState === 'unavailable') {
-          unavailableParentCandidateIds.add(edge.assertion.candidateId);
-          unavailableParentPaths.add(edge.binding.path);
-        }
-        setParentOutcome(
-          edge.binding,
-          'withheld',
-          edge.assertion.candidateId,
-          bindingState === 'unavailable'
-            ? 'current child, parent or Scheme read is unavailable'
-            : `parent-${fence === 'open' ? 'candidate-not-current' : fence}`,
-        );
-        continue;
-      }
-      currentEdges.push(edge);
-    }
-    const previous = page.adoption;
-    const currentAdoption = adoptionSnapshot(previous);
     const adoptionKey = groupKey(childId, 'skos:broader');
-    adoptionSnapshots.set(adoptionKey, currentAdoption);
-    const priorSelection = currentAdoption?.selection ?? [];
-    const selections = new Map<string, CandidateRank>();
-    let parentRetirementUnavailable = false;
-    for (const item of priorSelection) {
-      if (!item?.candidate) continue;
-      const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
-      if (group.refresh && selectedCandidate && managedSourceTagParent(selectedCandidate, input.aliases.vndb)) {
-        if (unavailableParentCandidateIds.has(selectedCandidate.id)) {
-          selections.set(item.candidate, item.rank);
-          continue;
-        }
-        const state = await currentFactsFence(input.review, input.aliases.vndb, selectedCandidate.source!.external_id);
-        if (state !== 'open') {
-          parentRetirementUnavailable = true;
-          continue;
-        }
-        continue;
-      }
-      selections.set(item.candidate, item.rank);
-    }
-    if (parentRetirementUnavailable) {
-      for (const { binding, assertion } of group.edges)
-        setParentOutcome(binding, 'withheld', assertion.candidateId, 'prior source parent tuple cannot be reconciled');
-      withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
-      continue;
-    }
-    for (const { binding, assertion } of currentEdges) selections.set(assertion.candidateId, 'normal');
-    if (selections.size > showcaseLimits.reviewPage) {
-      for (const { binding, assertion } of group.edges)
-        setParentOutcome(binding, 'withheld', assertion.candidateId, 'parent selection exceeds the review page');
-      withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
-      continue;
-    }
-    if (!group.refresh && !currentEdges.length) continue;
-    const body = {
-      context: GLOBAL_CONTEXT,
-      property: 'skos:broader',
-      mode: 'replace' as const,
-      expected_head: previous?.head ?? null,
-      selection: [...selections]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([candidate, rank]) => ({ candidate, rank })),
-    };
+    let currentEdges: typeof group.edges = [];
+    let observeParent = false;
     const adopted = await sendDurableAdopt({
       journal: input.journal,
       review: input.review,
       subjectId: childId,
       intent: manifest.digest,
-      planned: body,
-      current: currentAdoption,
+      property: 'skos:broader',
+      plan: async (recheck) => {
+        currentEdges = [];
+        observeParent = false;
+        adoptionSnapshots.delete(adoptionKey);
+        pageCache.delete(adoptionKey);
+        publicSubjects.delete(childId);
+        publicVocabularyEvidenceCache.delete(childId);
+        if (recheck) {
+          publicSubjects.clear();
+          publicVocabularyEvidenceCache.clear();
+        }
+        if (group.refresh && refresh) {
+          const refreshState = await parentRefreshEvidence(refresh);
+          if (refreshState === 'unavailable') {
+            for (const { binding, assertion } of group.edges) {
+              setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh read is unavailable');
+              unavailableParentCandidateIds.add(assertion.candidateId);
+              unavailableParentPaths.add(binding.path);
+            }
+            omissions.push({ provider: 'vndb', sourceKey: refresh.tagId, code: 'public-view-unavailable' });
+            return null;
+          }
+          if (refreshState === 'retired') {
+            for (const { binding, assertion } of group.edges)
+              setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh binding is retired');
+            withheldParentTags.add(refresh.tagId);
+            omissions.push({ provider: 'vndb', sourceKey: refresh.tagId, code: 'vocabulary-binding-not-current' });
+          }
+        }
+        const edges = group.edges.filter(({ assertion }) => parentAccepted.has(assertion.candidateId));
+        let page: CandidatePage;
+        try {
+          page = await candidatePage(
+            { review: input.review, id: childId, property: 'skos:broader', journal: input.journal },
+            pageCache,
+          );
+        } catch {
+          for (const { binding, assertion } of group.edges) {
+            setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent adoption read is unavailable');
+            unavailableParentCandidateIds.add(assertion.candidateId);
+            unavailableParentPaths.add(binding.path);
+          }
+          return null;
+        }
+        if (!page.complete || (page.adoption && !Array.isArray(page.adoption.selection))) {
+          for (const { binding, assertion } of group.edges) {
+            setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent selection is incomplete');
+            unavailableParentCandidateIds.add(assertion.candidateId);
+            unavailableParentPaths.add(binding.path);
+          }
+          return null;
+        }
+        for (const edge of edges) {
+          const fence = input.review.fence
+            ? await showcaseTagParentSourceFence(input.review.fence, edge.binding)
+            : 'unavailable';
+          const candidate = page.candidates.find((item) => item.id === edge.assertion.candidateId);
+          const bindingState = await parentBindingEvidence(edge.binding);
+          if (
+            fence !== 'open' ||
+            bindingState !== 'current' ||
+            !candidate ||
+            candidate.decision !== 'accepted' ||
+            !showcaseSourceMatches(candidate.source, edge.assertion.source) ||
+            !showcaseStatementMatches(candidate.statement, edge.assertion.statement) ||
+            showcaseDigest({ source: candidate.source, statement: edge.assertion.statement }) !==
+              edge.assertion.candidateDigest
+          ) {
+            if (bindingState === 'unavailable') {
+              unavailableParentCandidateIds.add(edge.assertion.candidateId);
+              unavailableParentPaths.add(edge.binding.path);
+            }
+            setParentOutcome(
+              edge.binding,
+              'withheld',
+              edge.assertion.candidateId,
+              bindingState === 'unavailable'
+                ? 'current child, parent or Scheme read is unavailable'
+                : `parent-${fence === 'open' ? 'candidate-not-current' : fence}`,
+            );
+            continue;
+          }
+          currentEdges.push(edge);
+        }
+        const previous = page.adoption;
+        const currentAdoption = adoptionSnapshot(previous);
+        adoptionSnapshots.set(adoptionKey, currentAdoption);
+        if (previous && previous.mode !== 'replace') {
+          observeParent = true;
+          return null;
+        }
+        const priorSelection = currentAdoption?.selection ?? [];
+        const priorRanks = new Map(priorSelection.map((item) => [item.candidate, item.rank]));
+        const selections = new Map<string, CandidateRank>();
+        let parentRetirementUnavailable = false;
+        for (const item of priorSelection) {
+          if (!item?.candidate) continue;
+          const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
+          if (group.refresh && selectedCandidate && managedSourceTagParent(selectedCandidate, input.aliases.vndb)) {
+            if (unavailableParentCandidateIds.has(selectedCandidate.id)) {
+              selections.set(item.candidate, item.rank);
+              continue;
+            }
+            const state = await currentFactsFence(
+              input.review,
+              input.aliases.vndb,
+              selectedCandidate.source!.external_id,
+            );
+            if (state !== 'open') {
+              parentRetirementUnavailable = true;
+              continue;
+            }
+            continue;
+          }
+          selections.set(item.candidate, item.rank);
+        }
+        if (parentRetirementUnavailable) {
+          for (const { binding, assertion } of group.edges)
+            setParentOutcome(binding, 'withheld', assertion.candidateId, 'prior source parent tuple cannot be reconciled');
+          withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
+          return null;
+        }
+        for (const { assertion } of currentEdges)
+          selections.set(assertion.candidateId, priorRanks.get(assertion.candidateId) ?? 'normal');
+        if (selections.size > showcaseLimits.reviewPage) {
+          for (const { binding, assertion } of group.edges)
+            setParentOutcome(binding, 'withheld', assertion.candidateId, 'parent selection exceeds the review page');
+          withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
+          return null;
+        }
+        if (!group.refresh && !currentEdges.length) return null;
+        const body: AdoptBody = {
+          context: GLOBAL_CONTEXT,
+          property: 'skos:broader',
+          mode: 'replace',
+          expected_head: previous?.head ?? null,
+          selection: [...selections]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([candidate, rank]) => ({ candidate, rank })),
+        };
+        observeParent = true;
+        return { planned: body, current: currentAdoption };
+      },
     });
     if (adopted.status !== 'complete') {
+      adoptionSnapshots.delete(adoptionKey);
       const code = adopted.status === 'bound' ? 'adoption-generation-bound' : adopted.code;
       omissions.push({ provider: 'vndb', sourceKey: group.record.sourceKey, code });
       for (const { binding, assertion } of group.edges)
@@ -2146,6 +2172,7 @@ async function publishShowcasePhases(
       withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
       continue;
     }
+    if (!observeParent) continue;
     if (adopted.snapshot) adoptionSnapshots.set(adoptionKey, adopted.snapshot);
     pageCache.delete(groupKey(childId, 'skos:broader'));
     publicSubjects.delete(childId);
@@ -2308,227 +2335,267 @@ async function publishShowcasePhases(
         !(refreshWeights && group.ids.size === 0))
     )
       continue;
-    if (group.property === 'schema:image') {
-      const assertion = assertions.find(
-        (entry) =>
-          entry.record.subjectId === id &&
-          entry.assertion.property === 'schema:image' &&
-          group.ids.has(entry.assertion.candidateId),
-      );
-      const outcome = assertion && admittedCoverMedia(input.plan, mediaOutcomes, group.record, assertion.assertion);
-      const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
-      if (state !== 'open') {
-        omissions.push({
-          provider: group.record.provider,
-          sourceKey: group.record.sourceKey,
-          code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable',
-        });
-        continue;
-      }
-    }
-    let page: CandidatePage;
-    try {
-      page = await candidatePage(
-        { review: input.review, id, property: group.property, journal: input.journal },
-        pageCache,
-      );
-    } catch {
-      omissions.push({
-        provider: group.record.provider,
-        sourceKey: group.record.sourceKey,
-        code: 'adoption-current-read-unavailable',
-      });
-      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
-      continue;
-    }
-    if (!page.complete) {
-      omissions.push({
-        provider: group.record.provider,
-        sourceKey: group.record.sourceKey,
-        code: 'adoption-selection-bounded',
-      });
-      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
-      continue;
-    }
-    const previous = page.adoption;
-    if (previous && !Array.isArray(previous.selection)) {
-      omissions.push({
-        provider: group.record.provider,
-        sourceKey: group.record.sourceKey,
-        code: 'adoption-selection-unavailable',
-      });
-      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
-      continue;
-    }
-    const currentAdoption = adoptionSnapshot(previous);
-    adoptionSnapshots.set(key, currentAdoption);
-    const priorSelection = currentAdoption?.selection ?? [];
-    if (refreshWeights || refreshMemberships) {
-      const state = await currentFactsFence(input.review, input.aliases.vndb, group.record.sourceKey);
-      if (state !== 'open') {
-        blockedTagSubjects.add(id);
-        omissions.push({
-          provider: 'vndb',
-          sourceKey: group.record.sourceKey,
-          code: state === 'fenced' ? 'tag-weight-fenced' : 'tag-weight-fence-unavailable',
-        });
-        continue;
-      }
-    }
-    const groupAssertions = assertions.filter(
-      (entry) => entry.record.subjectId === id && entry.assertion.property === group.property,
-    );
-    const dependencyStateForAssertion = async (entry: (typeof groupAssertions)[number]) => {
-      const dependencyIds = new Set<string>();
-      const value = entry.assertion.statement.value;
-      const content = value.type === 'value' ? value.content : undefined;
-      if (typeof content === 'string' && vocabularyById.has(content)) dependencyIds.add(content);
-      const concept = vocabularyById.get(id);
-      if (concept?.nativeType === 'skos:Concept' && concept.schemeId) dependencyIds.add(concept.schemeId);
-      let unavailable = false;
-      for (const dependencyId of dependencyIds) {
-        const dependency = vocabularyById.get(dependencyId);
-        const state = dependency ? await publicVocabularyEvidence(dependency) : 'retired';
-        if (state === 'retired') return 'retired' as const;
-        if (state === 'unavailable') unavailable = true;
-      }
-      return unavailable ? ('unavailable' as const) : ('current' as const);
-    };
-    for (const entry of groupAssertions) {
-      const state = await dependencyStateForAssertion(entry);
-      dependencyEvidenceByCandidate.set(entry.assertion.candidateId, state);
-      if (state !== 'current')
-        omissions.push({
-          provider: entry.record.provider,
-          sourceKey: entry.record.sourceKey,
-          code: state === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-not-current',
-        });
-    }
-    const selections = new Map<string, CandidateRank>();
-    for (const item of priorSelection) {
-      if (!item?.candidate) continue;
-      const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
-      const dependencyState = dependencyEvidenceByCandidate.get(item.candidate);
-      if (dependencyState === 'retired') continue;
-      if (dependencyState === 'unavailable') {
-        selections.set(item.candidate, item.rank);
-        continue;
-      }
-      if (
-        refreshWeights &&
-        selectedCandidate &&
-        managedSourceTagWeight(selectedCandidate, input.aliases.vndb, group.record.sourceKey)
-      ) {
-        const tagId = sourceTagId(selectedCandidate.statement);
-        const value = selectedCandidate.statement.value;
-        const bindingState =
-          tagId && value.type === 'value' && typeof value.content === 'string'
-            ? (currentTagBindingStates.get(`${group.record.sourceKey}\0${tagId}\0${value.content}`) ?? 'retired')
-            : 'retired';
-        if (bindingState === 'unavailable') {
-          selections.set(item.candidate, item.rank);
-          continue;
-        }
-        continue;
-      }
-      if (
-        refreshMemberships &&
-        selectedCandidate &&
-        managedSourceTagMembership(selectedCandidate, input.aliases.vndb, group.record)
-      ) {
-        const identity = tagAssociationPath(group.record, selectedCandidate.source, selectedCandidate.statement);
-        const explicitlyWithdrawn =
-          identity &&
-          parentOrSourceWithdrawals.some(
-            (withdrawal) => withdrawal.sourceKey === identity.sourceKey && withdrawal.tagId === identity.tagId,
-          );
-        const parentWithheld = !!identity && withheldParentTags.has(identity.tagId);
-        const association =
-          identity &&
-          (manifest.tagAssociations ?? []).find(
-            (item) =>
-              item.workId === group.record.sourceKey &&
-              item.sourceKey === identity.sourceKey &&
-              item.tagId === identity.tagId,
-          );
-        const bindingState = association
-          ? (currentMembershipBindingStates.get(tagAssociationKey(association)) ?? 'unavailable')
-          : 'retired';
-        if (!explicitlyWithdrawn && !parentWithheld && bindingState === 'unavailable') {
-          selections.set(item.candidate, item.rank);
-          continue;
-        }
-        const staleCurrentAssociation =
-          (manifest.tagAssociationRefreshes ?? []).includes(group.record.sourceKey) &&
-          !currentTagMembershipCandidateDigests.has(
-            showcaseDigest({ source: selectedCandidate.source, statement: selectedCandidate.statement }),
-          );
-        if (explicitlyWithdrawn || parentWithheld || staleCurrentAssociation) continue;
-      }
-      selections.set(item.candidate, item.rank);
-    }
-    for (const candidateId of group.ids) {
-      const candidate = page.candidates.find((item) => item.id === candidateId);
-      if (candidate?.decision !== 'accepted' || candidate.rank === 'deprecated') {
-        withholdAcceptance(
-          group.record,
-          candidateId,
-          candidate?.decision === 'rejected'
-            ? 'candidate-currently-rejected'
-            : candidate?.rank === 'deprecated'
-              ? 'candidate-not-currently-adopted'
-              : 'candidate-acceptance-not-current',
-        );
-        continue;
-      }
-      const dependencyState = dependencyEvidenceByCandidate.get(candidateId);
-      if (dependencyState === undefined || dependencyState === 'current')
-        selections.set(candidateId, selections.get(candidateId) ?? 'normal');
-    }
-    if (selections.size > showcaseLimits.reviewPage) {
-      omissions.push({
-        provider: group.record.provider,
-        sourceKey: group.record.sourceKey,
-        code: 'adoption-selection-bounded',
-      });
-      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
-      continue;
-    }
-    const identityProperty = group.property === sourceIdentityProperty(group.record);
-    if (group.record.kind !== 'source-vocabulary' && !identityProperty) {
-      const sourceRead = await publicRead(id);
-      if (
-        !sourceRead ||
-        !currentSourceRead(sourceRead, group.record) ||
-        !publicHasSourceIdentity(sourceRead, group.record)
-      ) {
-        omissions.push({
-          provider: group.record.provider,
-          sourceKey: group.record.sourceKey,
-          code: 'source-uri-not-current',
-        });
-        stoppedSubjects.add(id);
-        continue;
-      }
-    }
-    const body = {
-      context: GLOBAL_CONTEXT,
-      property: group.property,
-      mode: 'replace' as const,
-      expected_head: previous?.head ?? null,
-      selection: [...selections]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([candidate, rank]) => ({ candidate, rank })),
-    };
     const adopted = await sendDurableAdopt({
       journal: input.journal,
       review: input.review,
       subjectId: id,
       intent: manifest.digest,
-      planned: body,
-      current: currentAdoption,
+      property: group.property,
+      plan: async (recheck) => {
+        adoptionSnapshots.delete(key);
+        pageCache.delete(key);
+        publicSubjects.delete(id);
+        publicVocabularyEvidenceCache.delete(id);
+        if (recheck) {
+          publicSubjects.clear();
+          publicVocabularyEvidenceCache.clear();
+        }
+        if (group.property === 'schema:image') {
+          const assertion = assertions.find(
+            (entry) =>
+              entry.record.subjectId === id &&
+              entry.assertion.property === 'schema:image' &&
+              group.ids.has(entry.assertion.candidateId),
+          );
+          const outcome = assertion && admittedCoverMedia(input.plan, mediaOutcomes, group.record, assertion.assertion);
+          const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
+          if (state !== 'open') {
+            omissions.push({
+              provider: group.record.provider,
+              sourceKey: group.record.sourceKey,
+              code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable',
+            });
+            return null;
+          }
+        }
+        let page: CandidatePage;
+        try {
+          page = await candidatePage(
+            { review: input.review, id, property: group.property, journal: input.journal },
+            pageCache,
+          );
+        } catch {
+          omissions.push({
+            provider: group.record.provider,
+            sourceKey: group.record.sourceKey,
+            code: 'adoption-current-read-unavailable',
+          });
+          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          return null;
+        }
+        if (!page.complete) {
+          omissions.push({
+            provider: group.record.provider,
+            sourceKey: group.record.sourceKey,
+            code: 'adoption-selection-bounded',
+          });
+          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          return null;
+        }
+        const previous = page.adoption;
+        if (previous && !Array.isArray(previous.selection)) {
+          omissions.push({
+            provider: group.record.provider,
+            sourceKey: group.record.sourceKey,
+            code: 'adoption-selection-unavailable',
+          });
+          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          return null;
+        }
+        const currentAdoption = adoptionSnapshot(previous);
+        adoptionSnapshots.set(key, currentAdoption);
+        if (previous && previous.mode !== 'replace') return null;
+        const priorSelection = currentAdoption?.selection ?? [];
+        const priorRanks = new Map(priorSelection.map((item) => [item.candidate, item.rank]));
+        if (refreshWeights || refreshMemberships) {
+          const state = await currentFactsFence(input.review, input.aliases.vndb, group.record.sourceKey);
+          if (state !== 'open') {
+            blockedTagSubjects.add(id);
+            omissions.push({
+              provider: 'vndb',
+              sourceKey: group.record.sourceKey,
+              code: state === 'fenced' ? 'tag-weight-fenced' : 'tag-weight-fence-unavailable',
+            });
+            return null;
+          }
+        }
+        const groupAssertions = assertions.filter(
+          (entry) => entry.record.subjectId === id && entry.assertion.property === group.property,
+        );
+        const ownedCandidates = new Set<string>();
+        for (const { record, assertion } of groupAssertions) {
+          const candidate = page.candidates.find((item) => item.id === assertion.candidateId);
+          const owned =
+            candidate &&
+            showcaseSourceMatches(candidate.source, assertion.source) &&
+            showcaseStatementMatches(candidate.statement, assertion.statement) &&
+            showcaseDigest({ source: candidate.source, statement: assertion.statement }) === assertion.candidateDigest;
+          if (owned) ownedCandidates.add(assertion.candidateId);
+          if (!group.ids.has(assertion.candidateId) || withheldAcceptanceCandidates.has(assertion.candidateId))
+            continue;
+          if (!owned) {
+            withholdAcceptance(record, assertion.candidateId, 'candidate-digest-changed');
+            continue;
+          }
+          if (recheck) {
+            try {
+              const code = await refreshAcceptancePrerequisites(record, assertion);
+              if (code) withholdAcceptance(record, assertion.candidateId, code);
+            } catch {
+              withholdAcceptance(record, assertion.candidateId, 'acceptance-current-read-unavailable');
+            }
+          }
+        }
+        const dependencyStateForAssertion = async (entry: (typeof groupAssertions)[number]) => {
+          const dependencyIds = new Set<string>();
+          const value = entry.assertion.statement.value;
+          const content = value.type === 'value' ? value.content : undefined;
+          if (typeof content === 'string' && vocabularyById.has(content)) dependencyIds.add(content);
+          const concept = vocabularyById.get(id);
+          if (concept?.nativeType === 'skos:Concept' && concept.schemeId) dependencyIds.add(concept.schemeId);
+          let unavailable = false;
+          for (const dependencyId of dependencyIds) {
+            const dependency = vocabularyById.get(dependencyId);
+            const state = dependency ? await publicVocabularyEvidence(dependency) : 'retired';
+            if (state === 'retired') return 'retired' as const;
+            if (state === 'unavailable') unavailable = true;
+          }
+          return unavailable ? ('unavailable' as const) : ('current' as const);
+        };
+        for (const entry of groupAssertions) {
+          const state = await dependencyStateForAssertion(entry);
+          dependencyEvidenceByCandidate.set(entry.assertion.candidateId, state);
+          if (state !== 'current')
+            omissions.push({
+              provider: entry.record.provider,
+              sourceKey: entry.record.sourceKey,
+              code: state === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-not-current',
+            });
+        }
+        const selections = new Map<string, CandidateRank>();
+        for (const item of priorSelection) {
+          if (!item?.candidate) continue;
+          const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
+          const dependencyState = ownedCandidates.has(item.candidate)
+            ? dependencyEvidenceByCandidate.get(item.candidate)
+            : undefined;
+          if (dependencyState === 'retired') continue;
+          if (dependencyState === 'unavailable') {
+            selections.set(item.candidate, item.rank);
+            continue;
+          }
+          if (
+            refreshWeights &&
+            selectedCandidate &&
+            managedSourceTagWeight(selectedCandidate, input.aliases.vndb, group.record.sourceKey)
+          ) {
+            const tagId = sourceTagId(selectedCandidate.statement);
+            const value = selectedCandidate.statement.value;
+            const bindingState =
+              tagId && value.type === 'value' && typeof value.content === 'string'
+                ? (currentTagBindingStates.get(`${group.record.sourceKey}\0${tagId}\0${value.content}`) ?? 'retired')
+                : 'retired';
+            if (bindingState === 'unavailable') {
+              selections.set(item.candidate, item.rank);
+              continue;
+            }
+            continue;
+          }
+          if (
+            refreshMemberships &&
+            selectedCandidate &&
+            managedSourceTagMembership(selectedCandidate, input.aliases.vndb, group.record)
+          ) {
+            const identity = tagAssociationPath(group.record, selectedCandidate.source, selectedCandidate.statement);
+            const explicitlyWithdrawn =
+              identity &&
+              parentOrSourceWithdrawals.some(
+                (withdrawal) => withdrawal.sourceKey === identity.sourceKey && withdrawal.tagId === identity.tagId,
+              );
+            const parentWithheld = !!identity && withheldParentTags.has(identity.tagId);
+            const association =
+              identity &&
+              (manifest.tagAssociations ?? []).find(
+                (item) =>
+                  item.workId === group.record.sourceKey &&
+                  item.sourceKey === identity.sourceKey &&
+                  item.tagId === identity.tagId,
+              );
+            const bindingState = association
+              ? (currentMembershipBindingStates.get(tagAssociationKey(association)) ?? 'unavailable')
+              : 'retired';
+            if (!explicitlyWithdrawn && !parentWithheld && bindingState === 'unavailable') {
+              selections.set(item.candidate, item.rank);
+              continue;
+            }
+            const staleCurrentAssociation =
+              (manifest.tagAssociationRefreshes ?? []).includes(group.record.sourceKey) &&
+              !currentTagMembershipCandidateDigests.has(
+                showcaseDigest({ source: selectedCandidate.source, statement: selectedCandidate.statement }),
+              );
+            if (explicitlyWithdrawn || parentWithheld || staleCurrentAssociation) continue;
+          }
+          selections.set(item.candidate, item.rank);
+        }
+        for (const candidateId of group.ids) {
+          if (withheldAcceptanceCandidates.has(candidateId)) continue;
+          const candidate = page.candidates.find((item) => item.id === candidateId);
+          if (candidate?.decision !== 'accepted' || candidate.rank === 'deprecated') {
+            withholdAcceptance(
+              group.record,
+              candidateId,
+              candidate?.decision === 'rejected'
+                ? 'candidate-currently-rejected'
+                : candidate?.rank === 'deprecated'
+                  ? 'candidate-not-currently-adopted'
+                  : 'candidate-acceptance-not-current',
+            );
+            continue;
+          }
+          const dependencyState = dependencyEvidenceByCandidate.get(candidateId);
+          if (dependencyState === undefined || dependencyState === 'current')
+            selections.set(candidateId, selections.get(candidateId) ?? priorRanks.get(candidateId) ?? 'normal');
+        }
+        if (selections.size > showcaseLimits.reviewPage) {
+          omissions.push({
+            provider: group.record.provider,
+            sourceKey: group.record.sourceKey,
+            code: 'adoption-selection-bounded',
+          });
+          if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+          return null;
+        }
+        const identityProperty = group.property === sourceIdentityProperty(group.record);
+        if (group.record.kind !== 'source-vocabulary' && !identityProperty) {
+          const sourceRead = await publicRead(id);
+          if (
+            !sourceRead ||
+            !currentSourceRead(sourceRead, group.record) ||
+            !publicHasSourceIdentity(sourceRead, group.record)
+          ) {
+            omissions.push({
+              provider: group.record.provider,
+              sourceKey: group.record.sourceKey,
+              code: 'source-uri-not-current',
+            });
+            stoppedSubjects.add(id);
+            return null;
+          }
+        }
+        const body: AdoptBody = {
+          context: GLOBAL_CONTEXT,
+          property: group.property,
+          mode: 'replace',
+          expected_head: previous?.head ?? null,
+          selection: [...selections]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([candidate, rank]) => ({ candidate, rank })),
+        };
+        return { planned: body, current: currentAdoption };
+      },
     });
     if (adopted.status !== 'complete') {
+      adoptionSnapshots.delete(key);
       omissions.push({
         provider: group.record.provider,
         sourceKey: group.record.sourceKey,

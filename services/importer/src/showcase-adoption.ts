@@ -157,6 +157,26 @@ export function adoptResumeKeys(
   return [...new Set(keys)];
 }
 
+function preparedAdoptAction(
+  journal: ShowcaseJournal,
+  subjectId: string,
+  property: string,
+  intent: string,
+  planned: unknown,
+): ShowcaseJournalActionRow | null {
+  const identity = showcaseAdoptIdentity(subjectId, property, intent);
+  for (const candidate of adoptResumeKeys(journal, subjectId, property, intent, planned)) {
+    const prior = journal.action(candidate);
+    if (prior?.state === 'prepared') return prior;
+  }
+  const recorded = journal.adoptGeneration(identity);
+  for (let generation = showcaseAdoptInvocationBound; generation < recorded; generation += 1) {
+    const prior = journal.action(generationAdoptKey(subjectId, property, intent, generation));
+    if (prior?.state === 'prepared') return prior;
+  }
+  return null;
+}
+
 function nextFreshAdoptAction(
   journal: ShowcaseJournal,
   subjectId: string,
@@ -164,20 +184,12 @@ function nextFreshAdoptAction(
   intent: string,
 ): string | null {
   const identity = showcaseAdoptIdentity(subjectId, property, intent);
-  for (const candidate of adoptResumeKeys(journal, subjectId, property, intent, { identity })) {
-    const prior = journal.action(candidate);
-    if (prior?.state === 'prepared') return candidate;
-  }
   for (let generation = 0; generation < showcaseAdoptInvocationBound; generation += 1) {
     const action = generationAdoptKey(subjectId, property, intent, generation);
     if (!journal.action(action)) return action;
   }
   const recorded = journal.adoptGeneration(identity);
   const start = Math.max(showcaseAdoptInvocationBound, recorded);
-  for (let generation = showcaseAdoptInvocationBound; generation < start; generation += 1) {
-    const action = generationAdoptKey(subjectId, property, intent, generation);
-    if (journal.action(action)?.state === 'prepared') return action;
-  }
   let generation = start;
   for (let step = 0; step < showcaseAdoptInvocationBound; step += 1) {
     const action = generationAdoptKey(subjectId, property, intent, generation);
@@ -192,36 +204,57 @@ function nextFreshAdoptAction(
   return null;
 }
 
-export async function sendDurableAdopt(input: {
-  journal: ShowcaseJournal;
-  review: Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
-  subjectId: string;
-  intent: string;
+type AdoptPlan = {
   planned: AdoptBody;
   current: { selection: readonly { candidate: string; rank: string }[] } | null;
-}): Promise<
+};
+
+export async function sendDurableAdopt(
+  input: {
+    journal: ShowcaseJournal;
+    review: Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+    subjectId: string;
+    intent: string;
+  } & (
+    | AdoptPlan
+    | {
+        property: string;
+        /** Rebuild after settlement or a stale head; null leaves publication to current reads. */
+        plan: (refresh: boolean) => Promise<AdoptPlan | null>;
+      }
+  ),
+): Promise<
   | { status: 'complete'; snapshot?: AdoptionSnapshot }
   | { status: 'refused'; code: string }
   | { status: 'interrupted'; code: string }
   | { status: 'bound' }
 > {
-  const identity = showcaseAdoptIdentity(input.subjectId, input.planned.property, input.intent);
+  const property = 'plan' in input ? input.property : input.planned.property;
+  const identity = showcaseAdoptIdentity(input.subjectId, property, input.intent);
+  let plan: AdoptPlan | null = 'plan' in input ? null : input;
+  let refresh = false;
   for (let step = 0; step < showcaseAdoptInvocationBound; step += 1) {
-    const keys = adoptResumeKeys(input.journal, input.subjectId, input.planned.property, input.intent, input.planned);
+    const prepared = preparedAdoptAction(
+      input.journal,
+      input.subjectId,
+      property,
+      input.intent,
+      plan?.planned ?? { identity },
+    );
     let action = '';
-    let body = input.planned;
-    let found = false;
-    for (const candidate of keys) {
-      const prior = input.journal.action(candidate);
-      if (prior?.state !== 'prepared') continue;
-      const sealed = sealedAdoptBody(JSON.parse(prior.body_json));
+    let body: AdoptBody;
+    let replay = !!prepared;
+    if (prepared) {
+      const sealed = sealedAdoptBody(JSON.parse(prepared.body_json));
       if (!sealed) throw new TypeError('Prepared showcase adopt body is invalid');
-      action = candidate;
+      action = prepared.action_key;
       body = sealed;
-      found = true;
-      break;
-    }
-    if (!found) {
+    } else {
+      // A receipt settles delivery only. A fixed plan cannot certify the head or selection after replay.
+      if (refresh && !('plan' in input)) return { status: 'interrupted', code: 'adoption-current-read-unavailable' };
+      if (!plan && 'plan' in input) plan = await input.plan(refresh);
+      if (!plan) return { status: 'complete' };
+      const keys = adoptResumeKeys(input.journal, input.subjectId, property, input.intent, plan.planned);
       for (const candidate of keys) {
         const prior = input.journal.action(candidate);
         if (
@@ -234,22 +267,20 @@ export async function sendDurableAdopt(input: {
         const sealed = sealedAdoptBody(JSON.parse(prior.body_json));
         if (
           sealed &&
-          sameAdoptionSelection(sealed.selection, input.planned.selection) &&
-          input.current &&
-          sameAdoptionSelection(input.current.selection, input.planned.selection)
+          sameAdoptionSelection(sealed.selection, plan.planned.selection) &&
+          plan.current &&
+          sameAdoptionSelection(plan.current.selection, plan.planned.selection)
         )
           return { status: 'complete' };
       }
-      if (input.current && sameAdoptionSelection(input.current.selection, input.planned.selection))
+      if (plan.current && sameAdoptionSelection(plan.current.selection, plan.planned.selection))
         return { status: 'complete' };
-      const fresh = nextFreshAdoptAction(input.journal, input.subjectId, input.planned.property, input.intent);
-      if (fresh) {
-        action = fresh;
-        body = input.planned;
-        found = true;
-      }
+      const fresh = nextFreshAdoptAction(input.journal, input.subjectId, property, input.intent);
+      if (!fresh) return { status: 'bound' };
+      action = fresh;
+      body = plan.planned;
+      replay = input.journal.action(action)?.state === 'prepared';
     }
-    if (!found) return { status: 'bound' };
     input.journal.recordPendingAdopt(identity, action);
     try {
       const sent = await sendSealedShowcaseAction({
@@ -262,13 +293,22 @@ export async function sendDurableAdopt(input: {
           input.review.adoptReviewedCandidates(input.subjectId, sealedBody as AdoptBody, sealedKey),
       });
       if (sent.status === 'refused') return { status: 'refused', code: sent.code };
-      if (sent.status === 'stale') return { status: 'interrupted', code: sent.code };
+      if (sent.status === 'stale') {
+        if (!('plan' in input)) return { status: 'interrupted', code: sent.code };
+        plan = null;
+        refresh = true;
+        continue;
+      }
+      if (replay) {
+        // Settle every original before planning another write; never publish its historical receipt.
+        plan = null;
+        refresh = true;
+        continue;
+      }
       if (sent.status === 'acknowledged') {
-        if (!sameAdoptionSelection(body.selection, input.planned.selection)) continue;
         return { status: 'complete' };
       }
       if (sent.status === 'sent') {
-        if (!sameAdoptionSelection(body.selection, input.planned.selection)) continue;
         return {
           status: 'complete',
           snapshot: { head: sent.receipt.adoption.head, selection: sent.receipt.adoption.selection },
