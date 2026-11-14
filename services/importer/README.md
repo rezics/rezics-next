@@ -101,6 +101,16 @@ Decision: Ordinary four-provider CLI and native cases consume the current regist
 
 Preview, capture comparison, inspection, disappearance review, diagnostics, resume, retention, staging retirement, backup and snapshot validation operate on bounded exact generations or pages. Diagnostics do not publish or rewrite. Interrupted unsealed acquisition is discarded. Optional checkpoints hash and resume the same bytes for large Bangumi, Open Library, Wikidata and VNDB COPY inputs. Sealed work resumes from its journal; a rejected source is not silently replaced.
 
+Checkpointed staging uses one canonical v1 shape for plain, gzip, zstd and ordered Open Library dump-set input.
+Every identity records explicit input kind, ordered members with original-byte digests and compression, and its
+whole decoded-byte budget. A plain file has one `none` member and budget zero because no decoder is applied;
+compressed files and dump sets retain the configured positive budget. File and member paths are not identities.
+The SQLite checkpoint always stores its complete input identity and completed-member count; every prefix row
+includes its member index, and the rolling digest binds ordinal, member index, record key and converted digest.
+CLI, inspection and retirement read that same shape. Existing development checkpoints need the coordinated
+one-time conversion before this reader is used; generation IDs, sealed requests and completed writes stay intact.
+
+
 Built-in descriptors provide each provider's record URL, attribution and metadata terms. Only a complete validated sealed generation sends metadata through the public source-record API under current `subject:batch_write` authority and its exact source tuple. Descriptor size is at most 8 KiB; a run has at most one intent per bound record, or two when an unresolved intent precedes a change. Each coordinator attempt allows at most eight invocations and each HTTP call at most five. The immutable request/result journal uses no expected revision for first write and the last returned revision thereafter; response-loss replay uses the original bytes and key.
 
 ## Selected acquisition and publication

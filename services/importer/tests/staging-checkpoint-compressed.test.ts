@@ -16,9 +16,9 @@ import {
   STAGING_DECODER_GZIP_ID,
   STAGING_DECODER_ZSTD_ID,
   STAGING_INCOMPATIBLE,
+  admitStagingIdentity,
   captureDumpSetIdentity,
   captureFileIdentity,
-  captureIdentity,
   emptyPrefixDigest,
   extendPrefixDigest,
   identitiesMatch,
@@ -163,7 +163,7 @@ async function mixedSet(root: string, works = [{ ...workSource, covers: [] }, ex
   return path;
 }
 
-test('version-2 identity binds gzip, zstd, dump-set members and the whole-set budget', () => {
+test('canonical v1 identity binds plain, gzip, zstd and ordered dump-set members', () => {
   const gzipBytes = gzipSync(Buffer.from(olLine(1, 'Harbor')));
   const gzip = captureFileIdentity({
     sha256: sha(gzipBytes),
@@ -174,7 +174,7 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
     disappearanceThreshold: 0.2,
     compression: 'gzip',
   });
-  expect(gzip.checkpointVersion).toBe(2);
+  expect(gzip.checkpointVersion).toBe(1);
   expect(gzip.decoderId).toBe(STAGING_DECODER_GZIP_ID);
   expect(gzip.decodeBudget).toBe(DEFAULT_DECODED_DUMP_BYTES);
   expect(gzip.members).toEqual([
@@ -225,15 +225,20 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
   expect(resumeStagingInvocation('wikidata', '1', gzip)).toContain('--compression gzip');
   expect(resumeStagingInvocation('wikidata', '1', zstd)).toContain('--compression zstd');
   expect(resumeStagingInvocation('openlibrary', '1', set)).toContain('--dump-set');
-  const v1 = extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64) });
+  const firstMember = extendPrefixDigest(emptyPrefixDigest(), {
+    ordinal: 1,
+    recordKey: 'Q1',
+    digest: 'a'.repeat(64),
+    memberIndex: 0,
+  });
   expect(
-    extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 7 }),
-  ).toBe(v1);
-  expect(
-    extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 1 }, 2),
-  ).not.toBe(
-    extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 0 }, 2),
-  );
+    extendPrefixDigest(emptyPrefixDigest(), {
+      ordinal: 1,
+      recordKey: 'Q1',
+      digest: 'a'.repeat(64),
+      memberIndex: 1,
+    }),
+  ).not.toBe(firstMember);
   expect(() =>
     captureDumpSetIdentity({
       members: [{ index: 0, family: 'author', compression: 'zstd', sha256: 'd'.repeat(64), bytes: 1 }],
@@ -243,16 +248,24 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
       manifestVersion: 1,
     }),
   ).toThrow(/Checkpointed staging admits/);
-  expect(
-    captureIdentity({
-      sha256: 'e'.repeat(64),
-      bytes: 1,
-      sourceAlias: 'wikidata',
-      sourceKind: 'wikidata',
-      converterRevision: 'wd@1',
-      disappearanceThreshold: 0.2,
-    }).checkpointVersion,
-  ).toBe(1);
+  const plain = captureFileIdentity({
+    compression: 'none',
+    sha256: 'e'.repeat(64),
+    bytes: 1,
+    sourceAlias: 'wikidata',
+    sourceKind: 'wikidata',
+    converterRevision: 'wd@1',
+    disappearanceThreshold: 0.2,
+  });
+  expect(plain).toMatchObject({
+    checkpointVersion: 1,
+    inputKind: 'file',
+    decodeBudget: 0,
+    members: [{ index: 0, family: null, compression: 'none', sha256: plain.sha256, bytes: 1 }],
+  });
+  const retiredShape = { ...plain };
+  for (const field of ['decodeBudget', 'inputKind', 'members']) Reflect.deleteProperty(retiredShape, field);
+  expect(() => admitStagingIdentity(retiredShape)).toThrow(STAGING_INCOMPATIBLE);
 });
 
 test('gzip Wikidata resume converts only the uncommitted suffix and a same-size unread rewrite stays incompatible', async () => {

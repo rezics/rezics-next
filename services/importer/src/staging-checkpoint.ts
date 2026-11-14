@@ -3,9 +3,8 @@ import type { SourceId, SourceRecord } from '@rezics/conversion';
 import { DEFAULT_DECODED_DUMP_BYTES, type DumpCompression } from './compressed-dump.ts';
 import type { OpenLibraryDumpFamily } from './dumps.ts';
 
-/** Version 1 is one uncompressed regular file. Version 2 is compressed and/or ordered members. */
+/** Canonical v1 binds exact original bytes, explicit compression and ordered member replay. */
 export const STAGING_CHECKPOINT_VERSION = 1;
-export const STAGING_CHECKPOINT_VERSION_V2 = 2;
 export const STAGING_DECODER_ID = 'dumps-uncompressed-v1';
 export const STAGING_DECODER_GZIP_ID = 'dumps-gzip-v1';
 export const STAGING_DECODER_ZSTD_ID = 'dumps-zstd-v1';
@@ -13,7 +12,12 @@ export const STAGING_DECODER_DUMP_SET_ID = 'open-library-dump-set-v1';
 export const STAGING_CHECKPOINT_SOURCES = ['bangumi', 'openlibrary', 'wikidata'] as const;
 const SHA256 = /^[a-f0-9]{64}$/;
 const ZERO_DIGEST = '0'.repeat(64);
-const V2_DECODERS = new Set([STAGING_DECODER_GZIP_ID, STAGING_DECODER_ZSTD_ID, STAGING_DECODER_DUMP_SET_ID]);
+const DECODERS = new Set([
+  STAGING_DECODER_ID,
+  STAGING_DECODER_GZIP_ID,
+  STAGING_DECODER_ZSTD_ID,
+  STAGING_DECODER_DUMP_SET_ID,
+]);
 
 export type StagingCheckpointSource = (typeof STAGING_CHECKPOINT_SOURCES)[number];
 export type StagingInputKind = 'file' | 'dump-set';
@@ -34,23 +38,23 @@ export type StagingCaptureIdentity = Readonly<{
   sourceKind: SourceId;
   converterRevision: string;
   decoderId: string;
-  checkpointVersion: number;
+  checkpointVersion: typeof STAGING_CHECKPOINT_VERSION;
   disappearanceThreshold: number;
-  decodeBudget?: number;
-  inputKind?: StagingInputKind;
+  decodeBudget: number;
+  inputKind: StagingInputKind;
   manifestVersion?: 1;
-  members?: readonly StagingMemberIdentity[];
+  members: readonly StagingMemberIdentity[];
 }>;
 
 export type StagingPrefixRecord = Readonly<{
   ordinal: number;
   recordKey: string;
   digest: string;
-  memberIndex?: number;
+  memberIndex: number;
 }>;
 
 export type StagingCheckpoint = Readonly<{
-  version: number;
+  version: typeof STAGING_CHECKPOINT_VERSION;
   identity: StagingCaptureIdentity;
   committedOrdinal: number;
   skipped: number;
@@ -121,22 +125,15 @@ export function emptyPrefixDigest(): string {
   return ZERO_DIGEST;
 }
 
-export function extendPrefixDigest(
-  prior: string,
-  record: StagingPrefixRecord,
-  version = STAGING_CHECKPOINT_VERSION,
-): string {
+export function extendPrefixDigest(prior: string, record: StagingPrefixRecord): string {
   if (!SHA256.test(prior) || !SHA256.test(record.digest))
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   if (!Number.isSafeInteger(record.ordinal) || record.ordinal < 1)
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
-  const memberIndex = record.memberIndex ?? 0;
+  const memberIndex = record.memberIndex;
   if (!Number.isSafeInteger(memberIndex) || memberIndex < 0)
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
-  const payload =
-    version === STAGING_CHECKPOINT_VERSION_V2
-      ? `${record.ordinal}\0${memberIndex}\0${record.recordKey}\0${record.digest}`
-      : `${record.ordinal}\0${record.recordKey}\0${record.digest}`;
+  const payload = `${record.ordinal}\0${memberIndex}\0${record.recordKey}\0${record.digest}`;
   return createHash('sha256').update(Buffer.from(prior, 'hex')).update(payload).digest('hex');
 }
 
@@ -162,14 +159,14 @@ function admitMember(value: StagingMemberIdentity, index: number): StagingMember
   };
 }
 
-function admitV2Extras(
+function admitInputIdentity(
   value: StagingCaptureIdentity,
 ): Pick<StagingCaptureIdentity, 'decodeBudget' | 'inputKind' | 'manifestVersion' | 'members'> {
-  if (!V2_DECODERS.has(value.decoderId)) throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
-  const budget = value.decodeBudget ?? DEFAULT_DECODED_DUMP_BYTES;
-  if (!Number.isSafeInteger(budget) || budget <= 0)
+  if (!DECODERS.has(value.decoderId)) throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
+  const budget = value.decodeBudget;
+  if (!Number.isSafeInteger(budget) || (value.decoderId === STAGING_DECODER_ID ? budget !== 0 : budget <= 0))
     throw new StagingCheckpointError('configuration', STAGING_INCOMPATIBLE);
-  const inputKind = value.inputKind ?? (value.decoderId === STAGING_DECODER_DUMP_SET_ID ? 'dump-set' : 'file');
+  const inputKind = value.inputKind;
   if (inputKind !== 'file' && inputKind !== 'dump-set')
     throw new StagingCheckpointError('configuration', STAGING_INCOMPATIBLE);
   if (inputKind === 'dump-set') {
@@ -190,7 +187,14 @@ function admitV2Extras(
     throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
   const members = value.members.map((member, index) => admitMember(member, index));
   if (inputKind === 'file') {
-    if (members.length !== 1 || members[0]!.family !== null)
+    if (
+      value.decoderId === STAGING_DECODER_DUMP_SET_ID ||
+      members.length !== 1 ||
+      members[0]!.family !== null ||
+      members[0]!.sha256 !== value.sha256
+    )
+      throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
+    if (value.decoderId === STAGING_DECODER_ID && members[0]!.compression !== 'none')
       throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
     if (value.decoderId === STAGING_DECODER_GZIP_ID && members[0]!.compression !== 'gzip')
       throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
@@ -202,6 +206,8 @@ function admitV2Extras(
         throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
     }
   }
+  if (inputKind === 'dump-set' && dumpSetIdentityDigest(members).sha256 !== value.sha256)
+    throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
   const bytes = members.reduce((sum, member) => sum + member.bytes, 0);
   if (bytes !== value.bytes) throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
   return {
@@ -231,29 +237,9 @@ export function admitStagingIdentity(value: StagingCaptureIdentity): StagingCapt
     value.disappearanceThreshold > 1
   )
     throw new StagingCheckpointError('configuration', STAGING_INCOMPATIBLE);
-  if (value.checkpointVersion === STAGING_CHECKPOINT_VERSION) {
-    if (value.decoderId !== STAGING_DECODER_ID) throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
-    if (
-      value.decodeBudget !== undefined ||
-      value.inputKind !== undefined ||
-      value.manifestVersion !== undefined ||
-      value.members !== undefined
-    )
-      throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
-    return {
-      sha256: value.sha256,
-      bytes: value.bytes,
-      sourceAlias: value.sourceAlias,
-      sourceKind: value.sourceKind,
-      converterRevision: value.converterRevision,
-      decoderId: value.decoderId,
-      checkpointVersion: value.checkpointVersion,
-      disappearanceThreshold: value.disappearanceThreshold,
-    };
-  }
-  if (value.checkpointVersion !== STAGING_CHECKPOINT_VERSION_V2)
+  if (value.checkpointVersion !== STAGING_CHECKPOINT_VERSION)
     throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
-  const extras = admitV2Extras(value);
+  const extras = admitInputIdentity(value);
   return {
     sha256: value.sha256,
     bytes: value.bytes,
@@ -267,21 +253,6 @@ export function admitStagingIdentity(value: StagingCaptureIdentity): StagingCapt
   };
 }
 
-export function captureIdentity(input: {
-  sha256: string;
-  bytes: number;
-  sourceAlias: string;
-  sourceKind: SourceId;
-  converterRevision: string;
-  disappearanceThreshold: number;
-}): StagingCaptureIdentity {
-  return admitStagingIdentity({
-    ...input,
-    decoderId: STAGING_DECODER_ID,
-    checkpointVersion: STAGING_CHECKPOINT_VERSION,
-  });
-}
-
 export function captureFileIdentity(input: {
   sha256: string;
   bytes: number;
@@ -289,7 +260,7 @@ export function captureFileIdentity(input: {
   sourceKind: SourceId;
   converterRevision: string;
   disappearanceThreshold: number;
-  compression: 'gzip' | 'zstd';
+  compression: DumpCompression;
   decodeBudget?: number;
 }): StagingCaptureIdentity {
   return admitStagingIdentity({
@@ -298,10 +269,10 @@ export function captureFileIdentity(input: {
     sourceAlias: input.sourceAlias,
     sourceKind: input.sourceKind,
     converterRevision: input.converterRevision,
-    decoderId: input.compression === 'zstd' ? STAGING_DECODER_ZSTD_ID : STAGING_DECODER_GZIP_ID,
-    checkpointVersion: STAGING_CHECKPOINT_VERSION_V2,
+    decoderId: decoderIdForCompression(input.compression),
+    checkpointVersion: STAGING_CHECKPOINT_VERSION,
     disappearanceThreshold: input.disappearanceThreshold,
-    decodeBudget: input.decodeBudget ?? DEFAULT_DECODED_DUMP_BYTES,
+    decodeBudget: input.decodeBudget ?? (input.compression === 'none' ? 0 : DEFAULT_DECODED_DUMP_BYTES),
     inputKind: 'file',
     members: [
       {
@@ -342,7 +313,7 @@ export function captureDumpSetIdentity(input: {
     sourceKind: 'openlibrary',
     converterRevision: input.converterRevision,
     decoderId: STAGING_DECODER_DUMP_SET_ID,
-    checkpointVersion: STAGING_CHECKPOINT_VERSION_V2,
+    checkpointVersion: STAGING_CHECKPOINT_VERSION,
     disappearanceThreshold: input.disappearanceThreshold,
     decodeBudget: input.decodeBudget ?? DEFAULT_DECODED_DUMP_BYTES,
     inputKind: 'dump-set',
@@ -351,12 +322,8 @@ export function captureDumpSetIdentity(input: {
   });
 }
 
-function membersMatch(
-  left: readonly StagingMemberIdentity[] | undefined,
-  right: readonly StagingMemberIdentity[] | undefined,
-): boolean {
-  if (left === undefined && right === undefined) return true;
-  if (!left || !right || left.length !== right.length) return false;
+function membersMatch(left: readonly StagingMemberIdentity[], right: readonly StagingMemberIdentity[]): boolean {
+  if (left.length !== right.length) return false;
   return left.every(
     (member, index) =>
       member.index === right[index]!.index &&
@@ -384,8 +351,7 @@ export function identitiesMatch(left: StagingCaptureIdentity, right: StagingCapt
   );
 }
 
-export function encodeStagingIdentityJson(identity: StagingCaptureIdentity): string | null {
-  if (identity.checkpointVersion !== STAGING_CHECKPOINT_VERSION_V2) return null;
+export function encodeStagingIdentityJson(identity: StagingCaptureIdentity): string {
   return JSON.stringify({
     decodeBudget: identity.decodeBudget,
     inputKind: identity.inputKind,
@@ -408,19 +374,24 @@ export function parseStagingIdentityJson(
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   const keys = Object.keys(parsed);
-  if (keys.some((key) => !['decodeBudget', 'inputKind', 'manifestVersion', 'members'].includes(key)))
+  if (
+    !keys.includes('decodeBudget') ||
+    !keys.includes('inputKind') ||
+    !keys.includes('members') ||
+    keys.some((key) => !['decodeBudget', 'inputKind', 'manifestVersion', 'members'].includes(key))
+  )
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   const value = parsed as {
-    decodeBudget?: number;
-    inputKind?: StagingInputKind;
+    decodeBudget: number;
+    inputKind: StagingInputKind;
     manifestVersion?: 1;
-    members?: StagingMemberIdentity[];
+    members: StagingMemberIdentity[];
   };
   return {
-    ...(value.decodeBudget === undefined ? {} : { decodeBudget: value.decodeBudget }),
-    ...(value.inputKind === undefined ? {} : { inputKind: value.inputKind }),
+    decodeBudget: value.decodeBudget,
+    inputKind: value.inputKind,
     ...(value.manifestVersion === undefined ? {} : { manifestVersion: value.manifestVersion }),
-    ...(value.members === undefined ? {} : { members: value.members }),
+    members: value.members,
   };
 }
 
@@ -436,23 +407,20 @@ export function admitStagingCheckpoint(row: {
   committedOrdinal: number;
   skipped: number;
   rollingDigest: string;
-  completedMembers?: number;
-  identityJson?: string | null;
+  completedMembers: number;
+  identityJson: string;
 }): StagingCheckpoint {
-  if (row.version !== STAGING_CHECKPOINT_VERSION && row.version !== STAGING_CHECKPOINT_VERSION_V2)
-    throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
+  if (row.version !== STAGING_CHECKPOINT_VERSION) throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
   if (!Number.isSafeInteger(row.committedOrdinal) || row.committedOrdinal < 0)
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   if (!Number.isSafeInteger(row.skipped) || row.skipped < 0)
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
-  const completedMembers = row.completedMembers ?? 0;
+  const completedMembers = row.completedMembers;
   if (!Number.isSafeInteger(completedMembers) || completedMembers < 0)
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   if (row.committedOrdinal === 0 ? row.rollingDigest !== ZERO_DIGEST : !SHA256.test(row.rollingDigest))
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
-  const extras = row.version === STAGING_CHECKPOINT_VERSION_V2 ? parseStagingIdentityJson(row.identityJson) : {};
-  if (row.version === STAGING_CHECKPOINT_VERSION && row.identityJson)
-    throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
+  const extras = parseStagingIdentityJson(row.identityJson);
   const identity = admitStagingIdentity({
     sha256: row.sha256,
     bytes: row.bytes,
@@ -464,8 +432,7 @@ export function admitStagingCheckpoint(row: {
     disappearanceThreshold: row.disappearanceThreshold,
     ...extras,
   });
-  if (identity.members && completedMembers > identity.members.length)
-    throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+  if (completedMembers > identity.members.length) throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   return {
     version: row.version,
     identity,
@@ -551,9 +518,8 @@ export function stagingResumeGuidance(input: {
   if (!input.checkpoint)
     return `${STAGING_OLD_UNSUPPORTED} Ordinary import still discards this uncheckpointed staging run.`;
   const committed = input.committed ?? input.checkpoint.committedOrdinal;
-  const members = input.checkpoint.identity.members?.length;
-  const memberText =
-    members && members > 1 ? `, ${input.checkpoint.completedMembers} of ${members} members complete` : '';
+  const members = input.checkpoint.identity.members.length;
+  const memberText = members > 1 ? `, ${input.checkpoint.completedMembers} of ${members} members complete` : '';
   return `Compatible checkpoint for ${input.source} generation ${input.generation}: committed prefix ${committed} records${memberText}, ${input.checkpoint.identity.bytes} hashed bytes. ${STAGING_COST} Next: ${resumeStagingInvocation(input.source, input.generation, input.checkpoint.identity)}`;
 }
 

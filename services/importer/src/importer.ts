@@ -522,7 +522,7 @@ export class Importer {
         const verifying = enterVerifying();
         if (verifying !== undefined) await verifying;
         const prefix = store.prefixRecord(run, ordinal);
-        if (!prefix || prefix.recordKey !== record.key || (prefix.memberIndex ?? 0) !== recordMember)
+        if (!prefix || prefix.recordKey !== record.key || prefix.memberIndex !== recordMember)
           throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
         const staged = store.stagedIdentity(run, record.key);
         if (!staged || staged.digest !== prefix.digest || !staged.projection)

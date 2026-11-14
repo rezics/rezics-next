@@ -325,7 +325,7 @@ function readCheckpoint(
   const row = database
     .query(
       `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
-        disappearance_threshold,committed_ordinal,skipped,rolling_digest
+        disappearance_threshold,committed_ordinal,skipped,rolling_digest,identity_json,completed_members
        FROM run_staging_checkpoints WHERE source=? AND run_id=?`,
     )
     .get(source, id) as {
@@ -340,6 +340,8 @@ function readCheckpoint(
     committed_ordinal: number;
     skipped: number;
     rolling_digest: string;
+    identity_json: string;
+    completed_members: number;
   } | null;
   if (!row) return { state: 'absent' };
   try {
@@ -355,6 +357,8 @@ function readCheckpoint(
       committedOrdinal: row.committed_ordinal,
       skipped: row.skipped,
       rollingDigest: row.rolling_digest,
+      identityJson: row.identity_json,
+      completedMembers: row.completed_members,
     });
     return {
       state: 'present',
