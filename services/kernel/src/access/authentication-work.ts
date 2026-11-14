@@ -71,6 +71,13 @@ const checkout: AccessWork = Object.freeze({
   emptySeeks: 0,
 });
 
+/** Current identity reads, each on its own released native checkout. */
+export function authenticationIdentityWorkBound(delegated: boolean): AccessWork {
+  return delegated
+    ? addAccessWork(checkout, accountState(), checkout, assignment())
+    : addAccessWork(checkout, accountState());
+}
+
 /** Bounded JOSE and remote-key lookup declaration for this exact compact token. */
 export function authenticationVerificationWorkBound(token: string): AccessWork {
   const tokenBytes = Buffer.byteLength(token, 'utf8');
@@ -92,7 +99,7 @@ export function authenticationVerificationWorkBound(token: string): AccessWork {
  * come from the existing account-state and assignment producers.
  */
 export function authenticationWorkBound(token: string): AccessWork {
-  return addAccessWork(authenticationVerificationWorkBound(token), checkout, accountState(), checkout, assignment());
+  return addAccessWork(authenticationVerificationWorkBound(token), authenticationIdentityWorkBound(true));
 }
 
 function producer(): AuthenticationWorkProducer {

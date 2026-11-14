@@ -27,6 +27,7 @@ import { bindAccountRateIdentity, stageDurableRateIdentity } from './write-rate-
 import { ProblemError } from '../http/problem-error.ts';
 import {
   AUTHENTICATION_JWKS_LIMITS,
+  authenticationIdentityWorkBound,
   authenticationVerificationWorkBound,
   installOriginalAuthenticator,
   runOriginalAuthentication,
@@ -595,52 +596,74 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
     /** Internal native approval proof only. Reconstructed actors have no proof. */
     async restoreApproval(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor> {
       try {
-        context.work?.unavailable('Auth approval restoration full account/assignment native work producer');
         const facts = approvedIdentityClaims(proof, approvalScope, context.pool);
         if (!facts) throw invalid();
         const { actor, expires } = facts;
+        const work = context.work;
         remaining(context.deadline);
+        if (work && work.deadline !== context.deadline)
+          return work.unavailable('Auth approval restoration frame/deadline mismatch');
         if (clock().getTime() >= expires) throw invalid();
         const observedAt = Date.now();
-        const account = await withBoundedReadConnection(
-          context.pool,
-          context.deadline,
-          (client) => readAccount(client, routeOf(actor.accountId), actor.accountId),
-          {
-            deadlineError: () => new AccessUnavailableError('deadline'),
-            mapError: (error) => {
-              throwAccessUnavailable(error, context.deadline);
-              return new AccessUnavailableError('overloaded');
-            },
-            isUncertainSettledQueryError: () => true,
-          },
-        );
-        if (
-          !account ||
-          account.kind !== 'actor' ||
-          account.state !== 'active' ||
-          account.fenced ||
-          !Number.isSafeInteger(actor.authnEpoch) ||
-          actor.authnEpoch <= 0 ||
-          BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
-        )
-          throw invalid();
-        if (actor.requestedBy !== null) {
-          const assignment = await withBoundedReadConnection(
-            context.pool,
-            context.deadline,
-            (client) => readAssignment(client, actor.requestedBy, actor.accountId, clock),
-            {
-              deadlineError: () => new AccessUnavailableError('deadline'),
-              mapError: (error) => {
-                throwAccessUnavailable(error, context.deadline);
-                return new AccessUnavailableError('overloaded');
+        // This closed native body accepts no foreign callback. Completed denials
+        // settle their actual reads; transport failures still consume the bound.
+        const restoreCurrent = async (): Promise<Account | null> => {
+          const account = await accessCheckout(work, () =>
+            withBoundedReadConnection(
+              context.pool,
+              context.deadline,
+              (client) => readAccount(client, routeOf(actor.accountId), actor.accountId, work),
+              {
+                deadlineError: () => new AccessUnavailableError('deadline'),
+                mapError: (error) => {
+                  throwAccessUnavailable(error, context.deadline);
+                  return new AccessUnavailableError('overloaded');
+                },
+                isUncertainSettledQueryError: () => true,
               },
-              isUncertainSettledQueryError: () => true,
-            },
+            ),
           );
-          if (assignment.kind !== 'resolved') throw invalid();
-        }
+          if (
+            !account ||
+            account.kind !== 'actor' ||
+            account.state !== 'active' ||
+            account.fenced ||
+            !Number.isSafeInteger(actor.authnEpoch) ||
+            actor.authnEpoch <= 0 ||
+            BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+          )
+            return null;
+          if (actor.requestedBy !== null) {
+            const assignment = await accessCheckout(work, () =>
+              withBoundedReadConnection(
+                context.pool,
+                context.deadline,
+                (client) => readAssignment(client, actor.requestedBy, actor.accountId, clock, work),
+                {
+                  deadlineError: () => new AccessUnavailableError('deadline'),
+                  mapError: (error) => {
+                    throwAccessUnavailable(error, context.deadline);
+                    return new AccessUnavailableError('overloaded');
+                  },
+                  isUncertainSettledQueryError: () => true,
+                },
+              ),
+            );
+            if (assignment.kind !== 'resolved') return null;
+          }
+          return account;
+        };
+        const account = work
+          ? (
+              await work.invocation(
+                'access.approval-restoration',
+                authenticationIdentityWorkBound(actor.requestedBy !== null),
+                restoreCurrent,
+                context.deadline,
+              )
+            ).value
+          : await restoreCurrent();
+        if (!account) throw invalid();
         remaining(context.deadline);
         if (clock().getTime() >= expires) throw invalid();
         identities.set(actor, {
