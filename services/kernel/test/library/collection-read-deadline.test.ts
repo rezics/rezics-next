@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
-import { withCollectionReadConnection, withCollectionReadSnapshot } from '../../src/library/collection-read-connection.ts';
+import {
+  withCollectionReadConnection,
+  withCollectionReadSnapshot,
+} from '../../src/library/collection-read-connection.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -29,12 +32,17 @@ test('a checkout that arrives after expiry issues no SQL and is released', async
   const statements: string[] = [];
   let released!: () => void;
   const releasedPromise = new Promise<void>((done) => (released = done));
-  const connection = fakeClient((statement) => {
-    statements.push(statement);
-    return { rows: [] };
-  }, () => released());
-  const visit = withCollectionReadConnection(fakePool(() => checkout.promise), Date.now() + 50, (client) =>
-    client.query('SELECT 1'),
+  const connection = fakeClient(
+    (statement) => {
+      statements.push(statement);
+      return { rows: [] };
+    },
+    () => released(),
+  );
+  const visit = withCollectionReadConnection(
+    fakePool(() => checkout.promise),
+    Date.now() + 50,
+    (client) => client.query('SELECT 1'),
   );
 
   await expect(visit).rejects.toBeDefined();
@@ -70,14 +78,17 @@ test('uncertain BEGIN, query and COMMIT clients are discarded without rollback',
     let checkouts = 0;
     const pool = fakePool(async () => {
       checkouts += 1;
-      return fakeClient((statement) => {
-        statements.push(statement);
-        if (statement === blocked) return never;
-        return statement === 'SELECT current' ? { rows: [{ current: true }] } : { rows: [] };
-      }, (error) => {
-        releaseError = error;
-        released();
-      });
+      return fakeClient(
+        (statement) => {
+          statements.push(statement);
+          if (statement === blocked) return never;
+          return statement === 'SELECT current' ? { rows: [{ current: true }] } : { rows: [] };
+        },
+        (error) => {
+          releaseError = error;
+          released();
+        },
+      );
     });
 
     const visit = withCollectionReadSnapshot(pool, Date.now() + 50, async (client) => {
