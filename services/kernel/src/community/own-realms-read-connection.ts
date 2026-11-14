@@ -1,5 +1,10 @@
 import type { Pool, PoolClient } from 'pg';
-import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import type { AccessClient } from '../request/access.ts';
 
@@ -11,6 +16,7 @@ function boundedOptions() {
   return {
     deadlineError: () => new AccessUnavailableError('deadline'),
     mapError(error: unknown) {
+      if (error instanceof CommandUnavailableError) return error;
       try {
         throwAccessUnavailable(error);
       } catch (mapped) {

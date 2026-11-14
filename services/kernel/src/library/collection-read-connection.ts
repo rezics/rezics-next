@@ -1,90 +1,53 @@
-import type { Pool, PoolClient, QueryConfig } from 'pg';
-import { classifyUnavailability } from '../access/unavailable.ts';
-import { remaining, within } from '../access/deadline.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import type { Pool, PoolClient } from 'pg';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 
-type ReadWorkContext = {
-  discard(error: unknown): void;
-  uncertain(): boolean;
-  remember(error: unknown): void;
-};
-
-function asError(error: unknown): Error {
-  return error instanceof Error ? error : new Error('Collection read connection became uncertain');
+function boundedOptions() {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      if (error instanceof CommandUnavailableError) return error;
+      try {
+        throwAccessUnavailable(error);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
 }
 
-function deadlineReadClient(
-  connection: PoolClient,
-  deadline: number,
-  markUncertain: (error: unknown) => void,
-): PoolClient {
-  const client = Object.create(connection) as PoolClient;
-  client.query = ((query: QueryConfig | string, values?: unknown[]) => {
-    const config = {
-      ...(typeof query === 'string' ? { text: query, values: values ?? [] } : query),
-      query_timeout: remaining(deadline),
-    } as QueryConfig;
-    const operation = Promise.resolve().then(() => connection.query(config));
-    let settled = false;
-    void operation.then(
-      () => {
-        settled = true;
-      },
-      () => {
-        settled = true;
-      },
-    );
-    return within(deadline, () => operation).catch((error) => {
-      if (!settled || Date.now() >= deadline || classifyUnavailability(error) !== undefined) markUncertain(error);
-      throw error;
-    });
-  }) as PoolClient['query'];
-  return client;
-}
-
-async function withBoundedConnection<T>(
+function withCollectionRead<T>(
   pool: Pool,
   deadline: number,
-  work: (client: PoolClient, context: ReadWorkContext) => Promise<T>,
+  work: (client: PoolClient) => Promise<T>,
+  snapshot: boolean,
 ): Promise<T> {
-  let failed = false;
-  let failure: unknown;
-  const remember = (error: unknown) => {
-    if (!failed) {
-      failed = true;
-      failure = error;
+  let workFailed = false;
+  let workFailure: unknown;
+  const read = async (client: PoolClient) => {
+    try {
+      return await work(client);
+    } catch (error) {
+      workFailed = true;
+      workFailure = error;
+      throw error;
     }
   };
-  try {
-    return await within(deadline, () =>
-      withConnection(pool, async (connection) => {
-        let uncertain = false;
-        const discard = (error: unknown) => {
-          uncertain = true;
-          discardConnection(connection, asError(error));
-        };
-        const client = deadlineReadClient(connection, deadline, discard);
-        const context = { discard, uncertain: () => uncertain, remember };
-        let started = false;
-        try {
-          remaining(deadline);
-          return await within(deadline, () => {
-            started = true;
-            return work(client, context);
-          });
-        } catch (error) {
-          // The callback may still be waiting on native I/O when the visit expires.
-          if (started && Date.now() >= deadline) discard(error);
-          remember(error);
-          throw error;
-        }
-      }),
-    );
-  } catch (error) {
-    // Cleanup can consume the remaining request time. Keep the original read failure.
-    if (failed) throw failure;
+  const result = snapshot
+    ? withBoundedReadOnlyTransaction(pool, deadline, read, boundedOptions())
+    : withBoundedReadConnection(pool, deadline, read, boundedOptions());
+  return result.catch((error: unknown) => {
+    if (workFailed) throw workFailure;
     throw error;
-  }
+  });
 }
 
 /** A deadline-bounded checkout and query client that retains pool accounting and cleanup custody. */
@@ -93,7 +56,7 @@ export function withCollectionReadConnection<T>(
   deadline: number,
   work: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  return withBoundedConnection(pool, deadline, (client) => work(client));
+  return withCollectionRead(pool, deadline, work, false);
 }
 
 /** One repeatable-read snapshot whose transaction controls share the visit deadline. */
@@ -102,42 +65,5 @@ export function withCollectionReadSnapshot<T>(
   deadline: number,
   work: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  return withBoundedConnection(pool, deadline, async (client, context) => {
-    let began = false;
-    try {
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        began = true;
-      } catch (error) {
-        // BEGIN may have reached PostgreSQL even when its acknowledgement did not.
-        context.discard(error);
-        throw error;
-      }
-
-      const value = await work(client);
-      try {
-        await client.query('COMMIT');
-        began = false;
-      } catch (error) {
-        // Never queue rollback behind an uncertain COMMIT.
-        context.discard(error);
-        throw error;
-      }
-      return value;
-    } catch (error) {
-      context.remember(error);
-      if (began) {
-        if (Date.now() >= deadline || context.uncertain()) {
-          context.discard(error);
-        } else {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            context.discard(rollbackError);
-          }
-        }
-      }
-      throw error;
-    }
-  });
+  return withCollectionRead(pool, deadline, work, true);
 }

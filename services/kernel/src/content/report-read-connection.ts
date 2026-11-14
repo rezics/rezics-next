@@ -1,6 +1,29 @@
 import type { Pool } from 'pg';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import type { AccessClient } from '../request/access.ts';
-import { withReadConnection } from './read-connection.ts';
+
+function boundedOptions() {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      if (error instanceof CommandUnavailableError) return error;
+      try {
+        throwAccessUnavailable(error);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
+}
 
 /** Keep a complete report read transaction inside its original request deadline. */
 export function withReportReadConnection<T>(
@@ -8,28 +31,24 @@ export function withReportReadConnection<T>(
   deadline: number,
   read: (client: AccessClient) => Promise<T>,
 ): Promise<T> {
-  return withReadConnection(pool, deadline, async ({ client, uncertain, discard, retain }) => {
-    let beginAttempted = false;
-    try {
-      beginAttempted = true;
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const value = await read(client);
-      await client.query('COMMIT');
-      beginAttempted = false;
-      return value;
-    } catch (error) {
-      retain(error);
-      if (beginAttempted) {
-        if (uncertain) discard(error);
-        else {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discard(rollbackError);
-          }
-        }
+  let readFailed = false;
+  let readFailure: unknown;
+  const snapshot = withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
+      try {
+        return await read(client as AccessClient);
+      } catch (error) {
+        readFailed = true;
+        readFailure = error;
+        throw error;
       }
-      throw error;
-    }
+    },
+    boundedOptions(),
+  );
+  return snapshot.catch((error: unknown) => {
+    if (readFailed) throw readFailure;
+    throw error;
   });
 }
