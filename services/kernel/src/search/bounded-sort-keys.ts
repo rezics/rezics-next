@@ -32,10 +32,7 @@ function analysisBatches(names: readonly string[]): string[][] {
   for (const name of names) {
     const encodedNameBytes = encoder.encode(JSON.stringify(name)).byteLength;
     const nextBytes = requestBytes + encodedNameBytes + (current.length === 0 ? 0 : 1);
-    if (
-      current.length > 0 &&
-      (current.length >= MAX_ANALYSIS_BATCH_VALUES || nextBytes > MAX_ANALYSIS_BATCH_BYTES)
-    ) {
+    if (current.length > 0 && (current.length >= MAX_ANALYSIS_BATCH_VALUES || nextBytes > MAX_ANALYSIS_BATCH_BYTES)) {
       batches.push(current);
       current = [];
       requestBytes = EMPTY_ANALYSIS_REQUEST_BYTES;

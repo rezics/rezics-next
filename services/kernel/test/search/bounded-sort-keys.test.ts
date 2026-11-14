@@ -146,8 +146,16 @@ test('native normalization bounds complete name sort values on writes while pres
     const boundary = '\uFDFA'.repeat(28) + 'Ａ'.repeat(8);
     const supplementary = '\uFDFA'.repeat(27) + '𠀀'.repeat(13);
     const names = [
-      expanded, cjk, 'ＲＵＳＴ', 'ＲＵＳＴ', boundary, boundary + 'a',
-      supplementary, supplementary + 'a', '', '\u200B'.repeat(4),
+      expanded,
+      cjk,
+      'ＲＵＳＴ',
+      'ＲＵＳＴ',
+      boundary,
+      boundary + 'a',
+      supplementary,
+      supplementary + 'a',
+      '',
+      '\u200B'.repeat(4),
     ];
     expect(names.every((name) => name.length <= 250)).toBe(true);
     const originals = actionsFor(names.map((name, n) => subject(n + 1, name)));
@@ -275,7 +283,10 @@ test('native normalization bounds complete name sort values on writes while pres
       indivisibleBatches.requests
         .map(({ texts, bytes }) => [texts, bytes > MAX_ANALYSIS_BATCH_BYTES])
         .sort((a, b) => Number(b[1]) - Number(a[1])),
-    ).toEqual([[[overBudgetName], true], [['nearby'], false]]);
+    ).toEqual([
+      [[overBudgetName], true],
+      [['nearby'], false],
+    ]);
 
     const empty = observe(index);
     expect(await prepare(empty.client, index, [nullAction, originals.at(-1)!])).toEqual([
