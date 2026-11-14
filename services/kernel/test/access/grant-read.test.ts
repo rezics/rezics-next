@@ -78,7 +78,7 @@ beforeEach(async () => {
   );
 });
 afterAll(() => f?.close());
-async function read(port: typeof commands | null = commands, account = f.actor) {
+async function read(port: typeof commands | null = commands, account = f.actor, cursor?: string) {
   const context = await f.context(account);
   return readResourceGrants(
     {
@@ -90,7 +90,7 @@ async function read(port: typeof commands | null = commands, account = f.actor) 
       ...(port ? { commands: port } : {}),
     },
     context.actor,
-    { resourceId: f.resource.id },
+    { resourceId: f.resource.id, ...(cursor ? { cursor } : {}) },
     context.deadline,
   );
 }
@@ -139,4 +139,19 @@ test('management read uses every current owner action and refuses a foreign acco
   expect(page.roles.find((role) => role.id === 'community.realm.owner')?.delegable).toBe(false);
   expect(page.grants.find((grant) => grant.role === 'community.realm.owner')?.manageable).toBe(false);
   await expect(read(commands, f.recipient)).rejects.toMatchObject({ code: 'not_found' });
+});
+
+test('the exact-resource grant cursor continues once across current direct and role rows', async () => {
+  for (const subject of [f.recipient, f.principal]) for (const action of actions) await f.grant(subject, action);
+
+  const first = await read();
+  expect(first.grants).toHaveLength(20);
+  expect(first.next).not.toBeNull();
+  const second = await read(commands, f.actor, first.next!);
+  const grants = [...first.grants, ...second.grants];
+
+  expect(second.next).toBeNull();
+  expect(grants).toHaveLength(actions.length * 3 + 1);
+  expect(grants.filter((grant) => grant.kind === 'role')).toHaveLength(1);
+  expect(new Set(grants.map((grant) => JSON.stringify(grant))).size).toBe(grants.length);
 });

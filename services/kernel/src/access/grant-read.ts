@@ -2,14 +2,13 @@ import { hasNativeRealmGrantCommands, type createGrantCommands } from './grant-c
 import type { Pool } from 'pg';
 import { realmReadEligibility } from '../community/access-capabilities.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withGrantReadConnection, withGrantReadSnapshot } from './grant-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck, type Access, type Actor } from './check.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { readPublicIdentities, type PublicIdentity } from './account-data.ts';
-import { deadlineClient } from './deadline.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { mountedExposureCatalogue } from './gates/visibility.ts';
 import { createResourcePublicEligibility } from './eligibility.ts';
@@ -73,15 +72,17 @@ export async function readResourceGrants(
   const resource = { route, id: input.resourceId };
   const context = { pool: deps.pool, deadline };
   const management = await accessCheck(deps.access, actor, 'access:grant', resource, context);
-  const time = await withConnection(deps.pool, (client) => mintReadTime(client, deps.clock));
+  const time = await withGrantReadConnection(deps.pool, deadline, (client) => mintReadTime(client, deps.clock));
   try {
     const at = authoritativeTimeValue(time);
     // Nothing about the target, subjects or even the existence of a page precedes authorization.
-    const allowed = await withConnection(deps.pool, (client) => management(deadlineClient(client, deadline), time));
+    const allowed = await withGrantReadConnection(deps.pool, deadline, (client) => management(client, time));
     if (!allowed) throw new ProblemError('not_found');
-    const initialized = await deadlineClient(deps.pool, deadline).query<{ resource_type: string }>(
-      'SELECT resource_type FROM access.resource_initialization WHERE route = $1 AND resource_id = $2',
-      [route, resource.id],
+    const initialized = await withGrantReadConnection(deps.pool, deadline, (client) =>
+      client.query<{ resource_type: string }>(
+        'SELECT resource_type FROM access.resource_initialization WHERE route = $1 AND resource_id = $2',
+        [route, resource.id],
+      ),
     );
     const global = resource.route === PLATFORM_RESOURCE.route && resource.id === PLATFORM_RESOURCE.id;
     // Global predates ordinary resource initialization; its native owner still
@@ -156,121 +157,113 @@ export async function readResourceGrants(
       afterKind = String(decoded.after[0]);
       afterKey = String(decoded.after[1]);
     }
-    return await withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        if (!(await management(client, time))) throw new ProblemError('not_found');
-        const current = await owner.read(client, [resource.id], at, time);
-        // The owner's current head/state reader distinguishes absence from a private floor.
-        if (!(resource.id in current) || !(await checks.get(owner.readAction)!(client, time)))
-          throw new ProblemError('not_found');
-        const held = new Set<string>();
-        for (const action of actionIds) if (await checks.get(action)!(client, time)) held.add(action);
-        // Match ordinary grantCommand's sole covering-action exception. This is
-        // delegation advice, never a replacement for command-time authorization.
-        if (global && held.has('gate:any')) for (const action of gateActions) held.add(action);
-        const rows = (
-          await client.query<Row>(
-            `
-        SELECT * FROM (
-          SELECT 'direct'::text AS kind, erasure_key::text AS key, subject_kind, subject_id, subject_role,
-                 action AS name, valid::text, lower(valid) AS starts_at, upper(valid) AS ends_at, valid @> $3::timestamptz AS active
-          FROM access.resource_grant
-          WHERE route = $1 AND resource_id = $2 AND valid && tstzrange($3::timestamptz, NULL, '[)')
-            AND ($4::text < 'direct' OR ($4 = 'direct' AND erasure_key > $5::bigint))
-          UNION ALL
-          SELECT 'role'::text, erasure_key::text, subject_kind, subject_id, subject_role,
-                 grant_role, valid::text, lower(valid), upper(valid), valid @> $3::timestamptz
-          FROM access.resource_role_grant
-          WHERE route = $1 AND resource_id = $2 AND valid && tstzrange($3::timestamptz, NULL, '[)')
-            AND ($4::text < 'role' OR ($4 = 'role' AND erasure_key > $5::bigint))
-        ) page ORDER BY kind, key::bigint LIMIT 21`,
-            [route, resource.id, at, afterKind, afterKey],
-          )
-        ).rows;
-        const page = rows.slice(0, 20);
-        const realmGuardMissing =
-          type === 'community.realm' && !hasNativeRealmGrantCommands(deps.commands, deps.pool, deps.access);
-        const groupIds = [...new Set(page.filter((row) => row.subject_role !== '').map((row) => row.subject_id))];
-        // Resolve only the bounded, explicitly granted group anchors. Never expand their members or read a title.
-        const realmGroups = new Set(
-          groupIds.length
-            ? (
-                await client.query<{ resource_id: string }>(
-                  `SELECT initialized.resource_id FROM unnest($1::integer[], $2::uuid[]) AS wanted(route, id)
-         JOIN access.resource_initialization initialized
-           ON initialized.route = wanted.route AND initialized.resource_id = wanted.id
-         WHERE initialized.resource_type = 'community.realm'`,
-                  [groupIds.map((id) => routeOf(id)!), groupIds],
-                )
-              ).rows.map((row) => row.resource_id)
-            : [],
-        );
-        const grants: ManagedGrant[] = page.map((row) => {
-          const actions = row.kind === 'direct' ? [row.name] : [...(catalogue.roles.get(row.name) ?? [])];
-          return {
-            kind: row.kind,
-            state: row.active ? 'active' : 'scheduled',
-            subject:
-              row.subject_kind === 'active_accounts'
-                ? { kind: 'active_accounts' }
-                : row.subject_role === ''
-                  ? { kind: 'account', id: row.subject_id }
-                  : realmGroups.has(row.subject_id)
-                    ? { kind: 'realm', id: row.subject_id, role: row.subject_role }
-                    : { kind: 'organization', id: row.subject_id, role: row.subject_role },
-            actions,
-            role: row.kind === 'role' ? row.name : null,
-            valid: row.valid,
-            startsAt: row.starts_at?.toISOString() ?? null,
-            endsAt: row.ends_at?.toISOString() ?? null,
-            manageable:
-              !realmGuardMissing &&
-              !realmGroups.has(row.subject_id) &&
-              actions.length > 0 &&
-              actions.every((action) => held.has(action)),
-          };
-        });
-        const principalId = actor.requestedBy?.split(':')[3] ?? null;
-        const ids = [
-          ...new Set([
-            actor.accountId,
-            ...(principalId ? [principalId] : []),
-            ...grants.flatMap((grant) =>
-              grant.subject.kind === 'active_accounts' || grant.subject.kind === 'realm' ? [] : [grant.subject.id],
-            ),
-          ]),
-        ];
-        const identities = await readPublicIdentities(
-          client,
-          ids.map((id) => routeOf(id)!),
-          ids,
-        );
-        const last = page.at(-1);
-        const next =
-          rows.length > 20 && last
-            ? await encodeListCursor(deps.tokens, binding, { epoch: 1, after: [last.kind, last.key] }, new Date(at))
-            : null;
-        await client.query('COMMIT');
+    return await withGrantReadSnapshot(deps.pool, deadline, async (client) => {
+      if (!(await management(client, time))) throw new ProblemError('not_found');
+      const current = await owner.read(client, [resource.id], at, time);
+      // The owner's current head/state reader distinguishes absence from a private floor.
+      if (!(resource.id in current) || !(await checks.get(owner.readAction)!(client, time)))
+        throw new ProblemError('not_found');
+      const held = new Set<string>();
+      for (const action of actionIds) if (await checks.get(action)!(client, time)) held.add(action);
+      // Match ordinary grantCommand's sole covering-action exception. This is
+      // delegation advice, never a replacement for command-time authorization.
+      if (global && held.has('gate:any')) for (const action of gateActions) held.add(action);
+      const rows = (
+        await client.query<Row>(
+          `
+      SELECT * FROM (
+        SELECT 'direct'::text AS kind, erasure_key::text AS key, subject_kind, subject_id, subject_role,
+               action AS name, valid::text, lower(valid) AS starts_at, upper(valid) AS ends_at, valid @> $3::timestamptz AS active
+        FROM access.resource_grant
+        WHERE route = $1 AND resource_id = $2 AND valid && tstzrange($3::timestamptz, NULL, '[)')
+          AND ($4::text < 'direct' OR ($4 = 'direct' AND erasure_key > $5::bigint))
+        UNION ALL
+        SELECT 'role'::text, erasure_key::text, subject_kind, subject_id, subject_role,
+               grant_role, valid::text, lower(valid), upper(valid), valid @> $3::timestamptz
+        FROM access.resource_role_grant
+        WHERE route = $1 AND resource_id = $2 AND valid && tstzrange($3::timestamptz, NULL, '[)')
+          AND ($4::text < 'role' OR ($4 = 'role' AND erasure_key > $5::bigint))
+      ) page ORDER BY kind, key::bigint LIMIT 21`,
+          [route, resource.id, at, afterKind, afterKey],
+        )
+      ).rows;
+      const page = rows.slice(0, 20);
+      const realmGuardMissing =
+        type === 'community.realm' && !hasNativeRealmGrantCommands(deps.commands, deps.pool, deps.access);
+      const groupIds = [...new Set(page.filter((row) => row.subject_role !== '').map((row) => row.subject_id))];
+      // Resolve only the bounded, explicitly granted group anchors. Never expand their members or read a title.
+      const realmGroups = new Set(
+        groupIds.length
+          ? (
+              await client.query<{ resource_id: string }>(
+                `SELECT initialized.resource_id FROM unnest($1::integer[], $2::uuid[]) AS wanted(route, id)
+       JOIN access.resource_initialization initialized
+         ON initialized.route = wanted.route AND initialized.resource_id = wanted.id
+       WHERE initialized.resource_type = 'community.realm'`,
+                [groupIds.map((id) => routeOf(id)!), groupIds],
+              )
+            ).rows.map((row) => row.resource_id)
+          : [],
+      );
+      const grants: ManagedGrant[] = page.map((row) => {
+        const actions = row.kind === 'direct' ? [row.name] : [...(catalogue.roles.get(row.name) ?? [])];
         return {
-          resource: { ...resource, type },
-          authority: { accountId: actor.accountId, principalId, clientId: actor.clientId },
-          roles: roleIds.map((id) => ({
-            id,
-            actions: [...catalogue.roles.get(id)!],
-            delegable: !realmGuardMissing && catalogue.roles.get(id)!.every((action) => held.has(action)),
-          })),
-          actions: realmGuardMissing ? [] : [...held],
-          grants,
-          identities,
-          next,
-          mutationState: realmGuardMissing ? 'realm_guard_unavailable' : 'ready',
+          kind: row.kind,
+          state: row.active ? 'active' : 'scheduled',
+          subject:
+            row.subject_kind === 'active_accounts'
+              ? { kind: 'active_accounts' }
+              : row.subject_role === ''
+                ? { kind: 'account', id: row.subject_id }
+                : realmGroups.has(row.subject_id)
+                  ? { kind: 'realm', id: row.subject_id, role: row.subject_role }
+                  : { kind: 'organization', id: row.subject_id, role: row.subject_role },
+          actions,
+          role: row.kind === 'role' ? row.name : null,
+          valid: row.valid,
+          startsAt: row.starts_at?.toISOString() ?? null,
+          endsAt: row.ends_at?.toISOString() ?? null,
+          manageable:
+            !realmGuardMissing &&
+            !realmGroups.has(row.subject_id) &&
+            actions.length > 0 &&
+            actions.every((action) => held.has(action)),
         };
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+      });
+      const principalId = actor.requestedBy?.split(':')[3] ?? null;
+      const ids = [
+        ...new Set([
+          actor.accountId,
+          ...(principalId ? [principalId] : []),
+          ...grants.flatMap((grant) =>
+            grant.subject.kind === 'active_accounts' || grant.subject.kind === 'realm' ? [] : [grant.subject.id],
+          ),
+        ]),
+      ];
+      const identities = await readPublicIdentities(
+        client,
+        ids.map((id) => routeOf(id)!),
+        ids,
+      );
+      const last = page.at(-1);
+      const next =
+        rows.length > 20 && last
+          ? await encodeListCursor(deps.tokens, binding, { epoch: 1, after: [last.kind, last.key] }, new Date(at))
+          : null;
+      return {
+        resource: { ...resource, type },
+        authority: { accountId: actor.accountId, principalId, clientId: actor.clientId },
+        roles: roleIds.map((id) => ({
+          id,
+          actions: [...catalogue.roles.get(id)!],
+          delegable: !realmGuardMissing && catalogue.roles.get(id)!.every((action) => held.has(action)),
+        })),
+        actions: realmGuardMissing ? [] : [...held],
+        grants,
+        identities,
+        next,
+        mutationState: realmGuardMissing ? 'realm_guard_unavailable' : 'ready',
+      };
     });
   } finally {
     releaseOperationalTime(time);

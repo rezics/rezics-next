@@ -402,6 +402,11 @@ authority. Every write retains the original native authorization, anti-amplifica
 Live Realm grant and account-Realm reads take `realmReadEligibility` through Community's `access-capabilities`
 public entry.
 
+Decision: `GET /v1/grants` carries the original request deadline through authoritative-time minting, before/final
+authorization, resource initialization and its read-only repeatable-read snapshot; each earlier checkout is released
+before native owner preparation, and unresolved I/O or uncertain `BEGIN`/`COMMIT` results discard the client without
+queueing rollback after expiry.
+
 Cost: preparation adds one existing owner preparation for the exact target before checkout. Gate advice adds at
 most G+1 ordinary native checks for the fixed mounted group count G, with the existing K<=1,000 formula bound;
 no members, grant history or route-derived resource rows are enumerated. The existing twenty-row page and
