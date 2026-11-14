@@ -6578,13 +6578,6 @@ CREATE TRIGGER membership_inverse_terminal_guard BEFORE DELETE OR UPDATE ON acce
 
 
 --
--- Name: organization_member organization_member_publication_authority; Type: TRIGGER; Schema: access; Owner: -
---
-
-CREATE TRIGGER organization_member_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.organization_member FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
-
-
---
 -- Name: committed_continuation native_continuation_delete; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -6659,6 +6652,13 @@ CREATE TRIGGER operator_fence_page_immutable BEFORE DELETE OR UPDATE ON access.o
 --
 
 CREATE TRIGGER operator_relation_version BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.advance_operator_relation();
+
+
+--
+-- Name: organization_member organization_member_publication_authority; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER organization_member_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.organization_member FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
 
 
 --
