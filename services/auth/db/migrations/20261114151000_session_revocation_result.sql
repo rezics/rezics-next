@@ -1,3 +1,4 @@
+-- migrate:up
 -- Reuse the native effect owner and its existing erasure custody. Historical
 -- authorization/session state is deliberately not backfilled into completion.
 ALTER TABLE public.auth_effect_receipt
