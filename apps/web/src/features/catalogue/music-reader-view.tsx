@@ -1,6 +1,5 @@
-import { useId, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSubjectCommunityReading } from '../pages/subject-community-lifetime';
-import { useQuery } from '@tanstack/react-query';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -11,7 +10,12 @@ import { loadAlbumEditions } from './album-profile-actions';
 import { AlbumProfileEntry } from './album-profile-entry';
 import {
   musicReaderVisit,
+  moveAlbumEditionWindow,
+  settleAlbumEditionWindow,
+  type AlbumEditionAddress,
+  type AlbumEditionMove,
   type AlbumEditionRead,
+  type AlbumEditionWindow,
   type AlbumDefinitions,
   type MusicReaderVisit,
   type ProfileBound,
@@ -236,24 +240,41 @@ function EditionList({
   editions,
   locale,
   onRetry,
+  navigation,
 }: {
   editions: AlbumEditionRead | undefined;
   locale: string;
   onRetry?: () => void;
+  navigation?: { window: AlbumEditionWindow; move: (move: AlbumEditionMove) => void };
 }) {
   const o = options(locale);
+  const failure = navigation?.window.failure ?? (editions && !editions.ok ? editions : undefined);
+  const pending = !!navigation?.window.pending;
+  const retained = !!(editions?.ok && editions.admitted && (pending || failure));
   return (
-    <section data-slot="music-album-editions" className="min-w-0 space-y-3">
+    <section
+      data-slot="music-album-editions"
+      data-retained-page={retained || undefined}
+      aria-busy={pending}
+      className="min-w-0 space-y-3"
+    >
       <ContentItemHeading level={2} className="text-xl font-semibold">
         {m.subject_editions({}, o)}
       </ContentItemHeading>
-      {!editions ? (
-        <p role="status">{m.candidate_loading({}, o)}</p>
-      ) : !editions.ok ? (
+      {failure ? (
         <p role="alert">
-          {editions.reason === 'withheld' ? m.music_reader_denied({}, o) : m.album_tracks_unavailable({}, o)}
+          {failure.reason === 'withheld'
+            ? m.music_reader_denied({}, o)
+            : failure.reason === 'invalid'
+              ? m.music_context_invalid_address({}, o)
+              : m.album_tracks_unavailable({}, o)}
         </p>
-      ) : !editions.admitted ? (
+      ) : null}
+      {retained ? <p role="status">{m.music_context_last_good({}, o)}</p> : null}
+      {pending && editions ? <p role="status">{m.music_context_page_loading({}, o)}</p> : null}
+      {!editions && !failure ? (
+        <p role="status">{m.candidate_loading({}, o)}</p>
+      ) : !editions?.ok ? null : !editions.admitted ? (
         <p role="status">{m.album_tracks_unconfigured({}, o)}</p>
       ) : editions.rows.length ? (
         <ul className="min-w-0 space-y-2">
@@ -276,7 +297,45 @@ function EditionList({
       ) : (
         <p role="status">{m.music_context_empty_page({}, o)}</p>
       )}
-      {editions && !editions.ok && onRetry ? (
+      {editions?.ok && editions.admitted ? (
+        <>
+          <p role="status" className="text-sm text-muted-foreground">
+            {editions.caughtUp ? m.album_tracks_current({}, o) : m.work_parts_pending({}, o)}
+          </p>
+          {!editions.next ? <p className="text-sm text-muted-foreground">{m.album_tracks_complete({}, o)}</p> : null}
+          {editions.rows.length ? (
+            <p className="text-sm text-muted-foreground">{m.album_tracks_return({}, o)}</p>
+          ) : null}
+        </>
+      ) : null}
+      {navigation ? (
+        <div className="flex min-w-0 flex-wrap gap-3">
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            disabled={pending || !navigation.window.history.length}
+            onClick={() => navigation.move('previous')}
+          >
+            {m.music_context_previous_page({}, o)}
+          </button>
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            disabled={pending || !!failure || !editions?.ok || !editions.admitted || !editions.next}
+            onClick={() => navigation.move('next')}
+          >
+            {m.music_context_next_page({}, o)}
+          </button>
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            disabled={pending || failure?.reason !== 'unavailable'}
+            onClick={() => navigation.move('retry')}
+          >
+            {m.music_context_retry_page({}, o)}
+          </button>
+        </div>
+      ) : failure?.reason === 'unavailable' && onRetry ? (
         <button type="button" className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} onClick={onRetry}>
           {m.correction_retry({}, o)}
         </button>
@@ -295,6 +354,7 @@ export function MusicAlbumReader({
   loading,
   onRetry,
   onEditionRetry,
+  editionNavigation,
   link = PlainLink,
 }: {
   locale: string;
@@ -306,6 +366,7 @@ export function MusicAlbumReader({
   loading?: boolean;
   onRetry?: () => void;
   onEditionRetry?: () => void;
+  editionNavigation?: { window: AlbumEditionWindow; move: (move: AlbumEditionMove) => void };
   link?: PageLink;
 }) {
   const visit: MusicReaderVisit = musicReaderVisit({
@@ -350,6 +411,7 @@ export function MusicAlbumReader({
           editions={visit.editions}
           locale={locale}
           {...(onEditionRetry ? { onRetry: onEditionRetry } : {})}
+          {...(editionNavigation ? { navigation: editionNavigation } : {})}
         />
       ) : null}
       <ProfileBoundNotes bounds={visit.bounds} locale={locale} />
@@ -372,6 +434,7 @@ export function MusicAlbumOverview({
   release,
   bounds,
   link = PlainLink,
+  transport = nativeAlbumEditions,
 }: {
   source?: object;
   reader?: string | null;
@@ -380,8 +443,8 @@ export function MusicAlbumOverview({
   release?: AlbumDefinitions | undefined;
   bounds?: readonly ProfileBound[];
   link?: PageLink;
+  transport?: (address: AlbumEditionAddress) => Promise<AlbumEditionRead>;
 }) {
-  const instance = useId();
   const origin = source ?? publicRead;
   const [definitions, setDefinitions] = useState({ source: origin, release, revision: 0 });
   const revision = definitions.source !== origin ? 0 : definitions.revision + Number(definitions.release !== release);
@@ -392,42 +455,77 @@ export function MusicAlbumOverview({
     reader,
     descriptor: JSON.stringify([publicRead.subject.id, publicRead.subject.context, locale, revision]),
   });
-  const query = useQuery({
-    queryKey: ['music-album-reader', instance, publicRead.subject.id, locale, reading.key],
-    enabled: reading.available && !!release && !!publicRead.subject.context,
-    queryFn: async () => {
-      if (!reading.isCurrent()) throw new Error('Retired album source');
-      const editions = await loadAlbumEditions({
-        data: { id: publicRead.subject.id, context: publicRead.subject.context! },
-      });
-      if (!reading.isCurrent()) throw new Error('Retired album source');
-      return editions;
-    },
-    retry: false,
-    staleTime: Infinity,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
   if (!reading.available) return <p role="status">{m.music_reader_stale({}, options(locale))}</p>;
-  const editions: AlbumEditionRead | undefined = !publicRead.subject.context
-    ? { ok: false, reason: 'unavailable' }
-    : query.isFetching
-      ? undefined
-      : query.isError
-        ? { ok: false, reason: 'unavailable' }
-        : query.data;
   return (
-    <MusicAlbumReader
+    <AlbumOverviewWindow
+      key={reading.key}
       locale={locale}
       public={publicRead}
       {...(release ? { release } : {})}
       {...(bounds ? { bounds } : {})}
-      {...(editions ? { editions } : {})}
-      {...(release && publicRead.subject.context
-        ? { onEditionRetry: () => void query.refetch({ cancelRefetch: false }) }
-        : {})}
       link={link}
+      transport={transport}
+      isCurrent={reading.isCurrent}
+    />
+  );
+}
+
+const nativeAlbumEditions = (address: AlbumEditionAddress) => loadAlbumEditions({ data: address });
+
+function AlbumOverviewWindow({
+  transport,
+  isCurrent,
+  ...props
+}: Parameters<typeof MusicAlbumReader>[0] & {
+  transport: (address: AlbumEditionAddress) => Promise<AlbumEditionRead>;
+  isCurrent: () => boolean;
+}) {
+  const [window, setWindow] = useState<AlbumEditionWindow>(() => {
+    const address = { id: props.public!.subject.id, context: props.public!.subject.context! };
+    return {
+      address,
+      history: [],
+      ...(props.release && address.context
+        ? { pending: { address, history: [] } }
+        : { failure: { address, history: [], reason: 'unavailable' } }),
+    };
+  });
+  const current = useRef(isCurrent);
+  current.current = isCurrent;
+  const read = useRef(transport).current;
+  const pending = window.pending;
+  useEffect(() => {
+    if (!pending || !current.current()) return;
+    let retired = false;
+    const receive = (result: AlbumEditionRead) => {
+      if (!retired && current.current()) setWindow((window) => settleAlbumEditionWindow(window, pending, result));
+    };
+    // One exact native read; no cache of old page bodies, refill or background refetch.
+    void Promise.resolve()
+      .then(() => {
+        if (!retired && current.current()) return read(pending.address);
+        return { ok: false, reason: 'unavailable' } as const;
+      })
+      .then(receive, () => receive({ ok: false, reason: 'unavailable' }));
+    return () => {
+      retired = true;
+    };
+  }, [pending, read]);
+  const editions = window.page ?? (window.failure ? { ok: false as const, reason: window.failure.reason } : undefined);
+  return (
+    <MusicAlbumReader
+      {...props}
+      {...(editions ? { editions } : {})}
+      {...(props.release && window.address.context
+        ? {
+            editionNavigation: {
+              window,
+              move: (move: AlbumEditionMove) => {
+                if (current.current()) setWindow((window) => moveAlbumEditionWindow(window, move));
+              },
+            },
+          }
+        : {})}
     />
   );
 }

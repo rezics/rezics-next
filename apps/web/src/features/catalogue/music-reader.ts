@@ -80,6 +80,63 @@ export type AlbumEditionRead =
       caughtUp: boolean;
     };
 
+export const albumEditionHistoryLimit = 8;
+export type AlbumEditionMove = 'next' | 'previous' | 'retry';
+type AlbumEditionRequest = { address: AlbumEditionAddress; history: AlbumEditionAddress[] };
+export type AlbumEditionWindow = {
+  address: AlbumEditionAddress;
+  history: AlbumEditionAddress[];
+  page?: Extract<AlbumEditionRead, { ok: true }>;
+  pending?: AlbumEditionRequest;
+  failure?: AlbumEditionRequest & { reason: Extract<AlbumEditionRead, { ok: false }>['reason'] };
+};
+
+/** Remember addresses only. A successful move replaces the sole admitted page. */
+export function moveAlbumEditionWindow(window: AlbumEditionWindow, move: AlbumEditionMove): AlbumEditionWindow {
+  if (window.pending) return window;
+  let request: AlbumEditionRequest;
+  if (move === 'retry') {
+    if (window.failure?.reason !== 'unavailable') return window;
+    request = { address: window.failure.address, history: window.failure.history };
+  } else if (move === 'previous') {
+    const address = window.history.at(-1);
+    if (!address) return window;
+    request = { address, history: window.history.slice(0, -1) };
+  } else {
+    if (window.failure || !window.page?.admitted || !window.page.next) return window;
+    request = {
+      address: { ...window.address, cursor: window.page.next },
+      history: [...window.history, window.address].slice(-albumEditionHistoryLimit),
+    };
+  }
+  return {
+    address: window.address,
+    history: window.history,
+    ...(window.page ? { page: window.page } : {}),
+    pending: request,
+  };
+}
+
+export function settleAlbumEditionWindow(
+  window: AlbumEditionWindow,
+  request: AlbumEditionRequest,
+  result: AlbumEditionRead,
+): AlbumEditionWindow {
+  if (window.pending !== request) return window;
+  if (result.ok)
+    return {
+      address: request.address,
+      history: result.admitted ? request.history : [],
+      page: result,
+    };
+  return {
+    address: window.address,
+    history: window.history,
+    ...(result.reason === 'unavailable' && window.page ? { page: window.page } : {}),
+    failure: { ...request, reason: result.reason },
+  };
+}
+
 export type MusicReaderVisit = {
   state: ProfileReaderState;
   type: typeof albumType;
