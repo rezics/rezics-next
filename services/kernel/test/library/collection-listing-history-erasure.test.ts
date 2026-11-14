@@ -51,10 +51,12 @@ test('scrubs only exact curator links from parentless listing history and replay
     await deletePublicCollection(later, owner);
     await deletePublicCollection(foreignCollection, foreign);
     expect(
-      (await client.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=ANY($2::uuid[])', [
-        route,
-        [prior, later, foreignCollection],
-      ])).rowCount,
+      (
+        await client.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=ANY($2::uuid[])', [
+          route,
+          [prior, later, foreignCollection],
+        ])
+      ).rowCount,
     ).toBe(0);
     const recorded = await client.query<{ collection_id: string; curator_account_id: string }>(
       `SELECT collection_id::text, curator_account_id::text FROM library.collection_listing_history WHERE route=$1`,
@@ -79,10 +81,10 @@ test('scrubs only exact curator links from parentless listing history and replay
        VALUES ($1, $2, true, $3)`,
       [route, cleared, owner],
     );
-    await client.query(
-      'UPDATE library.collection SET curator_account_id=NULL WHERE route=$1 AND collection_id=$2',
-      [route, cleared],
-    );
+    await client.query('UPDATE library.collection SET curator_account_id=NULL WHERE route=$1 AND collection_id=$2', [
+      route,
+      cleared,
+    ]);
     await client.query('DELETE FROM library.collection WHERE route=$1 AND collection_id=$2', [route, cleared]);
 
     const rows = await client.query<{ collection_id: string; ever_public: boolean; curator_account_id: string | null }>(
