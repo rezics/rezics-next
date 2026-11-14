@@ -21,9 +21,10 @@ export const Route = createFileRoute('/books/$id/read')({
   shouldReload: true,
   pendingMs: 0,
   loaderDeps: ({ search }) => search,
-  loader: ({ params, deps }) =>
+  loader: ({ params, deps, abortController }) =>
     readHostedBookVisit({
       data: { catalogueId: params.id, locale: getLocale(), search: deps },
+      signal: abortController.signal,
     }),
   head: ({ match }) =>
     pageHead({ title: m.book_reader_title(), robots: 'noindex, follow' }, pageHeadContext(match.pathname)),
