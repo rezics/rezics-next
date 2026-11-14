@@ -151,7 +151,8 @@ export function createNativeDefinitionCatalogue({
           ),
       );
     } catch (error) {
-      throwAccessUnavailable(error, context.deadline);
+      // Cleanup can outlast the deadline after the transaction has already selected its failure.
+      throwAccessUnavailable(error);
       throw error;
     } finally {
       if (time) releaseOperationalTime(time);

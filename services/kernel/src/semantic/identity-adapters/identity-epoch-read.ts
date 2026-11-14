@@ -588,7 +588,8 @@ async function readIdentityBasisWith(
     requireAccessDeadline(deadline);
     return { state: 'ready', basis: { digest: createHash('sha256').update(encoded, 'utf8').digest('hex') } };
   } catch (error) {
-    throwAccessUnavailable(error, deadline);
+    // Cleanup can outlast the deadline after the transaction has already selected its failure.
+    throwAccessUnavailable(error);
     throw error;
   }
 }
