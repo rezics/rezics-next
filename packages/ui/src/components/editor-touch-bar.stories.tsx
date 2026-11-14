@@ -162,7 +162,8 @@ export const UndoRedo: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Post' });
-    const toolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
+    const toolbarElement = await canvas.findByRole('toolbar', { name: 'Formatting toolbar' });
+    const toolbar = within(toolbarElement);
     const undo = toolbar.getByRole('button', { name: 'Undo' });
     const redo = toolbar.getByRole('button', { name: 'Redo' });
     expect(undo).toBeDisabled();
@@ -264,6 +265,52 @@ export const UndoRedo: Story = {
     expect(retiredInput(view, staleInput)).toBe(false);
     expect(textbox.textContent).toBe('History');
     await waitFor(() => expect(history.latest.current).toEqual(original));
+    const bold = toolbar.getByRole('button', { name: 'Bold' });
+    const tabEntries = () =>
+      [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(
+        (button) => button.tabIndex === 0,
+      );
+    await userEvent.tab();
+    expect(bold).toHaveFocus();
+    expect(tabEntries()).toEqual([bold]);
+    await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
+    await waitFor(() => expect(plainText(history.latest.current)).toBe(''));
+    expect(textbox).toHaveFocus();
+    expect(undo).toBeDisabled();
+    expect(redo).toBeEnabled();
+    expect(tabEntries()).toEqual([bold]);
+    await userEvent.tab();
+    expect(bold).toHaveFocus();
+    expect(tabEntries()).toEqual([bold]);
+    await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
+    await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
+    expect(textbox).toHaveFocus();
+    expect(undo).toBeEnabled();
+    expect(redo).toBeDisabled();
+    expect(tabEntries()).toEqual([bold]);
+    await userEvent.keyboard('{Shift>}{Home}{/Shift}');
+    await userEvent.tab();
+    expect(bold).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(checked(history.latest.current)?.content?.[0]?.marks?.some((mark) => mark.type === 'bold')).toBe(true),
+    );
+    expect(plainText(history.latest.current)).toBe('History');
+    await userEvent.tab();
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{Enter}');
+    const page = within(canvasElement.ownerDocument.body);
+    const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
+    const heading2 = dialog.getByRole('button', { name: 'Heading 2' });
+    for (let attempt = 0; attempt < 8 && !heading2.matches(':focus'); attempt += 1) await userEvent.tab();
+    expect(heading2).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => {
+      const block = checked(history.latest.current);
+      expect(block?.type).toBe('heading');
+      expect(block?.attrs?.level).toBe(2);
+      expect(plainText(history.latest.current)).toBe('History');
+      expect(textbox).toHaveFocus();
+    });
     const unmounted = keyboardCallback();
     const unmountedInput = captureNative();
     await control('Unmount');

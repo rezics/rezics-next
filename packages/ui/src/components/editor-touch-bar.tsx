@@ -122,6 +122,17 @@ export function EditorTouchBar({
   const bar = useRef<HTMLDivElement>(null);
   const inset = useKeyboardInset(visible);
   const blockCommands = useMemo(() => availableInsertCommands(editor, upload), [editor, upload]);
+  const formatCommands = touchBarFormatCommands.filter((command) =>
+    state.marks.some((item) => item.command.id === command.id),
+  );
+  const availableTabStops = [
+    ...formatCommands.map((command) => command.id),
+    'blocks',
+    ...(state.canUndo ? ['undo'] : []),
+    ...(state.canRedo ? ['redo'] : []),
+    'hideKeyboard',
+  ];
+  const activeTabStop = availableTabStops.includes(tabStop) ? tabStop : (availableTabStops[0] ?? 'blocks');
   const selectionRevision = useRef(0);
   const [renderedSelectionRevision, setRenderedSelectionRevision] = useState(0);
   const menuIsCurrent = () => isCurrent() && selectionRevision.current === renderedSelectionRevision;
@@ -196,7 +207,7 @@ export function EditorTouchBar({
       className: cn(barButton, command.active && pressedTone),
       'aria-label': labels[command.label],
       disabled,
-      tabIndex: tabStop === command.id ? 0 : -1,
+      tabIndex: activeTabStop === command.id ? 0 : -1,
       onFocus: () => {
         if (isCurrent()) setTabStop(command.id);
       },
@@ -253,9 +264,7 @@ export function EditorTouchBar({
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overscroll-x-contain py-1">
-            {touchBarFormatCommands
-              .filter((command) => state.marks.some((item) => item.command.id === command.id))
-              .map((command) => commandButton(command))}
+            {formatCommands.map((command) => commandButton(command))}
             {barControl(
               'blocks',
               labels.blocks,
@@ -266,7 +275,7 @@ export function EditorTouchBar({
                 aria-label={labels.blocks}
                 aria-haspopup="dialog"
                 aria-expanded={blocksOpen}
-                tabIndex={tabStop === 'blocks' ? 0 : -1}
+                tabIndex={activeTabStop === 'blocks' ? 0 : -1}
                 onFocus={() => {
                   if (isCurrent()) setTabStop('blocks');
                 }}
@@ -291,7 +300,7 @@ export function EditorTouchBar({
               variant="ghost"
               className={barButton}
               aria-label={labels.hideKeyboard}
-              tabIndex={tabStop === 'hideKeyboard' ? 0 : -1}
+              tabIndex={activeTabStop === 'hideKeyboard' ? 0 : -1}
               onFocus={() => {
                 if (isCurrent()) setTabStop('hideKeyboard');
               }}

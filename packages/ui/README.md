@@ -131,6 +131,8 @@ The rich-text editor keeps Tiptap and the document model (`@rezics/document`) an
 
 shadcn menus and sheets render in a portal on the page, not inside the story canvas, so a story finds them with `screen`. A layer that takes focus must hand it back through Tiptap's frame-deferred restore (`returnFocus` in `editor-selection-menu.tsx`); wait for the editor to hold focus before sending the next key. A controlled echo of the same document keeps the current ProseMirror selection and an open link draft; the address field returns focus only when the editor does not already hold it, and never restores a retired visit's selection.
 
+The touch bar derives its one Tab entry from currently rendered and enabled controls. If its remembered command disappears, Tab enters at the first available control without moving focus during recovery.
+
 Editing continuity keeps one active document, caret, undo history and upload lifecycle. Preview and history open on
 demand within that visit. Save and publication remain explicit actions; an uncertain command retains its independent
 frozen intent while newer edits stay in the working document.
