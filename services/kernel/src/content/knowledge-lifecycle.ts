@@ -313,6 +313,7 @@ export async function changeKnowledgeLifecycle(
                $1,$2,$3,$4,$5,$6,$7,$8,$9::bigint,$10::timestamptz,'running',0,1,0,$11::timestamptz
              )
              ON CONFLICT (route,root_document_id) DO UPDATE SET
+               operation_id=EXCLUDED.operation_id,
                notebook_id=EXCLUDED.notebook_id,
                owner_account_id=EXCLUDED.owner_account_id,
                actor_client_id=EXCLUDED.actor_client_id,
