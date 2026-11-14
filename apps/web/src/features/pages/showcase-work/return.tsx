@@ -22,6 +22,7 @@ export function useWorkRegionReturn({
   fallbackHref,
   locale,
   spoiler,
+  preferences,
   release,
   revision,
 }: {
@@ -31,6 +32,7 @@ export function useWorkRegionReturn({
   fallbackHref: string;
   locale: string;
   spoiler: number | undefined;
+  preferences: string | undefined;
   release: string;
   revision: number;
 }) {
@@ -43,7 +45,7 @@ export function useWorkRegionReturn({
     | {
         sources: readonly unknown[];
         identity: string;
-        spoiler: number | undefined;
+        preferences: string | undefined;
         store: typeof store;
         observation: BrowserObservationSnapshot | undefined;
         serial: number;
@@ -81,7 +83,7 @@ export function useWorkRegionReturn({
     previous.current = {
       sources: [...sources],
       identity,
-      spoiler,
+      preferences,
       store,
       observation,
       serial: (old?.serial ?? 0) + 1,
@@ -91,11 +93,11 @@ export function useWorkRegionReturn({
   const binding = previous.current!;
   // The first actual setting prepares this reading without replacing its source or callbacks.
   // Once bound, a different actual value retires it permanently, including A/B/A.
-  if (binding.spoiler === undefined) binding.spoiler = spoiler;
+  if (binding.preferences === undefined) binding.preferences = preferences;
   if (
     (objectSource && retiredSources.current.has(objectSource)) ||
     binding.identity !== identity ||
-    (spoiler !== undefined && binding.spoiler !== spoiler) ||
+    (preferences !== undefined && binding.preferences !== preferences) ||
     binding.store !== store ||
     binding.observation !== observation
   )

@@ -66,7 +66,6 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
     sources: page ? [definitions, page] : [subject, related, definitions, windows],
     descriptor: JSON.stringify([
       value?.context,
-      value?.reader,
       value?.cacheReader,
       value?.releaseDigest,
       value?.viewer,
@@ -81,6 +80,7 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
     fallbackHref: returnTo,
     locale,
     spoiler: props.readerSpoiler,
+    preferences: props.readerSpoiler === undefined ? undefined : JSON.stringify([props.readerSpoiler, value?.reader]),
     release: subject?.release ?? '',
     revision: subject?.revision ?? 0,
   });
@@ -276,7 +276,7 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
                   subject.release,
                   subject.revision,
                   destination,
-                  value.reader,
+                  journey.key,
                 ])}
                 relation={{
                   holder: subject.id,
@@ -332,7 +332,7 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
                 subject.release,
                 subject.revision,
                 destination,
-                value.reader,
+                journey.key,
               ])}
               relation={{
                 holder: subject.id,
