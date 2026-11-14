@@ -74,11 +74,13 @@ export function InsightsPanel<T>({
   title,
   value,
   children,
+  failedContent,
 }: {
   id: string;
   title: string;
   value: { status: 'received'; value: T } | { status: 'failed'; reason: string };
   children: (value: T) => ReactNode;
+  failedContent?: ReactNode;
 }) {
   return (
     <section aria-labelledby={id} className="min-w-0 space-y-4 rounded-xl border border-border p-4 sm:p-6">
@@ -86,13 +88,16 @@ export function InsightsPanel<T>({
         {title}
       </h2>
       {value.status === 'failed' ? (
-        <div role="status">
-          <p>{m.library_insights_failed()}</p>
-          <details className="text-sm">
-            <summary className="min-h-11 cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
-            <code>{value.reason}</code>
-          </details>
-        </div>
+        <>
+          <div role="status">
+            <p>{m.library_insights_failed()}</p>
+            <details className="text-sm">
+              <summary className="min-h-11 cursor-pointer py-3">{m.library_insights_exact_details()}</summary>
+              <code>{value.reason}</code>
+            </details>
+          </div>
+          {failedContent}
+        </>
       ) : (
         children(value.value)
       )}
@@ -147,13 +152,24 @@ export function YearPanel({
     <>
       <p className="text-sm text-muted-foreground">{m.library_insights_year_help()}</p>
       <Facts values={completionFacts(value)} />
+      <nav aria-label={m.library_insights_diary()} className="flex flex-wrap gap-x-4">
+        <a
+          href={insightsDiaryHref(actions.diary, locale)}
+          className={insightLink}
+          onClick={(event) => {
+            if (!current()) event.preventDefault();
+          }}
+        >
+          {m.library_insights_diary()}
+        </a>
+      </nav>
       <div
-        className="overflow-x-auto"
+        className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         role="region"
         aria-label={m.library_insights_reported_year({ year: value.year })}
         tabIndex={0}
       >
-        <table className="w-full text-sm">
+        <table className="min-w-[44rem] w-full text-sm">
           <caption className="pb-3 text-start font-medium">
             {m.library_insights_reported_year({ year: value.year })}
           </caption>
@@ -206,8 +222,13 @@ export function YearPanel({
       <Coverage value={value.coverage} />
       <details>
         <summary className="min-h-11 cursor-pointer py-3">{m.library_insights_precision()}</summary>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div
+          className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          role="region"
+          aria-label={m.library_insights_precision()}
+          tabIndex={0}
+        >
+          <table className="min-w-[32rem] w-full text-sm">
             <caption className="sr-only">{m.library_insights_precision()}</caption>
             <thead>
               <tr>
@@ -278,8 +299,13 @@ export function ProfilesPanel({ value }: { value: PanelValue<'profiles'> }) {
           [m.library_insights_within_profile(), value.totals.repeatOccurrencesWithinProfile],
         ]}
       />
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div
+        className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        role="region"
+        aria-label={m.library_insights_profiles()}
+        tabIndex={0}
+      >
+        <table className="min-w-[32rem] w-full text-sm">
           <caption className="sr-only">{m.library_insights_profiles()}</caption>
           <thead>
             <tr>
@@ -446,29 +472,36 @@ export function AssessmentsPanel({ value }: { value: PanelValue<'assessments'> }
                 [m.library_insights_historical_unknown(), row.counts.historicalUnknown],
               ]}
             />
-            <table className="w-full text-sm">
-              <caption className="sr-only">{m.library_insights_revision({ revision: row.meaningRevision })}</caption>
-              <thead>
-                <tr>
-                  <th scope="col" className={cell}>
-                    {m.library_insights_assessment_value()}
-                  </th>
-                  <th scope="col" className={cell}>
-                    {m.library_insights_occurrences()}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {row.values.map((bucket) => (
-                  <tr key={bucket.units}>
-                    <th scope="row" className={cell}>
-                      {bucket.units / 2}
+            <div
+              className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              role="region"
+              aria-label={m.library_insights_revision({ revision: row.meaningRevision })}
+              tabIndex={0}
+            >
+              <table className="min-w-[20rem] w-full text-sm">
+                <caption className="sr-only">{m.library_insights_revision({ revision: row.meaningRevision })}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col" className={cell}>
+                      {m.library_insights_assessment_value()}
                     </th>
-                    <td className={cell}>{bucket.occurrences}</td>
+                    <th scope="col" className={cell}>
+                      {m.library_insights_occurrences()}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {row.values.map((bucket) => (
+                    <tr key={bucket.units}>
+                      <th scope="row" className={cell}>
+                        {bucket.units / 2}
+                      </th>
+                      <td className={cell}>{bucket.occurrences}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </li>
         ))}
       </ul>
