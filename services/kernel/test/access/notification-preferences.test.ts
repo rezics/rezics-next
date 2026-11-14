@@ -203,9 +203,9 @@ test('a patch that leaves notifications unchanged keeps the version and writes n
   }
   await call(person, { expectedVersion: 0, notifications: allOff });
   const before = (await stored(person.accountId)).rows;
-  const unchanged = await call(person, { expectedVersion: 1, notifications: allOff });
-  expect(unchanged.status).toBe(200);
-  expect(unchanged.value.version).toBe(1);
+  const sameSaved = await call(person, { expectedVersion: 1, notifications: allOff });
+  expect(sameSaved.status).toBe(200);
+  expect(sameSaved.value.version).toBe(1);
   expect((await stored(person.accountId)).rows).toEqual(before);
   expect(await preferenceEventCount(person.accountId)).toBe(events + 1);
 });
