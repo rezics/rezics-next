@@ -123,6 +123,7 @@ export function accountSchemaType(profile: { kind: string; automated?: boolean }
  */
 export function AccountIdentity(props: Record<string, unknown>) {
   const state = useOverview(props.id);
+  const linksHeadingId = useId();
   if (!state?.section?.ok || state.section.read.kind !== 'account') return null;
   const { value } = state;
   const profile = accountOf(state.section.body);
@@ -147,6 +148,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
     />
   );
   const links = profile.links.filter((link) => webUrl(link.url));
+  const hasSecondaryDetails = Boolean(profile.verified && profile.subject) || profile.automated || profile.operated || links.length > 0;
   return (
     <div
       data-slot="agent-profile-card"
@@ -160,7 +162,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
           <div className="sm:hidden">{avatar('sm')}</div>
           <div className="hidden w-40 sm:block">{avatar('md')}</div>
         </div>
-        <div className="min-w-0 flex-1 space-y-2 in-data-[density=compact]:space-y-1.5">
+        <header className="min-w-0 flex-1 space-y-2 in-data-[density=compact]:space-y-1.5">
           <h1 className="min-w-0 font-sans text-3xl font-semibold tracking-tight wrap-anywhere text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl">
             {name}
           </h1>
@@ -174,60 +176,75 @@ export function AccountIdentity(props: Record<string, unknown>) {
               ? m.settings_verification_organization({}, { locale: value.locale as never })
               : m.settings_verification_person({}, { locale: value.locale as never })}
           </p>
-        </div>
+        </header>
         <div
           data-slot="agent-description"
-          className="col-span-full min-w-0 space-y-3 wrap-anywhere sm:col-span-1 sm:col-start-2"
+          className="col-span-full min-w-0 wrap-anywhere sm:col-span-1 sm:col-start-2"
         >
-          {profile.bio && <p className="max-w-prose leading-7 text-pretty whitespace-pre-line">{profile.bio}</p>}
-          {value.subject ? <AccountFollow targetId={value.subject} /> : null}
-          <AccountManagementLinks key={profile.id} id={profile.id} value={value} />
-          {profile.verified && profile.subject && (
-            <p className="text-sm" data-slot="agent-verified">
-              <value.link
-                href={subjectHref({ id: profile.subject.id, label: profile.subject.label }, value.locale).href}
-              >
-                {m.public_account_verified({ name: profile.subject.label }, { locale: value.locale as never })}
-              </value.link>
+          {profile.bio && (
+            <p data-slot="agent-bio" className="max-w-prose leading-7 text-pretty whitespace-pre-line">
+              {profile.bio}
             </p>
           )}
-          {profile.automated && (
-            <p data-slot="agent-automation" className="text-sm font-medium">
-              {m.public_account_automated({}, { locale: value.locale as never })}
-            </p>
-          )}
-          {profile.operated && (
-            <p data-slot="agent-operator" className="text-sm text-muted-foreground">
-              {m.agent_operated_by({}, { locale: value.locale as never })}{' '}
-              {value.operator?.handle ? (
-                <value.link href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle)}`}>
-                  {value.operator.displayName || value.operator.handle}
-                </value.link>
-              ) : (
-                <span>
-                  {value.operator?.displayName ||
-                    m.public_account_operator_unavailable({}, { locale: value.locale as never })}
-                </span>
-              )}
-            </p>
-          )}
-          {links.length > 0 && (
-            <ul
-              aria-label={m.agent_links({}, { locale: value.locale as never })}
-              className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm"
-            >
-              {links.map((link) => (
-                <li key={link.url} className="min-w-0 max-w-full">
-                  <a
-                    className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center font-medium`}
-                    href={link.url}
-                    rel="nofollow noopener noreferrer ugc"
+          <div
+            data-slot="agent-actions"
+            className={`${profile.bio ? 'mt-5 ' : ''}flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 empty:hidden`}
+          >
+            {value.subject ? <AccountFollow targetId={value.subject} /> : null}
+            <AccountManagementLinks key={profile.id} id={profile.id} value={value} />
+          </div>
+          {hasSecondaryDetails && (
+            <div data-slot="agent-secondary" className="mt-5 space-y-3 border-t border-border/60 pt-4">
+              {profile.verified && profile.subject && (
+                <p className="text-sm" data-slot="agent-verified">
+                  <value.link
+                    href={subjectHref({ id: profile.subject.id, label: profile.subject.label }, value.locale).href}
                   >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
+                    {m.public_account_verified({ name: profile.subject.label }, { locale: value.locale as never })}
+                  </value.link>
+                </p>
+              )}
+              {profile.automated && (
+                <p data-slot="agent-automation" className="text-sm font-medium">
+                  {m.public_account_automated({}, { locale: value.locale as never })}
+                </p>
+              )}
+              {profile.operated && (
+                <p data-slot="agent-operator" className="text-sm text-muted-foreground">
+                  {m.agent_operated_by({}, { locale: value.locale as never })}{' '}
+                  {value.operator?.handle ? (
+                    <value.link href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle)}`}>
+                      {value.operator.displayName || value.operator.handle}
+                    </value.link>
+                  ) : (
+                    <span>
+                      {value.operator?.displayName ||
+                        m.public_account_operator_unavailable({}, { locale: value.locale as never })}
+                    </span>
+                  )}
+                </p>
+              )}
+              {links.length > 0 && (
+                <section data-slot="agent-links" aria-labelledby={linksHeadingId} className="min-w-0 space-y-2">
+                  <h2 id={linksHeadingId} className="text-sm font-medium">
+                    {m.agent_links({}, { locale: value.locale as never })}
+                  </h2>
+                  <ul className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm">
+                    {links.map((link) => (
+                      <li key={link.url} className="min-w-0 max-w-full">
+                        <a
+                          className={`${linkClass} ${linkColor} inline-flex min-h-11 max-w-full items-center font-medium wrap-anywhere`}
+                          href={link.url}
+                          rel="nofollow noopener noreferrer ugc"
+                        >
+                          {link.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
           )}
         </div>
       </div>
