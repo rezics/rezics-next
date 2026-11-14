@@ -9,7 +9,12 @@ import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { managerOwnership, ownedGoals } from './manager-ownership.ts';
-import { ManagerSessionTransport, userMessageTurn, type GoalMutationOrigin } from './manager-session-transport.ts';
+import {
+  ManagerSessionTransport,
+  userMessageTurn,
+  type GoalMutationOrigin,
+  isHarnessGoalContinuation,
+} from './manager-session-transport.ts';
 import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
 import type { PromptBudgetManifest } from './types.ts';
@@ -232,6 +237,8 @@ export type ManagerServices = {
   backlogDirectory?: string;
   now?: () => number;
   onAppServerStart?(identity: ProcessIdentity): void;
+  /** Keep the owned app-server process group for the successor host when a restart handoff is active. */
+  handoffAppServersOnClose?: () => boolean;
   onError?: (error: unknown) => void;
 };
 
@@ -594,6 +601,19 @@ export class ManagerSessions {
     this.countWorkTurn(state, turnId, turn.at);
     return true;
   }
+  private promoteParkedGoalContinuation(state: ManagedManagerState, threadId: string, turnId: string): boolean {
+    if (!this.isParkedTurnInProgress(state, threadId, turnId)) return false;
+    const turn = state.turnDisposition!;
+    const key = this.turnKey(state.id, threadId, turnId);
+    this.clearParkedTurnTimer(state.id);
+    this.userMessageTurns.delete(key);
+    this.committedParkInterrupts.delete(key);
+    state.waitingForInbox = false;
+    delete state.operatorTurnReparkId;
+    state.turnDisposition = { ...turn, intent: 'work' };
+    this.countWorkTurn(state, turnId, turn.at);
+    return true;
+  }
   private async interruptParkedAutomaticTurn(
     state: ManagedManagerState,
     threadId: string,
@@ -650,7 +670,9 @@ export class ManagerSessions {
       if (state.status !== 'running')
         await this.pauseRemote(state, state.goalPauseOrigin ?? (state.status === 'paused' ? 'user' : 'automatic'));
       else if (this.isParkedTurnInProgress(state, state.threadId, params.turn.id)) {
-        if (this.hasUserMessageTurn(state, state.threadId, params.turn.id))
+        if (isHarnessGoalContinuation(params))
+          this.promoteParkedGoalContinuation(state, state.threadId, params.turn.id);
+        else if (this.hasUserMessageTurn(state, state.threadId, params.turn.id))
           this.admitParkedOperatorTurn(state, state.threadId, params.turn.id);
         else this.armParkedTurnDecision(state, state.threadId, params.turn.id);
       }
@@ -1827,36 +1849,40 @@ export class ManagerSessions {
                 this.isParkedTurnInProgress(current, current.threadId, current.activeTurnId)
               ) {
                 const turnId = current.activeTurnId;
-                const hasPersistedUserMessage = await this.transport.turnHasUserMessage(
-                  client,
-                  current.threadId!,
-                  turnId,
-                );
-                if (hasPersistedUserMessage || this.hasUserMessageTurn(current, current.threadId!, turnId)) {
-                  this.userMessageTurns.add(this.turnKey(current.id, current.threadId!, turnId));
-                  this.promoteParkedTurnToWork(current, current.threadId!, turnId);
-                  const resumed = await this.transport.resumeThread(client, current, current.threadId!);
-                  reportProgress();
-                  if (resumed.latestTurn?.id === turnId && resumed.latestTurn.status !== 'inProgress')
-                    this.turnEnded(current, turnId, resumed.latestTurn.status);
+                const resumed = await this.transport.resumeThread(client, current, current.threadId!);
+                if (resumed.activeTurnId === turnId && resumed.latestTurn?.origin === 'goal-harness') {
+                  this.promoteParkedGoalContinuation(current, current.threadId!, turnId);
                   this.adoptActiveTurn(current, resumed.activeTurnId);
+                  reportProgress();
                   current.goalState = await this.transport.getGoal(client, current.threadId!);
-                  if (
-                    current.activeTurnId === null &&
-                    current.status === 'running' &&
-                    !unexpectedManagerTurn(current)
-                  ) {
-                    await this.markWaitingForInbox(current.id);
-                    current = this.get(current.id);
-                    assertManagedManager(current);
-                  }
                 } else {
-                  this.armParkedTurnDecision(current, current.threadId!, turnId);
+                  const hasPersistedUserMessage = await this.transport.turnHasUserMessage(
+                    client,
+                    current.threadId!,
+                    turnId,
+                  );
+                  if (hasPersistedUserMessage || this.hasUserMessageTurn(current, current.threadId!, turnId)) {
+                    this.userMessageTurns.add(this.turnKey(current.id, current.threadId!, turnId));
+                    this.promoteParkedTurnToWork(current, current.threadId!, turnId);
+                    reportProgress();
+                    if (resumed.latestTurn?.id === turnId && resumed.latestTurn.status !== 'inProgress')
+                      this.turnEnded(current, turnId, resumed.latestTurn.status);
+                    this.adoptActiveTurn(current, resumed.activeTurnId);
+                    current.goalState = await this.transport.getGoal(client, current.threadId!);
+                  } else {
+                    this.armParkedTurnDecision(current, current.threadId!, turnId);
+                  }
+                }
+                if (current.activeTurnId === null && current.status === 'running' && !unexpectedManagerTurn(current)) {
+                  await this.markWaitingForInbox(current.id);
+                  current = this.get(current.id);
+                  assertManagedManager(current);
                 }
               }
             } else if (
               !unexpectedManagerTurn(current) &&
               (current.goalState?.status !== 'paused' ||
+                (current.activeTurnId !== null && current.turnDisposition?.intent === 'work') ||
                 (current.operatorTurnReparkId !== undefined &&
                   current.activeTurnId === current.operatorTurnReparkId &&
                   current.turnDisposition?.intent === 'work')) &&
