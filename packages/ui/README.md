@@ -127,7 +127,10 @@ Editing continuity keeps one active document, caret, undo history and upload lif
 demand within that visit. Save and publication remain explicit actions; an uncertain command retains its independent
 frozen intent while newer edits stay in the working document.
 
-Keyboard undo (Ctrl/Cmd+Z) and redo (Ctrl/Cmd+Shift+Z or Ctrl+Y) share the toolbar's native ProseMirror history.
+Decision: native `beforeinput` history uses a visit-bound editor prop over the existing ProseMirror history;
+the installed plugin's eager handler is disabled, and only an actually applied step consumes the event.
+Native Edit-menu/mobile undo (`historyUndo`) and redo (`historyRedo`), keyboard undo (Ctrl/Cmd+Z) and redo
+(Ctrl/Cmd+Shift+Z or Ctrl+Y) share the toolbar's native ProseMirror history.
 Caller key handling runs first; only a handled shortcut is consumed, while composition, read-only mode and retired
 visits cannot dispatch history commands. History commands keep editor focus. Hiding the mounted editor for preview
 or version history retains its history; controlled echoes and editability toggles retain it too. An external document
@@ -135,13 +138,15 @@ replacement clears both history stacks in the existing editor, and a replaced ed
 Keyboard and visit acceptance extend the existing touch-bar `UndoRedo` story; the focused inline-lifetime regression
 runs it alongside `InlineLifetimeJourney`, keeping the existing story inventory.
 
-This keyboard capability is inherited by Studio Book/Column ([workspace](../../apps/web/src/studio/workspace.tsx)),
+This shared history capability is inherited by Studio Book/Column ([workspace](../../apps/web/src/studio/workspace.tsx)),
 [native drafts](../../apps/web/src/studio/native-draft-composer.tsx),
 [Threads new/reply/revision](../../apps/web/src/threads/composer.tsx),
 [Knowledge private pages](../../apps/web/src/knowledge/private-page.tsx), catalogue
 [authored fields](../../apps/web/src/features/catalogue/authored-field-view.tsx),
 [Manga fields](../../apps/web/src/features/catalogue/manga-profile-field.tsx) and
-[Recipe editing](../../apps/web/src/features/catalogue/recipe-editor-view.tsx).
+[Recipe editing](../../apps/web/src/features/catalogue/recipe-editor-view.tsx). Import inventory finds no exception
+requiring a page-local history binding. Equal bytes from a different owner/session/source still require the host's
+existing editor key/remount; equality cannot identify a new private draft.
 
 The shared schema's [DOM round-trip contract](../document/README.md#interoperability) is inherited automatically by
 every `RichTextEditor` host: Studio workspace (Book and Column), native draft composer, thread/reply composer,

@@ -11,6 +11,7 @@ import {
 import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import { history } from '@tiptap/pm/history';
 import { NodeSelection, Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
+import type { EditorView } from '@tiptap/pm/view';
 import { useEditor } from '@tiptap/react';
 import { ImageIcon } from 'lucide-react';
 import {
@@ -104,6 +105,14 @@ const EditorHistory = Extension.create({
     return [
       new Plugin({
         ...plugin.spec,
+        props: {
+          ...plugin.props,
+          handleDOMEvents: {
+            ...plugin.props.handleDOMEvents,
+            // The visit-bound editor prop below consumes only an applied history step.
+            beforeinput: () => false,
+          },
+        },
         state: {
           ...state,
           apply: (transaction, value, oldState, newState) =>
@@ -580,6 +589,32 @@ export function RichTextEditor({
     () => ownsVisit(visit, value.profile, currentMentionGeneration, editor),
     [currentMentionGeneration, editor, ownsVisit, value.profile, visit],
   );
+  const handleHistoryInput = useCallback(
+    (view: EditorView, event: Event): boolean => {
+      const input = event as InputEvent;
+      const command =
+        input.inputType === 'historyUndo' ? undoCommand : input.inputType === 'historyRedo' ? redoCommand : null;
+      if (
+        !command ||
+        event.defaultPrevented ||
+        !event.cancelable ||
+        input.isComposing ||
+        !isCurrent() ||
+        !editor ||
+        view !== editor.view ||
+        !view.editable ||
+        !view.hasFocus() ||
+        view.composing ||
+        !view.dom.contains(event.target as Node | null)
+      )
+        return false;
+
+      if (!command.run(editor, () => undefined)) return false;
+      event.preventDefault();
+      return true;
+    },
+    [editor, isCurrent],
+  );
   const isCurrentLinkRange = useCallback(
     (range: LinkVisitRange) => {
       const current = linkRangeRef.current;
@@ -706,6 +741,10 @@ export function RichTextEditor({
             readOnly,
           }),
           transformPastedHTML: sanitizePastedHTML,
+          handleDOMEvents: {
+            ...editor.options.editorProps.handleDOMEvents,
+            beforeinput: handleHistoryInput,
+          },
         },
       });
     }
@@ -798,6 +837,7 @@ export function RichTextEditor({
     dir,
     disabled,
     readOnly,
+    handleHistoryInput,
     controlledKey,
     value.profile,
     retireInlineWork,

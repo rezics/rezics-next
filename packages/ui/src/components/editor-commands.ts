@@ -94,16 +94,23 @@ export const touchBarFormatCommands: readonly EditorCommand[] = markCommands.fil
   ['bold', 'italic', 'link', 'code'].includes(command.id),
 );
 
+/** A nonempty branch can still produce no transaction, or dispatch can be filtered. */
+function applyHistory(editor: Editor, command: typeof undo): boolean {
+  const before = editor.state;
+  command(before, (transaction) => editor.view.dispatch(transaction));
+  return editor.state !== before;
+}
+
 export const undoCommand: EditorCommand = {
   id: 'undo',
   label: 'undo',
-  run: (editor) => undo(editor.state, (transaction) => editor.view.dispatch(transaction)),
+  run: (editor) => applyHistory(editor, undo),
 };
 
 export const redoCommand: EditorCommand = {
   id: 'redo',
   label: 'redo',
-  run: (editor) => redo(editor.state, (transaction) => editor.view.dispatch(transaction)),
+  run: (editor) => applyHistory(editor, redo),
 };
 
 const heading = (level: 1 | 2 | 3): EditorCommand => ({
