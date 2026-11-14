@@ -1097,6 +1097,7 @@ function journaledReview(options: {
   schemeAvailable?: boolean;
   loseAdopt?: boolean;
   conflictOnce?: boolean;
+  conflictStatus?: 409 | 412;
   conceptBroader?: string[];
   extraSubjects?: Record<string, ReviewedSubjectRead>;
   workCandidates: {
@@ -1209,7 +1210,6 @@ function journaledReview(options: {
       adoptBodies.push(body);
       const recovered = committedAdoptions.get(key);
       if (recovered) {
-        workCandidates.adoption = recovered;
         return {
           adoption: {
             context: globalContext,
@@ -1225,7 +1225,7 @@ function journaledReview(options: {
           head: (workCandidates.adoption?.head ?? 1) + 1,
           selection: workCandidates.adoption?.selection ?? [],
         };
-        throw new ImportTransportError(409);
+        throw new ImportTransportError(options.conflictStatus ?? 409);
       }
       const selection = isRecord(body) && Array.isArray(body.selection) ? body.selection : [];
       const adoption = {
@@ -1329,6 +1329,7 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
     expect(replayed.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
       [editorialId, extraEditorialId, pageOneId, pageTwoId, vanishedId].sort(),
     );
+    expect(replayed.adopted[`${workId}:schema:genre`]?.head).toBe(7);
 
     review.conflictNextAdopt();
     const retired = await completeReviewedSharedTagFlow({
@@ -1340,6 +1341,14 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
     expect(retired.retiredCandidateIds).toEqual([vanishedId]);
     expect(review.adoptKeys[3]).not.toBe(sealedKey);
     expect(review.adoptKeys[4]).not.toBe(review.adoptKeys[3]);
+    const staleAction = reviewedTagAdoptKey(
+      workId,
+      'schema:genre',
+      showcaseDigest({ intent: 'retire-g99', generation: 0 }),
+    );
+    expect(journal.action(staleAction)).toMatchObject({ state: 'refused', error_code: 'review-http-409' });
+    expect(JSON.parse(journal.action(staleAction)!.body_json)).toEqual(review.adoptBodies[3]);
+    expect(journal.actionDecisions(staleAction)).toEqual([]);
     expect(retired.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
       [editorialId, extraEditorialId, pageOneId, pageTwoId].sort(),
     );
@@ -1608,6 +1617,7 @@ test('reviewed-tag adopt resumes previous-format and later prepared keys before 
     expect(recovered.complete).toBe(true);
     expect(unknownReview.adoptKeys).toEqual([sealedKey, sealedKey]);
     expect(unknownReview.adoptBodies[1]).toEqual(sealedBody);
+    expect(recovered.adoption?.head).toBe(3);
     unknownJournal.close();
   } finally {
     journal.close();
@@ -1708,6 +1718,45 @@ test('reviewed-tag adopt replays a historical acknowledgement into later unknown
     expect(changed.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
       [editorialId, pageOneId].sort(),
     );
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('reviewed-tag adoption recovers a 412 on a new generation and retains the refused original', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-adopt-412-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const review = journaledReview({
+    conflictOnce: true,
+    conflictStatus: 412,
+    workCandidates: {
+      first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }, 'accepted')],
+      second: [],
+    },
+  });
+  try {
+    const recovered = await adoptAcceptedReviewedTagSelection(
+      review as unknown as Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+      workId,
+      'schema:genre',
+      journal,
+    );
+    const original = reviewedTagAdoptKey(workId, 'schema:genre', showcaseDigest({ intent: 'current', generation: 0 }));
+    const replacement = reviewedTagAdoptKey(
+      workId,
+      'schema:genre',
+      showcaseDigest({ intent: 'current', generation: 1 }),
+    );
+    expect(review.adoptKeys).toEqual([
+      journal.action(original)!.idempotency_key,
+      journal.action(replacement)!.idempotency_key,
+    ]);
+    expect(journal.action(original)).toMatchObject({ state: 'refused', error_code: 'review-http-412' });
+    expect(JSON.parse(journal.action(original)!.body_json)).toEqual(review.adoptBodies[0]);
+    expect(journal.action(replacement)?.state).toBe('acknowledged');
+    expect(review.adoptBodies[1]).toMatchObject({ expected_head: 2 });
+    expect(recovered).toMatchObject({ complete: true, adoption: { head: 3 } });
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
