@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { WorkbenchCaseDetail } from '../moderation/workbench-case';
+import type { ReportQueueAction } from '../moderation/reports-view-action';
 import type { Report, ResolvedReportTarget } from '../moderation/reports-read';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
@@ -65,6 +66,7 @@ const meta = {
   ],
   args: {
     report,
+    boardId: 'board-opened',
     target: current,
     revision,
     currentState: 'available',
@@ -73,15 +75,16 @@ const meta = {
     queueHref: '/moderation/workbench?queue=reports&board=board-opened&cursor=old',
     isCurrent: () => true,
     register: () => () => {},
-    onAction: async () => ({ ok: true }),
+    onAction: fn<ReportQueueAction>(async () => ({ ok: true })),
   },
 } satisfies Meta<typeof WorkbenchCaseDetail>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ReportedAndCurrent: Story = {
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.moderation_admission_current())).toBeVisible();
     await expect(canvas.getByRole('heading', { name: m.moderation_reported_revision_label() })).toBeVisible();
     await expect(canvas.getByText('The exact revision selected when the report was created.')).toBeVisible();
     await expect(canvas.getByText('The current post after the reported revision changed.')).toBeVisible();
@@ -94,6 +97,17 @@ export const ReportedAndCurrent: Story = {
     await expect(
       canvas.getByRole('link', { name: m.moderation_current_thread({ id: currentDestination.threadId }) }),
     ).toHaveFocus();
+    await expect(canvas.getByRole('link', { name: m.moderation_workbench_history_return() })).toHaveAttribute(
+      'href',
+      '/moderation/workbench?queue=reports&board=board-opened&cursor=old',
+    );
+    await userEvent.click(canvas.getByRole('button', { name: m.moderation_queue_review() }));
+    const review = within(canvas.getByRole('form', { name: m.moderation_queue_review() }));
+    await expect(review.getByText(report.target.id, { exact: true })).toBeVisible();
+    await expect(review.getByText(`${m.moderation_queue_details_report_id()}: ${report.id}`)).toBeVisible();
+    await expect(review.getByRole('button', { name: m.moderation_take_down() })).toBeDisabled();
+    await expect(review.getByRole('button', { name: m.moderation_dismiss() })).toBeEnabled();
+    await expect(args.onAction).not.toHaveBeenCalled();
   },
 };
 
@@ -112,5 +126,26 @@ export const CurrentTargetWithheld: Story = {
     await expect(
       canvas.queryByRole('navigation', { name: m.moderation_current_destination() }),
     ).not.toBeInTheDocument();
+  },
+};
+
+export const ResolvedCase: Story = {
+  args: {
+    report: { ...report, outcome: 'dismissed', resolvedAt: '2026-10-02T11:15:00.000Z' },
+    target: { ...current, value: null },
+    currentState: 'withheld',
+    destination: null,
+    actionAdvice: { dismiss: false, takeDown: false },
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.moderation_dismissed(), { exact: true })).toBeVisible();
+    await expect(canvas.getByText('The exact revision selected when the report was created.')).toBeVisible();
+    await expect(canvas.getByText(/Evidence paragraph 7/)).toBeVisible();
+    await expect(canvas.getByText(m.moderation_target_withheld())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.moderation_queue_review() })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByText(m.moderation_queue_details_reference(), { exact: true }));
+    await expect(canvas.getByText(report.id, { exact: true })).toBeVisible();
+    await expect(args.onAction).not.toHaveBeenCalled();
   },
 };

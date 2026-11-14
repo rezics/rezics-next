@@ -213,7 +213,8 @@ test('the workbench view covers preparation, empty, denied, unavailable recovery
     />,
   );
   const link = loaded.querySelector(`a[href*="/moderation/cases/${reportId}"]`);
-  expect(link?.textContent).toContain(reportId);
+  expect(link?.textContent).toBe(m.moderation_case_open());
+  expect(link?.getAttribute('aria-label')).toContain(reportId);
   expect(loaded.textContent).toContain(report.evidence);
   await act(async () => {
     [...loaded.querySelectorAll('button')].find((button) => button.textContent === m.threads_next_page())?.click();

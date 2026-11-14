@@ -84,14 +84,14 @@ function renderDecision(page: DecisionPage) {
   );
 }
 
-test('private decision cases keep full evidence, named shared frames, independent targets and exact outcome dates', async () => {
+test('private decision cases keep full evidence, flat named sections, independent targets and exact outcome dates', async () => {
   const open = parseMarkup(renderDecision(decisionPage));
   try {
     const { host } = open;
     expect(host.querySelectorAll('h1')).toHaveLength(1);
     expect(host.querySelectorAll('h2').length).toBeGreaterThanOrEqual(4);
     expect(host.querySelectorAll('[data-content-item-slot="title"]').length).toBeGreaterThanOrEqual(4);
-    expect(host.querySelectorAll('.group.relative.isolate').length).toBeGreaterThanOrEqual(4);
+    expect(host.querySelectorAll('.group.relative.isolate')).toHaveLength(1);
     const headings = [...host.querySelectorAll('h2')].map((heading) => heading.textContent?.trim());
     expect(headings).toContain(m.decision_current_outcome());
     expect(headings).toContain(m.decision_original_heading());
@@ -102,7 +102,8 @@ test('private decision cases keep full evidence, named shared frames, independen
     expect(host.textContent).toContain(m.decision_target_context_unavailable());
     expect(host.textContent).toContain(m.decision_appeal_advice_unavailable());
     expect(host.querySelector(`time[datetime="${decidedAt}"]`)).not.toBeNull();
-    expect(host.querySelector(`time[datetime="${appealDeadline}"]`)).not.toBeNull();
+    expect(host.querySelector(`header time[datetime="${appealDeadline}"]`)).not.toBeNull();
+    expect(host.querySelectorAll(`time[datetime="${appealDeadline}"]`)).toHaveLength(1);
     expect(host.querySelector(`a[href*="${targetId}"]`)).toBeNull();
     expect(host.querySelector('form')).toBeNull();
     expect(host.querySelector('textarea')).toBeNull();
