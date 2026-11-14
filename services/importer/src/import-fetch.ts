@@ -661,7 +661,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
           await sleep(delay, request.signal);
           continue;
         }
-        if (response.status === 401 && !renewedAfterDenial && options.token.length > 0) {
+        if (response.status === 401 && !renewedAfterDenial) {
           renewedAfterDenial = true;
           await abortable(request.signal, () => cancel(response.body));
           headers.set('authorization', `Bearer ${await accessToken(true)}`);

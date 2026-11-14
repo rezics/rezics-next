@@ -58,11 +58,20 @@ remain remote.
 
 ## Prepared-input transport
 
+Decision: every remote command containing `--emit-client` requests the closed client-output transport before upload
+and host admission; mutable sources are fingerprinted there, while frozen callers must already declare that
+transport. The prepared-input receipt remains available through output publication and physical terminal custody.
+
 `runScript` generates frozen-source verification and prepared-input evidence only when `expectedSourceSha256` is
-supplied. The generic check-run path supplies that fingerprint and continues to require the corresponding
-prepared-input receipt. Ordinary stack and gate callers do not request this generic evidence; their missing receipt
-is represented as `preparedInputs: null`, while native exit, declared returns and cleanup retain their existing
-outcomes. No evidence is synthesized for those callers.
+supplied. `withOutputTreeSource` supplies it for a declared client-output return, a direct `--emit-client` command,
+or a nested emitter with a declared artifact return. A frozen manifest that omits the transport is refused before
+remote work begins; mutable sources receive a manifest before host admission. The producer writes
+`/srv/rezics-check/receipts/<run>/prepared-inputs.json` after frozen install and every declared preparation command,
+before `command-started`. `withKernelClientOutput` reads that exact receipt and matches its source, run and host to the
+physical supervisor marker before invoking the compiler callback. Run cleanup leaves the receipt in the shared
+receipt root, so result recovery and declared-output transfer can finish before terminal custody is recorded.
+Ordinary stack and gate commands that do not emit client output still represent absent generic evidence as
+`preparedInputs: null`, with their native exit, declared returns and cleanup unchanged.
 
 ## Evidence and limits
 

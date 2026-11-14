@@ -61,9 +61,14 @@ runbooks. Each component is also listed separately. Ctrl-C stops the foreground 
 search containers remain available. Focused test tasks require explicit files, relative to their named workspace.
 `goal:cp-sync` and the service tasks retain the permissions and release rules in the Goal runbook.
 
-The coordinating role resolves cross-scope decisions and workflow defects. A manager owns its Goal's scope,
-contracts, briefs and acceptance. Workers implement briefed changes. Managers delegate implementation, including
-tooling changes, except an explicitly authorized emergency correction.
+The resident supermanager is the only manager. It owns scope, Goal allocation, cross-owner decisions, scheduling,
+progress reporting and publication. It may assign a worker to author a Goal, then reviews the contract before an
+execution unit consumes it through a native Codex Goal. Units use native subagents and Grok CLI within their assigned
+outcome; they do not create manager sessions or another management tier. See [unit operation](supermanager.md#execution-units).
+
+Each unit shares one worktree among its native session, subagents and Grok CLI. Different units use separate
+worktrees. Domain names identify product contracts and code ownership, not resident managers. The manager delegates
+implementation, including tooling changes, except an explicitly authorized emergency correction.
 
 Decide within the assigned scope and report the result. Escalate an unresolved product boundary or incompatible
 contract with evidence. Routine implementation choices do not need repeated confirmation.

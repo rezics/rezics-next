@@ -7,6 +7,7 @@ import { installPrivate } from './shared-dependencies.ts';
 import { HOST_START_KINDS, installService, reportServices, type HostStartKind } from './service.ts';
 import { MAINTENANCE_JOBS, runMaintenance, runResidentVerifier, type MaintenanceJob } from './maintenance.ts';
 import { runPublicationCommand } from './publication-command.ts';
+import { runNativeUnitCommand } from './native-unit-command.ts';
 
 const workerCommands = [
   'dispatch',
@@ -34,6 +35,7 @@ const integrationCommands = [
   'inbox',
   'backlog',
   'publication',
+  'unit',
   '_manager-host',
   '_host-start',
 ];
@@ -47,6 +49,7 @@ export const SWEEP_FREE_COMMANDS = new Set([
   'backlog',
   'manager',
   'publication',
+  'unit',
   'urgent',
   'amend',
   'typing-recover',
@@ -174,6 +177,10 @@ export async function run(
     if (command === 'publication') {
       if (!('settings' in runtime)) throw new Error('Publication commands require the configured Goal runtime');
       return await runPublicationCommand(args, runtime);
+    }
+    if (command === 'unit') {
+      if (!('settings' in runtime)) throw new Error('Native unit commands require the configured Goal runtime');
+      return await runNativeUnitCommand(args, runtime);
     }
     return await runIntegration([command, ...args], runtime);
   } catch (error) {

@@ -31,6 +31,12 @@ every Context a page could be scored in. A layout with one block, tab or section
 those numbers; so does ranking that only works for a handful of Contexts. Show what the design renders and costs at
 the limit, not only in the fixture.
 
+Before implementation, the product owner records data cardinalities, distinguishing product limits from step bounds,
+and exact indexes (keys and ordering). State point/page cost and total work, including preparation, maintenance,
+disclosure, migration and cleanup, under the [architecture's step and total-size rules](../architecture.md).
+Include seeded growth witnesses that exceed one request's bounds and grow unrelated siblings and descendants;
+show the ordinary journey still completes and the stated costs hold.
+
 ## Information placement
 
 Use the default overview for the information or actions that help almost everyone complete the primary job

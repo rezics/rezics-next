@@ -333,7 +333,6 @@
     },
     "width": {
       "workerThreshold": 10,
-      "residentSourceMinimum": 60,
       "bucketMs": 900000,
       "pageSize": 64,
       "sweepYieldItems": 8

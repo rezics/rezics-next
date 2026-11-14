@@ -443,7 +443,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     sweepWidth: async () => {
       await sweepWidthGovernor(db, inbox, new Date(), {
         policy: settings.policy,
-        residentManagerId: settings.integration.supermanager,
         stateDirectory: settings.stateDirectory,
       });
     },

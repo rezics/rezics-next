@@ -22,6 +22,10 @@ const MODULE_MAP_LEGEND =
   'row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; ' +
   'path k=kernel,w=web,p=package,@=rezics; - = none';
 
+const SELECTED_MODULE_MAP_LEGEND =
+  'row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; ' +
+  'path k=kernel,w=web,p=package,@=rezics; dir:{...}; - = none';
+
 const globCache = new Map<string, RegExp>();
 
 function globRegex(pattern: string): RegExp {
@@ -136,7 +140,44 @@ function groupPathEntries(entries: readonly string[]): string[] {
   return [...compact, ...rest.sort()];
 }
 
-function moduleEntryLabel(module: ArchitectureModule): string {
+interface PathNode {
+  files: string[];
+  directories: Map<string, PathNode>;
+}
+
+function compactPathEntries(entries: readonly string[]): string[] {
+  const root: PathNode = { files: [], directories: new Map() };
+  for (const entry of entries) {
+    const parts = entry.split('/');
+    if (parts.length === 1) {
+      root.files.push(entry);
+      continue;
+    }
+    let node = root;
+    for (const directory of parts.slice(0, -1)) {
+      let child = node.directories.get(directory);
+      if (!child) {
+        child = { files: [], directories: new Map() };
+        node.directories.set(directory, child);
+      }
+      node = child;
+    }
+    node.files.push(parts[parts.length - 1]!);
+  }
+
+  function render(node: PathNode): string {
+    const files = node.files.slice().sort();
+    const directories = [...node.directories.entries()]
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([name, child]) => `${name}:{${render(child)}}`);
+    return [...files, ...directories].join(',');
+  }
+
+  const compact = render(root);
+  return compact ? [compact] : [];
+}
+
+function moduleEntryLabel(module: ArchitectureModule, compactDirectories = false): string {
   const entries = module.publicEntries;
   if (!entries.length) return '-';
   const byPackage = new Map<string, string[]>();
@@ -159,23 +200,33 @@ function moduleEntryLabel(module: ArchitectureModule): string {
     const sorted = values.sort();
     return sorted.length === 1 && sorted[0] === '.' ? prefix : `${prefix}:{${sorted.join(',')}}`;
   });
-  return [...compact, ...groupPathEntries(other)].join(',');
+  return [...compact, ...(compactDirectories ? compactPathEntries(other) : groupPathEntries(other))].join(',');
 }
 
-function moduleMapRow(module: ArchitectureModule): string {
+function moduleMapRow(module: ArchitectureModule, compactDirectories = false): string {
   const dependencies = module.allowedDependencies.map(compactModuleId).sort().join(',') || '-';
-  return [compactModuleId(module.id), COMPACT_KIND[module.kind], moduleEntryLabel(module) || '-', dependencies].join(
-    '|',
-  );
+  return [
+    compactModuleId(module.id),
+    COMPACT_KIND[module.kind],
+    moduleEntryLabel(module, compactDirectories) || '-',
+    dependencies,
+  ].join('|');
 }
 
 function compareModuleId(left: ArchitectureModule, right: ArchitectureModule): number {
   return left.id.localeCompare(right.id);
 }
 
-function renderModuleMap(modules: readonly ArchitectureModule[]): { legend: string; rows: string[]; text: string } {
-  const rows = modules.slice().sort(compareModuleId).map(moduleMapRow);
-  return { legend: MODULE_MAP_LEGEND, rows, text: [MODULE_MAP_LEGEND, ...rows].join('\n') };
+function renderModuleMap(
+  modules: readonly ArchitectureModule[],
+  compactDirectories = false,
+): { legend: string; rows: string[]; text: string } {
+  const legend = compactDirectories ? SELECTED_MODULE_MAP_LEGEND : MODULE_MAP_LEGEND;
+  const rows = modules
+    .slice()
+    .sort(compareModuleId)
+    .map((module) => moduleMapRow(module, compactDirectories));
+  return { legend, rows, text: [legend, ...rows].join('\n') };
 }
 
 function fitRows(legend: string, rows: readonly string[], suffix: string, truncation: string): string {
@@ -221,15 +272,12 @@ export function formatModuleMap(manifest: ArchitectureManifest, paths?: readonly
     if (text.length <= MAX_MODULE_MAP_CHARACTERS) return text;
     return fitRows(legend, rows, '', MODULE_MAP_TRUNCATION);
   }
-  const owned = ownedModulesForBriefPaths(manifest, paths);
   const selected = modulesForBriefPaths(manifest, paths);
-  const { legend, text } = renderModuleMap(selected);
+  const { text } = renderModuleMap(selected, true);
   const complete = `${text}\n${MODULE_MAP_POINTER}`;
-  if (complete.length <= MAX_MODULE_MAP_CHARACTERS) return complete;
-  // Keep owned rows authoritative and make truncation explicit when dependency rows do not fit.
-  const ownedIds = new Set(owned.map((module) => module.id));
-  const prioritized = [...owned, ...selected.filter((module) => !ownedIds.has(module.id)).sort(compareModuleId)];
-  return fitRows(legend, prioritized.map(moduleMapRow), MODULE_MAP_POINTER, MODULE_MAP_TRUNCATION);
+  // The character target bounds unscoped maps. A path-scoped map is an import contract, so keep every
+  // selected row even when a large module boundary makes the complete representation exceed that target.
+  return complete;
 }
 
 export function loadManifest(rootInput: string): ArchitectureManifest {

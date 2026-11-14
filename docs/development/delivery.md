@@ -5,7 +5,7 @@ large task is fine when it is clear. State what it delivers in user terms and de
 dispatch. A failure must not lose work: a retry resumes the same session with its commits and evidence and continues
 from where it stopped, so the cost of failing is the remaining work, never a restart.
 
-Workers own the how; managers own the what. A brief states the outcome in user terms, owner links, what done means,
+Execution units own the how; the resident manager owns the what. A brief states the outcome in user terms, owner links, what done means,
 dependencies and estimated size; the worker designs and implements the change. Acceptance evidence follows the
 source-integration policy below and the scheduled verification. Use the schema in
 [Goal tooling](../../tools/goal/README.md); do not maintain another schema here.
@@ -26,7 +26,7 @@ the current critical path. Archived scope and historical task counts do not meas
 
 ## Direct source integration
 
-When integration becomes the bottleneck, managers and the supermanager resolve conflicts manually and integrate
+When integration becomes the bottleneck, the manager assigns a resolver to repair conflicts and integrate
 coherent source directly into its target branch. This applies to every task type, including product, urgent,
 control-plane, stabilize, specification and verification work. Preserve the current target history, source identity
 and both sides' required behavior. Keep independent implementation moving instead of waiting for a landing queue,
@@ -90,10 +90,12 @@ than assumed. Check:
 
 - required exports, fixtures and dependencies exist on the recorded base;
 - the acceptance agrees with current contracts;
+- skill instructions distinguish reference reads from executable commands ([skill instructions](#skill-instructions));
 - declared risk areas cover the paths;
 - the target is recorded in parsed metadata;
 - dependencies are real code dependencies;
-- overlap is not encoded as a dependency; use `after:` only when code needs another task's API, schema or component;
+- Use `after` with `afterSource` only for an indispensable unlanded implementation, and link its existing Goal
+  contract;
 - a requirement that refuses, rejects, stops or fails work carries its price line ([agent conduct](agent-conduct.md#briefs)).
 
 Prepare the next briefs while workers write. A held outcome's brief names the outcome, first writable boundary, what is
@@ -119,32 +121,47 @@ change the smallest assertion that makes them agree, list the file and reason, a
 Declared paths guide scope. A minimal adjacent correction must respect risk ownership, include its affected checks
 and notify its owner. Agree shared interfaces before consuming them; include consumers and fixtures in the change.
 
+## Skill instructions
+
+When a brief uses a skill, link its installed `SKILL.md` and name reference files as reads. Run only commands the
+skill documents, resolving its launcher from the installed skill directory rather than assuming a bare command
+exists on PATH. In Impeccable, `reference/craft-floor.md` is a document to read before UI edits, not a `craft-floor`
+CLI verb. Use the documented launcher for `context` or `detect`, within the task's authorized scope.
+
+If the launcher fails, follow the skill's documented fallback. Impeccable permits reading existing project context
+and the applicable references directly and continuing the repair; a launcher failure alone does not require another
+source attempt, installation, a PATH change or repetition of passed checks on unchanged inputs. Preserve the source
+and valid evidence, and fix any actual product defect found during that review.
+
+When an instruction caused the failure, correct its owning document and the affected active brief in the same
+turn; a temporary decision or retry message alone does not repair future instructions. Keep archived attempts as
+evidence and link subsequent briefs to the corrected owner. Verify the replacement wording against the installed
+skill and state separately whether the document change has landed and reached existing workers.
+
 ## Checkout and landing discipline
 
 Any change under `tools/goal/` is a control-plane task that lands on `main`, where the control plane runs. Put companion
 changes outside `tools/goal/` in a separate task targeting `dev`; integrating a control-plane change only into `dev`
 does not make it live. Follow the [control-plane landing mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
 
-In an explicitly assigned shared module workspace, commit your own paths often using `<task name>: <message>` and a
-`Goal-Task: <id>` trailer. Keep identifiers in commit metadata, never code or documents. Never reset, checkout, stash,
-clean or rebase that shared workspace. This mode does not authorize workers to move other workers' changes.
-
-Use assigned worktrees. Keep the live checkout stable. Address Git operations explicitly to their worktree.
+Each execution unit uses one shared worktree for its native Goal session, subagents and Grok CLI. Different units
+use separate worktrees. Assign file ownership before concurrent writes and designate one integration writer for
+staging and coherent commits. Keep identifiers in commit metadata, never code or documents. Preserve other writers'
+unfinished changes; do not reset, stash, clean or rebase shared work. Keep the live checkout stable and address Git
+operations explicitly to the assigned worktree.
 The controller normally owns rebasing, integration and promotion. When integration is the bottleneck, use
 [direct source integration](#direct-source-integration). Resolve conflicts without dropping the other side's required
 changes; ref updates preserve the current head and publication keeps its existing owner.
 
-Managers are resident roles, like staff in a company: the maintainer is often unreachable and the supermanager can
-be too. Never wait for either. When a decision would go to the supermanager and it does not answer, the managers
-concerned settle it among themselves (the producer decides its interface; for a shared choice the owner of the
-outcome decides after one exchange), record the decision and its reasons in the owner document or continuation, and
-proceed. If a choice truly cannot be made without the supermanager or the maintainer, park that item and keep working
-on everything else; the supermanager reviews recorded decisions when it returns.
+The resident supermanager is the only manager. Workers may author Goals; the manager adopts the scope, acceptance
+and allocation before a native execution unit consumes one. Units choose implementation order and may use native
+subagents and Grok CLI without adding manager sessions or a management tier. Domain names retain product-contract
+and module authority rather than identifying resident processes.
 
-On dev, workers resolve ambiguity reversibly, record lasting decisions in the owner document and tell their
-manager. Only conflicting requirements or missing access block work. Land a coherent increment and brief the rest.
-Workers may draft independent repairs with observed failures, owned paths and minimal proof; managers admit, merge
-or retire proposals through existing authority and duplicate checks.
+On dev, units resolve routine ambiguity reversibly from the Goal and owner documents. Record lasting decisions in
+the owner and return actionable conflicts to the manager. Only the genuinely dependent operation waits for missing
+authority. Preserve coherent source and propose independent repairs with their observed failure, write boundary and
+smallest useful check; the manager owns allocation and cross-unit priorities.
 
 Use [direct source integration](#direct-source-integration) when it applies; otherwise use the controller's retry
 process. A landing failure or a tool blocker of product work on dev resumes the same worker
@@ -156,7 +173,7 @@ Report specification conflicts with the conflicting outcomes and evidence. Do no
 Release acceptance and Goal closure follow [verification](verification.md), with the scoped outcomes on main and
 recorded evidence covering the promoted commit. They are separate from direct source integration.
 
-Managers read, act on and acknowledge inbox events. Before idling, establish the supported wakeup path. Use the
+The resident manager reads, acts on and acknowledges inbox events. Before idling, establish the supported wakeup path. Use the
 engine's idle mechanism rather than repeated model turns.
 
 A wrap-up instruction means checkpoint and pause promptly. Preserve work and write a continuation containing current
@@ -164,28 +181,39 @@ state, owner links, blockers and next actions. Resume only when authorized.
 
 # Delivery ownership
 
-The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns implementation to producers and
-outcomes to resident managers. Producers choose interfaces; outcome owners decide shared choices after one exchange
-with concerned managers. Record the reason and proceed when the supermanager or maintainer is unreachable. Park only
-work that genuinely depends on an unavailable decision.
+The resident manager owns release scope, Goal allocation, cross-unit decisions, live runtime configuration, recovery,
+progress reports and publication. It may use workers who author Goals to turn source gaps and unit proposals into complete
+executable contracts. Keep enough reviewed independent work for usable capacity; do not require a per-domain backlog
+quota or create work to satisfy a manager count. Register each executing unit's actual native Goal, pane and shared
+worktree through the [Goal tooling](../../tools/goal/README.md).
 
-A manager keeps the ordered list of outcomes for its Goal and short outcome briefs in its backlog, cross-Goal contracts
-and their frozen acceptance, answers to escalations, and a review of a sample of about two landings an hour whose
-defects become briefs. It synthesizes what its workers report into decisions and the next briefs. It does not
-dispatch, approve retries, preflight product briefs, write per-task acceptance, receive results, track custody,
-review evidence per task or send status messages and receipts.
+Units implement their assigned outcome, coordinate their native helpers within that boundary and preserve useful
+source across check failures. They return source revisions, reached native/browser observations and concrete owner
+actions. They may propose valuable independent work, naming the outcome, first editable files and actual dependency;
+proposals do not replace implementation or authorize another unit's files. The manager combines related proposals,
+avoids duplicate ownership and allocates the next Goal. If first source stalls, inspect the prompt's first writable
+function and remove irrelevant context, conflicting rules or stale check demands rather than repeating the attempt.
 
-Efficiency is measured without model tokens. An hourly report to the project's Telegram group, in Traditional
-Chinese, leads with new product code landed in the last full clock hour under apps, services and packages, excluding
-tests, stories, fixtures, recordings, generated files, JSON, evidence and documents, against the steady 20,000-line
-target and 40,000-line aim, then width, stopped tasks, ready briefs per Goal and allowance. It raises alarms for a
-two-hour total below the target, unfilled width, a Goal with fewer than three ready briefs, more than ten stopped
-tasks, and no product landing for 60 minutes. The supermanager acts on alarms. When a cause is unclear, it
-commissions a one-off measurement from session logs and the task store instead of a standing review. Lines are a
-measure, never a goal: quality comes first.
+Product and module owners decide their interfaces. Units communicate directly when an owner can settle a routine
+reversible choice; the resident resolves cross-unit conflicts, scope/resource trade-offs and faults needing live
+control-plane authority. Keep independent work moving while only the dependent seam waits. Units do not maintain
+manager continuations, domain-manager inboxes or recurring management turns.
 
-Control-plane owns delivery-tool defects; Performance owns check-host health. Managers keep complete ready briefs
-available for free width. A token-free watchdog [supervises the resident supermanager](supermanager.md).
+The existing hourly Traditional Chinese progress report continues. Pair qualifying Web campaign additions against
+the [throughput target](efficiency.md#output-and-flow) with overall product additions, accepted journeys, integrated
+revisions, visible product results and the remaining completion forecast. Exclude tests, stories, fixtures,
+recordings, generated files, JSON, evidence and documents from product-line counts. Report native unit/subagent starts
+and actual writing separately from checks, admission/integration waits, stopped operations and allowance. Count
+resumed usage once and avoid parent/child or managed/native duplication; mark missing attribution unknown.
+
+The manager handles real delivery alarms and the existing requested scheduling checkpoint. Old domain-manager
+counts, backlog quotas and coder floors do not establish useful capacity. When a cause is unclear, commission one
+bounded measurement rather than a standing review loop. Lines are a diagnostic, never permission to pad code. A
+[token-free watchdog](supermanager.md#resident-supervision) supervises the resident; every model wake has a counted cost.
+
+The control plane exists to maximize useful, accepted work per time and allowance. Repair workflow defects in their
+owner modules; check-host health retains its existing operational owner. Remove orchestration steps that add waiting
+without improving delivery, preserving the single publisher and separate release qualification.
 
 Runtime release, authenticated authority receiving, physical custody, workflow execution and delivered evidence are
 distinct facts. Source integration and a successful compiler command do not certify native runtime release or consume

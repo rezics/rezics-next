@@ -70,6 +70,8 @@ Decision: remote run custody admission and updates use the reader's 64 KiB seria
 
 Decision: per-physical remote checks publish native receipts and settlement details once as immutable evidence artifacts keyed by logical check, physical generation, host/run and SHA-256; bounded custody and result records retain byte-counted references and verify identity and content before accepting a verdict. Settlement references omit the native receipt and terminal cleanup remains separately recorded. Version-1 inline records remain readable.
 
+Decision: placed Kernel boot checks may emit an opt-in schema-1 `runner`/`phases` receipt over the caller's nonce-bound fd 3 channel. Remote queue is host slot wait; preparation and execution use one host boot-monotonic clock, and settlement uses the caller's monotonic clock through verified cleanup. Goal binds the receipt to its execution ID and command hash and owns its outer queue. Only an observed `command-started` marker can report live execution; absent live authority keeps the existing deadline and is reported as unavailable.
+
 Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
 fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
 controller-owned native/browser run after integration; the worker's minimal check covers changed-workspace typing
@@ -323,6 +325,16 @@ an exact terminal result with verified settlement can finish that check once. A 
 Missing or mismatched binding, no reservation identity, ambiguous attempts or incomplete terminal evidence stay
 unknown with custody retained. Do not reconstruct a host/run from log text, host names or timestamps, and do not
 signal another run or launch a replacement check during recovery.
+
+A completed remote wrapper exit 75 may receive physical cleanup without a compiler receipt only when the exact local
+runner is terminal and one original host/run remains bound with no native or settlement receipt. The receiver invokes
+cleanup-only reconciliation for that identity, records its positive cleanup independently, preserves exit 75 and the
+unknown compiler result, and does not replay the source. A newer terminal check does not establish the older run's
+custody; repeated receives reuse the older run's recorded cleanup.
+
+Decision: Cancelled cleanup validates stored remote attempt IDs with the same 1–96 ASCII letter, digit and hyphen
+contract as `reconcileRemoteRun`; local physical run IDs remain UUIDs, and cleanup still requires explicit cancellation
+and matching ownership and custody.
 
 Provision c with `performance: true`, 10 slots, `memoryMaxGiB: 20`, `cpuQuotaPercent: 3200` and
 `processorsPerSlot: 1`. These admission limits apply in addition to its `rezics-check.slice` limit of 24 GiB and

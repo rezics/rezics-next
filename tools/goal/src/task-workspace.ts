@@ -27,12 +27,72 @@ import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { gitOutputError } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
+import { sourceOnlyCompletionEligible } from './prompts.ts';
 import { installShared } from './shared-dependencies.ts';
+import { isMoneyPath } from './worker-check-budget.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Settings, Task } from './types.ts';
 
 export type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
 type FrozenCommit = { files: FrozenFile[]; formatterError?: string };
+type GitSpawnResult = {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  pid?: number;
+  error?: Error & { code?: string };
+  stderr?: Buffer | string | null;
+};
+
+export class GitCommandError extends Error {
+  readonly operation: string;
+  readonly command: string[];
+  readonly timeoutMs: number;
+  readonly errorCode: string | null;
+  readonly timedOut: boolean;
+  readonly status: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly stderr: string;
+  readonly processId: number | null;
+
+  constructor(
+    readonly cwd: string,
+    args: readonly string[],
+    result: GitSpawnResult,
+    timeoutMs: number,
+  ) {
+    const stderr =
+      typeof result.stderr === 'string' ? result.stderr.trim() : (result.stderr?.toString('utf8').trim() ?? '');
+    const cause = result.error;
+    const detail = stderr || cause?.message || `git exited ${result.status}`;
+    super(`git ${args[0]}: ${detail}`, { cause });
+    this.operation = `git ${args[0]}`;
+    this.command = ['git', ...args];
+    this.timeoutMs = timeoutMs;
+    this.errorCode = cause && 'code' in cause && typeof cause.code === 'string' ? cause.code : null;
+    this.timedOut = this.errorCode === 'ETIMEDOUT';
+    this.status = result.status;
+    this.signal = result.signal;
+    this.stderr = stderr;
+    this.processId = result.pid ?? null;
+  }
+
+  toJSON() {
+    return {
+      operation: this.operation,
+      command: this.command,
+      commandText: this.command.join(' '),
+      cwd: this.cwd,
+      timeoutMs: this.timeoutMs,
+      errorCode: this.errorCode,
+      timedOut: this.timedOut,
+      status: this.status,
+      signal: this.signal,
+      stderr: this.stderr,
+      processId: this.processId,
+      message: this.message,
+    };
+  }
+}
 
 export function frozenFiles(task: Task): Pick<FrozenFile, 'path' | 'hash'>[] {
   return (task as FrozenTask).frozenFiles ?? [];
@@ -150,15 +210,35 @@ export function git(cwd: string, args: string[], policy = defaultPolicy.merge): 
   });
   const overflow = gitOutputError(result, policy.gitBufferBytes);
   if (overflow) throw overflow;
-  if (result.status !== 0) {
-    const detail = result.stderr?.trim() || result.error?.message || `git exited ${result.status}`;
-    throw new Error(`git ${args[0]}: ${detail}`);
-  }
+  if (result.status !== 0) throw new GitCommandError(cwd, args, result, policy.commandTimeoutMs);
   return result.stdout.trimEnd();
 }
 
 export function installWorktreeDependencies(worktree: string, settings: Settings): void {
   installShared(worktree, undefined, undefined, settings.policy);
+}
+
+export function sourceOnlyDependencyInstallCanBeSkipped(settings: Settings, task: Task): boolean {
+  return sourceOnlyCompletionEligible({
+    task,
+    stateDirectory: settings.stateDirectory,
+    policy: settings.policy,
+  });
+}
+
+/** Apply the same launch policy while initial setup is still before Task creation. */
+export function initialSourceOnlyDependencyInstallCanBeSkipped(
+  settings: Settings,
+  input: {
+    task: Pick<Task, 'brief' | 'base' | 'worktree' | 'proofAuthorization'>;
+    proofCapture?: boolean;
+    pendingPaths?: readonly string[];
+  },
+): boolean {
+  if (input.proofCapture || input.pendingPaths?.some(isMoneyPath)) return false;
+  // sourceOnlyCompletionEligible reads only these fields from Task. Its callback runs after checkout and before freeze.
+  const candidate = { ...input.task, currentAttempt: 0 } as Task;
+  return sourceOnlyDependencyInstallCanBeSkipped(settings, candidate);
 }
 
 export function branchHead(settings: Settings, branch: string, createFromMain: boolean): string {
@@ -246,7 +326,10 @@ export function commitRetryLeftovers(settings: Settings, task: Task, attempt: nu
   const branch = git(task.worktree, ['branch', '--show-current'], settings.policy?.merge);
   if (branch !== task.branch)
     throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);
-  if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], settings.policy?.merge)) return;
+  // Normal untracked reporting avoids enumerating every file under an untracked tree. Once any source is found,
+  // `git add -A` still captures all meaningful tracked and untracked work in one bounded preparation.
+  const status = git(task.worktree, ['status', '--porcelain=v1', '--untracked-files=normal'], settings.policy?.merge);
+  if (!status) return;
   git(task.worktree, ['add', '-A'], settings.policy?.merge);
   git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`], settings.policy?.merge);
 }
@@ -301,7 +384,8 @@ export function ensureWorktree(settings: Settings, task: Task): void {
       git(settings.mainCheckout, ['worktree', 'prune'], settings.policy?.merge);
       git(settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch], settings.policy?.merge);
     }
-    if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree, settings);
+    if (task.brief.kind !== 'verification' && !sourceOnlyDependencyInstallCanBeSkipped(settings, task))
+      installWorktreeDependencies(task.worktree, settings);
   } finally {
     lease.release();
   }

@@ -470,6 +470,66 @@ export function verifyPublishedOutputTree(root: string, bytes: Buffer): void {
   if (JSON.stringify(collectOutputTree(root).members) !== JSON.stringify(tree.members)) fail('published tree changed');
 }
 
+type AdmittedCheckHostRun = Extract<ReturnType<typeof recognizeCheckHostRun>, { outcome: 'admitted' }>;
+
+function readPreparedSourceBinding(
+  workspaceRoot: string,
+  recognized: AdmittedCheckHostRun,
+  receiptRoot: string,
+): OutputTreeBinding {
+  const receipt = JSON.parse(
+    readOutputTreeFile(receiptRoot, `${recognized.runId}/prepared-inputs.json`, 4096).toString('utf8'),
+  ) as unknown;
+  keys(receipt, 'fileCount,host,manifestSha256,run,schema,sourceSha256,totalBytes');
+  if (
+    receipt.schema !== 1 ||
+    typeof receipt.host !== 'string' ||
+    typeof receipt.run !== 'string' ||
+    typeof receipt.sourceSha256 !== 'string' ||
+    typeof receipt.manifestSha256 !== 'string' ||
+    !HASH.test(receipt.manifestSha256) ||
+    !Number.isSafeInteger(receipt.fileCount) ||
+    (receipt.fileCount as number) < 0 ||
+    (receipt.fileCount as number) > 50_000 ||
+    !Number.isSafeInteger(receipt.totalBytes) ||
+    (receipt.totalBytes as number) < 0 ||
+    (receipt.totalBytes as number) > 1024 * 1024 * 1024
+  )
+    fail('prepared source receipt is invalid');
+  const source = {
+    host: receipt.host,
+    run: receipt.run,
+    sourceSha256: receipt.sourceSha256,
+  };
+  binding(source);
+  if (source.run !== recognized.runId) fail('prepared source receipt is stale');
+
+  const marker = JSON.parse(
+    readOutputTreeFile(workspaceRoot, '.remote-check-supervisor', 4096).toString('utf8'),
+  ) as unknown;
+  keys(marker, 'group,host,pid,run,schema,started,uid');
+  if (
+    marker.schema !== 1 ||
+    typeof marker.host !== 'string' ||
+    typeof marker.run !== 'string' ||
+    typeof marker.pid !== 'number' ||
+    typeof marker.started !== 'string' ||
+    typeof marker.group !== 'number' ||
+    typeof marker.uid !== 'number' ||
+    !Number.isSafeInteger(marker.uid) ||
+    marker.uid < 0 ||
+    !/^\d{1,20}$/.test(marker.started) ||
+    !new RegExp(CHECK_HOST_NAME_PATTERN).test(marker.host) ||
+    marker.run !== recognized.runId ||
+    marker.pid !== recognized.supervisor.pid ||
+    marker.started !== recognized.supervisor.started ||
+    marker.group !== recognized.supervisor.group
+  )
+    fail('physical supervisor marker changed after recognition');
+  if (marker.host !== source.host || marker.run !== source.run) fail('prepared source and physical marker disagree');
+  return source;
+}
+
 /** The official command is called once, after physical admission and prepared-source receipt verification. */
 export async function withKernelClientOutput(
   root: string,
@@ -477,6 +537,8 @@ export async function withKernelClientOutput(
   dependencies: {
     recognize?: typeof recognizeCheckHostRun;
     prepared?: (root: string, run: string) => OutputTreeBinding;
+    /** Alternate receipt root for filesystem-backed unit fixtures; production uses the installed host root. */
+    preparedReceiptRoot?: string;
     /** Additional already-declared ordinary outputs, such as a schema dump in combined emission. */
     returns?: readonly string[];
   } = {},
@@ -485,20 +547,7 @@ export async function withKernelClientOutput(
   if (recognized.outcome !== 'admitted') fail('capture requires admitted physical custody');
   const source = dependencies.prepared
     ? dependencies.prepared(root, recognized.runId)
-    : (() => {
-        const receiptRoot = '/srv/rezics-check/receipts';
-        const receipt = JSON.parse(
-          readOutputTreeFile(receiptRoot, `${recognized.runId}/prepared-inputs.json`, 4096).toString('utf8'),
-        ) as OutputTreeBinding & { schema: number };
-        if (receipt.schema !== 1) fail('prepared source receipt is missing or stale');
-        const marker = JSON.parse(readOutputTreeFile(root, '.remote-check-supervisor', 4096).toString('utf8')) as {
-          host: string;
-          run: string;
-        };
-        if (marker.host !== receipt.host || marker.run !== receipt.run)
-          fail('prepared source and physical marker disagree');
-        return { host: receipt.host, run: receipt.run, sourceSha256: receipt.sourceSha256 };
-      })();
+    : readPreparedSourceBinding(root, recognized, dependencies.preparedReceiptRoot ?? '/srv/rezics-check/receipts');
   binding(source);
   if (source.run !== recognized.runId) fail('prepared source receipt is stale');
   const transport = safeOutputTreePath(root, KERNEL_CLIENT_OUTPUT.transport, true);

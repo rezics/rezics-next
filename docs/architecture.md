@@ -6,17 +6,28 @@ configuration. Add backend capability only when the existing abstractions cannot
 Choose the simplest design that meets the requirement. Prefer mature engines, extensions, libraries and standards.
 A custom mechanism needs evidence of the gap it fills and a comparison with the existing alternatives.
 
-Every operation addresses a bounded neighbourhood. State its anchors, examined keys, expansion limits and indexed
-cost. Bound reads, writes, authorization, validation, projections and cleanup. A response limit does not bound a scan,
-sort, join, history walk or dependency fanout.
+Repository-owned models, contracts, formats and protocols have one canonical v1 baseline while the product remains
+unreleased. Remove superseded readers, writers, version selectors, compatibility adapters and duplicate models
+instead of preserving compatibility with versions that never shipped. Update producers, consumers and owner documents
+together. A cleanup is a model repair, not a blind renaming of version constants or loss of current behavior.
+
+When existing development state needs conversion or rebuilding, perform a bounded one-time operational migration,
+preserving records and evidence that remain useful. Do not make a permanent runtime compatibility path for that
+maintenance. Database migration history and operational evidence are not redundant model versions. Third-party
+protocols, provider APIs and standards retain their defined versions. The legacy reference stays read-only.
+
+Every synchronous operation or resumable step addresses a bounded neighbourhood. State its anchors, examined keys,
+expansion limits and indexed cost. Bound reads, writes, authorization, validation, projections and cleanup. A response
+limit does not bound a scan, sort, join, history walk or dependency fanout.
 
 The bound applies to the rows a design reads through its own keys, fanout and expansion limits. Physical work the
 database engine does for multiversion visibility, such as skipping versions from concurrent uncommitted transactions or
 versions not yet vacuumed, belongs to the engine and its maintenance. Do not build product-level budgets or custom
 primitives to meter it; use ordinary indexed SQL and keep the engine's maintenance healthy.
 
-A composed operation's ceiling is the derived sum of its parts' finite bounds. Owners set and record the numbers; a
-number that does not fit is raised, not a blocker. Only a design whose work grows with data is escalated.
+A composed step's ceiling is the derived sum of its parts' finite bounds. Owners set and record the numbers. When an
+ordinary journey needs more input than one bounded request, provide an indexed point operation or a resumable staged
+path. Raising the constant or routing a full scan to the client does not supply that path.
 
 Derive bounds on paper, enforce them with structural limits (full-key seeks, `LIMIT`, page and fan-out caps) and prove
 them with growth checks. Do not build runtime price protocols between owners: no pre-I/O quotes, prepaid funding,
@@ -24,15 +35,22 @@ no-refill ledgers or per-profile dispatch allowances. When a contract needs a pr
 documented static bound as a constant.
 
 Large jobs make bounded, resumable progress. Bound each step's examined work, expanded representation and output
-bytes independently of the total logical set. A page limit must not become a lifetime ceiling or require rewriting
-the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact contract.
+bytes independently of the total logical set. A page, batch, input envelope or synchronous work budget bounds a step,
+not the lifetime size of a logically unbounded collection, ordered structure or complete release. A step must not
+require rewriting the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact
+contract.
+
+Indexed local edits must not grow linearly with unrelated siblings or descendants. Work that consumes all n items
+must take O(n) or O(n log n) total work in bounded steps, without repeated full-prefix scans. Exceptions require an
+explicit product reason and measured proof.
 
 Share coverage, progress and byte-limit contracts across owners. Each domain keeps authority over its state,
 transaction, completion and effects. Reuse execution machinery only when those invariants and lifecycle agree.
 
-Decision: use the [pinned universal scalability audit](research/universal-scalability-audit.md) as an owner-review
-queue and evidence index; promote stable requirements into their architecture, product or verification owner, with
-the report linked as evidence.
+Decision: adopt the distinction between step bounds and supported data size above from the
+[pinned universal scalability audit](research/universal-scalability-audit.md) and its
+[follow-up](research/universal-scalability-follow-up.md). Use them as an owner-review queue and evidence index;
+adoption does not establish implementation.
 
 A capability must hold wherever its abstraction appears. Inclusion in public scope means the complete architectural
 capability across its surfaces, rather than one working example.
@@ -51,11 +69,98 @@ multiple interfaces, trace the shared client boundary first. Fix the earliest sh
 interaction or component that causes the failure, and verify representative consumers. Use a page-local fix only
 when the failure is specific to that page. Representation does not determine semantic meaning or authority.
 
+### First-release growth
+
+Decision: the first release is designed for several billion logical records. Evaluate 1 billion and 3 billion as
+scenarios, not cardinality limits, production measurements, an assumed object mix or permission to seed production.
+
+Use each owner's existing Cost entry, with distinct variables: global population `N`; largest relevant partition or
+hot key `H`; actually selected or changed population `n`; page count `k_rows` and admitted bytes `k_bytes` (the two
+units of `k`); query fanout `p`. Vary `N` and `H` independently of `n` and `k`. Name the indexed relations and key
+prefixes: a seek costs `O(log N)` in a global index or `O(log H)` in a partition-local index, not a constant probe.
+For each operation, record concrete ceilings or admitted inputs for candidate keys, reads including nested
+authorization, index probes, locks and lock duration, writes, events, peak heap, transferred/stored bytes and retries.
+Include indirect effects, cascades, projections and cleanup. Set finite page, byte, fanout and per-step ceilings;
+response size alone does not bound any of these costs.
+
+- **Point operations:** use exact full-key indexed access. Bound the number of candidate keys and nested reads,
+  authorization operands, probes, locks, changed rows and events independently of `N` and `H`, plus their index
+  descent and admitted body bytes. Denial and absence obey the same bound.
+- **Ordinary cursor pages:** where the filter/order/disclosure contract admits a merged indexed range, examine
+  at most `k_rows + p` candidates, including source lookahead. With at most `a` nested indexed reads/authorization
+  probes per candidate, charge up to `p + a (k_rows + p)` probes plus the range reads. Derive their global/local
+  descent costs separately; without nested probes the range costs `O(p log N + k_rows)` in a global index.
+  Heap and transfer grow only with the admitted page representation and `k_bytes`. Cap `p` and `a`; cursor depth
+  adds no prefix scan. A plan fetching a page per source must instead charge up to `p k_rows` candidates.
+  Reads take no mutation locks and produce no writes/events unless the owner names and bounds those effects.
+  Named exceptions such as residual disclosure filtering, exact counts or unindexed sorting state their actual
+  candidate, scan, sort and authorization cost in `N`, `H`, `n` and `p`. Bound the next step and persist continuation,
+  or supply an indexed point/staged alternative; a short or denied page cannot hide discarded candidates.
+- **Local changes:** changing one chapter touches only that chapter and bounded affected index paths, independent
+  of book size except indexed seeks. One status step updates bounded progress/frontier state without reading or
+  rewriting accumulated progress. Charge affected index entries, history and events explicitly; a small response
+  does not make a whole-book validation or progress rewrite local.
+- **Whole-scope work:** enumerate the actual scope `n` in total `O(n)` or `O(n log n)` logical work, with the
+  separately derived indexed-seek costs. Keep a persistent frontier committed with each step's effects, finite
+  examined keys, writes, events, bytes, heap and lock duration, and no repeated full-prefix scans. Schedule fairly
+  across scopes/homes so a large or hot scope cannot starve others. State the admitted concurrent-change and restart
+  semantics. Sum all steps: for `w` row writes and `i` maintained index entries per row, charge `O(w i)` index
+  mutations plus their seek costs, emitted events and serialized bytes separately from page size. Count every
+  failed/replayed attempt's reads, locks, writes and bytes; bound retries per invocation, persist resumable work on
+  exhaustion and make replay effects idempotent. State total retry assumptions instead of claiming a finite
+  completion bound under unlimited contention.
+
+Prove logical work with the existing [three-scale native counters](../services/kernel/performance-contract.md#growth-checks)
+and Cost entries, using the audit and follow-up above as the existing review queue. Grow unrelated population and
+history independently, and exercise skew/hot homes, deep cursors, denied and empty results. Compare native access
+plans across scales, including candidate removal and nested authorization/index probes; measure request/response,
+stored and expanded bytes and peak heap where meaningful. Small fixtures test the derivation, not billion-row
+capacity. Keep native evidence distinct from portable/source evidence; no new checklist or whole-site gate follows.
+
+Derive physical capacity separately for both population scenarios under named workload and storage assumptions:
+object/relationship/history mix, size distributions, retention, request mix, concurrency, arrival rates and skew.
+Estimate primary bytes as the sum of each population times its measured per-record bytes, then itemize index and
+search amplification, WAL rate/retention, replicas, temporary space and free-space headroom. State active partition
+placement, working-set memory and I/O, hot-key lock contention and serialized service rates; sharding does not split
+a required write order. Compare measured service rates with foreground arrivals and background maintenance demand.
+For a backlog `B`, arrival rate `lambda` and sustainable drain rate `mu` in the same work units, catch-up takes
+`B / (mu - lambda)` only when `mu > lambda`; otherwise it cannot drain under those assumptions. Include index,
+event and retry amplification in those rates. Report estimates and their assumptions separately from measured
+deployment results: neither a small fixture, a shard count nor a Big-O derivation proves deployed capacity.
+
+### Release selection and retention
+
+A release selects an exact immutable version under its owner's current publication authority. A point publish
+changes only the selected item and affected index paths. A large selection is prepared and sealed in bounded
+steps, then made current by one atomic compare-and-set under current source authority. Until activation the
+previous selection remains current. Reuse this lifecycle across content; an ordinary article can publish in one
+step, and a Book adds ordered membership and source rules through its
+[Content contract](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).
+
+Publication selects a version. [Access](../services/kernel/src/access/README.md) and the target owner decide
+what the reader may see now. [Commerce](../services/kernel/src/commerce/README.md) owns offers, payment and
+eligibility for the exact paid benefit; neither an active release nor a receipt alone authorizes use. Public
+metadata and protected bodies may have different visibility. An authorization proof used at activation must
+remain current through that commit under the authoritative owners; a prior successful check or later read
+withholding does not close the activation race.
+
+The storage owner may reclaim an unpublished candidate only after proving terminal state and the absence of
+retained references, then fencing new writes and references before bounded, resumable keyset deletion. An expired
+deadline starts eligibility review. Withdrawal alone cannot establish absence of references. Preserve reachable
+versions and shared storage, including exact releases, current pointers, active work and retention holds; if
+retention cannot be determined, keep the data. Historical deletion and legal retention still follow the
+[deletion policy](deletion.md). Reuse the lifecycle contract across owners; share an implementation only where
+transaction, authority and retention invariants match.
+
 ## Modules and boundaries
 
 Decision: a dev candidate that adds boundary violations lands; the architecture check does not hold it. The train
 records each Goal's net-new violations, and the same day an urgent repair brief per Goal, owned by its manager, removes
 them as one batch. Development continues while the boundary baseline cannot drift.
+
+Decision: Hosted Reading uses Semantic's type-only DefinitionRoutes contract and Platform's route-metadata entry;
+Kernel Platform resolves Zone labels through the Zones public entry; Hosted Subject schema factories memoize the
+shared UUID schema and the subject limit re-exports the literal leaf.
 
 Capabilities are modules with one owner and a declared public surface. Their structure is checked by tools, not by
 convention. The evidence is in [engineering modularity (Opus 5.5)](research/engineering-modularity-opus-5-5.md) and

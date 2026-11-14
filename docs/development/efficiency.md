@@ -9,23 +9,57 @@ Two measures run together, and neither replaces the other:
   cannot create journeys. A journey is accepted only when it works end to end on the integrated revision, seen in the
   running-product walkthrough, which runs at least every three hours, or by a native receipt. Track the burn-down of
   the remaining journeys and the projected finish date.
-- **Landed product lines measure throughput**, against the hourly floor below. They show whether the work system is
-  producing at the rate the burn-down needs.
+- **Landed product lines measure throughput.** The overall total shows whether the work system is producing at the
+  rate the burn-down needs; report it separately as a measure, not another target. The Web campaign target is defined
+  below.
 
-Landings and attempts are diagnostics; allowance and worker occupancy explain cost.
+Landings and attempts are diagnostics; allowance and worker occupancy explain cost. Compare windows only across
+comparable outcome classes, stages, model profiles and actual worker exposure, not configured width or raw task count.
+Pair new product source and landed results with attributable coding worker-hours and allowance. Show active writing,
+startup, waiting, landing and idle-slot causes separately, and label missing attribution. Use first useful source and
+source checkpoint frequency to distinguish weak prompts or oversized outcomes from admission and integration delays.
+When comparable evidence is missing, report the gap and intervene against the absolute target; do not claim improvement
+from a different work mix or concurrency.
 
 Each coding worker targets at least 1,000 landed product lines per worker-hour. Review workers individually and
 separate source delivery, check waits, and unknown attribution. When a worker is below target, repair the brief,
 admission, or verification cause and keep independent code moving. Do not add code merely to meet the count.
 
-Target 20,000 landed product lines per hour, aiming for 40,000, alongside accepted journeys and quality. Count
-additions under `apps/`, `services/` and `packages/` excluding tests, stories, fixtures, recordings, JSON, snapshots
-and generated files, including emitted declarations. Never pad output or subtract deletions.
+Report overall landed product additions across `apps/`, `services/` and `packages/` separately from Web campaign
+output, alongside accepted journeys and quality. Exclude tests, stories, fixtures, recordings, JSON, snapshots and
+generated files, including emitted declarations. Count additions without subtracting deletions; never pad output.
 
-Size a complete journey, including backend and interface, to finish in about an hour (usually 2,000–3,000 lines).
-The controller returns product briefs under 1,200 estimated lines or over 4,000 body characters. Split only at a
-real dependency; complete independent parts now and hold only the receiving seam. Continue the remainder after
-most of the brief is built. Report reverts, review findings and repeated failures beside throughput.
+During the current Web reconstruction campaign, target at least 50,000 high-quality landed product additions per
+completed UTC hour. The Web boundary is the `web-app`, `auth-pages` and `ui` paths in
+[`docs/architecture/modules.json`](../architecture/modules.json): `apps/web/src/**`, `apps/auth/src/**` and
+`packages/ui/src/**`. Apply the exclusions above; also exclude docs and formatting-only changes from the campaign.
+
+The line count does not certify usefulness or quality. Changed workflows, integrated source and published visual
+review are part of every delivery assessment. Duplicated implementations, unnecessary abstractions and artificial
+expansion do not qualify. Remove bad code when it improves the product, even if doing so lowers measured additions.
+Report actual shortfalls without changing the measure.
+
+Decision: The frozen report measures Web additions from the pinned `dev` revision, preserves all-product
+throughput separately, and labels unavailable Web attribution unknown.
+
+The resident manager owns Goal allocation, priority, useful unit starts and integration follow-through without waiting
+for another maintainer prompt. Set unit and native-subagent width from independent writable outcomes, authorized
+allowance and shared host capacity. Confirm execution from native identity and source checkpoints; queued work or an
+active label alone is not productive work. Resolve idle supply, repeated setup failure and integration bottlenecks in
+their owner modules rather than repeating a failed attempt.
+
+Every hourly delivery assessment pairs the product-line measure with changed routes, integrated revisions and
+published visual results. Choose the next-hour action from observed source output and visible product outcomes. A
+six-hour reconstruction interval without useful visible delivery is a delivery failure requiring immediate
+replanning. Storybook and verification assist reconstruction; during the authorized source-only wave, do not insert
+frontend tests or typing as a prerequisite for writing or review publication. Keep the single publication program
+moving under the [review cadence](storybook.md#review-publication-cadence), preserving native authorization, money
+semantics and the separate release acceptance obligations.
+
+Size one coherent outcome for one worker, typically 1,000–2,000 product lines in about an hour. This is an
+estimate, not a quota. Split only at a real dependency; complete independent parts and hold only their receiving
+seam. Follow [source batches](delivery.md#source-batches) for progress and help. Report reverts, findings and
+repeated failures beside throughput.
 
 Measure flow with `goal report --flow`. The manager host must alarm hourly against these absolute targets:
 
@@ -38,6 +72,9 @@ Handle a breached target the same day. Separate measured timestamps and duration
 missing timing.
 
 Decision: The hourly report reads each UTC bucket once, normalizes landing targets during aggregation, and reports conflicting task attribution as unknown; lifecycle and other window policies remain unchanged.
+
+The manager allocates complete release Goals from live gaps and worker proposals. Compare output on matched work,
+model, stage and actual exposure, using first-source evidence to target flow loss.
 
 The control plane exists to cut the cost of each landed outcome, and agents are its resolvers. A problem an agent
 can fix where it appears goes to an agent at that point, and the pipeline continues. Such problems include a merge
@@ -53,7 +90,11 @@ check even though dev is the unstable branch; those checks moved to post-merge v
 
 Decision: check-result planning batch-reads committed workspace manifests into one cached tree projection for closure, package tree IDs and global inputs; the default reuse policy stays unchanged.
 
-Trust agents. In the delivery workflow, efficiency outranks defensive safety: REZICS is a community product, and a
+Trust the manager’s decisions and workers’ evidence by default. Reuse the owner’s result; do not repeat their investigation
+or validation unless a concrete failure, conflicting evidence, or missing required proof changes a decision. Give the owner
+the exact discrepancy and check only the missing evidence.
+
+In the delivery workflow, efficiency outranks defensive safety: REZICS is a community product, and a
 mistake on dev is caught and returned after integration. A guard that distrusts agent work is defensive programming
 against the agents, and it must earn its cost. Such guards refuse, reject, fail an attempt, forbid a check or
 re-verify trusted work. A guard is kept only when its measured catches of real defects outweigh the attempts, hours
@@ -82,42 +123,39 @@ record the effect, including when it is not yet observable.
   unbound seam. A mock binding does not finish a journey.
 - Make a task one complete outcome of about 1,500 to 3,000 product lines, landed with one check: a whole capability
   row, a whole system or one migration step across a module. Chain similar work in one worker, not in slivers. State
-  the expected line count in the brief. Keep at most six tasks in flight per Goal.
+  the expected line count in the brief. An honest under-floor estimate on a complete outcome is not a dispatch return.
+  Keep at most 32 tasks in flight per Goal, including retries and released dependencies. Waiting checks and landing
+  count; dependency-held, urgent and control-plane tasks are exempt; admit ready work in order.
 - Repairs of integrated code that is broken on dev (type diagnostics, boot failures, failing tests named in landed
-  summaries) go out as urgent briefs under the manager's urgent grant. They are exempt from the size floor, carry an
-  honest estimate, and are batched per area, never one per diagnostic.
-- Take outcomes in this order: capability rows still red, each built end to end until its composed acceptance passes;
-  systems that [scope](../scope.md) lists as built but closed, finished to the polish bar and kept closed; then the
-  [architecture migration](../research/architecture-paradigms-opus-5-5.md) steps in the Goal's own modules. Deferred
-  systems stay deferred until the scope table changes.
+  summaries) go out as urgent briefs under the manager's urgent grant. They carry an honest estimate and are batched
+  per area, never one per diagnostic. The dispatch estimate floor is advisory.
+- Finish released capability rows end to end until their composed acceptance passes. Current [scope](../scope.md)
+  controls admission: closed and deferred systems receive no proactive implementation, research or polish without
+  explicit authorization. A historical checklist does not reopen them.
 - Commission research only for a named open choice with a consumer task; use one report by default.
 - Send a handoff as one message containing the revision, remaining question, proposed decision and affected consumer.
   Co-owner review answers accept or one counterexample.
 
-Decision: enforce the six-task per-Goal limit at worker start admission; waiting checks and landing count, dependency-held, urgent and control-plane tasks are exempt, and ready work starts in order when a slot opens.
+Decision: enforce the 32-task per-Goal limit at worker start admission.
 
 ## Operating discipline
 
 - The supermanager decides operational and engineering trade-offs itself, by the best efficiency, and does not wait for
   the maintainer. It reports the decision afterwards.
-- Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
-  one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
-- Decision: manager and worker prompts link here; managers keep the next independent writable slice ready, and workers
-  checkpoint then repair in-scope evidence, parking only blocked checks or dependencies.
-- Give each worker a writable outcome and an owned boundary. Name the failing behaviour, current evidence and the
-  smallest required check. Let the worker choose the repair order and take the next evidenced fix within that
-  boundary; coordinate a new boundary before touching another worker's scope. Checkpoint coherent source and keep
-  the next independent repair ready before the current one parks. While its check runs, admit that repair within
-  existing limits. Return exact failures to their source owner. At review, track writing, ready repairs, admission
-  waits and verification separately; distinguish missing implementation from unintegrated or unverified source.
-- Use the hourly report to detect lost writing time and empty writable queues. The supermanager acts on the
-  largest evidenced loss and checks the next sample without a maintainer prompt. Managers turn defects and
-  [worker proposals](delivery.md#checkout-and-landing-discipline) into ready repairs before raising width.
+- The resident is the only manager. At scheduling checkpoints, inspect the registered native units, their consumed
+  Goals, first source and actionable failures. Preserve productive Goal continuity; do not renew domain managers.
+  Control-plane changes go to an implementation worker with an owned boundary.
+- Follow [delivery ownership](delivery.md#delivery-ownership). Keep the next independent assignment ready before
+  the current one parks. Use worker proposals and existing defects to refill; do not wait for the manager to
+  discover every repair personally.
+- Separate coding, ready work, admission waits and verification in the flow report. Return actionable failures to
+  their source owners in batches. When a check parks one slice, admit independent implementations within measured
+  capacity. Only the dependent change waits. The supermanager acts on the largest observed loss without waiting for
+  the maintainer and checks the next comparable sample.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.
-- Managers challenge any rule or instruction, the supermanager's included, as soon as evidence shows it produces bad
-  results.
+- Every agent promptly challenges a rule or instruction, the manager's included, when evidence shows harmful results.
   Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
   Keep allowance balances, account selection and operating ceilings in private configuration.
 
@@ -148,8 +186,10 @@ cross-module contracts, security and money.
 Decision: the cross-module evidence and admission work for one reviewed Person across VN and anime retains the routed
 model default.
 
-Record attempts and accepted landings by Goal, task class and model profile. Include failed, replaced and abandoned
-attempts. Count resumed cumulative usage by deltas, once.
+Record attempts and accepted landings by Goal, task class and model profile, including native unit/subagent sessions
+and failed, replaced or abandoned work. Count cumulative usage by deltas, once; exclude child totals already included
+in a parent aggregate. Do not fabricate managed task starts to represent native activity. Preserve existing progress
+reports, adding native activity without double-counting historical records; mark unavailable attribution unknown.
 
 Maintain an hourly diagnostic ledger of allowance, wait requests, replacement input, compactions and acceptance
 failures alongside the flow report. Use it to locate avoidable costs in briefs, exploration, rereads, polling,
@@ -191,8 +231,9 @@ Plan against each pool's observed reset and remaining allowance. When real work 
 whose allowance expires first and queue work early enough to save coherent changes before reset. Stay within explicit
 pauses, reserves, pacing and host limits; leave allowance unused when no suitable work is ready.
 
-Decision: The Claude allowance keeps the resident supermanager running and nothing else. It routes no workers, and it
-holds no reserve beyond that; workers run on Codex and Cursor.
+Execution uses the currently authorized pools and service tier. Native units and their subagents must not silently
+activate another provider or a higher tier. Explicitly authorized Grok research runs inside the unit's shared worktree
+and is measured separately from Codex execution. Private configuration owns account selection and allowance policy.
 
 ## Incident method
 
@@ -204,7 +245,7 @@ observations from hypotheses; do not invent missing timing or claim a fix withou
 Repair each class where it appears: give the problem to an agent at that point (resolver, same-session fix,
 regeneration), so the pipeline continues. Add a check that refuses or ends work only when no agent can repair the
 problem in place. Register that check in the guard ledger with the defect it prevents, and price it from its first
-firing. Tell every manager the adopted rule and its owner link. Verify its effect in the next hourly
+firing. Send the manager and affected units the adopted rule and its owner link. Verify its effect in the next hourly
 report using comparable evidence; if the effect is not yet observable, record that limit and the next observation.
 Use the [worked incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis)
 when preparing the cause-to-fix record.

@@ -12,6 +12,10 @@ cannot select its evidence. Admitted execution continues inside the same run wit
 optional recognition/placement/database dependencies are inert test seams, never environment configuration. A null
 placement response without physical recognition is refused with status 75.
 
+Decision: `startWorkerCheck` validates migrations for exact-checkout Kernel `check`, `test` and `typecheck`
+entrypoints, including schema-emission options, before the worker budget stamp or remote upload. It uses the shared
+side-effect-free validator, while the Kernel receiver retains validation for different frozen input or clock.
+
 The root entrypoint computes affected workspaces and their transitive dependent closure before admission. An empty
 selection returns zero; selected pure workspaces execute locally without host or database work. A selection containing
 SQL work relocates in its entirety before any database or workspace process starts. The remote command carries a

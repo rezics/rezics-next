@@ -82,8 +82,22 @@ export type CheckCleanupReceipt = {
   remoteTerminal: boolean | null;
   resultTerminal: boolean;
   remoteRun?: { host: string; id: string };
+  /** Verified remote process cleanup is independent of native/compiler result custody. */
+  physicalCleanup?: CheckRemotePhysicalCleanup;
   reason?: string;
   completedAt: string;
+};
+
+export type CheckRemotePhysicalCleanup = {
+  schema: 1;
+  host: string;
+  run: string;
+  status: 'verified' | 'unknown';
+  supervisorStopped: boolean;
+  commandGroupTerminal: boolean;
+  containersRemoved: boolean;
+  runDirectoryRemoved: boolean;
+  failures: string[];
 };
 
 export type CheckRemoteAttempt = {
@@ -97,6 +111,8 @@ export type CheckRemoteAttempt = {
   nativeReference?: CheckRemoteEvidenceReference;
   settlementReference?: CheckRemoteEvidenceReference;
   cleanup?: unknown;
+  /** Cleanup-only recovery never fills native or settlement evidence. */
+  physicalCleanup?: CheckRemotePhysicalCleanup;
   reason?: string;
 };
 

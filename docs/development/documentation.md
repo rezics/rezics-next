@@ -9,21 +9,22 @@ Long, append-only documents dilute the current rules.
 | Layer      | Holds                                                                                           | Single authority                                | Delivered                                                                    | Budget as received                                                |
 | ---------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Global     | Precedence, language, one authority, legacy, temporary files, IDs, where each role's text lives | `AGENTS.md`                                     | Loaded natively by Codex, Claude Code and Cursor                             | 3,000 bytes                                                       |
-| Role       | How a worker, manager, researcher or supermanager works                                         | `tools/goal/prompts/<role>.md`                  | Rendered by the control plane; for the supermanager, by a session-start hook | worker 3,500; manager 5,000; researcher 2,500; supermanager 8,000 |
+| Role       | Worker, execution-unit and research procedure; resident responsibilities | Active `tools/goal/prompts/` templates; `supermanager.md` for the resident | Only the assigned role; no domain-manager bundle | worker 3,500; researcher 2,500; resident 8,000 |
 | Condition  | Text for one mode: retry, rebase, proof run, shared workspace, deferred checks                  | `tools/goal/prompts/conditions/<id>.md`         | Added by the control plane when the condition holds                          | 1,500 in total                                                    |
-| Goal       | Outcome, Done when, scope, ownership, links to adopted decisions                                | `docs/goals/<goal>.md`                          | Manager opening                                                              | 12,000                                                            |
-| Goal state | Live tasks, open decisions, next actions; no rules                                              | The manager's continuation, with fixed headings | Manager opening and renewal                                                  | 8,000                                                             |
+| Goal       | Outcome, Done when, scope, ownership, links to adopted decisions                                | `docs/goals/<goal>.md`                          | Goal authoring and native unit consumption                                    | 12,000                                                            |
+| Goal state | Native Goal progress, open decisions and next actions; no rules                                | Native session and short local continuation     | Unit continuation and resident scheduling                                    | 8,000                                                             |
 | Task       | Outcome, paths, acceptance, decisions made for this task, owner sections                        | The brief                                       | Worker prompt                                                                | 12,288                                                            |
 | Reference  | Owner documents, module READMEs, runbooks, skill stages                                         | Tracked files                                   | Read on demand, by section                                                   | [Budgets](#budgets)                                               |
-| Memory     | Local facts: accounts, allowances, hosts, credential locations, people, machine quirks          | The supermanager's memory directory             | Index loaded natively                                                        | Index 12,000; total 60,000                                        |
+| Local state | Runtime identities, panes, worktrees, allowances and credential pointers; no rules             | Private controller configuration and state      | Read only for the assigned operation                                         | No default context loading                                        |
 
-Session-start totals: worker 20,000 bytes, manager 30,000, researcher 15,000, supermanager 30,000. These numbers are
+Session-start totals: worker or execution unit 20,000 bytes, researcher 15,000, resident manager 30,000. These numbers are
 starting values for removing contradictions, history and repetition. They are not a claim about current models'
 context limits. Prompt manifests calibrate them on the models REZICS runs: a budget changes when measured outcomes
 say so. Budgets bound what loads at session start. An agent may read further when its question needs it; nothing mandates a whole-file read
 of a reference.
 
-Role templates in `tools/goal/prompts/` are the role text. Condition byte budgets count filled condition template
+Active templates in `tools/goal/prompts/` supply worker, unit and research role text;
+[supermanager](supermanager.md) owns the resident role. Remove retired manager templates from active loading. Condition byte budgets count filled condition template
 bodies; check-condition footers are appended once and counted in the session total. Minimal verification omits the
 open-session wait footer, asks for a typecheck-only wrapper check after the outcome is written (plus money-path tests
 when those paths changed), and routes that check-host command through the wrapper; other check conditions keep the wait
@@ -36,9 +37,10 @@ footer. Runtime command argv and wrapper-result lines are extras, not condition-
 - **No silent overrides.** The control plane resolves conflicts before dispatch, so no rendered prompt holds two
   contradictory instructions. Which checks run, where, and whether they are required or deferred is a typed check plan
   in the task. A condition fragment cannot override the brief.
-- **No history in instructions.** A manager's local working file is not an instruction layer. Durable decisions go
-  to owner documents, Done when goes to the Goal definition, and live state goes to the continuation. When a rule
-  changes, rewrite it and delete the old text; Git keeps history.
+- **No history in instructions.** Local working files are not an instruction layer. Durable decisions go to owner
+  documents, Done when goes to the Goal and live state stays with the native session or short continuation. Rewrite
+  changed rules and remove obsolete prompts, instructions and broken references in the same change; Git keeps history.
+  A unit loads its Goal and linked owner sections, not former domain-manager prompts, inboxes or backlog duties.
 - **Prose becomes a check.** When the input, the violation and the recovery can be stated without judgment, the rule
   becomes a check at the boundary nearest the effect: dispatch, launch or landing. The prose is then deleted.
   A hook gives early feedback, but it cannot be the only enforcement, because other engines bypass it.
@@ -157,10 +159,12 @@ The same module checks briefs at dispatch:
 - no reads of `.temp/goal/` or of absolute main-checkout paths;
 - no research cited as authority.
 
-### Supermanager memory
+### Local operating state
 
-Memory holds local facts and pointers to owner documents. Rules and decisions live in the repository. The index is
-at most 12,000 bytes, and the standing asks list only asks that are still open.
+Runtime sessions, termspaces panes, unit worktrees, allowance readings and private account configuration stay in
+untracked controller state. A native unit identity is not a managed-task record. Do not place rules, lessons or
+product decisions in agent memory; record them in the existing repository owner. Keep only the local facts needed
+for the current operation, and do not load historical manager continuations by default.
 
 ## Research behind this decision
 
