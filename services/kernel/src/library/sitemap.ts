@@ -1,8 +1,14 @@
 import type { Pool } from 'pg';
-import { deadlineClient, admitGroup } from './access-port.ts';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
+import { admitGroup } from './access-port.ts';
 import { PlatformClosedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access } from '../request/access.ts';
@@ -46,16 +52,33 @@ export async function listSitemapCollections(
   let checkpoint: SitemapPosition | null = cursor;
   let budget = 4 * limit;
   for (let visited = 0; visited < 4 && partition < PARTITIONS && budget > 0 && items.length < limit; visited++) {
-    const observation = await withConnection(pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      const current = await readPartition(bounded, partition);
-      if (!current || current.writeState === 'moved') throw new ProblemError('partition_unavailable');
-      if (cursor?.partition === partition && cursor.epoch !== current.epoch) throw new ProblemError('stale_cursor');
-      // Validate the exhausted partition's epoch before crossing its boundary. It is not an empty unvisited partition.
-      if (cursor?.partition === partition && cursor.exhausted) return { epoch: current.epoch, rows: null };
-      const rows = await readSitemapCandidates(bounded, { partition, after, limit: budget });
-      return { epoch: current.epoch, rows };
-    });
+    const observation = await withBoundedReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        const current = await readPartition(client, partition);
+        if (!current || current.writeState === 'moved') throw new ProblemError('partition_unavailable');
+        if (cursor?.partition === partition && cursor.epoch !== current.epoch) throw new ProblemError('stale_cursor');
+        // Validate the exhausted partition's epoch before crossing its boundary. It is not an empty unvisited partition.
+        if (cursor?.partition === partition && cursor.exhausted) return { epoch: current.epoch, rows: null };
+        const rows = await readSitemapCandidates(client, { partition, after, limit: budget });
+        return { epoch: current.epoch, rows };
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error: unknown) {
+          if (error instanceof CommandUnavailableError) return error;
+          try {
+            throwAccessUnavailable(error);
+          } catch (mapped) {
+            return mapped;
+          }
+          return error;
+        },
+        isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+        isUncertainSettledQueryError: () => true,
+      },
+    );
     if (observation.rows === null) {
       partition++;
       after = null;
