@@ -173,18 +173,8 @@ test('VNDB release bindings follow current ranked Scheme and Concept evidence in
   const releasedConceptId = '00000000-0000-4000-8000-000000000105';
   const currentSubjects: Record<string, NativeSubject> = {
     [devSchemeId]: nativeSubject(devSchemeId, 'skos:ConceptScheme', developmentStatusSchemeUri),
-    [statusOneId]: nativeSubject(
-      statusOneId,
-      'skos:Concept',
-      developmentStatusConceptUri('1'),
-      devSchemeId,
-    ),
-    [statusTwoId]: nativeSubject(
-      statusTwoId,
-      'skos:Concept',
-      developmentStatusConceptUri('2'),
-      devSchemeId,
-    ),
+    [statusOneId]: nativeSubject(statusOneId, 'skos:Concept', developmentStatusConceptUri('1'), devSchemeId),
+    [statusTwoId]: nativeSubject(statusTwoId, 'skos:Concept', developmentStatusConceptUri('2'), devSchemeId),
     [releasedSchemeId]: nativeSubject(releasedSchemeId, 'skos:ConceptScheme', releasedStateSchemeUri),
     [releasedConceptId]: nativeSubject(
       releasedConceptId,
@@ -220,12 +210,7 @@ test('VNDB release bindings follow current ranked Scheme and Concept evidence in
     `${releasedStateTaxonomy}:TBA`,
   ].sort();
   const unaffectedCodes = [`${developmentStatusTaxonomy}:2`, `${releasedStateTaxonomy}:TBA`].sort();
-  const setEvidence = (
-    id: string,
-    property: string,
-    content: string,
-    rank: 'normal' | 'preferred' | 'deprecated',
-  ) => {
+  const setEvidence = (id: string, property: string, content: string, rank: 'normal' | 'preferred' | 'deprecated') => {
     currentSubjects[id]!.subject.statements[property] = [valueStatement(content, rank)];
   };
 

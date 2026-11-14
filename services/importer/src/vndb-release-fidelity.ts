@@ -158,17 +158,12 @@ function adoptedContents(read: unknown, property: string): string[] {
   const statements = (
     read as {
       subject?: {
-        statements?: Record<
-          string,
-          { rank: 'normal' | 'preferred' | 'deprecated'; value?: { content?: unknown } }[]
-        >;
+        statements?: Record<string, { rank: 'normal' | 'preferred' | 'deprecated'; value?: { content?: unknown } }[]>;
       };
     }
   ).subject?.statements?.[property];
   return (Array.isArray(statements) ? statements : []).flatMap((statement) =>
-    statement.rank !== 'deprecated' && typeof statement.value?.content === 'string'
-      ? [statement.value.content]
-      : [],
+    statement.rank !== 'deprecated' && typeof statement.value?.content === 'string' ? [statement.value.content] : [],
   );
 }
 
