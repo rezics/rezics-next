@@ -26,10 +26,13 @@ import {
   relationFacetProperty,
 } from '@rezics/filter';
 import type { Pool, PoolClient } from 'pg';
+import { AccessUnavailableError } from '../access/unavailable.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readFences } from '../content/source-fences.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   MAX_RELATION_FACET_VALUES,
@@ -97,6 +100,7 @@ type SourceSubject = {
 };
 type Prepared = {
   partition: number;
+  deadline: number;
   runtime: Awaited<ReturnType<typeof activeRelease>>;
   rows: SelectedStatement[];
   releases: Map<string, Release | null>;
@@ -495,7 +499,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     return result;
   };
 
-  async function prepareMatch(partition: number, probes: readonly RelationFacetProbe[]) {
+  async function prepareMatch(partition: number, probes: readonly RelationFacetProbe[], deadline: number) {
     if (!Number.isInteger(partition) || partition < 0 || partition >= 4096 || !Array.isArray(probes))
       throw new TypeError('Invalid relation probe page');
     for (const probe of probes) {
@@ -649,7 +653,16 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     });
     if (!snapshot) return null;
     const { runtime, subjects, releases, cursors, rows, pending } = snapshot;
-    if (pending) await rebuild.run(pool, { route: pending.route, subject_id: pending.id });
+    if (pending)
+      await withBoundedReadConnection(
+        pool,
+        deadline,
+        (client) => rebuild.run(client, { route: pending.route, subject_id: pending.id }),
+        {
+          deadlineError: () => new AccessUnavailableError('deadline'),
+          isUncertainSettledQueryError: () => true,
+        },
+      );
     const observations = new Map<string, string>();
     const statements = await disclosed(rows, releases, subjects, runtime, observations);
     const admittedProbes = [...admitted.values()].flat();
@@ -718,7 +731,11 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
               previous_candidate: cursor.after_candidate,
             });
         }
-        if (progress.length) await withConnection(pool, (client) => writeCursor.run(client, { progress }));
+        if (progress.length)
+          await withBoundedReadConnection(pool, deadline, (client) => writeCursor.run(client, { progress }), {
+            deadlineError: () => new AccessUnavailableError('deadline'),
+            isUncertainSettledQueryError: () => true,
+          });
         if (!(await runtimeIsCurrent(runtime))) return probes.map(() => 'not_proven');
         return probes.map((p) => results.get(keyOf(p)) ?? 'not_proven');
       },
@@ -733,8 +750,9 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       releases: ReadonlyMap<string, Release>,
       partition: number,
     ): Promise<Prepared> {
+      const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
       const runtime = await activeRelease(client);
-      const prepared: Prepared = { partition, runtime, rows: [], releases: new Map(releases), subjects: [] };
+      const prepared: Prepared = { partition, deadline, runtime, rows: [], releases: new Map(releases), subjects: [] };
       const requests: { route: number; subject_id: string; property: string }[] = [];
       for (const subject of subjects) {
         const release = runtime?.release;
@@ -768,7 +786,16 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         ]),
       );
       const pending = prepared.subjects.find(({ subject }) => !subject.selection_ready);
-      if (pending) await rebuild.run(pool, { route: pending.subject.route, subject_id: pending.subject.id });
+      if (pending)
+        await withBoundedReadConnection(
+          pool,
+          prepared.deadline,
+          (client) => rebuild.run(client, { route: pending.subject.route, subject_id: pending.subject.id }),
+          {
+            deadlineError: () => new AccessUnavailableError('deadline'),
+            isUncertainSettledQueryError: () => true,
+          },
+        );
       if (!prepared.rows.length) return results;
       const expected = new Map(prepared.subjects.map(({ subject }) => [subject.id, subject]));
       const disclosedStatements = await disclosed(prepared.rows, prepared.releases, expected, prepared.runtime);
@@ -950,7 +977,16 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       return (await source.preparePage(probes)).match();
     },
     async preparePage(input: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage> {
-      return prepareCharacterPersonPage(input, prepareMatch);
+      const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+      const page = await withRequestDeadline(deadline, () =>
+        prepareCharacterPersonPage(input, (partition, probes) => prepareMatch(partition, probes, deadline)),
+      );
+      // Preparation settles before witness dispatch; every retained call still spends its original budget.
+      return {
+        bounds: page.bounds,
+        match: () => withRequestDeadline(deadline, () => page.match()),
+        revalidate: () => withRequestDeadline(deadline, () => page.revalidate()),
+      };
     },
   };
   function conceptBrowse(
