@@ -2,9 +2,10 @@ import type { Pool } from 'pg';
 import { readAccount } from './access-port.ts';
 import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
+import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import type { LibraryProfilePin } from './profile.ts';
 
@@ -178,6 +179,7 @@ export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
     if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
     const route = routeOf(actor.accountId);
     if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
+    const partitionNo = partitionOf(route);
     const alive = () => {
       if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
     };
@@ -203,6 +205,9 @@ export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
           throw new ProblemError('forbidden');
       };
       await authorize();
+      const home = await readPartition(client, partitionNo);
+      if (!home || home.writeState !== 'active' || home.movedTo !== null)
+        throw new ProblemError('partition_unavailable');
       // An absent optional installation cannot abort the surrounding authority
       // transaction or make independently usable summaries unavailable.
       await client.query('SAVEPOINT reading_insights_schema');
@@ -232,6 +237,16 @@ export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
       }
       alive();
       await client.query('COMMIT');
+      // COMMIT ends the source snapshot. Admit delivery against the current home.
+      const currentHome = await readPartition(client, partitionNo);
+      if (
+        !currentHome ||
+        currentHome.writeState !== 'active' ||
+        currentHome.movedTo !== null ||
+        currentHome.epoch !== home.epoch ||
+        currentHome.node !== home.node
+      )
+        throw new ProblemError('partition_unavailable');
       alive();
       return deliver ? deliver(value, encoded) : value;
     });
