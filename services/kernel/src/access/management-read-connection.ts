@@ -75,12 +75,7 @@ async function withManagementConnection<T>(
       return result;
     } catch (error) {
       const reason = classifyUnavailability(error);
-      if (
-        managed.uncertain() ||
-        Date.now() >= deadline ||
-        reason === 'deadline' ||
-        reason === 'overloaded'
-      )
+      if (managed.uncertain() || Date.now() >= deadline || reason === 'deadline' || reason === 'overloaded')
         managed.discard(error);
       throw error;
     }
