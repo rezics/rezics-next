@@ -544,8 +544,26 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         if (!time) return context.work.unavailable('Auth native account refresh requires a live AuthoritativeTime');
         authoritativeTimeValue(time);
         if (identityExpired(proof, clock)) return false;
-        const current = await within(deadline, () =>
-          readNativePermissionAccount(deadlineClient(context.pool, deadline), actor.accountId, context.work!),
+        const { value: current } = await context.work.invocation(
+          'access.authentication-account-refresh',
+          authenticationIdentityWorkBound(false),
+          () =>
+            accessCheckout(context.work!, () =>
+              withBoundedReadConnection(
+                context.pool,
+                deadline,
+                (client) => readNativePermissionAccount(client, actor.accountId, context.work!),
+                {
+                  deadlineError: () => new AccessUnavailableError('deadline'),
+                  mapError: (error) => {
+                    throwAccessUnavailable(error, deadline);
+                    return new AccessUnavailableError('overloaded');
+                  },
+                  isUncertainSettledQueryError: () => true,
+                },
+              ),
+            ),
+          deadline,
         );
         remaining(deadline);
         authoritativeTimeValue(time);
