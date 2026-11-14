@@ -29,10 +29,10 @@ export function LiteraryStreams({
 }) {
   const o = { locale: locale as never };
   return (
-    <section className={style.separator} aria-label={heading}>
+    <section data-slot="literary-streams" className="min-w-0 space-y-5 sm:space-y-6" aria-label={heading}>
       {candidates.length > 1 && (
         <nav aria-label={heading}>
-          <ul className="divide-y divide-border">
+          <ul className="grid min-w-0 gap-2 sm:grid-cols-2">
             {candidates.map((native) => {
               const property = definitions.properties[native.property];
               const label = pageText(
@@ -54,19 +54,23 @@ export function LiteraryStreams({
                   data-stream-node={native.node}
                   data-stream-property={native.property}
                   data-stream-direction={native.direction}
-                  className="min-w-0 py-1"
+                  className="min-w-0 rounded-lg border border-border p-2"
                 >
                   <a
                     href={hrefFor(native, current)}
                     aria-current={current ? 'page' : undefined}
                     aria-label={`${m.literary_grain_stream_read({}, o)}: ${label.text}, ${directionLabel}`}
-                    className={`${style.link} flex flex-wrap gap-x-3 gap-y-1`}
+                    className={`${style.link} w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-md px-3 ${current ? 'bg-muted text-foreground' : ''}`}
                   >
                     <span lang={label.lang}>{label.text || m.subject_relations({}, o)}</span>
                     <span className="text-muted-foreground">{directionLabel}</span>
                     {current && <span className="text-foreground">{m.literary_grain_stream_selected({}, o)}</span>}
                   </a>
-                  {state !== 'ready' && <LiteraryStatus state={state} locale={locale} />}
+                  {state !== 'ready' && (
+                    <div className="px-3 pt-1">
+                      <LiteraryStatus state={state} locale={locale} />
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -74,7 +78,7 @@ export function LiteraryStreams({
         </nav>
       )}
       {!candidates.length && (
-        <p role="status" className={style.muted}>
+        <p role="status" className={`${style.muted} py-2`}>
           {m.literary_reader_no_stream({}, o)}
         </p>
       )}
