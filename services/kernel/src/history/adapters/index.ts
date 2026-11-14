@@ -93,6 +93,8 @@ export {
   readHistoryReceivingReceipt,
   verifyCurrentHistoryReceiving,
 } from './receiving.ts';
+export { registerLibraryBulkReceiptConsumer } from './composition.ts';
+export { createLibraryBulkReceiptDispositionPort, libraryBulkReceiptReadiness } from './library-bulk-receipts.ts';
 export { prepareRecordHistoryPurge, minimizeRecordHistoryPurge } from './record-purge.ts';
 export {
   hasCommandRecordSourceSet,

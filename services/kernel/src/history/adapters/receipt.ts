@@ -11,6 +11,8 @@ import {
   type HistoryReceivingContext,
   HistoryRegistry,
   decodeLocator,
+  LIBRARY_BULK_TARGET_COMMAND_KIND,
+  LIBRARY_BULK_TARGET_COMMAND_KIND_ID,
 } from '../contract/index.ts';
 
 /** Actual owner disposition: this response has no downstream workflow consumers. No other
@@ -53,7 +55,10 @@ export async function minimizeHistoryReceipt(
   const key = decodeLocator('command-receipt/v1', locator);
   if (key.artifactType !== 'command-receipt/v1' || key.partitionNo !== job.partition_no)
     throw new TypeError('Receipt owner disposition unavailable');
-  const kind = commandHistoryKind(key.commandKindId);
+  const kind =
+    key.commandKindId === LIBRARY_BULK_TARGET_COMMAND_KIND_ID
+      ? LIBRARY_BULK_TARGET_COMMAND_KIND
+      : commandHistoryKind(key.commandKindId);
   if (!kind) return 'receipt-owner-unregistered';
   const identityGap = await agentIdentityCopyRetentionGap(tx, job.partition_no, 'command-receipt/v1', locator);
   if (identityGap) return identityGap;

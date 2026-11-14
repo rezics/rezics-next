@@ -52,6 +52,8 @@ import {
   type ZoneHistoryCleanupBinding,
   type ZoneHistoryConsumerObservation,
   type ZoneHistoryEventType,
+  LIBRARY_BULK_TARGET_COMMAND_KIND,
+  LIBRARY_BULK_TARGET_COMMAND_KIND_ID,
   classifyEvent,
   decodeLocator,
   encodeLocator,
@@ -107,6 +109,12 @@ function ZONE_RECEIPT_KIND_SET() {
 }
 function ZONE_EVENT_TYPE_SET() {
   return memoizedValue(ZONE_EVENT_TYPE_SET, () => new Set<string>(ZONE_HISTORY_EVENT_TYPES));
+}
+
+function nativeReceiptKind(commandKindId: number): string | undefined {
+  return commandKindId === LIBRARY_BULK_TARGET_COMMAND_KIND_ID
+    ? LIBRARY_BULK_TARGET_COMMAND_KIND
+    : commandHistoryKind(commandKindId);
 }
 
 function sameZoneBinding(a: ZoneHistoryCleanupBinding, b: ZoneHistoryCleanupBinding): boolean {
@@ -303,7 +311,7 @@ export async function observeZoneHistoryConsumerClosure(
 
 async function isZoneHistoryArtifact(tx: CommandTransaction, artifact: HistoryArtifact): Promise<boolean> {
   if (artifact.locator.artifactType === 'command-receipt/v1') {
-    const kind = commandHistoryKind(artifact.locator.commandKindId);
+    const kind = nativeReceiptKind(artifact.locator.commandKindId);
     return kind !== undefined && ZONE_RECEIPT_KIND_SET().has(kind);
   }
   if (artifact.locator.artifactType === 'outbox-event/v1') {
@@ -372,7 +380,12 @@ export async function recordHistoryReceivingProof(
   pool?: Pool,
   context?: HistoryReceivingContext,
 ): Promise<string | null> {
-  if (partition !== partitionOf(barrier.accountRoute)) return 'history-receiving-barrier-home-unavailable';
+  const remoteLibraryBulkReceipt =
+    locator.artifactType === 'command-receipt/v1' &&
+    locator.commandKindId === LIBRARY_BULK_TARGET_COMMAND_KIND_ID &&
+    partition !== partitionOf(barrier.accountRoute);
+  if (partition !== partitionOf(barrier.accountRoute) && !remoteLibraryBulkReceipt)
+    return 'history-receiving-barrier-home-unavailable';
   if (hasLiveCommandTransaction(tx) && currentCommand(tx).partition !== partition)
     return 'history-receiving-artifact-home-unavailable';
   const zoneArtifact = await isZoneHistoryArtifact(tx, { partition, locator, accounts: [] });
@@ -402,7 +415,7 @@ export async function recordHistoryReceivingProof(
   }
   if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
   const encoded = Buffer.from(encodeLocator(locator));
-  const custodyGap = await historyReceivingGap(tx, partition, locator, barrier, pool, context);
+  const custodyGap = await historyReceivingGap(tx, partition, locator, remoteLibraryBulkReceipt ? undefined : barrier, pool, context);
   if (custodyGap) return custodyGap;
   if (!(await historyPhysicalProof(tx, partition, locator))) throw new TypeError('History physical copy remains');
   const rows = await nativeScope(tx, partition, locator.artifactType, encoded);
@@ -594,7 +607,7 @@ export async function historyPhysicalProof(
   locator: HistoryArtifact['locator'],
 ): Promise<boolean> {
   if (locator.artifactType === 'command-receipt/v1') {
-    const kind = commandHistoryKind(locator.commandKindId);
+    const kind = nativeReceiptKind(locator.commandKindId);
     if (!kind || locator.partitionNo !== partition) return false;
     const token = `rk1.${locator.keyVersion}.${Buffer.from(locator.keyToken, 'hex').toString('base64url')}`;
     const proof = await tx.query(
@@ -640,7 +653,11 @@ async function nativeReceipt(
 ): Promise<ReceiptBinding | null> {
   // No foreign root read may occur while the artifact home is held. A released
   // observation cannot carry that root lock into this transaction.
-  if (artifact.partition !== partitionOf(barrier.accountRoute)) return null;
+  const remoteLibraryBulkReceipt =
+    artifact.locator.artifactType === 'command-receipt/v1' &&
+    artifact.locator.commandKindId === LIBRARY_BULK_TARGET_COMMAND_KIND_ID &&
+    artifact.partition !== partitionOf(barrier.accountRoute);
+  if (artifact.partition !== partitionOf(barrier.accountRoute) && !remoteLibraryBulkReceipt) return null;
   const zoneArtifact = await isZoneHistoryArtifact(tx, artifact);
   if (context?.discriminant?.kind === 'zone-cleanup' && !zoneArtifact) return null;
   if (zoneArtifact) {
@@ -653,7 +670,17 @@ async function nativeReceipt(
     if (closure.state === 'pending') return null;
   }
   if (!(await lockHistoryBarrier(tx, barrier))) return null;
-  if (await historyReceivingGap(tx, artifact.partition, artifact.locator, barrier, pool, context)) return null;
+  if (
+    await historyReceivingGap(
+      tx,
+      artifact.partition,
+      artifact.locator,
+      remoteLibraryBulkReceipt ? undefined : barrier,
+      pool,
+      context,
+    )
+  )
+    return null;
   const digest = scopeDigest(artifact);
   const encoded = Buffer.from(encodeLocator(artifact.locator));
   const rows = await nativeScope(tx, artifact.partition, artifact.locator.artifactType, encoded);
@@ -879,7 +906,7 @@ export async function recordHistoryFamilyArtifactWatch(
       ? [
           locator.principalKind,
           locator.principalId,
-          commandHistoryKind(locator.commandKindId),
+          nativeReceiptKind(locator.commandKindId),
           `rk1.${locator.keyVersion}.${Buffer.from(locator.keyToken, 'hex').toString('base64url')}`,
         ]
       : locator.artifactType === 'outbox-event/v1'

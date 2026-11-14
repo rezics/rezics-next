@@ -94,6 +94,16 @@ export {
   validateScope,
 } from './locator.ts';
 export type { AccountReference, HistoryLocator, HistoryScope } from './locator.ts';
+export {
+  LIBRARY_BULK_TARGET_COMMAND_KIND,
+  LIBRARY_BULK_TARGET_COMMAND_KIND_ID,
+} from './library-bulk-receipts.ts';
+export type {
+  LibraryBulkReceiptBinding,
+  LibraryBulkReceiptDisposition,
+  LibraryBulkReceiptDispositionPort,
+  LibraryBulkReceiptLocator,
+} from './library-bulk-receipts.ts';
 export type {
   CommittedOperationalWork,
   OperationalEpisode,

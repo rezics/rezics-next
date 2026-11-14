@@ -63,6 +63,7 @@ import type {
   HistoryReceivingReceipt,
 } from './receiving-types.ts';
 import type { RecordHistoryPurgeResult, SharedHistoryResult } from './record-types.ts';
+export type { LibraryBulkReceiptDispositionPort } from './library-bulk-receipts.ts';
 
 /**
  * The inward surface of the native History composition. Foreign Kernel modules reach History only through

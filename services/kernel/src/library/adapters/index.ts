@@ -104,5 +104,10 @@ export { bindHostedReadingPort, requireHostedReadingPort } from '../hosted-readi
 
 export { createFollowActivitySource } from '../follow-activity.ts';
 export { createCollectionReads } from '../collection-reads.ts';
+export {
+  prepareCollectionBulkHistoryDispositions,
+  verifyCollectionBulkHistoryDispositions,
+} from '../collection-bulk-history-consumer.ts';
+export type { CollectionBulkHistoryDisposition } from '../collection-bulk-history-consumer.ts';
 export type { ViewerPersonalActionsReader } from '../viewer-personal-actions.ts';
 export type { CollectionResourceView } from '../collection-reads.ts';

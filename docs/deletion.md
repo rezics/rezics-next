@@ -130,6 +130,10 @@ producer coverage is required before launch. The default thirty-day workflow-his
 
 The default native worker now advances sealed local pages and exact receipt/outbox/SDK minimizers, recording
 immutable per-artifact receiving proofs. Missing consumers do not stop independent artifacts from being minimized.
+Remote Library Collection bulk target receipts may be minimized only after the live source acknowledges the exact
+operation, source digest, ordinal, receipt and transaction, or native terminal closure binds them under the committed
+erasure barrier. Source manifest cleanup waits for that disposition; applied retries remain applied with their result
+erased.
 The current runtime has no complete producer-family declaration and cannot issue aggregate coverage across routing
 changes. Auth's committed copies proof is required independently of its final ACK. The separate shared-history ACK
 rejects incomplete coverage and, when enabled, emits only a closed technical version/outcome marker.

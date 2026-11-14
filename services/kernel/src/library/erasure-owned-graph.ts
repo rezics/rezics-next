@@ -22,7 +22,12 @@ import { purgeTerminalCollectionPage } from './collection-retention.ts';
 import { retireNativeCollectionCapturePage } from './native-source-custody.ts';
 import nativeCapture from './erasure-owned-native-source-capture.sql';
 import nativeFences from './erasure-owned-native-source-fence.sql';
+import bulkTarget from './erasure-owned-bulk-target.sql';
 import { removeCopyArchivePage } from './copy-archive.ts';
+import {
+  prepareCollectionBulkHistoryDispositions,
+  verifyCollectionBulkHistoryDispositions,
+} from './collection-bulk-history-consumer.ts';
 
 export const OWNED_PHASES = [
   'published_log',
@@ -166,6 +171,10 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || !Number.isSafeInteger(segment) || segment < 0)
     throw new TypeError('Invalid graph checkpoint');
   const digest = createHash('sha256').update(JSON.stringify(input)).digest();
+  // Target-home work is completed before the account-home command opens. The returned
+  // capabilities are rechecked under the source row locks before the cleanup SQL uses keys.
+  const bulkHistoryDispositions =
+    kind === 'bulk_target' ? await prepareCollectionBulkHistoryDispositions(pool, route, accountId) : [];
   const result = await runCommand<OwnedGraphPage>(
     pool,
     {
@@ -483,9 +492,25 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         }
       } else {
         if (!(kind in ownedQueries())) throw new TypeError('Invalid graph namespace');
-        // All fixed owner statements have exactly the same typed integer/uuid input.
-        const ownerResult = await ownedQueries()[kind as keyof ReturnType<typeof ownedQueries>].run(tx, args);
-        removed = Array.isArray(ownerResult) ? ownerResult.length : ownerResult == null ? 0 : 1;
+        if (kind === 'bulk_target') {
+          const settled = await verifyCollectionBulkHistoryDispositions(
+            tx,
+            route,
+            accountId,
+            bulkHistoryDispositions,
+          );
+          removed = (
+            await bulkTarget.run(tx, {
+              route,
+              account_id: accountId,
+              settled: JSON.stringify(settled),
+            })
+          ).length;
+        } else {
+          // All fixed owner statements have exactly the same typed integer/uuid input.
+          const ownerResult = await ownedQueries()[kind as keyof ReturnType<typeof ownedQueries>].run(tx, args);
+          removed = Array.isArray(ownerResult) ? ownerResult.length : ownerResult == null ? 0 : 1;
+        }
         if (kind === 'bulk_target' && removed < 100) {
           // Keep the installed Accounts phase and its 100-row budget, disposing empty roots too.
           const roots = await tx.query(
