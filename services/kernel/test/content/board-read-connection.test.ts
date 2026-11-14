@@ -63,7 +63,10 @@ for (const phase of ['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT 
 test('a checkout that arrives after expiry dispatches no SQL', async () => {
   let resolveCheckout!: (client: PoolClient) => void;
   const checkout = new Promise<PoolClient>((resolve) => (resolveCheckout = resolve));
-  const attempt = visit(poolFor(() => checkout), Date.now() + 100);
+  const attempt = visit(
+    poolFor(() => checkout),
+    Date.now() + 100,
+  );
 
   await expect(attempt).rejects.toBeInstanceOf(AccessUnavailableError);
   const late = connection();
@@ -80,9 +83,13 @@ test('a failed Board read keeps its error when rollback expires', async () => {
   );
 
   await expect(
-    withBoardReadSnapshot(poolFor(async () => stalled.client), Date.now() + 120, async () => {
-      throw primary;
-    }),
+    withBoardReadSnapshot(
+      poolFor(async () => stalled.client),
+      Date.now() + 120,
+      async () => {
+        throw primary;
+      },
+    ),
   ).rejects.toBe(primary);
   await stalled.releaseWait;
   expect(stalled.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'ROLLBACK']);

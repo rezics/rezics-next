@@ -189,34 +189,39 @@ export async function pageBoardCandidates(
     route(after.id);
     checkTime(after.createdAt);
   }
-  return snapshot(pool, partitionOf(boardRoute), async (client, anchor) => {
-    const parameters = {
-      route: boardRoute,
-      board_id: boardId,
-      created_at: after?.createdAt ?? (direction === 'desc' ? 'infinity' : '-infinity'),
-      thread_id: after?.id ?? '00000000-0000-0000-0000-000000000000',
-      limit,
-    };
-    const sql = direction === 'desc' ? page.sql : page.sql.replace(') < (', ') > (').replaceAll(' DESC', ' ASC');
-    const { rows } = await client.query<(typeof page)['~reylo']['element']>(
-      sql,
-      page.params.map((name) => parameters[name as keyof typeof parameters]),
-    );
-    const candidates = rows.map((row) => ({
-      id: row.thread_id,
-      boardId: row.board_id,
-      createdAt: timestamp(row.created_at!),
-      epoch: row.source_epoch,
-      position: BigInt(row.source_position),
-    }));
-    const last = candidates.at(-1);
-    return {
-      candidates,
-      next: candidates.length === limit && last ? { createdAt: last.createdAt, id: last.id } : null,
-      epoch: anchor.epoch,
-      position: anchor.position,
-    };
-  }, deadline);
+  return snapshot(
+    pool,
+    partitionOf(boardRoute),
+    async (client, anchor) => {
+      const parameters = {
+        route: boardRoute,
+        board_id: boardId,
+        created_at: after?.createdAt ?? (direction === 'desc' ? 'infinity' : '-infinity'),
+        thread_id: after?.id ?? '00000000-0000-0000-0000-000000000000',
+        limit,
+      };
+      const sql = direction === 'desc' ? page.sql : page.sql.replace(') < (', ') > (').replaceAll(' DESC', ' ASC');
+      const { rows } = await client.query<(typeof page)['~reylo']['element']>(
+        sql,
+        page.params.map((name) => parameters[name as keyof typeof parameters]),
+      );
+      const candidates = rows.map((row) => ({
+        id: row.thread_id,
+        boardId: row.board_id,
+        createdAt: timestamp(row.created_at!),
+        epoch: row.source_epoch,
+        position: BigInt(row.source_position),
+      }));
+      const last = candidates.at(-1);
+      return {
+        candidates,
+        next: candidates.length === limit && last ? { createdAt: last.createdAt, id: last.id } : null,
+        epoch: anchor.epoch,
+        position: anchor.position,
+      };
+    },
+    deadline,
+  );
 }
 
 /** Bounded active-rank traversal. Candidate identity still carries no disclosure authority. */
@@ -233,35 +238,40 @@ export async function pageActiveBoardCandidates(
     route(after.threadId);
     if (!Number.isFinite(after.activeRank) || after.activeRank < 0) throw new RangeError('Invalid active rank cursor');
   }
-  return snapshot(pool, partitionOf(boardRoute), async (client, anchor) => {
-    const parameters = {
-      route: boardRoute,
-      board_id: boardId,
-      active_rank: after?.activeRank ?? 0,
-      thread_id: after?.threadId ?? '00000000-0000-0000-0000-000000000000',
-      has_after: after !== null,
-      limit,
-    };
-    const { rows } = await client.query<(typeof activePage)['~reylo']['element']>(
-      activePage.sql,
-      activePage.params.map((name) => parameters[name as keyof typeof parameters]),
-    );
-    const candidates = rows.map((row) => {
-      if (row.rank_refreshed_at === null) throw new Error('Board rank freshness is missing');
-      return {
-        id: row.thread_id,
-        activeRank: row.active_rank,
-        rankRefreshedAt: row.rank_refreshed_at,
+  return snapshot(
+    pool,
+    partitionOf(boardRoute),
+    async (client, anchor) => {
+      const parameters = {
+        route: boardRoute,
+        board_id: boardId,
+        active_rank: after?.activeRank ?? 0,
+        thread_id: after?.threadId ?? '00000000-0000-0000-0000-000000000000',
+        has_after: after !== null,
+        limit,
       };
-    });
-    const last = candidates.at(-1);
-    return {
-      candidates,
-      next: candidates.length === limit && last ? { activeRank: last.activeRank, threadId: last.id } : null,
-      epoch: anchor.epoch,
-      position: anchor.position,
-    };
-  }, deadline);
+      const { rows } = await client.query<(typeof activePage)['~reylo']['element']>(
+        activePage.sql,
+        activePage.params.map((name) => parameters[name as keyof typeof parameters]),
+      );
+      const candidates = rows.map((row) => {
+        if (row.rank_refreshed_at === null) throw new Error('Board rank freshness is missing');
+        return {
+          id: row.thread_id,
+          activeRank: row.active_rank,
+          rankRefreshedAt: row.rank_refreshed_at,
+        };
+      });
+      const last = candidates.at(-1);
+      return {
+        candidates,
+        next: candidates.length === limit && last ? { activeRank: last.activeRank, threadId: last.id } : null,
+        epoch: anchor.epoch,
+        position: anchor.position,
+      };
+    },
+    deadline,
+  );
 }
 
 class UnchangedCandidate extends Error {}
