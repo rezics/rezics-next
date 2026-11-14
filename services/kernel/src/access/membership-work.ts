@@ -3,6 +3,10 @@ import { registerAccountDiscoveryWork } from './account-discovery-work.ts';
 import { registerRealmMembershipReconciliation } from './realm-membership-transition-legacy.ts';
 import { registerOrganizationCloseWork } from './organization-close-work.ts';
 import { registerOperatorFenceWork } from './operator-fence-work.ts';
+import {
+  registerSessionRevocationWork,
+  type CommittedSessionRevocationWorkflow,
+} from './session-revocation-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
 import {
   MEMBERSHIP_WORKFLOW_NAME,
@@ -74,7 +78,12 @@ export type RealmMembershipCommands = {
   terminalize(reservation: MembershipReservation, key: string): Promise<unknown>;
 };
 type MembershipWorkContext = Pick<WorkContext, 'pool' | 'env'>;
-type Options = { authorize?: MembershipAuthorization; access?: Access; realm?: RealmMembershipCommands };
+type Options = {
+  authorize?: MembershipAuthorization;
+  access?: Access;
+  realm?: RealmMembershipCommands;
+  sessionRevocation?: CommittedSessionRevocationWorkflow;
+};
 
 /** Native Access-only ports. Direct component construction defers approval
  * configuration until use; WorkModule registration validates it eagerly. */
@@ -244,6 +253,7 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
       if (options.realm && config) registerRealmMembershipReconciliation(context, options.realm, config.referenceKeys);
       context.addEffects([createAccountAgentEffect(context.pool)]);
       if (config) registerOperatorFenceWork(context, config.referenceKeys);
+      if (options.sessionRevocation) registerSessionRevocationWork(context, options.sessionRevocation);
       registerOrganizationCloseWork(context);
       await writeRateExpiryWorkModule.register(context);
     },
