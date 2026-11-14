@@ -32,6 +32,7 @@ import {
 } from './subject-classification-assessment-view';
 import { subjectHref } from '../../subject/subject-href';
 import { sourceObservationHref } from '../catalogue/source-observation/contract';
+import type { SubjectRatingFormHint } from './rating-actions';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
@@ -151,6 +152,7 @@ export const RatingControlContext = createContext<{
   session: 'unknown' | 'unavailable' | 'signed-out' | 'signed-in';
   own: SubjectOwnRating | undefined;
   binding?: SubjectPersonalLease;
+  result?: SubjectRatingFormHint;
   failure?: boolean;
 } | null>(null);
 
@@ -323,7 +325,11 @@ export function RatingsView({
             {control ? (
               <SubjectRatingControl
                 hideQuestionLabel
-                {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
+                {...(control.result !== undefined
+                  ? { initialResult: control.result }
+                  : control.failure
+                    ? { initialFailure: true }
+                    : {})}
                 question={question}
                 locale={control.locale}
                 own={control.own}
@@ -701,7 +707,11 @@ export function BookOverviewRating({ subject, locale }: { subject: string; local
           >
             {question && (
               <SubjectRatingControl
-                {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
+                {...(control.result !== undefined
+                  ? { initialResult: control.result }
+                  : control.failure
+                    ? { initialFailure: true }
+                    : {})}
                 question={question}
                 locale={control.locale}
                 own={control.own}

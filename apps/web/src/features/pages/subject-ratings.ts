@@ -407,22 +407,20 @@ export async function writeOwnRating(
   authorization: string,
   units: number | null,
   idempotencyKey: string,
-): Promise<boolean> {
+): Promise<PersonalScoreWriteResult> {
   try {
     const question = await readRatingQuestion(client);
-    if (units !== null && (!question || !validRatingUnits(units, question.scale))) return false;
-    return (
-      (await writeRatingVote(client, {
-        subjectId: id,
-        questionId: QUESTION,
-        authorization,
-        units,
-        idempotencyKey,
-        ...(question ? { observation: currentRatingObservation(id, question) } : {}),
-      })) === 'successful'
-    );
+    if (units !== null && (!question || !validRatingUnits(units, question.scale))) return 'rejected';
+    return await writeRatingVote(client, {
+      subjectId: id,
+      questionId: QUESTION,
+      authorization,
+      units,
+      idempotencyKey,
+      ...(question ? { observation: currentRatingObservation(id, question) } : {}),
+    });
   } catch {
-    return false;
+    return 'rejected';
   }
 }
 

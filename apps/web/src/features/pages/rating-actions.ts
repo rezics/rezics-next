@@ -94,7 +94,8 @@ export const changeSubjectRating = createServerFn({ method: 'POST' })
     }
   });
 
-type FormResult = 'success' | 'failure' | 'signed-out';
+export type SubjectRatingFormResult = PersonalScoreWriteResult | 'signed-out';
+export type SubjectRatingFormHint = PersonalScoreWriteResult;
 
 const localizedSubjectPath =
   /^\/(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)\/subjects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/[^/]{1,128}$/i;
@@ -139,22 +140,22 @@ export async function postSubjectRatingForm(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-): Promise<FormResult> {
+): Promise<SubjectRatingFormResult> {
   const url = new URL(request.url);
   const path = localizedSubjectPath.exec(url.pathname);
-  if (request.method !== 'POST' || !path) return 'failure';
+  if (request.method !== 'POST' || !path) return 'rejected';
   const fields = await formFields(request);
-  if (!fields) return 'failure';
+  if (!fields) return 'rejected';
   const intents = fields.getAll('intent');
-  if (intents.length !== 1 || !['save', 'clear'].includes(intents[0]!)) return 'failure';
+  if (intents.length !== 1 || !['save', 'clear'].includes(intents[0]!)) return 'rejected';
   let units: number | null;
   if (intents[0] === 'clear') {
     units = null;
   } else {
     const values = fields.getAll('units');
-    if (values.length !== 1 || !/^(?:0|-?[1-9]\d*)$/.test(values[0]!)) return 'failure';
+    if (values.length !== 1 || !/^(?:0|-?[1-9]\d*)$/.test(values[0]!)) return 'rejected';
     units = Number(values[0]);
-    if (!Number.isSafeInteger(units)) return 'failure';
+    if (!Number.isSafeInteger(units)) return 'rejected';
   }
 
   // The HTML is shared across readers, so it cannot embed a reader-specific CSRF token. The request middleware
@@ -167,7 +168,7 @@ export async function postSubjectRatingForm(
   }
   const authorization = viewerCredential(sessionRequest);
   if (!authorization) return 'signed-out';
-  return (await writeOwnRating(client, path[1]!, authorization, units, crypto.randomUUID())) ? 'success' : 'failure';
+  return writeOwnRating(client, path[1]!, authorization, units, crypto.randomUUID());
 }
 
 export type QuestionBoundRatingInput = ExpectedReader & {

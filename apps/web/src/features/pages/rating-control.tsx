@@ -4,7 +4,7 @@ import { Field } from '@base-ui/react/field';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
-import type { QuestionBoundRatingInput } from './rating-actions';
+import type { QuestionBoundRatingInput, SubjectRatingFormHint } from './rating-actions';
 import { sessionQueryKey, type BrowserSession } from '../../session';
 import {
   personalScoreWriteCommand,
@@ -37,11 +37,16 @@ function writeOutcome(result: PersonalScoreWriteResult | boolean): PersonalScore
   return result;
 }
 
-function ratingNotice(locale: string, notice: ReturnType<typeof personalScoreWriteNotice>) {
+function ratingNotice(locale: string, result: PersonalScoreWriteResult) {
   const options = { locale: locale as never };
-  if (notice === 'uncertain') return m.subject_rating_control_uncertain({}, options);
-  if (notice === 'stale') return m.subject_rating_control_stale({}, options);
+  if (result === 'uncertain') return m.subject_rating_control_uncertain({}, options);
+  if (result === 'stale') return m.subject_rating_control_stale({}, options);
   return m.subject_rating_control_error({}, options);
+}
+
+function formResultFailure(locale: string, result: SubjectRatingFormHint | undefined, legacyFailure: boolean) {
+  if (result === undefined) return legacyFailure ? ratingNotice(locale, 'rejected') : null;
+  return result === 'successful' ? null : ratingNotice(locale, result);
 }
 
 const actionClassName =
@@ -553,6 +558,7 @@ type SubjectRatingControlProps = {
   session: 'unknown' | 'unavailable' | 'signed-out' | 'signed-in';
   own: SubjectOwnRating | undefined;
   binding?: SubjectPersonalLease;
+  initialResult?: SubjectRatingFormHint;
   initialFailure?: boolean;
   hideQuestionLabel?: boolean;
   write?: RatingWrite;
@@ -581,6 +587,7 @@ function MountedSubjectRatingControl({
   session,
   own,
   binding,
+  initialResult,
   initialFailure = false,
   hideQuestionLabel = false,
   write,
@@ -598,9 +605,10 @@ function MountedSubjectRatingControl({
     };
   }, []);
   const [pending, setPending] = useState(false);
-  const [failure, setFailure] = useState<string | null>(
-    initialFailure ? m.subject_rating_control_error({}, { locale: locale as never }) : null,
-  );
+  const [failure, setFailure] = useState<string | null>(formResultFailure(locale, initialResult, initialFailure));
+  useEffect(() => {
+    setFailure(formResultFailure(locale, initialResult, initialFailure));
+  }, [initialFailure, initialResult, locale]);
   const [retryable, setRetryable] = useState(false);
   const [reading, setReading] = useState<RatingAnswerRecovery>({ kind: 'idle' });
   const state: RatingControlState =
@@ -664,10 +672,11 @@ function MountedSubjectRatingControl({
         write: original.sender,
         onFailure: (result) => {
           if (!isCurrent()) return;
-          const notice = personalScoreWriteNotice(result.stale ? 'stale' : result.uncertain ? 'uncertain' : 'rejected');
+          const outcome = result.stale ? 'stale' : result.uncertain ? 'uncertain' : 'rejected';
+          const notice = personalScoreWriteNotice(outcome);
           setRetryable(notice === 'uncertain');
           if (notice !== 'uncertain') pendingCommand.current = null;
-          setFailure(ratingNotice(locale, notice));
+          setFailure(ratingNotice(locale, outcome));
         },
       });
       if (saved && isCurrent()) {

@@ -32,7 +32,7 @@ import { type RatingSources, type RatingSource } from '../../features/pages/subj
 import { SubjectRatingPopulations } from '../../features/pages/subject-rating-populations-view';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { useSubjectReactionReader } from '../../features/pages/subject-reaction-reader';
-import { postSubjectRatingForm } from '../../features/pages/rating-actions';
+import { postSubjectRatingForm, type SubjectRatingFormHint } from '../../features/pages/rating-actions';
 import {
   subjectFrameQuery,
   subjectLibraryQuery,
@@ -164,6 +164,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           url.searchParams.delete('undoRevision');
           url.searchParams.delete('undoKey');
           url.searchParams.delete('ratingFailure');
+          url.searchParams.delete('ratingResult');
           if (result.ok && intent === 'unassign' && result.restoreRevision !== undefined) {
             url.searchParams.set('labelResult', 'label-removed');
             url.searchParams.set('undoLabelId', String(fields?.get('labelId') ?? ''));
@@ -203,8 +204,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
               'cache-control': 'private, no-store',
             },
           });
-        if (result === 'failure') url.searchParams.set('ratingFailure', '1');
-        else url.searchParams.delete('ratingFailure');
+        url.searchParams.delete('ratingFailure');
+        url.searchParams.delete('ratingResult');
+        url.searchParams.set('ratingResult', result);
         return new Response(null, {
           status: 303,
           headers: { location: url.pathname + url.search, 'cache-control': 'private, no-store' },
@@ -226,6 +228,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     slot?: 'collections';
     slotResult?: string;
     ratingFailure?: true;
+    ratingResult?: SubjectRatingFormHint;
     labelResult?: string;
     undoLabelId?: string;
     undoAssignmentId?: string;
@@ -260,6 +263,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
       ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
       ...(search.ratingFailure === '1' ? { ratingFailure: true as const } : {}),
+      ...(search.ratingResult === 'successful' ||
+      search.ratingResult === 'rejected' ||
+      search.ratingResult === 'stale' ||
+      search.ratingResult === 'uncertain'
+        ? { ratingResult: search.ratingResult }
+        : {}),
       ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
       ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
       ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
@@ -386,6 +395,7 @@ export function SubjectOverview({
     realm,
     slot,
     ratingFailure,
+    ratingResult,
     labelResult,
     undoLabelId,
     undoAssignmentId,
@@ -502,7 +512,7 @@ export function SubjectOverview({
           session,
           own: ownRating,
           ...(personal.binding ? { binding: personal.binding } : {}),
-          ...(ratingFailure ? { failure: true } : {}),
+          ...(ratingResult ? { result: ratingResult } : ratingFailure ? { result: 'rejected' as const } : {}),
         }}
       >
         <RatingsRecoveryContext.Provider value={retryRatingSource}>
