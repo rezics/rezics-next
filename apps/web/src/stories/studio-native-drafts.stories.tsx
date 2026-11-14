@@ -332,7 +332,9 @@ export const WorkingReferences: Story = {
     const { form } = await previewWorkingDraft(canvasElement);
     await userEvent.click(form.getByRole('button', { name: m.post_references_title() }));
     const dialog = within(await within(document.body).findByRole('dialog', { name: m.post_references_title() }));
-    await userEvent.click(dialog.getByRole('button', { name: m.post_references_entry({ number: 1, label: 'source' }) }));
+    await userEvent.click(
+      dialog.getByRole('button', { name: m.post_references_entry({ number: 1, label: 'source' }) }),
+    );
     await expect(dialog.getByRole('textbox', { name: m.post_references_destination() })).toHaveValue(
       'https://example.org/source',
     );
