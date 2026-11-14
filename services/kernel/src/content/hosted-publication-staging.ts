@@ -597,8 +597,12 @@ export async function advanceHostedPublicationStaging(
     };
   const live = await requireLiveStage(client, row);
   let result: HostedPublicationStagingStepResult;
+  if (
+    (live.mode === 'whole' && live.status === 'building') ||
+    (live.mode === 'selection' && (live.status === 'building' || live.status === 'closing'))
+  )
+    await requireCurrentPinnedSource(client, live);
   if (live.mode === 'whole') {
-    if (live.status === 'building') await requireCurrentPinnedSource(client, live);
     result = await advanceWhole(deps, client, actor, live, deadline);
   } else if (live.status === 'building') result = await advanceSelection(deps, client, actor, live, deadline);
   else if (live.status === 'closing') result = await advanceClosure(client, live);

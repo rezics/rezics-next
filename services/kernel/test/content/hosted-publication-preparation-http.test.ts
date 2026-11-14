@@ -398,6 +398,118 @@ test('selection progress exposes only its pinned binding and rejects new batches
   });
 });
 
+test('selection advance replays acknowledged steps and fences stale settlement and closure', async () => {
+  const startSelection = async (book: Awaited<ReturnType<typeof newBook>>, occurrenceIds: string[]) => {
+    const started = await f.native.call('POST', `${book.path}:prepareRelease`, {
+      stageId: book.newId(),
+      expectedRevisionId: book.created.revisionId,
+      expectedPublicationId: book.published.revisionId,
+      mode: 'selection',
+    });
+    expect(started.status).toBe(202);
+    const stageId = started.value.stageId as string;
+    const stagePath = prepPath(book.path, stageId);
+    expect(
+      (await f.native.call('POST', `${stagePath}:appendSelectionBatch`, {
+        batchId: book.newId(),
+        occurrenceIds,
+      })).status,
+    ).toBe(200);
+    expect((await f.native.call('POST', `${stagePath}:freezeSelection`, {})).status).toBe(200);
+    return { stageId, stagePath };
+  };
+  const stepTotals = async (book: Awaited<ReturnType<typeof newBook>>, stageId: string) =>
+    (
+      await f.native.pool.query<{ candidates: string; steps: string }>(
+        `SELECT
+           (SELECT count(*)::text FROM content.hosted_publication_staging_candidate
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS candidates,
+           (SELECT count(*)::text FROM content.hosted_publication_staging_step
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS steps`,
+        [routeOf(book.catalogueId), book.catalogueId, stageId],
+      )
+    ).rows[0];
+
+  const settlementBook = await newBook(20);
+  const settlement = await startSelection(
+    settlementBook,
+    settlementBook.placements.map(({ occurrenceId }) => occurrenceId),
+  );
+  const settledStepId = settlementBook.newId();
+  const settled = await f.native.call(
+    'POST',
+    `${settlement.stagePath}:advance`,
+    { stepId: settledStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(settled.status).toBe(200);
+  expect(settled.value.stage).toMatchObject({ state: 'building', settledInputCount: '20', candidateCount: '20' });
+  const revised = await f.native.call('POST', `${settlementBook.path}:appendRootChapter`, {
+    expectedRevisionId: settlementBook.created.revisionId,
+    occurrenceId: settlementBook.newId(),
+    title: 'A later draft edit',
+    target: settlementBook.target,
+  });
+  expect(revised.status).toBe(200);
+  const settledReplay = await f.native.call(
+    'POST',
+    `${settlement.stagePath}:advance`,
+    { stepId: settledStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(settledReplay.status).toBe(200);
+  expect(settledReplay.value).toEqual(settled.value);
+  expect((await f.native.call('POST', `${settlement.stagePath}:advance`, { stepId: settlementBook.newId() })).status)
+    .toBe(412);
+  expect((await f.native.call('POST', `${settlement.stagePath}:progress`, {})).value.stage).toMatchObject({
+    state: 'building',
+    settledInputCount: '20',
+    candidateCount: '20',
+  });
+  expect(await stepTotals(settlementBook, settlement.stageId)).toEqual({ candidates: '20', steps: '1' });
+  expect(await selectedRelease(settlementBook.catalogueId)).toBe(settlementBook.published.revisionId);
+
+  const closureBook = await newBook();
+  const closure = await startSelection(closureBook, [closureBook.nestedChapter]);
+  expect((await f.native.call('POST', `${closure.stagePath}:advance`, { stepId: closureBook.newId() })).status).toBe(
+    200,
+  );
+  const closingStepId = closureBook.newId();
+  const closing = await f.native.call(
+    'POST',
+    `${closure.stagePath}:advance`,
+    { stepId: closingStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(closing.status).toBe(200);
+  expect(closing.value.stage).toMatchObject({ state: 'closing', candidateCount: '1', closureCheckedCount: '0' });
+  const changedRelease = await f.native.call('POST', `${closureBook.path}:publish`, {
+    expectedRevisionId: closureBook.created.revisionId,
+    expectedPublicationId: closureBook.published.revisionId,
+    occurrenceIds: [closureBook.nestedChapter],
+  });
+  expect(changedRelease.status).toBe(200);
+  const closingReplay = await f.native.call(
+    'POST',
+    `${closure.stagePath}:advance`,
+    { stepId: closingStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(closingReplay.status).toBe(200);
+  expect(closingReplay.value).toEqual(closing.value);
+  expect((await f.native.call('POST', `${closure.stagePath}:advance`, { stepId: closureBook.newId() })).status).toBe(
+    412,
+  );
+  expect((await f.native.call('POST', `${closure.stagePath}:progress`, {})).value.stage).toMatchObject({
+    state: 'closing',
+    candidateCount: '1',
+    closureFrontier: '-1',
+    closureCheckedCount: '0',
+  });
+  expect(await stepTotals(closureBook, closure.stageId)).toEqual({ candidates: '1', steps: '2' });
+  expect(await selectedRelease(closureBook.catalogueId)).toBe(changedRelease.value.revisionId);
+});
+
 test('whole-source advance replays retained steps and rejects stale draft or publication pointers', async () => {
   const book = await newBook(22);
   const candidateCount = async (stageId: string) =>
