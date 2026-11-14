@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from './access-port.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction, withConnection } from '../database/pool.ts';
 import { CommandUnavailableError, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -29,6 +30,24 @@ export type EditionRow = {
 };
 export type EditionDependencies = Readonly<{ pool: Pool; clock: () => Date }>;
 
+function boundedEditionReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      if (error instanceof CommandUnavailableError) return error;
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) =>
+      !(error instanceof CommandUnavailableError) && classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: (error: unknown) => !(error instanceof CommandUnavailableError),
+  };
+}
+
 /** Released, home-anchored bounded snapshots, including the final byte guard. */
 export async function editionSnapshot<T>(
   deps: EditionDependencies,
@@ -38,27 +57,19 @@ export async function editionSnapshot<T>(
 ): Promise<Anchored<T>> {
   const route = routeOf(id);
   if (route === null) throw new RangeError('Invalid edition identity');
-  return within(context.deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition) throw new CommandUnavailableError('overloaded', partitionOf(route));
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partition.partitionNo, partition.movedTo);
-        const value = await read(client);
-        await client.query('COMMIT');
-        return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
+  return withBoundedReadOnlyTransaction(
+    deps.pool,
+    context.deadline,
+    async (native) => {
+      const client = native as AccessClient;
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition) throw new CommandUnavailableError('overloaded', partitionOf(route));
+      if (partition.writeState === 'moved')
+        throw new CommandUnavailableError('moved', partition.partitionNo, partition.movedTo);
+      const value = await read(client);
+      return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
+    },
+    boundedEditionReadOptions(context.deadline),
   );
 }
 
