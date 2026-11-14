@@ -350,7 +350,8 @@ async function inspect(
       items[seed.key] = read.subject;
     }
     if (subjects['source-harem'] === subjects['canonical-harem']) return { state: 'withdrawn' };
-    if ((items['source-harem']!.statements['schema:sameAs'] ?? []).some((statement) => isCurrentReviewedRank(statement.rank)))
+    const sourceEquivalences = items['source-harem']!.statements['schema:sameAs'] ?? [];
+    if (sourceEquivalences.some((statement) => isCurrentReviewedRank(statement.rank)))
       return { state: 'withdrawn' };
     const vocabularyRows = new Map<
       string,
