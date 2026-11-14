@@ -676,7 +676,7 @@ test('bulk preparation resumes the seed journal after pressure during its resuma
           exitCode: 0,
           registry,
           preparation,
-          ...(deferred ? { seed: { status: 'admission-deferred' } } : {}),
+          ...(deferred ? { seed: { status: 'admission-deferred' as const } } : {}),
         };
       },
     };
