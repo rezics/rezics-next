@@ -4,8 +4,9 @@ import type {
   ResourceEligibilityVerifyContext,
 } from '../access/public-eligibility.ts';
 import { addAccessWork, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkProducer } from '../access/work.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import type { PoolClient, QueryResultRow } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import type { ReadDecisionEligibility } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import contextPublicExists from './context-public-exists.sql';
@@ -38,6 +39,24 @@ async function point<I extends Record<string, unknown>, R extends QueryResultRow
 type PublicState = { visibility: string; security_revision: string } | null;
 type Prepare = ResourceEligibilityPrepareContext;
 type Verify<E> = ResourceEligibilityVerifyContext<E>;
+
+/** Access's unavailable reasons also describe deadline and transport failures
+ * from this finite native checkout. A settled server rejection leaves the client
+ * usable; client-side timeout and connection failures do not.
+ */
+function eligibilityReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      throwAccessUnavailable(error, deadline);
+      return error;
+    },
+    isUncertainSettledQueryError(error: unknown) {
+      const reason = classifyUnavailability(error);
+      return reason === 'deadline' || reason === 'overloaded';
+    },
+  };
+}
 
 /** One exact primary-key probe, including an empty probe. No history or payload
  * ranges enter these plans. Prepare additionally acquires and releases one pool
@@ -111,10 +130,13 @@ export function globalReadEligibility(action: GlobalReadAction): ResourceEligibi
   const resource = { route: 0, id: GLOBAL_CONTEXT };
   const prepare = measured<Prepare, { kind: string } | null>(
     ({ resource }) => pointWork(resource, bytes({ kind: 'community' }), true),
-    async ({ pool, resource: identity }) => {
+    async ({ pool, resource: identity, deadline }) => {
       const row =
-        (await withConnection(pool, (client) =>
-          point(client, contextPublicEvidence, { route: identity.route, context_id: identity.id }),
+        (await withBoundedReadConnection(
+          pool,
+          deadline,
+          (client) => point(client, contextPublicEvidence, { route: identity.route, context_id: identity.id }),
+          eligibilityReadOptions(deadline),
         )) ?? null;
       return {
         value: row,
@@ -244,7 +266,13 @@ export function subjectReadEligibility(
 ): ResourceEligibility {
   const prepare = measured<Prepare, PublicState>(
     ({ resource }) => pointWork(resource, publicStateBytes, true),
-    ({ pool, resource }) => withConnection(pool, (client) => publicState(client, resource, true)),
+    ({ pool, resource, deadline }) =>
+      withBoundedReadConnection(
+        pool,
+        deadline,
+        (client) => publicState(client, resource, true),
+        eligibilityReadOptions(deadline),
+      ),
   );
   const verify = measured<Verify<PublicState>, boolean>(
     ({ resource, evidence }) =>
