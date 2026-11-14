@@ -101,7 +101,9 @@ class ProgressDeparture {
     return new Promise<boolean>((resolve) => {
       this.decision = {
         resolve,
-        owners: this.current().filter(({ state }) => state.dirty || state.locked).map(({ draft }) => draft),
+        owners: this.current()
+          .filter(({ state }) => state.dirty || state.locked)
+          .map(({ draft }) => draft),
       };
       this.notify();
     });

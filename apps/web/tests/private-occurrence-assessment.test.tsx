@@ -33,13 +33,14 @@ for (const key of names)
   Object.defineProperty(globalThis, key, {
     configurable: true,
     writable: true,
-    value: key === 'window'
-      ? window
-      : key === 'IS_REACT_ACT_ENVIRONMENT'
-        ? true
-        : ['getComputedStyle', 'matchMedia', 'requestAnimationFrame', 'cancelAnimationFrame'].includes(key)
-          ? Reflect.get(window, key).bind(window)
-          : Reflect.get(window, key),
+    value:
+      key === 'window'
+        ? window
+        : key === 'IS_REACT_ACT_ENVIRONMENT'
+          ? true
+          : ['getComputedStyle', 'matchMedia', 'requestAnimationFrame', 'cancelAnimationFrame'].includes(key)
+            ? Reflect.get(window, key).bind(window)
+            : Reflect.get(window, key),
   });
 afterAll(async () => {
   mock.restore();
@@ -172,10 +173,11 @@ async function mount() {
   return {
     host,
     router,
-    depart: () => act(async () => {
-      void router.navigate({ href: '/library/history' });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }),
+    depart: () =>
+      act(async () => {
+        void router.navigate({ href: '/library/history' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
     unload: () => {
       const event = new window.Event('beforeunload', { cancelable: true });
       window.dispatchEvent(event);

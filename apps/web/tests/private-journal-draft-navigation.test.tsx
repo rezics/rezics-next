@@ -9,14 +9,23 @@ test('journal Stay/Leave owns links, history and unload with one Progress decisi
   );
   const window = new Window({ url: 'https://site.test/journal' });
   const globals = {
-    window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement,
-    HTMLTextAreaElement: window.HTMLTextAreaElement, HTMLAnchorElement: window.HTMLAnchorElement,
-    Element: window.Element, Node: window.Node, Document: window.Document,
-    MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window), matchMedia: window.matchMedia.bind(window),
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    HTMLAnchorElement: window.HTMLAnchorElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    matchMedia: window.matchMedia.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -37,30 +46,58 @@ test('journal Stay/Leave owns links, history and unload with one Progress decisi
     const [identity, setIdentity] = useState({});
     const [draft, setDraft] = useState(emptyJournalDraft);
     const [other, setOther] = useState(false);
-    reset = () => { setDraft(emptyJournalDraft()); };
-    replace = () => { reset(); setIdentity({}); };
+    reset = () => {
+      setDraft(emptyJournalDraft());
+    };
+    replace = () => {
+      reset();
+      setIdentity({});
+    };
     usePrivateJournalDraftNavigation({
-      identity, draft, command: null, isCurrent: () => true,
-      discard: () => { discarded = draft; setDraft(emptyJournalDraft()); },
+      identity,
+      draft,
+      command: null,
+      isCurrent: () => true,
+      discard: () => {
+        discarded = draft;
+        setDraft(emptyJournalDraft());
+      },
     });
     usePublicationNoteDraftNavigation({
-      identity, state: { active: true, dirty: other, locked: false },
-      discard: () => { otherDiscarded = true; setOther(false); },
+      identity,
+      state: { active: true, dirty: other, locked: false },
+      discard: () => {
+        otherDiscarded = true;
+        setOther(false);
+      },
     });
-    return <>
-      <textarea value={draft.reflection.kind === 'set' ? draft.reflection.text : ''}
-        onChange={(event) => setDraft({ ...draft, reflection: { kind: 'set', text: event.target.value } })} />
-      <button onClick={() => setDraft({ ...draft, assessment: { kind: 'clear' } })}>Clear only</button>
-      <button onClick={() => setOther(true)}>Other draft</button>
-      <Link to="/away">Elsewhere</Link>
-    </>;
+    return (
+      <>
+        <textarea
+          value={draft.reflection.kind === 'set' ? draft.reflection.text : ''}
+          onChange={(event) => setDraft({ ...draft, reflection: { kind: 'set', text: event.target.value } })}
+        />
+        <button onClick={() => setDraft({ ...draft, assessment: { kind: 'clear' } })}>Clear only</button>
+        <button onClick={() => setOther(true)}>Other draft</button>
+        <Link to="/away">Elsewhere</Link>
+      </>
+    );
   }
   const base = createRootRoute({
-    component: () => <PublicationNoteDraftNavigation messages="progress"><Outlet /></PublicationNoteDraftNavigation>,
+    component: () => (
+      <PublicationNoteDraftNavigation messages="progress">
+        <Outlet />
+      </PublicationNoteDraftNavigation>
+    ),
   });
   const journal = createRoute({
-    getParentRoute: () => base, path: '/journal',
-    component: () => <PrivateJournalDraftNavigation><Journal /></PrivateJournalDraftNavigation>,
+    getParentRoute: () => base,
+    path: '/journal',
+    component: () => (
+      <PrivateJournalDraftNavigation>
+        <Journal />
+      </PrivateJournalDraftNavigation>
+    ),
   });
   const away = createRoute({ getParentRoute: () => base, path: '/away', component: () => 'Away' });
   const history = createMemoryHistory({ initialEntries: ['/away', '/journal'] });
@@ -71,12 +108,16 @@ test('journal Stay/Leave owns links, history and unload with one Progress decisi
   const dialog = () => window.document.querySelector('[role="alertdialog"]');
   const field = () => host.querySelector('textarea')!;
   const settle = async (ready: () => boolean) => {
-    for (let count = 0; count < 100 && !ready(); count++) await act(async () => { await Bun.sleep(10); });
+    for (let count = 0; count < 100 && !ready(); count++)
+      await act(async () => {
+        await Bun.sleep(10);
+      });
     expect(ready()).toBe(true);
   };
   const click = async (label: string) => {
     await act(async () => {
-      [...window.document.querySelectorAll('button,a')].find((item) => item.textContent === label)!
+      [...window.document.querySelectorAll('button,a')]
+        .find((item) => item.textContent === label)!
         .dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
   };
@@ -92,8 +133,14 @@ test('journal Stay/Leave owns links, history and unload with one Progress decisi
     window.dispatchEvent(event);
     return event.defaultPrevented;
   };
-  const request = async (go = () => { void router.navigate({ href: '/away' }); }) => {
-    await act(async () => { go(); });
+  const request = async (
+    go = () => {
+      void router.navigate({ href: '/away' });
+    },
+  ) => {
+    await act(async () => {
+      go();
+    });
     await settle(() => !!dialog());
   };
   const stay = async () => {
@@ -102,7 +149,10 @@ test('journal Stay/Leave owns links, history and unload with one Progress decisi
     expect(router.state.location.pathname).toBe('/journal');
   };
   try {
-    await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
+    await act(async () => {
+      await router.load();
+      root.render(<RouterProvider router={router} />);
+    });
     await settle(() => !!field());
     expect(unload()).toBe(false);
     await click('Clear only');
@@ -126,7 +176,9 @@ test('journal Stay/Leave owns links, history and unload with one Progress decisi
     await edit('saved draft');
     await act(async () => reset());
     expect(unload()).toBe(false);
-    await act(async () => { await router.navigate({ href: '/away' }); });
+    await act(async () => {
+      await router.navigate({ href: '/away' });
+    });
     expect(dialog()).toBeNull();
     await act(async () => history.back());
     await settle(() => !!field());

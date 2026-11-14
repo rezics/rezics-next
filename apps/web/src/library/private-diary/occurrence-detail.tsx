@@ -19,8 +19,15 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useId,
-  type FormEvent, type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useId,
+  type FormEvent,
+  type ReactNode,
 } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../application';
@@ -172,7 +179,9 @@ function OccurrenceControls({
     useCallback(
       (listener: () => void) => {
         (custody.listeners ??= new Set()).add(listener);
-        return () => { custody.listeners!.delete(listener); };
+        return () => {
+          custody.listeners!.delete(listener);
+        };
       },
       [custody],
     ),
