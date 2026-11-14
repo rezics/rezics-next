@@ -224,7 +224,8 @@ test('21-target authority restarts after cross-home consent revoke and activates
   const path = `/v1/hostedCatalogues/${catalogueId}`;
   const oldPublicSource = await f.native.thread('published');
   const oldPublicTarget = f.target(oldPublicSource);
-  const sources = await Promise.all(Array.from({ length: 21 }, () => f.native.thread('draft')));
+  const sources: Awaited<ReturnType<typeof f.native.thread>>[] = [];
+  for (let index = 0; index < 21; index += 1) sources.push(await f.native.thread('draft'));
   const targets = sources.map((source) => f.target(source));
   const ranked = targets
     .map((target, index) => ({ target, index }))
@@ -560,13 +561,14 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
 
   const privateSource = await f.native.thread('draft');
   const privateTarget = f.target(privateSource);
+  const privateOccurrenceId = f.newOccurrenceIdFor(catalogueId);
   const revised = await f.native.command(
     `${path}:revise`,
     {
       expectedRevisionId: initial.revisionId,
       placements: [
         {
-          occurrenceId,
+          occurrenceId: privateOccurrenceId,
           parentId: null,
           position: 0,
           title: 'B waits for current authority',
@@ -699,7 +701,7 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   if (!activationRevisionId) throw new Error('The native activation revision was not retained');
   const hardConsentObservation = await observeHostedPublicationActivationTarget(
     activationDeps,
-    { catalogueId, activationRevisionId, target: privateTarget, occurrenceId },
+    { catalogueId, activationRevisionId, target: privateTarget, occurrenceId: privateOccurrenceId },
     { actor: { kind: 'anonymous' }, deadline: Date.now() + 120_000 },
   );
   expect(hardConsentObservation).toBeNull();
@@ -739,7 +741,7 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   expect(activated.value).toMatchObject({ state: 'activated', restartRequired: false });
   if (!activated.value.publicationId) throw new Error('The activated Book has no publication ID');
   expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
-  const readerPath = `${path}/occurrences/${occurrenceId}?kind=publication&revisionId=${activated.value.publicationId}`;
+  const readerPath = `${path}/occurrences/${privateOccurrenceId}?kind=publication&revisionId=${activated.value.publicationId}`;
   const available = await f.native.call('GET', readerPath, undefined, { anonymous: true });
   expect(available.status).toBe(200);
   expect(available.value.occurrence.availability).toBe('available');
