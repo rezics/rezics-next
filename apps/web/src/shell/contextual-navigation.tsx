@@ -87,6 +87,23 @@ export type ShellContextNavigationProps = {
   children: ReactNode;
 };
 
+function visibleSelectionTarget(target: HTMLElement | null | undefined): target is HTMLElement {
+  if (!target?.isConnected || target.matches(':disabled')) return false;
+  for (let node: HTMLElement | null = target; node; node = node.parentElement) {
+    if (
+      node.hidden ||
+      node.inert ||
+      node.getAttribute('aria-hidden') === 'true' ||
+      node.getAttribute('aria-disabled') === 'true' ||
+      node.matches('fieldset:disabled')
+    )
+      return false;
+    const style = node.ownerDocument.defaultView?.getComputedStyle(node);
+    if (style?.display === 'none' || style?.visibility === 'hidden' || style?.visibility === 'collapse') return false;
+  }
+  return true;
+}
+
 /** Call only after the consumer admits a document choice or its existing switch review. */
 export function useShellContextNavigationSelection(lifetime?: object) {
   const context = useContext(ContextNavigation);
@@ -94,18 +111,46 @@ export function useShellContextNavigationSelection(lifetime?: object) {
     scope: object | undefined;
     owner: object | null | undefined;
     lifetime: object | undefined;
+    origin: Element | null;
     focus: () => HTMLElement | null | undefined;
   } | null>(null);
   useLayoutEffect(() => {
     if (!selection) return;
-    setSelection(null);
-    if (selection.scope === context?.scope && selection.owner === context?.active && selection.lifetime === lifetime)
-      selection.focus()?.focus({ preventScroll: true });
-  }, [selection, context?.scope, context?.active, lifetime]);
+    if (selection.scope !== context?.scope || selection.owner !== context?.active || selection.lifetime !== lifetime) {
+      setSelection(null);
+      return;
+    }
+    const active = document.activeElement;
+    if (active !== selection.origin && active !== document.body) {
+      setSelection(null);
+      return;
+    }
+    const target = selection.focus();
+    if (visibleSelectionTarget(target)) {
+      setSelection(null);
+      target.focus({ preventScroll: true });
+      return;
+    }
+    // The Menu host or the consumer may still be retiring/revealing. Retry on their next commit.
+    // A later user action owns focus instead of this pending selection.
+    const cancel = () => setSelection((pending) => (pending === selection ? null : pending));
+    const moved = (event: FocusEvent) => {
+      if (event.target !== selection.origin && event.target !== document.body) cancel();
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('focusin', moved);
+    window.addEventListener('blur', cancel);
+    return () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('focusin', moved);
+      window.removeEventListener('blur', cancel);
+    };
+  });
   return (accepted: boolean, focus?: () => HTMLElement | null | undefined) => {
     if (!accepted) return;
+    const origin = document.activeElement;
     dismissMenuForNavigation(context?.target ?? null);
-    if (focus) setSelection({ scope: context?.scope, owner: context?.active, lifetime, focus });
+    setSelection(focus ? { scope: context?.scope, owner: context?.active, lifetime, origin, focus } : null);
   };
 }
 
