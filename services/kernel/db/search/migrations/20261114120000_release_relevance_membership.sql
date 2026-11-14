@@ -314,18 +314,25 @@ DECLARE
   v_existing_id uuid;
   v_existing_digest text;
 BEGIN
-  UPDATE search.release_relevance_execution e
-  SET expires_at = p_expires_at
+  SELECT e.id INTO v_execution_id
+  FROM search.release_relevance_execution e
   WHERE e.id = p_execution_id
     AND e.principal = p_principal
     AND e.request_hash = p_request_hash
     AND e.generation = p_generation
     AND e.source_cut_hash = p_source_cut_hash
     AND e.expires_at > p_now
-  RETURNING e.id INTO v_execution_id;
+    AND EXISTS (
+      SELECT 1 FROM search.release_relevance_position p
+      WHERE p.execution_id = e.id AND p.id = p_parent_id
+    )
+  FOR UPDATE;
   IF NOT FOUND THEN
     RETURN;
   END IF;
+  UPDATE search.release_relevance_execution e
+  SET expires_at = p_expires_at
+  WHERE e.id = v_execution_id;
   SELECT p.membership_root INTO v_parent_root
   FROM search.release_relevance_position p
   WHERE p.execution_id = p_execution_id AND p.id = p_parent_id;
