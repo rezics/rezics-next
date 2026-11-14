@@ -1,11 +1,57 @@
 # Committed identity scope receipts
 
 `resolveCommittedIdentityScopeReceipt(pool, {locator, context})` resolves an exact
-source/scope/registration/capture/revision in a released source-home snapshot. It
+source/scope/registration/capture/revision in the admitted source home. It
 returns `observed` evidence containing the actual `identity_epoch_native_commit`
 partition, epoch, position and transaction ID. The receiving locator identifies
 the local retained pre-arm projection by job, directory transaction, page and
 ordinal. It is not verification of a foreign directory's current state.
+
+Both calls accept `IdentityScopeCommittedContext`: the existing
+`IdentitySourceConsumerMaintenanceContext`, or this admitted Library context:
+
+```ts
+type IdentityScopeCommittedKindContext = Readonly<{
+  kind: 'collection-kind';
+  tx: OperationalTransaction;
+  preparation: CollectionKindPreparationLocator;
+  work: NativeCollectionWork;
+  deadline: number;
+}>;
+
+resolveCommittedIdentityScopeReceipt(
+  pool: Pool,
+  input: Readonly<{ locator: IdentityScopeCommittedLocator; context: IdentityScopeCommittedContext }>,
+): Promise<IdentityScopeCommittedResolution>;
+
+holdCommittedIdentityScopeReceipt(
+  tx: CommandTransaction,
+  pool: Pool,
+  input: Readonly<{ evidence: IdentityScopeCommittedEvidence; context: IdentityScopeCommittedContext }>,
+): Promise<IdentityScopeCommittedVerification>;
+
+isHeldCommittedIdentityScopeReceipt(tx: CommandTransaction, value: unknown): boolean;
+```
+
+For Kind, Library must have called `bindCollectionKindPreparationStep(tx,
+preparation, work)` and successfully `admitCollectionKindPreparationStep(tx,
+preparation, work)` in that same operational transaction. The receipt producer
+reads `currentCollectionKindInputAdmission` on every dispatch: exact Pool,
+preparation, operational admission, Source identity, native capture and original
+deadline must still match. The existing locator supplies the exact identity scope
+observation and registration, plus the retained receiving locator and attempt for
+a repair. These are locators, never substituted source-receipt native tuples.
+
+Kind resolution uses `context.tx` without checkout. The caller returns the
+observation from that home transaction and waits for its release before any foreign
+work. For final hold, Library binds and admits the **same work object** in the
+final Source home, with the unchanged `work.deadlineAt`; both the supplied `tx` and
+`context.tx` must be that exact live transaction. A deadline extension or an escaped
+admission refuses before IO. The producer directly reserves each existing literal
+statement footprint on that ledger and settles the full bound on hit, miss or
+failure. It creates no observer, child allowance, maintenance frame or publisher.
+Returned work is cumulative: do not add it back into the original ledger.
+Maintenance callers keep their existing released snapshot and accounting path.
 
 `holdCommittedIdentityScopeReceipt(tx, pool, {evidence, context})` repeats resolution
 under the supplied genuine command or admitted operational work-step transaction's
@@ -116,7 +162,10 @@ resolution costs 19 rows, 20 points and six statements. Ready repaired resolutio
 costs 26 rows, 27 points and seven statements. Held verification costs the same
 query rows/points without checkout or transaction controls. The existing
 instrumenter reserves terminal alternatives before BEGIN and retains dispatched
-charges on failure. Caller transaction controls remain the caller's responsibility.
+charges on failure. Kind resolution and hold each cost 19 rows/points and two
+statements for initial or repair state, or 26 rows/points and three statements for
+ready repaired state, with the literal bytes above. They open no connection.
+Caller transaction controls and Library admission remain the caller's responsibility.
 
 `identityScopeNativeAssociationPrices` publishes additive writer bounds before IO:
 
@@ -146,13 +195,13 @@ deadline. This also bounds the literal timeout representation charged above.
 
 ## Remaining foreign operands and verification
 
-Both resolver and writer use `identitySourceConsumerLibraryWork` from the actual
-private Source maintenance frame; neither creates one. An unbound ordinary caller
-must supply its real original private dispatch grant to enter these operations.
-A historical capture allowance, public work object or fresh configured maintenance
-frame created inside a producer is not that grant. Missing or expired binding
-refuses only the affected dispatch; the storage, native association, resolution and
-locking bodies are implemented independently.
+The writer and maintenance resolver use `identitySourceConsumerLibraryWork` from
+the actual private Source maintenance frame; neither creates one. Kind resolve and
+hold instead consume Library's admitted original through the context above. No
+maintenance-only token is required for that path. A historical capture allowance or
+an unbound work object cannot replace either admission. Commerce owns binding this
+contract in `readCollectionKindWorkDefinition` and complete-definition dispatch;
+the receipt is `observed.evidence.native`, pinned by the final held result.
 
 Library alone owns positive `readLibraryScopeEffectsPage` and
 `verifyLibraryScopeEffectsSeal`. Their current native bodies read the retained
@@ -170,9 +219,10 @@ real initial registration, atomic event/native association, ready replay without
 backfill, exact finish binding, ready advancement, native substitution, original
 Pool/episode/deadline admission, rollback/expired callback, held-versus-released
 currentness, capture-component lock retention, platform-only writer admission
-and bounded revision growth. Native/unit/growth/full acceptance are
-unrun under the current launch policy. The permitted Kernel compiler result is
-reported in the delivery summary; it is not native or whole-feature proof.
+and bounded revision growth. Source inspection and an authored regression do not
+establish acceptance. Runtime, compiler, lint, build and native acceptance checks
+are deferred under the code-only launch policy. Later Commerce/identity receivers
+must exercise the contract in complete-definition dispatch with real native state.
 
 Source material read includes current scope types and registration/advance/finish/
 repair/revalidation bodies; identity epoch native writer/contract/schema and native

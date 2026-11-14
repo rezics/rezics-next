@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import {
   authoritativeTimeValue,
   commandTime,
@@ -10,9 +10,17 @@ import {
   currentCommandResources,
   type CommandTransaction,
 } from '../command/command.ts';
-import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
+import {
+  currentOperationalResources,
+  hasLiveOperationalTransaction,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
-import { instrumentNativeCollectionWork, type NativeCollectionWork } from '../library/collection-source-work.ts';
+import { instrumentNativeCollectionWork, type NativeCollectionWork } from '../library/collection-native-work.ts';
+import {
+  currentCollectionKindInputAdmission,
+  type CollectionKindPreparationLocator,
+} from '../library/collection-kind-work-admission.ts';
 import type { WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityScopeAddress } from './identity-scoped-observations.ts';
@@ -51,6 +59,21 @@ export type IdentityScopeCommittedEvidence = Readonly<{
   sealDigest: string;
   sourceGeneration: string;
 }>;
+
+/** The existing Library original, already bound and admitted in this exact home.
+ * Resolution borrows tx; its caller releases that home before any foreign work.
+ * A later hold needs a new live admission of the SAME work and original deadline.
+ */
+export type IdentityScopeCommittedKindContext = Readonly<{
+  kind: 'collection-kind';
+  tx: OperationalTransaction;
+  preparation: CollectionKindPreparationLocator;
+  work: NativeCollectionWork;
+  deadline: number;
+}>;
+export type IdentityScopeCommittedContext =
+  | IdentitySourceConsumerMaintenanceContext
+  | IdentityScopeCommittedKindContext;
 
 type Refusal = Readonly<{
   status: 'unavailable';
@@ -268,15 +291,34 @@ async function read(
   locator: IdentityScopeCommittedLocator,
   values: unknown[],
   lock: boolean,
+  admission?: Readonly<{ work: NativeCollectionWork; current(): boolean }>,
 ): Promise<IdentityScopeCommittedEvidence | null> {
-  const row = (await tx.query<HeadRow>(lock ? currentLocked() : current.sql, values)).rows[0];
+  const query = async <Row extends QueryResultRow>(sql: string, args: unknown[]) => {
+    if (!admission) return tx.query<Row>(sql, args);
+    let reservation: ReturnType<NativeCollectionWork['reserve']>;
+    try {
+      reservation = admission.work.reserve(
+        admission.current() ? identityScopeCommittedReceiptFootprint(sql, args) : undefined,
+      );
+      reservation.dispatch();
+    } catch (error) {
+      admission.work.failure = error instanceof Error ? error : new Error('Identity receipt admission ended');
+      throw error;
+    }
+    try {
+      return await reservation.query(() => tx.query<Row>(sql, args));
+    } finally {
+      reservation.settle();
+    }
+  };
+  const row = (await query<HeadRow>(lock ? currentLocked() : current.sql, values)).rows[0];
   if (!row) return null;
   // Ready is its own real native command, including after a completed repair.
   // Read-only replay never mints or repairs a historical missing association.
   const ready =
     row.state === 'ready'
       ? (
-          await tx.query<Pick<CompletionRow, 'epoch' | 'position' | 'transaction_id' | 'completion_revision'>>(
+          await query<Pick<CompletionRow, 'epoch' | 'position' | 'transaction_id' | 'completion_revision'>>(
             lock ? associationLocked() : association.sql,
             [...values.slice(0, 7), locator.completion.kind === 'initial'],
           )
@@ -301,7 +343,7 @@ async function read(
   }
   const { receiving, attempt } = locator.completion;
   const completed = (
-    await tx.query<CompletionRow>(lock ? repairLocked() : repair.sql, [
+    await query<CompletionRow>(lock ? repairLocked() : repair.sql, [
       ...values.slice(0, 7),
       receiving.job.jobId,
       receiving.job.epoch.toString(),
@@ -333,18 +375,66 @@ function refuse(reason: Refusal['reason'], work: NativeCollectionWork | null): R
   return { status: 'unavailable', reason, work: work?.receipt() ?? null };
 }
 
-/** Released local snapshot only. It never returns a held verification. */
+function isKindContext(context: IdentityScopeCommittedContext): context is IdentityScopeCommittedKindContext {
+  return 'kind' in context && context.kind === 'collection-kind';
+}
+
+function snapshotContext(context: IdentityScopeCommittedContext): IdentityScopeCommittedContext {
+  return isKindContext(context)
+    ? Object.freeze({ ...context, preparation: Object.freeze({ ...context.preparation }) })
+    : Object.freeze({ ...context });
+}
+
+function kindAdmission(pool: Pool, context: IdentityScopeCommittedKindContext) {
+  const admission = currentCollectionKindInputAdmission(context.tx, context.preparation, context.work);
+  return admission?.pool === pool && admission.deadline === context.deadline ? admission : undefined;
+}
+
+function originalWork(pool: Pool, context: IdentityScopeCommittedContext): NativeCollectionWork | null {
+  if (isKindContext(context)) return kindAdmission(pool, context) ? context.work : null;
+  return identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
+}
+
+/** Compare owner-admitted operands, without creating a second admission or allowance. */
+function kindSourceBound(
+  pool: Pool,
+  context: IdentityScopeCommittedKindContext,
+  locator: IdentityScopeCommittedLocator,
+): boolean {
+  const admission = kindAdmission(pool, context);
+  const source = locator.expected.key.source;
+  return (
+    !!admission &&
+    source.kind === 'library' &&
+    isDeepStrictEqual(source.identity, admission.sourceIdentity) &&
+    locator.expected.captureId === admission.custody.captureId
+  );
+}
+
+/** Maintenance owns a released snapshot. Kind borrows its admitted home, which
+ * the caller must release before foreign work. Neither result is a held verification.
+ */
 export async function resolveCommittedIdentityScopeReceipt(
   pool: Pool,
-  input: Readonly<{ locator: IdentityScopeCommittedLocator; context: IdentitySourceConsumerMaintenanceContext }>,
+  input: Readonly<{ locator: IdentityScopeCommittedLocator; context: IdentityScopeCommittedContext }>,
 ): Promise<IdentityScopeCommittedResolution> {
-  const context = Object.freeze({ ...input.context });
-  const work = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
+  const context = snapshotContext(input.context);
+  const work = originalWork(pool, context);
   if (!work) return refuse('work_binding', null);
   const locator = structuredClone(input.locator);
   const values = parameters(locator);
   if (!values) return refuse('source_binding', work);
   try {
+    if (isKindContext(context)) {
+      const current = () =>
+        kindSourceBound(pool, context, locator) && liveHome(context.tx, pool, locator, context.deadline);
+      if (!current()) return refuse('source_binding', work);
+      const evidence = await read(context.tx, locator, values, false, { work, current });
+      work.assertReady();
+      return evidence && current()
+        ? { status: 'observed', evidence, work: work.receipt() }
+        : refuse('not_current', work);
+    }
     const evidence = await instrumentNativeCollectionWork(
       pool,
       work,
@@ -405,7 +495,7 @@ const holds = new WeakMap<
   {
     tx: CommandTransaction;
     pool: Pool;
-    context: IdentitySourceConsumerMaintenanceContext;
+    context: IdentityScopeCommittedContext;
     work: NativeCollectionWork;
     locator: IdentityScopeCommittedLocator;
   }
@@ -417,28 +507,32 @@ const holds = new WeakMap<
 export async function holdCommittedIdentityScopeReceipt(
   tx: CommandTransaction,
   pool: Pool,
-  input: Readonly<{ evidence: IdentityScopeCommittedEvidence; context: IdentitySourceConsumerMaintenanceContext }>,
+  input: Readonly<{ evidence: IdentityScopeCommittedEvidence; context: IdentityScopeCommittedContext }>,
 ): Promise<IdentityScopeCommittedVerification> {
-  const context = Object.freeze({ ...input.context });
-  const work = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
+  const context = snapshotContext(input.context);
+  const work = originalWork(pool, context);
   if (!work) return refuse('work_binding', null);
   const expected = structuredClone(input.evidence);
   const values = parameters(expected.locator);
   if (!values || !liveHome(tx, pool, expected.locator, context.deadline)) return refuse('source_binding', work);
+  if (isKindContext(context) && (context.tx !== tx || !kindSourceBound(pool, context, expected.locator)))
+    return refuse('source_binding', work);
   try {
-    const evidence = await instrumentNativeCollectionWork(
-      pool,
-      work,
-      (sql, args) =>
-        identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) === work &&
-        liveHome(tx, pool, expected.locator, context.deadline)
-          ? identityScopeCommittedReceiptFootprint(sql, args)
-          : undefined,
-      () => read(tx, expected.locator, values, true),
-      tx as PoolClient,
-    );
-    if (!evidence || !isDeepStrictEqual(evidence, expected) || !liveHome(tx, pool, expected.locator, context.deadline))
-      return refuse('not_current', work);
+    const current = () =>
+      originalWork(pool, context) === work &&
+      liveHome(tx, pool, expected.locator, context.deadline) &&
+      (!isKindContext(context) || kindSourceBound(pool, context, expected.locator));
+    const evidence = isKindContext(context)
+      ? await read(tx, expected.locator, values, true, { work, current })
+      : await instrumentNativeCollectionWork(
+          pool,
+          work,
+          (sql, args) => (current() ? identityScopeCommittedReceiptFootprint(sql, args) : undefined),
+          () => read(tx, expected.locator, values, true),
+          tx as PoolClient,
+        );
+    work.assertReady();
+    if (!evidence || !isDeepStrictEqual(evidence, expected) || !current()) return refuse('not_current', work);
     const result = Object.freeze({
       status: 'held' as const,
       evidence,
@@ -468,7 +562,7 @@ export function isHeldCommittedIdentityScopeReceipt(tx: CommandTransaction, valu
     binding.tx === tx &&
     !binding.work.failure &&
     liveHome(tx, binding.pool, binding.locator, binding.context.deadline) &&
-    identitySourceConsumerLibraryWork(binding.pool, binding.context.identityConsumerWork, binding.context.deadline) ===
-      binding.work
+    originalWork(binding.pool, binding.context) === binding.work &&
+    (!isKindContext(binding.context) || kindSourceBound(binding.pool, binding.context, binding.locator))
   );
 }
