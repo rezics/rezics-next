@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { SourceObservationReadResponse } from '../../src/rating/source-observation-read.ts';
-import { materializeSourceObservations } from '../../src/rating/source-observation-maintenance.ts';
+import { materializeSourceObservations, prepareSourceObservationMaterialization } from '../../src/rating/source-observation-maintenance.ts';
 import { sourceObservation } from '../../src/rating/source-provider.ts';
 import payloadQuery from '../../src/rating/source-observation-read-payload.sql';
 import headQuery from '../../src/rating/source-observation-read-head.sql';
@@ -17,6 +17,7 @@ let observer: ReturnType<typeof observeSql>;
 beforeAll(async () => {
   fixture = await createSourceStatisticIsolationFixture({ sourceFences: true });
   fixture.database.pool.options.max = 4;
+  await prepareSourceObservationMaterialization(fixture.database.pool);
   await fixture.grantImporter(fixture.actors.importer);
   await fixture.grantImporter(fixture.actors.secondImporter);
   observer = observeSql(fixture.database.pool);
@@ -68,6 +69,17 @@ function historyBinding(id: string, caller: IsolationActor): CursorBinding {
       pageSize: 1,
     },
   };
+}
+async function materialize(id: string) {
+  const route = routeOf(id);
+  if (route === null) throw new Error('Fixture Subject has no route');
+  for (let step = 0; step < 8; step++) {
+    const result = await materializeSourceObservations(fixture.database.pool, {
+      route, subjectId: id, source: 'bangumi',
+    });
+    if (result.done) return;
+  }
+  throw new Error('Fixture conversion exceeded its expected steps');
 }
 async function expectInvalidCursor(response: Response) {
   expect((await json(response, 400)).code).toBe('invalid_cursor');
@@ -242,7 +254,7 @@ test('bounded materialization preserves unknown native order in canonical curren
     ],
   );
   await json(await inspect(id), 503);
-  await materializeSourceObservations(fixture.database.pool, { route, subjectId: id, source: 'bangumi' });
+  await materialize(id);
   const legacyDigest = sourceObservation(id, 'bangumi', legacy).digest;
   const converted = await json(await inspect(id, `?digest=${legacyDigest}`));
   expect(converted.head.digest).toBe(legacyDigest);
@@ -255,7 +267,7 @@ test('bounded materialization preserves unknown native order in canonical curren
     [route, id, legacyDigest],
   );
   expect(provenance.rows[0]!.transaction_id).toBe(originalTransaction);
-  await materializeSourceObservations(fixture.database.pool, { route, subjectId: id, source: 'bangumi' });
+  await materialize(id);
   expect((await json(await inspect(id))).head).toEqual(converted.head);
   const current = { ...value('132'), asOf: '2026-11-02', expectedObservation: legacyDigest };
   const stored = await json(await write(id, current));

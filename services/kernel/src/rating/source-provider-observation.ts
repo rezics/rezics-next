@@ -24,7 +24,7 @@ export async function lockSourceObservation(tx: CommandTransaction, input: Obser
   const key = { route: input.route, subject_id: input.subjectId };
   if (!(await lock.run(tx, key))) return { exists: false, current: null } as const;
   const current = await head.run(tx, { ...key, source: input.source });
-  if (!current || current.needsMaterialization) throw new ProblemError('partition_unavailable');
+  if (!current || current.inconsistent) throw new ProblemError('partition_unavailable');
   return { exists: true, current: current.digest === null ? null : (current as ObservationHead) } as const;
 }
 

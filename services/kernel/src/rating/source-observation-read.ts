@@ -404,10 +404,10 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     route: number,
     cursor: Cursor | null,
   ) {
-    const currentRows = await query<MetaRow & { needsMaterialization: boolean; emptySubjectEpoch: string }>(
+    const currentRows = await query<MetaRow & { inconsistent: boolean; emptySubjectEpoch: string }>(
       headQuery, { route, subject_id: input.subjectId, source }, input.deadline,
     );
-    if (currentRows[0]?.needsMaterialization) throw new ProblemError('partition_unavailable');
+    if (currentRows[0]?.inconsistent) throw new ProblemError('partition_unavailable');
     const current = currentRows[0]?.digest ? currentRows[0] : null;
     let subjectEpoch = subjectEpochOf(currentRows.map((row) => ({ subjectEpoch: row.subjectEpoch ?? row.emptySubjectEpoch })));
     if (input.digest !== undefined) {
