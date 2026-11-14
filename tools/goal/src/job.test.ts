@@ -83,6 +83,7 @@ async function typingRetryFixture(
     setupFailure?: 'migration' | 'generic' | 'spoofed';
     legacySourceRepair?: boolean;
     staleProgress?: boolean;
+    wrappedPendingCommand?: boolean;
     unknownCustody?: boolean;
     unavailableCompilerReceipt?: boolean;
     misclassified?: boolean;
@@ -141,7 +142,9 @@ async function typingRetryFixture(
     ? ['bun', 'run', '--cwd', 'services/kernel', 'typecheck']
     : kernelOutput
       ? ['sh', '-c', 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck']
-      : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+      : options.wrappedPendingCommand
+        ? ['bun', 'scripts/typecheck.ts']
+        : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
   const checkId = randomUUID();
   const physicalRunId = randomUUID();
   const pendingCommand = options.legacySourceRepair
@@ -150,7 +153,9 @@ async function typingRetryFixture(
         '-c',
         'bun run --cwd services/kernel typecheck && bun test services/kernel/test/commerce/post-benefit.test.ts services/kernel/test/commerce/acquisition.test.ts services/kernel/test/commerce/settlement.test.ts',
       ]
-    : compiler;
+    : options.wrappedPendingCommand
+      ? ['--local', '--', ...compiler]
+      : compiler;
   const outputRun = `client-output-${physicalRunId}`;
   const worktree = task.worktree;
   if (options.setupFailure) {
@@ -433,13 +438,14 @@ test('newest worktree mtime ignores node_modules and .temp', async () => {
   expect(await newestWorktreeMtime(root)).toBe(lstatSync(kept).mtimeMs);
 });
 
-test('an accepted source-only amendment waits for terminal proof, then starts its existing retry once', async () => {
+test('a wrapped compiler amendment holds unknown custody, then starts its existing retry once after terminal proof', async () => {
   const h = harness();
   try {
     const retained = await typingRetryFixture(h, {
       exited: true,
       unknownCustody: true,
       unavailableCompilerReceipt: true,
+      wrappedPendingCommand: true,
     });
     writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'source-only\n');
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
@@ -448,12 +454,13 @@ test('an accepted source-only amendment waits for terminal proof, then starts it
     await job.drain();
     expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
     expect(h.store.retryIntent(retained.ref)?.status).toBe('pending');
-    expect(h.store.attempt(retained.ref).typingEvidencePending).toBeDefined();
-    expect(
-      h.store
-        .events(retained.task.id, retained.ref.attempt)
-        .filter((event) => event.kind === 'typing-retry-unreconciled'),
-    ).toHaveLength(1);
+    expect(retained.pendingCommand).toEqual(['--local', '--', 'bun', 'scripts/typecheck.ts']);
+    expect(h.store.attempt(retained.ref).typingEvidencePending?.command).toEqual(retained.pendingCommand);
+    const holdEvents = h.store
+      .events(retained.task.id, retained.ref.attempt)
+      .filter((event) => event.kind === 'typing-retry-unreconciled');
+    expect(holdEvents).toHaveLength(1);
+    expect(holdEvents[0]?.body).toContain('source-amendment-compiler-hold');
 
     publishLocalTerminalProof(retained);
     job.resumePendingRetries();
@@ -463,7 +470,7 @@ test('an accepted source-only amendment waits for terminal proof, then starts it
     expect(h.store.task(retained.task.id).currentAttempt).toBe(2);
     expect(h.store.retryIntent(retained.ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
     expect(h.store.attempt(retained.ref).state).toBe('superseded');
-    expect(h.store.attempt(retained.ref).typingEvidencePending).toBeDefined();
+    expect(h.store.attempt(retained.ref).typingEvidencePending?.command).toEqual(retained.pendingCommand);
     expect(
       h.store.events(retained.task.id).filter((event) => event.kind === 'worker-run-started' && event.attempt === 2),
     ).toHaveLength(1);
