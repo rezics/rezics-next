@@ -44,16 +44,7 @@ test('current owner reads every page shape; a floor advance during enrichment de
      VALUES ($1,$2,$3,$4,'lent','name','Open counterparty','2026-10-01','2026-10-20',NULL,now(),now(),$5),
             ($1,$6,$3,$7,'borrowed','name','History counterparty','2026-09-01','2026-09-20',
              '2026-09-15',now(),now(),$8)`,
-    [
-      route,
-      openLoanId,
-      owner.accountId,
-      newId(route),
-      newId(route),
-      historyLoanId,
-      newId(route),
-      newId(route),
-    ],
+    [route, openLoanId, owner.accountId, newId(route), newId(route), historyLoanId, newId(route), newId(route)],
   );
 
   const pageReady = deferred();
