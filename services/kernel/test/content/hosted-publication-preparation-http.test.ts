@@ -90,16 +90,22 @@ test('progress emits only for a persisted expiry transition and authorized recei
     mode: 'whole',
   });
   expect(started.status).toBe(202);
-  const stageId = started.value.stageId as string, stagePath = prepPath(book.path, stageId);
+  const stageId = started.value.stageId as string,
+    stagePath = prepPath(book.path, stageId);
   const eventCount = async () =>
-    Number((await f.native.pool.query<{ count: string }>(
-      'SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type=$2',
-      [book.catalogueId, PREPARATION_CHANGED_EVENT],
-    )).rows[0]?.count ?? '0');
+    Number(
+      (
+        await f.native.pool.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type=$2',
+          [book.catalogueId, PREPARATION_CHANGED_EVENT],
+        )
+      ).rows[0]?.count ?? '0',
+    );
   const eventsBeforeProgress = await eventCount();
   expect(eventsBeforeProgress).toBeGreaterThan(0);
 
-  const liveKey = crypto.randomUUID(), liveProgress = await f.native.call('POST', `${stagePath}:progress`, {}, { key: liveKey });
+  const liveKey = crypto.randomUUID(),
+    liveProgress = await f.native.call('POST', `${stagePath}:progress`, {}, { key: liveKey });
   expect(liveProgress.status).toBe(200);
   const liveReplay = await f.native.call('POST', `${stagePath}:progress`, {}, { key: liveKey });
   expect(liveReplay.value).toEqual(liveProgress.value);
@@ -110,12 +116,15 @@ test('progress emits only for a persisted expiry transition and authorized recei
      WHERE catalogue_id=$1 AND stage_id=$2`,
     [book.catalogueId, stageId],
   );
-  const expiryKey = crypto.randomUUID(), expired = await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey });
+  const expiryKey = crypto.randomUUID(),
+    expired = await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey });
   expect(expired.status).toBe(200);
   expect(expired.value.stage.state).toBe('expired');
   expect(await eventCount()).toBe(eventsBeforeProgress + 1);
   expect((await f.native.call('POST', `${stagePath}:progress`, {}, { key: expiryKey })).value).toEqual(expired.value);
-  expect((await f.native.call('POST', `${stagePath}:progress`, {}, { key: crypto.randomUUID() })).value.stage.state).toBe('expired');
+  expect(
+    (await f.native.call('POST', `${stagePath}:progress`, {}, { key: crypto.randomUUID() })).value.stage.state,
+  ).toBe('expired');
   expect(await eventCount()).toBe(eventsBeforeProgress + 1);
 });
 

@@ -68,10 +68,7 @@ export type HostedPublicationPreparationProgress = Readonly<{
 type PreparationWorkResult =
   | HostedPublicationPreparationProgress
   | Readonly<{ value: HostedPublicationPreparationProgress; changed: boolean }>;
-type PreparationWork = (
-  tx: CommandTransaction,
-  time: AuthoritativeTime,
-) => Promise<PreparationWorkResult>;
+type PreparationWork = (tx: CommandTransaction, time: AuthoritativeTime) => Promise<PreparationWorkResult>;
 type StageBinding = Readonly<{ stageId: string; allowMissing: boolean }>;
 
 const PREPARATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -382,8 +379,7 @@ export function readHostedPublicationPreparationProgress(
         locator(catalogueId, stageId),
       );
       const stage = stageRead.progress;
-      if (stage.state !== 'sealed')
-        return { value: progress(catalogueId, stage), changed: stageRead.expired };
+      if (stage.state !== 'sealed') return { value: progress(catalogueId, stage), changed: stageRead.expired };
       const candidate = await readHostedVersionReleaseCandidateProgress(tx, actor, locator(catalogueId, stageId));
       const value = progress(catalogueId, stage, candidate === null ? null : candidateProgress(candidate));
       return { value, changed: stageRead.expired };
