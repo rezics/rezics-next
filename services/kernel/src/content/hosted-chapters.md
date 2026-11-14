@@ -390,6 +390,12 @@ source-pinned stage a 24-hour lifetime from native command time, and returns ret
 only the stage's immutable source revision, expected draft and expected publication IDs; preparation never selects
 the publication pointer.
 
+Decision: preparation progress inspects the optional retained candidate by exact stage, source seal and owner epoch,
+returning null before materialization and its existing checkpoint afterwards. It never seals, allocates or advances
+a candidate. Later draft/publication movement does not reject this retained observation or relabel the stage;
+fresh start, advance and seal retain stale-intent admission. Current author/owner admission precedes exact receipt
+replay, which preserves the committed response. Existing expiry and terminal progress semantics remain in force.
+
 Decision: fresh activation start, authority advancement and candidate selection require the exact candidate's stage
 to remain sealed and its `expires_at` to be strictly later than native command time. The indexed candidate/stage
 point read compares timestamps in PostgreSQL inside the owning command transaction, preserving timestamp precision

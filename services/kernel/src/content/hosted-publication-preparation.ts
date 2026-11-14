@@ -36,6 +36,7 @@ import type {
 import {
   applyHostedVersionReleaseCandidatePage,
   beginHostedVersionReleaseCandidate,
+  readHostedVersionReleaseCandidateProgress,
   sealHostedVersionReleaseCandidate,
 } from './hosted-version-release-candidate.ts';
 import type { HostedVersionReleaseCandidateCheckpoint } from './hosted-version-release-candidate-model.ts';
@@ -374,8 +375,8 @@ export function readHostedPublicationPreparationProgress(
         locator(catalogueId, stageId),
       );
       if (stage.state !== 'sealed') return progress(catalogueId, stage);
-      const candidate = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
-      return progress(catalogueId, stage, candidateProgress(candidate));
+      const candidate = await readHostedVersionReleaseCandidateProgress(tx, actor, locator(catalogueId, stageId));
+      return progress(catalogueId, stage, candidate === null ? null : candidateProgress(candidate));
     },
     { stageId, allowMissing: false },
   );

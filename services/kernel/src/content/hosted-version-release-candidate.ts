@@ -5,6 +5,7 @@ import { newId, routeOf } from '../route/route.ts';
 import { readHostedPublicationStagingCandidates } from './hosted-publication-staging.ts';
 import type {
   HostedPublicationStagedCandidate,
+  HostedPublicationStagingLocator,
   HostedPublicationStagingSeal,
 } from './hosted-publication-staging-model.ts';
 import {
@@ -517,6 +518,53 @@ async function verifyCompleteRoots(
 
 function sourceCursor(value: string | null): bigint {
   return value === null ? -1n : BigInt(value);
+}
+
+/** Inspect an optional retained candidate after current author admission and
+ * the staging progress read's owner/epoch fence. This is observation of the
+ * pinned source, so later live draft/publication movement is not write intent. */
+export async function readHostedVersionReleaseCandidateProgress(
+  tx: CommandTransaction,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<HostedVersionReleaseCandidateCheckpoint | null> {
+  const actor = accountActor(actorInput);
+  const route = routeOf(locator.catalogueId);
+  const source = (
+    await tx.query<Pick<SourceFenceRow,
+      | 'initiator_account_id' | 'owner_epoch' | 'source_revision_id' | 'expected_head_revision_id'
+      | 'expected_publication_id' | 'mode' | 'seal_input_version' | 'seal_candidate_count' | 'seal_sealed_at'
+    >>(
+      `SELECT stage.initiator_account_id,stage.owner_epoch::text AS owner_epoch,
+              stage.source_revision_id,stage.expected_head_revision_id,stage.expected_publication_id,stage.mode,
+              source_seal.input_version::text AS seal_input_version,
+              source_seal.candidate_count::text AS seal_candidate_count,
+              to_char(source_seal.sealed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS seal_sealed_at
+       FROM content.hosted_publication_staging stage
+       JOIN content.hosted_publication_staging_seal source_seal
+         ON source_seal.route=stage.route AND source_seal.catalogue_id=stage.catalogue_id
+        AND source_seal.stage_id=stage.stage_id
+       WHERE stage.route=$1 AND stage.catalogue_id=$2 AND stage.stage_id=$3`,
+      [route, locator.catalogueId, locator.stageId],
+    )
+  ).rows[0];
+  if (!source || source.initiator_account_id !== actor.accountId || source.owner_epoch !== String(actor.authnEpoch))
+    throw new HostedVersionReleaseCandidateNotFoundError();
+  const sourceSeal: HostedPublicationStagingSeal = {
+    locator,
+    sourceRevisionId: source.source_revision_id,
+    expectedHeadRevisionId: source.expected_head_revision_id,
+    expectedPublicationId: source.expected_publication_id,
+    mode: source.mode,
+    inputVersion: source.seal_input_version,
+    candidateCount: source.seal_candidate_count,
+    sealedAt: source.seal_sealed_at,
+  };
+  const row = await readCandidate(tx, sourceSeal, false);
+  if (!row) return null;
+  assertCandidateBinding(row, actor, sourceSeal);
+  await currentSnapshot(tx, row);
+  return checkpoint(row);
 }
 
 /** Bind one exact staging seal to an isolated temporal candidate generation. */
