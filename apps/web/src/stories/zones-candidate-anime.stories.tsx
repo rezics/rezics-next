@@ -14,7 +14,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Deferred development preview with fictional sample content. It does not claim an adopted official Anime site or a public dynamic-release catalogue. PageStory keeps the generated route and shared theme, viewport, and locale controls.",
+          "Anime candidate gated development preview with fictional admitted rows; source opening is deferred. It does not claim an adopted official Anime site or a public dynamic-release catalogue. PageStory keeps the generated route and shared theme, viewport, and locale controls.",
       },
     },
   },
@@ -27,13 +27,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const PreviewDeferred: Story = {
+export const AdmittedPreviewDeferred: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole("heading", { name: "Anime" });
-    await canvas.findByText(/Development preview: this fictional sample/);
+    await canvas.findByText(/Anime candidate — gated development preview/);
     await userEvent.click(
-      await canvas.findByRole("link", { name: "The Lantern on Sora Bay" }),
+      await canvas.findByRole("link", { name: /The Lantern on Sora Bay/ }),
     );
     await canvas.findByRole("heading", { name: "The Lantern on Sora Bay" });
     await userEvent.click(
@@ -47,13 +47,24 @@ export const PreviewDeferred: Story = {
     );
     await canvas.findByRole("heading", { name: "Anime" });
     await expect(
-      canvas.getByText(/Development preview: this fictional sample/),
+      canvas.getByText(/Anime candidate — gated development preview/),
     ).toBeVisible();
   },
 };
 
 export const ReadyEmptyPreviewDeferred: Story = {
   args: { path: previewPath(animeCandidateIds.readyEmpty) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("heading", { name: "Anime" });
+    await canvas.findByText(/Anime candidate — gated development preview/);
+    await expect(
+      canvas.queryByRole("link", { name: /The Lantern on Sora Bay/ }),
+    ).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole("link", { name: /Moss and Meteors/ }),
+    ).not.toBeInTheDocument();
+  },
   parameters: {
     docs: {
       description: {
@@ -65,6 +76,14 @@ export const ReadyEmptyPreviewDeferred: Story = {
 
 export const SparsePreviewDeferred: Story = {
   args: { path: previewPath(animeCandidateIds.sparse) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("link", { name: /The Lantern on Sora Bay/ });
+    await canvas.findByRole("link", { name: /Moss and Meteors/ });
+    await expect(
+      canvas.queryByRole("link", { name: /A Map for Cloud Harbour/ }),
+    ).not.toBeInTheDocument();
+  },
   parameters: {
     docs: {
       description: {
@@ -98,13 +117,24 @@ export const SemanticUnavailablePreviewDeferred: Story = {
   },
 };
 
-export const PrivateOrMissingPreviewDeferred: Story = {
-  args: { path: previewPath(animeCandidateIds.concealed) },
+export const PrivatePreviewDeferred: Story = {
+  args: { path: previewPath(animeCandidateIds.private) },
+  parameters: {
+    docs: {
+      description: {
+        story: "An anonymous private target is concealed with a 404 response.",
+      },
+    },
+  },
+};
+
+export const MissingPreviewDeferred: Story = {
+  args: { path: previewPath(animeCandidateIds.missing) },
   parameters: {
     docs: {
       description: {
         story:
-          "Private and missing targets share the same concealed 404 response.",
+          "A missing target has the same concealed 404 response as a private target.",
       },
     },
   },

@@ -1,3 +1,4 @@
+import type { CompositionDocument } from "@rezics/composition";
 import type { ZonePageResponse } from "../appearance";
 
 /** Decision summary: keep Anime a synthetic, gated development preview until an official instance is adopted. */
@@ -5,9 +6,10 @@ export const animeCandidateIds = {
   admittedPreview: "0193c000-0001-7000-8000-000000000000",
   platformClosed: "0193c000-0001-7000-8000-000000000001",
   semanticUnavailable: "0193c000-0001-7000-8000-000000000002",
-  concealed: "0193c000-0001-7000-8000-000000000003",
+  private: "0193c000-0001-7000-8000-000000000003",
   readyEmpty: "0193c000-0001-7000-8000-000000000004",
   sparse: "0193c000-0001-7000-8000-000000000005",
+  missing: "0193c000-0001-7000-8000-000000000006",
 } as const;
 
 export const animeCandidateSubjectIds = {
@@ -35,40 +37,34 @@ const navigation = [
   { route: "series" },
 ];
 const previewCopy =
-  "Development preview: this fictional sample is not an adopted official Anime site or a live release catalogue.";
+  "Anime candidate — gated development preview; these fictional rows are admitted only for this Storybook fixture while source opening is deferred. No official Anime site or live public release catalogue is adopted.";
 
-type CandidateSubject = {
+export type AnimeCandidateSubject = {
   id: string;
   type: "schema:Movie" | "schema:TVSeries" | "rezics:AnimeRelease";
   labels: { en: string };
 };
 
-const film: CandidateSubject = {
+const film: AnimeCandidateSubject = {
   id: animeCandidateSubjectIds.film,
   type: "schema:Movie",
   labels: { en: "The Lantern on Sora Bay" },
 };
-const series: CandidateSubject = {
+const series: AnimeCandidateSubject = {
   id: animeCandidateSubjectIds.series,
   type: "schema:TVSeries",
   labels: { en: "Moss and Meteors" },
 };
-const secondFilm: CandidateSubject = {
+const secondFilm: AnimeCandidateSubject = {
   id: animeCandidateSubjectIds.secondFilm,
   type: "schema:Movie",
   labels: { en: "A Map for Cloud Harbour" },
 };
-const release: CandidateSubject = {
+const release: AnimeCandidateSubject = {
   id: animeCandidateSubjectIds.release,
   type: "rezics:AnimeRelease",
   labels: { en: "The Lantern on Sora Bay — home-video release" },
 };
-
-type ReadyRead = { status: "ready"; items: CandidateSubject[] };
-
-function read(items: CandidateSubject[]): ReadyRead {
-  return { status: "ready", items };
-}
 
 function slots() {
   return ["hero", "entity", "aside", "footer"].map((name) => ({
@@ -77,7 +73,11 @@ function slots() {
   }));
 }
 
-function staticDocument(title: string, intro: string, extra: string) {
+function staticDocument(
+  title: string,
+  intro: string,
+  extra: string,
+): CompositionDocument {
   return {
     root: { props: {} },
     content: [
@@ -98,7 +98,7 @@ function staticDocument(title: string, intro: string, extra: string) {
   };
 }
 
-const homeDocument = {
+const homeDocument: CompositionDocument = {
   root: { props: {} },
   content: [
     {
@@ -142,7 +142,7 @@ const homeDocument = {
   ],
 };
 
-const releasesDocument = {
+const releasesDocument: CompositionDocument = {
   root: { props: {} },
   content: [
     {
@@ -189,7 +189,9 @@ const releasesDocument = {
   ],
 };
 
-const documents = {
+export type AnimeRoute = "" | "films" | "releases" | "series";
+
+const documents: Record<AnimeRoute, CompositionDocument> = {
   "": homeDocument,
   films: staticDocument(
     "Films",
@@ -202,11 +204,9 @@ const documents = {
     "Animated television series.",
     "This authored route is a static guide. Seasons and episodes remain parts of their series.",
   ),
-} as const;
+};
 
-export type AnimeRoute = keyof typeof documents;
-
-const zone = (id: string): ZonePageResponse["zone"] => ({
+export const animeCandidateZone = (id: string): ZonePageResponse["zone"] => ({
   id,
   revision: "1",
   labels,
@@ -219,20 +219,15 @@ const zone = (id: string): ZonePageResponse["zone"] => ({
 export function animeCandidatePage(
   id: string,
   route: AnimeRoute,
-  items: CandidateSubject[] = [],
+  profile: string,
+  reads: Record<string, unknown>,
 ): ZonePageResponse {
-  const reads =
-    route === ""
-      ? { works: read(items) }
-      : route === "releases"
-        ? { releases: read(items) }
-        : {};
   return {
-    profile: "zone-public-page",
+    profile,
     template: { scope: "route", key: route },
     document: documents[route],
     reads,
-    zone: zone(id),
+    zone: animeCandidateZone(id),
   };
 }
 
@@ -243,29 +238,24 @@ export const animeCandidateReads = {
   releases: [release],
 };
 
+export function animeCandidateRows(
+  zoneId: string,
+  route: AnimeRoute,
+): AnimeCandidateSubject[] {
+  if (route === "") {
+    if (zoneId === animeCandidateIds.readyEmpty)
+      return animeCandidateReads.readyEmpty;
+    if (zoneId === animeCandidateIds.sparse) return animeCandidateReads.sparse;
+    return animeCandidateReads.admittedPreview;
+  }
+  if (route === "releases") return animeCandidateReads.releases;
+  return [];
+}
+
 export function animeCandidateSubject(
   id: string,
-): CandidateSubject | undefined {
+): AnimeCandidateSubject | undefined {
   return [film, series, secondFilm, release].find(
     (subject) => subject.id === id,
   );
-}
-
-export function animeCandidateSubjectPage(
-  zoneId: string,
-  subject: CandidateSubject,
-): ZonePageResponse {
-  return {
-    profile: "zone-public-page",
-    template: { scope: "type", key: subject.type },
-    document: staticDocument(
-      subject.labels.en,
-      `A fictional ${subject.type === "rezics:AnimeRelease" ? "release carrier" : "animated work"} in the Anime development preview.`,
-      "This subject is sample content. No third-party artwork or real Season binding is included.",
-    ),
-    reads: {},
-    zone: zone(zoneId),
-    subject: subject.id,
-    views: ["summary"],
-  };
 }
