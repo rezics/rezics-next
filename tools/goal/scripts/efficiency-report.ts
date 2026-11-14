@@ -124,7 +124,7 @@ async function main(args: string[]): Promise<void> {
       return;
     }
     const notifier = parsed.privateDuty
-      ? [process.execPath, resolve(process.cwd(), '.temp/goal/telegram.ts'), 'text']
+      ? [process.execPath, resolve(process.cwd(), '.temp/goal/telegram.ts'), 'hourly-text']
       : settings.integration.hourlyReportNotifier;
     const delivery = await sendHourlyEfficiencyReport(
       db,
