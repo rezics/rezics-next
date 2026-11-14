@@ -57,10 +57,13 @@ explicit choice; an unknown browser copy remains inspectable but cannot resume. 
 submitted title, source, source revision and saved time separately from the later current read; browser submission
 also names the selected server revision used by the native command.
 
-The installed document schema has no footnote node or disclosure port. This caller preserves supported structured
-nodes and spoiler disclosure without inventing footnote payloads; any future footnote contract belongs to Document.
-Focused rich-preview acceptance extends the existing resume and command suites; execution and keyboard/visual
-review remain with the separate verifier.
+Decision: Footnotes require an independent Document outcome that owns the snapshot format, editor and Markdown
+import support, accessible shared reading disclosure, owner documentation and focused acceptance. Own drafts
+integrates only after Document delivers its adopted public format and disclosure port; it does not invent footnote
+payloads. The installed schema has neither a footnote node nor that port, so this caller continues to preserve its
+supported structured nodes and spoiler disclosure. Existing reader, command and native acceptance remains in place;
+rich-preview acceptance extends the resume and command suites, while execution and rich-document keyboard/visual
+review belong to the separate verifier.
 
 ## Cost
 
