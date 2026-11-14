@@ -114,6 +114,15 @@ operation. Results and retry stay there. Creation goes through Copies' existing 
 a free-form ID or guessed revision. Both consumers share controls and return keyboard focus on Back/Close. Response
 boundaries, rather than the browser clock, initialize dates. Receipts and explicit current reads remain distinct.
 
+Decision: background reads stay passive; explicit focus moves target visible destinations while the user still owns them.
+
+Review, operation, Back and Close focus their visible destination. A saved receipt or refreshed result receives
+focus only while its source is current, its region is visible and the user has not moved from that transition. Copy
+refresh keeps the mounted controls while reading; success focuses Inspect and failure focuses Retry. After a valid
+refresh, only a settled saved/refused presentation resets in place to current operations. A changed Loans page focuses
+its list heading. Leaving or closing the region cancels a late focus move, and a current read never settles an unknown
+command.
+
 Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
 or `date-fns`. Host-b ready evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...`
 and then nothing for 150s; later `noDiscovery` plus an explicit include still printed no Vite

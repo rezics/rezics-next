@@ -99,7 +99,7 @@ export const ConflictRecovery: Story = {
     docs: {
       description: {
         story:
-          'The first command conflicts with a changed revision. Refresh current loans beside that refusal, review the changed loan and deliberately choose another operation. This is a new request after a definitive first refusal.',
+          'The first command conflicts with a changed revision. Refresh current loans beside that refusal, then confirm focus reaches the current list heading if you stay with the refresh. Review the changed loan and deliberately choose another operation. This is a new request after a definitive first refusal.',
       },
     },
   },
@@ -111,7 +111,7 @@ export const SelectedCopyCreation: Story = {
     docs: {
       description: {
         story:
-          'Inspect the copy through the installed Copies route. Review its loan region, choose Record a loan, enter a private counterparty and save. The command captures this copy and revision; loan fields do not join Copy Save.',
+          'Inspect the copy through the installed Copies route. Keep a Copy field focused while its initial loan read completes, then Review and Close to check the return focus. Choose Record a loan, enter a private counterparty and save. Use the explicit current refresh and check its visible destination. The command captures this copy and revision; loan fields do not join Copy Save.',
       },
     },
   },

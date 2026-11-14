@@ -15,6 +15,7 @@ export function LoanControls({
   originating,
   disabled = false,
   onRefresh,
+  readVersion = 0,
   onLockChange,
 }: {
   loan?: Loan;
@@ -22,10 +23,11 @@ export function LoanControls({
   today: string | null;
   originating: LoansOrigin;
   disabled?: boolean;
-  onRefresh: () => void;
+  onRefresh: (trigger: HTMLButtonElement) => void;
+  readVersion?: number;
   onLockChange?: (locked: boolean) => void;
 }) {
-  const [machine] = useState(() => new LoanCommandIntent(originating, dispatchLoan));
+  const [machine, setMachine] = useState(() => new LoanCommandIntent(originating, dispatchLoan));
   const state = useSyncExternalStore(machine.subscribe, machine.snapshot, machine.snapshot);
   const current = machine.current();
   const [operation, setOperation] = useState<LoanCommand['operation'] | null>(null);
@@ -38,21 +40,46 @@ export function LoanControls({
   const formHeading = useRef<HTMLHeadingElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const receipt = useRef<HTMLParagraphElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
+  const receiptFocus = useRef(false);
+  const previousReadVersion = useRef(readVersion);
   const locked = state.phase === 'pending' || state.phase === 'uncertain';
   useLayoutEffect(() => machine.mount(), [machine]);
   useEffect(() => {
     if (!current) machine.retire();
   }, [current, machine]);
+  useEffect(() => {
+    if (previousReadVersion.current === readVersion) return;
+    previousReadVersion.current = readVersion;
+    // A current read may clear resolved presentation, never a pending or unknown command.
+    if ((state.phase === 'saved' || state.phase === 'refused') && machine.current()) {
+      setMachine(new LoanCommandIntent(originating, dispatchLoan));
+      trigger.current = null;
+      setOperation(null);
+    }
+  }, [machine, originating, readVersion, state.phase]);
   useLayoutEffect(() => {
     onLockChange?.(locked);
   }, [locked, onLockChange]);
+  useEffect(() => {
+    const trackFocus = (event: FocusEvent) => {
+      if (!receiptFocus.current || event.target === document.body || event.target === document.documentElement) return;
+      if (!controls.current?.contains(event.target as Node)) receiptFocus.current = false;
+    };
+    document.addEventListener('focusin', trackFocus);
+    return () => document.removeEventListener('focusin', trackFocus);
+  }, []);
   useLayoutEffect(() => {
     if (operation) formHeading.current?.focus();
     else trigger.current?.focus();
   }, [operation]);
   useLayoutEffect(() => {
-    if (state.phase === 'saved') receipt.current?.focus();
-  }, [state.phase]);
+    if (state.phase !== 'saved' || !receiptFocus.current) return;
+    receiptFocus.current = false;
+    const region = controls.current;
+    if (!machine.current() || !region?.isConnected || region.closest('[hidden]')) return;
+    receipt.current?.focus();
+  }, [machine, state.phase]);
   if (!current || state.phase === 'retired') return null;
 
   const choose = (value: LoanCommand['operation'], button: HTMLButtonElement) => {
@@ -76,7 +103,7 @@ export function LoanControls({
 
   if (state.phase === 'saved')
     return (
-      <div className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
+      <div ref={controls} className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
         <p
           ref={receipt}
           tabIndex={-1}
@@ -87,14 +114,18 @@ export function LoanControls({
         </p>
         <LoanFacts loan={state.result.loan} today={state.result.boundary.today} />
         <p className="text-sm text-muted-foreground">{m.library_loans_read_distinct()}</p>
-        <button type="button" className={loanQuiet} onClick={() => machine.current() && onRefresh()}>
+        <button
+          type="button"
+          className={loanQuiet}
+          onClick={(event) => machine.current() && onRefresh(event.currentTarget)}
+        >
           {m.library_loans_refresh()}
         </button>
       </div>
     );
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div ref={controls} className="min-w-0 space-y-4">
       <div hidden={!!operation}>
         <div className="flex flex-wrap gap-3">
           {copy && !loan ? (
@@ -140,6 +171,7 @@ export function LoanControls({
           onSubmit={(event) => {
             event.preventDefault();
             if (!canEdit || !machine.current()) return;
+            receiptFocus.current = true;
             if (operation === 'create' && copy)
               void machine.start({
                 operation,
@@ -233,7 +265,15 @@ export function LoanControls({
               {state.refusal && state.refusal.reason !== 'unavailable' ? (
                 <p>{m.library_loans_unknown_refusal()}</p>
               ) : null}
-              <button type="button" className={loanButton} disabled={disabled} onClick={() => void machine.retry()}>
+              <button
+                type="button"
+                className={loanButton}
+                disabled={disabled}
+                onClick={() => {
+                  receiptFocus.current = true;
+                  void machine.retry();
+                }}
+              >
                 {m.library_loans_retry_exact()}
               </button>
             </div>
@@ -246,7 +286,11 @@ export function LoanControls({
                   {m.library_loans_correct()}
                 </button>
               ) : null}
-              <button type="button" className={loanQuiet} onClick={() => machine.current() && onRefresh()}>
+              <button
+                type="button"
+                className={loanQuiet}
+                onClick={(event) => machine.current() && onRefresh(event.currentTarget)}
+              >
                 {m.library_loans_refresh()}
               </button>
             </div>

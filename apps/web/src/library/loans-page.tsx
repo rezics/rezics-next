@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -26,6 +26,14 @@ export function LoansPage({
   const [source, setSource] = useState({ page, address, guard: originating.isCurrent });
   const [selected, setSelected] = useState<Selection | null>(null);
   const [locked, setLocked] = useState(false);
+  const listHeading = useRef<HTMLHeadingElement>(null);
+  const refreshFocus = useRef<{
+    trigger: HTMLButtonElement;
+    page: LoansPageData;
+    address: LoansAddress;
+    guard: LoansOrigin['isCurrent'];
+    moved: boolean;
+  } | null>(null);
   const current = originating.isCurrent();
   if (source.page !== page || source.address !== address || source.guard !== originating.isCurrent) {
     setSource({ page, address, guard: originating.isCurrent });
@@ -36,6 +44,38 @@ export function LoansPage({
     setSelected(null);
     setLocked(false);
   }
+  useEffect(() => {
+    const trackFocus = (event: FocusEvent) => {
+      const pending = refreshFocus.current;
+      if (!pending || event.target === document.body || event.target === document.documentElement) return;
+      if (event.target !== pending.trigger) pending.moved = true;
+    };
+    document.addEventListener('focusin', trackFocus);
+    return () => document.removeEventListener('focusin', trackFocus);
+  }, []);
+  useLayoutEffect(() => {
+    const pending = refreshFocus.current;
+    if (!pending) return;
+    if (
+      pending.guard !== originating.isCurrent ||
+      pending.address.filter !== address.filter ||
+      pending.address.cursor !== address.cursor ||
+      pending.address.locale !== address.locale ||
+      !originating.isCurrent('copy.list')
+    ) {
+      refreshFocus.current = null;
+      return;
+    }
+    if (pending.page === page) return;
+    refreshFocus.current = null;
+    if (pending.moved) return;
+    listHeading.current?.focus();
+  }, [address, originating, page]);
+  const refreshCurrent = (trigger: HTMLButtonElement) => {
+    if (!originating.isCurrent('copy.list')) return;
+    refreshFocus.current = { trigger, page, address, guard: originating.isCurrent, moved: false };
+    onRefresh();
+  };
   const select = (item: LoanItem, trigger: HTMLButtonElement) => {
     if (!originating.isCurrent() || (locked && selected?.item !== item)) return;
     setSelected({ item, expanded: true, trigger });
@@ -94,7 +134,11 @@ export function LoansPage({
         </nav>
       </Exposure>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-medium">
+        <h2
+          ref={listHeading}
+          tabIndex={-1}
+          className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           {address.filter === 'history' ? m.library_loans_history() : m.library_loans_open()}
         </h2>
         {address.filter === 'open' ? (
@@ -112,7 +156,7 @@ export function LoansPage({
           type="button"
           className={loanQuiet}
           disabled={!current}
-          onClick={() => originating.isCurrent() && onRefresh()}
+          onClick={(event) => refreshCurrent(event.currentTarget)}
         >
           {m.library_loans_refresh()}
         </button>
@@ -139,7 +183,7 @@ export function LoansPage({
                   onClose={close}
                   originating={originating}
                   today={page.boundary?.today ?? null}
-                  onRefresh={onRefresh}
+                  onRefresh={refreshCurrent}
                   onLockChange={lockChanged}
                 />
               ) : null}
@@ -193,7 +237,7 @@ function SelectedLoan({
   onClose: () => void;
   originating: LoansOrigin;
   today: string | null;
-  onRefresh: () => void;
+  onRefresh: (trigger: HTMLButtonElement) => void;
   onLockChange: (locked: boolean) => void;
 }) {
   const id = useId();

@@ -10,9 +10,13 @@ selected-copy read implementation remain with their owners.
 
 A row shows supplied work/copy identity, direction, private counterparty text, start/due/return days and native state.
 Review opens a contextual region. Choosing extend or return opens only those fields. Back returns focus to the
-operation button; Close returns focus to Review. Closing preserves the mounted selection, including an unresolved
-command, for reopening. While pending or uncertain, another row cannot replace that selection. Hidden, missing,
-deleted and unsupported context stays explicit; concealed people have no guessed identity or destination.
+operation button; Close returns focus to Review. Initial and background Copy reads do not move focus. A deliberate
+refresh preserves the mounted controls and focuses the current Inspect or Retry destination only if focus stayed
+with that refresh. After a valid refreshed read, only a settled saved/refused presentation resets in place to current
+operations; a read never resets an unknown command. A saved receipt gets focus only while its controls remain visible
+and focus has not moved elsewhere. Closing preserves the mounted selection, including an unresolved command, for
+reopening. While pending or uncertain, another row cannot replace that selection. Hidden, missing, deleted and
+unsupported context stays explicit; concealed people have no guessed identity or destination.
 
 An attempted command snapshots its operation, exact copy or loan revision, dates, untrimmed counterparty text, key
 and credential. Unavailable responses and thrown transport errors retain that snapshot. Retry dispatches exactly
@@ -27,7 +31,8 @@ and fences late responses. No polling, per-row reads, page refill or client date
 `apps/web/tests/loan-intent.test.ts` pins lost acknowledgements, exact create/extend/return replay, later refusal,
 first refusal correction, concurrent submission and credential/source retirement. The mounted controls cases in
 `apps/web/tests/loan-controls.test.tsx` pin deliberate operation selection, retained close/reopen, contextual result,
-conflict refresh and focus return. All are source-only until the verifier executes them.
+conflict refresh, passive initial reads, deliberate refresh destinations, receipt focus and delayed-result focus
+ownership. All are source-only until the verifier executes them.
 
 `Library/Loans` stories use actual routed consumers and explicitly illustrative contract-shaped fixtures. Named
 states are open/due/undated, returned history, concealed context, unknown exact retry and conflict recovery; the

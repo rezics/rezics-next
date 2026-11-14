@@ -2,6 +2,7 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 import type { LoanWriteResult } from '../src/library/loans-read';
+import type { OpenCopyLoanRead } from '../src/library/loans-actions';
 import type { LoansOrigin } from '../src/library/loan-intent';
 import { illustrativeLoan, illustrativeLoanPage, loanStoryBoundary } from '../src/kernel/fake/loans';
 
@@ -31,12 +32,20 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 let respond: (input: { data: Record<string, unknown>; headers: HeadersInit }) => Promise<LoanWriteResult>;
+let readCopyLoan: (input: { data: { copyId: string } }) => Promise<OpenCopyLoanRead> = async () => {
+  throw new Error('Unexpected selected-copy loan read');
+};
 const calls: { data: Record<string, unknown>; headers: HeadersInit }[] = [];
 const send = (input: { data: Record<string, unknown>; headers: HeadersInit }) => {
   calls.push(input);
   return respond(input);
 };
-mock.module('../src/library/loans-actions', () => ({ createLoan: send, updateLoanDue: send, completeLoan: send }));
+mock.module('../src/library/loans-actions', () => ({
+  createLoan: send,
+  updateLoanDue: send,
+  completeLoan: send,
+  readOpenCopyLoan: (input: { data: { copyId: string } }) => readCopyLoan(input),
+}));
 // Admission and navigation have their own lifetime acceptance; exercise the actual loan consumers here.
 mock.module('../src/kernel/exposure', () => ({ Exposure: ({ children }: { children: ReactNode }) => children }));
 const { createRoot } = await import('react-dom/client');
@@ -44,6 +53,7 @@ const { createRootRoute, createRouter, createMemoryHistory, RouterContextProvide
   await import('@tanstack/react-router');
 const { LoansPage } = await import('../src/library/loans-page');
 const { LoanControls } = await import('../src/library/loan-controls');
+const { CopyLoanPanel } = await import('../src/library/copy-loan-panel');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
@@ -87,6 +97,11 @@ const submit = async (host: Element) => {
   if (!form) throw new Error('Missing selected operation form');
   await act(async () => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
 };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => (resolve = done));
+  return { promise, resolve };
+}
 afterAll(async () => {
   mock.restore();
   await window.happyDOM.close();
@@ -116,6 +131,60 @@ test('supplied rows keep their order and mount fields only for the deliberately 
     await click(button(view.host, m.library_loans_close()));
     expect(document.activeElement).toBe(review);
     expect(calls).toHaveLength(0);
+  } finally {
+    await view.close();
+  }
+});
+
+test('initial Copy read preserves an edited field and deliberate refresh returns to its current controls', async () => {
+  const initial = deferred<OpenCopyLoanRead>();
+  const refreshed = deferred<OpenCopyLoanRead>();
+  const initialStarted = deferred<void>();
+  const refreshStarted = deferred<void>();
+  let reads = 0;
+  readCopyLoan = () => {
+    if (++reads === 1) {
+      initialStarted.resolve(undefined);
+      return initial.promise;
+    }
+    refreshStarted.resolve(undefined);
+    return refreshed.promise;
+  };
+  const unavailable: OpenCopyLoanRead = {
+    sessionSubject: 'viewer',
+    copyId: 'selected-copy',
+    page: { ...source(), inventoryState: 'unavailable', boundary: null, items: [] },
+    item: null,
+  };
+  const current: OpenCopyLoanRead = {
+    sessionSubject: 'viewer',
+    copyId: 'selected-copy',
+    page: { ...source(), items: [] },
+    item: null,
+  };
+  const copy = { id: 'selected-copy', revision: 7 } as Parameters<typeof CopyLoanPanel>[0]['copy'];
+  const view = await mount(
+    <>
+      <input aria-label="Copy field" />
+      <CopyLoanPanel copy={copy} originating={origin} disabled={false} />
+    </>,
+  );
+  try {
+    const field = view.host.querySelector('input')!;
+    await act(async () => field.focus());
+    await act(async () => {
+      await initialStarted.promise;
+      initial.resolve(unavailable);
+      for (let turn = 0; turn < 4; turn++) await Promise.resolve();
+    });
+    expect(document.activeElement).toBe(field);
+    await click(button(view.host, m.library_loans_refresh()));
+    await act(async () => {
+      await refreshStarted.promise;
+      refreshed.resolve(current);
+      for (let turn = 0; turn < 4; turn++) await Promise.resolve();
+    });
+    expect(document.activeElement).toBe(button(view.host, m.library_loans_inspect()));
   } finally {
     await view.close();
   }
@@ -156,6 +225,43 @@ test('uncertain return survives close/reopen and replays exact input beside the 
     expect(new Headers(calls[1]!.headers).get('x-csrf-token')).toBe('original');
     expect(row.textContent).toContain(m.library_loans_receipt());
     expect(row.textContent).toContain(m.library_loans_read_distinct());
+    expect(document.activeElement?.textContent).toBe(m.library_loans_receipt());
+    expect((document.activeElement as HTMLElement).closest('[hidden]')).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+test('a delayed receipt preserves focus after closing the loan and moving elsewhere', async () => {
+  const write = deferred<LoanWriteResult>();
+  respond = () => write.promise;
+  const view = await mount(
+    <>
+      <button type="button">Later destination</button>
+      <LoansPage page={source()} address={address} originating={origin} onRefresh={() => {}} />
+    </>,
+  );
+  try {
+    const review = button(view.host, m.library_loans_inspect());
+    await click(review);
+    await click(button(view.host, m.library_loans_return()));
+    await submit(view.host);
+    const row = view.host.querySelector('li')!;
+    await click(button(view.host, m.library_loans_close()));
+    expect(document.activeElement).toBe(review);
+    const later = button(view.host, 'Later destination');
+    await act(async () => later.focus());
+    await act(async () => {
+      write.resolve({
+        ok: true,
+        loan: illustrativeLoan({ returnedOn: loanStoryBoundary.today, state: 'returned', revision: 4 }),
+        boundary: loanStoryBoundary,
+      });
+      await Promise.resolve();
+    });
+    expect(row.textContent).toContain(m.library_loans_receipt());
+    expect(row.querySelector('section')?.hidden).toBe(true);
+    expect(document.activeElement).toBe(later);
   } finally {
     await view.close();
   }
@@ -184,6 +290,7 @@ test('first conflict offers an explicit fresh read; a changed source clears the 
     await click(button(view.host, m.library_loans_refresh()));
     expect(refreshed).toBe(1);
     await view.render(<LoansPage page={source()} address={address} originating={origin} onRefresh={() => {}} />);
+    expect(document.activeElement).toBe(view.host.querySelector('h2'));
     expect(view.host.querySelectorAll('form')).toHaveLength(0);
     expect(view.host.textContent).not.toContain(m.library_loans_conflict());
   } finally {
