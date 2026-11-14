@@ -529,7 +529,9 @@ export const CreateDraftDeparture: Story = {
     await waitFor(() => expect(stay).toHaveFocus());
     await userEvent.keyboard('{Enter}');
     await expect(title).toHaveValue('A small reading list');
-    await expect(view.getByRole('textbox', { name: m.library_collection_description() })).toHaveValue('Keep these notes');
+    await expect(view.getByRole('textbox', { name: m.library_collection_description() })).toHaveValue(
+      'Keep these notes',
+    );
     void creationVisit.router.navigate({ href: `/${getLocale()}/library/collections` });
     await expect(await within(document.body).findByRole('alertdialog')).toHaveTextContent(
       m.library_collection_create_departure_description(),
@@ -581,7 +583,9 @@ export const CreateFailed: Story = {
     void creationVisit.router.navigate({ href: `/${getLocale()}/library/collections` });
     const dialog = await within(document.body).findByRole('alertdialog');
     await expect(dialog).toHaveTextContent(m.library_collection_create_departure_unknown());
-    await expect(within(dialog).getByRole('button', { name: m.library_collection_draft_navigation_leave() })).toBeVisible();
+    await expect(
+      within(dialog).getByRole('button', { name: m.library_collection_draft_navigation_leave() }),
+    ).toBeVisible();
   },
 };
 

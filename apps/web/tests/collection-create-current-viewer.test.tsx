@@ -171,7 +171,11 @@ async function mountForm(hydrate = false) {
       // Public admission alone must never authorize an imperative create.
       client.setQueryData(['exposure', 'anonymous'], ['collections']);
       content = visible ? (
-        sender ? <NewCollectionForm csrfToken={session.csrfToken ?? ''} types={loaded.types} sender={sender} /> : <Page />
+        sender ? (
+          <NewCollectionForm csrfToken={session.csrfToken ?? ''} types={loaded.types} sender={sender} />
+        ) : (
+          <Page />
+        )
       ) : null;
       const tree = (
         <StrictMode>
@@ -254,7 +258,8 @@ async function mountForm(hydrate = false) {
           ? m.library_collection_draft_navigation_leave()
           : m.library_collection_draft_navigation_stay();
         [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')]
-          .find((button) => button.textContent === label)!.click();
+          .find((button) => button.textContent === label)!
+          .click();
       });
     },
     async depart(href?: string) {
@@ -309,10 +314,16 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         await page.depart();
         expect(page.dialog()).toBeNull();
         expect(page.router.state.location.pathname).toBe('/away');
-        await act(async () => { await page.router.navigate({ href: '/en/collections/new' }); });
-        await act(async () => { page.host.querySelector<HTMLElement>('#collection-visibility-private')!.click(); });
+        await act(async () => {
+          await page.router.navigate({ href: '/en/collections/new' });
+        });
+        await act(async () => {
+          page.host.querySelector<HTMLElement>('#collection-visibility-private')!.click();
+        });
         expect(page.unload()).toBe(true); // An explicit visibility choice alone is meaningful.
-        await act(async () => { page.router.history.back(); });
+        await act(async () => {
+          page.router.history.back();
+        });
         await page.choose(false);
         expect(page.host.querySelector('#collection-visibility-private')!.getAttribute('aria-checked')).toBe('true');
         await page.fill('Keep this exact title', 'unlisted', 'game');
@@ -324,11 +335,15 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         expect(page.description().value).toBe('Keep this exact title description');
         expect(page.kind().value).toBe('game');
         expect(page.key()).toBe(key);
-        await act(async () => { page.router.history.back(); });
+        await act(async () => {
+          page.router.history.back();
+        });
         await page.choose(true);
         expect(page.router.state.location.pathname).toBe('/away');
         expect(page.calls).toHaveLength(0);
-        await act(async () => { page.router.history.forward(); });
+        await act(async () => {
+          page.router.history.forward();
+        });
         expect(page.title().value).toBe('');
         expect(page.key()).not.toBe(key);
         await page.fill('Dispatched caller');
