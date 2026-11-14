@@ -75,8 +75,8 @@ test('product prompts hand off fixture choices and route adopted contract change
       task: mapTask(item.paths, { kind: item.kind, goal: 'web', manager: 'web' }),
       mainCheckout: MAP_MAIN,
     }).prompt;
-    expect(prompt).toContain(
-      'fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`',
+    expect(prompt).toMatch(
+      /fixture-only choices get one summary line and a manager inbox handoff through `bun tools\/goal\/src\/cli\.ts inbox send web info "<decision>"`/i,
     );
     expect(prompt).toContain(
       'For adopted contract changes, record one summary line and edit the owner doc if its path is in your brief; otherwise send the owner the exact proposed change through that inbox and continue independent source.',
