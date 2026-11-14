@@ -279,8 +279,12 @@ test('worker and manager prompts trust repository callers and let dev repair con
   const checkpoint = rendered.prompt.indexOf('Checkpoint coherent source');
   const ongoingProposal = rendered.prompt.indexOf('While implementing, fixing or reviewing');
   expect(ongoingProposal).toBeGreaterThan(checkpoint);
-  expect(ongoingProposal).toBeLessThan(rendered.prompt.indexOf('When only a check or dependent change remains blocked'));
-  expect(rendered.prompt).toContain('immediately propose each distinct valuable gap concisely: outcome, source evidence');
+  expect(ongoingProposal).toBeLessThan(
+    rendered.prompt.indexOf('When only a check or dependent change remains blocked'),
+  );
+  expect(rendered.prompt).toContain(
+    'immediately propose each distinct valuable gap concisely: outcome, source evidence',
+  );
   expect(rendered.prompt).toContain('first editable boundary, true prerequisite if any');
   expect(rendered.prompt).toContain('Keep useful in-scope work with you');
   expect(rendered.prompt).toContain('ready independent work to its manager as a short inbox handoff');
@@ -312,7 +316,9 @@ test('minimal verification collects independent failures under one wrapper budge
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
     const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
-    expect(prompt).toContain('Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit');
+    expect(prompt).toContain(
+      'Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit',
+    );
     expect(prompt).toContain('Typecheck each changed workspace');
     expect(prompt).toContain('Order producers before consumers');
     expect(prompt).toContain('On prerequisite failure, skip only dependent checks and report them unverified');
@@ -324,7 +330,7 @@ test('minimal verification collects independent failures under one wrapper budge
     expect(prompt).toContain('Kernel/Auth/Web mapper typechecks stay within the per-run memory cap');
     expect(prompt).toContain('use `&&` only for real dependencies');
     expect(prompt).not.toContain('never joins them with `&&`');
-    expect(prompt).not.toContain("cmd1; s=$?; cmd2 || s=1");
+    expect(prompt).not.toContain('cmd1; s=$?; cmd2 || s=1');
     expect(prompt).toContain('All must pass for success; reuse unchanged passing evidence');
     expect(prompt).toContain('Run checks through the wrapper');
     expect(prompt).not.toContain("under a 'failing tests' label in the summary");
@@ -371,9 +377,7 @@ test('minimal verification parks check-host commands on the wrapper and keeps sh
     const prompt = renderCheckProtocol(directory.path, 'Check the changed outcome.', directory.path);
     expect(prompt).toContain('Run checks through the wrapper (`bun scripts/worker-check.ts -- <command...>`)');
     expect(prompt).toContain('Kernel/Auth may use compiler DB/host');
-    expect(prompt).toContain(
-      'include payment, payout, order settlement, points or balance tests when changed',
-    );
+    expect(prompt).toContain('include payment, payout, order settlement, points or balance tests when changed');
     expect(prompt).toContain(
       '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
     );
