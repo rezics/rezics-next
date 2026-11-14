@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import type { DocumentImagePresentation } from './document-media';
@@ -24,7 +24,9 @@ export function NativeDocumentImage(props: DocumentImageProps) {
 
 function DocumentImageDisclosure({ image, alt, locale, mediaId, inspectable = true }: DocumentImageProps) {
   const [phase, setPhase] = useState<'initial' | 'ready' | 'failed' | 'retrying'>('initial');
+  const figure = useRef<HTMLElement | null>(null);
   const current = useRef<HTMLImageElement | null>(null);
+  const failureFocus = useRef<HTMLElement | null>(null);
   const options = { locale: locale as never };
   const unavailable = m.content_edition_image_unavailable({}, options);
   const settle = useCallback((element: HTMLImageElement, result: 'ready' | 'failed') => {
@@ -58,14 +60,39 @@ function DocumentImageDisclosure({ image, alt, locale, mediaId, inspectable = tr
   // A failed derivative may reflect a newer disclosure decision than the page summary. Do not keep
   // source metadata visible once the image itself is unavailable.
   const credit = available ? (image?.credit ?? null) : null;
-  const retry = () => setPhase((previous) => (previous === 'failed' ? 'retrying' : previous));
+  const failInspection = useCallback(() => {
+    const target = figure.current;
+    const active = document.activeElement;
+    if (target?.isConnected && active instanceof HTMLElement && active.closest('[data-slot="dialog-content"]'))
+      failureFocus.current = target;
+    setPhase('failed');
+  }, []);
+  useLayoutEffect(() => {
+    if (phase !== 'failed') return;
+    const target = failureFocus.current;
+    failureFocus.current = null;
+    const active = document.activeElement;
+    // Dialog teardown can drop focus to body after its trigger is removed. Recover only that lost focus;
+    // a live target chosen by the reader takes precedence.
+    if (target?.isConnected && (active === document.body || !active?.isConnected))
+      target.focus({ preventScroll: true });
+  }, [phase]);
+  const retry = (button: HTMLButtonElement) => {
+    if (phase !== 'failed') return;
+    const target = figure.current;
+    if (target?.isConnected && document.activeElement === button) target.focus({ preventScroll: true });
+    setPhase('retrying');
+  };
   return (
     <figure
+      ref={figure}
       data-slot="document-image"
       data-media-id={image?.id ?? mediaId}
       data-state={available ? 'ready' : 'unavailable'}
       aria-busy={recovering || undefined}
-      className="my-5 min-w-0 max-w-full space-y-2"
+      aria-label={alt || unavailable}
+      tabIndex={-1}
+      className="my-5 min-w-0 max-w-full space-y-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       {admitted && phase !== 'failed' ? (
         <picture hidden={recovering}>
@@ -99,7 +126,7 @@ function DocumentImageDisclosure({ image, alt, locale, mediaId, inspectable = tr
           {admitted && (phase === 'failed' || recovering) ? (
             <button
               type="button"
-              onClick={retry}
+              onClick={(event) => retry(event.currentTarget)}
               disabled={recovering}
               className="rounded-md px-3 py-2 text-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
             >
@@ -109,7 +136,7 @@ function DocumentImageDisclosure({ image, alt, locale, mediaId, inspectable = tr
         </>
       ) : null}
       {available && image && inspectable ? (
-        <DocumentImageInspector image={image} alt={alt} locale={locale} onUnavailable={() => setPhase('failed')} />
+        <DocumentImageInspector image={image} alt={alt} locale={locale} onUnavailable={failInspection} />
       ) : null}
       {credit ? (
         <figcaption

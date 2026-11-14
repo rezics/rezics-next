@@ -31,7 +31,10 @@ function preparedVisit(failure: boolean) {
   const documentMedia: ThreadDocumentMedia = {
     ...supplied,
     images: [image],
-    documents: supplied.documents.map((document) => ({ ...document, mediaIds: [imageId] })),
+    documents: supplied.documents.map((document) => ({
+      ...document,
+      mediaIds: [imageId],
+    })),
   };
   return { post, documentMedia, image };
 }
@@ -68,21 +71,100 @@ type Story = StoryObj<typeof meta>;
 async function inspectAndReturn({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   const { image } = preparedVisit(false);
-  const trigger = await canvas.findByRole('button', { name: m.document_image_inspect() });
+  const trigger = await canvas.findByRole('button', {
+    name: m.document_image_inspect(),
+  });
   await userEvent.click(trigger);
   const dialog = within(canvasElement.ownerDocument.body).getByRole('dialog');
   await expect(dialog.querySelector('[data-slot="document-image-inspection-stage"] img')).not.toBeNull();
   const delivered = selectDocumentImageInspectionVariant(image)!;
   await expect(dialog).toHaveTextContent(
-    m.document_image_inspection_size({ width: delivered.width, height: delivered.height }),
+    m.document_image_inspection_size({
+      width: delivered.width,
+      height: delivered.height,
+    }),
   );
-  await userEvent.click(within(dialog).getByRole('button', { name: m.document_image_inspection_actual() }));
+  await userEvent.click(
+    within(dialog).getByRole('button', {
+      name: m.document_image_inspection_actual(),
+    }),
+  );
   await expect(dialog.querySelector('[data-slot="document-image-inspection-stage"]')).toHaveAttribute(
     'data-scale',
     'actual',
   );
-  await userEvent.click(within(dialog).getByRole('button', { name: m.document_image_inspection_close() }));
+  await userEvent.click(
+    within(dialog).getByRole('button', {
+      name: m.document_image_inspection_close(),
+    }),
+  );
+  await expect(trigger).toHaveFocus();
+  await userEvent.click(trigger);
+  await userEvent.keyboard('{Escape}');
+  await expect(trigger).toHaveFocus();
+}
+
+async function recoverFailedInspection({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  const body = within(canvasElement.ownerDocument.body);
+  const { image } = preparedVisit(false);
+  const figure = canvasElement.querySelector<HTMLElement>('[data-slot="document-image"]')!;
+  const trigger = await canvas.findByRole('button', {
+    name: m.document_image_inspect(),
+  });
+  await userEvent.click(trigger);
+  const dialog = body.getByRole('dialog');
+  const selected = dialog.querySelector<HTMLImageElement>('[data-slot="document-image-inspection-stage"] img')!;
+  selected.dispatchEvent(new Event('error'));
+
+  await expect(body.queryByRole('dialog')).toBeNull();
+  await expect(canvas.queryByRole('button', { name: m.document_image_inspect() })).toBeNull();
+  await expect(canvas.queryByText(image.credit!.rightsHolder)).toBeNull();
+  await expect(figure).toHaveFocus();
+  await userEvent.tab();
+  const retry = canvas.getByRole('button', { name: m.document_image_retry() });
+  await expect(retry).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  await expect(figure).toHaveFocus();
+
+  figure.querySelector<HTMLImageElement>('picture img')!.dispatchEvent(new Event('load'));
+  const recoveredTrigger = await within(figure).findByRole('button', {
+    name: m.document_image_inspect(),
+  });
+  await expect(figure).toHaveFocus();
+  await expect(canvas.getByText(image.credit!.rightsHolder)).toBeVisible();
+  await userEvent.tab();
+  await expect(recoveredTrigger).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  const recoveredDialog = body.getByRole('dialog');
+  await expect(recoveredDialog.querySelector('[data-slot="document-image-inspection-stage"] img')).not.toBeNull();
+  await userEvent.keyboard('{Escape}');
+  await expect(recoveredTrigger).toHaveFocus();
+}
+
+async function keepReaderFocusDuringRetry({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  const body = within(canvasElement.ownerDocument.body);
+  const figure = canvasElement.querySelector<HTMLElement>('[data-slot="document-image"]')!;
+  const trigger = await canvas.findByRole('button', {
+    name: m.document_image_inspect(),
+  });
+  await userEvent.click(trigger);
+  const dialog = body.getByRole('dialog');
+  dialog
+    .querySelector<HTMLImageElement>('[data-slot="document-image-inspection-stage"] img')!
+    .dispatchEvent(new Event('error'));
+  await expect(figure).toHaveFocus();
+  await userEvent.tab();
+  await userEvent.keyboard('{Enter}');
+  await expect(figure).toHaveFocus();
+
+  const readingLink = canvasElement.querySelector<HTMLElement>('a[href^="https://example.test/notes/"]')!;
+  readingLink.focus();
+  await expect(readingLink).toHaveFocus();
+  figure.querySelector<HTMLImageElement>('picture img')!.dispatchEvent(new Event('load'));
   await expect(canvas.getByRole('button', { name: m.document_image_inspect() })).toBeVisible();
+  await expect(readingLink).toHaveFocus();
 }
 
 async function unavailableImage({ canvasElement }: { canvasElement: HTMLElement }) {
@@ -94,6 +176,12 @@ async function unavailableImage({ canvasElement }: { canvasElement: HTMLElement 
 }
 
 export const Inspection: Story = { play: inspectAndReturn };
+
+export const InspectionRecovery: Story = { play: recoverFailedInspection };
+
+export const RecoveryFocusDeparture: Story = {
+  play: keepReaderFocusDuringRetry,
+};
 
 export const Failure: Story = {
   args: { failure: true },
