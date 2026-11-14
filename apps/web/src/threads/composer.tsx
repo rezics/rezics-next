@@ -73,10 +73,14 @@ const authoringActionClassName =
 
 function writingActionLabel(action: WritingAction): string {
   switch (action) {
-    case 'create': return m.thread_recovery_create();
-    case 'reply': return m.thread_recovery_reply();
-    case 'save': return m.thread_recovery_save();
-    case 'publish': return m.thread_recovery_publish();
+    case 'create':
+      return m.thread_recovery_create();
+    case 'reply':
+      return m.thread_recovery_reply();
+    case 'save':
+      return m.thread_recovery_save();
+    case 'publish':
+      return m.thread_recovery_publish();
   }
 }
 
@@ -88,6 +92,7 @@ function WritingRequestRecovery({
   submitting,
   acknowledged,
   onRetry,
+  retryAllowed = true,
   onComplete,
   onKeepEditing,
 }: {
@@ -97,6 +102,7 @@ function WritingRequestRecovery({
   submitting: boolean;
   acknowledged: boolean;
   onRetry: () => void;
+  retryAllowed?: boolean;
   onComplete: () => void;
   onKeepEditing: () => void;
 }) {
@@ -113,7 +119,9 @@ function WritingRequestRecovery({
       aria-labelledby={heading}
       className="mt-5 min-w-0 space-y-3 rounded-xl border border-border bg-muted/30 p-4 [overflow-wrap:anywhere]"
     >
-      <h3 id={heading} className="font-semibold">{m.thread_recovery_heading()}</h3>
+      <h3 id={heading} className="font-semibold">
+        {m.thread_recovery_heading()}
+      </h3>
       <p className="font-medium">{writingActionLabel(request.action)}</p>
       <p role="status" aria-live="polite">
         {acknowledged ? m.thread_recovery_acknowledged() : m.thread_recovery_unknown()}
@@ -154,7 +162,7 @@ function WritingRequestRecovery({
           ref={retryButton}
           type="button"
           className={authoringActionClassName}
-          disabled={submitting || acknowledged}
+          disabled={submitting || acknowledged || !retryAllowed}
           onClick={onRetry}
         >
           {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
@@ -1186,7 +1194,7 @@ function PostComposerContent<T, Context = undefined>({
   async function submit(event?: FormEvent, retryOriginal = false) {
     if (event && event.target !== event.currentTarget) return;
     event?.preventDefault();
-    if (!lifetime.current() || submittingRef.current || request.current?.acknowledged) return;
+    if (!lifetime.current() || !canSubmit || submittingRef.current || request.current?.acknowledged) return;
     let delivery = request.current;
     if (retryOriginal) {
       // Replay never consults the working document, pending media, current parent or replacement props.
@@ -1281,8 +1289,34 @@ function PostComposerContent<T, Context = undefined>({
       original.settleWriting?.('success');
       const acceptedValue = result.value;
       const complete = () => {
-        if (!current()) return;
+        if (!current() || request.current !== original) return;
+        // For newer writing this runs only after the existing departure owner confirms its discard.
+        request.current = null;
+        setAcknowledged(null);
+        const empty = fromPlainText('', 'blocks');
+        pruneCopiedImages(empty);
+        mediaUpload.retire();
+        ownedMediaIds.current.clear();
+        editorPendingRef.current = 0;
+        updatePending();
+        setTitle('');
+        invalidateWriting();
+        initialBodyRef.current = empty;
+        bodyRef.current = empty;
+        setBody(empty);
+        setBodyCanSend(false);
+        snapshotPhaseRef.current = 'ready';
+        setSnapshotPhase('ready');
+        rawEditorWork.current = null;
+        setUploadNotice(null);
+        setFailure(null);
+        if (containerId || !boardId) {
+          const nextKey = crypto.randomUUID();
+          setIdempotencyKey(nextKey);
+          replyIntent.current.reset(nextKey);
+        }
         departure.release();
+        if (original.acknowledged) onIntentLockChange?.(false);
         original.finish(acceptedValue);
         if (boardId && !containerId) lifetime.retire();
       };
@@ -1296,21 +1330,6 @@ function PostComposerContent<T, Context = undefined>({
         original.acknowledged = true;
         setAcknowledged({ complete });
         return;
-      }
-      mediaUpload.retire();
-      setTitle('');
-      invalidateWriting();
-      const empty = fromPlainText('', 'blocks');
-      initialBodyRef.current = empty;
-      bodyRef.current = empty;
-      setBody(empty);
-      setBodyCanSend(false);
-      setUploadNotice(null);
-      request.current = null;
-      if (containerId || !boardId) {
-        const nextKey = crypto.randomUUID();
-        setIdempotencyKey(nextKey);
-        replyIntent.current.reset(nextKey);
       }
       complete();
     } finally {
@@ -1507,6 +1526,7 @@ function PostComposerContent<T, Context = undefined>({
           submitting={submitting}
           acknowledged={Boolean(acknowledged)}
           onRetry={() => void submit(undefined, true)}
+          retryAllowed={canSubmit}
           onComplete={() => departure.requestDiscard()}
           onKeepEditing={() => {
             if (!lifetime.current()) return;
@@ -1961,8 +1981,24 @@ function InlinePostEditorContent({
       }
       editIntent.current.settle(true);
       const acceptedPost = result.post;
+      const submittedBody = editIntent.current.original()!.body;
       const complete = () => {
-        if (!current()) return;
+        if (!current() || request.current !== original) return;
+        request.current = null;
+        setAcknowledged(null);
+        pruneCopiedImages(submittedBody);
+        mediaUpload.retire();
+        editorPendingRef.current = 0;
+        updatePending();
+        initialBodyRef.current = submittedBody;
+        bodyRef.current = submittedBody;
+        liveHostDirtyRef.current = false;
+        setBody(submittedBody);
+        snapshotPhaseRef.current = 'ready';
+        setSnapshotPhase('ready');
+        setFailure(null);
+        setUploadNotice(null);
+        editIntent.current.reset(crypto.randomUUID());
         departure.release();
         original.finish(acceptedPost);
       };
@@ -1975,7 +2011,6 @@ function InlinePostEditorContent({
         setAcknowledged({ complete });
         return;
       }
-      request.current = null;
       complete();
     } finally {
       if (current()) {

@@ -175,7 +175,7 @@ test('real reply and inline composers retire pending copies and submissions, whi
   let calls: { command: Command; sender: Configuration; outcome: ReturnType<typeof gate<Outcome>> }[];
   let callbacks: { kind: string; epoch: number; blocked?: boolean }[];
 
-  const mount = async (kind: Configuration['kind'], knownSession = true) => {
+  const mount = async (kind: Configuration['kind'], knownSession = true, navigateOnSuccess = true) => {
     await act(async () => root.render(null));
     client?.clear();
     originals.length = 0;
@@ -205,7 +205,7 @@ test('real reply and inline composers retire pending copies and submissions, whi
       };
       const onSuccess = () => {
         callbacks.push({ kind: 'success', epoch: current.epoch, blocked: blocked() });
-        void router.navigate({ href: '/done' });
+        if (navigateOnSuccess) void router.navigate({ href: '/done' });
       };
       return (
         <AuthoringDepartureProvider key={current.epoch}>
@@ -377,7 +377,7 @@ test('real reply and inline composers retire pending copies and submissions, whi
 
     // Local text/title changes never strand original replay or get cleared by its late acknowledgement.
     for (const kind of ['reply', 'inline', 'new-thread'] as const) {
-      const router = await mount(kind);
+      const router = await mount(kind, true, kind !== 'reply');
       await submitTwice();
       const originalCommand = structuredClone(calls[0]!.command);
       const originalSender = calls[0]!.sender;
@@ -419,7 +419,21 @@ test('real reply and inline composers retire pending copies and submissions, whi
       expect(editor()?.textContent).toContain('newer private writing');
       await click(m.thread_recovery_complete());
       await click(m.thread_authoring_discard());
-      await settle(() => router.state.location.pathname === '/done');
+      await settle(() => router.state.location.pathname === (kind === 'reply' ? '/compose' : '/done'));
+      if (kind === 'reply') {
+        // Reply acknowledgement commonly keeps the composer mounted; deliberate completion opens a fresh draft.
+        expect(editor()?.textContent?.trim()).toBe('');
+        expect(blocked()).toBe(false);
+        expect(host.textContent).not.toContain(m.thread_recovery_acknowledged());
+        await act(async () => {
+          await user.click(editor()!);
+          await user.keyboard('A fresh reply after deliberate completion.');
+        });
+        await submitTwice();
+        expect(calls).toHaveLength(3);
+        expect(calls[2]!.command.idempotencyKey).not.toBe(originalCommand.idempotencyKey);
+        await act(async () => calls[2]!.outcome.resolve({ ok: false, reason: 'invalid' }));
+      }
       expect(callbacks.filter((item) => item.kind === 'success')).toEqual([
         { kind: 'success', epoch: 0, blocked: false },
       ]);
