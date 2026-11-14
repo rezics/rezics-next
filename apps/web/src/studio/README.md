@@ -139,9 +139,11 @@ lifecycle, this README, existing workspace language tests and ordinary workbench
 main checkout's `.reference/INDEX.md`.
 
 Source-only acceptance adds `tests/studio-working-preview.test.tsx` and extends the ordinary workbench stories with
-explicitly illustrative native-format structured bodies. The verifier separately runs that suite and
-`tests/studio-workspace-language.test.tsx`, plus mounted Book/column authoring, keyboard, phone, themes and all eight
-locales. Tests, typing, builds, browser and capture remain unverified in this source attempt.
+explicitly illustrative native-format structured bodies in `kernel/fake/studio-workbench.ts` (the only additional
+implementation path). Existing language assertions remain, with reader/provenance assertions added. The verifier
+separately runs that suite and `tests/studio-workspace-language.test.tsx`, plus mounted Book/column authoring,
+keyboard, phone, themes and all eight locales. Tests, typing, builds, browser and capture remain unverified in this
+source attempt.
 
 ## Saved-version language
 

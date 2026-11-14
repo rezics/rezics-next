@@ -1,4 +1,12 @@
-import { fromPlainText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import {
+  fromMarkdown,
+  fromPlainText,
+  normalizeDocument,
+  serializeDocument,
+  withDocumentIds,
+  type DocumentNode,
+  type DocumentSnapshot,
+} from '@rezics/document';
 import {
   StudioController,
   bookTocIndex,
@@ -14,12 +22,71 @@ import {
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 
-export type StudioWorkbenchScenario = 'populated' | 'dirty' | 'comparison' | 'preparation-unavailable';
+export type StudioWorkbenchScenario =
+  | 'populated'
+  | 'dirty'
+  | 'comparison'
+  | 'preparation-unavailable'
+  | 'working-preview'
+  | 'working-preview-dirty'
+  | 'working-preview-missing';
 export type StudioWorkbenchProfile = 'book' | 'column';
 const id = (value: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(value).padStart(12, '0')}`;
 const catalogueId = id(100);
 const savedAt = '2026-11-13T09:30:00.000Z';
 const ok = <T>(value: T): StudioResult<T> => ({ ok: true, value });
+
+export const studioPreviewMediaId = id(300);
+export const studioPreviewAccountId = id(301);
+
+/** Illustrative native document format, not a native read or attachment admission. */
+export function studioWorkingPreviewBody(references = true, working = false): DocumentSnapshot {
+  const prose = fromMarkdown(
+    [
+      '## Harbour observations',
+      working ? 'A new observation still in the working draft.' : 'The notebook opens beside the harbour wall.',
+      '- Watch the tide\n- Mark the return journey',
+      '> The harbour is a place of small returns.',
+      references ? 'Read the [field source](https://example.org/harbour?edition=1#notes).' : 'No links were supplied.',
+      'A private note: >!The keeper has already returned.!<',
+      'The chart uses local time.[^chart]',
+      '### Tide measurements',
+      '```typescript\nconst readings = ["05:42 · harbour entrance · flood tide · eastern marker", "18:16 · outer breakwater · ebb tide · western marker"];\n```',
+      '[^chart]: Times are illustrative observations, not navigation advice.',
+    ].join('\n\n'),
+    'blocks',
+  );
+  const cell = (type: string, text: string): DocumentNode => ({
+    type,
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  });
+  const columns = ['Station', 'Local time', 'Direction', 'Observed height', 'Field notebook annotation'];
+  return normalizeDocument({
+    ...prose,
+    doc: withDocumentIds({
+      type: 'doc',
+      content: [
+        ...prose.doc.content!,
+        {
+          type: 'table',
+          content: [
+            { type: 'tableRow', content: columns.map((value) => cell('tableHeader', value)) },
+            {
+              type: 'tableRow',
+              content: ['East harbour', '05:42', 'Flood', '1.8 m', 'A long annotation keeps its place in this row.'].map(
+                (value) => cell('tableCell', value),
+              ),
+            },
+          ],
+        },
+        { type: 'image', attrs: { src: studioPreviewMediaId, alt: 'Harbour notebook illustration' } },
+        ...(references
+          ? [{ type: 'paragraph', content: [{ type: 'mention', attrs: { accountId: studioPreviewAccountId } }] }]
+          : []),
+      ],
+    }),
+  });
+}
 
 /** Constructed view-port responses, independent of native recordings and publication evidence. */
 export async function studioWorkbenchFixture(
@@ -29,7 +96,7 @@ export async function studioWorkbenchFixture(
 ) {
   let active = true;
   let sequence = 200;
-  let staleSave = scenario === 'dirty';
+  let staleSave = scenario === 'dirty' || scenario === 'working-preview-dirty';
   const saved = new Map<string, StudioSelection>();
   const revisions = new Map<string, StudioRevision[]>();
   const failure = (kind: 'unavailable' | 'stale'): StudioResult<never> => ({
@@ -48,13 +115,16 @@ export async function studioWorkbenchFixture(
     return Array.from(new Uint8Array(hashed), (value) => value.toString(16).padStart(2, '0')).join('');
   }
   async function revision(postId: string, title: string, text: string, date = savedAt): Promise<StudioRevision> {
-    const body = fromPlainText(text, 'blocks');
+    const body =
+      postId === id(101) && scenario.startsWith('working-preview')
+        ? studioWorkingPreviewBody(scenario !== 'working-preview-missing')
+        : fromPlainText(text, 'blocks');
     return {
       exact: { postId, revisionId: id(sequence++), sha256: await digest(body) },
       title,
       body,
       savedAt: date,
-      mediaIds: [],
+      mediaIds: scenario.startsWith('working-preview') && postId === id(101) ? [studioPreviewMediaId] : [],
     };
   }
   const titles = {
@@ -257,15 +327,24 @@ export async function studioWorkbenchFixture(
     await controller.loadVersions();
     await controller.inspectVersion(revisions.get(id(101))![1]!.exact);
   }
-  if (scenario === 'dirty') {
+  if (scenario === 'dirty' || scenario === 'working-preview-dirty') {
     controller.changeTitle(`${titles.first} · working draft`);
     controller.changeBody(
-      fromPlainText(`${paragraphs.join('\n\n')}\n\nA new paragraph still in the working draft.`, 'blocks'),
+      scenario === 'working-preview-dirty'
+        ? studioWorkingPreviewBody(true, true)
+        : fromPlainText(`${paragraphs.join('\n\n')}\n\nA new paragraph still in the working draft.`, 'blocks'),
     );
     // A supplied stale save leaves real dirty-switch recovery available, without a background save racing review.
     await controller.save();
   }
-  const props: StudioWorkspaceProps = { input, port, ...(profile === 'book' ? { bookPort } : {}) };
+  const props: StudioWorkspaceProps = {
+    input,
+    port,
+    ...(profile === 'book' ? { bookPort } : {}),
+    ...(scenario === 'working-preview' || scenario === 'working-preview-dirty'
+      ? { presentation: { reader: () => ({ mentions: { [studioPreviewAccountId]: { handle: 'harbour-keeper' } } }) } }
+      : {}),
+  };
   return {
     props,
     controller,
