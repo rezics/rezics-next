@@ -42,12 +42,33 @@ export declare const WatchManagementCommandSchema: import("typebox").TObject<{
 }>;
 export declare const WatchManagementItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
-    kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+    kind: import("typebox").TLiteral<"thread">;
     revision: import("typebox").TInteger;
     createdAt: import("typebox").TString;
     state: import("typebox").TLiteral<"available">;
     resourceId: import("typebox").TString;
     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    place: import("typebox").TObject<{
+        boardId: import("typebox").TString;
+        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>;
+    command: import("typebox").TObject<{
+        watchId: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+        expectedRevision: import("typebox").TInteger;
+    }>;
+}>, import("typebox").TObject<{
+    id: import("typebox").TString;
+    kind: import("typebox").TLiteral<"board">;
+    revision: import("typebox").TInteger;
+    createdAt: import("typebox").TString;
+    state: import("typebox").TLiteral<"available">;
+    resourceId: import("typebox").TString;
+    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    place: import("typebox").TUnion<[import("typebox").TObject<{
+        realmId: import("typebox").TString;
+        title: import("typebox").TString;
+    }>, import("typebox").TNull]>;
     command: import("typebox").TObject<{
         watchId: import("typebox").TString;
         kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
@@ -75,12 +96,33 @@ export declare const WatchManagementPageSchema: import("typebox").TObject<{
     }>;
     items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
         id: import("typebox").TString;
-        kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+        kind: import("typebox").TLiteral<"thread">;
         revision: import("typebox").TInteger;
         createdAt: import("typebox").TString;
         state: import("typebox").TLiteral<"available">;
         resourceId: import("typebox").TString;
         title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        place: import("typebox").TObject<{
+            boardId: import("typebox").TString;
+            title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>;
+        command: import("typebox").TObject<{
+            watchId: import("typebox").TString;
+            kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+            expectedRevision: import("typebox").TInteger;
+        }>;
+    }>, import("typebox").TObject<{
+        id: import("typebox").TString;
+        kind: import("typebox").TLiteral<"board">;
+        revision: import("typebox").TInteger;
+        createdAt: import("typebox").TString;
+        state: import("typebox").TLiteral<"available">;
+        resourceId: import("typebox").TString;
+        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        place: import("typebox").TUnion<[import("typebox").TObject<{
+            realmId: import("typebox").TString;
+            title: import("typebox").TString;
+        }>, import("typebox").TNull]>;
         command: import("typebox").TObject<{
             watchId: import("typebox").TString;
             kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;

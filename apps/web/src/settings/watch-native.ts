@@ -25,7 +25,12 @@ export type ManagedWatch = Readonly<{
   command: WatchCommand;
   remove: WatchAdvice;
   /** Only the currently disclosed resource receives a title and localized destination. */
-  target: Readonly<{ title: string; href: string }> | null;
+  target: Readonly<{
+    title: string;
+    href: string;
+    /** Optional for existing local callers; native available rows always disclose it. */
+    place?: Readonly<{ boardId: string; title: string | null }> | Readonly<{ realmId: string; title: string }> | null;
+  }> | null;
 }>;
 
 export type WatchPage = Readonly<{
@@ -183,7 +188,30 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]) 
 }
 
 function validId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
+  return typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+}
+
+function validTitle(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 1024;
+}
+
+function validNullableTitle(value: unknown): value is string | null {
+  return value === null || validTitle(value);
+}
+
+function decodePlace(value: unknown, kind: WatchKind) {
+  if (kind === 'thread') {
+    if (!isRecord(value) || !exactKeys(value, ['boardId', 'title']) ||
+        !validId(value.boardId) || !validNullableTitle(value.title))
+      throw new Error('Invalid native watch place');
+    return { boardId: value.boardId, title: value.title };
+  }
+  if (value === null) return null;
+  if (!isRecord(value) || !exactKeys(value, ['realmId', 'title']) ||
+      !validId(value.realmId) || !validTitle(value.title))
+    throw new Error('Invalid native watch place');
+  return { realmId: value.realmId, title: value.title };
 }
 
 function validInstant(value: unknown): value is string {
@@ -227,6 +255,7 @@ export function decodeWatchPage(
 ): WatchPage {
   if (
     !isRecord(value) ||
+    !exactKeys(value, ['viewer', 'actions', 'items', 'next']) ||
     !Array.isArray(value.items) ||
     value.items.length > 20 ||
     !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096))
@@ -239,8 +268,9 @@ export function decodeWatchPage(
       !isRecord(item) ||
       item.kind !== kind ||
       !validId(item.id) ||
-      !Number.isSafeInteger(item.revision) ||
+      !Number.isInteger(item.revision) ||
       (item.revision as number) < 1 ||
+      (item.revision as number) > 2147483646 ||
       !validInstant(item.createdAt)
     )
       throw new Error('Invalid native watch row');
@@ -260,17 +290,18 @@ export function decodeWatchPage(
     }
     if (
       item.state !== 'available' ||
-      !exactKeys(item, ['id', 'kind', 'revision', 'createdAt', 'state', 'resourceId', 'title', 'command']) ||
+      !exactKeys(item, ['id', 'kind', 'revision', 'createdAt', 'state', 'resourceId', 'title', 'place', 'command']) ||
       !validId(item.resourceId) ||
-      (item.title !== null && typeof item.title !== 'string')
+      !validNullableTitle(item.title)
     )
       throw new Error('Invalid native watch row');
+    const place = decodePlace(item.place, kind);
     const title = item.title ?? m.threads_untitled();
     const href =
       kind === 'thread'
         ? threadHref(getLocale(), { id: item.resourceId, title: item.title as string | null })
         : localizeHref(`/boards/${encodeURIComponent(item.resourceId)}`);
-    return { ...shared, target: { title, href } };
+    return { ...shared, target: { title, href, place } };
   });
   return { viewer, actions, watches, next: value.next as string | null };
 }
