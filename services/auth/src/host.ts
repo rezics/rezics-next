@@ -160,6 +160,9 @@ export class AuthHostConfigurationError extends Error {
 export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceOptions {
   /** Both pools belong exclusively to this host and are released by stop(). */
   systemDatabasePool?: Pool;
+  /** Defaults to true for a standalone host. Set false when an enclosing host
+   * owns process signals and calls stop() after its dependent workers drain. */
+  handleSignals?: boolean;
   /** Defaults to database.options.connectionString; must name the same Auth DB.
    * An absolute libpq `host` socket directory is that identity. */
   systemDatabaseUrl?: string;
@@ -305,14 +308,19 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
   const interrupt = () => {
     void stop();
   };
+  const ownsSignals = options.handleSignals !== false;
+  const releaseSignals = () => {
+    if (!ownsSignals) return;
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', interrupt);
+  };
   const assertNotStopping = () => {
     if (stopping) throw new Error('Auth host is stopped');
   };
   const stop = () =>
     (stopping ??= (async () => {
       privateConsentAccepting = false;
-      process.off('SIGINT', interrupt);
-      process.off('SIGTERM', interrupt);
+      releaseSignals();
       // Close admission now. Workflow close marks this generation stopped
       // synchronously, then joins any launch already in its lifecycle queue.
       const closingWorkflows = workflows.close();
@@ -323,8 +331,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
         await closingWorkflows;
       } finally {
         privateConsentAccepting = false;
-        process.off('SIGINT', interrupt);
-        process.off('SIGTERM', interrupt);
+        releaseSignals();
         await endPools();
       }
     })());
@@ -440,8 +447,10 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
           await maintenance!.start(schedule);
           assertNotStopping();
           privateConsentAccepting = true;
-          process.once('SIGINT', interrupt);
-          process.once('SIGTERM', interrupt);
+          if (ownsSignals) {
+            process.once('SIGINT', interrupt);
+            process.once('SIGTERM', interrupt);
+          }
         } catch (error) {
           privateConsentAccepting = false;
           // Native workflow shutdown still precedes pool release. Neither cleanup failure replaces the first

@@ -736,6 +736,8 @@ export async function assemble(options?: {
         secret: keys.secret,
         signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
         stagingKey: Buffer.from(keys.staging, 'base64url'),
+        // This composition owns SIGINT/SIGTERM and drains Kernel Work before host.stop().
+        handleSignals: false,
         trustedAccess: bindings.trustedAccess,
         access: bindings.workflowPorts,
         siteActions: actions,
@@ -774,18 +776,7 @@ export async function assemble(options?: {
         await service.internal.registerClient(semanticWalkClientRegistration());
       })(),
     );
-    const interrupts = new Set(process.listeners('SIGINT'));
-    const terminates = new Set(process.listeners('SIGTERM'));
     await phase('auth-worker', host.start());
-    // AuthHost currently installs its own shared SIGINT/SIGTERM stop callback.
-    // Adopt only callbacks installed by this start, retaining all prior listeners.
-    // The enclosing composition must drain Work before calling that same host.stop.
-    for (const listener of process.listeners('SIGINT')) {
-      if (!interrupts.has(listener) && !terminates.has(listener) && process.listeners('SIGTERM').includes(listener)) {
-        process.off('SIGINT', listener);
-        process.off('SIGTERM', listener);
-      }
-    }
     const startWork = () => {
       if (stopping) return Promise.reject(new Error('Native Auth/Work host is stopped'));
       return (startingWork ??= (async () => {
