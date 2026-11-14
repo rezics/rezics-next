@@ -50,12 +50,13 @@ BEGIN
          JOIN content.hosted_version_release_candidate candidate
            USING (route,catalogue_id,stage_id)
          WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
-           AND cleanup.generation_id=OLD.generation_id AND cleanup.terminal_status='expired'
+           AND cleanup.generation_id=OLD.generation_id AND cleanup.terminal_status IN ('expired','cancelled')
            AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
            AND cleanup.owner_epoch=stage.owner_epoch AND cleanup.owner_epoch=candidate.owner_epoch
            AND stage.initiator_account_id=candidate.initiator_account_id
            AND stage.mode=candidate.mode AND stage.mode IN ('whole','selection')
-           AND stage.status='expired' AND stage.sealed_at IS NOT NULL
+           AND stage.status=cleanup.terminal_status AND stage.sealed_at IS NOT NULL
+           AND (stage.status='expired' OR stage.expires_at<=clock_timestamp())
            AND stage.source_revision_id=stage.expected_head_revision_id
            AND stage.source_revision_id=candidate.source_revision_id
            AND stage.expected_head_revision_id=candidate.expected_head_revision_id
@@ -338,11 +339,12 @@ BEGIN
           USING (route,catalogue_id,stage_id)
         WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
           AND cleanup.stage_id=OLD.stage_id AND cleanup.generation_id=OLD.generation_id
-          AND cleanup.owner_epoch=OLD.owner_epoch AND cleanup.terminal_status='expired'
+          AND cleanup.owner_epoch=OLD.owner_epoch AND cleanup.terminal_status IN ('expired','cancelled')
           AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
           AND stage.initiator_account_id=OLD.initiator_account_id
           AND stage.owner_epoch=OLD.owner_epoch AND stage.mode=OLD.mode
-          AND stage.status='expired' AND stage.sealed_at IS NOT NULL
+          AND stage.status=cleanup.terminal_status AND stage.sealed_at IS NOT NULL
+          AND (stage.status='expired' OR stage.expires_at<=clock_timestamp())
           AND stage.source_revision_id=stage.expected_head_revision_id
           AND stage.source_revision_id=OLD.source_revision_id
           AND stage.expected_head_revision_id=OLD.expected_head_revision_id
@@ -353,7 +355,7 @@ BEGIN
           AND stage.sealed_at=seal.sealed_at AND OLD.source_sealed_at=seal.sealed_at
           AND (stage.mode='whole' OR stage.input_frozen_version=stage.input_version)
       ) THEN
-        RAISE EXCEPTION 'Hosted release candidate retirement requires its expired source claim' USING ERRCODE='23514';
+        RAISE EXCEPTION 'Hosted release candidate retirement requires its terminal source claim' USING ERRCODE='23514';
       END IF;
       RETURN NEW;
     END IF;
@@ -367,7 +369,7 @@ BEGIN
         FROM content.hosted_version_candidate_cleanup cleanup
         WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
           AND cleanup.stage_id=OLD.stage_id AND cleanup.owner_epoch=OLD.owner_epoch
-          AND cleanup.terminal_status='expired' AND cleanup.phase='generation'
+          AND cleanup.terminal_status IN ('expired','cancelled') AND cleanup.phase='generation'
           AND cleanup.cleanup_active AND cleanup.completed_at IS NULL
           AND authority=format('%s:%s:%s:%s',cleanup.route,cleanup.catalogue_id,
                                cleanup.stage_id,cleanup.generation_id);
@@ -3016,7 +3018,7 @@ CREATE TABLE content.hosted_version_candidate_cleanup (
     CONSTRAINT hosted_version_candidate_cleanup_deleted_row_count_check CHECK ((deleted_row_count >= 0)),
     CONSTRAINT hosted_version_candidate_cleanup_owner_epoch_check CHECK ((owner_epoch >= 0)),
     CONSTRAINT hosted_version_candidate_cleanup_phase_check CHECK ((phase = ANY (ARRAY['nodes'::text, 'occurrences'::text, 'sibling_roots'::text, 'snapshots'::text, 'generation'::text, 'done'::text]))),
-    CONSTRAINT hosted_version_candidate_cleanup_terminal_status_check CHECK ((terminal_status = 'expired'::text))
+    CONSTRAINT hosted_version_candidate_cleanup_terminal_status_check CHECK ((terminal_status = ANY (ARRAY['expired'::text, 'cancelled'::text])))
 );
 
 

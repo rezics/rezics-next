@@ -160,7 +160,8 @@ expiry deadline through the existing indexed retention drain. Cancellation remai
 sealed source reaching expiry transitions to `expired`. The durable candidate claim records the source's actual
 terminal status, and step receipts read that retained status alongside their original frontier and row count.
 Existing expired claims and receipts are unchanged. Downgrade refuses cancelled claim evidence rather than
-rewriting or deleting outcomes.
+rewriting or deleting outcomes. The migration and current schema snapshot expose the same terminal-status
+constraint and candidate/generation retirement guards.
 
 The stage lock precedes the claim, candidate and generation locks. Both terminal states require the same exact
 source seal, owner epoch, expected revisions, frozen selection input and generation head/snapshot binding.
