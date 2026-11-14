@@ -15,19 +15,21 @@ import { appendLiteraryPrevious, literaryFocusId } from '../literary-visit/navig
 import { useLiteraryVisitLocation } from '../literary-visit/location';
 import {
   literaryGrain,
+  literaryFocuses,
   literaryWindow,
   literaryWindowKind,
   literaryWindowState,
   literaryWindows,
   literaryWorkIdentity,
   type LiteraryDefinitions,
+  type LiteraryWindow,
 } from './model';
 import { LiteraryReader } from './view';
 import { LiteraryNativeWindow, LiteraryStatus } from './sections';
 import { LiteraryFacts } from './facts';
 import { LiteraryStreams } from './streams';
 import { LiteraryOverviewDestinations } from './overview';
-import { literaryView, literaryVisibleFamily } from './presentation';
+import { literaryFields, literaryView, literaryVisibleFamily } from './presentation';
 
 /** No read is started here. Metadata, assertions and windows all belong to the ordinary native page. */
 export function LiteraryReaderEntry({
@@ -81,7 +83,6 @@ export function LiteraryReaderEntry({
     context,
     locale,
     digest,
-    reader,
     view,
     realm,
     continuation,
@@ -90,14 +91,16 @@ export function LiteraryReaderEntry({
     selectedStreamDirection,
     viewer,
   ]);
+  const preferences = `${reader.spoilerLevel}:${reader.suitability}`;
   const visit = useLiteraryVisitLocation();
   const contextMismatch = visit.hasContext && (visit.invalid || visit.context !== (context?.id ?? undefined));
   const currentPrevious = visit.invalid || contextMismatch ? [] : visit.previous;
-  const currentFocus = visit.invalid || contextMismatch ? undefined : visit.focus;
+  const requestedFocus = visit.invalid || contextMismatch ? undefined : visit.focus;
   const captured = useRef<{
     source: object;
     identity: string;
     authority: typeof authority;
+    preferences: string | undefined;
     definitions: typeof definitions;
     retired: boolean;
     generation: number;
@@ -107,6 +110,7 @@ export function LiteraryReaderEntry({
       source,
       identity,
       authority,
+      preferences: reader === defaultReader ? undefined : preferences,
       definitions,
       retired: seen.current.has(source),
       generation: (captured.current?.generation ?? 0) + 1,
@@ -115,9 +119,13 @@ export function LiteraryReaderEntry({
   } else {
     if (captured.current.authority.state === 'unknown' && authority.state !== 'unknown' && !captured.current.retired)
       captured.current.authority = authority;
+    // The ordinary page supplies the shared sentinel until actual preferences arrive, even at default values.
+    if (captured.current.preferences === undefined && reader !== defaultReader && !captured.current.retired)
+      captured.current.preferences = preferences;
     if (
       captured.current.identity !== identity ||
       captured.current.authority !== authority ||
+      (captured.current.preferences !== undefined && captured.current.preferences !== preferences) ||
       captured.current.definitions !== definitions
     )
       captured.current.retired = true;
@@ -148,6 +156,78 @@ export function LiteraryReaderEntry({
     if (focusedRetiredStream) document.getElementById('literary-reader-title')?.focus();
   }, [source, focusedRetiredStream]);
   const readingRetired = retired || contextMismatch;
+  const activeFor = (kind: 'members' | 'editions') => {
+    if (selectionLost) return undefined;
+    if (requestedStream && definitions && literaryWindowKind(requestedStream, definitions) === kind)
+      return requestedStream;
+    return supplied.find((native) => definitions && literaryWindowKind(native, definitions) === kind);
+  };
+  const activeMembers = activeFor('members');
+  const activeEditions = activeFor('editions');
+  const presentationView = literaryView(view);
+  const visibleFamily = literaryVisibleFamily(presentationView);
+  const grain = literaryGrain(work.type, definitions);
+  const active =
+    visibleFamily === 'members' ? activeMembers : visibleFamily === 'editions' ? activeEditions : undefined;
+  // Share this one projection with rendering and focus admission; choices retain only their native window.
+  const activeWindow = useMemo(() => {
+    if (!active || readingRetired || !grain || descriptorState !== 'released') return undefined;
+    const direction = directions?.find(
+      (admitted) => admitted.property === active.property && admitted.direction === active.direction,
+    );
+    return direction?.state === 'admitted' && direction.release === digest
+      ? literaryWindow(active, work.id, locale, reader)
+      : {
+          native: active,
+          rows: [],
+          withheld: false,
+          state: direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const),
+        };
+  }, [
+    active,
+    readingRetired,
+    grain,
+    descriptorState,
+    directions,
+    digest,
+    work.id,
+    locale,
+    reader.spoilerLevel,
+    reader.suitability,
+  ]);
+  const windowState = (native: ProfileRelationWindow) => {
+    if (activeWindow?.native === native) return activeWindow.state;
+    const direction = directions?.find(
+      (admitted) => admitted.property === native.property && admitted.direction === native.direction,
+    );
+    if (direction?.state !== 'admitted' || direction.release !== digest)
+      return direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const);
+    return literaryWindowState(native, work.id, locale, reader);
+  };
+  const admittedFocus = new Set(
+    !readingRetired && definitions && grain && descriptorState === 'released'
+      ? literaryFocuses(
+          work,
+          definitions,
+          directions,
+          digest,
+          reader,
+          literaryFields(presentationView),
+          activeWindow,
+        ).map(literaryFocusId)
+      : [],
+  );
+  const currentFocus =
+    requestedFocus && admittedFocus.has(literaryFocusId(requestedFocus)) ? requestedFocus : undefined;
+  const focusedAssertion =
+    typeof document !== 'undefined' && document.activeElement instanceof Element
+      ? document.activeElement.closest('[id^="literary-row-"]')
+      : null;
+  const focusedDisclosureLost =
+    !!focusedAssertion?.closest('[data-slot="literary-reader"]') && !admittedFocus.has(focusedAssertion.id);
+  useEffect(() => {
+    if (focusedDisclosureLost) document.getElementById('literary-reader-title')?.focus();
+  }, [focusedDisclosureLost, source]);
   const routeFor = (native: ProfileRelationWindow) => {
     const kind = definitions ? literaryWindowKind(native, definitions) : undefined;
     return view === 'overview' ? 'overview' : kind === 'editions' ? 'editions' : 'contents';
@@ -211,26 +291,7 @@ export function LiteraryReaderEntry({
         });
   const freshAddress = literaryAddress({ id: work.id, label: '', locale, view: 'overview', realm, context });
   const recoveryHref = selectionLost ? freshAddress : contextMismatch ? freshAddress : returnTo;
-  const activeFor = (kind: 'members' | 'editions') => {
-    if (selectionLost) return undefined;
-    if (requestedStream && definitions && literaryWindowKind(requestedStream, definitions) === kind)
-      return requestedStream;
-    return supplied.find((native) => definitions && literaryWindowKind(native, definitions) === kind);
-  };
-  const activeMembers = activeFor('members');
-  const activeEditions = activeFor('editions');
-  const windowState = (native: ProfileRelationWindow) => {
-    const direction = directions?.find(
-      (admitted) => admitted.property === native.property && admitted.direction === native.direction,
-    );
-    if (direction?.state !== 'admitted' || direction.release !== digest)
-      return direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const);
-    return literaryWindowState(native, work.id, locale, reader);
-  };
-  const presentationView = literaryView(view);
-  const visibleFamily = literaryVisibleFamily(presentationView);
   const o = { locale: locale as never };
-  const grain = literaryGrain(work.type, definitions);
   const type = pageText(definitions?.types[work.type]?.labels, locale);
   const matching = value?.subject === work.id && (value.context?.id ?? null) === (context?.id ?? null);
   const factsHref = literaryAddress({ id: work.id, label: '', locale, view: 'details', realm, context }).replace(
@@ -266,18 +327,18 @@ export function LiteraryReaderEntry({
     };
   const [focusMissing, setFocusMissing] = useState(false);
   useEffect(() => {
-    if (!currentFocus || readingRetired || typeof document === 'undefined') {
+    if (!requestedFocus || readingRetired || typeof document === 'undefined') {
       setFocusMissing(false);
       return;
     }
-    const target = document.getElementById(literaryFocusId(currentFocus));
+    const target = currentFocus ? document.getElementById(literaryFocusId(currentFocus)) : null;
     if (target && document.activeElement === document.body) {
       (target as HTMLElement).focus();
       setFocusMissing(false);
     } else {
       setFocusMissing(!target);
     }
-  }, [currentFocus, readingRetired, source, supplied]);
+  }, [requestedFocus, currentFocus, readingRetired, source, supplied]);
   return (
     <LiteraryReader
       key={captured.current.generation}
@@ -351,24 +412,11 @@ export function LiteraryReaderEntry({
                 const candidates = supplied.filter(
                   (native) => definitions && literaryWindowKind(native, definitions) === kind,
                 );
-                const active = kind === 'members' ? activeMembers : activeEditions;
                 const heading = kind === 'members' ? m.literary_grain_members({}, o) : m.literary_grain_editions({}, o);
                 const streamView = kind === 'editions' ? 'editions' : 'contents';
-                const renderNative = (native: ProfileRelationWindow) => {
-                  const direction = directions?.find(
-                    (admitted) => admitted.property === native.property && admitted.direction === native.direction,
-                  );
-                  const state = windowState(native);
-                  const projected =
-                    direction?.state === 'admitted' && direction.release === digest
-                      ? literaryWindow(native, work.id, locale, reader)
-                      : {
-                          native,
-                          rows: [],
-                          withheld: false,
-                          state:
-                            direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const),
-                        };
+                const renderNative = (projected: LiteraryWindow) => {
+                  const native = projected.native;
+                  const state = projected.state;
                   const stream = { node: native.node, property: native.property, direction: native.direction };
                   const current =
                     view === streamView &&
@@ -467,7 +515,7 @@ export function LiteraryReaderEntry({
                       addressFor(native, routeFor(native), current, current ? currentFocus : undefined)
                     }
                   >
-                    {active ? renderNative(active) : null}
+                    {activeWindow ? renderNative(activeWindow) : null}
                   </LiteraryStreams>
                 );
               })}

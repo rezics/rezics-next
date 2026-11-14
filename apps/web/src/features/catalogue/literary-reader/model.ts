@@ -74,7 +74,7 @@ export function literaryAuthorityKey(session: {
 }
 
 // These are released identities, not names inferred from a URI or a numbered title.
-import type { Release } from '@rezics/definitions';
+import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Related } from '../../../subject/types';
 import type { Reader } from '../../../subject/reader';
 import type { ProfileRelationWindow } from '../../pages/views';
@@ -133,6 +133,31 @@ export function literarySelected(subject: Subject, property: string, reader: Rea
   return (subject.relationCounts ? statements : bestRank(statements)).filter(
     (statement) => statement.rank !== 'deprecated' && spoilerLevel(statement) <= reader.spoilerLevel,
   );
+}
+
+/** Focus addresses name only currently rendered assertions, never a concealed occurrence or a different stream. */
+export function literaryFocuses(
+  subject: Subject,
+  definitions: LiteraryDefinitions,
+  directions: readonly ReleasedRelationDirectionResult[] | undefined,
+  digest: string | undefined,
+  reader: Reader,
+  properties: readonly string[],
+  active: LiteraryWindow | undefined,
+): string[] {
+  const focuses: string[] = [];
+  for (const property of properties) {
+    if (!definitions.types[subject.type]?.properties.includes(property)) continue;
+    if (definitions.properties[property]?.relation) {
+      const direction = directions?.find((entry) => entry.property === property && entry.direction === 'forward');
+      if (direction?.state !== 'admitted' || direction.release !== digest) continue;
+    }
+    for (const statement of literarySelected(subject, property, reader))
+      focuses.push(`direct:${property}:${statement.id}`);
+  }
+  if (active && (active.state === 'ready' || active.state === 'preparing'))
+    for (const row of active.rows) focuses.push(`${active.native.node}:${row.statement.id}`);
+  return focuses;
 }
 
 export type LiteraryWindowKind = 'members' | 'editions';

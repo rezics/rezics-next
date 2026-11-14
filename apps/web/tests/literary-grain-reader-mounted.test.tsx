@@ -2,14 +2,21 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { literaryGrainExample, literaryIds } from '../src/features/catalogue/literary-reader/examples';
+import {
+  literaryGrainExample,
+  literaryGrainRow,
+  literaryIds,
+} from '../src/features/catalogue/literary-reader/examples';
+import { defaultReader, type Reader } from '../src/subject/reader';
 
 test('mounted work, series and edition use supplied grain, authors, directed order, sources and retiring page bounds', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/en/subjects/series/title/contents' });
+  const nativeRead = mock(() => Promise.reject(new Error('unexpected native read')));
   const globals: Record<string, unknown> = { window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true };
+  globals.fetch = nativeRead;
   for (const key of [
     'navigator',
     'HTMLElement',
@@ -31,7 +38,15 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
   const host = window.document.createElement('main') as unknown as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
-  let input = literaryGrainExample();
+  let input: ReturnType<typeof literaryGrainExample> & { reader?: Reader } = literaryGrainExample();
+  const occurrence = structuredClone(literaryGrainRow(input.windows[0]!.rows[0]));
+  occurrence.statement = occurrence.assertion.id = 'later-occurrence';
+  const spoiler = {
+    property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+    value: { type: 'value', content: { amount: '+2', unit: '1' } },
+  } as const;
+  occurrence.assertion.qualifiers.push(spoiler);
+  input.windows[0]!.rows.push(occurrence);
   const render = () =>
     act(async () =>
       root.render(
@@ -60,6 +75,20 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
     expect(host.querySelector('details summary')?.textContent).toBe(m.subject_sources());
     expect(host.querySelector('details a')?.getAttribute('href')).toBe('https://bgm.tv/subject/1');
     await act(async () => member.focus());
+    const currentWindow = host.querySelector('[data-slot="literary-window"]');
+    input = { ...input, reader: { spoilerLevel: 2, suitability: 'show' } };
+    await render();
+    expect(host.querySelector('[data-slot="literary-window"]')).toBe(currentWindow);
+    expect(host.querySelector('[data-slot="literary-window"] a[target="_blank"]')).toBe(member);
+    expect(
+      [...host.querySelectorAll('[data-slot="literary-window"] li[data-statement-id]')].map((row) =>
+        row.getAttribute('data-statement-id'),
+      ),
+    ).toEqual([literaryGrainRow(input.windows[0]!.rows[0]).statement, 'later-occurrence']);
+    input = { ...input, reader: { suitability: 'show', spoilerLevel: 2 } };
+    await render();
+    expect(host.querySelector('[data-slot="literary-window"]')).toBe(currentWindow);
+    expect(window.document.activeElement).toBe(member);
     input = { ...input, locale: 'ja' };
     await render();
     expect(host.textContent).toContain(m.literary_reader_stale({}, { locale: 'ja' }));
@@ -78,6 +107,13 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
     expect(new URL(editionsLink.href).searchParams.has('node')).toBe(false);
     expect(new URL(editionsLink.href).searchParams.has('cursor')).toBe(false);
     expect(host.querySelector('[data-property="schema:wordCount"] dd')?.textContent).toBe(m.subject_value_unknown());
+    input = { ...input, source: {}, work: structuredClone(input.work) };
+    input.work.statements['schema:author']![0]!.qualifiers.push(spoiler);
+    await render();
+    expect(host.textContent).not.toContain('Supplied author');
+    input = { ...input, reader: { spoilerLevel: 2, suitability: 'show' } };
+    await render();
+    expect(host.textContent).toContain('Supplied author');
     const quantity = (property: string, amount: string) => [
       {
         id: property,
@@ -164,6 +200,22 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
     input = original;
     await render();
     expect(host.querySelector('[data-slot="literary-window"]')).toBeNull();
+    for (const replacement of [
+      { spoilerLevel: 1, suitability: 'blur' },
+      { spoilerLevel: 0, suitability: 'show' },
+    ] satisfies Reader[]) {
+      await fresh('schema:Book');
+      input = { ...input, reader: { ...defaultReader } };
+      await render();
+      expect(host.textContent).toContain('Supplied author');
+      input = { ...input, reader: replacement };
+      await render();
+      input = { ...input, reader: { ...defaultReader } };
+      await render();
+      expect(host.textContent).toContain(m.literary_reader_stale());
+      expect(host.textContent).not.toContain('Supplied author');
+    }
+    expect(nativeRead).toHaveBeenCalledTimes(0);
   } finally {
     await act(async () => root.unmount());
     client.clear();

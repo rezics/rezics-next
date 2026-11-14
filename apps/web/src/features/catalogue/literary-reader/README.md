@@ -37,7 +37,16 @@ supplied UTF-8 window bytes and retained projection bytes; its request and decod
 adapter costs. The existing page producer exports no whole-page response byte limit, so fixture byte measurements
 are not represented as a native bound or executed SQL evidence.
 
-One browser observation and a weak source-incarnation set retire old public results on source, release, reader,
+Decision: the shared [default reader](../../../subject/reader.ts) is conservative preparation. The first actual
+preferences bind once outside visit identity, including settings equal to the defaults; equal later values keep the
+reading. Preparation recomputes supplied facts and the one active native window without a remount or read, preserving
+the selected occurrence, stream, opaque cursor and bounded return addresses. A return awaiting disclosure focuses its
+exact assertion only after it becomes admissible; a withdrawn assertion loses its focus destination and releases
+held focus to the reader heading. Later preference replacement retires the source permanently, including A/B/A.
+The [Subject page](../../pages/README.md) owns preparation delivery and the [session owner](../../../session/README.md)
+owns browser observations; native admission and Book activation keep their existing gates.
+
+One browser observation and a weak source-incarnation set retire old public results on source, release, prepared reader,
 credential, Context, locale or focus-window replacement, including A-to-B-to-A. Destinations open separately with a
 validated native return address. The address carries the exact Context, Realm, view, node, released property/direction,
 opaque cursor and selected row focus. Previous retains up to eight accepted addresses and reloads each through the
