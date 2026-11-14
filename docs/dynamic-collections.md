@@ -22,6 +22,8 @@ A Collection keeps one identity, curator, title, description, visibility, follow
 
 **DECIDED DTO:** `membershipKind` discriminates a union, never a bag of optional fields. Curated Collections retain required `createdAt`, `updatedAt`, `memberCount` and `orderEpoch`. Dynamic Collections omit all four; Web displays no count/time, never zero. An unrenamed dynamic `title` is null or absent; an explicit owner rename wins. Built-in dynamic DTOs include `builtinKind: 'everything' | 'state' | 'liked'`; ordinary saved-dynamic DTOs omit `builtinKind` and carry their explicit title. State `builtinLabels` is the actual accepted state's standard BCP47 locale map (`zh-Hans`/`zh-Hant`, never `zh`), or `{}` when absent; Web uses its neutral Other fallback. Liked and Everything use Web's normal localized messages. Liked is always private with owner tuple `{kind:'liked'}`; it exposes no public profile/predicate/pin fields or curated count/time/order. Only owner discovery may include the private `builtin` tuple; public DTOs never disclose profile/state IDs, predicates, pins or release digests. No fixed vertical vocabulary is added. A dynamic member item contains `kind: "dynamic"`, its `subjectId`, and the same optional subject summary as a curated item. It has no occurrence ID, note, or added time. No route creates a pretend occurrence for a dynamic result.
 
+Native Collection projections retain the stored discriminator: curated rows carry `membershipKind: 'curated'` and `builtinKind: null`, while dynamic rows keep their explicit membership and built-in kind.
+
 The first-scope built-ins are:
 
 1. Everything, one stable Collection identity for every account, including an empty account.

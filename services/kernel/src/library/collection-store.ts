@@ -52,8 +52,11 @@ function asCollection(
     hasSavedRule?: boolean;
   },
 ): Collection {
-  if (row.membershipKind !== undefined && row.membershipKind !== 'curated' && row.membershipKind !== 'dynamic')
+  const membershipKind = row.membershipKind === undefined ? 'curated' : row.membershipKind;
+  if (membershipKind !== 'curated' && membershipKind !== 'dynamic')
     throw new Error('Invalid Collection membership kind');
+  if (membershipKind === 'curated' && (row.builtinKind != null || row.hasSavedRule === true))
+    throw new Error('Invalid curated Collection metadata');
   return {
     id: row.id,
     curatorAccountId: row.curatorAccountId,
@@ -68,13 +71,13 @@ function asCollection(
     orderEpoch: row.orderEpoch,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
-    ...(row.membershipKind === 'dynamic'
+    ...(membershipKind === 'dynamic'
       ? {
-          membershipKind: row.membershipKind,
+          membershipKind,
           builtinKind: row.builtinKind ?? null,
           hasSavedRule: row.hasSavedRule ?? false,
         }
-      : {}),
+      : { membershipKind, builtinKind: null }),
   };
 }
 
@@ -141,6 +144,7 @@ export async function updateCollection(
   revision: number,
   changes: CollectionChanges,
   context: WriteContext,
+  membership?: Pick<Collection, 'membershipKind' | 'builtinKind' | 'hasSavedRule'>,
 ): Promise<Collection | null> {
   const row = await collectionUpdate.run(queryClient(client), {
     route,
@@ -155,7 +159,7 @@ export async function updateCollection(
     cover_media_id: changes.coverMediaId ?? null,
     ...write(context),
   });
-  return row ? asCollection(row as CollectionResult) : null;
+  return row ? asCollection({ ...row, ...membership } as CollectionResult) : null;
 }
 
 export async function tombstoneCollection(

@@ -919,7 +919,12 @@ export function createCollectionCommands(config: {
             conflict() {
               throw new ProblemError('conflict');
             },
-            write: () => updateCollectionRow(tx, route, id, revision, changes, command),
+            write: () =>
+              updateCollectionRow(tx, route, id, revision, changes, command, {
+                membershipKind: current.membershipKind,
+                builtinKind: current.builtinKind,
+                hasSavedRule: current.hasSavedRule,
+              }),
             retirePublication: () => retireCollectionPublicationWork(tx, route, id),
             reducePublicSource: () => recordPublicCollectionReduction(tx, route, id, command.transactionId),
             readCurrent: () => activeCollection(tx, route, id),
