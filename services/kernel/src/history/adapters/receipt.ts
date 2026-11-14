@@ -29,6 +29,10 @@ export const RECEIPT_OWNER_DISPOSITIONS = Object.freeze({
     minimizerVersion: 1,
     barrierCompletesResult: true,
   }),
+  // Watch results have no durable response consumers. This ordinary-record disposition is
+  // independent of their account-erasure owner registration; record source locks still apply.
+  'content.board.watch': Object.freeze({ commandKindId: 8, minimizerVersion: 1, barrierCompletesResult: true }),
+  'content.watch.remove': Object.freeze({ commandKindId: 9, minimizerVersion: 1, barrierCompletesResult: true }),
 });
 export type PreferenceHistoryCode = 'more' | 'covered-pending';
 type Job = {
