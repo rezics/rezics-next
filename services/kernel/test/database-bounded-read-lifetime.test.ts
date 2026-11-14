@@ -108,8 +108,117 @@ test('uncertain transaction phases discard the client and the next read uses a h
   }
 });
 
+test('a shorter native timeout preserves its cause and retires the checkout before the next read', async () => {
+  const original = new Error('Query read timeout');
+  const submitted: NativeReadQueryConfig[] = [];
+  const releases: Array<Error | boolean | undefined> = [];
+  let discarded = false;
+  let checkouts = 0;
+  const timedOut = fakeClient(
+    (config) => {
+      submitted.push(config);
+      if (config.text !== 'SELECT slow') return queryResult([{ healthy: false }]);
+      return new Promise<FakeQueryResult>((_resolve, reject) => {
+        setTimeout(() => reject(original), config.query_timeout);
+      });
+    },
+    (error) => {
+      releases.push(error);
+      discarded = error !== undefined;
+    },
+  );
+  const healthy = fakeClient(() => queryResult([{ healthy: true }]));
+  // A healthy release would put the same unresolved connection back into circulation.
+  const database = fakePool(async () => {
+    checkouts += 1;
+    return discarded ? healthy : timedOut;
+  });
+  const request: NativeReadQueryConfig = { text: 'SELECT slow', query_timeout: 25 };
+  let retained!: PoolClient;
+  const visit = withBoundedReadConnection(database, Date.now() + 500, async (client) => {
+    retained = client;
+    return client.query(request);
+  });
+
+  expect(await visit.catch((error: unknown) => error)).toBe(original);
+  expect(releases).toEqual([original]);
+  expect(submitted[0]?.query_timeout).toBe(25);
+  expect(submitted[0]).not.toBe(request);
+  expect(request.query_timeout).toBe(25);
+  await expect(retained.query('SELECT stale')).rejects.toBeInstanceOf(RetiredReadClientError);
+
+  const next = await withBoundedReadConnection(database, Date.now() + 500, (client) => client.query('SELECT healthy'));
+  expect(next.rows).toEqual([{ healthy: true }]);
+  expect(checkouts).toBe(2);
+  expect(submitted.map(({ text }) => text)).toEqual(['SELECT slow']);
+});
+
+test('native rejection and synchronous dispatch failure retire a checkout but ordinary callback failure does not', async () => {
+  for (const failureAt of ['native rejection', 'synchronous dispatch', 'callback']) {
+    const original = new Error('Connection terminated unexpectedly');
+    const releases: Array<Error | boolean | undefined> = [];
+    const database = fakePool(async () =>
+      fakeClient(
+        () => {
+          if (failureAt === 'native rejection') return Promise.reject(original);
+          if (failureAt === 'synchronous dispatch') throw original;
+          return queryResult([]);
+        },
+        (error) => releases.push(error),
+      ),
+    );
+    const visit = withBoundedReadConnection(database, Date.now() + 500, async (client) => {
+      await client.query('SELECT current');
+      throw original;
+    });
+
+    expect(await visit.catch((error: unknown) => error)).toBe(original);
+    expect(releases).toEqual([failureAt === 'callback' ? undefined : original]);
+  }
+});
+
+test('a caught native callback timeout keeps its first mapped cause through expiry and late work failure', async () => {
+  const original = new Error('Query read timeout');
+  const mapped = new Error('mapped native timeout', { cause: original });
+  const request: NativeReadQueryConfig = { text: 'SELECT slow', query_timeout: 5 };
+  const resume = deferred<void>();
+  const callbackFinished = deferred<void>();
+  const released = deferred<Error | boolean | undefined>();
+  let caught: unknown;
+  const database = fakePool(async () =>
+    fakeClient(() => Promise.reject(original), (error) => released.resolve(error)),
+  );
+  const visit = withBoundedReadConnection(
+    database,
+    Date.now() + 40,
+    async (client) => {
+      try {
+        await new Promise<void>((resolve) => {
+          client.query(request, (error) => {
+            caught = error;
+            resolve();
+          });
+        });
+        await resume.promise;
+        throw new Error('late callback failure');
+      } finally {
+        callbackFinished.resolve();
+      }
+    },
+    { mapError: (error) => (error === original ? mapped : new Error('later mapping', { cause: error })) },
+  );
+
+  const failure = await visit.catch((error: unknown) => error);
+  resume.resolve();
+  await callbackFinished.promise;
+  expect(caught).toBe(mapped);
+  expect(failure).toBe(mapped);
+  expect(await released.promise).toBe(mapped);
+});
+
 test('settled PostgreSQL failures roll back safely and rollback failures preserve the first error', async () => {
   const readError = Object.assign(new Error('read failed'), { code: '23505', severity: 'ERROR' });
+  const mappedReadError = new Error('mapped server failure', { cause: readError });
   const safeStatements: string[] = [];
   let safeReleaseError: Error | boolean | undefined;
   const safePool = fakePool(async () =>
@@ -123,10 +232,20 @@ test('settled PostgreSQL failures roll back safely and rollback failures preserv
       },
     ),
   );
-  const safeFailure = await withBoundedReadOnlyTransaction(safePool, Date.now() + 500, async (client) => {
-    await client.query('SELECT rejected');
-  }).catch((error: unknown) => error);
-  expect(safeFailure).toBe(readError);
+  const safeFailure = await withBoundedReadOnlyTransaction(
+    safePool,
+    Date.now() + 500,
+    async (client) => {
+      await client.query('SELECT rejected');
+    },
+    {
+      mapError: (error) => (error === readError ? mappedReadError : error),
+      isUncertainError: () => true,
+      isUncertainSettledQueryError: () => true,
+      isUncertainWorkError: () => true,
+    },
+  ).catch((error: unknown) => error);
+  expect(safeFailure).toBe(mappedReadError);
   expect(safeStatements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT rejected', 'ROLLBACK']);
   expect(safeReleaseError).toBeUndefined();
 

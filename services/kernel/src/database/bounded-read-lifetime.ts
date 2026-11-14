@@ -152,7 +152,7 @@ export function withBoundedReadLifetime<T>(
   let uncertain = false;
   let uncertainty: unknown;
   let activeQueries = 0;
-  const settledServerErrors = new WeakSet<object>();
+  const settledServerErrors = new Set<unknown>();
   // Native custody is independent of whether this helper owns automatic completion.
   let transaction: 'none' | 'open' = 'none';
   let hasFailure = false;
@@ -169,10 +169,6 @@ export function withBoundedReadLifetime<T>(
     uncertain = true;
     uncertainty = error;
     if (connection) discardConnection(connection, asError(error));
-  };
-  const isUncertain = (error: unknown) => {
-    if (typeof error === 'object' && error !== null && settledServerErrors.has(error)) return false;
-    return options.isUncertainError?.(error) ?? false;
   };
   const retiredError = () => new RetiredReadClientError();
 
@@ -237,31 +233,30 @@ export function withBoundedReadLifetime<T>(
           return result;
         },
         (error: unknown) => {
-          settled = true;
+          // A native rejection alone does not prove that the server finished the query.
+          settled = isPostgresServerError(error);
           nativeFailed = true;
-          if (dispatched) activeQueries -= 1;
+          if (dispatched && settled) activeQueries -= 1;
           throw error;
         },
       );
 
       const completion = until(observed, deadline, deadlineError).catch((error: unknown) => {
-        const mapped = mapError(error, options);
         const settledServerError = nativeFailed && isPostgresServerError(error);
+        const mapped = mapError(error, options);
         if (settledServerError) {
-          if (typeof error === 'object' && error !== null) settledServerErrors.add(error);
-          if (typeof mapped === 'object' && mapped !== null) settledServerErrors.add(mapped);
+          settledServerErrors.add(error);
+          settledServerErrors.add(mapped);
         }
-        const uncertainSettledError =
-          nativeFailed &&
-          !settledServerError &&
-          (transactionAfter !== undefined || isUncertain(error) || options.isUncertainSettledQueryError?.(error) === true);
-        if (dispatched && (!settled || uncertainSettledError)) {
+        if (dispatched && !settled) {
           // Catching an uncertain native failure cannot erase the lifetime's first cause.
           remember(mapped);
           discard(mapped);
         }
         throw mapped;
       });
+      // Observe failure even when the read callback leaves this query unawaited.
+      void completion.catch(() => {});
       return completeWithCallback(completion);
     }) as PoolClient['query'];
 
@@ -288,7 +283,11 @@ export function withBoundedReadLifetime<T>(
       } catch (error) {
         const mapped = mapError(error, options);
         remember(mapped);
-        if (options.isUncertainWorkError?.(error) || options.isUncertainWorkError?.(mapped)) discard(mapped);
+        if (
+          !settledServerErrors.has(error) &&
+          (options.isUncertainWorkError?.(error) || options.isUncertainWorkError?.(mapped))
+        )
+          discard(mapped);
 
         if (transaction === 'open') {
           if (uncertain || activeQueries > 0 || Date.now() >= deadline) {
