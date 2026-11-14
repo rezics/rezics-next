@@ -63,6 +63,7 @@ import {
   ensureWorktree,
   frozenFiles,
   git,
+  GitCommandError,
   installWorktreeDependencies,
   prepareProofWorktree,
   prepareSharedFrozen,
@@ -105,7 +106,7 @@ type DispatchProofCapture = {
 type DispatchBriefOverride = { markdown: string; proofCapture?: DispatchProofCapture };
 
 export class ReportedRetrySetupError extends Error {
-  constructor(readonly failure: DependencyInstallError) {
+  constructor(readonly failure: Error) {
     super(failure.message, { cause: failure });
   }
 }
@@ -129,6 +130,39 @@ export function reportRetryInstallFailure(
   // A stable summary without per-task identity uses the inbox's existing repeat fold, including across host restarts.
   inbox.deliver({ managerId: ownership.operations, kind: 'environment', summary });
   return new ReportedRetrySetupError(error);
+}
+
+/** Keep a leftover timeout with its task while folding the shared host incident into one operations action. */
+export function reportRetryLeftoverFailure(
+  inbox: SqliteManagerInbox,
+  ownership: { manager: string; operations: string; taskId: string; attempt: number },
+  step: string,
+  error: unknown,
+  summaryCharacters = defaultPolicy.worker.summaryCharacters,
+): ReportedRetrySetupError {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  const detail = `${failure.name}: ${failure.message}`.replace(/[\r\n]+/g, ' ');
+  const diagnostic = error instanceof GitCommandError ? error.toJSON() : { message: String(error) };
+  const event = {
+    managerId: ownership.manager,
+    taskId: ownership.taskId,
+    kind: 'environment' as const,
+    summary: `environment: retry setup failed during ${step}: ${detail}`.slice(0, summaryCharacters),
+    attempt: ownership.attempt,
+    diagnostic,
+  };
+  if (error instanceof GitCommandError && error.timedOut) {
+    inbox.record(ownership.manager, event);
+    // No task identity in this stable summary: inbox repeat folding keeps one action across tasks and host restarts.
+    inbox.deliver({
+      managerId: ownership.operations,
+      kind: 'environment',
+      summary:
+        `Retained-source ${error.operation} timed out during retry preparation. ` +
+        'Investigate shared host I/O pressure and restore Git responsiveness; pending retries resume through normal admission.',
+    });
+  } else inbox.deliver(event);
+  return new ReportedRetrySetupError(failure);
 }
 
 export class PageDataSessionUnavailableError extends Error {
@@ -1639,6 +1673,47 @@ export class WorkerTasks {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, task.brief.criticalPath ? 'critical\n' : 'normal\n');
   }
+  private async settleRetryProcesses(taskId: string, throughAttempt: number): Promise<void> {
+    // A retry owns the worktree only after every earlier worker group has settled.
+    for (const previous of this.store
+      .attempts(taskId)
+      .filter((attempt) => attempt.attempt <= throughAttempt && !attempt.supersededFinalized)) {
+      await terminateProcessGroup(previous.process, this.settings.terminationGraceMs, this.settings.policy?.process);
+      for (const process of previous.auxiliaryProcesses)
+        await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
+    }
+  }
+  private prepareRetryLeftovers(task: Task, attempt: number): void {
+    try {
+      commitRetryLeftovers(this.settings, task, attempt);
+    } catch (error) {
+      const step = 'checking worktree leftovers';
+      const diagnostic = error instanceof GitCommandError ? error.toJSON() : { message: String(error) };
+      this.store.event({ taskId: task.id, attempt: task.currentAttempt }, 'retry-setup-failed', {
+        step,
+        diagnostic,
+        error: String(error),
+      });
+      const inbox = new SqliteManagerInbox(
+        this.store.db,
+        this.settings.integration.inboxDirectory,
+        undefined,
+        this.settings.policy?.inbox,
+      );
+      throw reportRetryLeftoverFailure(
+        inbox,
+        {
+          manager: task.brief.manager,
+          operations: this.settings.integration.operationsManager ?? this.settings.integration.supermanager,
+          taskId: task.id,
+          attempt: task.currentAttempt,
+        },
+        step,
+        error,
+        (this.settings.policy ?? defaultPolicy).worker.summaryCharacters,
+      );
+    }
+  }
   async retryHeld(taskId: string): Promise<RunningWorker> {
     const task = this.store.task(taskId);
     const releaseCapacity = await awaitHostCapacity(
@@ -1688,7 +1763,8 @@ export class WorkerTasks {
       return worker;
     }
     ensureWorktree(this.settings, task);
-    commitRetryLeftovers(this.settings, task, task.currentAttempt);
+    await this.settleRetryProcesses(taskId, task.currentAttempt);
+    this.prepareRetryLeftovers(task, task.currentAttempt);
     const integration = taskBaseHead(this.settings, task.brief);
     const commits = Number(
       git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`], this.settings.policy?.merge),
@@ -1726,7 +1802,12 @@ export class WorkerTasks {
           .filter(Boolean);
         if (!conflicts.length) throw error;
         git(task.worktree, ['rebase', '--abort'], this.settings.policy?.merge);
-        const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts }, true);
+        const worker = await this.retryTask(
+          taskId,
+          { escalation: 'rebase-conflict', conflictFiles: conflicts },
+          true,
+          true,
+        );
         if (!worker) throw new Error('released task was unexpectedly held again');
         return worker;
       }
@@ -1744,7 +1825,7 @@ export class WorkerTasks {
         current.base = integration;
       });
     }
-    const worker = await this.retryTask(taskId, {}, true);
+    const worker = await this.retryTask(taskId, {}, true, true);
     if (!worker) throw new Error('released task was unexpectedly held again');
     return worker;
   }
@@ -1816,7 +1897,12 @@ export class WorkerTasks {
       this.store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
   }
   /** `leased` when the caller already holds the task's lease. */
-  private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
+  private async retryTask(
+    taskId: string,
+    options: RetryOptions,
+    leased = false,
+    leftoversPrepared = false,
+  ): Promise<RunningWorker | null> {
     if (!leased) {
       const current = this.store.task(taskId);
       const nextBrief = options.brief === undefined ? current.brief : this.validateBrief(options.brief, taskId).brief;
@@ -1968,8 +2054,13 @@ export class WorkerTasks {
         return task.brief.after.length ? this.retryHeld(taskId) : this.retryTask(taskId, startOptions);
       }
       ensureWorktree(this.settings, task);
-      const pools = this.poolPolicies.read();
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
+      if (!leftoversPrepared) {
+        await this.settleRetryProcesses(taskId, task.currentAttempt);
+        if (!task.workspace && nextBrief.kind !== 'verification')
+          this.prepareRetryLeftovers(task, old?.attempt ?? 0);
+      }
+      const pools = this.poolPolicies.read();
       // A chained task's first attempt continues the landed session it was offered: route, pool and resume follow it.
       const predecessor = old ?? (task.chain ? this.store.attempt(task.chain.from) : null);
       const previousConflict =
@@ -2153,14 +2244,6 @@ export class WorkerTasks {
       if (options.pageDataRepairKey)
         this.store.event(next, 'page-data-repair', { repairKey: options.pageDataRepairKey });
       this.writeTaskPriority(this.store.task(taskId));
-      // Include older groups after a controller crash between superseding and termination.
-      for (const previous of this.store
-        .attempts(taskId)
-        .filter((a) => a.attempt < next.attempt && !a.supersededFinalized)) {
-        await terminateProcessGroup(previous.process, this.settings.terminationGraceMs, this.settings.policy?.process);
-        for (const process of previous.auxiliaryProcesses)
-          await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
-      }
       this.store.assertCurrent(next);
       this.store.finalizeSuperseded(
         next,
@@ -2189,7 +2272,7 @@ export class WorkerTasks {
         task = this.store.updateTask({ taskId, attempt: next.attempt }, (current) => {
           delete current.freshSession;
         });
-      let setupStep = 'checking worktree leftovers';
+      let setupStep = 'committing frozen acceptance files';
       let retryPrepared = false;
       try {
         if (task.brief.kind === 'verification') {
@@ -2304,7 +2387,6 @@ export class WorkerTasks {
             );
           });
         }
-        commitRetryLeftovers(this.settings, task, old?.attempt ?? 0);
         setupStep = 'committing frozen acceptance files';
         const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths, this.settings.policy?.brief);
         const priorFiles = frozenFiles(task);

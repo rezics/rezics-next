@@ -310,7 +310,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (error instanceof ReportedRetrySetupError) return;
       if (error instanceof PoolUnavailableError) {
         const current = this.tasks.store.task(taskId);
-        this.deferPoolRefusal({ taskId, attempt: current.currentAttempt });
+        this.deferRetryIntent({ taskId, attempt: current.currentAttempt });
         return;
       }
       throw error;
@@ -401,7 +401,7 @@ export class WorkerJob implements GateOutcomeSink {
           await this.offloadStart(ref.taskId, 'retry');
         } catch (error) {
           if (error instanceof PoolUnavailableError) {
-            this.deferPoolRefusal(ref);
+            this.deferRetryIntent(ref);
             return;
           }
           throw error;
@@ -413,12 +413,14 @@ export class WorkerJob implements GateOutcomeSink {
       if (incident && !toolIncidentRetryAllowed(store, ref)) return;
       // A backed-off retry waits for its time, and a check-host transport failure only when every eligible host is in
       // outage. The intent stays pending, and the host's recovery sweep tries it again every minute.
+      // Incident probes bypass ordinary waits, but a preflight failure still needs one bounded recovery window.
       if (
-        !incidentProbe &&
         intent.options.notBefore &&
         Date.parse(intent.options.notBefore) - Date.now() > this.policy.worker.retryIntentLeadMs
-      )
-        return;
+      ) {
+        const setupFailed = store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-setup-failed');
+        if (!incidentProbe || setupFailed) return;
+      }
       if (intent.options.awaitCheckHosts) {
         const hosts = checkHostsBlockingRetry(this.tasks.settings.stateDirectory, this.policy);
         if (hosts.length) {
@@ -469,13 +471,17 @@ export class WorkerJob implements GateOutcomeSink {
         error instanceof ProofUnavailableError
       )
         return;
+      if (error instanceof ReportedRetrySetupError) {
+        if (store.task(ref.taskId).currentAttempt === ref.attempt) this.deferRetryIntent(ref);
+        return;
+      }
       if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
         if (error instanceof StaleAttemptError) this.markRetryIntentStarted(ref);
         return;
       }
       // Capacity refusal is an admission wait: leave the durable intent pending for the next existing recovery pass.
       if (error instanceof PoolUnavailableError) {
-        this.deferPoolRefusal(ref);
+        this.deferRetryIntent(ref);
         return;
       }
       throw error;
@@ -516,7 +522,7 @@ export class WorkerJob implements GateOutcomeSink {
       value.nextAttempt = task.currentAttempt;
     });
   }
-  private deferPoolRefusal(ref: AttemptRef): void {
+  private deferRetryIntent(ref: AttemptRef): void {
     const intent = this.tasks.store.retryIntent(ref);
     if (!intent || intent.status !== 'pending') return;
     const previous = intent.options.notBefore;
@@ -543,7 +549,7 @@ export class WorkerJob implements GateOutcomeSink {
         await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
       } catch (error) {
         if (error instanceof PoolUnavailableError) {
-          this.deferPoolRefusal(ref);
+          this.deferRetryIntent(ref);
           return;
         }
         throw error;
@@ -561,7 +567,7 @@ export class WorkerJob implements GateOutcomeSink {
       await this.follow(worker);
     } catch (error) {
       if (error instanceof PoolUnavailableError) {
-        this.deferPoolRefusal(ref);
+        this.deferRetryIntent(ref);
         return;
       }
       if (error instanceof TaskHeldForDependenciesError || error instanceof ProofCapacityQueuedError) return;
@@ -637,10 +643,11 @@ export class WorkerJob implements GateOutcomeSink {
         await this.follow(await this.tasks.retryHeld(taskId));
       } catch (error) {
         // Another process is starting it.
+        if (error instanceof ReportedRetrySetupError) return;
         if (error instanceof LeaseHeldError) return;
         if (error instanceof PoolUnavailableError) {
           const task = this.tasks.store.task(taskId);
-          this.deferPoolRefusal({ taskId, attempt: task.currentAttempt });
+          this.deferRetryIntent({ taskId, attempt: task.currentAttempt });
           return;
         }
         if (!(error instanceof HeldTaskConflictError)) throw error;

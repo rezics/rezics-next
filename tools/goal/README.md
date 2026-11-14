@@ -3758,6 +3758,11 @@ unless it already has newer control-plane code, which its next promotion republi
 A pause stops spending allowance without losing work. Nothing is cancelled: tasks keep their worktrees, branches and
 briefs, and a stopped attempt's uncommitted changes are committed as leftovers on its next retry.
 
+Decision: retained-source retries inspect and commit leftovers under their lease before publishing the next attempt.
+A bounded Git status timeout keeps the durable retry intent and source in place, records the command and process
+diagnostics, releases its capacity ticket after the Git process settles, and folds the timeout into one operations
+action through the existing recovery pass.
+
 To pause:
 
 1. Back up `<state>/capacity.json`, then write `{"maxWorkers": 0, "minAvailableMiB": 999999999}` to it. It is read on
