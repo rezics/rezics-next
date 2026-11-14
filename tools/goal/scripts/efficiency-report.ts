@@ -111,7 +111,7 @@ async function main(args: string[]): Promise<void> {
         policy: settings.policy,
         now,
         productLineMeasurement,
-        privateDuty,
+        ...(privateDuty !== undefined ? { privateDuty } : {}),
       });
       report = capture.snapshot.report;
     } else {

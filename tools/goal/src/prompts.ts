@@ -660,11 +660,13 @@ function readGoalDocuments(cwd: string, goals: readonly string[]): ManagerGoalDo
     const absolutePath = join(cwd, path);
     if (!existsSync(absolutePath)) return { goal, path };
     const markdown = readFileSync(absolutePath, 'utf8');
+    const outcome = firstGoalParagraph(markdown, 'Outcome');
+    const scope = firstGoalParagraph(markdown, 'Scope');
     return {
       goal,
       path,
-      outcome: firstGoalParagraph(markdown, 'Outcome'),
-      scope: firstGoalParagraph(markdown, 'Scope'),
+      ...(outcome !== undefined ? { outcome } : {}),
+      ...(scope !== undefined ? { scope } : {}),
     };
   });
 }
