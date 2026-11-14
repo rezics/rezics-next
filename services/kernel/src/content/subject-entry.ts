@@ -161,8 +161,7 @@ async function readSelectedBoardSource(
     await client.query("SET LOCAL statement_timeout = '3000ms'");
     const partition = await readPartition(client, partitionNo);
     if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-    if (partition.writeState === 'moved')
-      throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+    if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
     const parameters = { route, board_id: boardId };
     const rows = await client.query<(typeof readSelectedBoard)['~reylo']['element']>(
       readSelectedBoard.sql,
