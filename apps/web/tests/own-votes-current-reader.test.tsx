@@ -856,7 +856,10 @@ test('reader replacement retires a same-page selection prompt before an old disc
               admitted: [],
             });
           } else {
-            const key = view.client.getQueryCache().findAll({ queryKey: ['own-votes'] }).at(-1)!.queryKey;
+            const key = view.client
+              .getQueryCache()
+              .findAll({ queryKey: ['own-votes'] })
+              .at(-1)!.queryKey;
             const page = pageFor(account);
             const requested = row(terminal);
             if (replacement !== 'missing')
