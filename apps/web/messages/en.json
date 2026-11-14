@@ -9330,6 +9330,7 @@
   "report_title": "Report this content",
   "report_unavailable": "Reports are temporarily unavailable. Please try again.",
   "report_verification": "Verification",
+  "reporter_history_actions_hint": "Select a report to enable its status link. Opening status checks the current outcome; this row shows the history observation.",
   "reporter_history_continuation_unavailable": "The next page could not be loaded. Try again.",
   "reporter_history_continue": "Load more reports",
   "reporter_history_denied": "Your report history is not available for this session.",

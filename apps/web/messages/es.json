@@ -9330,6 +9330,7 @@
   "report_title": "Denunciar este contenido",
   "report_unavailable": "Las denuncias no están disponibles temporalmente. Inténtalo de nuevo.",
   "report_verification": "Verificación",
+  "reporter_history_actions_hint": "Selecciona un reporte para habilitar su enlace de estado. Al abrirlo se consulta el resultado actual; esta fila muestra el resultado del historial.",
   "reporter_history_continuation_unavailable": "No se pudo cargar la página siguiente. Inténtalo de nuevo.",
   "reporter_history_continue": "Cargar más reportes",
   "reporter_history_denied": "Tu historial de reportes no está disponible en esta sesión.",

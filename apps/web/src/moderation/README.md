@@ -161,6 +161,37 @@ grant. The served route uses one replacement page, exact selected-report confirm
 return carrying its opaque cursor and selected report ID. Session, credential, exposure, locale, source and
 navigation replacement retire the visit.
 
+Decision: each supplied history row uses ContentItem with one outcome and adjacent selection/status actions; status
+is disabled until selection admits the exact report. The selected row's real anchor carries its report ID and current
+cursor. Selection still starts its own first window. Status return rereads the captured page with that report selected.
+
+### Reporter reading hierarchy
+
+The supplied public target label leads each row, followed by the native reason and submitted/reviewed times. An
+unavailable target has no label, target ID, kind or destination in history markup or attributes. It still has its
+own report reference, outcome and selection, which enables its exact status action. Report and submitted-revision references remain
+inspectable in a native disclosure; available target references never substitute for report identity. Unknown native
+reason strings remain readable. Rows keep native order and frontier, with no lookup, hydration or invented context.
+
+The single outcome describes the supplied history observation. Help beside the row actions explains the selection
+gate and distinguishes it from a fresh exact status read. Unselected status entry would discard the existing return
+coordinates and keyboard orientation, so presentation retains the selected-only anchor. The status page leads with its own observed outcome and explanation, then presents
+timeline, submitted reason/evidence, target availability and inspectable references as plain sections. It retains the
+submitted target reference even when that exact status response marks the target unavailable; availability never
+creates target navigation. Only history's supplied public target destination is an independent target link.
+
+Loading drops private rows and controls. Preparation, unavailable selection, sparse continuation, failed same-cursor
+retry and expiry keep their distinct notices and explicit recovery. Exact status loading, failure, closed platform
+and concealed report retain the history return without old submission fields. Journey, coordinates, private-reader,
+clipboard and cancellable keyboard-focus owners are unchanged: keyboard status entry or return orients only the
+current reader; pointer use and later focus movement do not request orientation. Source, account or locale replacement
+retires the old visit and focus request. Controls wrap and retain 44 px targets and visible focus in all eight locales.
+
+Presentation adds O(N) supplied-row rendering, zero I/O, scans or private persistence to the existing one native
+history page and one deliberate exact status read. Acceptance covers a single recognizable outcome, independent
+target/status destinations, deliberate selection/status entry with exact cursor return, and retained unavailable states.
+Story fixtures illustrate these states; they do not establish native, keyboard, phone, theme or locale acceptance.
+
 Decision: a missing configured native origin remains unavailable, including development; never present fixture data as a delivered inventory.
 
 Decision: My reports retains up to eight admitted predecessor coordinates, current and one staged target per eligible

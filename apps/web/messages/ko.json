@@ -9330,6 +9330,7 @@
   "report_title": "이 콘텐츠 신고",
   "report_unavailable": "일시적으로 신고를 접수할 수 없습니다. 나중에 다시 시도하세요.",
   "report_verification": "인증",
+  "reporter_history_actions_hint": "신고를 선택하면 상태 링크가 활성화됩니다. 상태를 열면 현재 결과를 확인합니다. 이 행은 기록을 불러온 시점의 정보입니다.",
   "reporter_history_continuation_unavailable": "다음 페이지를 불러오지 못했습니다. 다시 시도해 주세요.",
   "reporter_history_continue": "신고 더 불러오기",
   "reporter_history_denied": "이 세션에서는 신고 기록을 사용할 수 없습니다.",

@@ -9330,6 +9330,7 @@
   "report_title": "举报此内容",
   "report_unavailable": "举报功能暂时无法使用，请稍后重试。",
   "report_verification": "验证",
+  "reporter_history_actions_hint": "选择举报后即可打开状态链接。打开状态会确认当前结果；此行显示的是载入记录时的结果。",
   "reporter_history_continuation_unavailable": "无法加载下一页，请重试。",
   "reporter_history_continue": "加载更多举报",
   "reporter_history_denied": "当前会话无法查看举报记录。",

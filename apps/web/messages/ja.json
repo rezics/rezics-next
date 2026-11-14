@@ -9330,6 +9330,7 @@
   "report_title": "このコンテンツを報告",
   "report_unavailable": "現在、報告を受け付けられません。後でもう一度お試しください。",
   "report_verification": "認証",
+  "reporter_history_actions_hint": "報告を選択すると、状況へのリンクが有効になります。リンクを開くと現在の結果を確認できます。この行は履歴を取得した時点の情報です。",
   "reporter_history_continuation_unavailable": "次のページを読み込めませんでした。もう一度お試しください。",
   "reporter_history_continue": "さらに報告を読み込む",
   "reporter_history_denied": "このセッションでは報告履歴を利用できません。",

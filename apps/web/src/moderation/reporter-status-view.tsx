@@ -1,6 +1,6 @@
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ContentItemHeading } from '@rezics/ui/content-item';
 import { ArrowLeft, Check, CircleCheck, CircleMinus, Clock3, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,6 +20,10 @@ import type { ReporterStatus } from './reporter-status-model';
 type RetryActivation = { keyboard: boolean; source: HTMLButtonElement };
 type Retry = (activation?: RetryActivation) => void | Promise<void>;
 
+const statusControl = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 wrap-anywhere';
+const statusHeading =
+  'font-display text-3xl font-semibold tracking-tight sm:text-4xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
 /** The served page and its stories share this composition within the site's AppShell. */
 export function ReporterStatusPage(
   props: (
@@ -29,7 +33,11 @@ export function ReporterStatusPage(
   ) & { returnHref?: string; onReturn?: () => void | Promise<void> },
 ) {
   return (
-    <section className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10" aria-labelledby="reporter-status-heading">
+    <section
+      className="mx-auto w-full max-w-3xl break-words px-4 py-6 sm:px-8 sm:py-10"
+      aria-labelledby="reporter-status-heading"
+      aria-busy={'state' in props && props.state === 'loading'}
+    >
       <a
         href={props.returnHref ?? localizeHref('/inbox')}
         data-reporter-history-return={props.returnHref ? '' : undefined}
@@ -47,7 +55,7 @@ export function ReporterStatusPage(
           event.preventDefault();
           void props.onReturn();
         }}
-        className="mb-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        className="mb-6 inline-flex min-h-11 min-w-11 max-w-full items-center gap-2 rounded-md py-2 text-sm font-medium whitespace-normal text-muted-foreground underline-offset-4 wrap-anywhere hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         {props.returnHref ? m.reporter_history_return() : m.reporter_status_back()}
@@ -262,11 +270,7 @@ export function ReporterStatusResultPage({
 export function ReporterStatusReadState({ state }: { state: 'loading' | 'concealed' | 'closed' }) {
   return (
     <section className="space-y-6" aria-labelledby="reporter-status-heading">
-      <h1
-        id="reporter-status-heading"
-        tabIndex={-1}
-        className="font-display text-3xl font-semibold tracking-tight sm:text-4xl"
-      >
+      <h1 id="reporter-status-heading" tabIndex={-1} className={statusHeading}>
         {m.reporter_status_heading()}
       </h1>
       <p role="status" className="leading-7 text-muted-foreground">
@@ -316,23 +320,19 @@ export function ReporterStatusView({
   return (
     <article className="space-y-8 break-words" aria-labelledby="reporter-status-heading">
       <header className="space-y-4">
-        <h1
-          id="reporter-status-heading"
-          tabIndex={-1}
-          className="font-display text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
+        <h1 id="reporter-status-heading" tabIndex={-1} className={statusHeading}>
           {m.reporter_status_heading()}
         </h1>
         <Badge
           variant={report.outcome === 'actioned' ? 'default' : 'secondary'}
-          className="h-auto gap-1.5 px-3 py-1.5 text-sm"
+          className="h-auto max-w-full gap-1.5 whitespace-normal px-3 py-1.5 text-sm wrap-anywhere"
         >
           <StatusIcon aria-hidden="true" />
           {status.label}
         </Badge>
         <p className="max-w-prose text-base leading-7 text-muted-foreground">{status.explanation}</p>
         {onRefresh ? (
-          <Button variant="outline" className="min-h-11" onClick={() => void onRefresh()}>
+          <Button variant="outline" className={statusControl} onClick={() => void onRefresh()}>
             <RefreshCw className="size-4" aria-hidden="true" />
             {m.reporter_status_refresh()}
           </Button>
@@ -342,73 +342,69 @@ export function ReporterStatusView({
         <ContentItemHeading id="reporter-status-timeline" level={2} className="text-xl font-semibold">
           {m.reporter_status_timeline()}
         </ContentItemHeading>
-        <ContentItemFrame as="div" className="p-5 sm:p-6">
-          <ol aria-label={m.reporter_status_timeline()} className="grid gap-5 sm:grid-cols-2">
-            <li className="flex gap-3">
-              <Check className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
-              <div className="space-y-1">
-                <p className="font-medium">{m.reporter_status_submitted()}</p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  <ReportTime instant={report.createdAt} />
-                </p>
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <StatusIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <div className="space-y-1">
-                <p className="font-medium">{m.reporter_status_reviewed()}</p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  {report.resolvedAt ? (
-                    <ReportTime instant={report.resolvedAt} />
-                  ) : report.outcome === null ? (
-                    m.reporter_status_awaiting_review()
-                  ) : (
-                    m.reporter_status_review_time_unavailable()
-                  )}
-                </p>
-              </div>
-            </li>
-          </ol>
-        </ContentItemFrame>
+        <ol aria-label={m.reporter_status_timeline()} className="grid gap-5 sm:grid-cols-2">
+          <li className="flex gap-3">
+            <Check className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
+            <div className="space-y-1">
+              <p className="font-medium">{m.reporter_status_submitted()}</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                <ReportTime instant={report.createdAt} />
+              </p>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <StatusIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="space-y-1">
+              <p className="font-medium">{m.reporter_status_reviewed()}</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {report.resolvedAt ? (
+                  <ReportTime instant={report.resolvedAt} />
+                ) : report.outcome === null ? (
+                  m.reporter_status_awaiting_review()
+                ) : (
+                  m.reporter_status_review_time_unavailable()
+                )}
+              </p>
+            </div>
+          </li>
+        </ol>
       </section>
       <section aria-labelledby="reporter-status-submission" className="space-y-6">
-        <ContentItemFrame as="div" className="space-y-6 p-5 sm:p-6">
-          <ContentItemHeading id="reporter-status-submission" level={2} className="text-xl font-semibold">
-            {m.reporter_status_submission()}
+        <ContentItemHeading id="reporter-status-submission" level={2} className="text-xl font-semibold">
+          {m.reporter_status_submission()}
+        </ContentItemHeading>
+        <div className="space-y-2">
+          <ContentItemHeading level={3} className="text-sm font-medium text-muted-foreground">
+            {m.moderation_reason_label()}
           </ContentItemHeading>
-          <div className="space-y-2">
-            <ContentItemHeading level={3} className="text-sm font-medium text-muted-foreground">
-              {m.moderation_reason_label()}
-            </ContentItemHeading>
-            <p className="font-medium">{reason}</p>
-          </div>
-          <div className="space-y-2">
-            <ContentItemHeading level={3} className="text-sm font-medium text-muted-foreground">
-              {m.reporter_status_evidence()}
-            </ContentItemHeading>
-            <p className="whitespace-pre-wrap leading-7">{report.evidence || m.reporter_status_no_evidence()}</p>
-          </div>
-        </ContentItemFrame>
+          <p className="font-medium">{reason}</p>
+        </div>
+        <div className="space-y-2">
+          <ContentItemHeading level={3} className="text-sm font-medium text-muted-foreground">
+            {m.reporter_status_evidence()}
+          </ContentItemHeading>
+          <p className="whitespace-pre-wrap leading-7">{report.evidence || m.reporter_status_no_evidence()}</p>
+        </div>
       </section>
       <section className="space-y-3" aria-labelledby="reporter-status-target">
-        <ContentItemFrame as="div" className="space-y-3 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <ContentItemHeading id="reporter-status-target" level={2} className="text-lg font-semibold">
-              {m.reporter_status_target()}
-            </ContentItemHeading>
-            <Badge variant="outline">{targetKind}</Badge>
-          </div>
-          <p className="font-medium">
-            {report.targetAvailability === 'unavailable'
-              ? m.moderation_target_unavailable()
-              : m.reporter_status_available()}
-          </p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            {report.targetAvailability === 'unavailable'
-              ? m.reporter_status_retained_submission()
-              : m.reporter_status_saved_reference()}
-          </p>
-        </ContentItemFrame>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <ContentItemHeading id="reporter-status-target" level={2} className="text-lg font-semibold">
+            {m.reporter_status_target()}
+          </ContentItemHeading>
+          <Badge variant="outline" className="h-auto max-w-full whitespace-normal wrap-anywhere">
+            {targetKind}
+          </Badge>
+        </div>
+        <p className="font-medium">
+          {report.targetAvailability === 'unavailable'
+            ? m.moderation_target_unavailable()
+            : m.reporter_status_available()}
+        </p>
+        <p className="text-sm leading-6 text-muted-foreground">
+          {report.targetAvailability === 'unavailable'
+            ? m.reporter_status_retained_submission()
+            : m.reporter_status_saved_reference()}
+        </p>
       </section>
       <ReportReference key={report.id} report={report} {...(isCurrent ? { isCurrent } : {})} />
     </article>
@@ -527,9 +523,11 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
     }
   }
   return (
-    <details className="pt-3">
-      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{m.reporter_status_reference()}</summary>
-      <ContentItemFrame as="div" className="space-y-4 p-4">
+    <details className="border-t pt-3">
+      <summary className="min-h-11 min-w-11 cursor-pointer rounded-md py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        {m.reporter_status_reference()}
+      </summary>
+      <div className="space-y-4 py-3">
         <dl className="space-y-4 text-sm">
           {reference.map(({ label, value }) => (
             <div key={label} className="space-y-1">
@@ -541,7 +539,7 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
         <Button
           ref={copyButtonRef}
           variant="outline"
-          className="min-h-11"
+          className={statusControl}
           onClick={(event) =>
             void copy(
               event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget,
@@ -566,7 +564,7 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
             </label>
             <Button
               variant="outline"
-              className="min-h-11"
+              className={statusControl}
               onClick={() => {
                 cancelManualFocus();
                 setCopyState('idle');
@@ -584,7 +582,7 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
               ? m.reporter_status_copy_failed()
               : null}
         </p>
-      </ContentItemFrame>
+      </div>
     </details>
   );
 }
@@ -615,18 +613,14 @@ export function ReporterStatusFailure({ onRetry }: { onRetry: Retry }) {
   }
   return (
     <section className="space-y-6" aria-labelledby="reporter-status-heading">
-      <h1
-        id="reporter-status-heading"
-        tabIndex={-1}
-        className="font-display text-3xl font-semibold tracking-tight sm:text-4xl"
-      >
+      <h1 id="reporter-status-heading" tabIndex={-1} className={statusHeading}>
         {m.reporter_status_heading()}
       </h1>
       <p role="alert" className="leading-7 text-muted-foreground">
         {m.reporter_status_unavailable()}
       </p>
       <Button
-        className="min-h-11"
+        className={statusControl}
         disabled={retrying}
         onClick={(event) =>
           void retry({

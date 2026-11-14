@@ -9330,6 +9330,7 @@
   "report_title": "Diesen Inhalt melden",
   "report_unavailable": "Meldungen sind vorübergehend nicht verfügbar. Bitte versuche es erneut.",
   "report_verification": "Verifizierung",
+  "reporter_history_actions_hint": "Wähle eine Meldung aus, um ihren Statuslink zu aktivieren. Beim Öffnen wird der aktuelle Stand geprüft; diese Zeile zeigt den Stand der Übersicht.",
   "reporter_history_continuation_unavailable": "Die nächste Seite konnte nicht geladen werden. Bitte erneut versuchen.",
   "reporter_history_continue": "Weitere Meldungen laden",
   "reporter_history_denied": "Dein Meldungsverlauf ist in dieser Sitzung nicht verfügbar.",
