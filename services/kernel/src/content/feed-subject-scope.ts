@@ -52,8 +52,7 @@ export async function openSpaceSubjectPopulation(
     return withFeedReadConnection(deps.pool, deadline, async (client) => {
       const partition = await readPartition(client, partitionNo);
       if (!partition) throw new CommandUnavailableError('contention', partitionNo);
-      if (partition.writeState === 'moved')
-        throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
       if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
       const realm =
         (

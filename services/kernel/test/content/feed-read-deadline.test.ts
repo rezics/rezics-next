@@ -44,11 +44,7 @@ const read = async (client: FeedReadClient) => {
 test('feed snapshots retain the repeatable-read transaction and return the committed source', async () => {
   const current = connection();
   await expect(withFeedReadConnection(poolFor(current), Date.now() + 1000, read)).resolves.toBe('current source');
-  expect(current.statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT source',
-    'COMMIT',
-  ]);
+  expect(current.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'COMMIT']);
   expect(current.releaseError()).toBeUndefined();
 });
 
