@@ -303,11 +303,15 @@ export function EditorPreferencesPanel({
   const toggle = (key: 'outline' | 'markdownShortcuts' | 'spellcheck' | 'autoLink', description?: string) => (
     <Field orientation="horizontal" data-disabled={disabled}>
       <FieldContent>
-        <FieldLabel htmlFor={`${id}-${key}`}>{text[key]}</FieldLabel>
-        {description ? <FieldDescription>{description}</FieldDescription> : null}
+        <FieldLabel id={`${id}-${key}-label`} htmlFor={`${id}-${key}`}>
+          {text[key]}
+        </FieldLabel>
+        {description ? <FieldDescription id={`${id}-${key}-description`}>{description}</FieldDescription> : null}
       </FieldContent>
       <Switch
         id={`${id}-${key}`}
+        aria-labelledby={`${id}-${key}-label`}
+        aria-describedby={description ? `${id}-${key}-description` : undefined}
         checked={resolved[key]}
         disabled={disabled}
         onCheckedChange={(checked) => change({ [key]: checked })}

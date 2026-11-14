@@ -32,7 +32,21 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Settings: Story = {};
+export const Settings: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const name of ['Show outline', 'Markdown shortcuts', 'Spellcheck', 'Convert typed URLs to links']) {
+      await expect(canvas.getByRole('switch', { name })).toHaveAccessibleName(name);
+    }
+    const spellcheck = canvas.getByRole('switch', { name: 'Spellcheck' });
+    await expect(spellcheck).toHaveAccessibleDescription(
+      'Use the browser spelling checker and its configured languages.',
+    );
+    await expect(spellcheck).toBeChecked();
+    await userEvent.click(spellcheck);
+    await expect(spellcheck).not.toBeChecked();
+  },
+};
 
 export const NumericEntry: Story = {
   play: async ({ canvasElement }) => {
