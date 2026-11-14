@@ -168,7 +168,7 @@ const tideglassLabels = {
 /** Fictional configured pages with no planned source reads; these are not a launch roster. */
 export const configuredStaticZoneHomeFake = {
   profile: 'sha256:configured-static-zone',
-  template: { scope: 'route', key: null },
+  template: { scope: 'route', key: '' },
   document: {
     root: { props: {} },
     content: [
@@ -262,7 +262,7 @@ const quietCabinetLabels = {
 /** A valid routed document with no blocks and no source reads. */
 export const configuredStaticEmptyFake = {
   profile: 'sha256:configured-static-empty',
-  template: { scope: 'route', key: null },
+  template: { scope: 'route', key: '' },
   document: { root: { props: {} }, content: [] },
   reads: {},
   zone: {

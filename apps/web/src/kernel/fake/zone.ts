@@ -141,7 +141,7 @@ function zoneResponse(id: string, target: ZoneTarget): KernelRecording {
   return {
     status: 200,
     profile: 'sha256:zone-story',
-    template: { scope: 'route', key: route || null },
+    template: { scope: 'route', key: route },
     document: route === 'guide' ? guideDocument() : homeDocument(),
     reads: route === 'guide' ? {} : typeListReads(subjectId, { en: 'Kokoro', 'zh-Hans': '心' }),
     zone: {
