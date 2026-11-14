@@ -1,6 +1,9 @@
 import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import type { ReviewDiscoverySource } from '../content/index.ts';
-import { withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
+import { withSingleCommandAttempt } from '../command/command.ts';
 import { readErasureStatus, resolveLateErasureItem } from './native-bindings.ts';
 import {
   nativeDiscoveryRegistry,
@@ -20,7 +23,7 @@ import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { discoveryIndexName, discoveryPhysicalTargetMatches, readDiscoveryPhysicalIdentity } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { relayConcurrencyForPool, startRelays } from '../events/relays.ts';
 import {
   OpenSearchError,
@@ -52,6 +55,7 @@ export { subjectConsumer } from './consumer-name.ts';
 
 /** Bind native requests to the lifetime that owns the runner and its relays. */
 function runnerSearch(search: OpenSearch, signal: AbortSignal): OpenSearch {
+  const combined = (requestSignal?: AbortSignal) => (requestSignal ? AbortSignal.any([signal, requestSignal]) : signal);
   return {
     request<T>(
       method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
@@ -59,15 +63,15 @@ function runnerSearch(search: OpenSearch, signal: AbortSignal): OpenSearch {
       body?: unknown,
       options?: SearchRequestOptions,
     ) {
-      return search.request<T>(method, path, body, { ...options, signal });
+      return search.request<T>(method, path, body, { ...options, signal: combined(options?.signal) });
     },
     bulk<T>(lines: readonly unknown[], options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal }) {
-      return search.bulk<T>(lines, { ...options, signal });
+      return search.bulk<T>(lines, { ...options, signal: combined(options?.signal) });
     },
     ...(search.bulkRaw
       ? {
           bulkRaw<T>(body: string, options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal }) {
-            return search.bulkRaw!<T>(body, { ...options, signal });
+            return search.bulkRaw!<T>(body, { ...options, signal: combined(options?.signal) });
           },
         }
       : {}),
@@ -374,6 +378,7 @@ export function startDiscoveryIndexing(options: {
     relay: ReturnType<typeof startRelays>;
   };
   let installation: Installation | undefined;
+  let lastRetirement = 0;
   let stopped = false,
     paused = false,
     timer: ReturnType<typeof setTimeout> | undefined,
@@ -511,8 +516,11 @@ export function startDiscoveryIndexing(options: {
         await installation?.receivers.get(target.generation)?.next();
     }
     if (stopped || paused) return;
-    for (const target of generations.filter((row) => row.state === 'retiring')) {
-      if (stopped || paused) return;
+    // One bounded retirement per tick; an unavailable old copy must not starve other generations.
+    const retiring = generations.filter((row) => row.state === 'retiring');
+    const target = retiring.find((row) => row.generation > lastRetirement) ?? retiring[0];
+    if (target) {
+      lastRetirement = target.generation;
       await retireDiscovery(
         options.pool,
         options.search,
@@ -587,93 +595,261 @@ export function startDiscoveryIndexing(options: {
   };
 }
 
+const DISCOVERY_RETIREMENT_MS = 5000;
+// A timed-out checkout can still be queued in pg. Do not queue another retirement behind it.
+const pendingRetirementCheckouts = new WeakSet<Pool>();
+
+function retirementFailure(error: unknown): Error {
+  return error instanceof Error ? error : new Error('Discovery retirement session became uncertain');
+}
+
+/** Admit before checkout; native commands and engine work spend the same finite maintenance turn. */
+async function withDiscoveryRetirement<T>(
+  pool: Pool,
+  search: OpenSearch,
+  work: (pool: Pool, search: OpenSearch) => Promise<T>,
+): Promise<T> {
+  const deadline = Date.now() + DISCOVERY_RETIREMENT_MS;
+  const expired = new SearchUnavailableError('Discovery retirement deadline expired');
+  const controller = new AbortController();
+  let closed = false;
+  const remaining = () => {
+    if (closed || Date.now() >= deadline) throw expired;
+    return Math.max(1, Math.floor(deadline - Date.now()));
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiration = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort(expired);
+      reject(expired);
+    }, DISCOVERY_RETIREMENT_MS);
+  });
+
+  // The native hooks accept a Pool, including legacy commands whose checkout is otherwise unbounded.
+  // Each lease retains the real checkout until release or expiry; late work only sees a retired client.
+  const boundedPool = Object.create(pool) as Pool;
+  const connect = () =>
+    new Promise<PoolClient>((resolve, reject) => {
+      remaining();
+      void withBoundedReadLifetime(
+        (read) => {
+          remaining();
+          if (pendingRetirementCheckouts.has(pool))
+            throw new SearchUnavailableError('Discovery retirement checkout is still pending');
+          pendingRetirementCheckouts.add(pool);
+          let acquired = false;
+          return withConnection(pool, async (client) => {
+            acquired = true;
+            pendingRetirementCheckouts.delete(pool);
+            try {
+              remaining();
+              return await read(client);
+            } catch (error) {
+              // Expiry between queries may still own a session lock or an open manual transaction.
+              discardConnection(client, retirementFailure(error));
+              throw error;
+            }
+          }).finally(() => {
+            if (!acquired) pendingRetirementCheckouts.delete(pool);
+          });
+        },
+        discardConnection,
+        deadline,
+        (client) =>
+          new Promise<void>((release, fail) => {
+            remaining();
+            const lease = Object.create(client) as PoolClient;
+            let released = false;
+            lease.release = (error?: Error | boolean) => {
+              if (released) throw new Error('Discovery retirement connection was already released');
+              released = true;
+              if (error) fail(retirementFailure(error));
+              else release();
+            };
+            resolve(lease);
+          }),
+        { deadlineError: () => expired, isUncertainSettledQueryError: () => true },
+      ).catch(reject);
+    });
+  boundedPool.connect = ((callback?: Parameters<Pool['connect']>[0]) => {
+    const connection = connect();
+    if (!callback) return connection;
+    void connection.then(
+      (client) => callback(undefined, client, client.release),
+      (error: Error) => callback(error, undefined as never, undefined as never),
+    );
+    return undefined;
+  }) as Pool['connect'];
+  // createPool's query method closes over the original pool. Route even direct queries through the lease.
+  boundedPool.query = new Proxy(pool.query, {
+    apply(_query, _receiver, args: unknown[]) {
+      const callback = typeof args.at(-1) === 'function' ? args.pop() : undefined;
+      const result = withConnection(boundedPool, (client) =>
+        Reflect.apply(client.query, client, args) as Promise<unknown>,
+      );
+      if (typeof callback !== 'function') return result;
+      void result.then(
+        (value) => Reflect.apply(callback, undefined, [null, value]),
+        (error: unknown) => Reflect.apply(callback, undefined, [error]),
+      );
+      return undefined;
+    },
+  });
+  const boundedSearch: OpenSearch = {
+    ...search,
+    async request<T>(
+      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
+      path: string,
+      body?: unknown,
+      options?: SearchRequestOptions,
+    ) {
+      const result = await Promise.race([
+        search.request<T>(method, path, body, {
+          ...options,
+          timeoutMs: Math.min(remaining(), options?.timeoutMs ?? Infinity),
+          signal: options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
+        }),
+        expiration,
+      ]);
+      remaining();
+      return result;
+    },
+  };
+  try {
+    // Keep the original deadline in late native continuations, even after the runner stops awaiting them.
+    return await Promise.race([
+      withRequestDeadline(deadline, () => withSingleCommandAttempt(() => work(boundedPool, boundedSearch))),
+      expiration,
+    ]);
+  } finally {
+    closed = true;
+    clearTimeout(timer);
+    controller.abort(expired);
+  }
+}
+
 async function retireDiscovery(
   pool: Pool,
   search: OpenSearch,
   target: DiscoveryGeneration,
   active: DiscoveryGeneration | undefined,
 ) {
-  const due = await withConnection(
-    pool,
-    async (client) =>
+  return withDiscoveryRetirement(pool, search, async (pool, search) => {
+    if (!target.uuid || !target.incarnation)
+      throw new SearchUnavailableError('Discovery retirement identity is unavailable');
+    const index = discoveryIndexName(target.prefix, target.generation);
+    const due = async (client: PoolClient) =>
       (
         await client.query<{ due: boolean }>(
           `SELECT (activated_at IS NULL OR EXISTS (
              SELECT 1 FROM search.discovery_generation a WHERE a.partition_no=0 AND a.prefix=$1
                AND a.generation=$3 AND a.state='active' AND a.activated_at < clock_timestamp()-interval '15 minutes'
            )) AS due FROM search.discovery_generation
-           WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'`,
-          [target.prefix, target.generation, active?.generation ?? null],
+           WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'
+             AND index_uuid=$4 AND incarnation=$5::uuid`,
+          [target.prefix, target.generation, active?.generation ?? null, target.uuid, target.incarnation],
         )
-      ).rows[0]?.due,
-  );
-  if (!due) return;
-  const index = discoveryIndexName(target.prefix, target.generation);
-  await withConnection(pool, async (client) => {
-    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [index]);
-    try {
-      const physical = await readDiscoveryPhysicalIdentity(search, index);
-      // The name may now refer to a replacement owned by another incarnation. Drain this
-      // persisted generation without deleting or writing that physical index.
-      if (physical?.uuid === target.uuid) {
+      ).rows[0]?.due === true;
+    const gone = await withConnection(pool, async (client) => {
+      // Grace-period ticks need only one bounded read, without taking writer custody.
+      if (!(await due(client))) return false;
+      const lock = await client.query<{ locked: boolean }>(
+        'SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked',
+        [index],
+      );
+      if (lock.rows[0]?.locked !== true) return false;
+      try {
+        // Recheck grace, state and the captured identity while holding physical-target custody.
+        if (!(await due(client))) return false;
+        const physical = await readDiscoveryPhysicalIdentity(search, index);
+        // A different UUID proves the old copy gone. An unchanged UUID with changed metadata does not.
+        if (physical?.uuid === target.uuid) {
+          if (physical.incarnation !== target.incarnation)
+            throw new SearchUnavailableError('Discovery retirement physical incarnation changed');
+          try {
+            const deleted = await search.request<{ acknowledged?: boolean }>('DELETE', `/${index}`);
+            if (deleted.status !== 404 && (deleted.status !== 200 || deleted.body?.acknowledged !== true))
+              throw new SearchUnavailableError('Discovery retirement deletion is unconfirmed');
+          } catch (error) {
+            if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+          }
+          if ((await readDiscoveryPhysicalIdentity(search, index))?.uuid === target.uuid)
+            throw new SearchUnavailableError('Discovery retirement physical copy remains');
+        }
+        return true;
+      } finally {
         try {
-          await search.request('DELETE', `/${index}`);
+          const unlocked = await client.query<{ unlocked: boolean }>(
+            'SELECT pg_advisory_unlock(hashtextextended($1,0)) AS unlocked',
+            [index],
+          );
+          if (unlocked.rows[0]?.unlocked !== true) throw new Error('Discovery retirement lock was not held');
         } catch (error) {
-          if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+          discardConnection(client, retirementFailure(error));
+          throw error;
         }
       }
-    } finally {
-      await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [index]);
-    }
-  });
-  // Reclaim a bounded locator page only after physical deletion. Late erasure items still resolve through Access.
-  const copies = await withConnection(
-    pool,
-    async (client) =>
-      (
-        await client.query<{ route: number; id: string; kind: string }>(
-          `SELECT route,source_id::text AS id,kind FROM search.discovery_copy WHERE prefix=$1 AND generation=$2 ORDER BY route,source_id,kind LIMIT 100`,
-          [target.prefix, target.generation],
-        )
-      ).rows,
-  );
-  for (const copy of copies) {
-    if (copy.kind === 'account') {
-      const status = await withConnection(pool, (client) => readErasureStatus(client, copy.id));
-      if (status) {
-        await registerRetiredErasure(pool, target, copy.id);
-        await resolveLateErasureItem(
-          { pool },
-          { accountId: copy.id, participant: 'search', locator: copyLocator(target) },
-        );
-      }
-    }
-    await withConnection(pool, (client) =>
-      client.query(
-        'DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',
-        [copy.route, copy.id, target.prefix, target.generation, copy.kind],
-      ),
+    });
+    if (!gone) return;
+    // Reclaim a bounded locator page only after physical deletion. Late items still resolve through Access.
+    const copies = await withConnection(
+      pool,
+      async (client) =>
+        (
+          await client.query<{ route: number; id: string; kind: string }>(
+            `SELECT route,source_id::text AS id,kind FROM search.discovery_copy WHERE prefix=$1 AND generation=$2 ORDER BY route,source_id,kind LIMIT 100`,
+            [target.prefix, target.generation],
+          )
+        ).rows,
     );
-  }
-  if (copies.length) return;
-  await withConnection(pool, async (client) => {
-    await client.query('BEGIN');
-    try {
-      await client.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND generation=$2', [
-        target.prefix,
-        target.generation,
-      ]);
-      await client.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [
-        discoveryConsumer(target.prefix, target.generation),
-      ]);
-      await client.query(
-        "UPDATE search.discovery_generation SET state='retired' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'",
-        [target.prefix, target.generation],
+    for (const copy of copies) {
+      if (copy.kind === 'account') {
+        const status = await withConnection(pool, (client) => readErasureStatus(client, copy.id));
+        if (status) {
+          await registerRetiredErasure(pool, target, copy.id);
+          await resolveLateErasureItem(
+            { pool },
+            { accountId: copy.id, participant: 'search', locator: copyLocator(target) },
+          );
+        }
+      }
+      await withConnection(pool, (client) =>
+        client.query(
+          'DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',
+          [copy.route, copy.id, target.prefix, target.generation, copy.kind],
+        ),
       );
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
     }
+    if (copies.length) return;
+    await withConnection(pool, async (client) => {
+      try {
+        await client.query('BEGIN');
+        const retired = await client.query(
+          `UPDATE search.discovery_generation SET state='retired'
+           WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'
+             AND index_uuid=$3 AND incarnation=$4::uuid
+             AND NOT EXISTS (SELECT 1 FROM search.discovery_copy WHERE prefix=$1 AND generation=$2)
+           RETURNING generation`,
+          [target.prefix, target.generation, target.uuid, target.incarnation],
+        );
+        if (retired.rowCount) {
+          await client.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND generation=$2', [
+            target.prefix,
+            target.generation,
+          ]);
+          await client.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [
+            discoveryConsumer(target.prefix, target.generation),
+          ]);
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (cleanupError) {
+          discardConnection(client, retirementFailure(cleanupError));
+        }
+        throw error;
+      }
+    });
   });
 }
