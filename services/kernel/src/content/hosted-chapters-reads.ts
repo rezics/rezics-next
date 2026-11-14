@@ -539,10 +539,8 @@ export async function discloseHostedPageTargets(
   for (const [identity, guard] of scoped) {
     if (guard) finalEntries.push({ kind: 'scoped', identity, guard });
   }
-  const finalized = await boundedReadWindow(
-    finalEntries,
-    HOSTED_PAGE_DISCLOSURE_CONCURRENCY,
-    async ({ guard }) => guard.final(),
+  const finalized = await boundedReadWindow(finalEntries, HOSTED_PAGE_DISCLOSURE_CONCURRENCY, async ({ guard }) =>
+    guard.final(),
   );
   const ordinaryAnchors = new Map<string, AnchoredPosition | null>();
   const scopedAnchors = new Map<string, AnchoredPosition | null>();
