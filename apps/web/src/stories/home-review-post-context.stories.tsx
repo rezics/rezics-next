@@ -171,7 +171,9 @@ function HomeReviewPostContext({ scenario }: { scenario: Scenario }) {
             >
               Switch viewer
             </button>
-            <output aria-live="polite">Viewer: {viewer}; page: {revision + 1}</output>
+            <output aria-live="polite">
+              Viewer: {viewer}; page: {revision + 1}
+            </output>
           </div>
         ) : null}
         <HomeFeed result={result} locale={getLocale()} signedIn />
