@@ -384,14 +384,18 @@ export function startHostedPublicationActivation(
   const route = validateLocator(catalogueId, stageId);
   return activationCommand(deps, actor, catalogueId, stageId, 'start', { stageId }, context, async (tx, time) => {
     const existing = await readActivation(tx, route, catalogueId, stageId, true);
-    if (existing) return progress(existing);
+    if (existing) {
+      const candidate = await readCandidate(tx, route, catalogueId, stageId, time);
+      if (!candidate || !liveCandidate(candidate)) throw activationNotFound();
+      return progress(existing);
+    }
 
     const current = await hostedCatalogue(tx as AccessClient, catalogueId, true);
     const candidate = await readCandidate(tx, route, catalogueId, stageId, time, true);
     if (
       !current ||
       !candidate ||
-      candidate.status !== 'sealed' ||
+      !liveCandidate(candidate) ||
       current.head_revision_id !== candidate.expected_head_revision_id ||
       current.publication_id !== candidate.expected_publication_id
     )
@@ -570,7 +574,7 @@ export function advanceHostedPublicationActivationAuthority(
     let row = await readActivation(tx, route, catalogueId, stageId, true);
     if (!row) throw activationNotFound();
     const candidate = await readCandidate(tx, route, catalogueId, stageId, time);
-    if (!candidate || !candidateMatches(row, candidate, actor)) throw activationNotFound();
+    if (!candidate || !liveCandidate(candidate) || !candidateMatches(row, candidate, actor)) throw activationNotFound();
     if (row.state === 'activated' || row.state === 'ready') return progress(row);
     if (row.state === 'restart') row = await resetPass(tx, row);
 

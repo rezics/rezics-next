@@ -390,6 +390,15 @@ source-pinned stage a 24-hour lifetime from native command time, and returns ret
 only the stage's immutable source revision, expected draft and expected publication IDs; preparation never selects
 the publication pointer.
 
+Decision: fresh activation start, authority advancement and candidate selection require the exact candidate's stage
+to remain sealed and its `expires_at` to be strictly later than native command time. The indexed candidate/stage
+point read compares timestamps in PostgreSQL inside the owning command transaction, preserving timestamp precision
+and the existing locks and their order. Equality is expired, even while
+the collector has not visited the stage. Fresh keys cannot bypass expiry through existing activation progress;
+current author admission still precedes exact committed receipt replay, which returns before lifecycle admission
+and never moves the publication pointer again. The current public edition remains selected and readable under its
+ordinary disclosure rules; expired unpublished candidates remain private.
+
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
 Decision: advertise and enforce a 1,024-ID selection batch cap, based on an isolated interleaved 40-sample benchmark;
