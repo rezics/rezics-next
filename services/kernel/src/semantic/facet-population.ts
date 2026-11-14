@@ -5,7 +5,6 @@ import {
   BoundedReadDeadlineError,
   withBoundedReadConnection,
   withBoundedReadOnlyTransaction,
-  withConnection,
 } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
@@ -196,7 +195,7 @@ export const createNativeFacetPopulationSource: FacetPopulationSourceFactory = (
         const readStorage = <T>(work: (client: PoolClient) => Promise<T>): Promise<T | null> =>
           withBoundedReadConnection(config.pool, context.deadline, (client) => currentHome(client, work), readOptions);
         const appendStorage = <T>(work: (client: PoolClient) => Promise<T>): Promise<T | null> =>
-          withConnection(config.pool, (client) => currentHome(client, work));
+          withBoundedReadConnection(config.pool, context.deadline, (client) => currentHome(client, work), readOptions);
         const load = async (frontier: string, successor: boolean) =>
           readStorage(async (client) => {
             const rows = await client.query<Retained>(
