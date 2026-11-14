@@ -8,6 +8,7 @@ CREATE TABLE library.hosted_reading (
   catalogue_id uuid NOT NULL,
   publication_revision_id uuid NOT NULL,
   occurrence_id uuid NOT NULL,
+  target_post_id uuid NOT NULL,
   target_revision_id uuid NOT NULL,
   target_sha256 bytea NOT NULL CHECK (octet_length(target_sha256) = 32),
   document_block_id text,

@@ -111,10 +111,14 @@ against Content's bounded exact frozen publication/occurrence selection; client 
 Stored Post identity remains available to the owner and export even when current disclosure withholds the body.
 Earlier development checkpoints require a bounded exact-binding conversion; unresolved rows remain unsupported
 evidence rather than entering the canonical reader with a guessed or nullable Post.
-Conversion keyset-pages 100 owner rows at a time and joins the immutable occurrence and exact revision/digest by
-their native keys. `hosted_reading_unsupported` retains unresolved metadata only; its checkpoint-fence foreign key
-cascades account erasure, and it supplies no reader or archive checkpoint. Downgrade restores retained evidence
-only when the original unique owner/Subject slot remains available.
+Canonical installation declares the required Post directly; it never converts retained data inside a migration.
+For an existing stopped development database, explicitly execute
+`scripts/maintenance/hosted-reading-post-prepare.sql`, apply current Kernel migrations, then repeat
+`hosted-reading-post-advance.sql` until it examines zero rows and execute `hosted-reading-post-finish.sql`.
+Each advance commits at most 100 addressed rows and joins immutable occurrence/revision/digest by native keys.
+The partial missing-Post index is the resumable frontier; a failed batch rolls back without losing evidence.
+`hosted_reading_unsupported` retains unresolved metadata only; its checkpoint-fence foreign key cascades account
+erasure, and it supplies no reader or archive checkpoint. No application reader accepts a nullable Post.
 
 Acceptance choice: focused source fixtures pin those states; native/browser acceptance stays in the
 dev verifier.
