@@ -1,7 +1,6 @@
 import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
 import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
-import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { FeedActionBar } from '../features/feed/action-bar';
 import { m } from '../paraglide/messages.js';
@@ -149,53 +148,50 @@ function ThreadCard({
       : undefined;
 
   return (
-    <ContentItem
-      className="px-4 py-6 [overflow-wrap:anywhere] sm:px-4 [&>div]:sm:block [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=actions]]:min-w-0 [&_[data-content-item-slot=actions]]:max-w-full [&_[data-content-item-slot=actions]]:sm:mt-3"
-      title={title}
-      href={href}
-      headingLevel={3}
-      titleDataSlot="board-feed-card"
-      data-thread-id={thread.id}
+    <li
       id={boardRowAnchor(thread.id, occurrence)}
+      data-thread-id={thread.id}
       data-board-occurrence={`${occurrence.section}-${occurrence.index}`}
       tabIndex={-1}
-      context={
-        available ? (
+      className="min-w-0 rounded-2xl bg-card px-4 py-5 [overflow-wrap:anywhere] sm:px-5"
+    >
+      <header data-slot="board-thread-meta" className="min-w-0 space-y-2">
+        {available ? (
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
             <ConversationKind kind={thread.kind} />
             {pin?.pinned ? <BoardPinBadge pinned /> : null}
           </div>
-        ) : null
-      }
-      metadata={
-        available ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Byline
-              author={author}
-              createdAt={thread.createdAt}
-              now={now}
-              size="sm"
-              className="w-full [&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
-            />
+        ) : null}
+        <h3 className="min-w-0 max-w-full break-words text-lg leading-snug font-semibold [overflow-wrap:anywhere]">
+          <a
+            href={href}
+            data-slot="board-feed-card"
+            className="rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {title}
+          </a>
+        </h3>
+        {available ? (
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+            <Byline author={author} createdAt={thread.createdAt} now={now} size="sm" className="min-w-0 max-w-full" />
           </div>
-        ) : null
-      }
-      preview={
-        <>
+        ) : null}
+      </header>
+      {available ? (
+        <div data-slot="board-thread-content" className="mt-3 min-w-0 max-w-full space-y-3">
           {previewContent}
           {hasSpoilers ? (
             <Button
               type="button"
               variant="ghost"
-              className="min-h-11"
+              className="min-h-11 max-w-full whitespace-normal"
               aria-expanded={revealed}
               onClick={() => setRevealed((value) => !value)}
             >
               {revealed ? m.subject_spoiler_hide() : m.thread_reveal_spoiler()}
             </Button>
           ) : null}
-          {available &&
-          thread.firstPost.availability === 'available' &&
+          {thread.firstPost.availability === 'available' &&
           openingAuthor?.state === 'available' &&
           openingAuthor.id !== thread.authorId ? (
             <Byline author={openingAuthor} createdAt={thread.firstPost.createdAt} now={now} size="sm" />
@@ -206,10 +202,10 @@ function ThreadCard({
           {openingCard?.media.state === 'unavailable' ? (
             <p className="text-sm text-muted-foreground">{m.content_edition_image_unavailable()}</p>
           ) : null}
-        </>
-      }
-      actions={
-        available ? (
+        </div>
+      ) : null}
+      <div data-slot="board-thread-actions" className="mt-4 min-w-0 max-w-full border-t border-border pt-3">
+        {available ? (
           <FeedActionBar
             locale={locale}
             title={title}
@@ -258,13 +254,13 @@ function ThreadCard({
             ) : null}
           </FeedActionBar>
         ) : (
-          <>
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <CopyDiscussionLink href={canonicalHref} />
             {pinControl}
-          </>
-        )
-      }
-    />
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -279,7 +275,6 @@ type BoardFeedProps = {
   reactionOrigin?: BoardOpeningReactionOrigin;
   authors: BoardFeedAuthors;
   now: string;
-  actions?: ReactNode;
   cursor?: string;
   onOpeningRead?: (page: ReceivedBoardOpeningPage) => void;
   pinProducer?: BoardPinProducer;
@@ -336,7 +331,6 @@ function BoardFeedVisit({
   reactionOrigin,
   authors: initialAuthors,
   now,
-  actions,
   cursor,
   onOpeningRead,
   pinProducer,
@@ -552,26 +546,23 @@ function BoardFeedVisit({
       aria-labelledby={headingId}
       onClick={guardReadingNavigation}
     >
-      <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 ref={heading} id={headingId} tabIndex={-1} className="min-w-0 max-w-full text-lg font-semibold">
           {m.board_threads_heading()}
         </h2>
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:py-2 [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:py-2 [&_button]:whitespace-normal [&_svg]:shrink-0">
-          {actions}
+        <div data-slot="board-sort-toolbar" className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2">
+          <BoardSortNav boardId={boardId} sort={sort} returnTo={requestSearch.returnTo} />
+          {refreshedAt ? (
+            <details className="min-w-0 max-w-full text-xs text-muted-foreground sm:max-w-prose">
+              <summary className="min-h-11 min-w-11 cursor-pointer content-center rounded-lg px-2 py-2 whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <time dateTime={refreshedAt} title={fullDateTime(refreshedAt, locale)}>
+                  {m.board_feed_order_help()}
+                </time>
+              </summary>
+              <p className="px-2 py-2">{m.board_rank_refreshed({ time: timeText(refreshedAt, now, locale) })}</p>
+            </details>
+          ) : null}
         </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <BoardSortNav boardId={boardId} sort={sort} returnTo={requestSearch.returnTo} />
-        {refreshedAt ? (
-          <details className="min-w-0 max-w-full text-xs text-muted-foreground sm:max-w-prose">
-            <summary className="min-h-11 min-w-11 cursor-pointer content-center rounded-lg px-2 py-2 whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-              <time dateTime={refreshedAt} title={fullDateTime(refreshedAt, locale)}>
-                {m.board_feed_order_help()}
-              </time>
-            </summary>
-            <p className="px-2 py-2">{m.board_rank_refreshed({ time: timeText(refreshedAt, now, locale) })}</p>
-          </details>
-        ) : null}
       </div>
       {focusRecovery ? (
         <div
@@ -634,8 +625,8 @@ function BoardFeedVisit({
           {ordinary.threads.map((thread, index) => card(thread, { section: 'ordinary', index }))}
         </ul>
       ) : section.state === 'ready' ? null : (
-        <div className="rounded-2xl bg-muted/50 px-5 py-10 text-center">
-          <p className="mx-auto max-w-sm text-muted-foreground">
+        <div data-slot="board-feed-empty" className="rounded-2xl bg-muted/40 px-4 py-8 text-center sm:px-6 sm:py-10">
+          <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground sm:text-base">
             {ordinary.next === null ? m.board_threads_empty() : m.board_threads_page_empty()}
           </p>
         </div>
