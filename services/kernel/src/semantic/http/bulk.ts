@@ -15,7 +15,7 @@ import type { OpenAPIV3 } from 'openapi-types';
 import { CommandUnavailableError } from '../../command/command.ts';
 import { resourceAuthorization } from '../../access/resource-authorization.ts';
 import { contentLifecycleOf } from '../adapters/ports.ts';
-import { discardConnection, withConnection } from '../../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema, type FieldError } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
@@ -101,27 +101,26 @@ function fencedProblem(requestId: string) {
 }
 
 /** One anchored read per media partition. Each cover still gets its own reference probe. */
-async function probeCovers(pool: Pool, partition: number, ids: readonly string[]): Promise<Map<string, boolean>> {
-  return withConnection(pool, async (connection) => {
-    await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+async function probeCovers(
+  pool: Pool,
+  partition: number,
+  ids: readonly string[],
+  deadline: number,
+): Promise<Map<string, boolean>> {
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (connection) => {
       const state = await readPartition(connection, partition);
       if (!state || state.writeState === 'moved')
         throw new CommandUnavailableError(state?.writeState === 'moved' ? 'moved' : 'deadline', partition);
       const available = new Map<string, boolean>();
       const lifecycle = contentLifecycleOf(pool);
       for (const id of ids) available.set(id, (await lifecycle.checkCover(connection, id)) !== null);
-      await connection.query('COMMIT');
       return available;
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(connection, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
+    },
+    { deadlineError: () => new CommandUnavailableError('deadline', partition) },
+  );
 }
 
 async function publishInside(pool: Pool, plan: SourceFencePlan, partition: number): Promise<void> {
@@ -174,7 +173,11 @@ export function bulkRoutes(
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
       const global = { route: 0, id: GLOBAL_CONTEXT };
       const permission = await authorize(global);
-      const allowed = await admission.run('normal', job, () => withConnection(pool, (tx) => permission(tx)));
+      const allowed = await admission.run('normal', job, () =>
+        withBoundedReadConnection(pool, job.deadline, (tx) => permission(tx), {
+          deadlineError: () => new CommandUnavailableError('deadline', partitionOf(global.route)),
+        }),
+      );
       if (!allowed) throw new ProblemError('forbidden');
       const release = await admission.run('normal', job, () => activeRelease(pool));
       if (!release) throw new ProblemError('semantic_not_ready');
@@ -233,6 +236,7 @@ export function bulkRoutes(
               pool,
               partition,
               list.map((item) => item.id),
+              job.deadline,
             );
           } catch (error) {
             for (const item of list) fatal.set(item.index, error);
