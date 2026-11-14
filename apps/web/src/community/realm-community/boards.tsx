@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { ListRow } from '@rezics/ui/list-row';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { boardRequestHref } from '../../threads/board-navigation';
@@ -37,45 +36,46 @@ function recentRegion(board: RealmBoard, boardHref: string, current: () => boole
       </p>
     ) : null;
   return (
-    <ul
-      className="min-w-0 divide-y divide-border border-s border-border ps-4"
-      data-slot="realm-board-recent"
-      aria-label={m.realm_board_recent()}
-    >
-      {recent.threads.slice(0, 3).map((thread) => {
-        const href = threadLocation(
-          getLocale(),
-          { id: thread.id, title: thread.title },
-          undefined,
-          undefined,
-          undefined,
-          boardHref,
-        );
-        const replies = commentsLabel(thread.comments);
-        return (
-          <li key={thread.id} className="min-w-0 py-2 first:pt-0 last:pb-0">
-            <a
-              href={href}
-              data-slot="realm-board-recent-link"
-              data-thread-id={thread.id}
-              onClick={(event) => {
-                if (!current()) event.preventDefault();
-              }}
-              onAuxClick={(event) => {
-                if (!current()) event.preventDefault();
-              }}
-              onContextMenu={(event) => {
-                if (!current()) event.preventDefault();
-              }}
-              className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              {thread.title ?? m.threads_untitled()}
-            </a>
-            {replies ? <p className="text-xs text-muted-foreground">{replies}</p> : null}
-          </li>
-        );
-      })}
-    </ul>
+    <div className="min-w-0 space-y-2 border-t border-border pt-3" data-slot="realm-board-recent">
+      <p aria-hidden="true" className="text-xs font-semibold text-muted-foreground">
+        {m.realm_board_recent()}
+      </p>
+      <ul className="min-w-0 divide-y divide-border" aria-label={m.realm_board_recent()}>
+        {recent.threads.slice(0, 3).map((thread) => {
+          const href = threadLocation(
+            getLocale(),
+            { id: thread.id, title: thread.title },
+            undefined,
+            undefined,
+            undefined,
+            boardHref,
+          );
+          const replies = commentsLabel(thread.comments);
+          return (
+            <li key={thread.id} className="min-w-0 py-1.5 first:pt-0 last:pb-0">
+              <a
+                href={href}
+                data-slot="realm-board-recent-link"
+                data-thread-id={thread.id}
+                onClick={(event) => {
+                  if (!current()) event.preventDefault();
+                }}
+                onAuxClick={(event) => {
+                  if (!current()) event.preventDefault();
+                }}
+                onContextMenu={(event) => {
+                  if (!current()) event.preventDefault();
+                }}
+                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                {thread.title ?? m.threads_untitled()}
+              </a>
+              {replies ? <p className="ps-1 text-xs text-muted-foreground">{replies}</p> : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -116,21 +116,31 @@ export function RealmCommunityBoards({
       </h2>
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.community_boards_description()}</p>
       {boards.length ? (
-        <ul className="divide-y divide-border">
+        <ul className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-2">
           {boards.map((board) => {
             const href = boardHref(board);
+            const visibilityLabel = {
+              published: m.catalogue_reports_visibility_visible(),
+              draft: m.realm_board_draft(),
+              protected: m.realm_board_protected(),
+              taken_down: m.catalogue_reports_visibility_taken_down(),
+            }[board.visibility];
             return (
-              <ListRow
+              <li
                 key={board.id}
                 id={`realm-board-${board.id}`}
                 ref={board.id === focus.firstId ? focus.itemRef : null}
                 tabIndex={-1}
                 aria-label={board.id === focus.firstId ? focus.regionLabel : undefined}
-                className="flex flex-col items-stretch gap-4 rounded-lg px-2 py-4 sm:px-4 sm:py-5 focus-visible:outline-2 focus-visible:outline-ring"
+                className="min-w-0 rounded-xl focus-visible:outline-2 focus-visible:outline-ring"
               >
-                <div className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-2">
-                  <div className="min-w-0 flex-1 basis-48 space-y-1">
-                    <h3 className="text-lg font-semibold">
+                <article
+                  data-slot="realm-board-card"
+                  data-visibility={board.visibility}
+                  className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5"
+                >
+                  <header className="min-w-0 space-y-2">
+                    <h3 className="text-lg leading-snug font-semibold sm:text-xl">
                       <a
                         href={href}
                         onClick={(event) => {
@@ -148,19 +158,23 @@ export function RealmCommunityBoards({
                         {board.title ?? m.threads_untitled()}
                       </a>
                     </h3>
+                    <div className="flex min-w-0 flex-wrap gap-2 text-xs font-medium">
+                      <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+                        {purposeLabel(board.purpose)}
+                      </span>
+                      {visibilityLabel ? (
+                        <span className="rounded-full border border-border px-2.5 py-1 text-muted-foreground">
+                          {visibilityLabel}
+                        </span>
+                      ) : null}
+                    </div>
                     {board.description ? (
-                      <p className="text-sm leading-relaxed text-muted-foreground">{board.description}</p>
+                      <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{board.description}</p>
                     ) : null}
-                    <p className="text-xs font-medium text-muted-foreground">{purposeLabel(board.purpose)}</p>
-                  </div>
-                  {board.visibility === 'draft' || board.visibility === 'protected' ? (
-                    <p className="shrink-0 text-xs text-muted-foreground">
-                      {board.visibility === 'draft' ? m.realm_board_draft() : m.realm_board_protected()}
-                    </p>
-                  ) : null}
-                </div>
-                {recentRegion(board, href, current)}
-              </ListRow>
+                  </header>
+                  {recentRegion(board, href, current)}
+                </article>
+              </li>
             );
           })}
         </ul>

@@ -93,6 +93,7 @@ function Published({
   const ratio = sharedRatio(titled.map((item) => item.cover));
   return (
     <section
+      data-slot="realm-community-publications"
       className="min-w-0 space-y-5 border-t border-border pt-6 sm:pt-8"
       aria-labelledby="realm-published-heading"
     >
@@ -654,7 +655,7 @@ function SpaceHome({
   return (
     <article
       ref={pageRoot}
-      className="min-w-0 max-w-5xl space-y-8 text-foreground [overflow-wrap:anywhere] sm:space-y-10"
+      className="min-w-0 max-w-6xl space-y-8 text-foreground [overflow-wrap:anywhere] sm:space-y-10"
       {...(page.realmCarrier ? { 'data-realm-carrier': page.realmCarrier } : {})}
     >
       {page.realmCarrier === 'unavailable' ? (
@@ -662,64 +663,75 @@ function SpaceHome({
           {m.realm_shelf_unavailable()}
         </p>
       ) : null}
-      {showCommunity && page.realm ? (
-        <RealmHomeHeader realm={page.realm} space={page.space} participation={participation} />
-      ) : (
-        <>
-          <header className="min-w-0 overflow-hidden rounded-2xl bg-card text-card-foreground">
-            {bannerSrc && !spaceRemoved ? (
-              <img
-                src={bannerSrc}
-                alt=""
-                className="max-h-56 w-full object-cover"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : null}
-            <div className="min-w-0 space-y-4 px-4 py-6 sm:px-6 sm:py-8">
-              <PageHeading className="min-w-0">{page.space.title}</PageHeading>
-              {page.space.summary && !spaceRemoved ? (
-                <p className="max-w-prose leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                  {page.space.summary}
-                </p>
+      <div data-slot="community-home-identity" className="min-w-0 space-y-6">
+        {showCommunity && page.realm ? (
+          <RealmHomeHeader realm={page.realm} space={page.space} participation={participation} />
+        ) : (
+          <>
+            <header className="min-w-0 overflow-hidden rounded-2xl bg-card text-card-foreground">
+              {bannerSrc && !spaceRemoved ? (
+                <img
+                  src={bannerSrc}
+                  alt=""
+                  className="max-h-56 w-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
               ) : null}
-            </div>
-          </header>
-          {participation}
-        </>
-      )}
-      {spaceRemoved || realmRemoved || orphaned ? (
-        <p role="status" className="rounded-xl border p-4 text-sm">
-          {spaceRemoved || realmRemoved ? m.container_lifecycle_removed_state() : m.container_lifecycle_orphaned()}
-        </p>
-      ) : null}
-      {page.realm && !realmRemoved && readable ? (
-        <CommunitySectionNavigation catalogueId={catalogueId} current={() => !lifetime || lifetime.current()} />
-      ) : null}
-      <div
-        id={catalogueId}
-        tabIndex={-1}
-        className="min-w-0 scroll-mt-6 space-y-6 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-      >
-        <RealmCatalogueCurrent
-          page={page}
-          available={Boolean(page.realm && !realmRemoved && !orphaned && presentationCurrent)}
-          sourceRevision={catalogueVersion}
-          isCurrentSource={() => catalogueRevision.current === catalogueVersion}
-        />
+              <div className="min-w-0 space-y-4 px-4 py-6 sm:px-6 sm:py-8">
+                <PageHeading className="min-w-0">{page.space.title}</PageHeading>
+                {page.space.summary && !spaceRemoved ? (
+                  <p className="max-w-prose leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                    {page.space.summary}
+                  </p>
+                ) : null}
+              </div>
+            </header>
+            {participation ? (
+              <aside
+                data-slot="space-home-participation"
+                className="min-w-0 max-w-full rounded-xl border border-border bg-card p-3 sm:p-4 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:min-h-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
+              >
+                {participation}
+              </aside>
+            ) : null}
+          </>
+        )}
+        {spaceRemoved || realmRemoved || orphaned ? (
+          <p role="status" className="rounded-xl border p-4 text-sm">
+            {spaceRemoved || realmRemoved ? m.container_lifecycle_removed_state() : m.container_lifecycle_orphaned()}
+          </p>
+        ) : null}
+        {page.realm && !realmRemoved && readable ? (
+          <CommunitySectionNavigation catalogueId={catalogueId} current={() => !lifetime || lifetime.current()} />
+        ) : null}
       </div>
-      {page.realm && !realmRemoved && readable ? (
-        <RealmShelf
-          realm={page.realm}
-          frozen={frozen}
-          returnTo={initialReturn}
-          onReadingChange={updateReadingReturn}
-          onCompleted={onRealmCompleted}
-          shelfGeneration={shelfGeneration}
-          application={application}
-        />
-      ) : null}
+      <div data-slot="community-public-discovery" className="min-w-0 space-y-8 sm:space-y-10">
+        <div
+          id={catalogueId}
+          tabIndex={-1}
+          className="min-w-0 scroll-mt-6 space-y-6 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+        >
+          <RealmCatalogueCurrent
+            page={page}
+            available={Boolean(page.realm && !realmRemoved && !orphaned && presentationCurrent)}
+            sourceRevision={catalogueVersion}
+            isCurrentSource={() => catalogueRevision.current === catalogueVersion}
+          />
+        </div>
+        {page.realm && !realmRemoved && readable ? (
+          <RealmShelf
+            realm={page.realm}
+            frozen={frozen}
+            returnTo={initialReturn}
+            onReadingChange={updateReadingReturn}
+            onCompleted={onRealmCompleted}
+            shelfGeneration={shelfGeneration}
+            application={application}
+          />
+        ) : null}
+      </div>
       {page.realm && !realmRemoved && (!nativeObservation || nativeObservation.actions.claim === 'admitted') ? (
         <RealmClaimPanel
           realmId={page.realm.id}
@@ -730,7 +742,11 @@ function SpaceHome({
         />
       ) : null}
       {admitted ? (
-        <section className="min-w-0 space-y-3 border-t border-border pt-6" aria-label={m.community_manage()}>
+        <section
+          data-slot="community-management-entry"
+          className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5"
+          aria-label={m.community_manage()}
+        >
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
             {m.community_manage_description()}
           </p>
@@ -749,10 +765,11 @@ function SpaceHome({
       <CommunityManagementContext.Provider value={management}>
         <section
           id={managementId}
+          data-slot="community-management-workspace"
           aria-labelledby={managementHeadingId}
           hidden={!entered}
           inert={!entered}
-          className="min-w-0 space-y-8 border-t border-border pt-6 [&_button]:max-w-full [&_button]:whitespace-normal"
+          className="min-w-0 space-y-8 rounded-2xl border border-border bg-card p-4 sm:p-6 [&_button]:max-w-full [&_button]:whitespace-normal"
         >
           {entered ? (
             <header className="flex flex-wrap items-center justify-between gap-3">
