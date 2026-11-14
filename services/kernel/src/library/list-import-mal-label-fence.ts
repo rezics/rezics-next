@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { deadlineClient } from './access-port.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { LibraryConflictError } from './entry-errors.ts';
@@ -42,9 +43,27 @@ export async function prepareMalLabelFence(
     throw new LibraryConflictError();
   if (fence.binding) {
     const b = fence.binding;
-    const claim = await deadlineClient(deps.pool, deadline).query<{ subject_id: string }>(
-      'SELECT subject_id FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
-      [b.route, b.source, b.externalId],
+    const claim = await withBoundedReadConnection(
+      deps.pool,
+      deadline,
+      (client) =>
+        client.query<{ subject_id: string }>(
+          'SELECT subject_id FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
+          [b.route, b.source, b.externalId],
+        ),
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error) {
+          try {
+            throwAccessUnavailable(error);
+          } catch (mapped) {
+            return mapped;
+          }
+          return error;
+        },
+        isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+        isUncertainSettledQueryError: () => true,
+      },
     );
     if (claim.rows[0]?.subject_id !== b.subject) throw new LibraryConflictError();
   }

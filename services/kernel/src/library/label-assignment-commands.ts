@@ -4,6 +4,7 @@ import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
+  commandAttemptDeadline,
   mintReadTime,
   releaseOperationalTime,
   noEffect,
@@ -150,7 +151,6 @@ export function createLabelAssignmentCommands(deps: {
     const account = owner(actor, 'library_entry:update');
     id(labelId);
     const parsed = input(value, operation !== 'assign');
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
@@ -367,6 +367,7 @@ export function createLabelAssignmentCommands(deps: {
         attemptPlan,
         async prepare(attempt) {
           try {
+            const deadline = commandAttemptDeadline(attempt);
             if (operation === 'unassign') {
               const resolved = await withRequestDeadline(deadline, () =>
                 resolveSubject(deps, account, parsed.subjectId, attempt.time),

@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, noEffect } from '../command/command.ts';
+import { authoritativeTimeValue, commandAttemptDeadline, noEffect } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { newId, routeOf } from '../route/route.ts';
@@ -254,8 +254,7 @@ export function createPersonalLabelCommands(config: {
     }
     if (!malLabelFence) return run(actor, 'library_label.create', { name: parsed.name }, key, body, guard, attemptPlan);
     if (!config.access) throw new TypeError('MAL label adoption requires Subject access');
-    const access = config.access,
-      deadline = deadlineFor(5000);
+    const access = config.access;
     return createLibraryCommandRunner(config).ownAccountPrepared(
       actor,
       {
@@ -266,7 +265,13 @@ export function createPersonalLabelCommands(config: {
         attemptPlan,
         async prepare(attempt) {
           try {
-            await prepareMalLabelFence({ pool, access }, owner, malLabelFence, attempt.time, deadline);
+            await prepareMalLabelFence(
+              { pool, access },
+              owner,
+              malLabelFence,
+              attempt.time,
+              commandAttemptDeadline(attempt),
+            );
             return { error: undefined };
           } catch (error) {
             return { error };
