@@ -15,6 +15,7 @@
     "typecheck": "bun check --no-script -p tsconfig.sources.json",
     "test": "bun ../ui/scripts/isolated.ts bun test",
     "test:stories": "bun ../ui/scripts/isolated.ts bun x vitest run",
+    "benchmark:find": "bun ../ui/scripts/isolated.ts bun scripts/benchmark-find.ts",
     "test:stories:slow-frames": "bun ../ui/scripts/isolated.ts bun x vitest run --config vitest.slow-frames.config.ts"
   },
   "dependencies": {
