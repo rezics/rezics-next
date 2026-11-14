@@ -11,7 +11,8 @@ import { completedUtcHour } from './efficiency-report-time.ts';
 import { MAINTENANCE_BOOTSTRAP_PAGE_SIZE, MAINTENANCE_CANDIDATE_BATCH_SIZE } from './store.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
 
-export const MAINTENANCE_JOBS = ['reap', 'alarm', 'detect', 'regenerate'] as const;
+// Deliver scheduled duties before historical cleanup can consume this pass's shared budget.
+export const MAINTENANCE_JOBS = ['detect', 'alarm', 'reap', 'regenerate'] as const;
 export type MaintenanceJob = (typeof MAINTENANCE_JOBS)[number];
 export type MaintenanceWorkUnit =
   | 'reap-worktree-existence'
@@ -57,12 +58,18 @@ export async function runMaintenance(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error(`Maintenance budget exhausted (${budget}ms)`)), budget);
   const signal = controller.signal;
+  const checkBudget = () => {
+    // Synchronous history scans can delay the timer; do not start another operation after the deadline.
+    if (!signal.aborted && Date.now() >= deadlineMs)
+      controller.abort(new Error(`Maintenance budget exhausted (${budget}ms)`));
+    signal.throwIfAborted();
+  };
   let lease;
   let failed = false;
   const step = async (name: string, action: () => Promise<unknown>) => {
     let cancel: () => void = () => {};
     try {
-      signal.throwIfAborted();
+      checkBudget();
       await Promise.race([
         new Promise<never>((_, reject) => {
           cancel = () => reject(signal.reason);
@@ -95,10 +102,11 @@ export async function runMaintenance(
             const processBackfill = runtime.store.bootstrapMaintenanceProcesses(MAINTENANCE_BOOTSTRAP_PAGE_SIZE);
             for (let index = 0; index < processBackfill.examined; index++)
               observe?.('maintenance-backfill-attempt-row');
+            checkBudget();
             const candidates = runtime.store.reapMaintenanceCandidates(MAINTENANCE_CANDIDATE_BATCH_SIZE);
             const completed: typeof candidates = [];
             for (const candidate of candidates) {
-              signal.throwIfAborted();
+              checkBudget();
               try {
                 observe?.('reap-worktree-existence');
                 // The worktree is the custody boundary: retain the candidate until deletion makes reaping eligible.
@@ -118,6 +126,7 @@ export async function runMaintenance(
               }
             }
             runtime.store.completeMaintenanceCandidates(completed);
+            checkBudget();
             await removeFinishedWorktree(runtime.settings, runtime.store, lifetimeRuntime, undefined, {
               deadlineMs,
               signal,
@@ -127,20 +136,23 @@ export async function runMaintenance(
             await runtime.deliverReminders?.();
             break;
           case 'alarm':
-            await step('alarm flow', async () => runtime.evaluateFlow?.());
+            // Flow evaluation may scan legacy history. It must not delay the scheduled report.
             if (runtime.hourlyEfficiencyReport?.enabled)
-              await maintenanceCommand(
-                [
-                  process.execPath,
-                  join(runtime.mainCheckout, 'tools/goal/scripts/efficiency-report.ts'),
-                  '--send',
-                  '--scheduled',
-                  '--bucket',
-                  completedUtcHour(Date.now()).start,
-                ],
-                runtime.mainCheckout,
-                signal,
+              await step('alarm report', () =>
+                maintenanceCommand(
+                  [
+                    process.execPath,
+                    join(runtime.mainCheckout, 'tools/goal/scripts/efficiency-report.ts'),
+                    '--send',
+                    '--scheduled',
+                    '--bucket',
+                    completedUtcHour(Date.now()).start,
+                  ],
+                  runtime.mainCheckout,
+                  signal,
+                ),
               );
+            await step('alarm flow', async () => runtime.evaluateFlow?.());
             break;
           case 'regenerate':
             await maintenanceCommand([process.execPath, import.meta.filename], runtime.mainCheckout, signal);

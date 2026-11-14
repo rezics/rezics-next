@@ -14,7 +14,7 @@ import {
   registerNativeUnit,
   type NativeUnit,
 } from './native-units.ts';
-import { nativeUnitContext } from './native-unit-context.ts';
+import { nativeUnitContext, NATIVE_UNIT_RUN_VARIABLE } from './native-unit-context.ts';
 import { renderGoalAuthorOpening, renderSupermanagerOpening, renderUnitOpening } from './prompts.ts';
 
 function unitCaller(db: Database, settings: Settings, unit?: NativeUnit): void {
@@ -156,7 +156,7 @@ export async function runNativeUnitCommand(
     const commandArgv = requestedCommand.length ? requestedCommand : unit.acceptance.command;
     const runId = randomUUID();
     db.query(
-      'INSERT INTO native_unit_runs(id, unit, started_at, source_commit, context, command) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO native_unit_runs(id, unit, started_at, requested_source_commit, context, command) VALUES (?, ?, ?, ?, ?, ?)',
     ).run(
       runId,
       unit.id,
@@ -175,6 +175,7 @@ export async function runNativeUnitCommand(
           GOAL_ATTEMPT: undefined,
           GOAL_CHECK_REGISTRY: undefined,
           ...environment,
+          [NATIVE_UNIT_RUN_VARIABLE]: runId,
         },
         stdin: 'inherit',
         stdout: 'inherit',

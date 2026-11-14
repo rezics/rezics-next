@@ -23,11 +23,23 @@ export const nativeUnitMigrations = [
     started_at TEXT NOT NULL,
     ended_at TEXT,
     exit_code INTEGER,
+    requested_source_commit TEXT,
     source_commit TEXT,
     context TEXT NOT NULL,
     command TEXT NOT NULL
   );
-  CREATE INDEX native_unit_runs_unit_started ON native_unit_runs(unit, started_at);`,
+  CREATE INDEX native_unit_runs_unit_started ON native_unit_runs(unit, started_at);
+  CREATE TABLE native_unit_run_sources (
+    run_id TEXT NOT NULL REFERENCES native_unit_runs(id),
+    invocation_id TEXT NOT NULL,
+    source_commit TEXT NOT NULL,
+    source_sha256 TEXT NOT NULL,
+    host TEXT NOT NULL,
+    physical_run TEXT NOT NULL,
+    receipt_sha256 TEXT NOT NULL,
+    native_exit_code INTEGER NOT NULL,
+    PRIMARY KEY(run_id, invocation_id)
+  );`,
   },
 ] as const;
 
