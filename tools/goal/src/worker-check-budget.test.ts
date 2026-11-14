@@ -934,7 +934,7 @@ test('source-only recovery waits for check custody and preserves the unused gran
         worktree: retained.task.worktree,
         taskId: retained.task.id,
         attempt: 1,
-        attemptCheckIds: h.store.attempt(retained.ref).checks,
+        attemptCheckIds: h.store.attempt(retained.ref).checks ?? [],
         command,
         token: grant.env[TYPING_RECOVERY_ENV],
       }),
