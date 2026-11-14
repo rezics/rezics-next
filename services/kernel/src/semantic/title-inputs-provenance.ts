@@ -242,7 +242,13 @@ export function bindSemanticTitleProvenanceRows(
 function sourceRowsByHome(entries: readonly SemanticTitleInputEntry[]) {
   const homes = new Map<
     number,
-    { route: number; id: string; languageSlot: string; labels: unknown; original: string | null }[]
+    {
+      route: number;
+      id: string;
+      languageSlot: string;
+      labels: SemanticTitleInputEntry['labels'];
+      original: string | null;
+    }[]
   >();
   const byId = new Map<string, SemanticTitleInputEntry>();
   for (const entry of entries) {

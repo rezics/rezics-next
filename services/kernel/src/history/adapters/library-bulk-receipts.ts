@@ -430,16 +430,21 @@ export function createLibraryBulkReceiptDispositionPort(history: HistoryRegistry
       if (!(await lockHistoryBarrier(tx, held.barrier))) return false;
       const source = await sourceRow(tx, binding, 'update');
       if (!source) return false;
-      if (
-        source.evidence &&
-        (source.state !== source.evidence.outcome ||
-          source.evidence.transactionId !== held.transactionId ||
-          source.evidence.operationId !== binding.operationId ||
-          source.evidence.ordinal !== binding.ordinal ||
-          source.evidence.sourceDigest !== binding.sourceDigest ||
-          !isDeepStrictEqual(source.evidence.receipt, binding.receipt))
-      )
-        return false;
+      if (source.evidence !== null) {
+        const raw = source.evidence;
+        if (!isRecord(raw)) return false;
+        const evidence = receiptEvidence(raw);
+        if (
+          !evidence ||
+          source.state !== evidence.outcome ||
+          evidence.transactionId !== held.transactionId ||
+          evidence.operationId !== binding.operationId ||
+          evidence.ordinal !== binding.ordinal ||
+          evidence.sourceDigest !== binding.sourceDigest ||
+          !isDeepStrictEqual(raw.receipt, binding.receipt)
+        )
+          return false;
+      }
       return true;
     },
   };
