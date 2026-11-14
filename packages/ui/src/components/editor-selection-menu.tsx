@@ -23,8 +23,12 @@ export const returnFocus =
   (editor: Editor, isCurrent: () => boolean = () => true) =>
   () => {
     if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return false;
+    const document = editor.view.dom.ownerDocument;
+    const owner = document.activeElement;
     requestAnimationFrame(() => {
-      if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
+      const active = document.activeElement;
+      if (isCurrent() && !editor.isDestroyed && editor.isEditable &&
+        (active === owner || active === document.body || editor.view.dom.contains(active))) editor.view.focus();
     });
     return false;
   };

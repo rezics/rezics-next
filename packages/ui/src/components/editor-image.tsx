@@ -8,11 +8,13 @@ import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tip
 import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { imageTypes, trackPosition } from './editor-uploads.ts';
+import { returnFocus } from './editor-selection-menu.tsx';
+import { ImageUploadDialog } from './editor-upstream/reactjs-tiptap-editor/image-upload.tsx';
 
 type ImageEditTarget = Pick<NodeViewProps, 'editor' | 'getPos' | 'node'>;
 
 /** The editor displays an occurrence without fetching media or knowing the site's routes. */
-function ImageView({ node, editor, updateAttributes, labels }: NodeViewProps & { labels: RichTextEditorLabels }) {
+function ImageView({ node, editor, getPos, updateAttributes, labels }: NodeViewProps & { labels: RichTextEditorLabels }) {
   const [editing, setEditing] = useState(false);
   const [alt, setAlt] = useState('');
   const field = useId();
@@ -119,6 +121,7 @@ function ImageView({ node, editor, updateAttributes, labels }: NodeViewProps & {
               finishDescriptionEdit(true);
             }}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
               if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopPropagation();
@@ -175,87 +178,55 @@ export function withImageView(extensions: Extensions, labels: () => RichTextEdit
   );
 }
 
-/**
- * Choose a file, then describe it before starting its upload. The panel stays in the editor's flow rather than in a
- * popover portal, so the file chooser and the description belong to the editor that asked for them.
- */
+/** Product media presentation over the existing mapped insertion position and authorized upload port. */
 export function ImageInsert({
   editor,
   position,
   labels,
   onInsert,
   onClose,
+  isCurrent = () => true,
+  isPositionCurrent = () => true,
 }: {
   editor: Editor;
   position: number;
   labels: RichTextEditorLabels;
   onInsert: (files: File[], position: number, alt: string) => void;
   onClose: () => void;
+  isCurrent?: () => boolean;
+  isPositionCurrent?: (position: number) => boolean;
 }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [alt, setAlt] = useState('');
   const tracked = useRef<ReturnType<typeof trackPosition> | null>(null);
-  const field = useId();
+  const mounted = useRef(false);
   useLayoutEffect(() => {
+    mounted.current = true;
     tracked.current = trackPosition(editor, position);
     return () => {
+      mounted.current = false;
       tracked.current?.stop();
+      tracked.current = null;
     };
   }, [editor, position]);
+  const current = () => mounted.current && isCurrent() && !editor.isDestroyed && editor.isEditable &&
+    tracked.current !== null && isPositionCurrent(tracked.current.get());
+  const close = () => {
+    if (!current()) return;
+    onClose();
+    returnFocus(editor, () => !editor.isDestroyed && editor.isEditable && isCurrent())();
+  };
   return (
-    <div
-      role="dialog"
-      aria-label={labels.image}
-      className="mt-2 rounded-2xl bg-popover p-3 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          onClose();
-          editor.commands.focus();
-        }
+    <ImageUploadDialog
+      labels={labels}
+      accept={imageTypes.join(',')}
+      isCurrent={current}
+      onCancel={close}
+      onInsert={(file, alt) => {
+        if (!current() || editor.view.composing) return;
+        const target = tracked.current?.get();
+        if (target === undefined) return;
+        onInsert([file], target, alt);
+        close();
       }}
-    >
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (file && editor.isEditable) {
-            onInsert([file], tracked.current?.get() ?? position, alt);
-            onClose();
-          }
-        }}
-      >
-        <FieldGroup className="gap-3">
-          <Field>
-            <FieldLabel htmlFor={`${field}-file`}>{labels.uploadFile}</FieldLabel>
-            <Input
-              id={`${field}-file`}
-              autoFocus
-              type="file"
-              accept={imageTypes.join(',')}
-              onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={field}>{labels.imageAlt}</FieldLabel>
-            <Input id={field} value={alt} onChange={(event) => setAlt(event.target.value)} />
-          </Field>
-          <Field orientation="horizontal">
-            <Button type="submit" disabled={!file || !editor.isEditable}>
-              {labels.insertImage}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                onClose();
-                editor.commands.focus();
-              }}
-            >
-              {labels.cancel}
-            </Button>
-          </Field>
-        </FieldGroup>
-      </form>
-    </div>
+    />
   );
 }

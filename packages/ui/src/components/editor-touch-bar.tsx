@@ -134,7 +134,7 @@ export function EditorTouchBar({
   const inset = useKeyboardInset(showBar && docked);
   const blockCommands = availableCommands([
     ...schemaBlockCommands.filter((command) => command.id === 'paragraph'), ...insertCommands,
-  ], editor).filter((command) => (command.id !== 'image' || upload) && (command.id !== 'table' || canInsertSizedTable(editor)));
+  ], editor).filter((command) => (command.id !== 'image' || upload) && (command.id !== 'table' || (onTable && canInsertSizedTable(editor))));
   const formatOrder = ['bold', 'italic', 'link', 'strike', 'code', 'clearFormatting'];
   const formatCommands = state.marks
     .map(({ command }) => command)
@@ -244,8 +244,8 @@ export function EditorTouchBar({
 
   function runCommand(command: EditorCommand) {
     if (!menuIsCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing) return;
-    if (command.id === 'table' && onTable) {
-      onTable();
+    if (command.id === 'table') {
+      onTable?.();
       return;
     }
     command.run(editor, onLink, onImage);

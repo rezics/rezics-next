@@ -219,7 +219,7 @@ export const SlashMenu = memo(function SlashMenu({
   const list = useRef<HTMLDivElement>(null);
   const nextOpenId = useRef(0);
   const commands = availableCommands([...blockCommands.filter((command) => command.id === 'paragraph'), ...slashCommands], editor)
-    .filter((command) => (command.id !== 'image' || upload) && (command.id !== 'table' || canInsertSizedTable(editor)));
+    .filter((command) => (command.id !== 'image' || upload) && (command.id !== 'table' || (onTable && canInsertSizedTable(editor))));
   const items = open ? matchCommands(commands, labels, open.query) : [];
   const activeIndex = items.length ? index % items.length : 0;
   const active = items[activeIndex];
@@ -238,8 +238,8 @@ export const SlashMenu = memo(function SlashMenu({
       !latest.current.commands.some((current) => current === command)
     )
       return;
-    if (command.id === 'table' && latest.current.onTable) {
-      latest.current.onTable(admitted.range);
+    if (command.id === 'table') {
+      latest.current.onTable?.(admitted.range);
       editor.view.dispatch(editor.state.tr.setMeta(slashPluginKey, { exit: true }).setMeta('addToHistory', false));
       return;
     }

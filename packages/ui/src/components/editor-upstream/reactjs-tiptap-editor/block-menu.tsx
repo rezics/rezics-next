@@ -3,7 +3,7 @@
 // The adopted slash command groups also supply the explicit block picker. See README.md and LICENSE.
 import { Command, CommandInput, CommandList } from '@rezics/ui/shadcn/command';
 import type { Editor } from '@tiptap/core';
-import { useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { cloneElement, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactElement } from 'react';
 import type { EditorCommand } from '../../editor-commands.ts';
 import type { RichTextEditorLabels } from '../../editor-labels.ts';
 import { Menu, dismissMenuForNavigation } from '../../menu.tsx';
@@ -28,11 +28,23 @@ function BlockMenuContent({ editor, labels, title, commands, selectedBlock, isCu
   const admitted = useRef({ doc: editor.state.doc, selection: editor.state.selection });
   const latestOpenChange = useRef(onOpenChange);
   latestOpenChange.current = onOpenChange;
+  const current = useRef(isCurrent);
+  current.current = isCurrent;
   const choices = filterCommandGroups(commands, labels, query).flatMap((group) => group.commands);
   useLayoutEffect(() => {
+    const host = root.current;
     latestOpenChange.current(true);
-    return () => latestOpenChange.current(false);
-  }, []);
+    return () => {
+      const document = host?.ownerDocument;
+      const heldFocus = host?.contains(document?.activeElement ?? null);
+      latestOpenChange.current(false);
+      // An automatic toolbar can disappear before Menu restores its trigger. Respect any outside focus.
+      if (heldFocus && document) requestAnimationFrame(() => {
+        if (current.current() && !editor.isDestroyed && editor.isEditable && document.activeElement === document.body)
+          editor.view.focus();
+      });
+    };
+  }, [editor]);
 
   return (
     <Command
@@ -71,7 +83,7 @@ function BlockMenuContent({ editor, labels, title, commands, selectedBlock, isCu
 /** Public responsive Menu owns focus and touch presentation; REZICS retires a changed command target. */
 export function BlockMenu(props: BlockMenuProps) {
   const [revision, setRevision] = useState(0);
-  const scope = useMemo(() => ({}), [props.editor, props.isCurrent]);
+  const scope = useMemo(() => ({}), [props.editor]);
   useLayoutEffect(() => {
     const retire = ({ transaction }: { transaction: import('@tiptap/pm/state').Transaction }) => {
       if (transaction.docChanged) setRevision((value) => value + 1);
@@ -85,11 +97,22 @@ export function BlockMenu(props: BlockMenuProps) {
     };
   }, [props.editor]);
 
+  const trigger = props.trigger as ReactElement<ButtonHTMLAttributes<HTMLButtonElement>>;
   return (
     <Menu
       key={revision}
       title={props.title}
-      trigger={props.trigger}
+      trigger={cloneElement(trigger, {
+        onKeyDown: (event) => {
+          trigger.props.onKeyDown?.(event);
+          if (event.defaultPrevented || event.nativeEvent.isComposing || event.keyCode === 229 || !props.isCurrent()) return;
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.click();
+          }
+        },
+      })}
       closeOnNavigation
       navigationScope={scope}
       content={<BlockMenuContent {...props} />}

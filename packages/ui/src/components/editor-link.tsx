@@ -1,16 +1,14 @@
 'use client';
 
-import { Button } from '@rezics/ui/shadcn/button';
-import { Field, FieldError } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
-import type { Editor } from '@tiptap/core';
+import { getMarkRange, type Editor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
-import { useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { TextSelection } from '@tiptap/pm/state';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { bubbleOptions } from './editor-selection-menu.tsx';
 import { safeDocumentUrl } from './document-url.ts';
+import { LinkEditBlock, LinkViewBlock } from './editor-upstream/reactjs-tiptap-editor/link-controls.tsx';
 
 export interface LinkRange {
   from: number;
@@ -20,6 +18,8 @@ export interface LinkVisitRange extends LinkRange {
   id: number;
   visit: number;
   url: string;
+  /** The caret/selection before expanding an existing link for exact address editing. */
+  selection?: LinkRange;
 }
 
 export function isLinkRangeValid(editor: Editor, range: LinkRange): boolean {
@@ -58,6 +58,12 @@ export function linkHref(editor: Editor, range: LinkRange): string {
   return href;
 }
 
+/** Capture the whole link under a caret once; an explicit text selection keeps its exact extent. */
+export function exactLinkRange(editor: Editor, range: LinkRange): LinkRange {
+  if (!isLinkRangeValid(editor, range) || range.from !== range.to || !editor.schema.marks.link) return range;
+  return getMarkRange(editor.state.doc.resolve(range.from), editor.schema.marks.link) ?? range;
+}
+
 /** Validate at the mutation boundary as well as in the address field. */
 export function applyLink(
   editor: Editor,
@@ -70,13 +76,15 @@ export function applyLink(
     editor.isDestroyed ||
     !editor.isEditable ||
     !editor.schema.marks.link ||
+    editor.view.composing ||
     !isLinkRangeValid(editor, range) ||
     (href !== null && !safeDocumentUrl(href))
   )
     return false;
-  const chain = editor.chain().setTextSelection(range).extendMarkRange('link');
+  const target = exactLinkRange(editor, range);
+  const chain = editor.chain().setTextSelection(target);
   if (href === null) return chain.unsetMark('link').run();
-  if (range.from === range.to && !editor.isActive('link')) {
+  if (target.from === target.to) {
     return chain.insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] }).run();
   }
   return chain.setMark('link', { href }).run();
@@ -130,7 +138,6 @@ export function LinkField({
   onUrlChange: (range: LinkVisitRange, url: string) => void;
   focusEditor: () => void;
 }) {
-  const errorId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [invalid, setInvalid] = useState(false);
   const linked = Boolean(linkHref(editor, range));
@@ -153,65 +160,36 @@ export function LinkField({
       return;
     }
     if (applyLink(editor, range, href, current)) {
+      const original = range.selection;
+      if (range.from !== range.to && original && isCurrent() && isLinkRangeValid(editor, original))
+        editor.commands.setTextSelection(original);
       onClose();
       focusEditor();
     }
   }
   function cancel() {
     if (!current()) return;
-    if (isLinkRangeValid(editor, range)) editor.commands.setTextSelection(range);
+    const original = range.selection ?? range;
+    if (isLinkRangeValid(editor, original)) editor.commands.setTextSelection(original);
     onClose();
     focusEditor();
   }
   return (
-    <form
-      className="grid gap-2 p-1"
-      onSubmit={(event) => {
-        event.preventDefault();
-        finish(range.url.trim() || null);
-      }}
-      onKeyDown={(event) => {
+    <LinkEditBlock
+      labels={labels}
+      url={range.url}
+      error={invalid ? labels.invalidUrl : undefined}
+      linked={linked}
+      inputRef={input}
+      onChange={(url) => {
         if (!current()) return;
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          event.stopPropagation();
-          cancel();
-        }
+        onUrlChange(range, url);
+        setInvalid(false);
       }}
-    >
-      <Field orientation="horizontal" className="flex-wrap items-center gap-1">
-        <Input
-          ref={input}
-          dir="ltr"
-          inputMode="url"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          className="min-w-40 flex-1 text-foreground"
-          aria-label={labels.url}
-          aria-invalid={invalid}
-          aria-describedby={invalid ? errorId : undefined}
-          value={range.url}
-          onChange={(event) => {
-            if (!current()) return;
-            onUrlChange(range, event.target.value);
-            setInvalid(false);
-          }}
-        />
-        <Button type="submit" variant="secondary">
-          {labels.apply}
-        </Button>
-        {linked ? (
-          <Button type="button" variant="ghost" onClick={() => finish(null)}>
-            {labels.unlink}
-          </Button>
-        ) : null}
-        <Button type="button" variant="ghost" onClick={cancel}>
-          {labels.cancel}
-        </Button>
-      </Field>
-      {invalid ? <FieldError id={errorId}>{labels.invalidUrl}</FieldError> : null}
-    </form>
+      onApply={() => finish(range.url.trim() || null)}
+      onClear={() => finish(null)}
+      onCancel={cancel}
+    />
   );
 }
 
@@ -252,6 +230,9 @@ export function LinkMenu({
   });
   if (!isCurrent() || (!state.empty && (!range || !rangeVisible)) || (!state.linked && !range)) return null;
   const safe = safeDocumentUrl(state.href);
+  const previewIsCurrent = () => isCurrent() && !editor.isDestroyed && editor.isEditable && !editor.view.composing &&
+    editor.state.selection.from === state.from && editor.state.selection.to === state.to &&
+    String(editor.getAttributes('link').href ?? '') === state.href;
   return (
     <BubbleMenu
       editor={editor}
@@ -269,9 +250,9 @@ export function LinkMenu({
       <div
         role="group"
         aria-label={labels.link}
-        className="flex max-w-80 flex-col gap-1 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+        className="flex w-80 max-w-[calc(100dvw-1rem)] flex-col gap-1 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
         onKeyDown={(event) => {
-          if (!isCurrent()) return;
+          if (!isCurrent() || event.nativeEvent.isComposing || event.keyCode === 229) return;
           if (event.key === 'Escape') {
             event.preventDefault();
             if (range) onClose();
@@ -292,42 +273,18 @@ export function LinkMenu({
             focusEditor={focusEditor}
           />
         ) : (
-          <>
-            {safe ? (
-              <a
-                href={safe}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={labels.openLink}
-                className="block truncate rounded-lg px-2 py-1 text-sm text-primary underline underline-offset-2"
-              >
-                {state.href}
-              </a>
-            ) : null}
-            <Button
-              variant="ghost"
-              onClick={() => {
-                if (isCurrent() && editor.state.selection.from === state.from && editor.state.selection.to === state.to)
-                  onEdit({ from: state.from, to: state.to });
-              }}
-            >
-              {labels.editLink}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                if (
-                  !isCurrent() ||
-                  editor.state.selection.from !== state.from ||
-                  editor.state.selection.to !== state.to
-                )
-                  return;
-                if (applyLink(editor, { from: state.from, to: state.to }, null, isCurrent)) focusEditor();
-              }}
-            >
-              {labels.unlink}
-            </Button>
-          </>
+          <LinkViewBlock
+            labels={labels}
+            href={safe}
+            isCurrent={previewIsCurrent}
+            onEdit={() => {
+              if (previewIsCurrent()) onEdit({ from: state.from, to: state.to });
+            }}
+            onClear={() => {
+              if (!previewIsCurrent()) return;
+              if (applyLink(editor, exactLinkRange(editor, { from: state.from, to: state.to }), null, isCurrent)) focusEditor();
+            }}
+          />
         )}
       </div>
     </BubbleMenu>

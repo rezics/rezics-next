@@ -68,6 +68,7 @@ function TableSizePicker({ labels, onCreate, onCancel }: {
         aria-label={labels.tableSize ?? productControlLabels.tableSize}
         aria-rowcount={gridSize}
         aria-colcount={gridSize}
+        aria-multiselectable="true"
         aria-describedby={`${id}-size`}
         aria-activedescendant={valid ? `${id}-${rows}-${cols}` : undefined}
         className="mx-auto grid w-fit max-w-full touch-none gap-1 rounded-md p-1 outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
@@ -122,7 +123,7 @@ function TableSizePicker({ labels, onCreate, onCancel }: {
                 data-cols={col}
                 aria-label={`${rowLabel}: ${row}, ${columnLabel}: ${col}`}
                 aria-selected={valid && row <= size.rows && col <= size.cols}
-                className={cn('size-5 rounded-xs border border-control', valid && row <= size.rows && col <= size.cols && 'bg-primary/25 border-primary')}
+                className={cn('size-5 rounded-xs border border-[var(--control)]', valid && row <= size.rows && col <= size.cols && 'bg-primary/25 border-primary')}
               />
             ))}
           </div>
@@ -178,7 +179,7 @@ export function TableInsert({ editor, labels, target, isCurrent, onClose }: {
   }, [editor]);
   const current = () => mounted.current && latest.current.isCurrent() && !editor.isDestroyed && editor.isEditable;
   const cancel = () => {
-    if (!current()) return;
+    if (!current() || !saved.current) return;
     saved.current = null;
     onClose();
     returnFocus(editor, isCurrent)();

@@ -60,9 +60,13 @@ export interface TableInsertTarget {
 }
 
 export function canInsertSizedTable(editor: Editor): boolean {
-  return !editor.isDestroyed && editor.isEditable && !editor.view.composing &&
-    ['table', 'tableRow', 'tableCell', 'tableHeader', 'paragraph'].every((name) => editor.schema.nodes[name]) &&
-    editor.state.selection.$from.parent.isTextblock && !isInTable(editor.state);
+  if (editor.isDestroyed || !editor.isEditable || editor.view.composing ||
+    !['table', 'tableRow', 'tableCell', 'tableHeader', 'paragraph'].every((name) => editor.schema.nodes[name]) ||
+    !editor.state.selection.$from.parent.isTextblock || isInTable(editor.state)) return false;
+  const { $from } = editor.state.selection;
+  const parent = $from.node($from.depth - 1);
+  const index = $from.index($from.depth - 1);
+  return parent.canReplaceWith(index + 1, index + 1, editor.schema.nodes.table!);
 }
 
 /** Map an open size chooser only while it still owns the same untouched selection and optional slash. */
@@ -108,13 +112,16 @@ export function insertSizedTable(editor: Editor, target: TableInsertTarget, opti
   ));
   const table = schema.nodes.table!.create(attrs, rows);
   const emptyParagraph = $from.parent.type === schema.nodes.paragraph && $from.parent.content.size === 0;
-  const at = emptyParagraph ? $from.before() : $from.after();
-  const tail = emptyParagraph ? $from.parent : schema.nodes.paragraph!.create(attrs);
   const parent = $from.node($from.depth - 1);
-  const index = $from.index($from.depth - 1) + (emptyParagraph ? 0 : 1);
+  const blockIndex = $from.index($from.depth - 1);
+  // List items must keep their leading paragraph, even when the slash emptied it.
+  const replaceEmpty = emptyParagraph && parent.canReplace(blockIndex, blockIndex + 1, Fragment.from([table, $from.parent]));
+  const at = replaceEmpty ? $from.before() : $from.after();
+  const tail = replaceEmpty ? $from.parent : schema.nodes.paragraph!.create(attrs);
+  const index = blockIndex + (replaceEmpty ? 0 : 1);
   const content = Fragment.from([table, tail]);
-  if (!parent.canReplace(index, index + (emptyParagraph ? 1 : 0), content)) return false;
-  transaction.replaceWith(at, emptyParagraph ? $from.after() : at, content);
+  if (!parent.canReplace(index, index + (replaceEmpty ? 1 : 0), content)) return false;
+  transaction.replaceWith(at, replaceEmpty ? $from.after() : at, content);
   transaction.setSelection(TextSelection.near(transaction.doc.resolve(at + 3))).scrollIntoView();
   const before = editor.state;
   editor.view.dispatch(transaction);
@@ -122,7 +129,7 @@ export function insertSizedTable(editor: Editor, target: TableInsertTarget, opti
 }
 
 export function runTableCommand(editor: Editor, name: TableCommandName, isCurrent: () => boolean): boolean {
-  if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return false;
+  if (!isCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing) return false;
   const before = editor.state;
   const handled = tableCommands[name](before, (transaction) => editor.view.dispatch(transaction));
   if (handled && isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();

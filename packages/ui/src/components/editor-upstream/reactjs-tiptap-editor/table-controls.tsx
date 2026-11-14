@@ -2,6 +2,7 @@
 
 // Adapted from src/components/Bubble/RichTextBubbleTable.tsx; see the adjacent provenance and MIT notice.
 import type { Editor } from '@tiptap/core';
+import type { Transaction } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import { isInTable } from '@tiptap/pm/tables';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -52,6 +53,17 @@ export function TableControls({ editor, labels, labelOverrides, isCurrent }: {
     },
   });
   const root = useRef<HTMLDivElement>(null);
+  const revision = useRef(0);
+  const [renderedRevision, setRenderedRevision] = useState(0);
+  useLayoutEffect(() => {
+    const retire = ({ transaction }: { transaction: Transaction }) => {
+      if (!transaction.docChanged && !transaction.selectionSet) return;
+      revision.current += 1;
+      setRenderedRevision(revision.current);
+    };
+    editor.on('transaction', retire);
+    return () => { editor.off('transaction', retire); };
+  }, [editor]);
   const [language, setLanguage] = useState<string>();
   useLayoutEffect(() => {
     // The document's language can differ from the surrounding interface language.
@@ -63,7 +75,7 @@ export function TableControls({ editor, labels, labelOverrides, isCurrent }: {
   const enabled = tableCommandGroups.flat().filter((name) => state.can[name]);
   const activeTabStop = enabled.includes(tabStop) ? tabStop : enabled[0];
   const label = (name: TableCommandName) => labelOverrides?.[name] ?? localized[name];
-  const run = (name: TableCommandName) => runTableCommand(editor, name, isCurrent);
+  const run = (name: TableCommandName) => runTableCommand(editor, name, () => isCurrent() && revision.current === renderedRevision);
   const entries: MenuEntry[] = tableCommandGroups.flatMap((group, index) => [
     ...(index ? [{ type: 'separator' as const }] : []),
     ...group.map((name): MenuEntry => ({
@@ -75,7 +87,7 @@ export function TableControls({ editor, labels, labelOverrides, isCurrent }: {
   ]);
 
   function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
-    if (!isCurrent() || !event.currentTarget.contains(event.target as Node)) return;
+    if (!isCurrent() || event.nativeEvent.isComposing || event.keyCode === 229 || editor.view.composing || !event.currentTarget.contains(event.target as Node)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -110,7 +122,7 @@ export function TableControls({ editor, labels, labelOverrides, isCurrent }: {
         onKeyDown={moveFocus}
       >
         <Menu
-          key={state.tableId}
+          key={`${state.tableId}:${renderedRevision}`}
           title={labels.table}
           entries={entries}
           trigger={

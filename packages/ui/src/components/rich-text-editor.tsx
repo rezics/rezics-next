@@ -37,6 +37,7 @@ import { productLabelsForLanguage } from './editor-upstream/reactjs-tiptap-edito
 import { canInsertSizedTable, type TableInsertTarget } from './editor-table-commands.ts';
 import {
   isLinkRangeValid,
+  exactLinkRange,
   LinkMenu,
   linkHref,
   revalidateTextSelection,
@@ -240,18 +241,24 @@ function mapSavedLinkRange(
   transaction: Transaction,
 ): LinkVisitRange | null {
   if (!transaction.docChanged) return range;
+  const originalSelection = range.selection ? {
+    from: transaction.mapping.map(range.selection.from, 1),
+    to: transaction.mapping.map(range.selection.to, range.selection.from === range.selection.to ? 1 : -1),
+  } : undefined;
   if (range.from === range.to) {
     const before = transaction.mapping.map(range.from, -1);
     const after = transaction.mapping.map(range.to, 1);
     if (before !== after) return null;
-    const mapped = { ...range, from: before, to: after };
+    const mapped = { ...range, from: before, to: after, ...(originalSelection ? { selection: originalSelection } : {}) };
     return isLinkRangeValid(editor, mapped) ? mapped : null;
   }
   const from = transaction.mapping.map(range.from, 1);
   const to = transaction.mapping.map(range.to, -1);
   if (from >= to) return null;
-  const mapped = { ...range, from, to };
-  return isLinkRangeValid(editor, mapped) ? mapped : null;
+  const mapped = { ...range, from, to, ...(originalSelection ? { selection: originalSelection } : {}) };
+  if (!isLinkRangeValid(editor, mapped)) return null;
+  // Editing the captured content or its marks retires the URL draft; unrelated mapped edits keep it.
+  return transaction.before.slice(range.from, range.to).eq(editor.state.doc.slice(from, to)) ? mapped : null;
 }
 
 /** Controlled editor for snapshots in the text and blocks document profiles. */
@@ -938,17 +945,21 @@ export function RichTextEditor({
     if (isCurrent() && editor && !editor.isDestroyed && editor.isEditable) editor.view.focus();
   }, [editor, isCurrent]);
   const openLink = useCallback(() => {
-    if (!isCurrent() || !editor?.schema.marks.link) return;
+    if (!isCurrent() || !editor?.schema.marks.link || editor.view.composing) return;
     const selection = editor.state.selection;
     if (!selection.$from.parent.inlineContent || !selection.$to.parent.inlineContent) return;
+    const target = exactLinkRange(editor, selection);
+    setOwnedImagePosition(null);
+    setTableRequest(null);
     setOwnedLinkRange({
-      from: selection.from,
-      to: selection.to,
+      from: target.from,
+      to: target.to,
+      selection: { from: selection.from, to: selection.to },
       id: ++nextLinkId.current,
       visit,
-      url: linkHref(editor, selection),
+      url: linkHref(editor, target),
     });
-  }, [editor, isCurrent, setOwnedLinkRange, visit]);
+  }, [editor, isCurrent, setOwnedImagePosition, setOwnedLinkRange, visit]);
   const openLinkForRange = useCallback(
     (range: LinkRange) => {
       if (
@@ -976,9 +987,11 @@ export function RichTextEditor({
     [isCurrent],
   );
   const openImage = useCallback(() => {
-    if (isCurrent() && editor && !editor.isDestroyed && editor.isEditable)
-      setOwnedImagePosition(editor.state.selection.from);
-  }, [editor, isCurrent, setOwnedImagePosition]);
+    if (!isCurrent() || !editor || editor.isDestroyed || !editor.isEditable || editor.view.composing || !latest.current.upload) return;
+    setOwnedLinkRange(null);
+    setTableRequest(null);
+    setOwnedImagePosition(editor.state.selection.from);
+  }, [editor, isCurrent, setOwnedImagePosition, setOwnedLinkRange]);
   const openTable = useCallback((slash?: SlashRange) => {
     if (!isCurrent() || !editor || !canInsertSizedTable(editor)) return;
     setOwnedLinkRange(null);
@@ -1136,6 +1149,8 @@ export function RichTextEditor({
               editor={editor}
               position={imagePosition}
               labels={resolvedLabels}
+              isCurrent={isCurrent}
+              isPositionCurrent={isCurrentImagePosition}
               onInsert={(files, position, alt) => {
                 if (isCurrentImagePosition(position)) uploads.current?.add(files, position, alt);
               }}
