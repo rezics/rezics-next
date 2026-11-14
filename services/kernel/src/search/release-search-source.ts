@@ -26,6 +26,7 @@ import {
   type ReleaseSearchNativeCandidate,
   type ReleaseSearchNativePage,
 } from './release-search-native-stream.ts';
+import { createReleaseSearchRelevanceState } from './release-search-relevance-state.ts';
 import { releaseWorkLink } from './release-search-grouping.ts';
 import type { SearchPlan } from './query.ts';
 import { searchSubjectHits } from './query.ts';
@@ -139,11 +140,23 @@ export async function readReleaseSearchGroups(input: {
     observe: input.observeBasis,
   };
   const cut = await observeReleaseSearchCandidates(pools, context);
+  const relevanceProgress = {
+    principal: input.principal,
+    generation: input.generation,
+    now: input.now,
+    state: createReleaseSearchRelevanceState({
+      pool: input.pool,
+      run: input.runSource,
+      reserve: () => reserve(input.reserve, poolId, { searchReads: 1 }),
+      poolId,
+    }),
+  };
   const candidates = createReleaseSearchCandidateStreams({
     pools,
     release: input.release,
     cut,
     context,
+    relevanceProgress,
     relevance: async (_request, after, size): Promise<ReleaseSearchNativePage> => {
       const nativeAfter = sortAfter(after);
       reserve(input.reserve, poolId, { searchReads: 1, keys: size });

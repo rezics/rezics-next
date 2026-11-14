@@ -18,6 +18,12 @@ import {
   type ReleaseGroupingSource,
   type ReleaseWorkLink,
 } from './release-search-grouping.ts';
+import {
+  ReleaseSearchRelevanceStateConflict,
+  ReleaseSearchRelevanceStateExpired,
+  type ReleaseSearchRelevanceLocation,
+  type ReleaseSearchRelevanceState,
+} from './release-search-relevance-state.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { subjectPartition, type SubjectSource } from './source.ts';
 
@@ -75,14 +81,23 @@ type Classified = {
   link?: ReleaseWorkLink;
 };
 type Position = {
-  version: 1;
+  version: 1 | 2;
   binding: string;
   namesAfter: string | null;
   /** Re-read this name and its complete current evidence before consuming its second candidate. */
   skipWorkFor?: string;
-  /** Prior work groups in native relevance order, so another release cannot repeat a group. */
+  /** Legacy inline state is imported once when an older relevance cursor is resumed. */
   seenWorks?: string[];
+  /** Opaque PostgreSQL lineage locator for relevance group duplicate suppression. */
+  relevance?: ReleaseSearchRelevanceLocation;
 };
+
+type RelevanceProgress = Readonly<{
+  principal: string;
+  generation: number;
+  now: number;
+  state: ReleaseSearchRelevanceState;
+}>;
 
 function unavailable(): never {
   throw new ReleaseGroupingUnavailable();
@@ -174,7 +189,7 @@ function binding(request: ReleaseGroupingRequest, cut: ReleaseSearchCandidateCut
 }
 
 function position(after: string | null, expected: string, children: boolean): Position {
-  if (after === null) return { version: 1, binding: expected, namesAfter: null };
+  if (after === null) return { version: 2, binding: expected, namesAfter: null };
   let value: Position;
   try {
     value = JSON.parse(after) as Position;
@@ -183,16 +198,33 @@ function position(after: string | null, expected: string, children: boolean): Po
   }
   if (
     !value ||
-    value.version !== 1 ||
+    (value.version !== 1 && value.version !== 2) ||
     typeof value.binding !== 'string' ||
     (value.namesAfter !== null && typeof value.namesAfter !== 'string') ||
     (value.skipWorkFor !== undefined && (children || typeof value.skipWorkFor !== 'string' || !value.skipWorkFor)) ||
-    (value.seenWorks !== undefined &&
-      (children ||
-        !Array.isArray(value.seenWorks) ||
-        value.seenWorks.length > 128 ||
-        value.seenWorks.some((id) => !canonicalId(id)) ||
-        new Set(value.seenWorks).size !== value.seenWorks.length))
+    (value.version === 1 &&
+      (value.relevance !== undefined ||
+        (value.seenWorks !== undefined &&
+          (children ||
+            !Array.isArray(value.seenWorks) ||
+            value.seenWorks.length > 128 ||
+            value.seenWorks.some((id) => !canonicalId(id)) ||
+            new Set(value.seenWorks).size !== value.seenWorks.length)))) ||
+    (value.version === 2 &&
+      (value.seenWorks !== undefined ||
+        (value.relevance !== undefined &&
+          (children ||
+            typeof value.relevance !== 'object' ||
+            value.relevance === null ||
+            !canonicalId(value.relevance.execution) ||
+            !canonicalId(value.relevance.node) ||
+            Object.keys(value.relevance).some((key) => key !== 'execution' && key !== 'node'))))) ||
+    Object.keys(value).some(
+      (key) =>
+        !['version', 'binding', 'namesAfter', 'skipWorkFor', ...(value.version === 1 ? ['seenWorks'] : ['relevance'])].includes(
+          key,
+        ),
+    )
   )
     return unavailable();
   if (value.binding !== expected) throw new ReleaseGroupingRestartRequired();
@@ -210,6 +242,7 @@ export function createReleaseSearchCandidateStreams(input: {
   cut: ReleaseSearchCandidateCut;
   context: Context;
   relevance?: (request: ReleaseGroupingRequest, after: string | null, size: number) => Promise<ReleaseSearchNativePage>;
+  relevanceProgress?: RelevanceProgress;
   currentMatches?: (
     request: ReleaseGroupingRequest,
     keys: readonly ReleaseSearchNativeCandidate[],
@@ -340,7 +373,44 @@ export function createReleaseSearchCandidateStreams(input: {
     if (request.releaseDigest !== cut.basis.releaseDigest) throw new ReleaseGroupingRestartRequired();
     const expected = binding(request, cut, work);
     const cursor = position(after, expected, work !== undefined);
+    if (request.sort !== 'relevance' && cursor.relevance !== undefined) return unavailable();
+    if (
+      after !== null &&
+      request.sort === 'relevance' &&
+      work === undefined &&
+      cursor.version === 2 &&
+      cursor.relevance === undefined
+    )
+      return unavailable();
     await assertCurrent();
+    let relevanceLocation: ReleaseSearchRelevanceLocation | undefined;
+    let relevanceBinding: {
+      principal: string;
+      request: ReleaseGroupingRequest;
+      generation: number;
+      cut: ReleaseSearchCandidateCut;
+    } | undefined;
+    if (request.sort === 'relevance' && work === undefined) {
+      const progress = input.relevanceProgress;
+      if (!progress) return unavailable();
+      relevanceBinding = {
+        principal: progress.principal,
+        request,
+        generation: progress.generation,
+        cut,
+      };
+      try {
+        if (cursor.relevance) {
+          await progress.state.resume(relevanceBinding, cursor.relevance, progress.now);
+          relevanceLocation = cursor.relevance;
+        } else {
+          relevanceLocation = await progress.state.start(relevanceBinding, progress.now, cursor.seenWorks ?? []);
+        }
+      } catch (error) {
+        if (error instanceof ReleaseSearchRelevanceStateExpired) throw new ReleaseGroupingRestartRequired();
+        throw error;
+      }
+    }
     const relevancePage =
       request.sort === 'relevance' ? await input.relevance!(request, cursor.namesAfter, size) : undefined;
     const page =
@@ -381,7 +451,32 @@ export function createReleaseSearchCandidateStreams(input: {
     const keys: Candidate[] = [];
     let namesAfter = cursor.namesAfter;
     let skipWorkFor = cursor.skipWorkFor;
-    const seenWorks = new Set(cursor.seenWorks ?? []);
+    const possibleWorks =
+      relevanceLocation && request.sort === 'relevance'
+        ? page.keys.flatMap(({ id }) => {
+            const current = classified.get(id);
+            if (!current || (currentMatches !== undefined && !currentMatches.has(id))) return [];
+            if (current.link?.kind === 'linked') return [current.link.work];
+            if (current.work && skipWorkFor !== id) return [id];
+            return [];
+          })
+        : [];
+    const seenWorks = new Set<string>();
+    if (relevanceLocation && relevanceBinding && possibleWorks.length) {
+      try {
+        for (const id of await input.relevanceProgress!.state.seen(
+          relevanceBinding,
+          relevanceLocation,
+          possibleWorks,
+          input.relevanceProgress!.now,
+        ))
+          seenWorks.add(id);
+      } catch (error) {
+        if (error instanceof ReleaseSearchRelevanceStateExpired) throw new ReleaseGroupingRestartRequired();
+        throw error;
+      }
+    }
+    const emittedWorks = new Set<string>();
     if (skipWorkFor !== undefined && page.keys[0]?.id !== skipWorkFor) throw new ReleaseGroupingRestartRequired();
     if (skipWorkFor !== undefined) {
       const replay = classified.get(skipWorkFor);
@@ -396,9 +491,10 @@ export function createReleaseSearchCandidateStreams(input: {
             if (current.work && skipWorkFor !== key.id) candidates.push({ kind: 'work', id: key.id });
             if (current.link && current.link.kind !== 'linked') candidates.push({ kind: 'release', id: key.id });
           } else if (current.link?.kind === 'linked') {
-            if (!seenWorks.has(current.link.work)) candidates.push({ kind: 'work', id: current.link.work });
+            if (!seenWorks.has(current.link.work) && !emittedWorks.has(current.link.work))
+              candidates.push({ kind: 'work', id: current.link.work });
           } else {
-            if (current.work && skipWorkFor !== key.id && !seenWorks.has(key.id))
+            if (current.work && skipWorkFor !== key.id && !seenWorks.has(key.id) && !emittedWorks.has(key.id))
               candidates.push({ kind: 'work', id: key.id });
             if (current.link) candidates.push({ kind: 'release', id: key.id });
           }
@@ -413,14 +509,14 @@ export function createReleaseSearchCandidateStreams(input: {
           keys.push(first);
           if (first.kind === 'work') {
             skipWorkFor = key.id;
-            if (request.sort === 'relevance') seenWorks.add(first.id);
+            if (request.sort === 'relevance') emittedWorks.add(first.id);
           }
         }
         break;
       }
       keys.push(...candidates);
       if (request.sort === 'relevance' && work === undefined)
-        for (const candidate of candidates) if (candidate.kind === 'work') seenWorks.add(candidate.id);
+        for (const candidate of candidates) if (candidate.kind === 'work') emittedWorks.add(candidate.id);
       skipWorkFor = undefined;
       namesAfter =
         request.sort === 'name'
@@ -436,14 +532,35 @@ export function createReleaseSearchCandidateStreams(input: {
     )
       throw new ReleaseGroupingRestartRequired();
     await assertCurrent();
+    if (relevanceLocation && relevanceBinding && emittedWorks.size) {
+      const branchValue = canonicalize({ after: cursor.namesAfter, skipWorkFor: cursor.skipWorkFor, size });
+      if (branchValue === undefined) return unavailable();
+      const branch = createHash('sha256').update(branchValue).digest('hex');
+      try {
+        relevanceLocation = await input.relevanceProgress!.state.advance(
+          relevanceBinding,
+          relevanceLocation,
+          branch,
+          [...emittedWorks],
+          input.relevanceProgress!.now,
+        );
+      } catch (error) {
+        if (
+          error instanceof ReleaseSearchRelevanceStateExpired ||
+          error instanceof ReleaseSearchRelevanceStateConflict
+        )
+          throw new ReleaseGroupingRestartRequired();
+        throw error;
+      }
+    }
     return {
       keys,
       after: JSON.stringify({
-        version: 1,
+        version: 2,
         binding: expected,
         namesAfter,
         ...(skipWorkFor ? { skipWorkFor } : {}),
-        ...(request.sort === 'relevance' && work === undefined && seenWorks.size ? { seenWorks: [...seenWorks] } : {}),
+        ...(relevanceLocation ? { relevance: relevanceLocation } : {}),
       }),
       exhausted: page.exhausted && (consumed || page.keys.length === 0),
     };

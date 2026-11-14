@@ -143,6 +143,7 @@ measurement and browser inspection remain deferred until the applicable validati
 Decision: expose grouped release pages as `release-groups-v1` on the existing subjects search route; child requests
 carry the work ID and their own cursor while group requests retain the group cursor.
 Decision: relevance ranks each work by its first current matching release in native relevance order; ungroupable releases keep their own native relevance position.
+Decision: relevance cursors retain an opaque PostgreSQL lineage node, while emitted work IDs stay in private page rows bound to the viewer, request, generation and source cut. Each node has one replay-idempotent successor per native position, so replaying an older cursor cannot see work IDs from a later branch.
 
 Decision: native name traversal uses one shared canonical-name frontier across occupied homes in all pools;
 every pool's retained cut, including an empty pool, participates in invalidation.
@@ -164,6 +165,14 @@ current matching release in native order, then suppresses later releases for tha
 independent per-work progress. Both streams advance past rejected candidates and require native EOF. Sampled facts
 never determine ownership. Missing complete-reader support or evidence makes the operation unavailable; explicit
 incomplete evidence remains unproven, and concealed targets retain the owner's identity-free unknown value.
+
+`release-search-relevance-state.ts` stores relevance group progress in PostgreSQL as immutable page-lineage nodes
+and emitted work IDs. The encrypted cursor carries only the execution and node UUIDs; state reads compare the
+current native page against its ancestry, preserving old-cursor replay without exposing prior work IDs or scanning
+them into the public token. The retained execution binds the principal, complete request, physical generation and
+source cut. Resume renews the cursor's 15-minute expiry; new traversals perform fixed-size cleanup sweeps. Each
+state SQL operation is included in the native search-read reservation. Child expansion remains independently
+keyset-paged and does not depend on this state.
 
 Its retained cut includes a required full-authority observer in addition to every pool's canonical-name population.
 Current snapshot positions and security revisions must agree with their name homes. Release, physical generation
