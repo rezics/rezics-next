@@ -1,10 +1,11 @@
 import { createHmac } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { readCurrentResourceRolePage } from '../access/current-resource-roles.ts';
-import { deadlineClient, readPublicIdentities } from './domain-ports.ts';
+import { readPublicIdentities } from './domain-ports.ts';
 import type { PublicIdentity } from '../access/account-data.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
@@ -218,24 +219,15 @@ async function readCurrentMembers(
 async function readTransaction<T>(
   pool: Pool,
   deadline: number,
-  run: (client: ReturnType<typeof deadlineClient>) => Promise<T>,
+  run: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  return withConnection(pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const result = await run(bounded);
-      await bounded.query('COMMIT');
-      return result;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
+  return withBoundedReadLifetime(
+    (work) => withConnection(pool, work),
+    discardConnection,
+    deadline,
+    run,
+    { transaction: 'repeatable-read-read-only' },
+  );
 }
 
 /** Selects a bounded raw frontier and its exact current source episodes before identity hydration. */
@@ -400,20 +392,25 @@ export async function readRealmMemberIdentities(
     throw new MemberPageUnavailableError();
   if (!ids.length) return new Map();
   try {
-    return await withConnection(pool, async (client) => {
-      const rows = await readPublicIdentities(
-        deadlineClient(client, deadline),
-        ids.map((accountId) => routeOf(accountId)!),
-        ids,
-      );
-      const result = new Map<string, PublicIdentity>();
-      const requested = new Set(ids);
-      for (const identity of rows) {
-        if (!requested.has(identity.id) || result.has(identity.id)) throw new MemberPageUnavailableError();
-        result.set(identity.id, identity);
-      }
-      return result;
-    });
+    return await withBoundedReadLifetime(
+      (work) => withConnection(pool, work),
+      discardConnection,
+      deadline,
+      async (client) => {
+        const rows = await readPublicIdentities(
+          client,
+          ids.map((accountId) => routeOf(accountId)!),
+          ids,
+        );
+        const result = new Map<string, PublicIdentity>();
+        const requested = new Set(ids);
+        for (const identity of rows) {
+          if (!requested.has(identity.id) || result.has(identity.id)) throw new MemberPageUnavailableError();
+          result.set(identity.id, identity);
+        }
+        return result;
+      },
+    );
   } catch (error) {
     throw new MemberPageUnavailableError({ cause: error });
   }
@@ -433,9 +430,8 @@ export async function readRealmMemberActions(
   if (!ids.length) return new Map();
   try {
     return await readTransaction(input.pool, input.deadline, async (client) => {
-      const bounded = deadlineClient(client, input.deadline);
       const result = new Map<string, MemberActionObservation>();
-      const rows = await memberActions.run(bounded, {
+      const rows = await memberActions.run(client, {
         route,
         realm_id: request.realmId,
         account_ids: ids,
@@ -452,12 +448,12 @@ export async function readRealmMemberActions(
         result.set(row.accountId, { banned: row.banned, protectedRole: false });
       }
       if (result.size !== ids.length) throw new MemberPageUnavailableError();
-      const at = await mintReadTime(bounded);
+      const at = await mintReadTime(client);
       try {
         const protectedAccounts = new Set<string>();
         let incomplete = false;
         for (const role of ['community.realm.owner', 'community.realm.moderator']) {
-          const page = await readCurrentResourceRolePage(bounded, {
+          const page = await readCurrentResourceRolePage(client, {
             resource: { route, id: request.realmId },
             roles: [role],
             at,
