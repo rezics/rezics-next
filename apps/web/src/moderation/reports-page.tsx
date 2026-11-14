@@ -402,7 +402,7 @@ function ReportsView({
         });
       }}
     >
-      <header className="space-y-3">
+      <header className="space-y-4">
         {boardId ? (
           <a
             className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:underline"
@@ -411,7 +411,6 @@ function ReportsView({
             {m.moderation_queue_back()}
           </a>
         ) : null}
-        <PageHeading>{m.moderation_reports_heading()}</PageHeading>
         {boardId ? (
           <ModerationScope
             kind="board"
@@ -420,23 +419,25 @@ function ReportsView({
             admitted={state === 'ready' && !retired && isCurrent?.() !== false}
           />
         ) : null}
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-          {postId
-            ? m.moderation_queue_post_scope()
-            : threadId
-              ? m.moderation_thread_filter()
-              : m.moderation_queue_board_scope()}
-        </p>
+        <div className="space-y-2">
+          <PageHeading>{m.moderation_reports_heading()}</PageHeading>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            {postId
+              ? m.moderation_queue_post_scope()
+              : threadId
+                ? m.moderation_thread_filter()
+                : m.moderation_queue_board_scope()}
+          </p>
+        </div>
       </header>
       <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
         {tab === 'reports' ? (
-          <a
-            href={reportsHref}
+          <span
             aria-current="page"
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4"
           >
             {m.moderation_reports_tab()}
-          </a>
+          </span>
         ) : (
           <a
             href={reportsHref}
@@ -446,13 +447,12 @@ function ReportsView({
           </a>
         )}
         {tab === 'appeals' ? (
-          <a
-            href={appealsHref}
+          <span
             aria-current="page"
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4"
           >
             {m.moderation_appeals_tab()}
-          </a>
+          </span>
         ) : (
           <a
             href={appealsHref}
@@ -462,96 +462,106 @@ function ReportsView({
           </a>
         )}
       </nav>
-      <p id={`${controlsId}-summary`} className="min-w-0 text-sm leading-relaxed text-muted-foreground">
-        {m.moderation_controls_details_summary({ status: selectedStatus, kind: selectedKind, order: selectedOrder })}
-      </p>
-      <fieldset
-        className="flex min-w-0 flex-wrap items-end gap-3"
-        aria-describedby={`${controlsId}-summary`}
-        disabled={!onSelection || retired}
-      >
-        <legend className="sr-only">{m.moderation_filter_label()}</legend>
-        <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-          <FieldLabel htmlFor={`${controlsId}-status`}>{m.moderation_filter_status()}</FieldLabel>
-          <Select
+      <section className="min-w-0 space-y-2" aria-labelledby={`${controlsId}-heading`}>
+        <h2 id={`${controlsId}-heading`} className="sr-only">
+          {m.moderation_filter_label()}
+        </h2>
+        <p id={`${controlsId}-summary`} className="min-w-0 text-sm leading-relaxed text-muted-foreground">
+          {m.moderation_controls_details_summary({ status: selectedStatus, kind: selectedKind, order: selectedOrder })}
+        </p>
+        <details className="min-w-0 border-y">
+          <summary className="min-h-11 cursor-pointer rounded-sm py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.moderation_filter_label()}
+          </summary>
+          <fieldset
+            className="flex min-w-0 flex-wrap items-end gap-3 py-3"
+            aria-describedby={`${controlsId}-summary`}
             disabled={!onSelection || retired}
-            items={[
-              { value: 'all', label: m.moderation_filter_all_status() },
-              { value: 'pending', label: m.moderation_filter_pending() },
-              { value: 'resolved', label: m.moderation_filter_resolved() },
-            ]}
-            value={selection.status}
-            onValueChange={(value) => select({ ...selection, status: value! as ReportSelection['status'] })}
           >
-            <SelectTrigger id={`${controlsId}-status`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">{m.moderation_filter_all_status()}</SelectItem>
-                <SelectItem value="pending">{m.moderation_filter_pending()}</SelectItem>
-                <SelectItem value="resolved">{m.moderation_filter_resolved()}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-          <FieldLabel htmlFor={`${controlsId}-kind`}>{m.moderation_filter_kind()}</FieldLabel>
-          <Select
-            disabled={!onSelection || retired}
-            items={[
-              { value: 'all', label: m.moderation_filter_all_kinds() },
-              { value: 'board', label: m.moderation_queue_board() },
-              { value: 'thread', label: m.moderation_queue_thread() },
-              { value: 'post', label: m.moderation_queue_post() },
-            ]}
-            value={selection.targetKind}
-            onValueChange={(value) => select({ ...selection, targetKind: value! as ReportSelection['targetKind'] })}
-          >
-            <SelectTrigger id={`${controlsId}-kind`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">{m.moderation_filter_all_kinds()}</SelectItem>
-                <SelectItem value="board">{m.moderation_queue_board()}</SelectItem>
-                <SelectItem value="thread">{m.moderation_queue_thread()}</SelectItem>
-                <SelectItem value="post">{m.moderation_queue_post()}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-          <FieldLabel htmlFor={`${controlsId}-order`}>{m.moderation_filter_order()}</FieldLabel>
-          <Select
-            disabled={!onSelection || retired}
-            items={[
-              { value: 'newest', label: m.moderation_filter_newest() },
-              { value: 'oldest', label: m.moderation_filter_oldest() },
-            ]}
-            value={selection.order}
-            onValueChange={(value) => select({ ...selection, order: value! as ReportSelection['order'] })}
-          >
-            <SelectTrigger id={`${controlsId}-order`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="newest">{m.moderation_filter_newest()}</SelectItem>
-                <SelectItem value="oldest">{m.moderation_filter_oldest()}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-          onClick={() => select(DEFAULT_REPORT_SELECTION)}
-        >
-          {m.moderation_filter_reset()}
-        </Button>
-      </fieldset>
+            <legend className="sr-only">{m.moderation_filter_label()}</legend>
+            <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+              <FieldLabel htmlFor={`${controlsId}-status`}>{m.moderation_filter_status()}</FieldLabel>
+              <Select
+                disabled={!onSelection || retired}
+                items={[
+                  { value: 'all', label: m.moderation_filter_all_status() },
+                  { value: 'pending', label: m.moderation_filter_pending() },
+                  { value: 'resolved', label: m.moderation_filter_resolved() },
+                ]}
+                value={selection.status}
+                onValueChange={(value) => select({ ...selection, status: value! as ReportSelection['status'] })}
+              >
+                <SelectTrigger id={`${controlsId}-status`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">{m.moderation_filter_all_status()}</SelectItem>
+                    <SelectItem value="pending">{m.moderation_filter_pending()}</SelectItem>
+                    <SelectItem value="resolved">{m.moderation_filter_resolved()}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+              <FieldLabel htmlFor={`${controlsId}-kind`}>{m.moderation_filter_kind()}</FieldLabel>
+              <Select
+                disabled={!onSelection || retired}
+                items={[
+                  { value: 'all', label: m.moderation_filter_all_kinds() },
+                  { value: 'board', label: m.moderation_queue_board() },
+                  { value: 'thread', label: m.moderation_queue_thread() },
+                  { value: 'post', label: m.moderation_queue_post() },
+                ]}
+                value={selection.targetKind}
+                onValueChange={(value) => select({ ...selection, targetKind: value! as ReportSelection['targetKind'] })}
+              >
+                <SelectTrigger id={`${controlsId}-kind`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">{m.moderation_filter_all_kinds()}</SelectItem>
+                    <SelectItem value="board">{m.moderation_queue_board()}</SelectItem>
+                    <SelectItem value="thread">{m.moderation_queue_thread()}</SelectItem>
+                    <SelectItem value="post">{m.moderation_queue_post()}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+              <FieldLabel htmlFor={`${controlsId}-order`}>{m.moderation_filter_order()}</FieldLabel>
+              <Select
+                disabled={!onSelection || retired}
+                items={[
+                  { value: 'newest', label: m.moderation_filter_newest() },
+                  { value: 'oldest', label: m.moderation_filter_oldest() },
+                ]}
+                value={selection.order}
+                onValueChange={(value) => select({ ...selection, order: value! as ReportSelection['order'] })}
+              >
+                <SelectTrigger id={`${controlsId}-order`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="newest">{m.moderation_filter_newest()}</SelectItem>
+                    <SelectItem value="oldest">{m.moderation_filter_oldest()}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+              onClick={() => select(DEFAULT_REPORT_SELECTION)}
+            >
+              {m.moderation_filter_reset()}
+            </Button>
+          </fieldset>
+        </details>
+      </section>
       <BoardReportQueue
         {...(onLeave ? { onLeave } : {})}
         {...(isCurrent ? { isCurrent } : {})}

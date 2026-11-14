@@ -19,7 +19,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { useSession } from '../session/query';
 import { moderationEvidence } from './target-context';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { AppealResolution } from './appeal-resolution';
 import { appealTarget, loadModerationAppeals, type Appeal } from './appeals-read';
@@ -32,7 +32,13 @@ import {
   type PrivateAppealPage,
 } from './appeals-read-model';
 import { moderationTargetContent, type ModerationTarget } from './target-content';
-import { ModerationActionRegion, ModerationReference, moderationControl, moderationLink } from './presentation';
+import {
+  ModerationActionRegion,
+  ModerationReference,
+  ModerationScope,
+  moderationControl,
+  moderationLink,
+} from './presentation';
 
 const date = (value: string) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -245,6 +251,7 @@ function AppealsVisit(props: AppealsPageProps) {
           {...(data.viewerId !== null ? { viewerId: data.viewerId } : {})}
           state={state}
           queueBoundary={queueBoundary}
+          boardId={original.input.boardId}
           {...(original.input.threadId ? { threadId: original.input.threadId } : {})}
           {...(original.input.postId ? { postId: original.input.postId } : {})}
           {...(props.reportsSearch !== undefined ? { reportsSearch: props.reportsSearch } : {})}
@@ -306,6 +313,7 @@ function AppealsView({
   appeals,
   targets,
   next,
+  boardId,
   threadId,
   postId,
   onNext,
@@ -335,6 +343,7 @@ function AppealsView({
   appeals: Appeal[];
   targets: ModerationTarget[];
   next: string | null;
+  boardId?: string;
   threadId?: string;
   postId?: string;
   onNext?: (cursor: string) => void;
@@ -358,6 +367,23 @@ function AppealsView({
     .filter(Boolean)
     .join('&');
   const reportsHref = reportsSearch ?? (filters ? `?${filters}` : '?');
+  const boardHref = boardId ? localizeHref(`/boards/${encodeURIComponent(boardId)}`) : undefined;
+  const navigateOrdinaryLink = (event: ReactMouseEvent<HTMLAnchorElement>, href: string) => {
+    if (
+      !router ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      (event.currentTarget.target && event.currentTarget.target !== '_self') ||
+      event.currentTarget.hasAttribute('download')
+    )
+      return;
+    event.preventDefault();
+    void router.navigate({ href });
+  };
   return (
     <article
       ref={queueBoundary}
@@ -365,123 +391,130 @@ function AppealsView({
       aria-labelledby={headingId}
       className="mx-auto w-full min-w-0 max-w-5xl space-y-6 text-foreground [overflow-wrap:anywhere]"
     >
-      <header className="space-y-3">
-        <p className="text-sm text-muted-foreground">{m.moderation_appeals_tab()}</p>
-        <PageHeading id={headingId}>{m.moderation_appeals_heading()}</PageHeading>
-        {state === 'ready' && isCurrent?.() !== false ? (
-          <Badge variant="secondary">{m.moderation_admission_current()}</Badge>
+      <header className="space-y-4">
+        {boardHref ? (
+          <a
+            className={moderationLink}
+            href={boardHref}
+            onClick={(event) => navigateOrdinaryLink(event, boardHref)}
+          >
+            {m.moderation_queue_back()}
+          </a>
         ) : null}
+        {boardId ? (
+          <ModerationScope
+            kind="board"
+            id={boardId}
+            label={evidence.find((item) => item?.board?.id === boardId)?.board?.title}
+            admitted={state === 'ready' && isCurrent?.() !== false}
+          />
+        ) : null}
+        <div className="space-y-2">
+          <PageHeading id={headingId}>{m.moderation_appeals_heading()}</PageHeading>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            {postId
+              ? threadId
+                ? m.moderation_appeals_read_post_thread_scope()
+                : m.moderation_appeals_read_post_board_scope()
+              : threadId
+                ? m.moderation_appeals_read_thread_scope()
+                : m.moderation_appeals_read_board_scope()}
+          </p>
+        </div>
       </header>
-      <nav aria-label={m.moderation_tabs_label()} className="flex flex-wrap items-center gap-4 border-b pb-2">
+      <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
         <a
-          className={moderationLink}
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-transparent px-3 py-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href={reportsHref}
-          onClick={(event) => {
-            if (
-              !router ||
-              event.defaultPrevented ||
-              event.button !== 0 ||
-              event.metaKey ||
-              event.ctrlKey ||
-              event.shiftKey ||
-              event.altKey
-            )
-              return;
-            event.preventDefault();
-            void router.navigate({ href: reportsHref });
-          }}
+          onClick={(event) => navigateOrdinaryLink(event, reportsHref)}
         >
           {m.moderation_reports_tab()}
         </a>
         <span
           aria-current="page"
-          className="inline-flex min-h-11 items-center border-b-2 border-primary px-3 py-2 text-sm font-semibold"
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4"
         >
           {m.moderation_appeals_tab()}
         </span>
       </nav>
-      <p className="text-sm text-muted-foreground">
-        {postId
-          ? threadId
-            ? m.moderation_appeals_read_post_thread_scope()
-            : m.moderation_appeals_read_post_board_scope()
-          : threadId
-            ? m.moderation_appeals_read_thread_scope()
-            : m.moderation_appeals_read_board_scope()}
-      </p>
-      {state === 'ready' && onRefresh ? (
-        <div className="space-y-2">
-          <Button className={moderationControl} variant="outline" disabled={refreshBlocked} onClick={onRefresh}>
-            {m.moderation_queue_refresh()}
+      <section aria-labelledby={`${headingId}-queue`} className="min-w-0 space-y-5">
+        <h2 id={`${headingId}-queue`} className="sr-only">
+          {m.moderation_appeals_heading()}
+        </h2>
+        {state === 'ready' && onRefresh ? (
+          <div className="space-y-2">
+            <Button className={moderationControl} variant="outline" disabled={refreshBlocked} onClick={onRefresh}>
+              {m.moderation_queue_refresh()}
+            </Button>
+            {refreshBlocked ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.moderation_appeals_refresh_blocked()}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {state !== 'ready' ? (
+          <ContentItemFrame
+            as="div"
+            role="status"
+            aria-live="polite"
+            aria-busy={state === 'loading'}
+            className="space-y-3 p-4 sm:p-6"
+          >
+            <ContentItemHeading level={2} className="text-base font-semibold">
+              {state === 'loading'
+                ? m.moderation_appeals_read_loading()
+                : state === 'unavailable'
+                  ? m.moderation_appeals_read_unavailable()
+                  : state === 'stale'
+                    ? m.moderation_appeals_read_stale()
+                    : m.moderation_appeals_read_closed()}
+            </ContentItemHeading>
+            {state === 'unavailable' && onRetry ? (
+              <Button ref={recoveryControl} className={moderationControl} variant="outline" onClick={onRetry}>
+                {m.moderation_appeals_read_retry()}
+              </Button>
+            ) : null}
+            {state === 'stale' && onRestart ? (
+              <Button className={moderationControl} variant="outline" onClick={onRestart}>
+                {m.moderation_appeals_read_restart()}
+              </Button>
+            ) : null}
+          </ContentItemFrame>
+        ) : appeals.length ? (
+          <ol className="space-y-4">
+            {appeals.map((appeal) => {
+              const identity = appealTarget(appeal);
+              const target = targets.find((item) => item.key === `${identity?.kind}:${identity?.id}`);
+              const mayResolve =
+                (appeal.canResolve === true || (appeal.canResolve === undefined && canResolve?.(appeal) === true)) &&
+                (!viewerId || viewerId !== appeal.decision.deciderId) &&
+                (canResolve?.(appeal) ?? true);
+              return (
+                <AppealCard
+                  key={appeal.id}
+                  appeal={appeal}
+                  target={target}
+                  mayResolve={mayResolve}
+                  {...(onResolutionPending ? { onResolutionPending } : {})}
+                  {...(isCurrent ? { isCurrent } : {})}
+                />
+              );
+            })}
+          </ol>
+        ) : (
+          <ContentItemFrame as="div" role="status" className="p-4 sm:p-6">
+            <ContentItemHeading level={2} className="text-base font-semibold text-muted-foreground">
+              {next ? m.moderation_appeals_read_sparse() : m.moderation_appeals_empty()}
+            </ContentItemHeading>
+          </ContentItemFrame>
+        )}
+        {state === 'ready' && next ? (
+          <Button className={moderationControl} variant="outline" onClick={() => onNext?.(next)}>
+            {m.threads_next_page()}
           </Button>
-          {refreshBlocked ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.moderation_appeals_refresh_blocked()}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {state !== 'ready' ? (
-        <ContentItemFrame
-          as="div"
-          role="status"
-          aria-live="polite"
-          aria-busy={state === 'loading'}
-          className="space-y-3 p-4 sm:p-6"
-        >
-          <ContentItemHeading level={2} className="text-base font-semibold">
-            {state === 'loading'
-              ? m.moderation_appeals_read_loading()
-              : state === 'unavailable'
-                ? m.moderation_appeals_read_unavailable()
-                : state === 'stale'
-                  ? m.moderation_appeals_read_stale()
-                  : m.moderation_appeals_read_closed()}
-          </ContentItemHeading>
-          {state === 'unavailable' && onRetry ? (
-            <Button ref={recoveryControl} className={moderationControl} variant="outline" onClick={onRetry}>
-              {m.moderation_appeals_read_retry()}
-            </Button>
-          ) : null}
-          {state === 'stale' && onRestart ? (
-            <Button className={moderationControl} variant="outline" onClick={onRestart}>
-              {m.moderation_appeals_read_restart()}
-            </Button>
-          ) : null}
-        </ContentItemFrame>
-      ) : appeals.length ? (
-        <ol className="space-y-4">
-          {appeals.map((appeal) => {
-            const identity = appealTarget(appeal);
-            const target = targets.find((item) => item.key === `${identity?.kind}:${identity?.id}`);
-            const mayResolve =
-              (appeal.canResolve === true || (appeal.canResolve === undefined && canResolve?.(appeal) === true)) &&
-              (!viewerId || viewerId !== appeal.decision.deciderId) &&
-              (canResolve?.(appeal) ?? true);
-            return (
-              <AppealCard
-                key={appeal.id}
-                appeal={appeal}
-                target={target}
-                mayResolve={mayResolve}
-                {...(onResolutionPending ? { onResolutionPending } : {})}
-                {...(isCurrent ? { isCurrent } : {})}
-              />
-            );
-          })}
-        </ol>
-      ) : (
-        <ContentItemFrame as="div" role="status" className="p-4 sm:p-6">
-          <ContentItemHeading level={2} className="text-base font-semibold text-muted-foreground">
-            {next ? m.moderation_appeals_read_sparse() : m.moderation_appeals_empty()}
-          </ContentItemHeading>
-        </ContentItemFrame>
-      )}
-      {state === 'ready' && next ? (
-        <Button className={moderationControl} variant="outline" onClick={() => onNext?.(next)}>
-          {m.threads_next_page()}
-        </Button>
-      ) : null}
+        ) : null}
+      </section>
     </article>
   );
 }
