@@ -27,7 +27,6 @@ import {
   partitionReadClientObservation,
   withBoundedReadConnection,
   withBoundedReadOnlyTransaction,
-  withConnection,
 } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -346,6 +345,7 @@ export function createEntryCommands(config: Dependencies) {
     actor: Actor,
     action: string,
     body: (client: QueryClient, owner: AccountActor, route: number) => Promise<T>,
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
   ) {
     const owner = account(actor, action);
     const partition = partitionOf(requireRoute(owner.accountId));
@@ -353,7 +353,7 @@ export function createEntryCommands(config: Dependencies) {
     // Delivery admission belongs to the read caller, after this checkout releases.
     return withBoundedReadOnlyTransaction(
       pool,
-      deadlineFor(WORK_STEP_DEADLINE_MS),
+      deadline,
       async (client) => {
         const admittedRoute = await admit(client, owner);
         return body(client, owner, admittedRoute);
@@ -365,9 +365,17 @@ export function createEntryCommands(config: Dependencies) {
     );
   }
 
-  async function historicalStateAdmitted(owner: AccountActor, subjectId: string, historicalState: string) {
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
-    const time = await withConnection(pool, (client) => mintReadTime(client, clock));
+  async function historicalStateAdmitted(
+    owner: AccountActor,
+    subjectId: string,
+    historicalState: string,
+    deadline: number,
+  ) {
+    const partition = partitionOf(requireRoute(owner.accountId));
+    const time = await withBoundedReadConnection(pool, deadline, (client) => mintReadTime(client, clock), {
+      deadlineError: () => new CommandUnavailableError('deadline', partition),
+      isUncertainSettledQueryError: () => true,
+    });
     try {
       const observation = await readLibraryProfileSourceObservation(
         { pool, access, actor: owner, at: time, deadline },
@@ -781,29 +789,56 @@ export function createEntryCommands(config: Dependencies) {
     const owner = account(actor, 'library_entry:read');
     requireRoute(subjectId);
     const selected = revision(selectedRevision);
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const partition = partitionOf(requireRoute(owner.accountId));
     const operationPlan = entryOperationPlan('library.entry.state-review', { subjectId, revision: selected });
     const reviewed = await withEntryOperation(operationPlan, () =>
-      snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
-        const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
-        if (!current) throw new LibraryNotFoundError();
-        if (!current.incarnationId) throw new LibraryNotFoundError();
-        const change = await readEntryStateChange(client, {
-          route,
-          accountId: accountOwner.accountId,
-          subjectId,
-          incarnationId: current.incarnationId,
-          revision: selected,
-        });
-        if (!change) throw new LibraryNotFoundError();
-        return { current, change };
-      }),
+      snapshot(
+        actor,
+        'library_entry:read',
+        async (client, accountOwner, route) => {
+          const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
+          if (!current) throw new LibraryNotFoundError();
+          if (!current.incarnationId) throw new LibraryNotFoundError();
+          const change = await readEntryStateChange(client, {
+            route,
+            accountId: accountOwner.accountId,
+            subjectId,
+            incarnationId: current.incarnationId,
+            revision: selected,
+          });
+          if (!change) throw new LibraryNotFoundError();
+          // One fixed authority read anchors delivery after the source releases.
+          const epoch = await partitionEpochRead.run(
+            { query: client.query.bind(client) },
+            { partition_no: partitionOf(route) },
+          );
+          return { current, change, epoch: epoch?.epoch ?? null };
+        },
+        deadline,
+      ),
     );
     let availability: 'available' | 'no_prior_state' | 'state_unavailable';
     if (reviewed.change.beforeState === null) availability = 'no_prior_state';
     else
-      availability = (await historicalStateAdmitted(owner, subjectId, reviewed.change.beforeState))
+      availability = (await historicalStateAdmitted(owner, subjectId, reviewed.change.beforeState, deadline))
         ? 'available'
         : 'state_unavailable';
+    // The owner snapshot and profile source have released before this delivery admission.
+    await withBoundedReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        await admit(client, owner);
+        const { partition: home } = await partitionReadClientObservation(client, partition);
+        if (home.writeState !== 'active' || home.movedTo !== null || home.epoch !== reviewed.epoch)
+          throw new CommandUnavailableError('fenced', partition);
+      },
+      {
+        deadlineError: () => new CommandUnavailableError('deadline', partition),
+        isUncertainSettledQueryError: () => true,
+      },
+    );
     return {
       change: stateChangeView(reviewed.change),
       current: {
@@ -837,6 +872,7 @@ export function createEntryCommands(config: Dependencies) {
       currentRevision: revision(value.currentRevision),
     };
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const partition = partitionOf(requireRoute(owner.accountId));
     return runner.ownAccountPrepared(
       actor,
       {
@@ -844,16 +880,24 @@ export function createEntryCommands(config: Dependencies) {
         kind: 'library.entry.state.restore',
         requestKey,
         input: request,
+        deadline,
         async prepare(attempt) {
           try {
-            const change = await withConnection(pool, (client) =>
-              readEntryStateChange(client, {
-                route: requireRoute(owner.accountId),
-                accountId: owner.accountId,
-                subjectId,
-                incarnationId: request.incarnationId,
-                revision: request.changeRevision,
-              }),
+            const change = await withBoundedReadConnection(
+              pool,
+              deadline,
+              (client) =>
+                readEntryStateChange(client, {
+                  route: requireRoute(owner.accountId),
+                  accountId: owner.accountId,
+                  subjectId,
+                  incarnationId: request.incarnationId,
+                  revision: request.changeRevision,
+                }),
+              {
+                deadlineError: () => new CommandUnavailableError('deadline', partition),
+                isUncertainSettledQueryError: () => true,
+              },
             );
             if (!change) throw new LibraryNotFoundError();
             if (change.beforeState === null) throw new (LibraryEntryStateRestoreConflictError())('unavailable');
