@@ -1523,7 +1523,10 @@ test('contents Previous rereads sparse pages; pointer movement keeps focus and k
   expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(target);
   expect(host.textContent).toContain(m.book_reader_contents_recovery());
   external.focus();
-  const result = await book.source.read({ address: target, locale: 'en', limit: 40, ancestorLimit: 24 }, new AbortController().signal);
+  const result = await book.source.read(
+    { address: target, locale: 'en', limit: 40, ancestorLimit: 24 },
+    new AbortController().signal,
+  );
   await act(async () => pending.resolve(result));
   await settle();
   expect(document.activeElement).toBe(external);
@@ -1532,7 +1535,6 @@ test('contents Previous rereads sparse pages; pointer movement keeps focus and k
   expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(book.contents(ids.nested));
   expect(document.activeElement).toBe(host.querySelector('h1'));
 });
-
 
 test('chapter return rereads the original sparse address and leaves a missing selected row honestly missing', async () => {
   const book = createIllustrativeHostedBook('multiple-pages');

@@ -355,7 +355,8 @@ function BookReaderView({
     );
   };
   const title =
-    page?.title ?? (state.address.kind === 'contents' ? m.book_reader_contents({}, options) : m.book_reader_title({}, options));
+    page?.title ??
+    (state.address.kind === 'contents' ? m.book_reader_contents({}, options) : m.book_reader_title({}, options));
   const rootContents = page
     ? {
         kind: 'contents' as const,
@@ -551,12 +552,16 @@ function BookReaderView({
               {state.state !== 'retired' ? (
                 <>
                   {state.address.kind === 'contents' ? (
-                    destination({ ...state.address, cursor: null }, m.book_reader_first_page({}, options), { movement: 'first' })
+                    destination({ ...state.address, cursor: null }, m.book_reader_first_page({}, options), {
+                      movement: 'first',
+                    })
                   ) : (
                     <Button
                       className={control}
                       variant="ghost"
-                      onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}
+                      onClick={(event) =>
+                        act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)
+                      }
                     >
                       {labels.contents}
                     </Button>
@@ -696,11 +701,15 @@ function Contents({
         <div className="flex min-w-0 flex-wrap gap-2">
           {previous ? destination(previous, m.book_reader_previous_page({}, options), { movement: 'exact' }) : null}
           {page.address.cursor !== null
-            ? destination({ ...page.address, cursor: null }, m.book_reader_first_page({}, options), { movement: 'first' })
+            ? destination({ ...page.address, cursor: null }, m.book_reader_first_page({}, options), {
+                movement: 'first',
+              })
             : null}
         </div>
         {page.continuation.state === 'more' ? (
-          destination({ ...page.address, cursor: page.continuation.cursor }, m.book_reader_more({}, options), { movement: 'exact' })
+          destination({ ...page.address, cursor: page.continuation.cursor }, m.book_reader_more({}, options), {
+            movement: 'exact',
+          })
         ) : page.continuation.state === 'end' ? (
           <p className="text-xs text-muted-foreground">{m.book_reader_level_end({}, options)}</p>
         ) : (
@@ -708,7 +717,11 @@ function Contents({
             <p role="status" className="text-sm text-muted-foreground">
               {m.book_reader_navigation_unavailable({}, options)}
             </p>
-            <Button className={control} variant="outline" onClick={(event) => act((focus) => reader.retry(focus), event.detail === 0)}>
+            <Button
+              className={control}
+              variant="outline"
+              onClick={(event) => act((focus) => reader.retry(focus), event.detail === 0)}
+            >
               {m.book_reader_retry({}, options)}
             </Button>
           </>

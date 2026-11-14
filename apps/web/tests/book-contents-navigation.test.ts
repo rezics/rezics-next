@@ -75,11 +75,17 @@ test('a retired reader cannot erase coordinates admitted by the next route incar
   const contents = createBookContentsNavigation();
   let current = true;
   const observation = { state: 'current' } as const;
-  const reader = createBookReader({
-    getSnapshot: () => observation,
-    subscribe: () => () => {},
-    read: async () => ({ state: 'unavailable' }),
-  }, address(null), 'en', () => current, { contentsNavigation: contents });
+  const reader = createBookReader(
+    {
+      getSnapshot: () => observation,
+      subscribe: () => () => {},
+      read: async () => ({ state: 'unavailable' }),
+    },
+    address(null),
+    'en',
+    () => current,
+    { contentsNavigation: contents },
+  );
   reader.retire();
   current = false;
   contents.observe(address(null));

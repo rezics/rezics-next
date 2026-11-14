@@ -33,8 +33,13 @@ export const illustrativeBookIds = {
   nightRevision: '0192f3a0-6c1e-7b2a-9d4e-000000000014',
 } as const;
 export type IllustrativeBookState =
-  | 'nested' | 'sparse' | 'failed-page' | 'moved' | 'unavailable-navigation'
-  | 'multiple-pages' | 'failed-previous';
+  | 'nested'
+  | 'sparse'
+  | 'failed-page'
+  | 'moved'
+  | 'unavailable-navigation'
+  | 'multiple-pages'
+  | 'failed-previous';
 export const illustrativeBookCursor = 'illustrative:opaque/+page=2';
 export const illustrativeBookLastCursor = 'illustrative:opaque/+page=3';
 export const illustrativeRootCursor = 'illustrative:root/+page=2';
@@ -198,23 +203,46 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
       },
       async children(_id, query) {
         if (paged) {
-          if (state === 'failed-previous' && query.parentId === ids.nested &&
-            query.cursor === illustrativeBookCursor && lastNestedCursor === illustrativeBookLastCursor && !failed) {
+          if (
+            state === 'failed-previous' &&
+            query.parentId === ids.nested &&
+            query.cursor === illustrativeBookCursor &&
+            lastNestedCursor === illustrativeBookLastCursor &&
+            !failed
+          ) {
             failed = true;
             return { state: 'unavailable' };
           }
-          const items = query.parentId === ids.nested
-            ? query.cursor === illustrativeBookLastCursor ? [] : query.cursor === illustrativeBookCursor ? [reused] : [first]
-            : query.parentId === ids.part
-              ? query.cursor === illustrativePartCursor ? [nested] : []
-              : query.parentId === ids.secondPart ? [harbor, night]
-                : query.cursor === illustrativeRootCursor ? [part] : [secondPart];
-          const nextCursor = query.parentId === ids.nested
-            ? query.cursor === illustrativeBookLastCursor ? null : query.cursor === illustrativeBookCursor
-              ? illustrativeBookLastCursor : illustrativeBookCursor
-            : query.parentId === ids.part
-              ? query.cursor ? null : illustrativePartCursor
-              : !query.parentId && !query.cursor ? illustrativeRootCursor : null;
+          const items =
+            query.parentId === ids.nested
+              ? query.cursor === illustrativeBookLastCursor
+                ? []
+                : query.cursor === illustrativeBookCursor
+                  ? [reused]
+                  : [first]
+              : query.parentId === ids.part
+                ? query.cursor === illustrativePartCursor
+                  ? [nested]
+                  : []
+                : query.parentId === ids.secondPart
+                  ? [harbor, night]
+                  : query.cursor === illustrativeRootCursor
+                    ? [part]
+                    : [secondPart];
+          const nextCursor =
+            query.parentId === ids.nested
+              ? query.cursor === illustrativeBookLastCursor
+                ? null
+                : query.cursor === illustrativeBookCursor
+                  ? illustrativeBookLastCursor
+                  : illustrativeBookCursor
+              : query.parentId === ids.part
+                ? query.cursor
+                  ? null
+                  : illustrativePartCursor
+                : !query.parentId && !query.cursor
+                  ? illustrativeRootCursor
+                  : null;
           if (query.parentId === ids.nested) lastNestedCursor = query.cursor;
           return { state: 'ready', value: { ...release, items, nextCursor } };
         }

@@ -197,13 +197,14 @@ export function createBookReader(
       const chapter = snapshot.page?.kind === 'chapter' ? snapshot.page : null;
       const target = address
         ? contents.resolve(address, movement)
-        : contentsReturn ?? chapter?.contents ?? {
+        : (contentsReturn ??
+          chapter?.contents ?? {
             kind: 'contents' as const,
             publication: initialAddress.publication,
             parentOccurrenceId: null,
             cursor: null,
             selection: snapshot.address.selection,
-          };
+          });
       const selection = chapter?.address.selection ?? snapshot.address.selection;
       const selected = selection ? { ...target, selection } : target;
       contentsReturn = selected;

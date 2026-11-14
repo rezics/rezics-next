@@ -88,7 +88,13 @@ export type HostedBookVisitViewProps = {
 
 /** One production visit, using the retained native source and document reader. No body cache in the router. */
 export function HostedBookVisitView({
-  visit, locale, navigate, reload, navigation, location, renderProgress,
+  visit,
+  locale,
+  navigate,
+  reload,
+  navigation,
+  location,
+  renderProgress,
 }: HostedBookVisitViewProps) {
   const localNavigation = useMemo(createHostedBookNavigation, []);
   const coordinates = navigation ?? localNavigation;
@@ -96,17 +102,19 @@ export function HostedBookVisitView({
   const session = readerSessionSource(client);
   if (visit.state === 'ready') {
     const { publication, viewer, currentReleaseRevisionId, currentStructureRevisionId } = visit.admission;
-    coordinates.bind(JSON.stringify([
-      publication.id,
-      publication.structureRevisionId,
-      publication.releaseRevisionId,
-      currentReleaseRevisionId,
-      currentStructureRevisionId,
-      locale,
-      viewer.kind,
-      viewer.kind === 'session' ? viewer.subject : null,
-      session.snapshot(),
-    ]));
+    coordinates.bind(
+      JSON.stringify([
+        publication.id,
+        publication.structureRevisionId,
+        publication.releaseRevisionId,
+        currentReleaseRevisionId,
+        currentStructureRevisionId,
+        locale,
+        viewer.kind,
+        viewer.kind === 'session' ? viewer.subject : null,
+        session.snapshot(),
+      ]),
+    );
   }
   const admission = useMemo<NativeHostedBookAdmissionSource>(
     () => ({
@@ -167,28 +175,37 @@ export function HostedBookVisitView({
   if (visit.state !== 'ready') {
     const search = location?.search;
     const contents = !!location && (search?.view === 'contents' || (search?.view === undefined && !search?.occurrence));
-    const first = location && contents ? hostedBookHref(location.catalogueId, locale, {
-      release: search?.release,
-      occurrence: search?.occurrence,
-      subject: search?.subject,
-      view: 'contents',
-      parent: search?.parent,
-    }) : null;
-    const chapter = location && contents && search?.occurrence ? hostedBookHref(location.catalogueId, locale, {
-      release: search.release,
-      occurrence: search.occurrence,
-      subject: search.subject,
-      view: 'chapter',
-      returnParent: search.parent,
-      returnCursor: search.cursor,
-    }) : null;
-    const linkClass = 'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere]';
+    const first =
+      location && contents
+        ? hostedBookHref(location.catalogueId, locale, {
+            release: search?.release,
+            occurrence: search?.occurrence,
+            subject: search?.subject,
+            view: 'contents',
+            parent: search?.parent,
+          })
+        : null;
+    const chapter =
+      location && contents && search?.occurrence
+        ? hostedBookHref(location.catalogueId, locale, {
+            release: search.release,
+            occurrence: search.occurrence,
+            subject: search.subject,
+            view: 'chapter',
+            returnParent: search.parent,
+            returnCursor: search.cursor,
+          })
+        : null;
+    const linkClass =
+      'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere]';
     return (
       <section className="mx-auto grid max-w-3xl gap-4 px-4 py-8" lang={locale} data-slot="hosted-book-visit">
         <h1 className="text-2xl font-semibold">
           {contents ? m.book_reader_contents({}, options) : m.book_reader_title({}, options)}
         </h1>
-        {contents ? <p className="text-sm text-muted-foreground">{m.book_reader_contents_recovery({}, options)}</p> : null}
+        {contents ? (
+          <p className="text-sm text-muted-foreground">{m.book_reader_contents_recovery({}, options)}</p>
+        ) : null}
         <p role="status">
           {visit.state === 'denied'
             ? m.book_reader_denied({}, options)
