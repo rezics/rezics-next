@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -42,19 +42,15 @@ export function KnowledgeDiscoveryReturnLink({ href, locale }: { href: string; l
 }
 
 function DiscoveryNotice({
-  locale,
   message,
+  descriptionId,
   alert,
   action,
-  actionLabel,
-  busy,
 }: {
-  locale: string;
   message: string;
+  descriptionId: string;
   alert?: boolean | undefined;
-  action?: (() => void) | undefined;
-  actionLabel?: string | undefined;
-  busy: boolean;
+  action?: ReactNode | undefined;
 }) {
   return (
     <div
@@ -62,12 +58,10 @@ function DiscoveryNotice({
       className="min-w-0 space-y-3 text-sm text-muted-foreground"
       aria-live="polite"
     >
-      <p className="min-w-0 break-words">{message}</p>
-      {action && actionLabel ? (
-        <Button type="button" variant="outline" className={controlClass} disabled={busy} onClick={action}>
-          {busy ? m.knowledge_discovery_preparing({}, localeOptions(locale)) : actionLabel}
-        </Button>
-      ) : null}
+      <p id={descriptionId} className="min-w-0 break-words">
+        {message}
+      </p>
+      {action}
     </div>
   );
 }
@@ -135,7 +129,9 @@ export function KnowledgeDiscoveryPanel({
   onRestart,
 }: KnowledgeDiscoveryPanelProps) {
   const options = localeOptions(locale);
-  const headingId = 'subject-knowledge-heading';
+  const headingId = useId();
+  const introId = useId();
+  const descriptionId = useId();
   const documents = snapshot.state === 'ready' ? (snapshot.page?.documents ?? []) : [];
   const next = snapshot.state === 'ready' ? (snapshot.page?.next ?? null) : null;
   const exhausted = snapshot.state === 'ready' && next === null;
@@ -143,84 +139,254 @@ export function KnowledgeDiscoveryPanel({
   const empty = snapshot.state === 'ready' && documents.length === 0 && next === null;
   const preparingContinuation = snapshot.state === 'preparing' && !!snapshot.frontier;
   const initialPreparing = snapshot.state === 'preparing' && !snapshot.frontier;
-  const moreRef = useRef<HTMLButtonElement>(null);
-  const endRef = useRef<HTMLParagraphElement>(null);
-  const previousMore = useRef(false);
+  const replacing = initialPreparing && snapshot.cursor !== null;
+  const boundaryRef = useRef<HTMLElement>(null);
+  const keyboardActivation = useRef<{ kind: string; key: string; button: HTMLButtonElement } | null>(null);
+  const orientationRequest = useRef<{ source: KnowledgeDiscoverySnapshot; expectedCursor: string | null } | null>(null);
+  const removeOrientationListeners = useRef<(() => void) | null>(null);
+
+  const cancelOrientation = useCallback(() => {
+    orientationRequest.current = null;
+    const remove = removeOrientationListeners.current;
+    removeOrientationListeners.current = null;
+    remove?.();
+  }, []);
+
+  function requestOrientation(expectedCursor: string | null) {
+    cancelOrientation();
+    orientationRequest.current = { source: snapshot, expectedCursor };
+
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target === document.body || event.target === document.documentElement) return;
+      cancelOrientation();
+    };
+    const onPointerMovement = () => cancelOrientation();
+    const onKeyMovement = () => cancelOrientation();
+    const onDeparture = () => cancelOrientation();
+    const onVisibility = () => {
+      if (document.hidden) cancelOrientation();
+    };
+
+    document.addEventListener('focusin', onFocusIn, true);
+    document.addEventListener('pointerdown', onPointerMovement, true);
+    document.addEventListener('pointermove', onPointerMovement, true);
+    document.addEventListener('keydown', onKeyMovement, true);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onDeparture);
+    window.addEventListener('pagehide', onDeparture);
+    removeOrientationListeners.current = () => {
+      document.removeEventListener('focusin', onFocusIn, true);
+      document.removeEventListener('pointerdown', onPointerMovement, true);
+      document.removeEventListener('pointermove', onPointerMovement, true);
+      document.removeEventListener('keydown', onKeyMovement, true);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onDeparture);
+      window.removeEventListener('pagehide', onDeparture);
+    };
+  }
+
+  function actionButton(
+    kind: string,
+    action: (() => void) | undefined,
+    label: string,
+    expectedCursor: string | null,
+  ) {
+    if (!action) return null;
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        className={controlClass}
+        disabled={snapshot.busy}
+        onKeyDown={(event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+            keyboardActivation.current = { kind, key: event.key, button: event.currentTarget };
+          } else {
+            keyboardActivation.current = null;
+            cancelOrientation();
+          }
+        }}
+        onKeyUp={(event) => {
+          const activation = keyboardActivation.current;
+          if (activation?.button === event.currentTarget && activation.key === event.key) {
+            window.setTimeout(() => {
+              if (keyboardActivation.current === activation) keyboardActivation.current = null;
+            }, 0);
+          }
+        }}
+        onPointerDown={() => {
+          keyboardActivation.current = null;
+          cancelOrientation();
+        }}
+        onClick={(event) => {
+          const activation = keyboardActivation.current;
+          const keyboard =
+            event.detail === 0 &&
+            activation !== null &&
+            activation.kind === kind &&
+            activation.button === event.currentTarget;
+          keyboardActivation.current = null;
+          if (keyboard) requestOrientation(expectedCursor);
+          else cancelOrientation();
+          try {
+            action();
+          } catch (error) {
+            cancelOrientation();
+            throw error;
+          }
+        }}
+      >
+        {snapshot.busy ? m.knowledge_discovery_preparing({}, options) : label}
+      </Button>
+    );
+  }
 
   useLayoutEffect(() => {
-    if (previousMore.current && exhausted && endRef.current && document.activeElement === moreRef.current)
-      endRef.current.focus();
-    previousMore.current = !!next && snapshot.state === 'ready';
-  }, [exhausted, next, snapshot.state]);
+    return () => {
+      keyboardActivation.current = null;
+      cancelOrientation();
+    };
+  }, [cancelOrientation, locale, returnTo]);
+
+  useLayoutEffect(() => {
+    const request = orientationRequest.current;
+    if (!request || snapshot === request.source) return;
+    if (snapshot.state === 'retired' || snapshot.cursor !== request.expectedCursor) {
+      cancelOrientation();
+      return;
+    }
+    if (snapshot.busy) {
+      if (snapshot.state !== 'preparing') cancelOrientation();
+      return;
+    }
+
+    const currentBoundary =
+      snapshot.state === 'ready' ||
+      (snapshot.state === 'preparing' && !!snapshot.frontier) ||
+      snapshot.state === 'denied' ||
+      snapshot.state === 'unavailable' ||
+      snapshot.state === 'restart';
+    if (!currentBoundary) {
+      cancelOrientation();
+      return;
+    }
+
+    cancelOrientation();
+    const boundary = boundaryRef.current;
+    if (
+      boundary?.isConnected &&
+      boundary.getClientRects().length > 0 &&
+      !boundary.closest('[hidden], [inert], [aria-hidden="true"]') &&
+      window.getComputedStyle(boundary).visibility === 'visible'
+    )
+      boundary.focus();
+  }, [cancelOrientation, snapshot]);
+
+  const hasStateDescription =
+    initialPreparing ||
+    snapshot.state === 'denied' ||
+    snapshot.state === 'unavailable' ||
+    snapshot.state === 'restart' ||
+    preparingContinuation ||
+    empty ||
+    sparse ||
+    (exhausted && documents.length > 0);
+  let presentationState: string;
+  if (snapshot.state === 'preparing') {
+    presentationState = snapshot.frontier
+      ? 'preparing-frontier'
+      : replacing
+        ? 'replacing-results'
+        : 'initial-preparation';
+  } else if (snapshot.state === 'ready') {
+    presentationState = sparse
+      ? 'sparse-continuation'
+      : empty
+        ? 'empty-terminal'
+        : exhausted
+          ? 'nonempty-exhaustion'
+          : 'results';
+  } else {
+    presentationState = snapshot.state;
+  }
 
   return (
     <section
+      ref={boundaryRef}
       data-slot="subject-knowledge"
-      className="min-w-0 space-y-4 text-foreground selection:bg-primary/20 [overflow-wrap:anywhere]"
+      data-discovery-state={presentationState}
+      tabIndex={-1}
+      className="min-w-0 space-y-4 text-foreground selection:bg-primary/20 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
       aria-labelledby={headingId}
+      aria-describedby={hasStateDescription ? `${introId} ${descriptionId}` : introId}
       aria-busy={snapshot.busy || initialPreparing}
     >
       <header className="min-w-0 space-y-2">
         <h2 id={headingId} className="text-base font-semibold">
           {m.knowledge_discovery_heading({}, options)}
         </h2>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+        <p id={introId} className="max-w-prose text-sm leading-relaxed text-muted-foreground">
           {m.knowledge_discovery_intro({}, options)}
         </p>
       </header>
       {initialPreparing ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
           {m.knowledge_discovery_preparing({}, options)}
         </p>
       ) : null}
       {snapshot.state === 'denied' ? (
         <DiscoveryNotice
-          locale={locale}
           message={m.knowledge_discovery_denied({}, options)}
-          action={onRetry}
-          actionLabel={m.knowledge_discovery_retry({}, options)}
-          busy={snapshot.busy}
+          descriptionId={descriptionId}
+          action={actionButton('retry', onRetry, m.knowledge_discovery_retry({}, options), snapshot.cursor)}
         />
       ) : null}
       {snapshot.state === 'unavailable' ? (
         <DiscoveryNotice
-          locale={locale}
           message={m.knowledge_discovery_unavailable({}, options)}
+          descriptionId={descriptionId}
           alert
-          action={onRetry}
-          actionLabel={m.knowledge_discovery_retry({}, options)}
-          busy={snapshot.busy}
+          action={actionButton('retry', onRetry, m.knowledge_discovery_retry({}, options), snapshot.cursor)}
         />
       ) : null}
       {snapshot.state === 'restart' ? (
         <DiscoveryNotice
-          locale={locale}
           message={m.knowledge_discovery_restart_needed({}, options)}
+          descriptionId={descriptionId}
           alert
-          action={onRestart}
-          actionLabel={m.knowledge_discovery_restart({}, options)}
-          busy={snapshot.busy}
+          action={actionButton('restart', onRestart, m.knowledge_discovery_restart({}, options), null)}
         />
       ) : null}
       {preparingContinuation ? (
         <DiscoveryNotice
-          locale={locale}
           message={m.knowledge_discovery_preparing({}, options)}
-          action={onContinue}
-          actionLabel={m.knowledge_discovery_continue({}, options)}
-          busy={snapshot.busy}
+          descriptionId={descriptionId}
+          action={actionButton(
+            'continue',
+            onContinue,
+            m.knowledge_discovery_continue({}, options),
+            snapshot.frontier ?? null,
+          )}
         />
       ) : null}
       {empty ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
           {m.knowledge_discovery_empty({}, options)}
         </p>
       ) : null}
       {sparse ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
           {m.knowledge_discovery_sparse({}, options)}
         </p>
       ) : null}
+      {exhausted && documents.length > 0 ? (
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
+          {m.knowledge_discovery_end({}, options)}
+        </p>
+      ) : null}
+      {next
+        ? actionButton('more', onMore, m.knowledge_discovery_more({}, options), next)
+        : null}
       {documents.length > 0 ? (
         <ul className="min-w-0 space-y-1">
           {documents.map((document) => (
@@ -232,28 +398,6 @@ export function KnowledgeDiscoveryPanel({
             />
           ))}
         </ul>
-      ) : null}
-      {next ? (
-        <Button
-          ref={moreRef}
-          type="button"
-          variant="outline"
-          className={controlClass}
-          disabled={snapshot.busy}
-          onClick={onMore}
-        >
-          {snapshot.busy ? m.knowledge_discovery_preparing({}, options) : m.knowledge_discovery_more({}, options)}
-        </Button>
-      ) : null}
-      {exhausted && documents.length > 0 ? (
-        <p
-          ref={endRef}
-          tabIndex={-1}
-          role="status"
-          className="text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {m.knowledge_discovery_end({}, options)}
-        </p>
       ) : null}
     </section>
   );
