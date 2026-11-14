@@ -57,11 +57,6 @@ explicit choice; an unknown browser copy remains inspectable but cannot resume. 
 submitted title, source, source revision and saved time separately from the later current read; browser submission
 also names the selected server revision used by the native command.
 
-Decision: Footnotes require an independent Document outcome that owns the snapshot format, editor and Markdown
-import support, accessible shared reading disclosure, owner documentation and focused acceptance. Own drafts
-integrates only after Document delivers its adopted public format and disclosure port; it does not invent footnote
-payloads. Schedule the Document prerequisite before briefing the dependent Own drafts integration.
-
 ## Footnote prerequisite
 
 [Document ownership](../../../../../packages/document/README.md) must define the public snapshot representation and
@@ -76,10 +71,11 @@ retirement of its state when the supplied document or reading visit changes. Its
   [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
 
 Decision: Consume footnotes unchanged through the existing private `PostReadingBody` caller after Document adopts
-and delivers its snapshot format and public reading disclosure port. Delivery requires the Document profile schemas,
-editor and Markdown preservation, and shared accessible reading controls; scheduling completion or consumer
-documentation alone cannot supply those contracts. The integration brief must identify the supported representation,
-controls and named story states before consumer fixtures and stories are written.
+and delivers its snapshot format and public reading disclosure port. Bind the consumer dependency to the implementation
+change in `packages/document` and `packages/ui`, rather than the prerequisite documentation change. That implementation
+owns the Document profile schemas, editor and Markdown preservation, and shared accessible reading controls. Its
+integration brief must identify the supported representation, controls and named story states before consumer fixtures
+and stories are written; Own drafts does not invent footnote payloads or controls.
 Until that implementation arrives, preserve the existing consumer source, assertions, messages and named stories.
 The next independent outcome is the producer in `packages/document` and `packages/ui`; dispatch the consumer
 continuation after that implementation and its integration brief, rather than after prerequisite documentation.
