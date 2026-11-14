@@ -1979,7 +1979,7 @@ async function publishShowcasePhases(
     const currentAdoption = adoptionSnapshot(previous);
     const adoptionKey = groupKey(childId, 'skos:broader');
     adoptionSnapshots.set(adoptionKey, currentAdoption);
-    const priorSelection = Array.isArray(previous?.selection) ? previous.selection : [];
+    const priorSelection = currentAdoption?.selection ?? [];
     const selections = new Map<string, CandidateRank>();
     let parentRetirementUnavailable = false;
     for (const item of priorSelection) {
@@ -2238,7 +2238,6 @@ async function publishShowcasePhases(
       continue;
     }
     const previous = page.adoption;
-    const priorSelection = Array.isArray(previous?.selection) ? previous.selection : [];
     if (previous && !Array.isArray(previous.selection)) {
       omissions.push({
         provider: group.record.provider,
@@ -2250,6 +2249,7 @@ async function publishShowcasePhases(
     }
     const currentAdoption = adoptionSnapshot(previous);
     adoptionSnapshots.set(key, currentAdoption);
+    const priorSelection = currentAdoption?.selection ?? [];
     if (refreshWeights || refreshMemberships) {
       const state = await currentFactsFence(input.review, input.aliases.vndb, group.record.sourceKey);
       if (state !== 'open') {
