@@ -56,6 +56,23 @@ confirming that intent; exact replay remains deliberate. Population disclosure s
 reader lease, with no private payload added to SSR. Library facts supply no public count or authority. Review
 entries stay manually editable. The [private inventory](../../ratings/own-votes/README.md) owns original-pair edits.
 
+Decision: the shared personal rating control explains preparation, signed-out sign-in and unavailable current
+answers with distinct localized text beside the personal heading. Unavailability establishes neither permission
+nor an absent vote; only an admitted answer displays zero or unrated. Both ordinary rating consumers retain
+independent public figures and question context. This is O(1) local presentation with zero reads and existing
+navigation; it adds no recovery action. Existing sign-in and original-command recovery labels wrap with visible
+focus and minimum 44px targets.
+
+`subject-personal-reader.tsx` is the Web owner of private reader admission and lifetime. Content retains question,
+vote and private read admission. Content's dev `f9a4c2f` confirmation and the current `useSubjectPersonalReader` /
+`RatingControlContext` expose no source-owned private own-answer/session Retry capability. `retryRatingSource`
+is public only; `RatingRecoveryView` retry/read belong to the captured uncertain command. That missing private
+recovery capability is an independent follow-up, not a prerequisite for this explanation. Original intent, sender,
+key and CSRF stay captured; even matching current readback does not confirm delivery. Source, reader, credential,
+exposure and locale retirement keep their existing authority; question/scale changes never rewrite original intent.
+The focused rating-control and form-identity tests pin these states and retained recovery; execution, the ordinary
+mounted failure/recovery visit, native phone/desktop review and promoted acceptance remain verifier obligations.
+
 ## Subject purchase entry slot
 
 `AppShellProps.subjectPurchase` accepts `SubjectPurchaseRegions` from

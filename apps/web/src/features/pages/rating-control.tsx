@@ -156,31 +156,34 @@ export function RatingControlView({
     if (!editing.current && !pending && !preserveDraft) setDraft(state.kind === 'ready' ? state.units : null);
   }, [pending, preserveDraft, state.kind, state.kind === 'ready' ? state.units : null]);
 
-  if (state.kind === 'unavailable')
-    return <div aria-hidden="true" className="min-h-12" data-slot="rating-control-reserved" />;
-
-  if (state.kind === 'signed-out')
+  if (state.kind !== 'ready')
     return (
-      <div className="min-h-12 min-w-0" data-slot="rating-control-reserved">
-        <a
-          className={`inline-flex items-center text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80 ${actionClassName}`}
-          href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
-        >
-          {m.account_sign_in({}, options)}
-        </a>
-        {fallback}
-      </div>
-    );
-
-  if (state.kind === 'unknown')
-    return (
-      <div aria-busy="true" className="min-h-12" data-slot="rating-control-reserved">
+      <div
+        aria-busy={state.kind === 'unknown' ? true : undefined}
+        className="min-h-12 min-w-0 space-y-2"
+        data-slot="rating-control-reserved"
+      >
+        <p className="text-sm text-muted-foreground wrap-anywhere" role="status">
+          {state.kind === 'unknown'
+            ? m.subject_rating_control_preparing({}, options)
+            : state.kind === 'signed-out'
+              ? m.subject_rating_control_signed_out({}, options)
+              : m.subject_rating_control_unavailable({}, options)}
+        </p>
+        {state.kind === 'signed-out' && (
+          <a
+            className={`inline-flex items-center text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80 ${actionClassName}`}
+            href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
+          >
+            {m.account_sign_in({}, options)}
+          </a>
+        )}
         {failure !== null && (
           <p className="text-sm" role="status">
             {failure}
           </p>
         )}
-        {fallback}
+        {state.kind !== 'unavailable' && fallback}
       </div>
     );
 
