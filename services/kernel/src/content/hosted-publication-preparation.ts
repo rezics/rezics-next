@@ -178,9 +178,10 @@ function preparationCommand(
     const authorization: CommandAuthorization = {
       ...stageBoundAuthorization,
       async prepare(attempt) {
-        const evidence = await stageBoundAuthorization.prepare!(attempt);
+        // Receipt preflight already checks current authority; let foreign attachment reads finish
+        // before preparing the evidence reused by the final authorization at this command time.
         if (prepareWork) preparedByTime.set(attempt.time, await prepareWork(attempt));
-        return evidence;
+        return stageBoundAuthorization.prepare!(attempt);
       },
     };
     const commandInput = {

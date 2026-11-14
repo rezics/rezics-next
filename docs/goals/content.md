@@ -62,12 +62,12 @@ Decision: Report and moderation reads use one Content-owned repeatable-read tran
 deadline; unresolved native I/O is discarded without queuing rollback behind it.
 
 Decision: Content owns large-serial Book release-candidate acceptance; Web links to it for the mounted journey.
-Chapter count, outline count and a complete release have no 512 business ceiling. Request envelopes, pages and
-preparation steps may be capped under [architecture's bounds](../architecture.md), without limiting total book size.
-An author can publish one new chapter or one selected exact chapter revision with bounded local index and ancestor
-work and an atomic public pointer change, without copying or revalidating every existing chapter. Large initial and
-whole-book publication consume exact selections in bounded resumable steps; the prior release remains visible until
-the complete new selection is atomically published. Before a first release completes, preparation stays private.
+Chapter, outline and complete-release size has no 512 ceiling; request envelopes, pages and preparation steps may
+follow [architecture bounds](../architecture.md) without limiting total book size. Authors publish a new chapter or
+exact selected revision with bounded index/ancestor work and an atomic pointer change, without copying/revalidating
+prior chapters. Initial and whole-book builds use exact bounded resumable steps; the prior release stays visible until
+atomic publication, and work stays private before the first release. Staged advance preflights current receipt
+authority, reads foreign attachments, then refreshes same-attempt Access evidence before the original deadline.
 
 Decision: The kernel route inventory lists `prepareRelease` and all six installed preparation-stage methods using
 internal `/$method` paths; activation routes remain with their existing owner. Pin that unmounted factory with the
