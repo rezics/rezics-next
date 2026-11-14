@@ -80,6 +80,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       }
       if (provider === 'bangumi' && table === 'subject-persons') {
         yield { subject_id: 101, person_id: 11, position: 2, creditedAs: 'Chief Director' };
+        yield { subject_id: 101, person_id: 13, position: 41 };
         yield { subject_id: 101, person_id: 99, position: 2 };
       }
       if (provider === 'bangumi' && table === 'person-characters')
@@ -92,6 +93,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       if (provider === 'bangumi' && table === 'person') {
         yield { id: 11, type: 1, name: 'Director' };
         yield { id: 12, type: 1, name: 'Voice performer' };
+        yield { id: 13, type: 1, name: 'Assistant director' };
       }
       if (provider === 'bangumi' && table === 'character') yield { id: 21, name: 'Ari' };
     },
@@ -115,6 +117,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
             {
               property: { id: property },
               value: { type: 'value', content: identity![2] },
+              rank: 'normal',
               references: [
                 {
                   parts: [
@@ -209,9 +212,10 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       const key = `${id}\0${action.property}`;
       const next = { head: (adopted.get(key)?.head ?? 0) + 1, selection: action.selection };
       adopted.set(key, next);
-      subjects.get(id)!.statements[action.property] = action.selection.map(
-        ({ candidate }) => candidates.get(candidate)!.statement,
-      );
+      subjects.get(id)!.statements[action.property] = action.selection.map(({ candidate, rank }) => ({
+        ...candidates.get(candidate)!.statement,
+        rank,
+      }));
       return {
         adoption: { context: globalContext, property: action.property, mode: 'replace', ...next },
         revision: 1,
@@ -286,7 +290,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     );
     expect(publication.status).toBe('incomplete');
     expect(accepted.size).toBeGreaterThan(0);
-    expect(result.creditRoles).toHaveLength(1);
+    expect(result.creditRoles?.map((item) => item.code)).toEqual(['2', '41']);
     expect(publication.omissions).not.toContainEqual(
       expect.objectContaining({ sourceKey: '101', code: 'source-uri-not-current' }),
     );
@@ -295,7 +299,8 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     expect(
       staff?.qualifiers?.some(
         (qualifier) =>
-          qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === result.creditRoles![0]!.conceptId,
+          qualifier.property.id === 'wdt:P3831' &&
+          valueContent(qualifier) === result.creditRoles!.find((item) => item.code === '2')!.conceptId,
       ),
     ).toBe(true);
     expect(
@@ -324,13 +329,127 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         path: '/subject-persons/101/99/position',
       }),
     );
-    const role = result.creditRoles![0]!;
+    const role = result.creditRoles!.find((item) => item.code === '2')!;
     const concept = (await publicClient.readSubject(role.conceptId)).subject as {
       statements: Record<string, readonly BatchStatement[]>;
     };
     expect(valueContent(concept.statements['schema:sameAs']?.[0])).toBe(role.uri);
     expect(valueContent(concept.statements['skos:inScheme']?.[0])).toBe(role.schemeId);
     expect(accepted.size).toBeGreaterThan(0);
+
+    const roleSubject = subjects.get(role.conceptId)!;
+    const roleRequirement = resolution!.requirements.find((item) => item.sourceKey === `bangumi.staff:${role.code}`)!;
+    const expectedValues = {
+      'schema:url': roleRequirement.sourceUri,
+      'schema:sameAs': role.uri,
+      'skos:inScheme': role.schemeId,
+    };
+    const evidence = (
+      property: keyof typeof expectedValues,
+      content: string,
+      rank: 'normal' | 'preferred' | 'deprecated',
+    ): Record<string, unknown> => ({
+      ...structuredClone(roleSubject.statements[property]![0] as Record<string, unknown>),
+      property: { id: property },
+      value: { type: 'value', content },
+      rank,
+    });
+    const setRoleEvidence = (
+      ranks: Record<keyof typeof expectedValues, 'normal' | 'preferred' | 'deprecated'>,
+      withDeprecatedAlternative = false,
+    ) => {
+      for (const property of Object.keys(expectedValues) as (keyof typeof expectedValues)[]) {
+        const exact = evidence(property, expectedValues[property], ranks[property]);
+        roleSubject.statements[property] = withDeprecatedAlternative
+          ? [
+              evidence(
+                property,
+                property === 'skos:inScheme' ? globalContext : `${expectedValues[property]}/retired`,
+                'deprecated',
+              ),
+              exact,
+            ]
+          : [exact];
+      }
+    };
+    const readBindings = (
+      readSubject: (id: string) => Promise<ReviewedSubjectRead | null> = async (id) => read(id),
+    ) =>
+      currentBangumiCreatorCreditBindings({
+        resolution: resolution!,
+        acknowledgements: journal.acknowledgedCommands(),
+        read: readSubject,
+      });
+    const roleCodes = (value: BangumiCreditVocabularyResolution) =>
+      value.roles.map((item) => item.code).sort((left, right) => left.localeCompare(right));
+
+    setRoleEvidence({ 'schema:url': 'preferred', 'schema:sameAs': 'normal', 'skos:inScheme': 'preferred' });
+    expect(roleCodes(await readBindings())).toEqual(['2', '41']);
+
+    setRoleEvidence({ 'schema:url': 'deprecated', 'schema:sameAs': 'deprecated', 'skos:inScheme': 'deprecated' });
+    expect(roleCodes(await readBindings())).toEqual(['41']);
+
+    setRoleEvidence(
+      { 'schema:url': 'normal', 'schema:sameAs': 'preferred', 'skos:inScheme': 'normal' },
+      true,
+    );
+    expect(roleCodes(await readBindings())).toEqual(['2', '41']);
+
+    setRoleEvidence({ 'schema:url': 'normal', 'schema:sameAs': 'normal', 'skos:inScheme': 'preferred' });
+    expect(roleCodes(await readBindings(async (id) => (id === role.conceptId ? null : read(id))))).toEqual(['41']);
+    expect(roleCodes(await readBindings())).toEqual(['2', '41']);
+
+    const prior = resolution!.publication!;
+    const acknowledgementCount = journal.acknowledgedCommands().length;
+    journal.close();
+    journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+    const reopened = await prepareBangumiCreatorCreditBindings({
+      plan,
+      result,
+      drafts: plan.credits,
+      port: captureShowcaseCommands(basePort, journal),
+      journal,
+      review,
+      publicClient,
+      prior,
+      subjectTypes: [2],
+      read: async (id) => publicClient.readSubject(id),
+    });
+    expect(roleCodes(reopened)).toEqual(['2', '41']);
+    expect(journal.acknowledgedCommands()).toHaveLength(acknowledgementCount);
+    resolution = reopened;
+
+    setRoleEvidence({ 'schema:url': 'deprecated', 'schema:sameAs': 'deprecated', 'skos:inScheme': 'deprecated' });
+    for (const property of Object.keys(expectedValues) as (keyof typeof expectedValues)[]) {
+      const assertionCandidate = [...candidates.values()].find(
+        (candidate) =>
+          candidate.source.external_id === roleRequirement.source.external_id &&
+          candidate.statement.property.id === property,
+      )!;
+      const key = `${role.conceptId}\0${property}`;
+      const current = adopted.get(key)!;
+      adopted.set(key, {
+        ...current,
+        selection: current.selection.filter((selection) => selection.candidate !== assertionCandidate.id),
+      });
+    }
+    const unpublishedRolePrior = {
+      manifest: prior.manifest,
+      published: prior.published.filter((item) => item.sourceKey !== `bangumi.staff:${role.code}`),
+    };
+    const recovered = await prepareBangumiCreatorCreditBindings({
+      plan,
+      result,
+      drafts: plan.credits,
+      port: captureShowcaseCommands(basePort, journal),
+      journal,
+      review,
+      publicClient,
+      prior: unpublishedRolePrior,
+      subjectTypes: [2],
+      read: async (id) => publicClient.readSubject(id),
+    });
+    expect(roleCodes(recovered)).toEqual(['2', '41']);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
