@@ -27,7 +27,11 @@ test('Follow snapshots bound checkout, discard uncertain phases, and commit succ
   let resolveLate!: (client: PoolClient) => void;
   const late = connection(),
     checkout = new Promise<PoolClient>((resolve) => (resolveLate = resolve));
-  const read = withFollowDiscoveryReadConnection(pool(() => checkout), Date.now() + 20, async () => 'unreachable');
+  const read = withFollowDiscoveryReadConnection(
+    pool(() => checkout),
+    Date.now() + 20,
+    async () => 'unreachable',
+  );
   await expect(read).rejects.toThrow();
   resolveLate(late.client);
   expect(late.statements).toEqual([]);
@@ -66,18 +70,26 @@ test('Follow snapshots bound checkout, discard uncertain phases, and commit succ
       sql === 'ROLLBACK' ? Promise.reject(new Error('rollback failed')) : Promise.resolve({ rows: [] }),
     );
   await expect(
-    withFollowDiscoveryReadConnection(pool(async () => cleanup.client), Date.now() + 5_000, async () => {
-      throw primary;
-    }),
+    withFollowDiscoveryReadConnection(
+      pool(async () => cleanup.client),
+      Date.now() + 5_000,
+      async () => {
+        throw primary;
+      },
+    ),
   ).rejects.toBe(primary);
   expect(await cleanup.released).toBeInstanceOf(Error);
 
   const successful = connection();
   expect(
-    await withFollowDiscoveryReadConnection(pool(async () => successful.client), Date.now() + 5_000, async (client) => {
-      await client.query('SELECT private');
-      return 'current';
-    }),
+    await withFollowDiscoveryReadConnection(
+      pool(async () => successful.client),
+      Date.now() + 5_000,
+      async (client) => {
+        await client.query('SELECT private');
+        return 'current';
+      },
+    ),
   ).toBe('current');
   expect(successful.statements).toEqual([
     'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
