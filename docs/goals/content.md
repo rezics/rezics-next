@@ -149,6 +149,9 @@ consumer-owned ports; bind independent Community/Semantic evidence and Search ex
 Focused identity, unavailable-authority and final-currentness tests preserve existing outcome assertions; no extra
 stories or positive default-journey claim. Typing is implementation acceptance; the Goal walk owns runtime acceptance.
 
+Decision: Own Realm directory snapshots carry one request deadline through checkout and every transaction statement;
+in-flight timeouts discard the connection, and cleanup never queues rollback after expiry.
+
 Decision: Rating counted preparation/read/finish and vote admission consume required Rating application ports;
 Semantic supplies native adapters through composition. Rating owns exact readback and vote events; Semantic owns
 immutable review operands. Extend vote-review for original actor/Pool/deadline/transaction handoff, receive installed

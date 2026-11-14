@@ -1,16 +1,15 @@
 import {
-  deadlineClient,
   readRealmOwnerLeaveObservation,
   readRealmOwnershipRoles,
   REALM_OWNER_ROLE,
   accessCheck,
 } from './domain-ports.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Actor, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { withOwnRealmsReadSnapshot } from './own-realms-read-connection.ts';
 import { sameOwnRealmMembership, type OwnRealmMembership, type OwnRealmsDependencies } from './own-realms-shape.ts';
 import { createRealmParticipationCheck } from './participation.ts';
 import { readRealm, readRealmSettingsHead, realmReadEligibility } from './realm-read.ts';
@@ -74,119 +73,108 @@ export function createRealmViewerObservation(
         { ...host, eligibility: spaceReadEligibility(host) },
         context,
       );
-      const observed = await withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const observed = await (async () => {
         let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
         try {
-          time = await mintReadTime(client, deps.clock);
-          const at = authoritativeTimeValue(time);
-          const home = await readPartition(client, partitionOf(route));
-          if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-          if (!(await disclose(client, time))) {
-            await client.query('COMMIT');
-            return null;
-          }
-          const realm = await readRealmSettingsHead(client, realmId, at);
-          const source = await bindingRead.run(client, {
-            ...resource,
-            subject: null,
-            at,
+          return await withOwnRealmsReadSnapshot(deps.pool, deadline, async (client) => {
+            time = await mintReadTime(client, deps.clock);
+            const at = authoritativeTimeValue(time);
+            const home = await readPartition(client, partitionOf(route));
+            if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+            if (!(await disclose(client, time))) return null;
+            const realm = await readRealmSettingsHead(client, realmId, at);
+            const source = await bindingRead.run(client, {
+              ...resource,
+              subject: null,
+              at,
+            });
+            if (
+              !realm ||
+              !source ||
+              realm.spaceId !== host.id ||
+              realm.headRevisionId !== initial.headRevisionId ||
+              source.head_revision_id !== initial.headRevisionId
+            )
+              throw retry();
+            const row =
+              actor.kind === 'account'
+                ? await membershipRead.run(client, {
+                    route,
+                    realm_id: realmId,
+                    account_id: actor.accountId,
+                    at,
+                  })
+                : null;
+            if (row && (row.since === null || !Number.isFinite(Date.parse(row.since))))
+              throw new ProblemError('dependency_unavailable');
+            const membership = row ? { ...row, since: row.since!, epoch: home.epoch } : null;
+            if (selected && (!membership || !sameOwnRealmMembership(selected, membership))) throw retry();
+            const mayManage = await manage(client, time);
+            const mayLeave = actor.kind === 'account' && membership !== null && (await leave(client, time));
+            // Direct-role data only selects the writer's invariant. It grants nothing.
+            const roles =
+              mayLeave && actor.kind === 'account'
+                ? await readRealmOwnershipRoles(client, {
+                    resource,
+                    accountId: actor.accountId,
+                    at: time,
+                  })
+                : [];
+            const owner = roles.some((role) => role.role === REALM_OWNER_ROLE);
+            const ownership =
+              mayLeave && owner && actor.kind === 'account'
+                ? await readRealmOwnerLeaveObservation(client, {
+                    resource,
+                    accountId: actor.accountId,
+                    at: time,
+                  })
+                : null;
+            if (ownership && !ownership.owner) throw retry();
+            if (ownership && !ownership.source) throw retry();
+            const hostReadable = mayManage && (await discloseHost(client, time));
+            return {
+              realm,
+              source: {
+                realmId,
+                headRevisionId: source.head_revision_id,
+                lifecycleVersion: source.realm_version,
+                spaceId: source.space_id,
+                spaceHeadRevisionId: source.space_head,
+                spaceLifecycleVersion: source.space_version,
+                contextId: source.context_id,
+                node: home.node,
+                epoch: home.epoch,
+                owner: ownership ? { roles, source: ownership.source } : null,
+              },
+              membership,
+              actions: {
+                state: 'current' as const,
+                enter: command('GET', `/v1/realms/${realmId}`, 200),
+                manage: realm.governanceReadOnly
+                  ? prohibited('governance_read_only')
+                  : mayManage && hostReadable
+                    ? command('GET', `/v1/realms/${realmId}/settings`, 200)
+                    : prohibited('not_authorized'),
+                leave:
+                  actor.kind !== 'account'
+                    ? prohibited('signed_out')
+                    : !membership
+                      ? prohibited('not_member')
+                      : !mayLeave
+                        ? prohibited('not_authorized')
+                        : owner && !ownership?.remaining
+                          ? {
+                              state: 'unavailable' as const,
+                              reason: 'last_explicit_holder' as const,
+                            }
+                          : command('DELETE', `/v1/realms/${realmId}/membership`, 202),
+              },
+            };
           });
-          if (
-            !realm ||
-            !source ||
-            realm.spaceId !== host.id ||
-            realm.headRevisionId !== initial.headRevisionId ||
-            source.head_revision_id !== initial.headRevisionId
-          )
-            throw retry();
-          const row =
-            actor.kind === 'account'
-              ? await membershipRead.run(client, {
-                  route,
-                  realm_id: realmId,
-                  account_id: actor.accountId,
-                  at,
-                })
-              : null;
-          if (row && (row.since === null || !Number.isFinite(Date.parse(row.since))))
-            throw new ProblemError('dependency_unavailable');
-          const membership = row ? { ...row, since: row.since!, epoch: home.epoch } : null;
-          if (selected && (!membership || !sameOwnRealmMembership(selected, membership))) throw retry();
-          const mayManage = await manage(client, time);
-          const mayLeave = actor.kind === 'account' && membership !== null && (await leave(client, time));
-          // Direct-role data only selects the writer's invariant. It grants nothing.
-          const roles =
-            mayLeave && actor.kind === 'account'
-              ? await readRealmOwnershipRoles(client, {
-                  resource,
-                  accountId: actor.accountId,
-                  at: time,
-                })
-              : [];
-          const owner = roles.some((role) => role.role === REALM_OWNER_ROLE);
-          const ownership =
-            mayLeave && owner && actor.kind === 'account'
-              ? await readRealmOwnerLeaveObservation(client, {
-                  resource,
-                  accountId: actor.accountId,
-                  at: time,
-                })
-              : null;
-          if (ownership && !ownership.owner) throw retry();
-          if (ownership && !ownership.source) throw retry();
-          const hostReadable = mayManage && (await discloseHost(client, time));
-          await client.query('COMMIT');
-          return {
-            realm,
-            source: {
-              realmId,
-              headRevisionId: source.head_revision_id,
-              lifecycleVersion: source.realm_version,
-              spaceId: source.space_id,
-              spaceHeadRevisionId: source.space_head,
-              spaceLifecycleVersion: source.space_version,
-              contextId: source.context_id,
-              node: home.node,
-              epoch: home.epoch,
-              owner: ownership ? { roles, source: ownership.source } : null,
-            },
-            membership,
-            actions: {
-              state: 'current' as const,
-              enter: command('GET', `/v1/realms/${realmId}`, 200),
-              manage: realm.governanceReadOnly
-                ? prohibited('governance_read_only')
-                : mayManage && hostReadable
-                  ? command('GET', `/v1/realms/${realmId}/settings`, 200)
-                  : prohibited('not_authorized'),
-              leave:
-                actor.kind !== 'account'
-                  ? prohibited('signed_out')
-                  : !membership
-                    ? prohibited('not_member')
-                    : !mayLeave
-                      ? prohibited('not_authorized')
-                      : owner && !ownership?.remaining
-                        ? {
-                            state: 'unavailable' as const,
-                            reason: 'last_explicit_holder' as const,
-                          }
-                        : command('DELETE', `/v1/realms/${realmId}/membership`, 202),
-            },
-          };
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(connection, rollbackError as Error);
-          }
-          throw error;
         } finally {
           if (time) releaseOperationalTime(time);
         }
-      });
+      })();
       if (!observed) return null;
       const allowed = await participation(deps.pool as unknown as AccessClient, { realmId, actor });
       requireIdentity();

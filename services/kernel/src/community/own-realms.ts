@@ -1,12 +1,11 @@
-import type { Pool } from 'pg';
-import { deadlineClient, MembershipInverseIncompleteError, requireMembershipInverseReady } from './domain-ports.ts';
+import { MembershipInverseIncompleteError, requireMembershipInverseReady } from './domain-ports.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { withOwnRealmsReadSnapshot } from './own-realms-read-connection.ts';
 import { hydrateOwnRealms } from './own-realms-view.ts';
 import { sameOwnRealmMembership, type OwnRealmMembership, type OwnRealmsDependencies } from './own-realms-shape.ts';
 import inversePage from './own-realms-inverse-page.sql';
@@ -33,25 +32,6 @@ function binding(actor: AccountActor) {
   };
 }
 
-async function snapshot<T>(pool: Pool, deadline: number, read: (client: AccessClient) => Promise<T>): Promise<T> {
-  return withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const result = await read(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(connection, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
-}
-
 async function accountEpoch(client: AccessClient, actor: AccountActor): Promise<number> {
   try {
     await requireMembershipInverseReady(client, actor);
@@ -76,7 +56,7 @@ export async function observeOwnRealmMembership(
 ): Promise<OwnRealmMembership | null> {
   const route = routeOf(realmId);
   if (route === null) return null;
-  return snapshot(deps.pool, context.deadline, async (client) => {
+  return withOwnRealmsReadSnapshot(deps.pool, context.deadline, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
     const member = await confirmMembership.run(client, {
@@ -109,7 +89,9 @@ export async function listOwnRealms(
   };
   const accountRoute = routeOf(viewer.accountId);
   if (accountRoute === null) throw new ProblemError('authentication_required');
-  const epoch = await snapshot(dependencies.pool, context.deadline, (client) => accountEpoch(client, viewer));
+  const epoch = await withOwnRealmsReadSnapshot(dependencies.pool, context.deadline, (client) =>
+    accountEpoch(client, viewer),
+  );
   let after = START_AFTER;
   if (input.cursor !== undefined) {
     const cursor = decodeCursor(dependencies.tokens, binding(viewer), input.cursor);
@@ -119,7 +101,7 @@ export async function listOwnRealms(
     after = cursor.after[0];
   }
   const scan = (key: string, limit: number) =>
-    snapshot(dependencies.pool, context.deadline, async (client) => {
+    withOwnRealmsReadSnapshot(dependencies.pool, context.deadline, async (client) => {
       requireSameViewer();
       if ((await accountEpoch(client, viewer)) !== epoch) throw new ProblemError('stale_cursor');
       return inversePage.run(client, {
@@ -167,7 +149,7 @@ export async function listOwnRealms(
     const current = await observeOwnRealmMembership(dependencies, viewer, member.realmId, { ...context, at });
     if (!sameOwnRealmMembership(member, current)) throw new ProblemError('transaction_retry_exhausted');
   }
-  await snapshot(dependencies.pool, context.deadline, async (client) => {
+  await withOwnRealmsReadSnapshot(dependencies.pool, context.deadline, async (client) => {
     if ((await accountEpoch(client, viewer)) !== epoch) throw new ProblemError('stale_cursor');
   });
   requireSameViewer();
