@@ -284,3 +284,29 @@ test('without JavaScript each kind form posts its own statuses and the server ac
   expect(await csrfTokenFromRequest(csrfRequest)).toBe('token');
   expect(await csrfTokenFromRequest(new Request('https://site.test/en/settings', csrfRequest))).toBeNull();
 });
+
+test('ordinary Copy forms omit unchanged condition fields and preserve explicit unknown and clear independently', async () => {
+  const profile = resolved();
+  profile.kinds[0]!.condition = 'physical-v1';
+  const html = markup(views.CopiesFallback, { page: page([copy()], profile) });
+  expect(options(html, 'mediaCondition')).toContain('unknown');
+  const omitted = transport();
+  expect(
+    (await actions.postCopyForm(omitted.client, posted(html, { mediaCondition: '', packagingCondition: '' }), {})).ok,
+  ).toBe(true);
+  expect(omitted.calls).toHaveLength(1);
+  expect(omitted.calls[0]!.body).not.toHaveProperty('mediaCondition');
+  expect(omitted.calls[0]!.body).not.toHaveProperty('packagingCondition');
+
+  const edited = transport();
+  const update = posted(html, {
+    intent: 'update',
+    id: 'copy-1',
+    revision: '1',
+    mediaCondition: 'unknown',
+    packagingCondition: '__clear__',
+  });
+  expect((await actions.postCopyForm(edited.client, update, {})).ok).toBe(true);
+  expect(edited.calls).toHaveLength(1);
+  expect(edited.calls[0]!.body).toMatchObject({ mediaCondition: 'unknown', packagingCondition: null });
+});
