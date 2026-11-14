@@ -1168,10 +1168,17 @@ test('cancellation distinguishes native refusal and expiry; pending create canno
 test('review and ready put the primary action before inspection and restore while keeping all omissions visible', async () => {
   const fixture = recordingPort(pagesFor(1));
   const files: ExportArtifact[] = [];
-  await mount(fixture.port, visit(), { deliver: (file) => { files.push(file); return files.length > 1; } });
+  await mount(fixture.port, visit(), {
+    deliver: (file) => {
+      files.push(file);
+      return files.length > 1;
+    },
+  });
   expect(host.contains(document.activeElement)).toBe(false);
   const restore = host.querySelector('nav')!;
-  expect(button(m.library_export_capture())!.compareDocumentPosition(restore) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    button(m.library_export_capture())!.compareDocumentPosition(restore) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   const coverageDetails = host.querySelector('details')!;
   expect(coverageDetails.open).toBe(false);
   expect(coverageDetails.querySelectorAll('ul:first-child > li')).toHaveLength(21);
@@ -1260,11 +1267,19 @@ test('bytes-lost presentation offers original replay rather than download and re
   const complete = await journey.capture();
   const originalCursors = [...fixture.pageCursors];
   const actions: string[] = [];
-  await mount(fixture.port, visit(), {}, <ExportVisitView
-    snapshot={{ ...complete, hasArtifact: false, notice: { kind: 'bytes-lost' } }}
-    onAction={(_event, action) => { actions.push(action); if (action === 'replay') void journey.replay(); }}
-    onLeave={() => journey.retire()}
-  />);
+  await mount(
+    fixture.port,
+    visit(),
+    {},
+    <ExportVisitView
+      snapshot={{ ...complete, hasArtifact: false, notice: { kind: 'bytes-lost' } }}
+      onAction={(_event, action) => {
+        actions.push(action);
+        if (action === 'replay') void journey.replay();
+      }}
+      onLeave={() => journey.retire()}
+    />,
+  );
   expect(button(m.library_export_download())).toBeUndefined();
   expect(host.textContent).toContain(m.library_export_bytes_lost());
   await click(m.library_export_replay());

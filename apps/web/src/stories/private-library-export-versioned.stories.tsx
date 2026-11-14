@@ -3,11 +3,22 @@ import { useState } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { fn } from 'storybook/test';
 import {
-  EXPORT_FORMAT, EXPORT_PRIVACY, EXPORT_COMPLETENESS,
-  EXPORT_SECTIONS_V1, EXPORT_SECTIONS_V2, EXPORT_SECTIONS_V3, EXPORT_SECTIONS_V4,
-  EXPORT_V2_COVERAGE, EXPORT_V3_COVERAGE, EXPORT_V4_COVERAGE,
-  type ExportSectionTotals, type ExportManifest, type ExportManifestV1,
-  type ExportManifestV2, type ExportManifestV3, type ExportManifestV4,
+  EXPORT_FORMAT,
+  EXPORT_PRIVACY,
+  EXPORT_COMPLETENESS,
+  EXPORT_SECTIONS_V1,
+  EXPORT_SECTIONS_V2,
+  EXPORT_SECTIONS_V3,
+  EXPORT_SECTIONS_V4,
+  EXPORT_V2_COVERAGE,
+  EXPORT_V3_COVERAGE,
+  EXPORT_V4_COVERAGE,
+  type ExportSectionTotals,
+  type ExportManifest,
+  type ExportManifestV1,
+  type ExportManifestV2,
+  type ExportManifestV3,
+  type ExportManifestV4,
 } from '../library/private-export/contract';
 import type { ExportJourneySnapshot, ExportStage } from '../library/private-export/controller';
 import { emptyExportCost } from '../library/private-export/cost';
@@ -20,7 +31,8 @@ const meta = {
     layout: 'fullscreen',
     docs: {
       description: {
-        component: 'Illustrative contract-shaped states in the actual routed export presentation. Actions are logged; these fixtures do not perform capture, delivery or restoration and are not native acceptance evidence. Opening is still; choose locale and viewport manually.',
+        component:
+          'Illustrative contract-shaped states in the actual routed export presentation. Actions are logged; these fixtures do not perform capture, delivery or restoration and are not native acceptance evidence. Opening is still; choose locale and viewport manually.',
       },
     },
   },
@@ -32,12 +44,14 @@ const onAction = fn();
 const onLeave = fn();
 
 function RoutedState({ snapshot }: { snapshot: ExportJourneySnapshot }) {
-  const [router] = useState(() => createRouter({
-    routeTree: createRootRoute({
-      component: () => <ExportVisitView snapshot={snapshot} onAction={onAction} onLeave={onLeave} />,
+  const [router] = useState(() =>
+    createRouter({
+      routeTree: createRootRoute({
+        component: () => <ExportVisitView snapshot={snapshot} onAction={onAction} onLeave={onLeave} />,
+      }),
+      history: createMemoryHistory({ initialEntries: ['/en/library/export'] }),
     }),
-    history: createMemoryHistory({ initialEntries: ['/en/library/export'] }),
-  }));
+  );
   return <RouterProvider router={router} />;
 }
 
@@ -107,8 +121,10 @@ const v4Manifest: ExportManifestV4 = {
   sections: [...EXPORT_SECTIONS_V4],
   omissions: {
     ...v3Manifest.omissions,
-    personalImportEvidence: 'Retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
-    reimport: 'Version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
+    personalImportEvidence:
+      'Retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
+    reimport:
+      'Version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
   },
   rows: 9,
   recordBytes: 1932,
@@ -123,7 +139,11 @@ const v4Manifest: ExportManifestV4 = {
   },
 };
 
-function snapshot(stage: ExportStage, manifest: ExportManifest = v4Manifest, extra: Partial<ExportJourneySnapshot> = {}): ExportJourneySnapshot {
+function snapshot(
+  stage: ExportStage,
+  manifest: ExportManifest = v4Manifest,
+  extra: Partial<ExportJourneySnapshot> = {},
+): ExportJourneySnapshot {
   const complete = stage === 'ready' || stage === 'empty' || stage === 'save-failed';
   const captured = stage !== 'coverage';
   return {
@@ -170,34 +190,55 @@ export const Version4SaveFailure: Story = {
 
 export const Version4BytesLostReplay: Story = {
   name: 'Version 4 bytes lost, original replay (illustrative)',
-  render: () => <RoutedState snapshot={snapshot('ready', v4Manifest, {
-    notice: { kind: 'bytes-lost' }, hasArtifact: false, records: 0,
-  })} />,
+  render: () => (
+    <RoutedState
+      snapshot={snapshot('ready', v4Manifest, {
+        notice: { kind: 'bytes-lost' },
+        hasArtifact: false,
+        records: 0,
+      })}
+    />
+  ),
 };
 
 export const UnknownCancellation: Story = {
   name: 'Cancellation outcome unknown (illustrative)',
-  render: () => <RoutedState snapshot={snapshot('cancelling', v4Manifest, {
-    busy: false,
-    pages: 5,
-    notice: { kind: 'unknown', command: { kind: 'cancel', exportId: v4Manifest.exportId } },
-  })} />,
+  render: () => (
+    <RoutedState
+      snapshot={snapshot('cancelling', v4Manifest, {
+        busy: false,
+        pages: 5,
+        notice: { kind: 'unknown', command: { kind: 'cancel', exportId: v4Manifest.exportId } },
+      })}
+    />
+  ),
 };
 
 export const StoredVersion2Replay: Story = {
   name: 'Stored version 2 replay (illustrative)',
-  render: () => <RoutedState snapshot={snapshot('empty', v2Manifest, { notice: { kind: 'bytes-lost' }, hasArtifact: false })} />,
+  render: () => (
+    <RoutedState snapshot={snapshot('empty', v2Manifest, { notice: { kind: 'bytes-lost' }, hasArtifact: false })} />
+  ),
 };
 
 export const StoredVersion1Replay: Story = {
   name: 'Stored version 1 replay (illustrative)',
-  render: () => <RoutedState snapshot={snapshot('ready', v1Manifest, { notice: { kind: 'bytes-lost' }, hasArtifact: false, records: 0 })} />,
+  render: () => (
+    <RoutedState
+      snapshot={snapshot('ready', v1Manifest, { notice: { kind: 'bytes-lost' }, hasArtifact: false, records: 0 })}
+    />
+  ),
 };
 
 export const Version3Assessment: Story = {
   name: 'Version 3 assessment coverage (illustrative)',
   parameters: {
-    docs: { description: { story: 'The original V3 inventory retains 17 totals and assessment vocabulary. This empty illustrative capture does not manufacture a journal or an absent legacy assessment.' } },
+    docs: {
+      description: {
+        story:
+          'The original V3 inventory retains 17 totals and assessment vocabulary. This empty illustrative capture does not manufacture a journal or an absent legacy assessment.',
+      },
+    },
   },
   render: () => <RoutedState snapshot={snapshot('empty', v3Manifest)} />,
 };
@@ -210,12 +251,18 @@ export const Version3SaveRetry: Story = {
 export const Version3FinalTotalsRefusal: Story = {
   name: 'Version 3 final totals refusal (illustrative)',
   parameters: {
-    docs: { description: { story: 'Mismatched final totals produce no artifact. The installed journey owns this refusal.' } },
+    docs: {
+      description: { story: 'Mismatched final totals produce no artifact. The installed journey owns this refusal.' },
+    },
   },
   render: () => <RoutedState snapshot={snapshot('unavailable', v3Manifest, { notice: { kind: 'malformed' } })} />,
 };
 
 export const Version4Empty: Story = {
   name: 'Version 4 empty section totals (illustrative)',
-  render: () => <RoutedState snapshot={snapshot('empty', { ...v4Manifest, rows: 0, recordBytes: 0, sectionTotals: zeroV4Totals })} />,
+  render: () => (
+    <RoutedState
+      snapshot={snapshot('empty', { ...v4Manifest, rows: 0, recordBytes: 0, sectionTotals: zeroV4Totals })}
+    />
+  ),
 };

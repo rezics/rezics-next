@@ -39,7 +39,9 @@ export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveReco
     ] as const;
     return (
       <section aria-labelledby={headingId} className="space-y-4 border-t pt-6">
-        <h2 id={headingId} className="text-lg font-semibold">{m.library_export_restore_heading()}</h2>
+        <h2 id={headingId} className="text-lg font-semibold">
+          {m.library_export_restore_heading()}
+        </h2>
         <p className="text-sm text-muted-foreground">{m.library_export_restore_help()}</p>
         <nav aria-label={m.library_archive_destinations()}>
           <ul className="divide-y">
@@ -66,11 +68,17 @@ export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveReco
   }
   return (
     <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
-      {items.filter((item) => item.id !== current).map((item) => (
-        <a key={item.href} className={`${actionClass} inline-flex items-center underline`} href={localizeHref(item.href)}>
-          {item.label()}
-        </a>
-      ))}
+      {items
+        .filter((item) => item.id !== current)
+        .map((item) => (
+          <a
+            key={item.href}
+            className={`${actionClass} inline-flex items-center underline`}
+            href={localizeHref(item.href)}
+          >
+            {item.label()}
+          </a>
+        ))}
     </nav>
   );
 }

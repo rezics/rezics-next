@@ -40,9 +40,7 @@ export function ExportCoverage({
         </ExportAction>
       </div>
       <details className="rounded-lg border">
-        <summary className={`${actionClass} cursor-pointer font-medium`}>
-          {m.library_export_sections_heading()}
-        </summary>
+        <summary className={`${actionClass} cursor-pointer font-medium`}>{m.library_export_sections_heading()}</summary>
         <div className="space-y-4 px-4 pb-4">
           <ul className="list-disc space-y-2 pl-5 text-sm">
             {EXPORT_SECTIONS_V4.map((section) => (

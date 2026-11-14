@@ -68,9 +68,7 @@ export function ExportTerminal({
   const restartable = stage === 'stale' || stage === 'expired' || stage === 'cancelled' || stage === 'limit';
   return (
     <section className="space-y-4" data-export-stage={stage}>
-      <p>
-        {notice ?? terminalMessage(stage)}
-      </p>
+      <p>{notice ?? terminalMessage(stage)}</p>
       {stage === 'stale' ? <p>{m.library_export_stale_restart()}</p> : null}
       <div className="flex flex-wrap gap-3">
         {restartable && onRestart ? (

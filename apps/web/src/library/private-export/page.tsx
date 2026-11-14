@@ -192,11 +192,7 @@ export function ExportVisitView({
             data-export-outcome="unknown"
           >
             <p>{text}</p>
-            <ExportAction
-              type="button"
-              disabled={snap.busy}
-              onClick={(event) => onAction(event, 'retryUnknown')}
-            >
+            <ExportAction type="button" disabled={snap.busy} onClick={(event) => onAction(event, 'retryUnknown')}>
               {m.library_export_retry_command()}
             </ExportAction>
           </div>

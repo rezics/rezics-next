@@ -10,7 +10,12 @@ const meta = {
   id: 'pages-library-private-export-producer-recordings',
   parameters: {
     layout: 'fullscreen',
-    docs: { description: { component: 'Manual routed journeys using saved V1/V4 producer HTTP responses at their captured clock. Capture and download start only on your action; delivery is simulated. These stories do not establish current native acceptance. Choose locale and viewport manually.' } },
+    docs: {
+      description: {
+        component:
+          'Manual routed journeys using saved V1/V4 producer HTTP responses at their captured clock. Capture and download start only on your action; delivery is simulated. These stories do not establish current native acceptance. Choose locale and viewport manually.',
+      },
+    },
   },
 } satisfies Meta;
 export default meta;
@@ -57,7 +62,12 @@ export const ProviderEvidence: Story = {
 export const SaveRetry: Story = {
   name: 'Version 4 exact save retry (producer responses)',
   parameters: {
-    docs: { description: { story: 'Create a capture, choose Download JSON, then Retry download. The first local delivery fails; the second receives the same artifact.' } },
+    docs: {
+      description: {
+        story:
+          'Create a capture, choose Download JSON, then Retry download. The first local delivery fails; the second receives the same artifact.',
+      },
+    },
   },
   render: () => <RecordedVisit failSave />,
 };

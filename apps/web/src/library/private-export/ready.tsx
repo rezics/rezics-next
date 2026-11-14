@@ -36,14 +36,16 @@ export function ExportReady({
   const warningId = useId();
   // Index the supplied inventory once per manifest; no record traversal or additional reads.
   const sections = useMemo(
-    () => manifest.sections.map((section) => ({
-      section,
-      total: manifest.version === 1
-        ? null
-        : manifest.version === 4
-          ? manifest.sectionTotals[section]
-          : manifest.sectionTotals[section as keyof typeof manifest.sectionTotals],
-    })),
+    () =>
+      manifest.sections.map((section) => ({
+        section,
+        total:
+          manifest.version === 1
+            ? null
+            : manifest.version === 4
+              ? manifest.sectionTotals[section]
+              : manifest.sectionTotals[section as keyof typeof manifest.sectionTotals],
+      })),
     [manifest],
   );
 
@@ -73,11 +75,17 @@ export function ExportReady({
           aria-describedby={`${warningId} ${omissionsId}`}
           onClick={bytesLost ? onReplay : onDownload}
         >
-          {bytesLost ? m.library_export_replay() : saveFailed ? m.library_export_retry_save() : m.library_export_download()}
+          {bytesLost
+            ? m.library_export_replay()
+            : saveFailed
+              ? m.library_export_retry_save()
+              : m.library_export_download()}
         </ExportAction>
       </div>
       <section aria-labelledby={omissionsId} className="space-y-3">
-        <h3 id={omissionsId} className="font-semibold">{m.library_export_omissions_heading()}</h3>
+        <h3 id={omissionsId} className="font-semibold">
+          {m.library_export_omissions_heading()}
+        </h3>
         <p>{m.library_export_full_false()}</p>
         <p className="text-sm">{m.library_export_no_reimport()}</p>
         <dl className="space-y-3 rounded-lg border p-4 text-sm">
@@ -90,9 +98,7 @@ export function ExportReady({
         </dl>
       </section>
       <details className="rounded-lg border">
-        <summary className={`${actionClass} cursor-pointer font-medium`}>
-          {m.library_export_inspect_manifest()}
-        </summary>
+        <summary className={`${actionClass} cursor-pointer font-medium`}>{m.library_export_inspect_manifest()}</summary>
         <div className="space-y-5 px-4 pb-4 text-sm [overflow-wrap:anywhere]">
           <ul className="space-y-2">
             <li>{m.library_export_manifest_identity({ value: manifest.exportId })}</li>
@@ -102,7 +108,9 @@ export function ExportReady({
               <li>{m.library_export_manifest_coverage({ value: manifest.coverage })}</li>
             ) : null}
             <li>{m.library_export_completeness({ value: manifest.completeness })}</li>
-            <li><code>fullExport: {String(manifest.fullExport)}</code></li>
+            <li>
+              <code>fullExport: {String(manifest.fullExport)}</code>
+            </li>
             <li>{m.library_export_privacy_value({ value: manifest.privacy })}</li>
             <li>{m.library_export_captured_at({ value: manifest.capturedAt })}</li>
             <li>{m.library_export_expires_at({ value: manifest.expiresAt })}</li>
