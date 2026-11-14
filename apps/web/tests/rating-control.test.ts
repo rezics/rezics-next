@@ -89,13 +89,13 @@ function view(state: RatingControlState, { question = ratingQuestion, pending = 
   );
 }
 
-test('the rating control has an accessible 0-to-10 slider in half-point steps and a no-JavaScript form', () => {
+test('the rating control displays exact 0-to-20 question units and a no-JavaScript form', () => {
   const html = view({ kind: 'ready', units: 15 });
   expect(html).toContain('aria-label="Your rating"');
   expect(html).toContain('min="0"');
   expect(html).toContain('max="20"');
   expect(html).toContain('aria-valuenow="15"');
-  expect(html).toContain('aria-valuetext="7.5 out of 10"');
+  expect(html).toContain('aria-valuetext="15 / 20"');
   expect(html).toContain('data-slot="rating-control-value"');
   expect(html).toContain('<noscript>');
   expect(html).toContain('method="post"');
@@ -106,11 +106,11 @@ test('the rating control has an accessible 0-to-10 slider in half-point steps an
 });
 
 test.each([
-  { units: 15, rangeValue: 15, text: '7.5 out of 10', pending: false, locale: 'en' },
+  { units: 15, rangeValue: 15, text: '15 / 20', pending: false, locale: 'en' },
   { units: null, rangeValue: 10, text: 'Not rated', pending: false, locale: 'en' },
-  { units: 0, rangeValue: 0, text: '0 out of 10', pending: false, locale: 'en' },
-  { units: 20, rangeValue: 20, text: '10 out of 10', pending: true, locale: 'en' },
-  { units: 15, rangeValue: 15, text: '7.5 / 10', pending: false, locale: 'zh-Hans' },
+  { units: 0, rangeValue: 0, text: '0 / 20', pending: false, locale: 'en' },
+  { units: 20, rangeValue: 20, text: '20 / 20', pending: true, locale: 'en' },
+  { units: 15, rangeValue: 15, text: '15 / 20', pending: false, locale: 'zh-Hans' },
   { units: null, rangeValue: 10, text: '尚未评分', pending: true, locale: 'zh-Hans' },
 ])(
   'the native rating input owns its label and current value text: %j',
@@ -163,6 +163,14 @@ test('the native input retains the question scale and question-specific label th
     'value="24"',
   ])
     expect(input).toContain(attribute);
+});
+
+test('native answer display preserves a shifted stepped scale without normalization', () => {
+  const question = { ...ratingQuestion, scale: { min: 4, max: 44, displayStep: 4 } };
+  const html = view({ kind: 'ready', units: 4 }, { question });
+  expect(html).toContain('aria-valuetext="4 / 44"');
+  expect(html).toContain(m.rating_native_scale({ min: '4', max: '44', step: '4' }));
+  expect(html).not.toContain('out of 10');
 });
 
 test('signed-out readers get a sign-in link returning to this subject', () => {

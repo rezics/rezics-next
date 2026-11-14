@@ -118,6 +118,7 @@ export function RatingControlView({
   nativeFallback = true,
   hideValue = false,
   retryable = false,
+  hideQuestionLabel = false,
 }: {
   question: RatingQuestion;
   subjectId: string;
@@ -131,6 +132,7 @@ export function RatingControlView({
   nativeFallback?: boolean;
   hideValue?: boolean;
   retryable?: boolean;
+  hideQuestionLabel?: boolean;
 }) {
   const options = { locale: locale as never };
   const formId = useId();
@@ -145,6 +147,7 @@ export function RatingControlView({
       returnTo={returnTo}
       locale={locale}
       value={state.kind === 'ready' ? state.units : null}
+      hideQuestionLabel={hideQuestionLabel}
     />
   ) : null;
 
@@ -227,10 +230,17 @@ export function RatingControlView({
       >
         <RatingFormIdentity question={question} subjectId={subjectId} returnTo={returnTo} />
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <Field.Label className="min-w-0 wrap-anywhere font-medium text-sm" id={labelId}>
+          <Field.Label
+            className={hideQuestionLabel ? 'sr-only' : 'min-w-0 wrap-anywhere font-medium text-sm'}
+            id={labelId}
+          >
             {question.label}
           </Field.Label>
-          <output aria-live="polite" className="font-semibold tabular-nums" data-slot="rating-control-value">
+          <output
+            aria-live="polite"
+            className={`font-semibold tabular-nums ${hideQuestionLabel ? 'text-2xl' : ''}`}
+            data-slot="rating-control-value"
+          >
             {valueText}
           </output>
         </div>
@@ -348,17 +358,21 @@ function NoScriptForm({
   returnTo,
   locale,
   value,
+  hideQuestionLabel,
 }: {
   question: RatingQuestion;
   subjectId: string;
   returnTo: string;
   locale: string;
   value: number | null;
+  hideQuestionLabel: boolean;
 }) {
   const options = { locale: locale as never };
   const formId = useId();
   const inputId = `${formId}-units`;
   const labelId = `${formId}-label`;
+  const scaleId = `${formId}-scale`;
+  const number = (units: number) => new Intl.NumberFormat(locale).format(units);
   return (
     <noscript>
       <form
@@ -369,11 +383,16 @@ function NoScriptForm({
         method="post"
       >
         <RatingFormIdentity question={question} subjectId={subjectId} returnTo={returnTo} />
-        <label className="min-w-0 wrap-anywhere text-sm" htmlFor={inputId} id={labelId}>
+        <label
+          className={hideQuestionLabel ? 'sr-only' : 'min-w-0 wrap-anywhere text-sm'}
+          htmlFor={inputId}
+          id={labelId}
+        >
           {question.label}
         </label>
         <input
           aria-label={question.label}
+          aria-describedby={scaleId}
           className="min-h-11 min-w-11 max-w-full"
           defaultValue={
             value ??
@@ -388,6 +407,16 @@ function NoScriptForm({
           step={question.scale.displayStep}
           type="range"
         />
+        <p id={scaleId} className="basis-full text-xs text-muted-foreground">
+          {m.rating_native_scale(
+            {
+              min: number(question.scale.min),
+              max: number(question.scale.max),
+              step: number(question.scale.displayStep),
+            },
+            options,
+          )}
+        </p>
         <button
           className={`rounded-2xl bg-primary px-3 text-primary-foreground text-sm ${actionClassName}`}
           name="intent"
@@ -444,6 +473,7 @@ export function SubjectRatingControl({
   own,
   binding,
   initialFailure = false,
+  hideQuestionLabel = false,
   write,
 }: {
   subjectId: string;
@@ -454,6 +484,7 @@ export function SubjectRatingControl({
   own: SubjectOwnRating | undefined;
   binding?: SubjectPersonalLease;
   initialFailure?: boolean;
+  hideQuestionLabel?: boolean;
   write?: RatingWrite;
 }) {
   const queryClient = useQueryClient();
@@ -557,6 +588,7 @@ export function SubjectRatingControl({
     <RatingControlView
       key={`${bindingKey}:${question.id}:${question.revision}`}
       question={question}
+      hideQuestionLabel={hideQuestionLabel}
       failure={failure}
       locale={locale}
       onClear={() => void change(null)}

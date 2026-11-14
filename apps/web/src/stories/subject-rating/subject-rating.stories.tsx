@@ -5,7 +5,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RatingControlView } from '../../features/pages/rating-control';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
 import { GLOBAL, type PublicFigure, type Ratings } from '../../features/pages/subject-ratings';
-import { ratingsFixtures, standardRatingQuestion } from '../../kernel/fake/ratings';
+import { independentSourceStatistics, ratingsFixtures, standardRatingQuestion } from '../../kernel/fake/ratings';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
@@ -423,12 +423,53 @@ export const IndependentSources: Story = {
     await expect(figure).not.toBeNull();
     await expect(histogram).not.toBeNull();
     await expect(context.canvasElement.querySelector('[data-slot="rating-control-reserved"]')).not.toBeNull();
-    await userEvent.click(view.getByText(m.subject_ratings_provenance()));
     const failure = within(context.canvasElement.querySelector<HTMLElement>('[data-source="statistics"]')!);
     const retry = failure.getByRole('button', { name: m.subject_section_retry() });
     await expectComfortableAction(retry);
     await userEvent.click(retry);
     await expect(context.canvasElement.querySelector('[data-slot="public-rating-figure"]')).toBe(figure);
     await expect(context.canvasElement.querySelector('[data-slot="rating-distribution"]')).toBe(histogram);
+  },
+};
+
+/** Full route: independent public sources, exact zero answer and an ordinary editable control. */
+export const RichRatings: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-rich" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByRole('slider')).toHaveAttribute('aria-valuenow', '0');
+    const sources = context.canvasElement.querySelector<HTMLElement>('[data-slot="rating-imported"]')!;
+    await expect(sources).toBeVisible();
+    await expect(within(sources).getByRole('heading', { name: 'VNDB' })).toBeVisible();
+    await expect(within(sources).getByRole('heading', { name: 'Bangumi' })).toBeVisible();
+    await expect(context.canvasElement.querySelector('[data-slot="rating-personal"]')).toHaveTextContent('0 / 20');
+    await expect(context.canvasElement.querySelector('[data-slot="public-rating-figure"]')).toHaveTextContent('8.4');
+    await expect(canvas.getByRole('button', { name: m.subject_rating_control_clear() })).toBeEnabled();
+  },
+};
+
+export const MultipleIndependentSources: Story = {
+  render: () => <Figures data={{ ...ready, own: 0, statistics: independentSourceStatistics }} />,
+  play: async ({ canvasElement }) => {
+    const sources = canvasElement.querySelector<HTMLElement>('[data-slot="rating-imported"]')!;
+    await expect(sources.closest('details')).toBeNull();
+    await expect(sources.querySelectorAll('[data-slot="imported-score"]')).toHaveLength(2);
+    await expect(canvasElement.querySelector('[data-slot="own-rating"]')).toHaveTextContent('0 / 20');
+  },
+};
+
+export const FigureUnavailableSourcesRemain: Story = {
+  render: () => (
+    <PageStory visitor="Signed In" path={pagePaths.subject} ratingsFixture="subject-ratings-figure-unavailable" />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    await expect(await within(context.canvasElement).findByRole('slider')).toBeEnabled();
+    const failed = context.canvasElement.querySelector<HTMLElement>('[data-source="figure"]')!;
+    await expect(failed).toHaveAttribute('data-state', 'failed');
+    await expect(within(failed).getByRole('button', { name: m.subject_section_retry() })).toBeEnabled();
+    await expect(context.canvasElement.querySelector('[data-slot="rating-global-aggregate"]')).not.toBeNull();
+    await expect(context.canvasElement.querySelectorAll('[data-slot="imported-score"]')).toHaveLength(2);
   },
 };

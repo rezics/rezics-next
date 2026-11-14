@@ -18,6 +18,8 @@ import type { OwnVoteIntent } from '../ratings/own-votes/intent';
 import type { OwnVoteReadback } from '../ratings/own-votes/readback';
 
 type Mode =
+  | 'rich'
+  | 'uncertain-current'
   | 'ready'
   | 'empty'
   | 'sparse'
@@ -50,6 +52,7 @@ const targetA = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
 const targetB = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
 const questionA = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
 const questionB = 'e5e5e5e5-e5e5-45e5-85e5-e5e5e5e5e5e5';
+const questionC = 'f6f6f6f6-f6f6-46f6-86f6-f6f6f6f6f6f6';
 
 function entry(
   targetId: string,
@@ -65,7 +68,7 @@ function entry(
     targetId,
     questionId,
     subject: {
-      id: subjectId,
+      id: actions.state === 'unavailable' && actions.reason === 'merged_source' ? subjectId : targetId,
       type: 'work',
       types: ['work'],
       label: { value: 'Kokoro', language: 'en' },
@@ -87,6 +90,36 @@ function entry(
 
 function fixture(mode: Mode): OwnVotesPage {
   const editableA = entry(targetA, questionA);
+  if (mode === 'rich') {
+    const translation = entry(targetA, questionB);
+    translation.question = {
+      ...translation.question,
+      label: 'Would you recommend this translation?',
+      scale: { min: 0, max: 4, displayStep: 1 },
+    };
+    translation.own = { ...translation.own, units: 4 };
+    const readOnly = entry(targetB, questionA, { state: 'unavailable', reason: 'read_only' });
+    readOnly.subject = { ...readOnly.subject, id: targetB, label: { value: 'The Tale of Genji', language: 'en' } };
+    readOnly.own = { ...readOnly.own, units: 18 };
+    const retired = entry(targetB, questionC, {
+      state: 'retired',
+      reason: 'question_retired',
+      clear: `/v1/subjects/${targetB}/ratings/${questionC}/vote`,
+      readback: `/v1/subjects/${targetB}/ratings/${questionC}/vote`,
+    });
+    retired.subject = readOnly.subject;
+    retired.question = {
+      ...retired.question,
+      label: 'How well does this edition read?',
+      scale: { min: 1, max: 5, displayStep: 1 },
+    };
+    retired.own = { ...retired.own, units: 3 };
+    return {
+      viewer: { accountId: subjectId },
+      votes: [editableA, translation, readOnly, retired],
+      next: 'sealed-continuation',
+    };
+  }
   if (mode === 'empty') return { viewer: { accountId: subjectId }, votes: [], next: null };
   if (mode === 'sparse') return { viewer: { accountId: subjectId }, votes: [], next: 'sealed-continuation' };
   if (mode === 'retired')
@@ -124,8 +157,11 @@ function StoryScreen() {
   const [page, setPage] = useState(() => fixture(mode));
   const [failed, setFailed] = useState(mode === 'dependency' || mode === 'return-failed');
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const commandCount = useRef(0);
   const execute = async ({ data }: { data: OwnVoteIntent }) => {
-    if (mode === 'uncertain') return { kind: 'uncertain' as const };
+    commandCount.current += 1;
+    if (mode === 'uncertain' || (mode === 'uncertain-current' && commandCount.current === 1))
+      return { kind: 'uncertain' as const };
     return data.method === 'DELETE'
       ? { kind: 'acknowledged' as const, readback: { kind: 'cleared' as const } }
       : {
@@ -208,11 +244,27 @@ function Story({ mode, locale = 'en' }: { mode: Mode; locale?: (typeof locales)[
   );
 }
 
-const meta = { title: 'Library/My ratings', id: 'pages-library-my-ratings', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Library/My ratings',
+  id: 'pages-library-my-ratings',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type StoryType = StoryObj<typeof meta>;
 
 export const Ready: StoryType = { render: () => <Story mode="ready" /> };
+export const RichInventory: StoryType = { render: () => <Story mode="rich" /> };
+export const NativeZero: StoryType = {
+  render: () => <Story mode="ready" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await inspectFirst(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_edit() }));
+    await expect(canvas.getByRole('spinbutton')).toHaveValue(0);
+    const row = canvasElement.querySelector<HTMLElement>('[data-own-vote-pair]')!;
+    await expect(within(row).getByRole('button', { name: m.library_my_ratings_save() })).toBeEnabled();
+    await expect(row.querySelector('[data-slot="own-vote-editor"]')).not.toBeNull();
+  },
+};
 export const PreviousPage: StoryType = {
   render: () => <Story mode="previous" />,
   play: async ({ canvasElement }) => {
@@ -223,8 +275,25 @@ export const PreviousPage: StoryType = {
 };
 export const Empty: StoryType = { render: () => <Story mode="empty" /> };
 export const SparseContinuation: StoryType = { render: () => <Story mode="sparse" /> };
-export const RetiredQuestion: StoryType = { render: () => <Story mode="retired" /> };
-export const MergedSource: StoryType = { render: () => <Story mode="merged" /> };
+export const RetiredQuestion: StoryType = {
+  render: () => <Story mode="retired" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await inspectFirst(canvasElement);
+    await expect(canvas.getByText(m.library_my_ratings_retired())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.library_my_ratings_clear() })).toBeEnabled();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_edit() })).toBeNull();
+  },
+};
+export const MergedSource: StoryType = {
+  render: () => <Story mode="merged" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await inspectFirst(canvasElement);
+    await expect(canvas.getByText(m.library_my_ratings_merged())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_edit() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_clear() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_review_original() })).toBeNull();
+  },
+};
 export const Denied: StoryType = { render: () => <Story mode="denied" /> };
 export const LongLocalizedQuestion: StoryType = {
   render: () => <Story mode="long" locale="de" />,
@@ -304,5 +373,21 @@ export const ReturnPairMissing: StoryType = {
     await expect(canvas.getByText(m.library_my_ratings_return_missing())).toBeVisible();
     await expect(canvas.queryByRole('button', { name: m.library_my_ratings_edit() })).toBeNull();
     await expect(canvas.getAllByRole('button', { name: m.library_my_ratings_inspect() })).toHaveLength(2);
+  },
+};
+
+/** Matching readback remains visibly different from acknowledging the original request. */
+export const UncertainMatchingCurrentRead: StoryType = {
+  render: () => <Story mode="uncertain-current" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await inspectFirst(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_edit() }));
+    await userEvent.clear(canvas.getByRole('spinbutton'));
+    await userEvent.type(canvas.getByRole('spinbutton'), '2');
+    await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_save() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.library_my_ratings_review_original() }));
+    await expect(canvas.getByRole('status')).toHaveTextContent(m.library_my_ratings_review_current({ value: '2' }));
+    await expect(canvas.queryByText(m.library_my_ratings_saved())).toBeNull();
+    await expect(canvas.getByRole('button', { name: m.library_my_ratings_retry_original() })).toBeEnabled();
   },
 };

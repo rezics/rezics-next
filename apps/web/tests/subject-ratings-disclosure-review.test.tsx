@@ -185,7 +185,9 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
       expect(host.querySelectorAll('[data-slot="rating-question-revision"]')).toHaveLength(1);
       expect(provenance.textContent).toContain(m.rating_public_delay({}, options));
       expect(provenance.textContent).toContain(m.rating_public_ordering({}, options));
-      const imported = provenance.querySelector('[data-slot="imported-score"]')!;
+      const imported = host.querySelector('[data-slot="imported-score"]')!;
+      expect(imported.closest('[data-slot="rating-imported"]')).not.toBeNull();
+      expect(imported.closest('details')).toBeNull();
       const date = new Intl.DateTimeFormat(locale, {
         timeZone: 'UTC',
         year: 'numeric',
@@ -297,7 +299,8 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
     }
     await paint({ ...sources, statistics: { kind: 'failed' } });
     const failedSource = host.querySelector('[data-source="statistics"]')!;
-    expect(failedSource.closest('details')?.getAttribute('data-slot')).toBe('rating-provenance');
+    expect(failedSource.closest('details')).toBeNull();
+    expect(failedSource.closest('[data-slot="rating-imported"]')).not.toBeNull();
     await act(async () => failedSource.querySelector<HTMLButtonElement>('button')!.click());
     expect(recoveries.at(-1)).toBe('statistics');
     expect(host.querySelector('[data-slot="rating-distribution"]')).not.toBeNull();

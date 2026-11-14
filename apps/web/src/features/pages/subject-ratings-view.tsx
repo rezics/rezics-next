@@ -57,6 +57,7 @@ export function RatingSourceStatus({
   retry,
   owner,
   children,
+  showLabel = true,
 }: {
   outcome: RatingOutcome<unknown>;
   source: string;
@@ -64,6 +65,7 @@ export function RatingSourceStatus({
   retry?: (() => void) | undefined;
   owner?: RatingSourceOwner | undefined;
   children?: ReactNode;
+  showLabel?: boolean;
 }) {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   const labels: Record<string, string> = {
@@ -107,7 +109,7 @@ export function RatingSourceStatus({
         children
       ) : (
         <>
-          <p className="font-medium">{label}</p>
+          {showLabel && <p className="font-medium">{label}</p>}
           <p role="status">
             {outcome.kind === 'idle'
               ? m.rating_population_loading({}, options)
@@ -236,6 +238,7 @@ export function RatingsView({
     <RatingSourceStatus
       outcome={sources[source]}
       source={source}
+      showLabel={source !== 'statistics' && source !== 'global'}
       locale={locale}
       retry={
         recovery
@@ -319,6 +322,7 @@ export function RatingsView({
             </h3>
             {control ? (
               <SubjectRatingControl
+                hideQuestionLabel
                 {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
                 question={question}
                 locale={control.locale}

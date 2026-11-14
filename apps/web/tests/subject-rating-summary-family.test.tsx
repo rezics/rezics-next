@@ -306,8 +306,10 @@ test('supplied and selected Realm summaries share semantic headings, useful figu
     expect(host.querySelector('[data-slot="rating-question"]')?.getAttribute('data-revision')).toBe('7');
     const provenance = host.querySelector<HTMLDetailsElement>('[data-slot="rating-provenance"]')!;
     expect(provenance.open).toBe(false);
+    const imported = host.querySelector('[data-slot="rating-imported"]')!;
+    expect(imported.closest('details')).toBeNull();
     for (const text of ['Example', '84', '100', '50', '2025', 'ODbL-1.0', 'Example contributors'])
-      expect(provenance.textContent).toContain(text);
+      expect(imported.textContent).toContain(text);
     expect(unexpectedReads).toBe(0);
   } finally {
     await act(async () => root.unmount());

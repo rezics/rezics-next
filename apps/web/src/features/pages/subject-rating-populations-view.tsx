@@ -542,6 +542,7 @@ function PopulationVisit({
         <RatingSourceStatus
           outcome={directoryOutcome}
           source="directory"
+          showLabel={false}
           locale={locale}
           retry={pageState.stopped ? undefined : () => retry('directory')}
           owner={{ subject: subjectId, incarnation: lease.key, isCurrent: current }}
@@ -639,6 +640,7 @@ function PopulationVisit({
           <RatingSourceStatus
             outcome={selectedOutcome}
             source="selected"
+            showLabel={false}
             locale={locale}
             retry={() => retry('selected')}
             owner={{
@@ -720,7 +722,7 @@ function PopulationFigure({
 }) {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   if (item.figure.kind !== 'ready')
-    return <RatingSourceStatus outcome={item.figure} source="comparison" locale={locale} />;
+    return <RatingSourceStatus outcome={item.figure} source="comparison" locale={locale} showLabel={false} />;
   const figure = item.figure.value;
   const number = (value: number) => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
   const threshold = ['episode', 'character'].includes(question.grain) ? 10 : 5;

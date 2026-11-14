@@ -332,6 +332,11 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
       (button) => button.textContent === m.library_my_ratings_inspect(),
     )!;
     await click(view, inspect);
+    const rows = view.host.querySelectorAll('[data-own-vote-pair]');
+    expect(rows[0]!.querySelector('[data-slot="own-vote-editor"]')).not.toBeNull();
+    expect(rows[1]!.querySelector('[data-slot="own-vote-editor"]')).toBeNull();
+    expect(rows[0]!.querySelectorAll('time')).toHaveLength(1);
+    expect(rows[0]!.textContent?.split(original.question.label)).toHaveLength(2);
     await click(
       view,
       [...view.host.querySelectorAll('button')].find((button) => button.textContent === m.library_my_ratings_edit())!,
@@ -624,6 +629,8 @@ test('a matching newer exact read leaves an uncertain original intent available 
     await click(view, button(view, m.library_my_ratings_save()));
     await click(view, button(view, m.library_my_ratings_review_original()));
     expect(view.host.textContent).toContain(m.library_my_ratings_uncertain_text());
+    expect(view.host.textContent).not.toContain(m.library_my_ratings_saved());
+    expect(button(view, m.library_my_ratings_retry_original()).closest('[data-slot="own-vote-editor"]')).not.toBeNull();
     await click(view, button(view, m.library_my_ratings_retry_original()));
     expect(view.calls).toHaveLength(2);
     expect(view.calls[1]).toBe(view.calls[0]);
