@@ -12447,5 +12447,6 @@
   "library_import_no_results": "Todavía no hay cambios confirmados. Vuelve a revisar y elige qué aplicar.",
   "library_import_retained": "Archivo conservado e información para reabrirlo",
   "library_import_review_help": "Revisa cada elemento antes de continuar. Las etiquetas tienen su propia revisión y confirmación.",
-  "library_import_reopen_help": "Guarda este identificador para reabrir el archivo conservado desde la página de subida de este proveedor."
+  "library_import_reopen_help": "Guarda este identificador para reabrir el archivo conservado desde la página de subida de este proveedor.",
+  "library_import_retained_page": "Se muestran {shown} elementos conservados en esta página."
 }

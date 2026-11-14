@@ -12447,5 +12447,6 @@
   "library_import_no_results": "尚无已确认的更改。请返回核对并选择要应用的内容。",
   "library_import_retained": "保留的上传及重新打开信息",
   "library_import_review_help": "继续前请逐项核对。标签使用独立的核对与确认。",
-  "library_import_reopen_help": "请保留此标识，以便在该提供方的上传页重新打开保留文件。"
+  "library_import_reopen_help": "请保留此标识，以便在该提供方的上传页重新打开保留文件。",
+  "library_import_retained_page": "此页显示 {shown} 个保留的条目。"
 }

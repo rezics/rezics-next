@@ -369,7 +369,6 @@ export function BangumiLabelAdoption({
     current.reviewedMappings === null
       ? selectedMappings.length === 0
       : JSON.stringify(selectedMappings) === JSON.stringify(current.reviewedMappings);
-  const outcomes = outcomeSummary(current.result, current.labels);
   const held = !!current.command;
   const retryableResults =
     current.labels?.confirmed &&
@@ -656,48 +655,7 @@ export function BangumiLabelAdoption({
             ) : null}
           </section>
         ) : null}
-        {outcomes.length ? (
-          <section className="space-y-3" aria-label={m.library_bangumi_label_results()}>
-            <h5 className="font-medium">{m.library_bangumi_label_results()}</h5>
-            <ul className="space-y-2">
-              {outcomes.map((outcome) => (
-                <li
-                  key={outcome.index}
-                  className="space-y-1 rounded border p-3"
-                  data-bangumi-label-outcome={outcome.status}
-                >
-                  <p>
-                    {m.library_bangumi_label_tag_index({ index: outcome.index })}: {outcomeLabel(outcome.status)}
-                  </p>
-                  <p>
-                    {m.library_bangumi_label_created({
-                      created: outcome.created ? m.library_bangumi_label_yes() : m.library_bangumi_label_no(),
-                    })}
-                  </p>
-                  {outcome.label ? (
-                    <p className="break-all">
-                      {m.library_bangumi_label_identity({ id: outcome.label.id, revision: outcome.label.revision })}
-                    </p>
-                  ) : null}
-                  {outcome.assignment ? (
-                    <p className="break-all">
-                      {m.library_bangumi_label_assignment_identity({
-                        id: outcome.assignment.id,
-                        revision: outcome.assignment.revision,
-                      })}
-                    </p>
-                  ) : null}
-                  {outcome.created && !outcome.assignment ? (
-                    <p role="status">{m.library_bangumi_label_incomplete_adoption()}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-            {current.result?.remaining.length ? (
-              <p>{m.library_bangumi_label_remaining({ indices: current.result.remaining.join(', ') })}</p>
-            ) : null}
-          </section>
-        ) : null}
+        <BangumiLabelOutcomes panel={current} />
         {current.labels?.review.subject ? (
           <section className="space-y-2 rounded-md border p-3">
             <h5 className="font-medium">{m.library_bangumi_label_current_assignments()}</h5>
@@ -734,4 +692,47 @@ export function BangumiLabelAdoption({
       </div>
     </details>
   );
+}
+
+/** Supplied acknowledgements only; mounting this summary never reads or writes native state. */
+export function BangumiLabelOutcomes({ panel }: { panel: BangumiLabelPanelState }) {
+  const outcomes = outcomeSummary(panel.result, panel.labels);
+  return outcomes.length ? (
+    <section className="space-y-3" aria-label={m.library_bangumi_label_results()}>
+      <h5 className="font-medium">{m.library_bangumi_label_results()}</h5>
+      <ul className="space-y-2">
+        {outcomes.map((outcome) => (
+          <li key={outcome.index} className="space-y-1 rounded border p-3" data-bangumi-label-outcome={outcome.status}>
+            <p>
+              {m.library_bangumi_label_tag_index({ index: outcome.index })}: {outcomeLabel(outcome.status)}
+            </p>
+            <p>
+              {m.library_bangumi_label_created({
+                created: outcome.created ? m.library_bangumi_label_yes() : m.library_bangumi_label_no(),
+              })}
+            </p>
+            {outcome.label ? (
+              <p className="break-all">
+                {m.library_bangumi_label_identity({ id: outcome.label.id, revision: outcome.label.revision })}
+              </p>
+            ) : null}
+            {outcome.assignment ? (
+              <p className="break-all">
+                {m.library_bangumi_label_assignment_identity({
+                  id: outcome.assignment.id,
+                  revision: outcome.assignment.revision,
+                })}
+              </p>
+            ) : null}
+            {outcome.created && !outcome.assignment ? (
+              <p role="status">{m.library_bangumi_label_incomplete_adoption()}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {panel.result?.remaining.length ? (
+        <p>{m.library_bangumi_label_remaining({ indices: panel.result.remaining.join(', ') })}</p>
+      ) : null}
+    </section>
+  ) : null;
 }

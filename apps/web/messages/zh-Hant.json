@@ -12447,5 +12447,6 @@
   "library_import_no_results": "尚無已確認的變更。請返回核對並選擇要套用的內容。",
   "library_import_retained": "保留的上傳與重新開啟資訊",
   "library_import_review_help": "繼續前請逐項核對。標籤使用獨立的核對與確認。",
-  "library_import_reopen_help": "請保留此識別碼，以便在此提供方的上傳頁重新開啟保留檔案。"
+  "library_import_reopen_help": "請保留此識別碼，以便在此提供方的上傳頁重新開啟保留檔案。",
+  "library_import_retained_page": "此頁顯示 {shown} 個保留的項目。"
 }

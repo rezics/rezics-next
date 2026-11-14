@@ -6,17 +6,7 @@ import type { AniListOutcome, AniListRow, AniListRowMeta } from './contract';
 import { AniListAction } from './controls';
 import { aniListOutcomeLabel, aniListValidityLabel } from './meaning';
 
-function Outcome({
-  outcome,
-  titles,
-  admission,
-  row,
-}: {
-  outcome: AniListOutcome;
-  titles: Map<number, string>;
-  admission: AniListRowMeta['sourceAdmission'];
-  row: AniListRowMeta | undefined;
-}) {
+function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMeta | undefined }) {
   const applied = outcome.status === 'applied' ? ['status'].filter((field) => !outcome.retained.includes(field)) : [];
   const score =
     outcome.score && typeof outcome.score === 'object' && !Array.isArray(outcome.score)
@@ -27,7 +17,8 @@ function Outcome({
   const readback = currentScoreReadback(row?.currentScore);
   return (
     <li className="rounded-md border p-3" data-anilist-outcome={outcome.status} data-anilist-row={outcome.ordinal}>
-      <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.ordinal) ?? `#${outcome.ordinal + 1}`}</p>
+      <p className="font-medium [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</p>
+      <ImportTarget target={row?.target} />
       <section className="space-y-1" data-anilist-state-effect>
         <h4 className="font-medium">{m.library_anilist_state_effect()}</h4>
         <p>{aniListOutcomeLabel(outcome.status)}</p>
@@ -91,7 +82,7 @@ function Outcome({
       {outcome.status === 'stale' ? (
         <p className="text-sm text-muted-foreground">{m.library_anilist_stale_help()}</p>
       ) : null}
-      <ImportSourceOutcome outcome={admission} />
+      <ImportSourceOutcome outcome={row?.sourceAdmission ?? null} />
     </li>
   );
 }
@@ -174,8 +165,6 @@ export function AniListResultPage({
   onReview: () => void;
   onRefresh: () => void;
 }) {
-  const titles = new Map(meta.map((row) => [row.ordinal, row.title]));
-  const admissions = new Map(meta.map((row) => [row.ordinal, row.sourceAdmission]));
   const rows = new Map(meta.map((row) => [row.ordinal, row]));
   const locale = getLocale();
   return (
@@ -190,13 +179,7 @@ export function AniListResultPage({
       <p className="text-sm text-muted-foreground">{m.library_anilist_erasure_limit()}</p>
       <ul className="space-y-3">
         {outcomes.map((outcome) => (
-          <Outcome
-            key={outcome.ordinal}
-            outcome={outcome}
-            titles={titles}
-            admission={admissions.get(outcome.ordinal) ?? null}
-            row={rows.get(outcome.ordinal)}
-          />
+          <Outcome key={outcome.ordinal} outcome={outcome} row={rows.get(outcome.ordinal)} />
         ))}
         {remaining.map((ordinal) => (
           <li
@@ -205,7 +188,7 @@ export function AniListResultPage({
             data-anilist-outcome="unattempted"
             data-anilist-row={ordinal}
           >
-            <p className="font-medium [overflow-wrap:anywhere]">{titles.get(ordinal) ?? `#${ordinal + 1}`}</p>
+            <p className="font-medium [overflow-wrap:anywhere]">{rows.get(ordinal)?.title ?? `#${ordinal + 1}`}</p>
             <p>{m.library_anilist_result_unattempted()}</p>
           </li>
         ))}
@@ -219,7 +202,7 @@ export function AniListResultPage({
             data-anilist-label-result-row={row.ordinal}
           >
             <h3 className="font-medium">
-              {titles.get(row.ordinal)} · {m.library_import_labels()}
+              {rows.get(row.ordinal)?.title} · {m.library_import_labels()}
             </h3>
             <ImportTarget target={rows.get(row.ordinal)!.labels!.subjectId} />
             <AniListLabelResult row={row} labels={rows.get(row.ordinal)!.labels!} />

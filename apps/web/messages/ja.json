@@ -12447,5 +12447,6 @@
   "library_import_no_results": "確定済みの変更はまだありません。確認画面に戻り、反映する内容を選択してください。",
   "library_import_retained": "保持中のアップロードと再開情報",
   "library_import_review_help": "続行前に各項目を確認してください。ラベルには個別の確認と確定が必要です。",
-  "library_import_reopen_help": "この識別子を控えると、この提供元のアップロード画面から保持中のデータを再度開けます。"
+  "library_import_reopen_help": "この識別子を控えると、この提供元のアップロード画面から保持中のデータを再度開けます。",
+  "library_import_retained_page": "このページには保存済みの項目が{shown}件あります。"
 }

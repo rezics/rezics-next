@@ -1,3 +1,4 @@
+import { ImportDetails } from '../personal-list-import/presentation';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useId, useRef, useState } from 'react';
@@ -52,15 +53,17 @@ export function AniListUploadForm({
     >
       <p>{m.library_anilist_intro()}</p>
       <p id={attestId}>{m.library_anilist_attestation()}</p>
-      <p>{m.library_anilist_whose_upload()}</p>
-      <p>{m.library_anilist_not_official()}</p>
-      <p>{m.library_anilist_not_account()}</p>
-      <p id={formatId} className="text-sm text-muted-foreground">
-        {m.library_anilist_dialect()}
-      </p>
-      <p id={helpId} className="text-sm text-muted-foreground">
-        {m.library_anilist_guidance({ size: Math.floor(ANILIST_UPLOAD_BYTES / 1024), rows: ANILIST_ROWS })}
-      </p>
+      <ImportDetails>
+        <p>{m.library_anilist_whose_upload()}</p>
+        <p>{m.library_anilist_not_official()}</p>
+        <p>{m.library_anilist_not_account()}</p>
+        <p id={formatId} className="text-sm text-muted-foreground">
+          {m.library_anilist_dialect()}
+        </p>
+        <p id={helpId} className="text-sm text-muted-foreground">
+          {m.library_anilist_guidance({ size: Math.floor(ANILIST_UPLOAD_BYTES / 1024), rows: ANILIST_ROWS })}
+        </p>
+      </ImportDetails>
       <Field>
         <FieldLabel id={`${scoreId}-label`} htmlFor={scoreId} className="min-h-11 items-center">
           {m.library_anilist_score_format()}
@@ -108,19 +111,26 @@ export function AniListUploadForm({
         {busy ? m.library_anilist_uploading() : m.library_anilist_upload()}
       </AniListAction>
       {onReopen ? (
-        <Field>
-          <FieldLabel htmlFor={retainedIdInput}>{m.library_anilist_retained_id()}</FieldLabel>
-          <input
-            id={retainedIdInput}
-            className="min-h-11 w-full rounded border px-3"
-            value={retainedId}
-            disabled={busy || disabled}
-            onChange={(event) => setRetainedId(event.target.value)}
-          />
-          <AniListAction type="button" disabled={busy || disabled || !retainedId} onClick={() => onReopen(retainedId)}>
-            {m.library_anilist_reopen()}
-          </AniListAction>
-        </Field>
+        <ImportDetails title={m.library_import_retained()}>
+          <p>{m.library_import_reopen_help()}</p>
+          <Field>
+            <FieldLabel htmlFor={retainedIdInput}>{m.library_anilist_retained_id()}</FieldLabel>
+            <input
+              id={retainedIdInput}
+              className="min-h-11 w-full rounded border px-3"
+              value={retainedId}
+              disabled={busy || disabled}
+              onChange={(event) => setRetainedId(event.target.value)}
+            />
+            <AniListAction
+              type="button"
+              disabled={busy || disabled || !retainedId}
+              onClick={() => onReopen(retainedId)}
+            >
+              {m.library_anilist_reopen()}
+            </AniListAction>
+          </Field>
+        </ImportDetails>
       ) : null}
     </form>
   );

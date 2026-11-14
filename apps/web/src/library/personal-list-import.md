@@ -151,3 +151,17 @@ installed typecheck; test execution, native mounted journeys and keyboard/eight-
 Design sources: this owner; the AniList, MAL and Bangumi presentation owners; and each provider's existing page,
 review, row, confirmation and results components. Installed Impeccable `reference/craft-floor.md` was absent from the
 available skill/reference directories; it is guidance, not a prerequisite.
+
+Decision: MAL current label assignments are an explicit action within the item's result, separate from the apply
+acknowledgement. A target change or unmount retires an outstanding assignment response; opening results does not
+hydrate each row. Bangumi reuses its native label-receipt presentation in results without mounting a second label
+reader. Its existing page loader adopts the returned upload identity so a retained page can reopen in a fresh visit;
+the page shows only the supplied item count when the producer has supplied no upload total. Cancelled AniList and
+Bangumi reviews can be inspected without returning the native controller to an admitting stage.
+
+Stories use the existing routed hosts and actual provider pages with illustrative contract-shaped responses and
+sample exports. Opening performs no scripted interactions, forces no locale and changes no viewport. Review,
+replacement, uncertain retry, partial results and Library return are reached through the production controls.
+Focused acceptance adds AniList mounted label-search retention, MAL explicit assignment readback and Bangumi retained
+cancelled inspection; existing target retirement, zero/clear and exact-retry assertions remain unchanged. The necessary
+additional source path is `personal-bangumi-import/controller.ts`; acceptance files are the existing provider tests.

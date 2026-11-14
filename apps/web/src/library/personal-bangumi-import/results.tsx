@@ -1,31 +1,32 @@
+import { ImportEmpty, ImportTarget } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
-import type { BangumiOutcome, BangumiRowMeta } from './contract';
+import type { BangumiOutcome, BangumiRowMeta, BangumiLabelPanelState } from './contract';
 import { BangumiAction } from './controls';
+import { BangumiLabelOutcomes } from './labels';
 import { bangumiOutcomeLabel } from './meaning';
 import { BangumiCurrentFacts, BangumiScoreOutcomeView } from './score';
 
 function Outcome({
   outcome,
-  titles,
   row,
+  labels,
   busy,
   onInspect,
-  admission,
 }: {
   outcome: BangumiOutcome;
-  titles: Map<number, string>;
+  labels: BangumiLabelPanelState | undefined;
   row: BangumiRowMeta | undefined;
   busy: boolean;
   onInspect: (ordinal: number) => void;
-  admission: BangumiRowMeta['sourceAdmission'];
 }) {
   const acknowledged = outcome.status === 'applied' || outcome.score?.status === 'applied';
   const inspected = !!row?.entryReadback || !!row?.voteReadback;
   return (
     <li className="rounded-md border p-3" data-bangumi-outcome={outcome.status} data-bangumi-row={outcome.ordinal}>
-      <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.ordinal) ?? `#${outcome.ordinal + 1}`}</p>
+      <p className="font-medium [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</p>
+      <ImportTarget target={row?.target} />
       <p>{bangumiOutcomeLabel(outcome.status)}</p>
       {outcome.applied.length ? (
         <p className="text-sm">{m.library_bangumi_applied_fields({ fields: outcome.applied.join(', ') })}</p>
@@ -50,7 +51,8 @@ function Outcome({
           <BangumiCurrentFacts entry={row.entryReadback} vote={row.voteReadback} />
         </div>
       ) : null}
-      <ImportSourceOutcome outcome={admission} />
+      {labels ? <BangumiLabelOutcomes panel={labels} /> : null}
+      <ImportSourceOutcome outcome={row?.sourceAdmission ?? null} />
     </li>
   );
 }
@@ -58,6 +60,8 @@ function Outcome({
 export function BangumiResultPage({
   outcomes,
   remaining,
+  labelPanels = {},
+  uploadId,
   meta,
   busy,
   cancelled,
@@ -68,6 +72,8 @@ export function BangumiResultPage({
   onInspect,
 }: {
   outcomes: BangumiOutcome[];
+  labelPanels?: Record<string, BangumiLabelPanelState>;
+  uploadId?: string | null;
   remaining: number[];
   meta: BangumiRowMeta[];
   busy: boolean;
@@ -78,12 +84,12 @@ export function BangumiResultPage({
   onRefresh: () => void;
   onInspect: (ordinal: number) => void;
 }) {
-  const titles = new Map(meta.map((row) => [row.ordinal, row.title]));
   const rowsByOrdinal = new Map(meta.map((row) => [row.ordinal, row]));
-  const admissions = new Map(meta.map((row) => [row.ordinal, row.sourceAdmission]));
   const locale = getLocale();
   return (
     <section className="space-y-4" data-bangumi-stage="results">
+      <h2 className="text-xl font-semibold">{m.library_import_results()}</h2>
+      {outcomes.length === 0 && remaining.length === 0 ? <ImportEmpty results /> : null}
       {cancelled ? (
         <p role="status">{m.library_bangumi_stopped()}</p>
       ) : (
@@ -95,11 +101,10 @@ export function BangumiResultPage({
           <Outcome
             key={outcome.ordinal}
             outcome={outcome}
-            titles={titles}
             row={rowsByOrdinal.get(outcome.ordinal)}
+            labels={labelPanels[`${uploadId}:${outcome.ordinal}`]}
             busy={busy}
             onInspect={onInspect}
-            admission={admissions.get(outcome.ordinal) ?? null}
           />
         ))}
         {remaining.map((ordinal) => (
@@ -109,7 +114,9 @@ export function BangumiResultPage({
             data-bangumi-outcome="unattempted"
             data-bangumi-row={ordinal}
           >
-            <p className="font-medium [overflow-wrap:anywhere]">{titles.get(ordinal) ?? `#${ordinal + 1}`}</p>
+            <p className="font-medium [overflow-wrap:anywhere]">
+              {rowsByOrdinal.get(ordinal)?.title ?? `#${ordinal + 1}`}
+            </p>
             <p>{m.library_bangumi_result_unattempted()}</p>
           </li>
         ))}

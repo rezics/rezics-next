@@ -1,9 +1,11 @@
+import { ImportDetails } from '../personal-list-import/presentation';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type { MalAssignment, MalLabelReview, MalLabelSelection, MalPreviewRow } from './contract';
 import { useMalImportPort } from './port';
+import { MalAction } from './controls';
 
 /** Render only the native evidence projection. Never tokenize a display value or XML here. */
 export function MalLabelsReview({
@@ -21,15 +23,17 @@ export function MalLabelsReview({
   const base = useId();
   if (!evidence) return null;
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-3 rounded-md border p-3">
+    <fieldset disabled={disabled} className="min-w-0 space-y-3 border-t pt-4">
       <legend>{m.library_mal_label_adoption()}</legend>
       <p>{m.library_mal_label_help()}</p>
-      <p>
-        {evidence.grammar} · {evidence.kind} · {evidence.reason}
-      </p>
-      {evidence.raw !== undefined ? (
-        <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{evidence.raw}</pre>
-      ) : null}
+      <ImportDetails>
+        <p>
+          {evidence.grammar} · {evidence.kind} · {evidence.reason}
+        </p>
+        {evidence.raw !== undefined ? (
+          <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{evidence.raw}</pre>
+        ) : null}
+      </ImportDetails>
       {evidence.values.map((value) => {
         const selected = labels?.find((s) => s.value === value.index);
         return (
@@ -37,7 +41,9 @@ export function MalLabelsReview({
             <p className="[overflow-wrap:anywhere]">
               #{value.index}: {value.value}
             </p>
-            <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value.raw}</pre>
+            <ImportDetails>
+              <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value.raw}</pre>
+            </ImportDetails>
             {value.duplicateOf !== null ? <p>{m.library_mal_label_duplicate({ index: value.duplicateOf })}</p> : null}
             <label className="flex min-h-11 items-center gap-2" htmlFor={`${base}-${value.index}`}>
               <input
@@ -166,25 +172,42 @@ export function MalReviewedLabels({ review }: { review: MalLabelReview | undefin
 }
 
 /** A receipt is an effect acknowledgement. This separate current read never settles delivery uncertainty. */
-export function MalCurrentAssignments({ subjectId }: { subjectId: string }) {
+export function MalCurrentAssignments({ subjectId, disabled = false }: { subjectId: string; disabled?: boolean }) {
   const port = useMalImportPort();
   const [current, setCurrent] = useState<MalAssignment[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const epoch = useRef(0);
   useEffect(() => {
-    let active = true;
+    epoch.current++;
     setCurrent(null);
-    void port.assignments?.(subjectId).then((result) => {
-      if (active && result.kind === 'assignments') setCurrent(result.assignments);
-    });
+    setBusy(false);
+    setFailed(false);
     return () => {
-      active = false;
+      epoch.current++;
     };
   }, [port, subjectId]);
+  async function read() {
+    const request = ++epoch.current;
+    setBusy(true);
+    const response = await port.assignments?.(subjectId);
+    if (request !== epoch.current) return;
+    setBusy(false);
+    setFailed(response?.kind !== 'assignments');
+    setCurrent(response?.kind === 'assignments' ? response.assignments : null);
+  }
   return (
-    <section className="mt-3 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_current()}>
-      <h4>{m.library_mal_label_current()}</h4>
-      <p>{subjectId}</p>
+    <section
+      className="mt-3 space-y-2 border-t pt-3 [overflow-wrap:anywhere]"
+      aria-label={m.library_mal_label_current()}
+    >
+      <h4 className="font-medium">{m.library_mal_label_current()}</h4>
+      <MalAction type="button" variant="outline" disabled={disabled || busy} onClick={() => void read()}>
+        {m.library_anilist_labels_read()}
+      </MalAction>
+      {failed ? <p role="status">{m.library_mal_unavailable()}</p> : null}
       {current === null ? (
-        <p role="status">{m.library_mal_unavailable()}</p>
+        <p>{m.library_anilist_labels_read_pending()}</p>
       ) : (
         <>
           {!current.length ? <p>{m.library_mal_label_none()}</p> : null}

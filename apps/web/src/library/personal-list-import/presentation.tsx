@@ -39,7 +39,7 @@ export function ImportJourney({ stage }: { stage: string }) {
 export function ImportDetails({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <details className="min-w-0 border-t pt-2 text-sm [overflow-wrap:anywhere]">
-      <summary className="flex min-h-11 cursor-pointer items-center font-medium underline decoration-muted-foreground/50 underline-offset-4">
+      <summary className="min-h-11 cursor-pointer py-3 font-medium underline decoration-muted-foreground/50 underline-offset-4">
         {title ?? m.library_import_evidence()}
       </summary>
       <div className="space-y-3 pb-3 pt-2">{children}</div>

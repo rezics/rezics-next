@@ -12454,5 +12454,6 @@
   "library_import_no_results": "No acknowledged changes yet. Return to review to choose what to apply.",
   "library_import_retained": "Retained upload and reopen details",
   "library_import_review_help": "Review each item before continuing. Labels use their own review and confirmation.",
-  "library_import_reopen_help": "Keep this identifier to reopen your retained upload through this provider’s upload page."
+  "library_import_reopen_help": "Keep this identifier to reopen your retained upload through this provider’s upload page.",
+  "library_import_retained_page": "Showing {shown} retained items on this page."
 }

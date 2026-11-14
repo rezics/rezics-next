@@ -12447,5 +12447,6 @@
   "library_import_no_results": "Aucune modification confirmée pour le moment. Revenez à l’examen pour choisir les effets à appliquer.",
   "library_import_retained": "Import conservé et informations de réouverture",
   "library_import_review_help": "Examinez chaque élément avant de continuer. Les étiquettes ont leur propre examen et confirmation.",
-  "library_import_reopen_help": "Conservez cet identifiant pour rouvrir cet import depuis la page d’envoi de ce fournisseur."
+  "library_import_reopen_help": "Conservez cet identifiant pour rouvrir cet import depuis la page d’envoi de ce fournisseur.",
+  "library_import_retained_page": "Cette page affiche {shown} éléments conservés."
 }

@@ -76,6 +76,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
     });
   }
 
+  const [inspectCancelled, setInspectCancelled] = useState(false);
   const locked = snap.busy || snap.notice?.kind === 'unknown';
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
@@ -93,7 +94,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
       ) : null}
       {snap.stage === 'upload' ? (
         <AniListUploadForm
-          busy={snap.busy}
+          busy={locked}
           onUpload={(upload, scoreFormat) => void act((current) => current.preview(upload, scoreFormat))}
           onReopen={(importId) => void act((current) => current.loadPage(importId, -1))}
         />
@@ -107,7 +108,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
         </ImportDetails>
       ) : null}
       {snap.importId && snap.stage !== 'removed' ? (
-        <div hidden={snap.stage !== 'review'}>
+        <div hidden={snap.stage !== 'review' && !(snap.stage === 'cancelled' && inspectCancelled)}>
           <AniListReviewPage
             key={snap.importId}
             snap={snap}
@@ -175,9 +176,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           onRefresh={() => void act((current) => current.refresh())}
         />
       ) : null}
-      {snap.stage === 'cancelled' ? (
-        <AniListCancelledNotice onReturn={() => act((current) => current.backToReview())} />
-      ) : null}
+      {snap.stage === 'cancelled' ? <AniListCancelledNotice onReturn={() => setInspectCancelled(true)} /> : null}
       {snap.stage === 'removed' ? <AniListRemovedNotice /> : null}
       {snap.importId && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
