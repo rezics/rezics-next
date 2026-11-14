@@ -59,8 +59,12 @@ import {
 import {
   adoptionSnapshot,
   currentSourceRead,
+  publicHasCitation,
   publicHasValue,
   publicStatements,
+  publicValueStatementCites,
+  publicValueStatementCurrent,
+  publicValueStatementMatches,
   readCurrentCandidatePages,
   sameAdoptionSelection,
   selectedSynopsisOnPublicRead,
@@ -87,6 +91,8 @@ export type { ShowcaseReviewPort };
 function groupKey(subject: string, property: string): string {
   return `${subject}\0${property}`;
 }
+
+type CurrentEvidenceState = 'current' | 'retired' | 'unavailable';
 
 function sourceIdentity(record: ShowcaseRecord): { property: string; value: string } | null {
   if (record.provider === 'vndb') return { property: 'wdt:P3180', value: record.sourceKey };
@@ -519,32 +525,6 @@ function tagParentBindingFor(
   return assertion.tagParentPath ? evidence.find((binding) => binding.path === assertion.tagParentPath) : undefined;
 }
 
-function publicStatementCites(value: unknown, uri: string): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const references = (value as { references?: unknown }).references;
-  if (!Array.isArray(references)) return false;
-  return references.some((reference) => {
-    if (!reference || typeof reference !== 'object' || Array.isArray(reference)) return false;
-    const parts = (reference as { parts?: unknown }).parts;
-    return (
-      Array.isArray(parts) &&
-      parts.some((part) => {
-        if (!part || typeof part !== 'object' || Array.isArray(part)) return false;
-        const row = part as { property?: unknown; value?: { content?: unknown } };
-        const property =
-          typeof row.property === 'string' ? row.property : (row.property as { id?: unknown } | null)?.id;
-        return property === 'schema:url' && row.value?.content === uri;
-      })
-    );
-  });
-}
-
-function publicHasCitation(read: ReviewedSubjectRead, uri: string): boolean {
-  return Object.values((read.subject as { statements?: Record<string, unknown[]> }).statements ?? {}).some((rows) =>
-    rows.some((row) => publicStatementCites(row, uri)),
-  );
-}
-
 function publicVocabularySourceEvidence(read: ReviewedSubjectRead, record: ShowcaseVocabularyRecord): boolean {
   if (record.provenance !== 'reviewed-catalogue')
     return !!record.sourceUri && publicHasValue(read, 'schema:url', record.sourceUri);
@@ -562,15 +542,19 @@ function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseReco
         assertion.source.digest === record.semanticDigest &&
         assertion.statement.value.type === 'value' &&
         assertion.citations.includes(record.sourceUri!) &&
-        publicStatements(read, 'schema:name').some((entry) => statementOnPublicRead(entry, assertion.statement)),
+        publicStatements(read, 'schema:name').some(
+          (entry) =>
+            publicValueStatementCurrent(entry, 'schema:name') && statementOnPublicRead(entry, assertion.statement),
+        ),
     );
   }
   const identity = sourceIdentity(record);
   if (!identity || !record.sourceUri) return false;
   return publicStatements(read, identity.property).some((entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
-    const value = (entry as { value?: { content?: unknown } }).value;
-    return value?.content === identity.value && publicStatementCites(entry, record.sourceUri!);
+    return (
+      publicValueStatementMatches(entry, identity.property, identity.value) &&
+      publicValueStatementCites(entry, identity.property, record.sourceUri!)
+    );
   });
 }
 
@@ -1165,6 +1149,8 @@ async function publishShowcasePhases(
         observedTagBindings.set(`${observation.workId}\0${binding.tagId}\0${binding.conceptId}`, binding);
   const currentTagBindings = new Set<string>();
   const currentMembershipBindings = new Set<string>();
+  const currentTagBindingStates = new Map<string, CurrentEvidenceState>();
+  const currentMembershipBindingStates = new Map<string, CurrentEvidenceState>();
   const bindingReadIds = new Set<string>();
   for (const binding of observedTagBindings.values()) {
     bindingReadIds.add(binding.conceptId);
@@ -1194,11 +1180,12 @@ async function publishShowcasePhases(
       conceptId: string | null;
       schemeId: string | null;
     },
-  ) => {
-    if (!binding.conceptId || !binding.schemeId) return false;
+  ): CurrentEvidenceState => {
+    if (!binding.conceptId || !binding.schemeId) return 'unavailable';
     const conceptRead = currentSubjectCache.get(binding.conceptId) ?? null;
     const schemeRead = currentSubjectCache.get(binding.schemeId) ?? null;
-    return !!(
+    if (!conceptRead || !schemeRead) return 'unavailable';
+    const current = !!(
       conceptRead &&
       schemeRead &&
       subjectId(conceptRead) === binding.conceptId &&
@@ -1211,17 +1198,18 @@ async function publishShowcasePhases(
       binding.schemeUri === vndbPublicTagScheme(binding.category) &&
       publicHasValue(schemeRead, 'schema:url', binding.schemeUri)
     );
+    return current ? 'current' : 'retired';
   };
   for (const [key, binding] of observedTagBindings) {
-    if (currentBindingMatches(binding)) currentTagBindings.add(key);
+    const state = currentBindingMatches(binding);
+    currentTagBindingStates.set(key, state);
+    if (state === 'current') currentTagBindings.add(key);
   }
   for (const association of manifest.tagAssociations ?? []) {
-    if (
-      association.conceptId &&
-      association.schemeId &&
-      association.releaseDigest === bundledDigest &&
-      currentBindingMatches(association)
-    )
+    const state =
+      association.releaseDigest === bundledDigest ? currentBindingMatches(association) : 'retired';
+    currentMembershipBindingStates.set(tagAssociationKey(association), state);
+    if (state === 'current')
       currentMembershipBindings.add(tagAssociationKey(association));
   }
   for (const record of manifest.records) {
@@ -1317,12 +1305,18 @@ async function publishShowcasePhases(
     if (sourceTagWeight(assertion.statement)) {
       const tagId = sourceTagId(assertion.statement);
       const content = assertion.statement.value.type === 'value' ? assertion.statement.value.content : null;
+      const bindingKey = tagId && typeof content === 'string' ? `${record.sourceKey}\0${tagId}\0${content}` : '';
+      const bindingState = currentTagBindingStates.get(bindingKey);
       if (
         !tagId ||
         typeof content !== 'string' ||
-        !currentTagBindings.has(`${record.sourceKey}\0${tagId}\0${content}`)
+        !currentTagBindings.has(bindingKey)
       ) {
-        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: bindingState === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-missing',
+        });
         continue;
       }
     }
@@ -1338,7 +1332,14 @@ async function publishShowcasePhases(
         !tagAssociationStatementMatches(association, assertion.statement) ||
         !currentMembershipBindings.has(tagAssociationKey(association))
       ) {
-        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
+        const bindingState = association
+          ? currentMembershipBindingStates.get(tagAssociationKey(association))
+          : undefined;
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: bindingState === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-missing',
+        });
         continue;
       }
       currentMembership = true;
@@ -1637,6 +1638,8 @@ async function publishShowcasePhases(
   }
 
   const publicSubjects = new Map<string, ReviewedSubjectRead | null>();
+  const publicVocabularyEvidenceCache = new Map<string, CurrentEvidenceState>();
+  const dependencyEvidenceByCandidate = new Map<string, CurrentEvidenceState>();
   const publicRead = async (id: string): Promise<ReviewedSubjectRead | null> => {
     if (publicSubjects.has(id)) return publicSubjects.get(id) ?? null;
     try {
@@ -1647,6 +1650,25 @@ async function publishShowcasePhases(
       publicSubjects.set(id, null);
       return null;
     }
+  };
+  const publicVocabularyEvidence = async (dependency: ShowcaseVocabularyRecord): Promise<CurrentEvidenceState> => {
+    const cached = publicVocabularyEvidenceCache.get(dependency.subjectId);
+    if (cached) return cached;
+    const read = await publicRead(dependency.subjectId);
+    if (!read) {
+      publicVocabularyEvidenceCache.set(dependency.subjectId, 'unavailable');
+      return 'unavailable';
+    }
+    const current =
+      subjectId(read) === dependency.subjectId &&
+      subjectType(read) === dependency.nativeType &&
+      !!dependency.sourceUri &&
+      publicVocabularySourceEvidence(read, dependency) &&
+      (dependency.nativeType !== 'skos:Concept' ||
+        (!!dependency.schemeId && publicHasValue(read, 'skos:inScheme', dependency.schemeId)));
+    const state = current ? 'current' : 'retired';
+    publicVocabularyEvidenceCache.set(dependency.subjectId, state);
+    return state;
   };
 
   const parentEvidence = manifest.tagParentEvidence ?? [];
@@ -1705,7 +1727,7 @@ async function publishShowcasePhases(
     if (!binding) continue;
     parentGroupFor(binding.childId, record)?.edges.push({ binding, assertion });
   }
-  const parentBindingCurrent = async (binding: ShowcaseTagParentBinding): Promise<boolean> => {
+  const parentBindingEvidence = async (binding: ShowcaseTagParentBinding): Promise<CurrentEvidenceState> => {
     const child = vocabularyById.get(binding.childId);
     const parent = vocabularyById.get(binding.parentId);
     const scheme = vocabularyById.get(binding.schemeId);
@@ -1722,13 +1744,14 @@ async function publishShowcasePhases(
       parent.sourceUri !== binding.parentUri ||
       scheme.sourceUri !== binding.schemeUri
     )
-      return false;
+      return 'retired';
     const [childRead, parentRead, schemeRead] = await Promise.all([
       publicRead(binding.childId),
       publicRead(binding.parentId),
       publicRead(binding.schemeId),
     ]);
-    return !!(
+    if (!childRead || !parentRead || !schemeRead) return 'unavailable';
+    const current = !!(
       childRead &&
       parentRead &&
       schemeRead &&
@@ -1744,18 +1767,21 @@ async function publishShowcasePhases(
       publicHasValue(parentRead, 'skos:inScheme', binding.schemeId) &&
       publicHasValue(schemeRead, 'schema:url', binding.schemeUri)
     );
+    return current ? 'current' : 'retired';
   };
   const parentStatementCurrent = async (
     binding: ShowcaseTagParentBinding,
     assertion: ShowcaseAssertion,
-  ): Promise<boolean> => {
-    if (!(await parentBindingCurrent(binding))) return false;
+  ): Promise<CurrentEvidenceState> => {
+    const bindingState = await parentBindingEvidence(binding);
+    if (bindingState !== 'current') return bindingState;
     const child = await publicRead(binding.childId);
-    return (
-      !!child && publicStatements(child, 'skos:broader').some((row) => statementOnPublicRead(row, assertion.statement))
-    );
+    if (!child) return 'unavailable';
+    return publicStatements(child, 'skos:broader').some((row) => statementOnPublicRead(row, assertion.statement))
+      ? 'current'
+      : 'retired';
   };
-  const parentRefreshCurrent = async (refresh: ShowcaseTagParentRefresh): Promise<boolean> => {
+  const parentRefreshEvidence = async (refresh: ShowcaseTagParentRefresh): Promise<CurrentEvidenceState> => {
     const child = vocabularyById.get(refresh.childId);
     const scheme = vocabularyById.get(refresh.schemeId);
     if (
@@ -1767,9 +1793,10 @@ async function publishShowcasePhases(
       child.sourceUri !== refresh.childUri ||
       scheme.sourceUri !== refresh.schemeUri
     )
-      return false;
+      return 'retired';
     const [childRead, schemeRead] = await Promise.all([publicRead(refresh.childId), publicRead(refresh.schemeId)]);
-    return !!(
+    if (!childRead || !schemeRead) return 'unavailable';
+    const current = !!(
       childRead &&
       schemeRead &&
       subjectId(childRead) === refresh.childId &&
@@ -1780,6 +1807,7 @@ async function publishShowcasePhases(
       publicHasValue(childRead, 'skos:inScheme', refresh.schemeId) &&
       publicHasValue(schemeRead, 'schema:url', refresh.schemeUri)
     );
+    return current ? 'current' : 'retired';
   };
   const setParentOutcome = (
     binding: ShowcaseTagParentBinding,
@@ -1800,6 +1828,9 @@ async function publishShowcasePhases(
     });
   };
   const parentAccepted = new Set<string>();
+  const unavailableParentCandidateIds = new Set<string>();
+  const unavailableParentPaths = new Set<string>();
+  const withheldParentTags = new Set<string>();
   for (const binding of parentEvidence) {
     const edge = parentAssertions.find(({ assertion }) => assertion.tagParentPath === binding.path);
     const candidate = edge ? validated.get(edge.assertion.candidateId) : undefined;
@@ -1813,14 +1844,27 @@ async function publishShowcasePhases(
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'source-claim-withheld' });
       continue;
     }
-    if (!(await parentBindingCurrent(binding))) {
+    const bindingState = await parentBindingEvidence(binding);
+    if (bindingState !== 'current') {
       setParentOutcome(
         binding,
         'withheld',
         edge.assertion.candidateId,
-        'current child, parent or Scheme binding is unavailable',
+        bindingState === 'unavailable'
+          ? 'current child, parent or Scheme read is unavailable'
+          : 'current child, parent or Scheme binding is retired',
       );
-      omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'vocabulary-binding-not-current' });
+      if (bindingState === 'unavailable') {
+        unavailableParentCandidateIds.add(edge.assertion.candidateId);
+        unavailableParentPaths.add(binding.path);
+      } else {
+        withheldParentTags.add(binding.child);
+      }
+      omissions.push({
+        provider: 'vndb',
+        sourceKey: binding.path,
+        code: bindingState === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-not-current',
+      });
       continue;
     }
     if (candidate.decision === 'rejected') {
@@ -1860,18 +1904,28 @@ async function publishShowcasePhases(
     }
     parentAccepted.add(edge.assertion.candidateId);
   }
-  const withheldParentTags = new Set<string>();
   const parentRefreshByChild = new Map(
     (manifest.tagParentRefreshes ?? []).map((refresh) => [refresh.childId, refresh]),
   );
   for (const [childId, group] of parentGroups) {
     const refresh = parentRefreshByChild.get(childId);
-    if (group.refresh && refresh && !(await parentRefreshCurrent(refresh))) {
-      for (const { binding, assertion } of group.edges)
-        setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh binding is unavailable');
-      withheldParentTags.add(refresh.tagId);
-      omissions.push({ provider: 'vndb', sourceKey: refresh.tagId, code: 'vocabulary-binding-not-current' });
-      continue;
+    if (group.refresh && refresh) {
+      const refreshState = await parentRefreshEvidence(refresh);
+      if (refreshState === 'unavailable') {
+        for (const { binding, assertion } of group.edges) {
+          setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh read is unavailable');
+          unavailableParentCandidateIds.add(assertion.candidateId);
+          unavailableParentPaths.add(binding.path);
+        }
+        omissions.push({ provider: 'vndb', sourceKey: refresh.tagId, code: 'public-view-unavailable' });
+        continue;
+      }
+      if (refreshState === 'retired') {
+        for (const { binding, assertion } of group.edges)
+          setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh binding is retired');
+        withheldParentTags.add(refresh.tagId);
+        omissions.push({ provider: 'vndb', sourceKey: refresh.tagId, code: 'vocabulary-binding-not-current' });
+      }
     }
     const edges = group.edges.filter(({ assertion }) => parentAccepted.has(assertion.candidateId));
     let page: CandidatePage;
@@ -1881,15 +1935,19 @@ async function publishShowcasePhases(
         pageCache,
       );
     } catch {
-      for (const { binding, assertion } of group.edges)
+      for (const { binding, assertion } of group.edges) {
         setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent adoption read is unavailable');
-      if (refresh) withheldParentTags.add(refresh.tagId);
+        unavailableParentCandidateIds.add(assertion.candidateId);
+        unavailableParentPaths.add(binding.path);
+      }
       continue;
     }
     if (!page.complete || (page.adoption && !Array.isArray(page.adoption.selection))) {
-      for (const { binding, assertion } of group.edges)
+      for (const { binding, assertion } of group.edges) {
         setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent selection is incomplete');
-      if (refresh) withheldParentTags.add(refresh.tagId);
+        unavailableParentCandidateIds.add(assertion.candidateId);
+        unavailableParentPaths.add(binding.path);
+      }
       continue;
     }
     const currentEdges: typeof edges = [];
@@ -1898,19 +1956,26 @@ async function publishShowcasePhases(
         ? await showcaseTagParentSourceFence(input.review.fence, edge.binding)
         : 'unavailable';
       const candidate = page.candidates.find((item) => item.id === edge.assertion.candidateId);
+      const bindingState = await parentBindingEvidence(edge.binding);
       if (
         fence !== 'open' ||
-        !(await parentBindingCurrent(edge.binding)) ||
+        bindingState !== 'current' ||
         !candidate ||
         candidate.decision !== 'accepted' ||
         !showcaseSourceMatches(candidate.source, edge.assertion.source) ||
         !showcaseStatementMatches(candidate.statement, edge.assertion.statement)
       ) {
+        if (bindingState === 'unavailable') {
+          unavailableParentCandidateIds.add(edge.assertion.candidateId);
+          unavailableParentPaths.add(edge.binding.path);
+        }
         setParentOutcome(
           edge.binding,
           'withheld',
           edge.assertion.candidateId,
-          `parent-${fence === 'open' ? 'candidate-not-current' : fence}`,
+          bindingState === 'unavailable'
+            ? 'current child, parent or Scheme read is unavailable'
+            : `parent-${fence === 'open' ? 'candidate-not-current' : fence}`,
         );
         continue;
       }
@@ -1927,6 +1992,10 @@ async function publishShowcasePhases(
       if (!item?.candidate) continue;
       const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
       if (group.refresh && selectedCandidate && managedSourceTagParent(selectedCandidate, input.aliases.vndb)) {
+        if (unavailableParentCandidateIds.has(selectedCandidate.id)) {
+          selections.set(item.candidate, item.rank);
+          continue;
+        }
         const state = await currentFactsFence(input.review, input.aliases.vndb, selectedCandidate.source!.external_id);
         if (state !== 'open') {
           parentRetirementUnavailable = true;
@@ -1978,22 +2047,31 @@ async function publishShowcasePhases(
     if (adopted.snapshot) adoptionSnapshots.set(adoptionKey, adopted.snapshot);
     pageCache.delete(groupKey(childId, 'skos:broader'));
     publicSubjects.delete(childId);
+    publicVocabularyEvidenceCache.delete(childId);
     for (const edge of currentEdges) {
       const state = input.review.fence
         ? await showcaseTagParentSourceFence(input.review.fence, edge.binding)
         : 'unavailable';
-      if (state === 'open' && (await parentStatementCurrent(edge.binding, edge.assertion)))
+      const statementState = state === 'open' ? await parentStatementCurrent(edge.binding, edge.assertion) : 'unavailable';
+      if (state === 'open' && statementState === 'current')
         setParentOutcome(edge.binding, 'public', edge.assertion.candidateId);
       else {
-        setParentOutcome(edge.binding, 'withheld', edge.assertion.candidateId, `parent-public-read-${state}`);
-        withheldParentTags.add(edge.binding.child);
+        setParentOutcome(
+          edge.binding,
+          'withheld',
+          edge.assertion.candidateId,
+          statementState === 'unavailable' ? 'parent public read is unavailable' : `parent-public-read-${state}`,
+        );
+        if (statementState === 'retired') withheldParentTags.add(edge.binding.child);
+        if (statementState === 'unavailable') unavailableParentPaths.add(edge.binding.path);
         omissions.push({ provider: 'vndb', sourceKey: edge.binding.path, code: 'public-view-unavailable' });
       }
     }
   }
   for (const binding of parentEvidence) {
     const outcome = parentOutcomeByPath.get(binding.path);
-    if (outcome?.status !== 'public') withheldParentTags.add(binding.child);
+    if (outcome?.status !== 'public' && !unavailableParentPaths.has(binding.path))
+      withheldParentTags.add(binding.child);
   }
   const childrenByParent = new Map<string, string[]>();
   for (const binding of parentEvidence) {
@@ -2189,16 +2267,62 @@ async function publishShowcasePhases(
         continue;
       }
     }
+    const groupAssertions = assertions.filter(
+      (entry) => entry.record.subjectId === id && entry.assertion.property === group.property,
+    );
+    const dependencyStateForAssertion = async (entry: (typeof groupAssertions)[number]) => {
+      const dependencyIds = new Set<string>();
+      const value = entry.assertion.statement.value;
+      const content = value.type === 'value' ? value.content : undefined;
+      if (typeof content === 'string' && vocabularyById.has(content)) dependencyIds.add(content);
+      const concept = vocabularyById.get(id);
+      if (concept?.nativeType === 'skos:Concept' && concept.schemeId) dependencyIds.add(concept.schemeId);
+      let unavailable = false;
+      for (const dependencyId of dependencyIds) {
+        const dependency = vocabularyById.get(dependencyId);
+        const state = dependency ? await publicVocabularyEvidence(dependency) : 'retired';
+        if (state === 'retired') return 'retired' as const;
+        if (state === 'unavailable') unavailable = true;
+      }
+      return unavailable ? 'unavailable' as const : 'current' as const;
+    };
+    for (const entry of groupAssertions) {
+      const state = await dependencyStateForAssertion(entry);
+      dependencyEvidenceByCandidate.set(entry.assertion.candidateId, state);
+      if (state !== 'current')
+        omissions.push({
+          provider: entry.record.provider,
+          sourceKey: entry.record.sourceKey,
+          code: state === 'unavailable' ? 'public-view-unavailable' : 'vocabulary-binding-not-current',
+        });
+    }
     const selections = new Map<string, CandidateRank>();
     for (const item of priorSelection) {
       if (!item?.candidate) continue;
       const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
+      const dependencyState = dependencyEvidenceByCandidate.get(item.candidate);
+      if (dependencyState === 'retired') continue;
+      if (dependencyState === 'unavailable') {
+        selections.set(item.candidate, item.rank);
+        continue;
+      }
       if (
         refreshWeights &&
         selectedCandidate &&
         managedSourceTagWeight(selectedCandidate, input.aliases.vndb, group.record.sourceKey)
-      )
+      ) {
+        const tagId = sourceTagId(selectedCandidate.statement);
+        const value = selectedCandidate.statement.value;
+        const bindingState =
+          tagId && value.type === 'value' && typeof value.content === 'string'
+            ? currentTagBindingStates.get(`${group.record.sourceKey}\0${tagId}\0${value.content}`) ?? 'retired'
+            : 'retired';
+        if (bindingState === 'unavailable') {
+          selections.set(item.candidate, item.rank);
+          continue;
+        }
         continue;
+      }
       if (
         refreshMemberships &&
         selectedCandidate &&
@@ -2211,6 +2335,20 @@ async function publishShowcasePhases(
             (withdrawal) => withdrawal.sourceKey === identity.sourceKey && withdrawal.tagId === identity.tagId,
           );
         const parentWithheld = !!identity && withheldParentTags.has(identity.tagId);
+        const association = identity &&
+          manifest.tagAssociations.find(
+            (item) =>
+              item.workId === group.record.sourceKey &&
+              item.sourceKey === identity.sourceKey &&
+              item.tagId === identity.tagId,
+          );
+        const bindingState = association
+          ? currentMembershipBindingStates.get(tagAssociationKey(association)) ?? 'unavailable'
+          : 'retired';
+        if (!explicitlyWithdrawn && !parentWithheld && bindingState === 'unavailable') {
+          selections.set(item.candidate, item.rank);
+          continue;
+        }
         const staleCurrentAssociation =
           (manifest.tagAssociationRefreshes ?? []).includes(group.record.sourceKey) &&
           !currentTagMembershipCandidateDigests.has(
@@ -2220,7 +2358,11 @@ async function publishShowcasePhases(
       }
       selections.set(item.candidate, item.rank);
     }
-    for (const candidateId of group.ids) selections.set(candidateId, selections.get(candidateId) ?? 'normal');
+    for (const candidateId of group.ids) {
+      const dependencyState = dependencyEvidenceByCandidate.get(candidateId);
+      if (dependencyState === undefined || dependencyState === 'current')
+        selections.set(candidateId, selections.get(candidateId) ?? 'normal');
+    }
     if (selections.size > showcaseLimits.reviewPage) {
       omissions.push({
         provider: group.record.provider,
@@ -2230,17 +2372,6 @@ async function publishShowcasePhases(
       if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
     }
-    const dependencyIds = new Set<string>();
-    for (const assertion of assertions.filter(
-      (entry) => entry.record.subjectId === id && entry.assertion.property === group.property,
-    )) {
-      const value = assertion.assertion.statement.value;
-      const content = value.type === 'value' ? value.content : undefined;
-      if (typeof content === 'string' && vocabularyById.has(content)) dependencyIds.add(content);
-    }
-    const concept = vocabularyById.get(id);
-    if (concept?.nativeType === 'skos:Concept' && concept.schemeId) dependencyIds.add(concept.schemeId);
-    let dependencyReady = true;
     const identityProperty = group.property === sourceIdentityProperty(group.record);
     if (group.record.kind !== 'source-vocabulary' && !identityProperty) {
       const sourceRead = await publicRead(id);
@@ -2257,32 +2388,6 @@ async function publishShowcasePhases(
         stoppedSubjects.add(id);
         continue;
       }
-    }
-    for (const dependencyId of dependencyIds) {
-      const dependency = vocabularyById.get(dependencyId);
-      const dependencyRead = await publicRead(dependencyId);
-      if (
-        !dependency ||
-        !dependencyRead ||
-        subjectId(dependencyRead) !== dependencyId ||
-        subjectType(dependencyRead) !== dependency.nativeType ||
-        !dependency.sourceUri ||
-        !publicVocabularySourceEvidence(dependencyRead, dependency) ||
-        (dependency.nativeType === 'skos:Concept' &&
-          (!dependency.schemeId || !publicHasValue(dependencyRead, 'skos:inScheme', dependency.schemeId)))
-      ) {
-        omissions.push({
-          provider: group.record.provider,
-          sourceKey: group.record.sourceKey,
-          code: 'vocabulary-binding-not-current',
-        });
-        dependencyReady = false;
-        break;
-      }
-    }
-    if (!dependencyReady) {
-      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
-      continue;
     }
     const body = {
       context: GLOBAL_CONTEXT,
@@ -2314,6 +2419,7 @@ async function publishShowcasePhases(
       adoptionSnapshots.set(key, adopted.snapshot);
       pageCache.delete(groupKey(id, group.property));
       publicSubjects.delete(id);
+      publicVocabularyEvidenceCache.delete(id);
     }
   }
 
@@ -2461,6 +2567,8 @@ async function publishShowcasePhases(
     const visible = record.assertions.filter((assertion) => {
       if (
         !validated.has(assertion.candidateId) ||
+        (dependencyEvidenceByCandidate.has(assertion.candidateId) &&
+          dependencyEvidenceByCandidate.get(assertion.candidateId) !== 'current') ||
         withheldGraphCandidates.has(assertion.candidateId) ||
         blockedMembershipCandidateIds.has(assertion.candidateId)
       )
@@ -2533,6 +2641,8 @@ async function publishShowcasePhases(
     }
     const required = record.assertions.filter(
       (assertion) =>
+        (!dependencyEvidenceByCandidate.has(assertion.candidateId) ||
+          dependencyEvidenceByCandidate.get(assertion.candidateId) === 'current') &&
         !withheldGraphCandidates.has(assertion.candidateId) &&
         !blockedMembershipCandidateIds.has(assertion.candidateId) &&
         (assertion.property !== 'schema:image' || imageVisible),
