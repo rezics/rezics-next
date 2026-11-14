@@ -304,17 +304,11 @@ function OccurrenceControls({
   const [refusedField, setRefusedField] = useState<string | null>(null);
   const [conflictRevision, setConflictRevision] = useState<number | null>(null);
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
-  const lifecycleContext = JSON.stringify([
-    currentViewer,
-    csrfToken,
-    session.id,
-    location.search.history,
-  ]);
+  const lifecycleContext = JSON.stringify([currentViewer, csrfToken, session.id, location.search.history]);
   const lifecyclePermitted = (intent: LifecycleIntent) =>
     intent.context === lifecycleContext && (intent.data.action === 'reopen' ? reopenAllowed : retireAllowed);
   if (custody.lifecycle && !lifecyclePermitted(custody.lifecycle)) delete custody.lifecycle;
-  if (custody.lifecycleConflict && !lifecyclePermitted(custody.lifecycleConflict))
-    delete custody.lifecycleConflict;
+  if (custody.lifecycleConflict && !lifecyclePermitted(custody.lifecycleConflict)) delete custody.lifecycleConflict;
   const retainedLifecycle = custody.lifecycle ?? null;
   const [lifecycleCommand, setLifecycleCommand] = useState<LifecycleIntent | null>(retainedLifecycle);
   // This ref closes the gap between activation and rendering: no second review can replace the first intent.

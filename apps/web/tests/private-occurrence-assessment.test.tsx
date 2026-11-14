@@ -2,7 +2,11 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { ProgressSessionView } from '../src/library/progress-reads';
-import type { JournalReadResult, JournalCommandResult, LifecycleResult } from '../src/library/private-diary/occurrence-server';
+import type {
+  JournalReadResult,
+  JournalCommandResult,
+  LifecycleResult,
+} from '../src/library/private-diary/occurrence-server';
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -199,9 +203,10 @@ async function mount() {
     retire: () => {
       current = false;
     },
-    replaceRead: () => act(async () => {
-      root.render(null);
-    }),
+    replaceRead: () =>
+      act(async () => {
+        root.render(null);
+      }),
     depart: () =>
       act(async () => {
         void router.navigate({ href: '/library/history' });
@@ -527,9 +532,11 @@ test('unsent lifecycle review cancels with focus and leaves journal selections u
     expect(document.activeElement).toBe(h.button(m.library_occurrence_confirm_heading()));
     expect(h.host.textContent).toContain(m.library_occurrence_lifecycle_basis({ revision: 7 }));
     await act(async () => {
-      h.host.querySelector<HTMLButtonElement>(
-        '[aria-label="' + m.library_occurrence_confirm_heading() + '"] button:last-child',
-      )!.click();
+      h.host
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="' + m.library_occurrence_confirm_heading() + '"] button:last-child',
+        )!
+        .click();
     });
     expect(document.activeElement).toBe(h.button(m.library_occurrence_reopen()));
     expect(h.host.querySelector('textarea')!.value).toBe('independent journal draft');
@@ -552,16 +559,18 @@ test.each(['reopen', 'retire'] as const)(
       await h.click(action === 'reopen' ? m.library_occurrence_reopen() : m.library_occurrence_retire());
       await h.click(m.library_occurrence_confirm_heading());
       const original = lifecycle.mock.calls[0];
-      expect(original).toEqual([{
-        data: {
-          action,
-          sessionId: 'exact',
-          viewer: 'owner',
-          csrfToken: 'owner-csrf',
-          revision: 7,
-          key: expect.any(String),
+      expect(original).toEqual([
+        {
+          data: {
+            action,
+            sessionId: 'exact',
+            viewer: 'owner',
+            csrfToken: 'owner-csrf',
+            revision: 7,
+            key: expect.any(String),
+          },
         },
-      }]);
+      ]);
       const panel = () => h.host.querySelector('[aria-label="' + m.library_occurrence_confirm_heading() + '"]')!;
       expect(panel().textContent).toContain(m.library_occurrence_lifecycle_pending());
       expect(panel().textContent).not.toContain(m.library_occurrence_uncertain());
@@ -687,7 +696,9 @@ test.each(['permission', 'credential', 'viewer', 'source', 'occurrence', 'reader
       if (replacement === 'reader') h.retire();
       await h.show(replacement === 'occurrence' ? 'second' : 'exact', false, replacement === 'source' ? {} : lifetime);
       expect(h.button(m.library_occurrence_lifecycle_retry())).toBeUndefined();
-      await act(async () => finishLifecycle({ kind: 'saved', session: { id: 'exact', state: 'retired', revision: 8 } }));
+      await act(async () =>
+        finishLifecycle({ kind: 'saved', session: { id: 'exact', state: 'retired', revision: 8 } }),
+      );
       expect(h.router.state.location.pathname).toBe('/library/progress/exact');
       expect(h.host.textContent).not.toContain(m.library_occurrence_reopened());
       expect(h.host.textContent).not.toContain(m.library_occurrence_uncertain());
