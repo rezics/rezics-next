@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
+import { ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   ContentSection,
@@ -20,6 +20,14 @@ import { readCursors, issuerPage, type Cursors, type Detail, type Identity, type
 
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal wrap-anywhere rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const actionClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md border border-border bg-background px-3 py-2 text-start whitespace-normal wrap-anywhere text-primary underline underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const actionGroupClass = 'flex flex-wrap gap-2';
+const rowClass =
+  'flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:justify-between';
+const rowIdentityClass = 'min-w-0 space-y-1';
+const rowTitleClass = 'break-words font-semibold';
+const badgeClass = 'h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start';
 const retryClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-3 text-start';
 export function managementHref(account: Identity) {
   return `/${getLocale()}/${account.kind === 'organization' ? 'organizations' : 'accounts'}/${encodeURIComponent(account.id)}`;
@@ -29,8 +37,8 @@ function name(account: Identity) {
 }
 function Frame({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <article className="mx-auto w-full max-w-4xl min-w-0 space-y-8 pb-8 wrap-anywhere">
-      <header className="space-y-3">
+    <article className="mx-auto w-full max-w-4xl min-w-0 space-y-6 pb-8 wrap-anywhere sm:space-y-8">
+      <header className="space-y-3 border-b border-border/70 pb-5 sm:pb-6">
         <PageHeading>{title}</PageHeading>
         <p className="max-w-prose text-muted-foreground">{m.managed_intro()}</p>
       </header>
@@ -79,10 +87,10 @@ function Failure({ page, retry }: { page: Exclude<Page<unknown>, { state: 'ready
 }
 function IdentityLink({ account, management = true }: { account: Identity | null; management?: boolean }) {
   return account ? (
-    <div className="min-w-0">
+    <div className="min-w-0 space-y-1 rounded-xl border border-primary/25 bg-primary/5 p-4 sm:p-5">
       {management || account.handle ? (
         <a
-          className={`${linkClass} break-words font-medium`}
+          className={`${linkClass} break-words text-base font-semibold sm:text-lg`}
           href={management ? managementHref(account) : `/${getLocale()}/@${encodeURIComponent(account.handle!)}`}
         >
           {name(account)}
@@ -90,8 +98,17 @@ function IdentityLink({ account, management = true }: { account: Identity | null
       ) : (
         <p className="break-words font-medium">{name(account)}</p>
       )}
-      {account.handle && account.displayName ? (
-        <p className="break-words text-sm text-muted-foreground">@{account.handle}</p>
+      {account.handle && (account.displayName || management) ? (
+        management ? (
+          <a
+            className={`${linkClass} break-words text-sm`}
+            href={`/${getLocale()}/@${encodeURIComponent(account.handle)}`}
+          >
+            @{account.handle}
+          </a>
+        ) : (
+          <p className="break-words text-sm text-muted-foreground">@{account.handle}</p>
+        )
       ) : null}
     </div>
   ) : (
@@ -117,7 +134,7 @@ function WindowControls({
     else search[field] = target;
     return (
       <a
-        className={linkClass}
+        className={actionClass}
         rel={movement === 'next' ? 'next' : movement === 'previous' ? 'prev' : undefined}
         href={`?${new URLSearchParams(search)}`}
         onClick={(event) => navigation?.move(event, field, target, movement)}
@@ -128,7 +145,7 @@ function WindowControls({
   };
   return (
     <nav
-      className="flex flex-wrap gap-x-6 gap-y-2"
+      className={actionGroupClass}
       aria-label={
         field === 'organizationsCursor'
           ? m.managed_organizations_title()
@@ -169,27 +186,30 @@ function Responsibilities({
       </ContentSectionHeader>
       <ContentSectionBody className="space-y-4">
         {page.items.length ? (
-          <ul>
+          <ul className="space-y-3">
             {page.items.map((item) => (
-              <ContentItem
-                key={item.reservationId}
-                headingLevel={3}
-                title={item.account ? name(item.account) : m.managed_missing_title()}
-                {...(item.account && item.state === 'current' && item.navigation?.state === 'admitted'
-                  ? { href: managementHref(item.account) }
-                  : item.account?.handle && item.navigation?.state !== 'concealed'
-                    ? { href: `/${getLocale()}/@${encodeURIComponent(item.account.handle)}` }
-                    : {})}
-                metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
-                state={
-                  <Badge
-                    variant="secondary"
-                    className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
-                  >
-                    {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
-                  </Badge>
-                }
-              />
+              <li key={item.reservationId} className={rowClass}>
+                <div className={rowIdentityClass}>
+                  {item.account && item.state === 'current' && item.navigation?.state === 'admitted' ? (
+                    <a className={`${linkClass} ${rowTitleClass}`} href={managementHref(item.account)}>
+                      {name(item.account)}
+                    </a>
+                  ) : (
+                    <p className={rowTitleClass}>{item.account ? name(item.account) : m.managed_missing_title()}</p>
+                  )}
+                  {item.account?.handle && item.navigation?.state !== 'concealed' ? (
+                    <a
+                      className={`${linkClass} break-words text-sm`}
+                      href={`/${getLocale()}/@${encodeURIComponent(item.account.handle)}`}
+                    >
+                      @{item.account.handle}
+                    </a>
+                  ) : null}
+                </div>
+                <Badge variant="secondary" className={badgeClass}>
+                  {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
+                </Badge>
+              </li>
             ))}
           </ul>
         ) : (
@@ -232,19 +252,19 @@ export function ManagedAccountsPage({
             <ContentItemHeading level={2}>{m.managed_your_account()}</ContentItemHeading>
           </ContentSectionTitle>
         </ContentSectionHeader>
-        <ContentSectionBody className="space-y-3">
+        <ContentSectionBody className="space-y-4">
           <IdentityLink account={page.value.account} />
-          <nav aria-label={m.av_accounts()} className="flex flex-wrap gap-x-6 gap-y-2">
+          <nav aria-label={m.av_accounts()} className={`${actionGroupClass} border-t border-border/70 pt-4`}>
             <a
-              className={linkClass}
+              className={actionClass}
               href={`/${getLocale()}/accounts/${encodeURIComponent(page.value.account.id)}/verification`}
             >
               {m.av_my_verification()}
             </a>
-            <a className={linkClass} href={`/${getLocale()}/review/account-verifications`}>
+            <a className={actionClass} href={`/${getLocale()}/review/account-verifications`}>
               {m.av_review_title()}
             </a>
-            <a className={linkClass} href={`/${getLocale()}/settings`}>
+            <a className={actionClass} href={`/${getLocale()}/settings`}>
               {m.av_applicant_settings()}
             </a>
           </nav>
@@ -267,23 +287,30 @@ export function ManagedAccountsPage({
           {page.value.organizations.state === 'preparing' ? (
             <p role="status">{m.managed_preparing_text()}</p>
           ) : page.value.organizations.items.length ? (
-            <ul>
+            <ul className="space-y-3">
               {page.value.organizations.items.map(({ account, role, navigation }) => (
-                <ContentItem
-                  key={account.id}
-                  headingLevel={3}
-                  title={name(account)}
-                  {...(navigation?.state === 'admitted' ? { href: managementHref(account) } : {})}
-                  metadata={account.handle && account.displayName ? <p>@{account.handle}</p> : null}
-                  state={
-                    <Badge
-                      variant="secondary"
-                      className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
-                    >
-                      {role === 'owner' ? m.managed_owner() : m.managed_member()}
-                    </Badge>
-                  }
-                />
+                <li key={account.id} className={rowClass}>
+                  <div className={rowIdentityClass}>
+                    {navigation?.state === 'admitted' ? (
+                      <a className={`${linkClass} ${rowTitleClass}`} href={managementHref(account)}>
+                        {name(account)}
+                      </a>
+                    ) : (
+                      <p className={rowTitleClass}>{name(account)}</p>
+                    )}
+                    {account.handle ? (
+                      <a
+                        className={`${linkClass} break-words text-sm`}
+                        href={`/${getLocale()}/@${encodeURIComponent(account.handle)}`}
+                      >
+                        @{account.handle}
+                      </a>
+                    ) : null}
+                  </div>
+                  <Badge variant="secondary" className={badgeClass}>
+                    {role === 'owner' ? m.managed_owner() : m.managed_member()}
+                  </Badge>
+                </li>
               ))}
             </ul>
           ) : (
@@ -297,15 +324,17 @@ export function ManagedAccountsPage({
             field="organizationsCursor"
             cursors={cursors}
           />
-          {create ? (
-            <a className={linkClass} href={create}>
-              {m.managed_create_organization()}
-            </a>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {page.organizationsAvailable === false ? m.managed_creation_closed() : m.managed_creation_unavailable()}
-            </p>
-          )}
+          <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+            {create ? (
+              <a className={actionClass} href={create}>
+                {m.managed_create_organization()}
+              </a>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {page.organizationsAvailable === false ? m.managed_creation_closed() : m.managed_creation_unavailable()}
+              </p>
+            )}
+          </div>
         </ContentSectionBody>
       </ContentSection>
       <Responsibilities page={page.value.responsibilities} cursors={cursors} navigation={navigation} />
@@ -344,7 +373,7 @@ export function AccountManagementPage({
   return (
     <Frame title={name(value.account)}>
       <nav aria-label={m.managed_title()}>
-        <a href={`/${getLocale()}/accounts`} className={linkClass}>
+        <a href={`/${getLocale()}/accounts`} className={actionClass}>
           {m.managed_back()}
         </a>
       </nav>
@@ -361,27 +390,30 @@ export function AccountManagementPage({
                 : m.managed_human_identity()}
           </ContentSectionDescription>
         </ContentSectionHeader>
-        <ContentSectionBody data-slot="account-management-identity" className="grid min-w-0 gap-3">
+        <ContentSectionBody
+          data-slot="account-management-identity"
+          className="grid min-w-0 gap-4 rounded-xl border border-primary/25 bg-primary/5 p-4 sm:p-5"
+        >
           {value.account.handle ? (
-            <a className={linkClass} href={`/${getLocale()}/@${encodeURIComponent(value.account.handle)}`}>
+            <a
+              className={`${linkClass} text-base font-semibold sm:text-lg`}
+              href={`/${getLocale()}/@${encodeURIComponent(value.account.handle)}`}
+            >
               @{value.account.handle}
             </a>
           ) : (
             <p>{m.managed_handleless()}</p>
           )}
           {value.role ? (
-            <p>
+            <p className="flex flex-wrap items-center gap-2">
               {m.managed_your_role()}{' '}
-              <Badge
-                variant="secondary"
-                className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
-              >
+              <Badge variant="secondary" className={badgeClass}>
                 {value.role === 'owner' ? m.managed_owner() : m.managed_member()}
               </Badge>
             </p>
           ) : null}
           {value.relation ? (
-            <div>
+            <div className="min-w-0 space-y-2 rounded-lg border border-border/70 bg-background/70 p-3 sm:p-4">
               <ContentItemHeading level={3} className="font-medium">
                 {m.managed_operator_title()}
               </ContentItemHeading>
@@ -390,7 +422,7 @@ export function AccountManagementPage({
             </div>
           ) : null}
           {value.self ? (
-            <a href={`/${getLocale()}/settings`} className={linkClass}>
+            <a href={`/${getLocale()}/settings`} className={actionClass}>
               {m.managed_edit_profile()}
             </a>
           ) : null}
@@ -414,25 +446,28 @@ export function AccountManagementPage({
             {value.members.state === 'denied' ? (
               <p>{m.managed_holders_denied()}</p>
             ) : value.members.items.length ? (
-              <ul>
+              <ul className="space-y-3">
                 {value.members.items.map((item) => (
-                  <ContentItem
-                    key={item.accountId}
-                    headingLevel={3}
-                    title={item.account ? name(item.account) : m.managed_missing_title()}
-                    {...(item.account?.handle
-                      ? { href: `/${getLocale()}/@${encodeURIComponent(item.account.handle)}` }
-                      : {})}
-                    metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
-                    state={
-                      <Badge
-                        variant="secondary"
-                        className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
-                      >
-                        {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
-                      </Badge>
-                    }
-                  />
+                  <li key={item.accountId} className={rowClass}>
+                    <div className={rowIdentityClass}>
+                      {item.account?.handle ? (
+                        <a
+                          className={`${linkClass} ${rowTitleClass}`}
+                          href={`/${getLocale()}/@${encodeURIComponent(item.account.handle)}`}
+                        >
+                          {name(item.account)}
+                        </a>
+                      ) : (
+                        <p className={rowTitleClass}>{item.account ? name(item.account) : m.managed_missing_title()}</p>
+                      )}
+                      {item.account?.handle && item.account.displayName ? (
+                        <p className="break-words text-sm text-muted-foreground">@{item.account.handle}</p>
+                      ) : null}
+                    </div>
+                    <Badge variant="secondary" className={badgeClass}>
+                      {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
+                    </Badge>
+                  </li>
                 ))}
               </ul>
             ) : (
@@ -456,13 +491,18 @@ export function AccountManagementPage({
             <ContentItemHeading level={2}>{m.managed_changes_title()}</ContentItemHeading>
           </ContentSectionTitle>
         </ContentSectionHeader>
-        <ContentSectionBody className="space-y-4 text-sm text-muted-foreground">
-          <a className={linkClass} href={managedAccountHref(`/${getLocale()}/settings`, value.account.id)}>
-            {m.managed_options()}
-          </a>
-          <p>{m.managed_options_guidance()}</p>
+        <ContentSectionBody className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground sm:p-5">
+          <div className="space-y-2">
+            <a className={actionClass} href={managedAccountHref(`/${getLocale()}/settings`, value.account.id)}>
+              {m.managed_options()}
+            </a>
+            <p>{m.managed_options_guidance()}</p>
+          </div>
           {page.authNavigation ? (
-            <nav aria-label={m.managed_actions_title()} className="flex flex-wrap gap-x-6 gap-y-2">
+            <nav
+              aria-label={m.managed_actions_title()}
+              className={`${actionGroupClass} border-t border-border/70 pt-4`}
+            >
               {(['rename', 'members', 'transfer'] as const).map((name) => {
                 const action = page.authNavigation!.actions[name];
                 const label =
@@ -472,7 +512,7 @@ export function AccountManagementPage({
                       ? m.managed_actions_members()
                       : m.managed_actions_transfer();
                 return action.state === 'available' ? (
-                  <a key={name} className={linkClass} href={action.href}>
+                  <a key={name} className={actionClass} href={action.href}>
                     {label}
                   </a>
                 ) : null;
@@ -484,7 +524,7 @@ export function AccountManagementPage({
           ) : null}
           <p>{m.managed_operation_status()}</p>
           {deletion ? (
-            <a className={linkClass} href={deletion}>
+            <a className={actionClass} href={deletion}>
               {m.managed_delete_self()}
             </a>
           ) : null}
@@ -504,19 +544,21 @@ function AutomationEntries({ issuer }: { issuer: string | null }) {
     <ContentSection>
       <ContentSectionHeader>
         <ContentSectionTitle>
-          <ContentItemHeading level={2}>{m.managed_automation_title()}</ContentItemHeading>
+          <ContentItemHeading level={2} className="text-base">
+            {m.managed_automation_title()}
+          </ContentItemHeading>
         </ContentSectionTitle>
       </ContentSectionHeader>
-      <ContentSectionBody className="space-y-3">
+      <ContentSectionBody className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-5">
         <p className="text-sm text-muted-foreground">{m.managed_actions_selection()}</p>
-        <nav aria-label={m.managed_automation_title()} className="flex flex-wrap gap-x-6 gap-y-2">
+        <nav aria-label={m.managed_automation_title()} className={actionGroupClass}>
           {create ? (
-            <a className={linkClass} href={create}>
+            <a className={actionClass} href={create}>
               {m.managed_create_automation()}
             </a>
           ) : null}
           {open ? (
-            <a className={linkClass} href={open}>
+            <a className={actionClass} href={open}>
               {m.managed_open_automation()}
             </a>
           ) : null}
