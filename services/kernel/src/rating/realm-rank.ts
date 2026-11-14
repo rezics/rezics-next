@@ -3,7 +3,6 @@ import { ratingCapabilities } from './adapters/ambient.ts';
 import { createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import {
-  deadlineClient,
   readRealm,
   accessCheck,
   type Access,
@@ -15,7 +14,8 @@ import {
 } from './dependencies.ts';
 import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 
@@ -267,6 +267,16 @@ function decode(tokens: KeyRing, scope: string, token: string, now: number): Pos
   }
 }
 
+const readOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  mapError(error: unknown) {
+    // Cleanup reaching the deadline must not replace an earlier domain failure.
+    throwAccessUnavailable(error);
+    return error;
+  },
+  isUncertainSettledQueryError: () => true,
+};
+
 /** Fresh physical snapshots, independent of any caller-owned read transaction. */
 async function observe<T>(
   pool: Pool,
@@ -274,24 +284,16 @@ async function observe<T>(
   deadline: number,
   read: (client: PoolClient, epoch: number, home: NonNullable<Awaited<ReturnType<typeof readPartition>>>) => Promise<T>,
 ): Promise<T> {
-  return withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline) as PoolClient;
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
       const home = await readPartition(client, partition);
       if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-      const value = await read(client, home.epoch, home);
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (rollback) {
-        discardConnection(connection, rollback as Error);
-      }
-      throw error;
-    }
-  });
+      return read(client, home.epoch, home);
+    },
+    readOptions,
+  );
 }
 async function generation(client: PoolClient, input: RealmRankRequest): Promise<string> {
   const result = await client.query<{ generation: string }>(
@@ -422,15 +424,19 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
           },
           { pool: deps.pool, deadline },
         );
-        const readable = await withConnection(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          const identity = await readIdentity.run(client, {
-            route,
-            subject_id: row.subjectId,
-            partition_no: input.partition,
-          });
-          return identity && identity.redirect === null && (await check(client));
-        });
+        const readable = await withBoundedReadConnection(
+          deps.pool,
+          deadline,
+          async (client) => {
+            const identity = await readIdentity.run(client, {
+              route,
+              subject_id: row.subjectId,
+              partition_no: input.partition,
+            });
+            return identity && identity.redirect === null && (await check(client));
+          },
+          readOptions,
+        );
         if (!readable) continue;
         const count = Number(row.count);
         if (!Number.isSafeInteger(count)) throw new Error('Realm rank count exceeds safe range');
@@ -590,8 +596,14 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       const priorActive = prior.active && prior.identity === questionIdentity;
       if (priorActive && (!Number.isSafeInteger(Number(prior.generation)) || Number(prior.generation) < 1))
         throw new Error('Invalid prior generation');
-      const publication = await deps.pool.query<{ last_value: string; is_called: boolean }>(
-        `SELECT last_value::text,is_called FROM rating.realm_rank_publication_generation`,
+      const publication = await withBoundedReadConnection(
+        deps.pool,
+        deadline,
+        (client) =>
+          client.query<{ last_value: string; is_called: boolean }>(
+            `SELECT last_value::text,is_called FROM rating.realm_rank_publication_generation`,
+          ),
+        readOptions,
       );
       const generation = publication.rows[0];
       if (!generation || !/^[0-9]+$/.test(generation.last_value))
