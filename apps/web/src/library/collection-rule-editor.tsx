@@ -18,6 +18,7 @@ import type { RuleWrite } from './collection-rule-actions';
 import type { SavedQuerySource } from './saved-query-editor/selection';
 import type { CollectionWriteResult } from './collection-records';
 import { CollectionRuleControls } from './collection-rule-controls';
+import { CollectionRuleWorkspace } from './collection-rule-workspace';
 import { collectionRuleLabelPrefix } from './collection-rule-label-input';
 import { ruleDraftSnapshot, useCollectionRuleDraftNavigation } from './collection-rule-draft-navigation';
 import { DynamicRuleReview, ruleReviewReleaseFromChoices } from './dynamic-rule-review';
@@ -531,6 +532,8 @@ function RuleForm({
   const [savedId, setSavedId] = useState<string | null>(null);
   const [currentRuleRead, setCurrentRuleRead] = useState(false);
   const [reviewCurrentRule, setReviewCurrentRule] = useState(false);
+  const currentReviewOpener = useRef<HTMLButtonElement>(null);
+  const currentReviewPanel = useRef<HTMLDivElement>(null);
   const confirmed = useRef(false);
   const snapshot = ruleDraftSnapshot({ filter, title, description, source });
   const baseline = useRef(snapshot);
@@ -769,6 +772,11 @@ function RuleForm({
     intent && submittedReview ? submittedReview.accepted : reviewUsesSavedMeaning ? savedMeaning : undefined;
   const reviewProfiles = reviewMeaning?.profiles ?? editingChoices.release.profiles;
   const reviewProfileState = reviewMeaning?.state ?? editingChoices.release.state;
+  function toggleCurrentRuleReview() {
+    const next = !reviewCurrentRule;
+    if (!next && currentReviewPanel.current?.contains(document.activeElement)) currentReviewOpener.current?.focus();
+    setReviewCurrentRule(next);
+  }
   // Keep this intent mounted while authority is unavailable, without retaining private UI in the DOM.
   if (!isCurrent())
     return (
@@ -783,267 +791,337 @@ function RuleForm({
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       {navigation.boundary}
       <PageHeading>{base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}</PageHeading>
-      <header className="min-w-0 space-y-2 rounded-xl border border-border bg-card p-4 sm:p-6">
-        {base.state === 'ready' && <h2 className="break-words text-xl font-semibold">{base.title}</h2>}
-        <p className="max-w-prose text-sm text-muted-foreground">
-          {base.state === 'new' ? m.library_rule_new_help() : m.library_rule_edit_help()}
-        </p>
-        <p className="max-w-prose text-sm">
-          {base.state === 'new' ? m.library_rule_private() : m.library_rule_privacy_help()}
-        </p>
-        {base.state === 'ready' && (
-          <p className="max-w-prose text-sm text-muted-foreground">{m.library_rule_edit_release_help()}</p>
-        )}
-      </header>
       <form
         noValidate
         onSubmit={(event) => void submit(event)}
-        className="flex min-w-0 flex-col gap-6 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2"
+        className="min-w-0 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2"
       >
-        <fieldset disabled={pending || !!intent || !!savedId} className="min-w-0">
-          <FieldGroup>
-            {base.state === 'new' && (
-              <>
-                <Field>
-                  <FieldLabel htmlFor={`${metadataId}-title`}>{m.library_collection_title()}</FieldLabel>
-                  <Input
-                    id={`${metadataId}-title`}
-                    {...collectionTextInputAttributes({
-                      id: `${metadataId}-title`,
-                      field: 'title',
-                      value: title,
-                      submitted: textSubmitted,
-                    })}
-                    required
-                    value={title}
-                    onChange={(event) => {
-                      if (isCurrent() && !captured.current) setTitle(event.currentTarget.value);
-                    }}
-                  />
-                  <CollectionTextInputHelp
-                    id={`${metadataId}-title`}
-                    field="title"
-                    value={title}
-                    submitted={textSubmitted}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor={`${metadataId}-description`}>{m.library_collection_description()}</FieldLabel>
-                  <Textarea
-                    id={`${metadataId}-description`}
-                    {...collectionTextInputAttributes({
-                      id: `${metadataId}-description`,
-                      field: 'description',
-                      value: description,
-                      submitted: textSubmitted,
-                    })}
-                    value={description}
-                    rows={4}
-                    onChange={(event) => {
-                      if (isCurrent() && !captured.current) setDescription(event.currentTarget.value);
-                    }}
-                  />
-                  <CollectionTextInputHelp
-                    id={`${metadataId}-description`}
-                    field="description"
-                    value={description}
-                    submitted={textSubmitted}
-                  />
-                </Field>
-              </>
-            )}
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold">{m.library_rule_conditions()}</h2>
-              <p className="max-w-prose text-sm text-muted-foreground">{m.library_rule_conditions_help()}</p>
-            </div>
-            {choices.release.state !== 'ready' && (
-              <p role="status">
-                {choices.release.state === 'preparing'
-                  ? m.library_rule_preparing()
-                  : m.condition_metadata_unavailable()}
-              </p>
-            )}
-            {visibleChoices.labels.state !== 'ready' && (
-              <p role="status">
-                {visibleChoices.labels.state === 'preparing'
-                  ? m.library_rule_preparing()
-                  : m.library_rule_labels_unavailable()}
-              </p>
-            )}
-            {labels && canLabel && (
-              <Field>
-                <FieldLabel htmlFor={`${metadataId}-label-search`}>{m.library_rule_label_search()}</FieldLabel>
-                <Input
-                  id={`${metadataId}-label-search`}
-                  aria-describedby={`${metadataId}-${prefixError ? 'label-error' : 'label-limit'}`}
-                  aria-invalid={!!prefixError}
-                  value={query}
-                  maxLength={1000}
-                  onChange={(event) => {
-                    if (!isCurrent() || !(canLabelCurrent?.() ?? true) || captured.current) return;
-                    const raw = event.currentTarget.value;
-                    const next = collectionRuleLabelPrefix(raw);
-                    choiceAddress.current = {
-                      raw,
-                      q: next.ok ? next.query : '',
-                      cursor: undefined,
-                      generation: choiceAddress.current.generation + 1,
-                    };
-                    // A raw edit retires even equal normalized queries and their continuation positions.
-                    choiceContext.current = { q: '', next: null, generation: -1 };
-                    setChoices((current) => ({ ...current, labels: { state: 'ready', values: [], next: null } }));
-                    setQuery(raw);
-                  }}
-                />
-                <FieldDescription id={`${metadataId}-label-limit`}>
-                  {m.library_rule_label_input_help()}
-                </FieldDescription>
-                {prefixError && (
-                  <FieldDescription id={`${metadataId}-label-error`} role="alert">
-                    {prefixError}
-                  </FieldDescription>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" disabled={!prefix.ok} onClick={() => void labelPage()}>
-                    {m.search_apply()}
-                  </Button>
-                  {choices.labels.next &&
-                    prefix.ok &&
-                    choiceContext.current.q === prefix.query &&
-                    choiceContext.current.generation === choiceAddress.current.generation && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void labelPage(choices.labels.next!, labelContext)}
-                      >
-                        {m.library_label_more()}
-                      </Button>
-                    )}
-                </div>
-              </Field>
-            )}
-            <ConditionInput
-              value={filter}
-              onChange={(value) => {
-                if (isCurrent() && !captured.current) setFilter(value);
-              }}
-              locale={locale}
-              metadata={editingChoices.release.metadata ?? { types: {}, properties: {} }}
-              extension={extension}
-            />
-            <details className="text-sm">
-              <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                {m.search_reader_condition_limits_title()}
-              </summary>
-              <p className="text-muted-foreground">{m.search_reader_condition_limits()}</p>
-            </details>
-          </FieldGroup>
-        </fieldset>
-        {intent && 'title' in intent && (
-          <section
-            className="min-w-0 space-y-3 rounded-xl border border-border p-4"
-            aria-label={m.library_rule_submitted_metadata()}
-          >
-            <h2 className="font-semibold">{m.library_rule_submitted_metadata()}</h2>
-            <dl className="space-y-2">
-              <div>
-                <dt className="text-sm text-muted-foreground">{m.library_collection_title()}</dt>
-                <dd className="break-words">{intent.title}</dd>
+        <CollectionRuleWorkspace
+          context={
+            <header className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <h2 className="break-words text-lg font-semibold">
+                  {base.state === 'ready' ? base.title : m.library_rule_new()}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {base.state === 'new' ? m.library_rule_private() : m.library_rule_privacy_help()}
+                </p>
               </div>
-              {intent.description && (
-                <div>
-                  <dt className="text-sm text-muted-foreground">{m.library_collection_description()}</dt>
-                  <dd className="whitespace-pre-wrap break-words">{intent.description}</dd>
-                </div>
-              )}
-            </dl>
-          </section>
-        )}
-        <DynamicRuleReview
-          filter={reviewFilter}
-          stage={reviewStage}
-          current={currentMeaning}
-          accepted={
-            reviewMeaning ??
-            (intent && submittedReview ? ruleReviewReleaseFromChoices(submittedReview.choices) : undefined)
+              <div className="min-w-0 space-y-1 sm:max-w-prose sm:text-right">
+                <p className="text-sm text-muted-foreground">
+                  {base.state === 'new' ? m.library_rule_new_help() : m.library_rule_edit_help()}
+                </p>
+                {base.state === 'ready' && (
+                  <p className="text-sm text-muted-foreground">{m.library_rule_edit_release_help()}</p>
+                )}
+              </div>
+            </header>
           }
-          choices={visibleChoices}
-          profiles={reviewProfiles}
-          profileState={reviewProfileState}
-          basis={base.state === 'ready' && reviewStage !== 'confirmed' ? base.rule : undefined}
-          basisKind={intent ? 'original' : 'loaded'}
-          collectionId={base.state === 'ready' ? base.id : (savedId ?? undefined)}
-          returnedId={savedId ?? undefined}
-          locale={locale}
-          ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
-        />
-        {currentRuleRead && base.state === 'ready' ? (
-          <section className="min-w-0 space-y-3 rounded-lg border border-primary/30 p-4">
-            <p className="text-sm text-muted-foreground">{m.library_rule_review_current_prompt()}</p>
-            <Button
-              type="button"
-              variant="outline"
-              aria-expanded={reviewCurrentRule}
-              onClick={() => setReviewCurrentRule((value) => !value)}
+          editing={
+            <fieldset disabled={pending || !!intent || !!savedId} className="min-w-0">
+              <div className="min-w-0 space-y-4">
+                {base.state === 'new' && (
+                  <section
+                    className="min-w-0 space-y-3 rounded-xl border border-border p-4"
+                    aria-labelledby={`${metadataId}-creation-heading`}
+                  >
+                    <h2 id={`${metadataId}-creation-heading`} className="text-lg font-semibold">
+                      {m.library_collection_create()}
+                    </h2>
+                    <FieldGroup>
+                      <Field>
+                        <FieldLabel htmlFor={`${metadataId}-title`}>{m.library_collection_title()}</FieldLabel>
+                        <Input
+                          id={`${metadataId}-title`}
+                          {...collectionTextInputAttributes({
+                            id: `${metadataId}-title`,
+                            field: 'title',
+                            value: title,
+                            submitted: textSubmitted,
+                          })}
+                          required
+                          value={title}
+                          onChange={(event) => {
+                            if (isCurrent() && !captured.current) setTitle(event.currentTarget.value);
+                          }}
+                        />
+                        <CollectionTextInputHelp
+                          id={`${metadataId}-title`}
+                          field="title"
+                          value={title}
+                          submitted={textSubmitted}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`${metadataId}-description`}>{m.library_collection_description()}</FieldLabel>
+                        <Textarea
+                          id={`${metadataId}-description`}
+                          {...collectionTextInputAttributes({
+                            id: `${metadataId}-description`,
+                            field: 'description',
+                            value: description,
+                            submitted: textSubmitted,
+                          })}
+                          value={description}
+                          rows={4}
+                          onChange={(event) => {
+                            if (isCurrent() && !captured.current) setDescription(event.currentTarget.value);
+                          }}
+                        />
+                        <CollectionTextInputHelp
+                          id={`${metadataId}-description`}
+                          field="description"
+                          value={description}
+                          submitted={textSubmitted}
+                        />
+                      </Field>
+                    </FieldGroup>
+                  </section>
+                )}
+                <section
+                  className="min-w-0 space-y-4 rounded-xl border border-border p-4"
+                  aria-labelledby={`${metadataId}-conditions-heading`}
+                >
+                  <div className="space-y-2">
+                    <h2 id={`${metadataId}-conditions-heading`} className="text-lg font-semibold">
+                      {m.library_rule_conditions()}
+                    </h2>
+                    <p className="max-w-prose text-sm text-muted-foreground">{m.library_rule_conditions_help()}</p>
+                  </div>
+                  <FieldGroup>
+                    {choices.release.state !== 'ready' && (
+                      <p role="status">
+                        {choices.release.state === 'preparing'
+                          ? m.library_rule_preparing()
+                          : m.condition_metadata_unavailable()}
+                      </p>
+                    )}
+                    {visibleChoices.labels.state !== 'ready' && (
+                      <p role="status">
+                        {visibleChoices.labels.state === 'preparing'
+                          ? m.library_rule_preparing()
+                          : m.library_rule_labels_unavailable()}
+                      </p>
+                    )}
+                    {labels && canLabel && (
+                      <section
+                        className="min-w-0 space-y-3 rounded-lg border border-border p-3"
+                        aria-label={m.library_rule_label_search()}
+                      >
+                        <Field>
+                          <FieldLabel htmlFor={`${metadataId}-label-search`}>
+                            {m.library_rule_label_search()}
+                          </FieldLabel>
+                          <Input
+                            id={`${metadataId}-label-search`}
+                            aria-describedby={`${metadataId}-${prefixError ? 'label-error' : 'label-limit'}`}
+                            aria-invalid={!!prefixError}
+                            value={query}
+                            maxLength={1000}
+                            onChange={(event) => {
+                              if (!isCurrent() || !(canLabelCurrent?.() ?? true) || captured.current) return;
+                              const raw = event.currentTarget.value;
+                              const next = collectionRuleLabelPrefix(raw);
+                              choiceAddress.current = {
+                                raw,
+                                q: next.ok ? next.query : '',
+                                cursor: undefined,
+                                generation: choiceAddress.current.generation + 1,
+                              };
+                              // A raw edit retires even equal normalized queries and their continuation positions.
+                              choiceContext.current = { q: '', next: null, generation: -1 };
+                              setChoices((current) => ({ ...current, labels: { state: 'ready', values: [], next: null } }));
+                              setQuery(raw);
+                            }}
+                          />
+                          <FieldDescription id={`${metadataId}-label-limit`}>
+                            {m.library_rule_label_input_help()}
+                          </FieldDescription>
+                          {prefixError && (
+                            <FieldDescription id={`${metadataId}-label-error`} role="alert">
+                              {prefixError}
+                            </FieldDescription>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={!prefix.ok}
+                              onClick={() => void labelPage()}
+                            >
+                              {m.search_apply()}
+                            </Button>
+                            {choices.labels.next &&
+                              prefix.ok &&
+                              choiceContext.current.q === prefix.query &&
+                              choiceContext.current.generation === choiceAddress.current.generation && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => void labelPage(choices.labels.next!, labelContext)}
+                                >
+                                  {m.library_label_more()}
+                                </Button>
+                              )}
+                          </div>
+                        </Field>
+                      </section>
+                    )}
+                    <ConditionInput
+                      value={filter}
+                      onChange={(value) => {
+                        if (isCurrent() && !captured.current) setFilter(value);
+                      }}
+                      locale={locale}
+                      metadata={editingChoices.release.metadata ?? { types: {}, properties: {} }}
+                      extension={extension}
+                    />
+                    <details className="text-sm">
+                      <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                        {m.search_reader_condition_limits_title()}
+                      </summary>
+                      <p className="text-muted-foreground">{m.search_reader_condition_limits()}</p>
+                    </details>
+                  </FieldGroup>
+                </section>
+              </div>
+            </fieldset>
+          }
+          commandActions={
+            <section
+              className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4"
+              aria-label={m.library_collection_save()}
             >
-              {reviewCurrentRule ? m.library_rule_review_current_close() : m.library_rule_review_current_button()}
-            </Button>
-            {reviewCurrentRule ? (
+              {feedback && <p role="alert">{feedback}</p>}
+              {intent && !pending && <p role="status">{m.library_rule_uncertain()}</p>}
+              {savedId && <p role="status">{m.library_rule_saved()}</p>}
+              <CollectionRuleControls
+                creating={base.state === 'new'}
+                pending={pending}
+                conflict={conflict}
+                uncertain={!!intent}
+                hasFilter={!!filter && !!(currentCsrf ? currentCsrf() : csrfToken)}
+                savedId={savedId}
+                collectionId={base.state === 'ready' ? base.id : null}
+                resultsHref={resultsHref}
+                navigateAfterSave={!!navigate}
+                refresh={() => void refresh()}
+              />
+            </section>
+          }
+          meaningReview={
+            <div className="min-w-0 space-y-4">
+              {intent && 'title' in intent && (
+                <section
+                  className="min-w-0 space-y-3 rounded-xl border border-border p-4"
+                  aria-label={m.library_rule_submitted_metadata()}
+                >
+                  <h2 className="font-semibold">{m.library_rule_submitted_metadata()}</h2>
+                  <dl className="space-y-2">
+                    <div>
+                      <dt className="text-sm text-muted-foreground">{m.library_collection_title()}</dt>
+                      <dd className="break-words">{intent.title}</dd>
+                    </div>
+                    {intent.description && (
+                      <div>
+                        <dt className="text-sm text-muted-foreground">{m.library_collection_description()}</dt>
+                        <dd className="whitespace-pre-wrap break-words">{intent.description}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </section>
+              )}
               <DynamicRuleReview
-                filter={base.rule.filter}
-                stage="current"
+                filter={reviewFilter}
+                stage={reviewStage}
                 current={currentMeaning}
-                accepted={savedMeaning}
+                accepted={
+                  reviewMeaning ??
+                  (intent && submittedReview ? ruleReviewReleaseFromChoices(submittedReview.choices) : undefined)
+                }
                 choices={visibleChoices}
-                profiles={base.accepted?.profiles ?? choices.release.profiles}
-                profileState={base.accepted?.state ?? choices.release.state}
-                basis={base.rule}
-                basisKind="loaded"
-                collectionId={base.id}
+                profiles={reviewProfiles}
+                profileState={reviewProfileState}
+                basis={base.state === 'ready' && reviewStage !== 'confirmed' ? base.rule : undefined}
+                basisKind={intent ? 'original' : 'loaded'}
+                collectionId={base.state === 'ready' ? base.id : (savedId ?? undefined)}
+                returnedId={savedId ?? undefined}
                 locale={locale}
                 ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
               />
-            ) : null}
-          </section>
-        ) : null}
-        {feedback && <p role="alert">{feedback}</p>}
-        {intent && !pending && <p role="status">{m.library_rule_uncertain()}</p>}
-        {savedId && <p role="status">{m.library_rule_saved()}</p>}
-        <CollectionRuleControls
-          creating={base.state === 'new'}
-          pending={pending}
-          conflict={conflict}
-          uncertain={!!intent}
-          hasFilter={!!filter && !!(currentCsrf ? currentCsrf() : csrfToken)}
-          savedId={savedId}
-          collectionId={base.state === 'ready' ? base.id : null}
-          resultsHref={resultsHref}
-          navigateAfterSave={!!navigate}
-          refresh={() => void refresh()}
-        />
-        <TechnicalDetails label={m.library_rule_details()}>
-          <p className="text-muted-foreground">{m.library_rule_sort()}</p>
-          {base.state === 'ready' && (
-            <>
-              <p className="text-muted-foreground">{m.library_rule_loaded_references()}</p>
-              <dl className="flex min-w-0 flex-col gap-2">
-                {[
-                  { label: m.library_rule_release(), value: base.rule.releaseDigest },
-                  { label: m.library_rule_source_generation(), value: base.rule.sourceGeneration },
-                  { label: m.library_rule_revision(), value: base.rule.revision },
-                  { label: m.library_rule_collection_revision(), value: base.rule.collectionRevision },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd className="select-text break-all">
-                      <code>{value}</code>
-                    </dd>
+              {currentRuleRead && base.state === 'ready' ? (
+                <section
+                  className="min-w-0 space-y-3 rounded-lg border border-primary/30 p-4"
+                  aria-labelledby={`${metadataId}-current-review-heading`}
+                >
+                  <h2 id={`${metadataId}-current-review-heading`} className="font-semibold">
+                    {m.library_rule_review_current_prompt()}
+                  </h2>
+                  <Button
+                    ref={currentReviewOpener}
+                    type="button"
+                    variant="outline"
+                    aria-expanded={reviewCurrentRule}
+                    aria-controls={`${metadataId}-current-review-panel`}
+                    onClick={toggleCurrentRuleReview}
+                  >
+                    {reviewCurrentRule ? m.library_rule_review_current_close() : m.library_rule_review_current_button()}
+                  </Button>
+                  <div
+                    id={`${metadataId}-current-review-panel`}
+                    ref={currentReviewPanel}
+                    role="region"
+                    aria-labelledby={`${metadataId}-current-review-heading`}
+                    hidden={!reviewCurrentRule}
+                    className="min-w-0"
+                  >
+                    {reviewCurrentRule ? (
+                      <DynamicRuleReview
+                        filter={base.rule.filter}
+                        stage="current"
+                        current={currentMeaning}
+                        accepted={savedMeaning}
+                        choices={visibleChoices}
+                        profiles={base.accepted?.profiles ?? choices.release.profiles}
+                        profileState={base.accepted?.state ?? choices.release.state}
+                        basis={base.rule}
+                        basisKind="loaded"
+                        collectionId={base.id}
+                        locale={locale}
+                        ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
+                      />
+                    ) : null}
                   </div>
-                ))}
-              </dl>
-            </>
-          )}
-        </TechnicalDetails>
+                </section>
+              ) : null}
+            </div>
+          }
+          references={
+            <TechnicalDetails label={m.library_rule_details()}>
+              <p className="text-muted-foreground">{m.library_rule_sort()}</p>
+              {base.state === 'ready' && (
+                <>
+                  <p className="text-muted-foreground">{m.library_rule_loaded_references()}</p>
+                  <dl className="flex min-w-0 flex-col gap-2">
+                    {[
+                      { label: m.library_rule_release(), value: base.rule.releaseDigest },
+                      { label: m.library_rule_source_generation(), value: base.rule.sourceGeneration },
+                      { label: m.library_rule_revision(), value: base.rule.revision },
+                      { label: m.library_rule_collection_revision(), value: base.rule.collectionRevision },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd className="select-text break-all">
+                          <code>{value}</code>
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              )}
+            </TechnicalDetails>
+          }
+        />
       </form>
     </article>
   );
