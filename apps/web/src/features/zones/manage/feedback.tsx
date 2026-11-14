@@ -1,3 +1,4 @@
+import { useEffect, useRef, type MouseEvent } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../../../paraglide/messages.js';
@@ -5,6 +6,62 @@ import type { Failure } from './model';
 
 const recoveryControlClassName =
   'h-auto min-h-8 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+
+export type KeyboardActivation = { generation: number };
+
+/** A deferred result may take focus only while the same keyboard activation still owns it. */
+export function useSettlementFocus() {
+  const generation = useRef(0);
+  const expectedRestore = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const invalidate = () => {
+      expectedRestore.current = null;
+      generation.current += 1;
+    };
+    const onFocus = (event: FocusEvent) => {
+      if (expectedRestore.current && (event.target === expectedRestore.current || event.target === document.body)) {
+        expectedRestore.current = null;
+        return;
+      }
+      invalidate();
+    };
+    document.addEventListener('pointerdown', invalidate, true);
+    document.addEventListener('keydown', invalidate, true);
+    document.addEventListener('focusin', onFocus, true);
+    return () => {
+      document.removeEventListener('pointerdown', invalidate, true);
+      document.removeEventListener('keydown', invalidate, true);
+      document.removeEventListener('focusin', onFocus, true);
+    };
+  }, []);
+
+  function captureActivation(event?: { detail: number }, restoreTo?: HTMLElement | null) {
+    expectedRestore.current = restoreTo ?? null;
+    return event && event.detail !== 0 ? null : { generation: generation.current };
+  }
+
+  function focusResult(
+    getTarget: () => HTMLElement | null,
+    activation: KeyboardActivation | null,
+    isCurrent: () => boolean,
+  ) {
+    if (!activation) return;
+    requestAnimationFrame(() => {
+      const target = getTarget();
+      if (
+        generation.current !== activation.generation ||
+        !isCurrent() ||
+        !target?.isConnected ||
+        target.getClientRects().length === 0
+      )
+        return;
+      target.focus();
+    });
+  }
+
+  return { captureActivation, focusResult };
+}
 
 export function ZoneFeedback({
   failure,
@@ -15,7 +72,7 @@ export function ZoneFeedback({
 }: {
   failure: Failure;
   locale: string;
-  onRetry?: (() => void) | undefined;
+  onRetry?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   retryPending?: boolean;
   returnTo?: string;
 }) {
