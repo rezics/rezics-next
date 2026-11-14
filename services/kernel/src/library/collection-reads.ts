@@ -48,7 +48,8 @@ import {
 } from './subject-collection-read-bounds.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
-import { readableSubjects, resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
+import { requireLibraryPresentation } from './domain-binding.ts';
 import collectionRead from './collection-reads-collection.sql';
 import { collectionDirectoryPagePlan, collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
 import memberPage from './collection-reads-members.sql';
@@ -428,13 +429,14 @@ export function createCollectionReads(
     }
   }
 
-  async function loadCollection(
+  async function withReadableCollection<T>(
     viewer: Actor,
     id: string,
-    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+    deadline: number,
+    read: (client: QueryClient, row: StoredCollection) => Promise<T>,
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
     work?: AccessWorkAccounting,
-  ): Promise<StoredCollection | null> {
+  ): Promise<T | null> {
     if (typeof id !== 'string') return null;
     const route = routeOf(id);
     if (route === null) return null;
@@ -471,8 +473,19 @@ export function createCollectionReads(
           // authoritative deletion from unavailable identity, then drop it on the wire.
         }
       }
-      return disclose(sink.row, allowed, account, viewer);
+      const row = disclose(sink.row, allowed, account, viewer);
+      return row === null ? null : read(client, row);
     });
+  }
+
+  function loadCollection(
+    viewer: Actor,
+    id: string,
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+    observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
+    work?: AccessWorkAccounting,
+  ): Promise<StoredCollection | null> {
+    return withReadableCollection(viewer, id, deadline, async (_client, row) => row, observation, work);
   }
 
   /** Following needs the authorized title, without unrelated cover/editor presentation. */
@@ -486,11 +499,11 @@ export function createCollectionReads(
   async function readCollection(
     viewer: Actor,
     id: string,
-    deadline?: number,
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
     ownerManagement = false,
   ): Promise<CollectionResourceView> {
-    const logical = await builtins.read(viewer, id);
+    const logical = await builtins.read(viewer, id, 'collection:read', deadline);
     if (logical) {
       if (!ownerManagement) return logical;
       if (viewer.kind !== 'account' || viewer.accountId !== logical.curatorAccountId) throw notFound();
@@ -499,7 +512,7 @@ export function createCollectionReads(
     const row = await loadCollection(viewer, id, deadline, observation);
     if (!row) throw notFound();
     if (ownerManagement && (viewer.kind !== 'account' || viewer.accountId !== row.curatorAccountId)) throw notFound();
-    return present(viewer, row, deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS), ownerManagement);
+    return present(viewer, row, deadline, ownerManagement);
   }
 
   async function withCurrentMetadataOwner<T>(
@@ -1327,36 +1340,45 @@ export function createCollectionReads(
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
   ): Promise<{ members: MemberView[]; next: string | null }> {
     const page = pageRequest(options, ['cursor', 'limit']);
-    const collection = await loadCollection(viewer, collectionId, deadline);
-    if (!collection) throw notFound();
-    if (collection.membershipKind === 'dynamic') throw new ProblemError('unsupported_query');
-    const route = routeOf(collectionId)!;
     const binding: CursorBinding = {
       operation: 'library.collection.members',
       parameters: { collectionId },
     };
-    const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.orderEpoch);
-    const rows = await readOnly(pool, deadline, (client) =>
-      memberPage.run(queryOf(client), {
-        route,
-        collection_id: collectionId,
-        after_ordinal_key: position?.ordinalKey ?? null,
-        after_member_id: position?.memberId ?? null,
-        limit: page.limit + 1,
-      }),
-    );
+    async function capture() {
+      const result = await withReadableCollection(viewer, collectionId, deadline, async (client, collection) => {
+        if (collection.membershipKind === 'dynamic') throw new ProblemError('unsupported_query');
+        const route = routeOf(collectionId)!;
+        const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.orderEpoch);
+        const rows = await memberPage.run(queryOf(client), {
+          route,
+          collection_id: collectionId,
+          after_ordinal_key: position?.ordinalKey ?? null,
+          after_member_id: position?.memberId ?? null,
+          limit: page.limit + 1,
+        });
+        return { collection, rows };
+      });
+      if (result === null) throw notFound();
+      return result;
+    }
+    // The authorized parent, order epoch and raw prefix belong to one source snapshot.
+    const original = await capture();
+    const { collection, rows } = original;
     const considered = rows.slice(0, page.limit);
     const hasMore = rows.length > page.limit;
     // The extra row only decides `next`. Subject reads stay inside the page.
     const readable = new Set(
       considered.length === 0
         ? []
-        : await readableSubjects(
-            anchors,
-            viewer,
+        : await requireLibraryPresentation().identity.readable(
+            { ...anchors, actor: viewer, context: { pool, deadline } },
             considered.map((row) => row.subjectId),
           ),
     );
+    // All Subject homes have been released. Repeat native admission and the exact
+    // bounded prefix, including lookahead, before disclosing either rows or cursor.
+    const current = await capture();
+    if (JSON.stringify(current) !== JSON.stringify(original)) throw new ProblemError('stale_cursor');
     const last = considered.at(-1);
     return {
       members: considered.filter((row) => readable.has(row.subjectId)).map(memberView),

@@ -961,17 +961,23 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () =>
-          fullView(viewDependencies(), actor, query.view, {
-            collection: collectionReadView(
-              await read().readCollection(
-                actor,
-                params.collectionId,
-                undefined,
-                undefined,
-                query.ownerManagement === true,
+          fullView(
+            viewDependencies(),
+            actor,
+            query.view,
+            {
+              collection: collectionReadView(
+                await read().readCollection(
+                  actor,
+                  params.collectionId,
+                  job.deadline,
+                  undefined,
+                  query.ownerManagement === true,
+                ),
               ),
-            ),
-          }),
+            },
+            { deadline: job.deadline },
+          ),
         ),
     )
     .get(
