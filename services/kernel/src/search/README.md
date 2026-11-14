@@ -1523,19 +1523,24 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Bounded native name sort
 
-- Touches: The helper deduplicates distinct nonnull raw names and sends one `_analyze` request per name before bulk;
-  hidden/deleted action names are not analyzed. Each subject keeps one bulk action and its anchor external version.
+Decision: The helper reads engine analysis limits and the `name_key` normalizer only when non-empty names need native
+normalization. Empty or delete-only action lists keep the no-analysis path; batch limits still come from the engine and
+the serialized request envelope.
+
+- Touches: The helper deduplicates distinct nonnull raw names and sends bounded multi-value `_analyze` requests before
+  bulk; hidden/deleted action names are not analyzed. Each subject keeps one bulk action and its anchor external version.
   Normalization failure prevents bulk and checkpoint advancement. The existing integration and batch contracts are
   covered by `test/search/bounded-sort-indexer.test.ts` (“default index relay and rebuild bound native sort values
   before visible writes and do not checkpoint failed normalization”) and `test/search/canonical-coverage.test.ts`
   (“source cap stays 256 and publication waits for every real source chunk and checkpoint outcome”); their pass
   status is unverified here.
-- Bound: The helper permits at most 16 concurrent analysis requests and validates each single token's position and
-  offsets; it does not infer alignment from multi-text output or cap its action set at 256. Helper work is
-  `O(distinct names and their bytes)`, with one request per distinct name and zero SQL. Any eventual source chunking
-  is a separate batch-contract bound. Retain only a complete normalized key of at most 512 UTF-16 code units; larger
-  results use null. Display and exact names stay unchanged, and read-side sorting remains match-dependent with
-  missing-last plus unique id.
+- Bound: Each request is limited by the engine token ceiling divided by maximum concurrency and by a 64 KiB serialized
+  request envelope; one individually oversized name remains whole in its own request. The helper permits at most 16
+  concurrent analysis requests and validates each single token's position and offsets; it does not infer alignment
+  from multi-text output or cap its action set at 256. Helper work is `O(distinct names and their serialized bytes)`
+  with zero SQL. Any eventual source chunking is a separate batch-contract bound. Retain only a complete normalized
+  key of at most 512 UTF-16 code units; larger results use null. Display and exact names stay unchanged, and read-side
+  sorting remains match-dependent with missing-last plus unique id.
 - Growth check: `test/search/bounded-sort-keys.test.ts` (“native normalization bounds complete name sort values on
   writes while preserving full names and stable null pagination”) exercises the native helper; its pass status is
   unverified here. Pinned-engine/runtime evidence for overlong normalization becoming null, ordinary 250-CJK names
