@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import type { AuthoritativeTime } from '../command/command.ts';
+import { releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import type { OperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -286,41 +286,45 @@ export function createCollectionKindNative(
         return unavailable;
       const resumed = await preparation.resume({ capture: input.capture, deadline: input.deadline });
       if (resumed.status !== 'prepared') return resumed;
-      if (
-        resumed.step.source.observation.collectionId !== input.capture.collectionId ||
-        resumed.step.source.observation.route !== routeOf(input.capture.collectionId)
-      )
-        return unavailable;
-      const check = () =>
-        sources.identity.revalidate({
-          key: resumed.identity.key,
-          expected: resumed.identity,
+      try {
+        if (
+          resumed.step.source.observation.collectionId !== input.capture.collectionId ||
+          resumed.step.source.observation.route !== routeOf(input.capture.collectionId)
+        )
+          return unavailable;
+        const check = () =>
+          sources.identity.revalidate({
+            key: resumed.identity.key,
+            expected: resumed.identity,
+            deadline: input.deadline,
+          });
+        if ((await check()).status !== 'current') return unavailable;
+        const progress = decodeCollectionKindProgress(input.frontier);
+        const result = await readCollectionKindSourcePage({
+          ...resumed.step,
           deadline: input.deadline,
+          collection: sources.source(resumed.access),
+          afterSubject: input.afterSubject,
+          ...(progress === null ? {} : { progress }),
         });
-      if ((await check()).status !== 'current') return unavailable;
-      const progress = decodeCollectionKindProgress(input.frontier);
-      const result = await readCollectionKindSourcePage({
-        ...resumed.step,
-        deadline: input.deadline,
-        collection: sources.source(resumed.access),
-        afterSubject: input.afterSubject,
-        ...(progress === null ? {} : { progress }),
-      });
-      if ((await check()).status !== 'current') return unavailable;
-      if (result.status === 'settled') return result.page;
-      // An owner-repair wait with no raw progress cannot become an empty-loop continuation.
-      if (result.progress === null && result.afterSubject === input.afterSubject) return unavailable;
-      const frontier = result.progress === null ? null : JSON.stringify(result.progress);
-      const bytes = new TextEncoder().encode(JSON.stringify({ frontier, votes: result.votes })).byteLength;
-      if (bytes > input.byteLimit) return unavailable;
-      return {
-        status: 'progress',
-        frontier,
-        afterSubject: result.afterSubject,
-        votes: result.votes,
-        examined: result.work.used.candidateKeys,
-        bytes,
-      };
+        if ((await check()).status !== 'current') return unavailable;
+        if (result.status === 'settled') return result.page;
+        // An owner-repair wait with no raw progress cannot become an empty-loop continuation.
+        if (result.progress === null && result.afterSubject === input.afterSubject) return unavailable;
+        const frontier = result.progress === null ? null : JSON.stringify(result.progress);
+        const bytes = new TextEncoder().encode(JSON.stringify({ frontier, votes: result.votes })).byteLength;
+        if (bytes > input.byteLimit) return unavailable;
+        return {
+          status: 'progress',
+          frontier,
+          afterSubject: result.afterSubject,
+          votes: result.votes,
+          examined: result.work.used.candidateKeys,
+          bytes,
+        };
+      } finally {
+        releaseOperationalTime(resumed.step.at);
+      }
     },
   };
 }
