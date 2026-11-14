@@ -949,6 +949,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     subjectId: subjectOne,
   });
   const absentPage = await ownerCall('GET', '/v1/libraryHostedReading/checkpoints', undefined);
+  expect(absentPage.value).toEqual({ items: [], nextCursor: null });
   expect(absentPage.value.items.map((item: { subjectId: string }) => item.subjectId)).not.toContain(subjectOne);
   const exported = await readHostedReadingExportPage(
     f.native.pool,
