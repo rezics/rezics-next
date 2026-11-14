@@ -1760,12 +1760,14 @@ function CollectionPageLifetime({
               </span>,
             ]}
           />
-          <CollectionDescriptionReader description={page.description} />
-          <CollectionPresentationSummary
-            layout={layout}
-            kind={page.presentationKindSource === 'owner' ? page.presentationKind : null}
-            types={page.presentationTypes}
-          />
+          {!editing ? <CollectionDescriptionReader description={page.description} /> : null}
+          {!editing ? (
+            <CollectionPresentationSummary
+              layout={layout}
+              kind={page.presentationKindSource === 'owner' ? page.presentationKind : null}
+              types={page.presentationTypes}
+            />
+          ) : null}
           <div data-slot="collection-actions" className="flex min-w-0 flex-wrap items-center gap-2">
             <ResourceAccessLink resourceId={page.id} />
             {addAdmitted ? (
@@ -1997,83 +1999,6 @@ function CollectionPageLifetime({
             }}
           />
         ) : null}
-        {editing && ownerCurrent ? (
-          <CollectionMetadataEditor
-            textSubmitted={textSubmitted}
-            title={title}
-            description={description}
-            disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
-            onSubmit={(event) => void save(event)}
-            onTitleChange={(value) => {
-              if (
-                isCurrent('collection.update') &&
-                !inFlight.current &&
-                saveIntent.current === null &&
-                transfer === null
-              )
-                setTitle(value);
-            }}
-            onDescriptionChange={(value) => {
-              if (
-                isCurrent('collection.update') &&
-                !inFlight.current &&
-                saveIntent.current === null &&
-                transfer === null
-              )
-                setDescription(value);
-            }}
-          >
-            <CollectionPresentationFields
-              types={draftPage.presentationTypes}
-              savedKind={storedKind}
-              savedCoverMediaId={draftPage.coverMediaId ?? null}
-              savedCover={draftPage.cover ?? null}
-              savedCoverSource={draftPage.coverSource}
-              listPresentations={draftPage.listPresentations}
-              typeRatios={draftPage.typeRatios}
-              comparisonDefinitions={draftPage.comparisonDefinitions}
-              firstPage={draftPage.firstPage}
-              saveConfirmed={saveConfirmed}
-              kind={kind}
-              onKindChange={(value) => {
-                if (
-                  isCurrent('collection.update') &&
-                  !inFlight.current &&
-                  saveIntent.current === null &&
-                  transfer === null
-                )
-                  setKind(value);
-              }}
-              coverMediaId={coverMediaId}
-              onCoverChange={(value) => {
-                if (
-                  isCurrent('collection.update') &&
-                  !inFlight.current &&
-                  saveIntent.current === null &&
-                  transfer === null
-                )
-                  setCoverMediaId(value);
-              }}
-              members={saveDesiredMembers}
-              disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
-            />
-            <VisibilityField
-              onChange={(value) => {
-                if (
-                  isCurrent('collection.update') &&
-                  !inFlight.current &&
-                  saveIntent.current === null &&
-                  transfer === null
-                )
-                  setVisibility(value);
-              }}
-              value={visibility}
-              disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
-            />
-            <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
-            <CollectionMetadataHistory collectionId={page.id} isCurrent={() => isCurrent('collection.update')} />
-          </CollectionMetadataEditor>
-        ) : null}
 
         {!editing ? (
           <div data-slot="collection-toolbar" className="flex min-w-0 items-center justify-between gap-2">
@@ -2133,326 +2058,495 @@ function CollectionPageLifetime({
             />
           </>
         ) : null}
-        <div>
-          <h2 className="sr-only">{m.library_collection_members()}</h2>
-          {editing && ownerCurrent && boundaryAdmitted ? (
-            <div className="mb-3 space-y-1 text-sm text-muted-foreground" data-collection-boundary-guidance>
-              <p>{m.library_collection_boundary_help()}</p>
-              {draftChanged ? <p role="status">{m.library_collection_move_save_first()}</p> : null}
-            </div>
-          ) : null}
-          {editing &&
-          ownerCurrent &&
-          (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null || !!bulkOccurrenceCapture) ? (
-            <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
-              <p className="me-auto self-center text-sm text-muted-foreground">
-                {m.library_collection_selection_count({ count: selectedIds.size })}
+        {editing && ownerCurrent ? (
+          <section className="min-w-0 space-y-2 border-b border-border pb-4" data-collection-authoring-heading>
+            <h2 className="text-xl font-semibold tracking-tight">{m.collection_workbench_heading()}</h2>
+            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.collection_workbench_help()}</p>
+          </section>
+        ) : null}
+        <div
+          className={
+            editing && ownerCurrent
+              ? 'grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]'
+              : 'contents'
+          }
+          data-collection-workbench={editing && ownerCurrent ? '' : undefined}
+        >
+          <section className="min-w-0" aria-labelledby="collection-member-canvas-heading" data-collection-member-canvas>
+            <h2 id="collection-member-canvas-heading" className={editing ? 'mb-2 text-lg font-semibold' : 'sr-only'}>
+              {m.library_collection_members()}
+            </h2>
+            {editing ? (
+              <p className="mb-4 max-w-prose text-sm leading-relaxed text-muted-foreground">
+                {m.collection_workbench_members_help()}
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={
-                  pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0 || transfer !== null
-                }
-                onClick={() => {
-                  if (
+            ) : null}
+
+            {editing && ownerCurrent ? (
+              <div className="mb-4 flex min-w-0 flex-wrap gap-2" data-collection-page-selection>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  disabled={
+                    pending ||
+                    draftFrozen ||
+                    transfer !== null ||
+                    members.length === 0 ||
+                    selectedIds.size === members.length
+                  }
+                  onClick={() => {
+                    if (!isCurrent() || inFlight.current || saveIntent.current !== null || transfer !== null) return;
+                    setSelectedIds(new Set(members.slice(0, 100).map((member) => member.id)));
+                  }}
+                >
+                  {m.collection_workbench_select_page()}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  disabled={pending || draftFrozen || transfer !== null || selectedIds.size === 0}
+                  onClick={() => {
+                    if (!isCurrent() || inFlight.current || saveIntent.current !== null || transfer !== null) return;
+                    setSelectedIds(new Set());
+                  }}
+                >
+                  {m.collection_workbench_clear_selection()}
+                </Button>
+              </div>
+            ) : null}
+            {editing && ownerCurrent && boundaryAdmitted ? (
+              <div className="mb-3 space-y-1 text-sm text-muted-foreground" data-collection-boundary-guidance>
+                <p>{m.library_collection_boundary_help()}</p>
+                {draftChanged ? <p role="status">{m.library_collection_move_save_first()}</p> : null}
+              </div>
+            ) : null}
+            {editing &&
+            ownerCurrent &&
+            (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null || !!bulkOccurrenceCapture) ? (
+              <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
+                <p className="me-auto self-center text-sm text-muted-foreground">
+                  {m.library_collection_selection_count({ count: selectedIds.size })}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0 || transfer !== null
+                  }
+                  onClick={() => {
+                    if (
+                      !isCurrent('collection_member.batch_remove') ||
+                      inFlight.current ||
+                      saveIntent.current !== null ||
+                      transfer !== null
+                    )
+                      return;
+                    setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
+                    setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
+                    setSelectedIds(new Set());
+                  }}
+                >
+                  {m.library_collection_remove_selected()}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    pending ||
+                    draftFrozen ||
+                    conflict ||
+                    bulkUnavailable ||
+                    memberDraftChanged ||
+                    transfer !== null ||
+                    selectedIds.size === 0 ||
                     !isCurrent('collection_member.batch_remove') ||
+                    !!bulkOccurrenceRemove
+                  }
+                  onClick={previewSelectedOccurrenceRemoval}
+                >
+                  {m.library_bulk_occurrence_remove_preview()}
+                </Button>
+                <details
+                  className="min-w-0 basis-full rounded-lg border border-border bg-card p-3"
+                  data-collection-transfer-tools
+                >
+                  <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    {m.library_collection_move_selected()}
+                  </summary>
+                  <div className="space-y-3 pt-3">
+                    <CollectionMoveChooser
+                      key={chooserEpoch}
+                      sourceId={page.id}
+                      disabled={pending || draftFrozen || conflict || transfer !== null || transferHasIndependentDraft}
+                      focusHeadingOnMount={chooserEpoch > 0}
+                      current={() => isCurrent('collection_member.transfer') && transfer === null}
+                      onChange={(choice) => {
+                        if (isCurrent('collection_member.transfer') && transfer === null) setMoveChoice(choice);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                      disabled={
+                        pending ||
+                        conflict ||
+                        bulkUnavailable ||
+                        draftFrozen ||
+                        transferHasIndependentDraft ||
+                        !moveChoice ||
+                        selectedIds.size === 0 ||
+                        transfer !== null
+                      }
+                      onClick={() => {
+                        if (
+                          !isCurrent('collection_member.transfer') ||
+                          inFlight.current ||
+                          saveIntent.current !== null ||
+                          !moveChoice
+                        )
+                          return;
+                        const source = editorPage.current ?? page;
+                        const sourceMembers = editorMembers ?? page.members;
+                        const selected = sourceMembers.filter((member) => selectedIds.has(member.id));
+                        if (
+                          source.id !== page.id ||
+                          !Number.isSafeInteger(source.revision) ||
+                          selected.length !== selectedIds.size ||
+                          moveChoice.destination.id === source.id
+                        ) {
+                          setFailure(m.library_collection_move_read_failed());
+                          return;
+                        }
+                        const occurrences = selected.map((member) => ({
+                          id: member.id,
+                          title: member.subject
+                            ? pageText(libraryTitleValue(member.subject.label), getLocale()).text
+                            : m.library_collection_move_occurrence_unavailable(),
+                        }));
+                        setTransfer({
+                          ...moveChoice,
+                          sourceId: source.id,
+                          sourceTitle: source.title,
+                          sourceRevision: source.revision,
+                          sourceHref: collectionViewAddress(source.id, layout, cursor, search),
+                          destinationHref: collectionViewAddress(moveChoice.destination.id, 'list', undefined),
+                          occurrences,
+                          memberIds: selected.map((member) => member.id),
+                          idempotencyKey: crypto.randomUUID(),
+                        });
+                        setTransferState('review');
+                        setFailure('');
+                      }}
+                    >
+                      {m.library_collection_move_review_button()}
+                    </Button>
+                  </div>
+                </details>
+                {transfer ? (
+                  <CollectionTransferReviewPanel
+                    transfer={transfer}
+                    transferState={transferState}
+                    pending={pending}
+                    conflict={conflict}
+                    draftFrozen={draftFrozen}
+                    canWrite={isCurrent('collection_member.transfer')}
+                    canRead={isCurrent()}
+                    headingRef={transferReviewHeading}
+                    refusal={failure}
+                    onConfirm={() => void save(undefined, false, true)}
+                    onRetryExact={() => void save(undefined, false, true)}
+                    onReread={() => void rereadRefusedTransfer()}
+                    onCancel={() => {
+                      if (!isCurrent() || saveIntent.current !== null) return;
+                      setTransfer(null);
+                      setTransferState(null);
+                      setMoveChoice(null);
+                      setChooserEpoch((value) => value + 1);
+                      setFailure('');
+                    }}
+                  />
+                ) : null}
+                {transferHasIndependentDraft && !transfer ? (
+                  <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_save_first()}</p>
+                ) : null}
+                {bulkUnavailable ? (
+                  <p className="basis-full text-sm text-muted-foreground">{m.library_collection_batch_unavailable()}</p>
+                ) : null}
+                {bulkOccurrenceCapture && bulkOccurrenceRemove && isCurrent() ? (
+                  <div className="basis-full space-y-3">
+                    <BulkOccurrenceRemoveReview capture={bulkOccurrenceCapture} />
+                    <BulkOccurrenceRemoveJourneyControls
+                      state={bulkOccurrenceRemove.state}
+                      canWrite={isCurrent('collection_member.batch_remove')}
+                      onPreview={() => void bulkOccurrenceRemove.preview()}
+                      onRetryPreview={() => void bulkOccurrenceRemove.preview(true)}
+                      onConfirm={() =>
+                        void bulkOccurrenceRemove.confirm().then((confirmed) => {
+                          if (confirmed) void bulkOccurrenceRemove.read();
+                        })
+                      }
+                      onRetryConfirm={() =>
+                        void bulkOccurrenceRemove.confirm(true).then((confirmed) => {
+                          if (confirmed) void bulkOccurrenceRemove.read();
+                        })
+                      }
+                      onRead={() => void bulkOccurrenceRemove.read()}
+                      onReadMore={(cursor) => void bulkOccurrenceRemove.read(cursor)}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <CollectionMembersStatus
+              state={page.memberState ?? 'ready'}
+              retrying={readingMembers}
+              disabled={pending || draftFrozen || editing || readingMembers}
+              onRetry={() => void reloadFromControl()}
+            />
+            {!editing ? (
+              <CollectionReadMembers<CollectionReadMember>
+                members={readMembers}
+                layout={layout}
+                pageReady={readPageReady}
+                pageKey={readPageKey}
+                positionScope={readPositionScope}
+                currentHref={currentHref}
+                returnSource={page}
+                admitInitialReturn={admitInitialComparisonReturn}
+                onReferenceNavigate={() => setSelectedIds(new Set())}
+                viewerProjection={viewerProjection}
+                viewerActionHref={(member: CollectionReadMember) => {
+                  const row = collectionViewerFactForMember(viewerProjection, member);
+                  if (
+                    viewerProjection.state !== 'current' ||
+                    !member.subject ||
+                    !member.subjectId ||
+                    !collectionViewerHasPersonalAction(row, viewerProjection.question)
+                  )
+                    return undefined;
+                  const title = pageText(libraryTitleValue(member.subject.label), getLocale()).text;
+                  const subject = subjectHref({ id: member.subjectId, label: title }, getLocale()).href;
+                  return collectionViewerActionHref(subject, collectionMemberReturnAddress(currentHref, member.id));
+                }}
+                presentationKind={page.presentationKind}
+                typeRatios={page.typeRatios}
+                listPresentations={page.listPresentations}
+                comparisonDefinitions={page.comparisonDefinitions}
+                onCopy={(member) => {
+                  if (member.subject)
+                    return navigator.clipboard.writeText(
+                      new URL(
+                        collectionComparisonHref(
+                          member.subject.id,
+                          pageText(libraryTitleValue(member.subject.label), getLocale()).text,
+                          getLocale(),
+                          currentHref,
+                          member.id,
+                        ),
+                        location.origin,
+                      ).href,
+                    );
+                }}
+              />
+            ) : (
+              <CollectionMemberList
+                textSubmitted={textSubmitted}
+                members={members}
+                typeRatios={page.typeRatios}
+                listPresentations={page.listPresentations}
+                comparisonDefinitions={page.comparisonDefinitions}
+                editing={editing && ownerCurrent}
+                firstPage={page.firstPage}
+                busy={pending || draftFrozen || transfer !== null}
+                selectedIds={selectedIds}
+                savedNoteIds={savedNoteIds}
+                onSelectionChange={(memberId, selected) => {
+                  if (!isCurrent() || inFlight.current || saveIntent.current !== null || transfer !== null) return;
+                  setSelectedIds((current) => {
+                    const next = new Set(current);
+                    if (selected && next.size < 100 && members.some((member) => member.id === memberId))
+                      next.add(memberId);
+                    else next.delete(memberId);
+                    return next;
+                  });
+                }}
+                onMove={(memberId, after) => {
+                  if (transfer === null) setMemberOrder(memberId, after);
+                }}
+                onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
+                boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
+                onNoteChange={(memberId, note) => {
+                  if (
+                    !isCurrent('collection_member.update') ||
                     inFlight.current ||
                     saveIntent.current !== null ||
                     transfer !== null
                   )
                     return;
-                  setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
-                  setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
-                  setSelectedIds(new Set());
+                  setMembers((current) =>
+                    current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
+                  );
+                  setSavedNoteIds((current) => {
+                    if (!current.has(memberId)) return current;
+                    const next = new Set(current);
+                    next.delete(memberId);
+                    return next;
+                  });
                 }}
-              >
-                {m.library_collection_remove_selected()}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={
-                  pending ||
-                  draftFrozen ||
-                  conflict ||
-                  bulkUnavailable ||
-                  memberDraftChanged ||
-                  transfer !== null ||
-                  selectedIds.size === 0 ||
-                  !isCurrent('collection_member.batch_remove') ||
-                  !!bulkOccurrenceRemove
-                }
-                onClick={previewSelectedOccurrenceRemoval}
-              >
-                {m.library_bulk_occurrence_remove_preview()}
-              </Button>
-              <CollectionMoveChooser
-                key={chooserEpoch}
-                sourceId={page.id}
-                disabled={pending || draftFrozen || conflict || transfer !== null || transferHasIndependentDraft}
-                focusHeadingOnMount={chooserEpoch > 0}
-                current={() => isCurrent('collection_member.transfer') && transfer === null}
-                onChange={(choice) => {
-                  if (isCurrent('collection_member.transfer') && transfer === null) setMoveChoice(choice);
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-                disabled={
-                  pending ||
-                  conflict ||
-                  bulkUnavailable ||
-                  draftFrozen ||
-                  transferHasIndependentDraft ||
-                  !moveChoice ||
-                  selectedIds.size === 0 ||
-                  transfer !== null
-                }
-                onClick={() => {
+                onRemove={(memberId) => {
                   if (
-                    !isCurrent('collection_member.transfer') ||
+                    !isCurrent('collection_member.delete') ||
                     inFlight.current ||
                     saveIntent.current !== null ||
-                    !moveChoice
+                    transfer !== null
                   )
                     return;
-                  const source = editorPage.current ?? page;
-                  const sourceMembers = editorMembers ?? page.members;
-                  const selected = sourceMembers.filter((member) => selectedIds.has(member.id));
+                  setMembers((current) => current.filter((member) => member.id !== memberId));
+                  setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
+                }}
+                onCopy={(memberId) => {
+                  const subject = members.find((member) => member.id === memberId)?.subject;
+                  if (subject)
+                    copyLink(
+                      subjectHref(
+                        { id: subject.id, label: pageText(libraryTitleValue(subject.label), getLocale()).text },
+                        getLocale(),
+                      ).href,
+                    );
+                }}
+              />
+            )}
+          </section>
+          {editing && ownerCurrent ? (
+            <aside
+              className="min-w-0 space-y-4"
+              aria-label={m.library_collection_details()}
+              data-collection-authoring-details
+            >
+              <CollectionMetadataEditor
+                textSubmitted={textSubmitted}
+                title={title}
+                description={description}
+                disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
+                onSubmit={(event) => void save(event)}
+                onTitleChange={(value) => {
                   if (
-                    source.id !== page.id ||
-                    !Number.isSafeInteger(source.revision) ||
-                    selected.length !== selectedIds.size ||
-                    moveChoice.destination.id === source.id
-                  ) {
-                    setFailure(m.library_collection_move_read_failed());
-                    return;
-                  }
-                  const occurrences = selected.map((member) => ({
-                    id: member.id,
-                    title: member.subject
-                      ? pageText(libraryTitleValue(member.subject.label), getLocale()).text
-                      : m.library_collection_move_occurrence_unavailable(),
-                  }));
-                  setTransfer({
-                    ...moveChoice,
-                    sourceId: source.id,
-                    sourceTitle: source.title,
-                    sourceRevision: source.revision,
-                    sourceHref: collectionViewAddress(source.id, layout, cursor, search),
-                    destinationHref: collectionViewAddress(moveChoice.destination.id, 'list', undefined),
-                    occurrences,
-                    memberIds: selected.map((member) => member.id),
-                    idempotencyKey: crypto.randomUUID(),
-                  });
-                  setTransferState('review');
-                  setFailure('');
+                    isCurrent('collection.update') &&
+                    !inFlight.current &&
+                    saveIntent.current === null &&
+                    transfer === null
+                  )
+                    setTitle(value);
+                }}
+                onDescriptionChange={(value) => {
+                  if (
+                    isCurrent('collection.update') &&
+                    !inFlight.current &&
+                    saveIntent.current === null &&
+                    transfer === null
+                  )
+                    setDescription(value);
                 }}
               >
-                {m.library_collection_move_review_button()}
-              </Button>
-              {transfer ? (
-                <CollectionTransferReviewPanel
-                  transfer={transfer}
-                  transferState={transferState}
-                  pending={pending}
-                  conflict={conflict}
-                  draftFrozen={draftFrozen}
-                  canWrite={isCurrent('collection_member.transfer')}
-                  canRead={isCurrent()}
-                  headingRef={transferReviewHeading}
-                  refusal={failure}
-                  onConfirm={() => void save(undefined, false, true)}
-                  onRetryExact={() => void save(undefined, false, true)}
-                  onReread={() => void rereadRefusedTransfer()}
-                  onCancel={() => {
-                    if (!isCurrent() || saveIntent.current !== null) return;
-                    setTransfer(null);
-                    setTransferState(null);
-                    setMoveChoice(null);
-                    setChooserEpoch((value) => value + 1);
-                    setFailure('');
-                  }}
-                />
-              ) : null}
-              {transferHasIndependentDraft && !transfer ? (
-                <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_save_first()}</p>
-              ) : null}
-              {bulkUnavailable ? (
-                <p className="basis-full text-sm text-muted-foreground">{m.library_collection_batch_unavailable()}</p>
-              ) : null}
-              {bulkOccurrenceCapture && bulkOccurrenceRemove && isCurrent() ? (
-                <div className="basis-full space-y-3">
-                  <BulkOccurrenceRemoveReview capture={bulkOccurrenceCapture} />
-                  <BulkOccurrenceRemoveJourneyControls
-                    state={bulkOccurrenceRemove.state}
-                    canWrite={isCurrent('collection_member.batch_remove')}
-                    onPreview={() => void bulkOccurrenceRemove.preview()}
-                    onRetryPreview={() => void bulkOccurrenceRemove.preview(true)}
-                    onConfirm={() =>
-                      void bulkOccurrenceRemove.confirm().then((confirmed) => {
-                        if (confirmed) void bulkOccurrenceRemove.read();
-                      })
+                <details className="min-w-0 border-t border-border pt-3" data-collection-presentation-settings>
+                  <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    {m.collection_choice_heading()}
+                  </summary>
+                  <div className="pt-3">
+                    <CollectionPresentationFields
+                      types={draftPage.presentationTypes}
+                      savedKind={storedKind}
+                      savedCoverMediaId={draftPage.coverMediaId ?? null}
+                      savedCover={draftPage.cover ?? null}
+                      savedCoverSource={draftPage.coverSource}
+                      listPresentations={draftPage.listPresentations}
+                      typeRatios={draftPage.typeRatios}
+                      comparisonDefinitions={draftPage.comparisonDefinitions}
+                      firstPage={draftPage.firstPage}
+                      saveConfirmed={saveConfirmed}
+                      kind={kind}
+                      onKindChange={(value) => {
+                        if (
+                          isCurrent('collection.update') &&
+                          !inFlight.current &&
+                          saveIntent.current === null &&
+                          transfer === null
+                        )
+                          setKind(value);
+                      }}
+                      coverMediaId={coverMediaId}
+                      onCoverChange={(value) => {
+                        if (
+                          isCurrent('collection.update') &&
+                          !inFlight.current &&
+                          saveIntent.current === null &&
+                          transfer === null
+                        )
+                          setCoverMediaId(value);
+                      }}
+                      members={saveDesiredMembers}
+                      disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
+                    />
+                  </div>
+                </details>
+                <details className="min-w-0 border-t border-border pt-3" data-collection-advanced-settings>
+                  <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    {m.collection_workbench_secondary()}
+                  </summary>
+                  <div className="space-y-4 pt-3">
+                    <VisibilityField
+                      onChange={(value) => {
+                        if (
+                          isCurrent('collection.update') &&
+                          !inFlight.current &&
+                          saveIntent.current === null &&
+                          transfer === null
+                        )
+                          setVisibility(value);
+                      }}
+                      value={visibility}
+                      disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
+                    />
+                    <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
+                    <CollectionMetadataHistory
+                      collectionId={page.id}
+                      isCurrent={() => isCurrent('collection.update')}
+                    />
+                  </div>
+                </details>
+              </CollectionMetadataEditor>
+            </aside>
+          ) : null}
+          {editing && ownerCurrent && (draftChanged || transfer || activeSave) ? (
+            <div className="col-span-full min-w-0">
+              <CollectionEditReview
+                plan={activePlan}
+                initial={activeInitial}
+                desired={activeDesired}
+                types={page.presentationTypes}
+                outcomes={activeOutcomes}
+                basisState={conflictBasisState}
+                currentBasis={conflictBasis}
+                rebaseIssue={rebaseIssue}
+                recoverCurrent={!activeSave?.transfer}
+                {...(activeSave ? { onRetry: () => void save(undefined, true, Boolean(activeSave.transfer)) } : {})}
+                {...(activeSave && !activeSave.transfer
+                  ? {
+                      onReadCurrent: () => void readCurrentConflictBasis(),
+                      onDiscard: discardDraftForCurrentBasis,
+                      onReviewCurrent: () => reviewRemainingAgainstCurrent(),
                     }
-                    onRetryConfirm={() =>
-                      void bulkOccurrenceRemove.confirm(true).then((confirmed) => {
-                        if (confirmed) void bulkOccurrenceRemove.read();
-                      })
-                    }
-                    onRead={() => void bulkOccurrenceRemove.read()}
-                    onReadMore={(cursor) => void bulkOccurrenceRemove.read(cursor)}
-                  />
-                </div>
-              ) : null}
+                  : {})}
+                {...(activeSave && !activeSave.transfer && rebaseIssue
+                  ? { onDiscardUnavailable: discardUnavailableDraftOperation }
+                  : {})}
+              />
             </div>
           ) : null}
-          <CollectionMembersStatus
-            state={page.memberState ?? 'ready'}
-            retrying={readingMembers}
-            disabled={pending || draftFrozen || editing || readingMembers}
-            onRetry={() => void reloadFromControl()}
-          />
-          {!editing ? (
-            <CollectionReadMembers<CollectionReadMember>
-              members={readMembers}
-              layout={layout}
-              pageReady={readPageReady}
-              pageKey={readPageKey}
-              positionScope={readPositionScope}
-              currentHref={currentHref}
-              returnSource={page}
-              admitInitialReturn={admitInitialComparisonReturn}
-              onReferenceNavigate={() => setSelectedIds(new Set())}
-              viewerProjection={viewerProjection}
-              viewerActionHref={(member: CollectionReadMember) => {
-                const row = collectionViewerFactForMember(viewerProjection, member);
-                if (
-                  viewerProjection.state !== 'current' ||
-                  !member.subject ||
-                  !member.subjectId ||
-                  !collectionViewerHasPersonalAction(row, viewerProjection.question)
-                )
-                  return undefined;
-                const title = pageText(libraryTitleValue(member.subject.label), getLocale()).text;
-                const subject = subjectHref({ id: member.subjectId, label: title }, getLocale()).href;
-                return collectionViewerActionHref(subject, collectionMemberReturnAddress(currentHref, member.id));
-              }}
-              presentationKind={page.presentationKind}
-              typeRatios={page.typeRatios}
-              listPresentations={page.listPresentations}
-              comparisonDefinitions={page.comparisonDefinitions}
-              onCopy={(member) => {
-                if (member.subject)
-                  return navigator.clipboard.writeText(
-                    new URL(
-                      collectionComparisonHref(
-                        member.subject.id,
-                        pageText(libraryTitleValue(member.subject.label), getLocale()).text,
-                        getLocale(),
-                        currentHref,
-                        member.id,
-                      ),
-                      location.origin,
-                    ).href,
-                  );
-              }}
-            />
-          ) : (
-            <CollectionMemberList
-              textSubmitted={textSubmitted}
-              members={members}
-              typeRatios={page.typeRatios}
-              listPresentations={page.listPresentations}
-              comparisonDefinitions={page.comparisonDefinitions}
-              editing={editing && ownerCurrent}
-              firstPage={page.firstPage}
-              busy={pending || draftFrozen || transfer !== null}
-              selectedIds={selectedIds}
-              savedNoteIds={savedNoteIds}
-              onSelectionChange={(memberId, selected) => {
-                if (!isCurrent() || inFlight.current || saveIntent.current !== null || transfer !== null) return;
-                setSelectedIds((current) => {
-                  const next = new Set(current);
-                  if (selected && next.size < 100 && members.some((member) => member.id === memberId))
-                    next.add(memberId);
-                  else next.delete(memberId);
-                  return next;
-                });
-              }}
-              onMove={(memberId, after) => {
-                if (transfer === null) setMemberOrder(memberId, after);
-              }}
-              onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
-              boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
-              onNoteChange={(memberId, note) => {
-                if (
-                  !isCurrent('collection_member.update') ||
-                  inFlight.current ||
-                  saveIntent.current !== null ||
-                  transfer !== null
-                )
-                  return;
-                setMembers((current) =>
-                  current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
-                );
-                setSavedNoteIds((current) => {
-                  if (!current.has(memberId)) return current;
-                  const next = new Set(current);
-                  next.delete(memberId);
-                  return next;
-                });
-              }}
-              onRemove={(memberId) => {
-                if (
-                  !isCurrent('collection_member.delete') ||
-                  inFlight.current ||
-                  saveIntent.current !== null ||
-                  transfer !== null
-                )
-                  return;
-                setMembers((current) => current.filter((member) => member.id !== memberId));
-                setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
-              }}
-              onCopy={(memberId) => {
-                const subject = members.find((member) => member.id === memberId)?.subject;
-                if (subject)
-                  copyLink(
-                    subjectHref(
-                      { id: subject.id, label: pageText(libraryTitleValue(subject.label), getLocale()).text },
-                      getLocale(),
-                    ).href,
-                  );
-              }}
-            />
-          )}
         </div>
-        {editing && ownerCurrent && (draftChanged || transfer || activeSave) ? (
-          <CollectionEditReview
-            plan={activePlan}
-            initial={activeInitial}
-            desired={activeDesired}
-            types={page.presentationTypes}
-            outcomes={activeOutcomes}
-            basisState={conflictBasisState}
-            currentBasis={conflictBasis}
-            rebaseIssue={rebaseIssue}
-            recoverCurrent={!activeSave?.transfer}
-            {...(activeSave ? { onRetry: () => void save(undefined, true, Boolean(activeSave.transfer)) } : {})}
-            {...(activeSave && !activeSave.transfer
-              ? {
-                  onReadCurrent: () => void readCurrentConflictBasis(),
-                  onDiscard: discardDraftForCurrentBasis,
-                  onReviewCurrent: () => reviewRemainingAgainstCurrent(),
-                }
-              : {})}
-            {...(activeSave && !activeSave.transfer && rebaseIssue
-              ? { onDiscardUnavailable: discardUnavailableDraftOperation }
-              : {})}
-          />
-        ) : null}
         {!editing && ownerCurrent && saveRunView?.complete ? (
           <CollectionEditReview
             plan={saveRunView.plan}
@@ -2466,10 +2560,11 @@ function CollectionPageLifetime({
         ) : null}
         {editing && ownerCurrent ? (
           <div
-            className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm"
+            className="sticky bottom-3 z-20 flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm"
             data-collection-save
           >
             <Button
+              className="h-auto min-h-11 max-w-full flex-1 whitespace-normal px-5 py-3 sm:flex-none"
               type="submit"
               form="collection-edit-form"
               disabled={!hydrated || pending || conflict || transfer !== null}
@@ -2479,11 +2574,18 @@ function CollectionPageLifetime({
             <Button
               type="button"
               variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal py-3"
               disabled={pending || conflict || draftFrozen}
               onClick={cancelEditing}
             >
               {m.library_collection_cancel()}
             </Button>
+            <p
+              className="basis-full text-xs leading-relaxed text-muted-foreground sm:order-last"
+              data-collection-save-help
+            >
+              {m.collection_workbench_save_help()}
+            </p>
             {!saveConfirmed && (memberDraftChanged || transfer) ? (
               <span role="status" className="text-sm text-muted-foreground">
                 {m.library_collection_unsaved_members()}

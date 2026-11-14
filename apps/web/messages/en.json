@@ -12552,5 +12552,17 @@
   "moderation_scope_catalogue": "Catalogue",
   "moderation_case_open": "Open case",
   "moderation_action_target": "Action applies to",
-  "moderation_action_review_hint": "Review the exact target and reason before sending."
+  "moderation_action_review_hint": "Review the exact target and reason before sending.",
+  "collection_workbench_clear_selection": "Clear selection",
+  "collection_workbench_create_help": "Start with a title and visibility. You can add and arrange works after creating the collection.",
+  "collection_workbench_empty_help": "Your ordered members will appear here. Create the collection first, then add works.",
+  "collection_workbench_heading": "Organize this collection",
+  "collection_workbench_help": "Arrange the loaded occurrences, then review and save your changes.",
+  "collection_workbench_members_help": "Each row is one occurrence. Repeated works keep their own position and note.",
+  "collection_workbench_page_position": "Position {position} on this page",
+  "collection_workbench_publication_help": "Choose the permitted works to share, then confirm the exact selection. Editing a collection does not publish it.",
+  "collection_workbench_review": "Review and confirm",
+  "collection_workbench_save_help": "Save the reviewed edits. Publication requires a separate, explicit confirmation.",
+  "collection_workbench_secondary": "Visibility and history",
+  "collection_workbench_select_page": "Select this page"
 }

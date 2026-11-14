@@ -12545,5 +12545,17 @@
   "moderation_scope_catalogue": "カタログ",
   "moderation_case_open": "案件を開く",
   "moderation_action_target": "操作の対象",
-  "moderation_action_review_hint": "送信前に対象と理由を確認してください。"
+  "moderation_action_review_hint": "送信前に対象と理由を確認してください。",
+  "collection_workbench_clear_selection": "選択を解除",
+  "collection_workbench_create_help": "タイトルと公開範囲を設定します。作成後に作品を追加して並べ替えられます。",
+  "collection_workbench_empty_help": "並べた項目がここに表示されます。先にコレクションを作成してから作品を追加してください。",
+  "collection_workbench_heading": "コレクションを整理",
+  "collection_workbench_help": "読み込まれた各項目を並べ替え、変更を確認して保存します。",
+  "collection_workbench_members_help": "各行は個別の出現です。同じ作品でも位置とメモはそれぞれ保持されます。",
+  "collection_workbench_page_position": "このページの {position} 番目",
+  "collection_workbench_publication_help": "共有できる作品を選び、対象を確認してください。コレクションを編集しても公開されません。",
+  "collection_workbench_review": "確認して実行",
+  "collection_workbench_save_help": "確認した変更を保存します。公開には別途、明示的な確認が必要です。",
+  "collection_workbench_secondary": "公開範囲と履歴",
+  "collection_workbench_select_page": "このページを選択"
 }

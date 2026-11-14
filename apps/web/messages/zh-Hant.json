@@ -12545,5 +12545,17 @@
   "moderation_scope_catalogue": "目錄",
   "moderation_case_open": "開啟案件",
   "moderation_action_target": "操作對象",
-  "moderation_action_review_hint": "送出前請核對確切對象和理由。"
+  "moderation_action_review_hint": "送出前請核對確切對象和理由。",
+  "collection_workbench_clear_selection": "清除選取",
+  "collection_workbench_create_help": "先設定標題和可見範圍。建立收藏集後即可新增作品並調整順序。",
+  "collection_workbench_empty_help": "排列後的項目將顯示在此處。請先建立收藏集，再新增作品。",
+  "collection_workbench_heading": "整理收藏集",
+  "collection_workbench_help": "排列已載入的各個項目，再檢查並儲存變更。",
+  "collection_workbench_members_help": "每列都是獨立項目。重複作品各自保留位置和備註。",
+  "collection_workbench_page_position": "本頁第 {position} 項",
+  "collection_workbench_publication_help": "選取獲准分享的作品，再確認具體選擇。編輯收藏集不會自動發佈。",
+  "collection_workbench_review": "檢查並確認",
+  "collection_workbench_save_help": "儲存已檢查的變更。發佈需要另行明確確認。",
+  "collection_workbench_secondary": "可見範圍與歷史",
+  "collection_workbench_select_page": "選取本頁"
 }

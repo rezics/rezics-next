@@ -9,7 +9,11 @@ import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createCollection, readNewCollection } from '../../library/collection-edit';
-import { buttonClass, fieldClass, VisibilityField } from '../../library/collection-page';
+import { VisibilityField } from '../../library/collection-page';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import type { CollectionVisibility } from '../../library/reads';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -31,9 +35,12 @@ function NewCollectionPage() {
   const admitted = useOperation('collection.create');
 
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
+    <article className="w-full min-w-0 max-w-6xl space-y-6 text-foreground">
       <header className="space-y-3">
         <PageHeading>{m.library_collection_new()}</PageHeading>
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          {m.collection_workbench_create_help()}
+        </p>
       </header>
       {state === 'signed-in' && subject && csrfToken && admitted ? (
         <NewCollectionForm key={subject} csrfToken={csrfToken} types={loaded.types} sender={createCollection} />
@@ -145,56 +152,92 @@ export function NewCollectionForm({
   }
 
   return (
-    <form noValidate className="space-y-6" onSubmit={(event) => void create(event)}>
+    <form
+      noValidate
+      className="min-w-0 space-y-5"
+      onSubmit={(event) => void create(event)}
+      data-collection-create-workbench
+    >
       <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
-      <fieldset className="space-y-6" disabled={pending || uncertain}>
-        <label className="block">
-          {m.library_collection_title()}
-          <input
-            className={fieldClass}
-            name="title"
-            required
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            {...collectionTextInputAttributes({
-              id: 'collection-new-title',
-              field: 'title',
-              value: title,
-              submitted: textSubmitted,
-            })}
-          />
-        </label>
-        <CollectionTextInputHelp id="collection-new-title" field="title" value={title} submitted={textSubmitted} />
-        <label className="block">
-          {m.library_collection_description()}
-          <textarea
-            className={fieldClass}
-            name="description"
-            rows={4}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            {...collectionTextInputAttributes({
-              id: 'collection-new-description',
-              field: 'description',
-              value: description,
-              submitted: textSubmitted,
-            })}
-          />
-        </label>
-        <CollectionTextInputHelp
-          id="collection-new-description"
-          field="description"
-          value={description}
-          submitted={textSubmitted}
-        />
-        <CollectionPresentationFields
-          types={types}
-          kind={kind}
-          onKindChange={setKind}
-          coverMediaId={null}
-          disabled={pending || uncertain}
-        />
-        <VisibilityField onChange={setVisibility} value={visibility} disabled={pending || uncertain} />
+      <fieldset
+        className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]"
+        disabled={pending || uncertain}
+      >
+        <section
+          className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6"
+          aria-labelledby="collection-create-details"
+        >
+          <h2 id="collection-create-details" className="text-lg font-semibold">
+            {m.library_collection_details()}
+          </h2>
+          <Field className="min-w-0 gap-2">
+            <FieldLabel htmlFor="collection-new-title">{m.library_collection_title()}</FieldLabel>
+            <Input
+              id="collection-new-title"
+              className="min-h-11"
+              name="title"
+              required
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              {...collectionTextInputAttributes({
+                id: 'collection-new-title',
+                field: 'title',
+                value: title,
+                submitted: textSubmitted,
+              })}
+            />
+            <CollectionTextInputHelp id="collection-new-title" field="title" value={title} submitted={textSubmitted} />
+          </Field>
+          <Field className="min-w-0 gap-2">
+            <FieldLabel htmlFor="collection-new-description">{m.library_collection_description()}</FieldLabel>
+            <Textarea
+              id="collection-new-description"
+              className="min-h-28"
+              name="description"
+              rows={4}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              {...collectionTextInputAttributes({
+                id: 'collection-new-description',
+                field: 'description',
+                value: description,
+                submitted: textSubmitted,
+              })}
+            />
+            <CollectionTextInputHelp
+              id="collection-new-description"
+              field="description"
+              value={description}
+              submitted={textSubmitted}
+            />
+          </Field>
+          <VisibilityField onChange={setVisibility} value={visibility} disabled={pending || uncertain} />
+          <div className="space-y-2 border-t border-border pt-4" data-collection-create-members>
+            <h3 className="font-medium">{m.library_collection_members()}</h3>
+            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+              {m.collection_workbench_empty_help()}
+            </p>
+          </div>
+        </section>
+        <aside className="min-w-0 space-y-4" aria-label={m.collection_choice_heading()}>
+          <details
+            className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5"
+            data-collection-presentation-settings
+          >
+            <summary className="min-h-11 cursor-pointer py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {m.collection_choice_heading()}
+            </summary>
+            <div className="pt-3">
+              <CollectionPresentationFields
+                types={types}
+                kind={kind}
+                onKindChange={setKind}
+                coverMediaId={null}
+                disabled={pending || uncertain}
+              />
+            </div>
+          </details>
+        </aside>
       </fieldset>
       {title.trim() ? (
         <section
@@ -209,9 +252,19 @@ export function NewCollectionForm({
         </section>
       ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
-      <button className={buttonClass} disabled={pending || visibility === ''} aria-busy={pending} type="submit">
-        {uncertain ? m.library_publication_retry() : m.library_collection_create()}
-      </button>
+      <div className="sticky bottom-3 z-20 flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
+        <Button
+          className="h-auto min-h-11 max-w-full whitespace-normal px-5 py-3"
+          disabled={pending || visibility === ''}
+          aria-busy={pending}
+          type="submit"
+        >
+          {uncertain ? m.library_publication_retry() : m.library_collection_create()}
+        </Button>
+        <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+          {m.collection_workbench_save_help()}
+        </p>
+      </div>
     </form>
   );
 }

@@ -12545,5 +12545,17 @@
   "moderation_scope_catalogue": "Katalog",
   "moderation_case_open": "Fall öffnen",
   "moderation_action_target": "Aktion betrifft",
-  "moderation_action_review_hint": "Prüfe das genaue Ziel und die Begründung vor dem Senden."
+  "moderation_action_review_hint": "Prüfe das genaue Ziel und die Begründung vor dem Senden.",
+  "collection_workbench_clear_selection": "Auswahl aufheben",
+  "collection_workbench_create_help": "Beginne mit Titel und Sichtbarkeit. Nach dem Erstellen kannst du Werke hinzufügen und ordnen.",
+  "collection_workbench_empty_help": "Hier erscheinen deine geordneten Einträge. Erstelle zuerst die Sammlung und füge dann Werke hinzu.",
+  "collection_workbench_heading": "Sammlung ordnen",
+  "collection_workbench_help": "Ordne die geladenen Einträge und prüfe und speichere deine Änderungen.",
+  "collection_workbench_members_help": "Jede Zeile ist ein Vorkommen. Wiederholte Werke behalten ihre eigene Position und Notiz.",
+  "collection_workbench_page_position": "Position {position} auf dieser Seite",
+  "collection_workbench_publication_help": "Wähle die zulässigen Werke zum Teilen und bestätige die genaue Auswahl. Das Bearbeiten einer Sammlung veröffentlicht sie nicht.",
+  "collection_workbench_review": "Prüfen und bestätigen",
+  "collection_workbench_save_help": "Speichere die geprüften Änderungen. Eine Veröffentlichung erfordert eine separate, ausdrückliche Bestätigung.",
+  "collection_workbench_secondary": "Sichtbarkeit und Verlauf",
+  "collection_workbench_select_page": "Diese Seite auswählen"
 }

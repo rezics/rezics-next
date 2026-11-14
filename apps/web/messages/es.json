@@ -12545,5 +12545,17 @@
   "moderation_scope_catalogue": "Catálogo",
   "moderation_case_open": "Abrir caso",
   "moderation_action_target": "La acción se aplica a",
-  "moderation_action_review_hint": "Revisa el destino exacto y el motivo antes de enviar."
+  "moderation_action_review_hint": "Revisa el destino exacto y el motivo antes de enviar.",
+  "collection_workbench_clear_selection": "Borrar selección",
+  "collection_workbench_create_help": "Empieza con un título y la visibilidad. Podrás añadir y ordenar obras después de crear la colección.",
+  "collection_workbench_empty_help": "Aquí aparecerán los miembros ordenados. Primero crea la colección y después añade obras.",
+  "collection_workbench_heading": "Organiza esta colección",
+  "collection_workbench_help": "Ordena las apariciones cargadas y después revisa y guarda los cambios.",
+  "collection_workbench_members_help": "Cada fila es una aparición. Las obras repetidas conservan su propia posición y nota.",
+  "collection_workbench_page_position": "Posición {position} en esta página",
+  "collection_workbench_publication_help": "Elige las obras permitidas que quieras compartir y confirma la selección exacta. Editar una colección no la publica.",
+  "collection_workbench_review": "Revisar y confirmar",
+  "collection_workbench_save_help": "Guarda los cambios revisados. La publicación requiere una confirmación explícita aparte.",
+  "collection_workbench_secondary": "Visibilidad e historial",
+  "collection_workbench_select_page": "Seleccionar esta página"
 }

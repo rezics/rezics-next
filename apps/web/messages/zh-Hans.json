@@ -12545,5 +12545,17 @@
   "moderation_scope_catalogue": "目录",
   "moderation_case_open": "打开案件",
   "moderation_action_target": "操作对象",
-  "moderation_action_review_hint": "发送前请核对具体对象和理由。"
+  "moderation_action_review_hint": "发送前请核对具体对象和理由。",
+  "collection_workbench_clear_selection": "清除选择",
+  "collection_workbench_create_help": "先设置标题和可见范围。创建收藏集后即可添加作品并调整顺序。",
+  "collection_workbench_empty_help": "排列后的条目将显示在此处。请先创建收藏集，再添加作品。",
+  "collection_workbench_heading": "整理收藏集",
+  "collection_workbench_help": "排列已载入的各个条目，再检查并保存更改。",
+  "collection_workbench_members_help": "每行都是独立条目。重复作品各自保留位置和备注。",
+  "collection_workbench_page_position": "本页第 {position} 项",
+  "collection_workbench_publication_help": "选择获准分享的作品，再确认具体选择。编辑收藏集不会自动发布。",
+  "collection_workbench_review": "检查并确认",
+  "collection_workbench_save_help": "保存已检查的更改。发布需要另行明确确认。",
+  "collection_workbench_secondary": "可见范围与历史",
+  "collection_workbench_select_page": "选择本页"
 }

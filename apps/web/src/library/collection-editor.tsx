@@ -7,6 +7,7 @@ import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
 import type { DragEvent, FormEvent, ReactNode } from 'react';
@@ -27,7 +28,7 @@ export type { CollectionMemberEditOperation } from './collection-member-edit-pla
 export const fieldClass =
   'mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
-/** Metadata stays in the owning local draft; presentation and visibility keep their existing controls. */
+/** Secondary draft controls; the page keeps membership and command authority. */
 export function CollectionMetadataEditor({
   title,
   description,
@@ -51,17 +52,27 @@ export function CollectionMetadataEditor({
     <form
       noValidate
       id="collection-edit-form"
-      className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6"
+      className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5"
       onSubmit={onSubmit}
     >
-      <details data-collection-details open>
-        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_details()}</summary>
+      <details
+        data-collection-details
+        open={
+          textSubmitted && (!!collectionTextIssue('title', title) || !!collectionTextIssue('description', description))
+            ? true
+            : undefined
+        }
+      >
+        <summary className="min-h-11 cursor-pointer rounded-lg py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.library_collection_details()}
+        </summary>
         <div className="space-y-5 pt-3">
-          <label className="block max-w-3xl">
-            {m.library_collection_title()}
-            <input
+          <Field className="min-w-0 gap-2">
+            <FieldLabel htmlFor="collection-edit-title">{m.library_collection_title()}</FieldLabel>
+            <Input
+              id="collection-edit-title"
               disabled={disabled}
-              className={fieldClass}
+              className="min-h-11"
               onChange={(event) => onTitleChange(event.target.value)}
               required
               {...collectionTextInputAttributes({
@@ -72,11 +83,12 @@ export function CollectionMetadataEditor({
               })}
               value={title}
             />
-          </label>
-          <CollectionTextInputHelp id="collection-edit-title" field="title" value={title} submitted={textSubmitted} />
-          <label className="block max-w-3xl">
-            {m.library_collection_description()}
-            <textarea
+            <CollectionTextInputHelp id="collection-edit-title" field="title" value={title} submitted={textSubmitted} />
+          </Field>
+          <Field className="min-w-0 gap-2">
+            <FieldLabel htmlFor="collection-edit-description">{m.library_collection_description()}</FieldLabel>
+            <Textarea
+              id="collection-edit-description"
               disabled={disabled}
               {...collectionTextInputAttributes({
                 id: 'collection-edit-description',
@@ -84,18 +96,18 @@ export function CollectionMetadataEditor({
                 value: description,
                 submitted: textSubmitted,
               })}
-              className={fieldClass}
+              className="min-h-28"
               onChange={(event) => onDescriptionChange(event.target.value)}
               rows={4}
               value={description}
             />
-          </label>
-          <CollectionTextInputHelp
-            id="collection-edit-description"
-            field="description"
-            value={description}
-            submitted={textSubmitted}
-          />
+            <CollectionTextInputHelp
+              id="collection-edit-description"
+              field="description"
+              value={description}
+              submitted={textSubmitted}
+            />
+          </Field>
           {children}
         </div>
       </details>
@@ -259,8 +271,9 @@ export function CollectionMemberList({
         return (
           <ListRow
             key={member.id}
-            className={`grid min-w-0 items-start gap-x-3 gap-y-2 py-2 ${columns}`}
+            className={`grid min-w-0 items-start gap-x-3 gap-y-2 py-3 ${columns} ${editing ? 'rounded-xl border border-border px-3 transition-colors' : ''} ${editing && selectedIds.has(member.id) ? 'border-primary/50 bg-primary/5' : ''}`}
             data-member={member.id}
+            data-member-selected={editing && selectedIds.has(member.id) ? '' : undefined}
             onDragOver={editing && !busy ? (event) => event.preventDefault() : undefined}
             onDrop={
               editing && !busy && onMove
@@ -286,8 +299,14 @@ export function CollectionMemberList({
             {editing ? (
               <ListRowControl data-content-item-slot="trailing" className="flex flex-col items-center gap-2">
                 <span
+                  className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-md bg-muted px-1.5 text-xs font-medium tabular-nums"
+                  aria-label={m.collection_workbench_page_position({ position: index + 1 })}
+                >
+                  {new Intl.NumberFormat(getLocale()).format(index + 1)}
+                </span>
+                <span
                   aria-hidden="true"
-                  className="inline-flex size-11 cursor-grab items-center justify-center text-muted-foreground sm:size-8"
+                  className="inline-flex size-11 cursor-grab items-center justify-center text-muted-foreground"
                   data-drag-handle
                   draggable={!busy}
                   onDragStart={beginDrag}
@@ -310,7 +329,7 @@ export function CollectionMemberList({
               <ContentItemHeading
                 level={3}
                 lang={localizedTitle?.lang}
-                className="line-clamp-2 font-medium leading-snug"
+                className={`${editing ? 'break-words [overflow-wrap:anywhere]' : 'line-clamp-2'} font-medium leading-snug`}
               >
                 {href ? (
                   <ContentItemTitleLink

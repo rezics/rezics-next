@@ -317,13 +317,16 @@ function PublicationIntentView({
   );
 
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 text-foreground sm:py-8" aria-busy={busy}>
+    <article className="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-4 py-6 text-foreground sm:py-8" aria-busy={busy}>
       <header className="space-y-3">
-        <a className="text-primary underline" href={base}>
+        <a className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4" href={base}>
           {m.library_publication_back()}
         </a>
         <PageHeading>{m.library_publication_heading()}</PageHeading>
-        {ready ? <p className="text-lg font-medium break-words">{source.page.title}</p> : null}
+        {ready ? <p className="text-lg font-medium [overflow-wrap:anywhere]">{source.page.title}</p> : null}
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          {m.collection_workbench_publication_help()}
+        </p>
       </header>
       {!ready ? (
         <div className="space-y-3">
@@ -340,11 +343,21 @@ function PublicationIntentView({
           <SavedQueryPublishedMembership published={published} />
           {unknown && review ? <CollectionPublicationReview review={review} /> : null}
           {feedback}
-          <Button type="button" disabled={!unknown || busy || !isOwnerCurrent()} onClick={() => void publish()}>
+          <Button
+            type="button"
+            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            disabled={!unknown || busy || !isOwnerCurrent()}
+            onClick={() => void publish()}
+          >
             {unknown ? m.library_publication_retry() : m.library_publication_publish()}
           </Button>
           {onReload && !busy ? (
-            <Button type="button" variant="outline" onClick={reload}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+              onClick={reload}
+            >
               {m.library_collection_reload()}
             </Button>
           ) : null}
@@ -352,71 +365,77 @@ function PublicationIntentView({
       ) : (
         <>
           <section
-            className="space-y-4"
+            className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]"
             aria-labelledby="publication-selection"
             aria-busy={busy}
             data-publication-current
           >
-            <h2 id="publication-selection" className="text-xl font-semibold">
-              {m.library_publication_current()}
-            </h2>
-            <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_choose()}</p>
-            {candidates.length ? (
-              <ul className="space-y-4">
-                {candidates.map((member) => {
-                  const id = member.subject!.id;
-                  const checked = selected.includes(id);
-                  const title = displayLibraryTitle(member.subject!.label, getLocale());
-                  return (
-                    <ContentItem
-                      key={id}
-                      title={title.text}
-                      {...(title.lang ? { titleLang: title.lang } : {})}
-                      headingLevel={3}
-                      href={subjectHref({ id, label: title.text }, getLocale()).href}
-                      visual={<SubjectCover subject={member.subject} ratio={ratio} />}
-                      metadata={
-                        <CollectionMemberDetails member={member} listPresentations={source.page.listPresentations} />
-                      }
-                      trailing={
-                        <input
-                          type="checkbox"
-                          className="size-5 shrink-0 accent-primary"
-                          checked={checked}
-                          aria-label={m.library_publication_select({
-                            title:
-                              typeof member.subject!.label === 'string'
-                                ? member.subject!.label
-                                : member.subject!.label.value,
-                          })}
-                          disabled={locked || (!checked && selected.length >= 100)}
-                          onChange={() => {
-                            if (!isCurrent()) return;
-                            update((previous) => {
-                              if (previous.busy || previous.attempt) return previous;
-                              const selected = previous.selected.includes(id)
-                                ? previous.selected.filter((value) => value !== id)
-                                : previous.selected.length < 100
-                                  ? [...previous.selected, id]
-                                  : previous.selected;
-                              return { ...previous, selected, confirmed: false, result: null };
-                            });
-                          }}
-                        />
-                      }
-                    />
-                  );
-                })}
-              </ul>
-            ) : (
-              <p role="status">{m.library_publication_no_disclosed()}</p>
-            )}
+            <div className="min-w-0 space-y-4" data-publication-canvas>
+              <h2 id="publication-selection" className="text-xl font-semibold">
+                {m.library_publication_current()}
+              </h2>
+              <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_choose()}</p>
+              {candidates.length ? (
+                <ul className="min-w-0 space-y-3" data-publication-candidates>
+                  {candidates.map((member) => {
+                    const id = member.subject!.id;
+                    const checked = selected.includes(id);
+                    const title = displayLibraryTitle(member.subject!.label, getLocale());
+                    return (
+                      <ContentItem
+                        key={id}
+                        className={`min-w-0 rounded-xl border p-3 [overflow-wrap:anywhere] ${checked ? 'border-primary/50 bg-primary/5' : 'border-border bg-card'}`}
+                        title={title.text}
+                        {...(title.lang ? { titleLang: title.lang } : {})}
+                        headingLevel={3}
+                        href={subjectHref({ id, label: title.text }, getLocale()).href}
+                        visual={<SubjectCover subject={member.subject} ratio={ratio} />}
+                        metadata={
+                          <CollectionMemberDetails member={member} listPresentations={source.page.listPresentations} />
+                        }
+                        trailing={
+                          <label className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+                            <input
+                              type="checkbox"
+                              className="size-5 shrink-0 cursor-pointer accent-primary"
+                              checked={checked}
+                              aria-label={m.library_publication_select({
+                                title:
+                                  typeof member.subject!.label === 'string'
+                                    ? member.subject!.label
+                                    : member.subject!.label.value,
+                              })}
+                              disabled={locked || (!checked && selected.length >= 100)}
+                              onChange={() => {
+                                if (!isCurrent()) return;
+                                update((previous) => {
+                                  if (previous.busy || previous.attempt) return previous;
+                                  const selected = previous.selected.includes(id)
+                                    ? previous.selected.filter((value) => value !== id)
+                                    : previous.selected.length < 100
+                                      ? [...previous.selected, id]
+                                      : previous.selected;
+                                  return { ...previous, selected, confirmed: false, result: null };
+                                });
+                              }}
+                            />
+                          </label>
+                        }
+                      />
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p role="status">{m.library_publication_no_disclosed()}</p>
+              )}
+            </div>
             <div
               role="group"
               aria-labelledby="publication-count"
-              className="min-w-0 space-y-3 rounded-xl bg-muted/50 p-4 sm:p-5"
+              className="min-w-0 space-y-4 rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4 sm:p-5"
               data-publication-confirmation
             >
+              <h2 className="text-lg font-semibold">{m.collection_workbench_review()}</h2>
               <p id="publication-count" className="font-medium" role="status">
                 {quantityText(selected.length, m.library_publication_count_one, m.library_publication_count)}
               </p>
@@ -430,7 +449,7 @@ function PublicationIntentView({
                 meaning={ready ? acceptedMeaningFromPage(source.page, source.revision) : null}
               />
               {review ? <CollectionPublicationReview review={review} /> : null}
-              <label className="flex min-h-11 items-start gap-3 py-2">
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
                 <input
                   type="checkbox"
                   className="mt-1 size-5 shrink-0 accent-primary"
@@ -453,10 +472,10 @@ function PublicationIntentView({
                 {m.library_publication_privacy()}
               </p>
               {feedback}
-              <div className="flex flex-wrap gap-3">
+              <div className="flex min-w-0 flex-wrap gap-3 border-t border-border pt-4">
                 <Button
                   type="button"
-                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  className="h-auto min-h-11 w-full max-w-full whitespace-normal px-4 py-3 text-start"
                   aria-describedby="publication-bounds publication-replacement publication-privacy"
                   disabled={
                     !confirmed || busy || refused || (unknown ? !state.attempt || !isOwnerCurrent() : !canPublish())
@@ -466,7 +485,12 @@ function PublicationIntentView({
                   {unknown ? m.library_publication_retry() : m.library_publication_publish()}
                 </Button>
                 {onReload && !busy ? (
-                  <Button type="button" variant="outline" onClick={reload}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+                    onClick={reload}
+                  >
                     {m.library_collection_reload()}
                   </Button>
                 ) : null}
@@ -623,11 +647,25 @@ function CurrentPublicationPage({
         </div>
       ) : null}
       {page.source.state === 'ready' ? (
-        <div className="flex flex-wrap gap-3 p-4">
-          <Button variant="outline" aria-pressed={wholeQuery} onClick={() => setWholeQuery(true)}>
+        <div
+          className="mx-auto flex w-full max-w-6xl flex-wrap gap-2 px-4 pt-4"
+          role="group"
+          aria-label={m.library_publication_heading()}
+        >
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            variant={wholeQuery ? 'default' : 'outline'}
+            aria-pressed={wholeQuery}
+            onClick={() => setWholeQuery(true)}
+          >
             {m.library_query_publication_heading()}
           </Button>
-          <Button variant="outline" aria-pressed={!wholeQuery} onClick={() => setWholeQuery(false)}>
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            variant={!wholeQuery ? 'default' : 'outline'}
+            aria-pressed={!wholeQuery}
+            onClick={() => setWholeQuery(false)}
+          >
             {m.library_publication_choose()}
           </Button>
         </div>

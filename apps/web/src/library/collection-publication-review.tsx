@@ -40,12 +40,12 @@ export function CollectionPublicationReview({ review }: { review: PublicationRev
   const locale = getLocale();
   return (
     <div
-      className="space-y-2 rounded-lg border border-border p-3"
+      className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/20 p-3 [overflow-wrap:anywhere]"
       data-publication-review
       data-source-revision={review.revision}
     >
-      <p className="font-medium break-words">{review.title}</p>
-      {review.description ? <p className="whitespace-pre-wrap break-words">{review.description}</p> : null}
+      <p className="font-medium leading-snug">{review.title}</p>
+      {review.description ? <p className="whitespace-pre-wrap text-sm leading-relaxed">{review.description}</p> : null}
       {Number.isSafeInteger(review.revision) && review.revision > 0 ? (
         <p className="text-sm text-muted-foreground">
           {m.library_publication_revision({ revision: String(review.revision) })}
@@ -53,13 +53,17 @@ export function CollectionPublicationReview({ review }: { review: PublicationRev
       ) : (
         <p className="text-sm text-muted-foreground">{m.library_publication_meaning_unavailable()}</p>
       )}
-      <ol className="list-decimal space-y-1 ps-5" aria-label={m.library_publication_choose()}>
+      <ol
+        className="max-h-72 list-decimal space-y-1 overflow-auto overscroll-contain ps-6 pe-1 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        tabIndex={review.subjects.length > 6 ? 0 : undefined}
+        aria-label={m.library_publication_choose()}
+      >
         {review.subjects.map(({ id, label }) => {
           const title = displayLibraryTitle(label, locale);
           return (
             <li key={id}>
               <a
-                className="text-primary underline"
+                className="inline-flex min-h-11 items-center py-2 text-primary underline underline-offset-4"
                 href={subjectHref({ id, label: title.text }, locale).href}
                 lang={title.lang}
               >

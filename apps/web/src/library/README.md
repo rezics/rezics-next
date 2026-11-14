@@ -420,6 +420,22 @@ The cursor path and page cost bounds are owned by [Progress index windows](progr
 
 Canonical session and Subject links remain ordinary shareable addresses. Same-tab Progress navigation carries the filtered index selectors and opaque cursor privately, then accepts focus only for the same admitted session ID, Subject ID and start time. A stale or changed source offers a safe restart instead of searching later pages. Subject return context is revalidated against the currently disclosed work before it is used.
 
+## Collection authoring workbench
+
+Decision: put the ordered occurrence canvas before secondary metadata and presentation, keep one visible save area,
+and pair publication candidates with an explicit review and confirmation; preserve the existing writers and lifetimes.
+The current page alone supplies selection and positions. Repeated Subjects keep separate occurrence IDs and notes.
+Transfer tools are a labelled disclosure; the captured source/destination, revisions, exact anchor and every selected
+occurrence stay visible in review. Recovery keeps independent source and destination observations and immutable retries.
+Metadata, optional presentation and visibility/history remain in the same local draft. Creating a Collection first
+requires title and visibility; its members are added through the existing owner journey. Saving never publishes.
+
+The design reads were this README, [placement journey](collection-placement-journey.md), the editor, transfer,
+presentation, save and publication components, their route callers and regression/story sources, and the read-only
+main checkout's `.reference/INDEX.md`. Impeccable references were absent from the supplied locations; the documented
+fallback uses installed shared UI and tokens. Focused acceptance source and named authoring stories accompany the
+change; test, typing, build, browser, native and visual execution remain deferred to the verifier.
+
 ## Collection publication
 
 Decision: the publication page offers the mounted whole-query command alongside explicit selection. Whole-query
