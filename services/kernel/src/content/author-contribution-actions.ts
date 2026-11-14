@@ -1,12 +1,10 @@
 import { createHash } from 'node:crypto';
-import { deadlineClient, within } from './access-port.ts';
+import { actorOf } from './access-port.ts';
 import { readPublicViews } from '../access/public-views.ts';
 import { CommandUnavailableError } from '../command/command.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { actorOf } from './access-port.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
 import type { Actor } from '../request/access.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
@@ -17,6 +15,7 @@ import type {
   AuthorContributionSelection,
 } from './author-contribution-actions-schema.ts';
 import { readThread, readPost } from './reads.ts';
+import { withAuthorReadConnection } from './author-read-connection.ts';
 import type { AnchoredPosition } from './model.ts';
 import {
   createContentReadingCardBatch,
@@ -146,28 +145,13 @@ async function publication(
 ): Promise<AnchoredPosition> {
   const route = routeOf(accountId);
   if (route === null) throw new ProblemError('not_found');
-  return within(deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '3000ms'");
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition || partition.writeState === 'moved' || partition.epoch !== epoch) throw changed();
-        const views = (await readPublicViews(client, [accountId])).get(accountId);
-        if (!(view === 'reviews' ? views?.reviews : views?.posts)) throw new ProblemError('not_found');
-        await client.query('COMMIT');
-        return { partition, epoch: partition.epoch, position: partition.position };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollback) {
-          discardConnection(connection, rollback as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  return withAuthorReadConnection(dependencies.pool, deadline, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    if (!partition || partition.writeState === 'moved' || partition.epoch !== epoch) throw changed();
+    const views = (await readPublicViews(client, [accountId])).get(accountId);
+    if (!(view === 'reviews' ? views?.reviews : views?.posts)) throw new ProblemError('not_found');
+    return { partition, epoch: partition.epoch, position: partition.position };
+  });
 }
 
 /** Reuse exact native source/ancestry/place disclosure as anonymous, even for an author or editor. */

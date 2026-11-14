@@ -248,6 +248,9 @@ reporter history requirements, independent IDs and opaque return operands.
 
 ## Public author contribution context
 
+Decision: author source snapshots use one deadline-bound connection lifetime; expired or uncertain reads discard the
+client, while rollback stays bounded by the original deadline and preserves the primary error.
+
 Decision: anonymous native author pages issue a signed exact-cohort selection bound to the author, view,
 original cursor and native source observation; the private overlay consumes that selection without rereading
 the author frontier. This requires an additive `actionSelection` in `author-item-reads.ts` and its public schemas.

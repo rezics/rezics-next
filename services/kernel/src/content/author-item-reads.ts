@@ -1,10 +1,8 @@
-import { deadlineClient, within } from './access-port.ts';
 import { readPublicViews } from '../access/public-views.ts';
 import { accessCheck } from './access-port.ts';
 import type { AccessCheck, Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CursorBinding } from '../tokens/cursor.ts';
@@ -21,6 +19,7 @@ import {
 import threadPage from './author-item-threads.sql';
 import postPage from './author-item-posts.sql';
 import { issueAuthorContributionSelection } from './author-contribution-actions.ts';
+import { withAuthorReadConnection } from './author-read-connection.ts';
 import type { AuthorContributionSelection } from './author-contribution-actions-schema.ts';
 export { decodeAuthorItemKey, encodeAuthorItemKey } from './author-item-cursor.ts';
 export type { AuthorItemCursorKey } from './author-item-cursor.ts';
@@ -76,63 +75,47 @@ async function candidates(
 ): Promise<{ candidates: readonly Candidate[]; anchor: AnchoredPosition }> {
   const route = routeOf(accountId);
   if (route === null) throw new ContentNotFoundError();
-  return within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '3000ms'");
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition) throw new CommandUnavailableError('deadline', partitionOf(route));
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionOf(route), partition.movedTo);
-        const after =
-          input.cursor === undefined
-            ? null
-            : decodeAuthorItemKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
-        const views = (await readPublicViews(client, [accountId])).get(accountId);
-        const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
-        const self = context.actor.kind === 'account' && context.actor.accountId === accountId;
-        if (!enabled && !self) {
-          const actingFor = presentationCheck ? await presentationCheck(client) : false;
-          if (!actingFor) {
-            await client.query('COMMIT');
-            return { candidates: [], anchor: { partition, epoch: partition.epoch, position: partition.position } };
-          }
-        }
-        const parameters = {
-          route,
-          author_account_id: accountId,
-          kind,
-          has_after: after !== null,
-          after_at: after?.createdAt ?? 'infinity',
-          after_item_id: after?.itemId ?? '00000000-0000-0000-0000-000000000000',
-          limit,
-        };
-        const page = list === 'threads' ? threadPage : postPage;
-        const rows = await client.query<(typeof threadPage)['~reylo']['element']>(
-          page.sql,
-          page.params.map((name) => parameters[name as keyof typeof parameters]),
-        );
-        await client.query('COMMIT');
-        return {
-          candidates: rows.rows.map((row) => ({
-            itemId: row.item_id,
-            threadId: row.thread_id,
-            createdAt: row.created_at!,
-          })),
-          anchor: { partition, epoch: partition.epoch, position: partition.position },
-        };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
+  return withAuthorReadConnection(dependencies.pool, context.deadline, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    if (!partition) throw new CommandUnavailableError('deadline', partitionOf(route));
+    if (partition.writeState === 'moved')
+      throw new CommandUnavailableError('moved', partitionOf(route), partition.movedTo);
+    const after =
+      input.cursor === undefined
+        ? null
+        : decodeAuthorItemKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
+    const views = (await readPublicViews(client, [accountId])).get(accountId);
+    const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
+    const self = context.actor.kind === 'account' && context.actor.accountId === accountId;
+    if (!enabled && !self) {
+      const actingFor = presentationCheck ? await presentationCheck(client) : false;
+      if (!actingFor) {
+        return { candidates: [], anchor: { partition, epoch: partition.epoch, position: partition.position } };
       }
-    }),
-  );
+    }
+    const parameters = {
+      route,
+      author_account_id: accountId,
+      kind,
+      has_after: after !== null,
+      after_at: after?.createdAt ?? 'infinity',
+      after_item_id: after?.itemId ?? '00000000-0000-0000-0000-000000000000',
+      limit,
+    };
+    const page = list === 'threads' ? threadPage : postPage;
+    const rows = await client.query<(typeof threadPage)['~reylo']['element']>(
+      page.sql,
+      page.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    return {
+      candidates: rows.rows.map((row) => ({
+        itemId: row.item_id,
+        threadId: row.thread_id,
+        createdAt: row.created_at!,
+      })),
+      anchor: { partition, epoch: partition.epoch, position: partition.position },
+    };
+  });
 }
 
 function listed(item: { availability: string; visibility?: string }): boolean {
@@ -221,31 +204,16 @@ async function listAuthorItems(
   const contexts = await prepared.finish();
   // Reobserve the account after owner hydration, then close over the original
   // Content keys. No replacement cohort or new frontier is selected here.
-  const final = await within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '3000ms'");
-        const partition = await readPartition(client, partitionOf(accountRoute!));
-        if (!partition || partition.writeState === 'moved' || partition.epoch !== page.anchor.epoch)
-          throw new ProblemError('dependency_unavailable');
-        const views = (await readPublicViews(client, [accountId])).get(accountId);
-        const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
-        if (!enabled && !self && !(presentationCheck && (await presentationCheck(client))) && entries.length > 0)
-          throw new ProblemError('dependency_unavailable');
-        await client.query('COMMIT');
-        return { partition, epoch: partition.epoch, position: partition.position };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  const final = await withAuthorReadConnection(dependencies.pool, context.deadline, async (client) => {
+    const partition = await readPartition(client, partitionOf(accountRoute!));
+    if (!partition || partition.writeState === 'moved' || partition.epoch !== page.anchor.epoch)
+      throw new ProblemError('dependency_unavailable');
+    const views = (await readPublicViews(client, [accountId])).get(accountId);
+    const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
+    if (!enabled && !self && !(presentationCheck && (await presentationCheck(client))) && entries.length > 0)
+      throw new ProblemError('dependency_unavailable');
+    return { partition, epoch: partition.epoch, position: partition.position };
+  });
   anchors.push(final);
 
   await prepared.confirm();
