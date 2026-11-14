@@ -4,6 +4,7 @@ import { knowledgePublicSelection } from './knowledge-store.ts';
 import authoring from './knowledge-media-authoring-selection.sql';
 import published from './knowledge-media-public-selection.sql';
 import reservationLock from './knowledge-media-reservation-lock.sql';
+import reservationAnchor from './knowledge-media-reservation-anchor.sql';
 import reservation from './knowledge-media-reservation-selection.sql';
 import retention from './knowledge-media-retention-selection.sql';
 
@@ -69,13 +70,17 @@ export async function knowledgeMediaSelection(
   return row === null ? null : { ...row, body_sha256: Buffer.from(row.body_sha256) };
 }
 
-/** On a native transaction client, the existing Notebook fence spans the current-path admission read. */
+/** Write admission takes the existing Notebook fence; metadata-only reads never acquire a row lock. */
 export async function knowledgeMediaReservationSelection(
   client: AccessClient,
   route: number,
   documentId: string,
+  forUpdate = false,
 ): Promise<KnowledgeMediaReservationSelection | null> {
-  const locked = await first<{ notebook_id: string }>(client, reservationLock, { route, document_id: documentId });
+  const locked = await first<{ notebook_id: string }>(client, forUpdate ? reservationLock : reservationAnchor, {
+    route,
+    document_id: documentId,
+  });
   if (!locked) return null;
   return first(client, reservation, { route, document_id: documentId, notebook_id: locked.notebook_id });
 }
