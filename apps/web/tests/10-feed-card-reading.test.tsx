@@ -172,7 +172,9 @@ test('each mixed-feed kind preserves source, occurrence, identity, preview and e
     expect(postRow.querySelector('[data-feed-review-citation]')?.textContent).toContain(
       m.subject_community_recorded_scale({ min: '0', max: '20', step: '1' }, { locale }),
     );
-    expect(postRow.querySelector('[data-feed-card-parent]')?.textContent).not.toContain('The parent reveals the ending');
+    expect(postRow.querySelector('[data-feed-card-parent]')?.textContent).not.toContain(
+      'The parent reveals the ending',
+    );
     expect(postRow.querySelector('[data-feed-card-parent-post]')?.getAttribute('href')).toContain(
       '?post=review-parent#post-review-parent',
     );

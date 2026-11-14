@@ -108,7 +108,11 @@ test('review threads and following posts render only current Subject and exact c
     expect(markup).toContain('data-question-revision="9"');
     expect(markup).toContain('data-vote-revision="4"');
     expect(markup).toContain('Recorded scale 0–20, step 1');
-    for (const marker of ['data-feed-card-review-context', 'data-feed-card-reviewed-subject', 'data-feed-review-citation'])
+    for (const marker of [
+      'data-feed-card-review-context',
+      'data-feed-card-reviewed-subject',
+      'data-feed-review-citation',
+    ])
       expect(markup.match(new RegExp(marker, 'g'))).toHaveLength(1);
     expect(markup.match(/How clear was this edition\?/g)).toHaveLength(1);
     expect(markup.match(/<h2\b/g)).toHaveLength(1);
