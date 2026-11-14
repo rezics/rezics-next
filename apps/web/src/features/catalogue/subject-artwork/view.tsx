@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -8,7 +9,10 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { ReadingDisclosureScope, useIncarnationState } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { Eye } from 'lucide-react';
 import { m } from '../../../paraglide/messages.js';
 import { NativeDocumentImage, type DocumentImagePresentation } from '../../../threads/document-media';
 import type { Reader } from '../../../subject/reader';
@@ -22,6 +26,7 @@ const ArtworkContext = createContext<{
   incarnation?: number;
   reading?: Reading | undefined;
   select?: ((selection: Selection) => void) | undefined;
+  retire?: ((key: string) => void) | undefined;
   fallback?: RefObject<HTMLDivElement | null> | undefined;
 }>({});
 
@@ -29,29 +34,17 @@ const ArtworkContext = createContext<{
 export function SubjectArtworkBoundary({
   source,
   identity,
+  preferences,
   label,
   children,
 }: {
   source: object;
   identity: string;
+  preferences?: Reader | undefined;
   label: string;
   children: ReactNode;
 }) {
   const reader = useContext(ArtworkReaderContext);
-  const previous = useRef<{ source: object; identity: string; reader: unknown; generation: number } | null>(null);
-  if (
-    !previous.current ||
-    previous.current.source !== source ||
-    previous.current.identity !== identity ||
-    previous.current.reader !== reader.incarnation
-  ) {
-    previous.current = {
-      source,
-      identity,
-      reader: reader.incarnation,
-      generation: (previous.current?.generation ?? 0) + 1,
-    };
-  }
   const admission = useRef<{ source: object; reader: unknown; retired: boolean }>({
     source,
     reader: reader.incarnation,
@@ -61,6 +54,31 @@ export function SubjectArtworkBoundary({
   else if (admission.current.reader === null && !admission.current.retired)
     admission.current.reader = reader.incarnation;
   else if (admission.current.reader !== reader.incarnation) admission.current.retired = true;
+  const preferenceIdentity = preferences && JSON.stringify([preferences.spoilerLevel, preferences.suitability]);
+  const previous = useRef<{
+    source: object;
+    identity: string;
+    reader: unknown;
+    preferences: string | undefined;
+    prepared: boolean;
+    generation: number;
+  } | null>(null);
+  const before = previous.current;
+  const sameVisit = before?.source === source && before.identity === identity;
+  const firstPreferences = sameVisit && !before.prepared && preferences !== undefined;
+  const firstAuthority = sameVisit && before.reader === null && !admission.current.retired;
+  const replaced =
+    !sameVisit ||
+    (!firstAuthority && before.reader !== reader.incarnation) ||
+    (!firstPreferences && before.preferences !== preferenceIdentity);
+  previous.current = {
+    source,
+    identity,
+    reader: reader.incarnation,
+    preferences: preferenceIdentity,
+    prepared: (sameVisit && before.prepared) || preferences !== undefined,
+    generation: (before?.generation ?? 0) + Number(replaced),
+  };
   const fallback = useRef<HTMLDivElement>(null);
   return (
     <div
@@ -97,10 +115,12 @@ function ArtworkVisit({
 }) {
   const [reading, setReading] = useState<Reading>();
   const request = useRef(0);
+  const selected = useRef<string | undefined>(undefined);
   const previous = useRef(generation);
   if (previous.current !== generation) {
     previous.current = generation;
     request.current++;
+    selected.current = undefined;
     if (reading) setReading(undefined);
   }
   const mounted = useRef(true);
@@ -111,9 +131,16 @@ function ArtworkVisit({
       request.current++;
     };
   }, []);
+  const retire = useCallback((key: string) => {
+    if (selected.current !== key) return;
+    selected.current = undefined;
+    request.current++;
+    setReading(undefined);
+  }, []);
   const select = async (selection: Selection) => {
     if (previous.current !== generation || reading?.result.kind === 'loading' || current?.() === false) return;
     const attempt = ++request.current;
+    selected.current = selection.key;
     setReading({ selection, result: { kind: 'loading' } });
     let result: ArtworkResult;
     try {
@@ -125,9 +152,47 @@ function ArtworkVisit({
       setReading({ selection, result });
   };
   return (
-    <ArtworkContext.Provider value={{ incarnation: generation, reading, select, fallback }}>
+    <ArtworkContext.Provider value={{ incarnation: generation, reading, select, retire, fallback }}>
       {children}
     </ArtworkContext.Provider>
+  );
+}
+
+/** Keep the fact's position while preparation changes its threshold; native disclosure still decides admission. */
+export function SubjectArtworkDisclosure({ identity, ...props }: { identity: string } & ArtworkDisclosureProps) {
+  return <ArtworkDisclosure key={identity} {...props} />;
+}
+
+type ArtworkDisclosureProps = {
+  spoilerLevel: Reader['spoilerLevel'];
+  gated: boolean;
+  label: string;
+  hideLabel?: string | undefined;
+  children: ReactNode;
+};
+
+function ArtworkDisclosure({ spoilerLevel, gated, label, hideLabel, children }: ArtworkDisclosureProps) {
+  const disclosure = useContext(ReadingDisclosureScope);
+  const { value, setValue } = useIncarnationState(JSON.stringify([disclosure, spoilerLevel]), () => false);
+  const open = !gated || value;
+  return (
+    <Collapsible open={open} onOpenChange={setValue} className="space-y-2">
+      {gated ? (
+        <CollapsibleTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11 min-w-11 whitespace-normal text-left focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
+            />
+          }
+        >
+          <Eye aria-hidden="true" className="size-4" />
+          {open ? (hideLabel ?? m.subject_spoiler_hide()) : label}
+        </CollapsibleTrigger>
+      ) : null}
+      <CollapsibleContent className="space-y-2">{open ? children : null}</CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -148,7 +213,7 @@ export function SubjectArtwork({
   suitability: Reader['suitability'];
 }) {
   const { incarnation } = useContext(ArtworkContext);
-  const identity = JSON.stringify([incarnation, subject, statement, title, propertyLabel, locale, suitability]);
+  const identity = JSON.stringify([incarnation, subject, statement, title, propertyLabel, locale]);
   return (
     <ArtworkFact
       key={identity}
@@ -177,8 +242,10 @@ function ArtworkFact({
   locale: string;
   suitability: Reader['suitability'];
 }) {
-  const { reading, select, fallback } = useContext(ArtworkContext);
-  const [revealed, setRevealed] = useState(suitability === 'show');
+  const { reading, select, retire, fallback } = useContext(ArtworkContext);
+  const [disclosure, setDisclosure] = useState<'default' | 'revealed' | 'hidden'>('default');
+  const revealed = disclosure === 'revealed' || (disclosure === 'default' && suitability === 'show');
+  useLayoutEffect(() => () => retire?.(identity), [identity, retire]);
   const options = { locale: locale as never };
   const content = statement.value.type === 'value' ? statement.value.content : undefined;
   if (!canonicalMediaId(content)) return <p>{m.subject_artwork_unsupported({}, options)}</p>;
@@ -186,7 +253,7 @@ function ArtworkFact({
   const result = selected ? reading.result : undefined;
   const busy = reading?.result.kind === 'loading';
   const choose = () => {
-    setRevealed(true);
+    setDisclosure('revealed');
     select?.({ key: identity, id: content });
   };
   const alt = m.subject_artwork_alt({ title, property: propertyLabel }, options);
@@ -231,7 +298,7 @@ function ArtworkFact({
           variant="ghost"
           size="sm"
           className="min-h-11 whitespace-normal"
-          onClick={() => setRevealed(false)}
+          onClick={() => setDisclosure('hidden')}
         >
           {m.subject_artwork_hide({}, options)}
         </Button>

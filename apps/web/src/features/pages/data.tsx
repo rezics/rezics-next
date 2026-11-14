@@ -35,7 +35,7 @@ import * as overview from './overview';
 import { ScreenReadingBinding } from './screen-reading-binding';
 import { CharacterReadingBinding } from './character-reading-binding';
 import { SubjectPageCover } from './subject-page-cover';
-import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
+import { SubjectArtwork, SubjectArtworkBoundary, SubjectArtworkDisclosure } from '../catalogue/subject-artwork/view';
 import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
 import {
@@ -573,7 +573,21 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
           tabIndex={read.subject.type === 'schema:Recipe' ? -1 : undefined}
           className="min-w-0 space-y-2 [overflow-wrap:anywhere] sm:col-start-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-ring [&_a]:focus-visible:outline-offset-2"
         >
-          {wholeRecipe ? (
+          {statement.value.type === 'value' && statement.property.data_type === 'media' ? (
+            <>
+              <SubjectArtworkDisclosure
+                identity={JSON.stringify([read.subject.id, read.subject.context, options.locale, statement])}
+                spoilerLevel={reader.spoilerLevel}
+                gated={gated}
+                label={options.messages.spoilerShow}
+                hideLabel={options.labels.spoilerHide}
+              >
+                {body}
+                {wholeRecipe ? actions : null}
+              </SubjectArtworkDisclosure>
+              {!wholeRecipe ? actions : null}
+            </>
+          ) : wholeRecipe ? (
             <SpoilerGate
               key={JSON.stringify([
                 read.subject.id,
@@ -769,7 +783,7 @@ export function PageData({
   reads,
   messages,
   link = PlainLink,
-  reader = defaultReader,
+  reader: preferences,
   typeLabel,
   ratio,
   relations = {},
@@ -824,6 +838,7 @@ export function PageData({
   artworkSource?: object;
   children?: ReactNode;
 }) {
+  const reader = preferences ?? defaultReader;
   const readingDomain = useContext(ReadingDomainContext);
   // Page documents have already passed the composition contract at the kernel boundary.
   const composition = document as CompositionDocument;
@@ -1005,15 +1020,17 @@ export function PageData({
         source={artworkSource ?? reads}
         identity={JSON.stringify([
           subject,
+          currentHref,
+          pageTarget,
           context,
           artworkContext,
           continuation,
           artworkRelease,
           cacheReader,
-          reader,
           locale,
           readingView,
         ])}
+        preferences={preferences}
         label={overviewSubjectLabel || resolved.unlabelled}
       >
         <overview.OverviewRoot value={overviewValue} PageValue={CandidateValue}>

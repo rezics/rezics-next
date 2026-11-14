@@ -12,7 +12,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 
-test('ordinary artwork facts gate actual media, retain exact handoffs, recover independently and retire A → B → A', async () => {
+test('ordinary artwork retains first preparation, gates exact media and retires real replacements A → B → A', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -133,19 +133,26 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
   window.document.body.append(host);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  let authority = 1;
-  const render = async (source = body, suitability: 'blur' | 'show' = 'blur', locale = 'en') =>
+  let authority: number | null = 1;
+  const render = async (
+    source = body,
+    suitability: 'blur' | 'show' | 'unresolved' = 'blur',
+    locale = 'en',
+    spoilerLevel: 0 | 1 | 2 = 0,
+    currentHref = '/en/subjects/art',
+  ) =>
     act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <ArtworkReaderContext.Provider value={{ incarnation: authority, read }}>
             <PageData
               locale={locale}
+              currentHref={currentHref}
               subject={source.subject.id}
               artworkSource={source}
               document={document}
               reads={Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: source }]))}
-              reader={{ spoilerLevel: 0, suitability }}
+              {...(suitability === 'unresolved' ? {} : { reader: { spoilerLevel, suitability } })}
               messages={{
                 unknown: 'Unknown',
                 none: 'None',
@@ -162,11 +169,11 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
         </QueryClientProvider>,
       );
     });
-  const button = (name: string) =>
-    [...host.querySelectorAll('button')].find((entry) => entry.textContent?.trim() === name)!;
-  const click = async (name: string) =>
+  const button = (name: string, scope: ParentNode = host) =>
+    [...scope.querySelectorAll('button')].find((entry) => entry.textContent?.trim() === name)!;
+  const click = async (name: string, scope: ParentNode = host) =>
     act(async () => {
-      const trigger = button(name);
+      const trigger = button(name, scope);
       expect(trigger).toBeTruthy();
       trigger.focus();
       trigger.click();
@@ -175,6 +182,53 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
     if (button('Reveal spoiler')) await click('Reveal spoiler');
   };
   try {
+    for (const phase of ['ready', 'pending'] as const) {
+      for (const prepared of ['blur', 'show', 'concealed'] as const) {
+        const source = structuredClone(body);
+        if (prepared === 'concealed')
+          source.subject.statements['schema:image']![0]!.qualifiers[0]!.value.content = { amount: '+2', unit: '1' };
+        source.subject.statements['schema:image']!.unshift({
+          ...source.subject.statements['schema:image']![0]!,
+          id: 'unselected-artwork',
+          qualifiers: [],
+          value: { type: 'value', content: '0192f3a0-6c1e-7b2a-9d4e-000000000003' },
+        });
+        authority = null;
+        hold = phase === 'pending';
+        await render(source, 'unresolved');
+        await reveal();
+        const count = calls.length;
+        await click(m.subject_artwork_reveal(), host.querySelector(`[data-statement="${statement.id}"]`)!);
+        const selectedImage = host.querySelector('img');
+        authority = 1;
+        await render(source, 'unresolved');
+        const suitability = prepared === 'blur' ? 'blur' : 'show';
+        const level = prepared === 'blur' ? 0 : 1;
+        await render(source, suitability, 'en', level);
+        if (prepared !== 'concealed' && phase === 'pending') expect(host.textContent).toContain(m.candidate_loading());
+        if (prepared !== 'concealed' && phase === 'ready') expect(host.querySelector('img')).toBe(selectedImage);
+        await act(async () => pending?.({ kind: 'ready', image }));
+        expect(calls.slice(count)).toEqual([media]);
+        if (prepared === 'concealed') {
+          expect(host.querySelector('img')).toBeNull();
+          await reveal();
+          expect(host.querySelector('img')).toBeNull();
+        } else {
+          expect(host.querySelector(`[data-statement="${statement.id}"] img`)).toBe(host.querySelector('img'));
+          expect(host.querySelector('img')?.getAttribute('src')).toBe(`/media/${media}/webp-240`);
+          expect(host.querySelector('a[href="https://source.test/art"]')?.textContent).toBe('Actual source');
+        }
+        const admittedImage = host.querySelector('img');
+        await render(source, suitability, 'en', level);
+        expect(host.querySelector('img')).toBe(admittedImage);
+        await render(source, suitability === 'blur' ? 'show' : 'blur', 'en', level);
+        await render(source, suitability, 'en', level);
+        expect(host.querySelector('img')).toBeNull();
+        expect(calls).toHaveLength(count + 1);
+      }
+    }
+    hold = false;
+    calls.length = 0;
     await render();
     expect(calls).toHaveLength(0);
     expect(host.querySelector('img')).toBeNull();
@@ -186,6 +240,8 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
     expect(host.querySelector('img')?.getAttribute('src')).toBe(`/media/${media}/webp-240`);
     expect(host.querySelector('img')?.getAttribute('alt')).toBe('Portrait — Original subject');
     expect(host.textContent).toContain('Actual artist');
+    expect(host.textContent).toContain('Actual source');
+    expect(host.textContent).toContain('CC-BY-4.0');
     expect(host.textContent).toContain('Other readable fact');
     expect(
       [...host.querySelectorAll('a')].some((link) => new URL(link.href).searchParams.get('statement') === statement.id),
@@ -217,7 +273,7 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
     result = { kind: 'ready', image };
     await click(m.document_image_retry());
     expect(host.querySelector('img')).not.toBeNull();
-    authority++;
+    authority = 2;
     await render();
     expect(host.querySelector('img')).toBeNull();
     const beforeRetiredRead = calls.length;
@@ -233,14 +289,45 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
     await act(async () => pending?.({ kind: 'ready', image }));
     expect(host.querySelector('img')).toBeNull();
     hold = false;
+    const hiddenSource = structuredClone(body);
+    await render(hiddenSource, 'unresolved');
+    await reveal();
+    await click(m.subject_artwork_reveal());
+    await click(m.subject_artwork_hide());
+    const hiddenCount = calls.length;
+    await render(hiddenSource, 'show', 'en', 1);
+    expect(host.querySelector('img')).toBeNull();
+    expect(calls).toHaveLength(hiddenCount);
+    const pendingSource = structuredClone(body);
+    await render(pendingSource);
+    await reveal();
+    hold = true;
+    await click(m.subject_artwork_reveal());
+    await render(pendingSource, 'show');
+    await render(pendingSource);
+    await act(async () => pending?.({ kind: 'ready', image }));
+    expect(host.querySelector('img')).toBeNull();
+    await reveal();
+    await click(m.subject_artwork_reveal());
+    authority = 3;
+    await render(pendingSource);
+    authority = 2;
+    await render(pendingSource);
+    await act(async () => pending?.({ kind: 'ready', image }));
+    expect(host.querySelector('img')).toBeNull();
+    hold = false;
     for (const locale of ['ja', 'zh-Hant']) {
       await render(body, 'show', locale);
       await reveal();
       await click(m.subject_artwork_view({}, { locale: locale as never }));
       expect(host.querySelector('img')?.getAttribute('alt')).toContain(locale === 'ja' ? '肖像画' : '人物肖像');
     }
-    for (const field of ['context', 'release'] as const) {
-      body.subject[field] += '-replacement';
+    for (const field of ['context', 'release', 'address'] as const) {
+      await render(body, 'show');
+      await reveal();
+      await click(m.subject_artwork_view());
+      if (field !== 'address') body.subject[field] += '-replacement';
+      await render(body, 'show', 'en', 0, field === 'address' ? '/en/subjects/art?view=details' : undefined);
       await render(body, 'show');
       expect(host.querySelector('img')).toBeNull();
     }
@@ -250,8 +337,14 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
     await reveal();
     expect(host.textContent).toContain(m.subject_artwork_unsupported());
     expect(host.querySelector('img')).toBeNull();
+    hold = true;
+    await render(structuredClone(body), 'show');
+    await reveal();
+    await click(m.subject_artwork_view());
   } finally {
     await act(async () => root.unmount());
+    await act(async () => pending?.({ kind: 'ready', image }));
+    expect(host.querySelector('img')).toBeNull();
     client.clear();
     window.happyDOM.abort();
     for (const [key, descriptor] of previous) {
