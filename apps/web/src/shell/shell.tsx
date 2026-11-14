@@ -614,7 +614,14 @@ function ShellContent({
                   tabIndex={-1}
                   className="min-w-0 scroll-mt-[calc(var(--shell-header-height)+1rem)] px-3 py-6 pb-[calc(var(--bottom-nav-height)+1.5rem)] outline-none md:p-6"
                 >
-                  <div className="mx-auto w-full max-w-5xl">
+                  <div
+                    className={cn(
+                      'mx-auto w-full min-w-0',
+                      navigationPathMatches({ locale: getLocale(), pathname: location.pathname }, '/studio', 'prefix')
+                        ? 'max-w-[92rem]'
+                        : 'max-w-5xl',
+                    )}
+                  >
                     {children}
                     {session === 'signed-in' &&
                       navigationPathname({ locale: getLocale(), pathname: location.pathname }) === '/settings' && (
