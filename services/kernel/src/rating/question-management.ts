@@ -12,7 +12,7 @@ import {
 } from './dependencies.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
@@ -74,7 +74,15 @@ async function manageAdvice(deps: Dependencies, actor: Actor, realmId: string, d
     { route: routeOf(realmId)!, id: realmId },
     { pool: deps.pool, deadline },
   );
-  return withConnection(deps.pool, (client) => check(deadlineClient(client, deadline)));
+  return withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    (client) => check(deadlineClient(client, deadline)),
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      isUncertainSettledQueryError: () => true,
+    },
+  );
 }
 
 /** One Realm directory and one optional exact definition. This is an additive
@@ -143,17 +151,21 @@ export async function readQuestionManagementPage(
   const canManage = await manageAdvice(deps, actor, realmId, deadline);
   // Foreign advice preparation must not release rows after disclosure is revoked.
   await requireRealmQuestionRead(deps, actor, realmId, deadline);
-  await withReadTransaction(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    await partitionReadClient(bounded, partitionOf(route));
-    const generation = (await generationRead.run(bounded, { realm_id: realmId }))?.generation ?? '0';
-    if (generation !== directory.lifecycleGeneration) throw new ProblemError('invalid_cursor');
-    if (selected !== null) {
-      const current = await questionRead.run(bounded, { question_id: selected.id });
-      if (!current || current.realmId !== realmId) throw new ProblemError('not_found');
-      if (JSON.stringify(current) !== JSON.stringify(selected)) throw new ProblemError('conflict');
-    }
-  });
+  await withReadTransaction(
+    deps.pool,
+    async (client) => {
+      const bounded = deadlineClient(client, deadline);
+      await partitionReadClient(bounded, partitionOf(route));
+      const generation = (await generationRead.run(bounded, { realm_id: realmId }))?.generation ?? '0';
+      if (generation !== directory.lifecycleGeneration) throw new ProblemError('invalid_cursor');
+      if (selected !== null) {
+        const current = await questionRead.run(bounded, { question_id: selected.id });
+        if (!current || current.realmId !== realmId) throw new ProblemError('not_found');
+        if (JSON.stringify(current) !== JSON.stringify(selected)) throw new ProblemError('conflict');
+      }
+    },
+    deadline,
+  );
   const question = selected === null ? null : managementQuestion(ratingQuestionView(selected));
   const selectedBase = question === null ? null : `/v1/rating-questions/${question.id}`;
   const next =
