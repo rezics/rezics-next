@@ -168,6 +168,9 @@ test('reconnects to one manager pane across successive endpoint changes and move
   const nextArgv = [...f.currentArgv];
   nextArgv[nextArgv.length - 1] = 'ws://127.0.0.1:10003';
   f.panes.get('%4')!.draft = 'second unsent draft';
+  // tmux renders the shell command inside double quotes and escapes its dollar signs.
+  const sticky = f.panes.get('%4')!;
+  sticky.command = '"' + sticky.command.replace(/[\\"$`]/g, (character) => '\\' + character) + '"';
   expect(await f.windows.rebindIfStale('manager', nextArgv, '/cwd')).toBe(true);
   expect(f.archived.get('%4')).toMatchObject({ draft: 'second unsent draft' });
   expect([...f.panes.keys()]).toEqual(['%5']);
@@ -189,6 +192,23 @@ test('a menu arriving after viewer recovery is left paused exactly once', async 
     ['%4', 'Down', 'Enter'],
   ]);
   expect(f.probes).toHaveLength(0);
+});
+
+test('checks a current viewer after attach without scheduling a duplicate probe or launching another pane', async () => {
+  const f = viewerFixture();
+  const current = f.panes.get('%3')!;
+  f.panes.delete('%3');
+  f.panes.set('%4', { ...current, command: f.encode(f.currentArgv), draft: '' });
+  f.setActivePane('%4');
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  expect(f.probes).toHaveLength(1);
+  f.probes.shift()!();
+  await Bun.sleep(0);
+  expect(f.calls.filter((argv) => argv.includes('send-keys')).map((argv) => argv.slice(-3))).toEqual([
+    ['%4', 'Down', 'Enter'],
+  ]);
+  expect(f.calls.some((argv) => argv.includes('split-window'))).toBe(false);
 });
 
 test('leaves unrelated panes and unowned windows alone', async () => {
