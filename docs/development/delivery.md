@@ -148,18 +148,18 @@ state, owner links, blockers and next actions. Resume only when authorized.
 
 # Delivery ownership
 
-The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns delivery to resident managers
-and implementation to workers. The manager owns a continuously workable queue: prioritize outcomes, assign each
-ready worker a clear next result and write boundary, change assignments or width as work and capacity change,
-and replace stalled or spent work promptly. Managers own [starts through first source](../../tools/goal/prompts/manager.md):
-dispatch through Goal, verify the current worker and its first source checkpoint, and resolve or replace a failed
-start. The controller executes admission, retries and landings; it does not replace the manager's scheduling judgment.
+Each manager independently finds runnable release work from actual source gaps, owner contracts and worker proposals.
+Size complete writable outcomes and refill eligible capacity before workers exit or park. Keep a ready queue, verify
+actual process starts and first-source checkpoints, and continue dispatch without waiting for a fixed batch or a list
+from the supermanager. A verification dependency holds only its dependent change; it does not block unrelated
+implementation.
 
-Workers can find defects, define a repair within the accepted scope, and ask for or propose their next assignment.
-They may continue evidenced work inside their assigned boundary and coordinate before taking another boundary.
-Managers review worker proposals for priority, ownership and overlap; a proposal does not have to originate with a
-manager. When an assignment parks, keep its commits and exact next action and offer independent work to the
-available worker or slot. Review a small sample of delivered work for recurring defects rather than auditing every task.
+Workers may choose repair order within their scope and propose adjacent work. Managers coordinate ownership and write
+boundaries, and own priority, assignment, start recovery and integration follow-through. When first source stalls,
+inspect the rendered prompt and identify the first writable file or function, observed behavior, owner boundaries and
+next independent step. Remove unnecessary context, conflicting instructions and stale check demands; preserve useful
+active work and avoid repeating the prompt. The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation)
+assigns implementation to workers; the controller executes admission, retries and landings.
 
 Managers and workers communicate directly with the owner who can act. Managers settle reversible cross-Goal
 decisions peer to peer: the producer owns its interface and the outcome owner decides shared choices after one

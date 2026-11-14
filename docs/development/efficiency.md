@@ -12,7 +12,13 @@ Two measures run together, and neither replaces the other:
 - **Landed product lines measure throughput**, against the hourly floor below. They show whether the work system is
   producing at the rate the burn-down needs.
 
-Landings and attempts are diagnostics; allowance and worker occupancy explain cost.
+Landings and attempts are diagnostics; allowance and worker occupancy explain cost. Compare windows only across
+comparable outcome classes, stages, model profiles and actual worker exposure, not configured width or raw task count.
+Pair new product source and landed results with attributable coding worker-hours and allowance. Show active writing,
+startup, waiting, landing and idle-slot causes separately, and label missing attribution. Use first useful source and
+source checkpoint frequency to distinguish weak prompts or oversized outcomes from admission and integration delays.
+When comparable evidence is missing, report the gap and intervene against the absolute target; do not claim improvement
+from a different work mix or concurrency.
 
 Each coding worker targets at least 1,000 landed product lines per worker-hour. Review workers individually and
 separate source delivery, check waits, and unknown attribution. When a worker is below target, repair the brief,
@@ -57,6 +63,8 @@ Handle a breached target the same day. Separate measured timestamps and duration
 missing timing.
 
 Decision: The hourly report reads each UTC bucket once, normalizes landing targets during aggregation, and reports conflicting task attribution as unknown; lifecycle and other window policies remain unchanged.
+
+Decision: Managers dispatch complete release work from live gaps and proposals; compare output on matched work, model, stage and actual exposure, and use first-source evidence to target flow loss.
 
 The control plane exists to cut the cost of each landed outcome, and agents are its resolvers. A problem an agent
 can fix where it appears goes to an agent at that point, and the pipeline continues. Such problems include a merge
