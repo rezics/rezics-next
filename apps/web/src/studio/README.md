@@ -153,10 +153,13 @@ The brief's legacy editor comparison is behavioral guidance (one document/previe
 state-preserving reconfiguration); its named commit and paths are unavailable in this checkout's legacy refs, so no
 legacy source is ported and old-editor parity remains unverified.
 
-Focused acceptance source covers Book/Column selection from one context contribution, unsaved text/undo/caret across
-Preview and history close, explicit bounded history reads, protected replacement, and dirty-switch choices. Existing
-locale, autosave, unknown-intent replay and publication assertions remain. Obsolete local-navigation selectors and
-peer-mode keyboard expectations are adapted to the Shell-owned navigation and the concise toolbar.
+Focused acceptance in `tests/studio-workspace-continuity.test.tsx` covers Book/Column selection from one context
+contribution, unsaved text/undo/caret across Preview and history close, explicit bounded history reads, protected
+replacement, and dirty-switch choices. Text-caret restoration excludes file controls and retired editor generations.
+`tests/studio-workspace-language.test.tsx` retains its locale, autosave, unknown-intent replay and publication assertions;
+its navigation helper follows Shell placement. `tests/studio-native-drafts.test.tsx` replaces only the obsolete local
+disclosure layout assertion and helper. Ordinary workbench walks cover both profiles; native phone/desktop keyboard
+stories use AppShell and the concise toolbar. First-save rich-preview story assertions retain their existing owner.
 
 ## Working preview
 

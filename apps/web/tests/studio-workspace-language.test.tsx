@@ -192,8 +192,6 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input, bo
       await act(async () => button(name).click());
     },
     open: async (name: string) => {
-      const navigation = host.querySelector<HTMLDetailsElement>('.studio-mobile-navigation')!;
-      if (!navigation.open) await act(async () => (navigation.querySelector('summary') as HTMLElement).click());
       await act(async () => button(name).click());
     },
     title: () => getByRole(host, 'textbox', { name: m.studio_workspace_title(), exact: true }) as HTMLInputElement,
@@ -477,10 +475,6 @@ test('native composer completion clears operands even when completion wording di
   const feedback = spyOn(language, 'workspaceFeedbackMessage').mockReturnValue('Different safe receipt text');
   const v = await mount(f, { ...f.input, initialSelection: undefined, nativeDrafts: true, canCreateDraft: true });
   try {
-    const navigation = v.host.querySelector<HTMLDetailsElement>('.studio-mobile-navigation')!;
-    await act(async () => {
-      navigation.open = true;
-    });
     const field = (name: string) => getByRole(v.host, 'textbox', { name, exact: true }) as HTMLInputElement;
     await v.change(field(m.studio_account_board()), 'board');
     await v.change(field(m.studio_account_title()), 'Created <原稿>');

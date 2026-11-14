@@ -259,15 +259,12 @@ test('uncertain article publication retries its frozen exact revision and reads 
   }
 });
 
-test('Studio leads with the document and starts its draft navigation as a compact disclosure', () => {
+test('Studio leaves sidebar placement and the phone drawer to Shell', () => {
   const fixture = port();
   const markup = renderToStaticMarkup(createElement(StudioWorkspace, { input: input(), port: fixture.value }));
-  const documentPosition = markup.indexOf('class="studio-document"');
-  const navigationPosition = markup.indexOf('class="studio-sidebar"');
-
-  expect(documentPosition).toBeGreaterThanOrEqual(0);
-  expect(navigationPosition).toBeGreaterThan(documentPosition);
-  expect(markup).toContain('<details class="studio-mobile-navigation">');
+  expect(markup).toContain('class="studio-document"');
+  expect(markup).not.toContain('class="studio-sidebar"');
+  expect(markup).not.toContain('studio-mobile-navigation');
 });
 
 const structuredHtml =
@@ -290,11 +287,6 @@ async function mountComposer(fixture = port()) {
         }),
       ),
     );
-    const navigation = host.querySelector<HTMLDetailsElement>('.studio-mobile-navigation');
-    if (navigation && !navigation.open)
-      await act(async () => {
-        navigation.open = true;
-      });
   };
   await render();
   const form = () => getByRole(host, 'form', { name: m.studio_account_create() });

@@ -461,18 +461,9 @@ export function StudioWorkbench({
               </header>
               <div className="studio-document-toolbar">
                 <div className="studio-action-row" role="group" aria-label={m.studio_workspace_views({}, options)}>
-                  {historyOpen ? (
+                  {!historyOpen ? (
                     <Button
-                      type="button"
-                      variant="outline"
-                      aria-expanded={true}
-                      aria-controls={`${id}-history`}
-                      onClick={closeHistory}
-                    >
-                      {copy.closeHistory}
-                    </Button>
-                  ) : (
-                    <Button
+                      key="preview"
                       type="button"
                       variant="outline"
                       aria-controls={`${id}-canvas`}
@@ -483,21 +474,22 @@ export function StudioWorkbench({
                         ? m.studio_workspace_write({}, options)
                         : m.studio_workspace_preview({}, options)}
                     </Button>
-                  )}
-                  {!historyOpen ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      aria-expanded={false}
-                      aria-controls={`${id}-history`}
-                      disabled={blocked || selected.snapshotPending || selected.uploading}
-                      onClick={(event) =>
-                        showHistory(event.detail === 0 && document.activeElement === event.currentTarget)
-                      }
-                    >
-                      {m.studio_workspace_versions({}, options)}
-                    </Button>
                   ) : null}
+                  <Button
+                    key="history"
+                    type="button"
+                    variant="ghost"
+                    aria-expanded={historyOpen}
+                    aria-controls={`${id}-history`}
+                    disabled={!historyOpen && (blocked || selected.snapshotPending || selected.uploading)}
+                    onClick={(event) =>
+                      historyOpen
+                        ? closeHistory()
+                        : showHistory(event.detail === 0 && document.activeElement === event.currentTarget)
+                    }
+                  >
+                    {historyOpen ? copy.closeHistory : m.studio_workspace_versions({}, options)}
+                  </Button>
                 </div>
                 <Button
                   type="button"
@@ -626,32 +618,30 @@ export function StudioWorkbench({
                   locale={locale}
                 />
               ) : null}
-              {historyVisited ? (
-                <section
-                  id={`${id}-history`}
-                  hidden={!historyOpen}
-                  className="studio-history-canvas studio-stack"
-                  aria-labelledby={`${id}-history-heading`}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape' && !event.defaultPrevented) {
-                      event.preventDefault();
-                      closeHistory();
-                    }
-                  }}
-                >
-                  <h2 id={`${id}-history-heading`} ref={historyHeading} tabIndex={-1}>
-                    {m.studio_workspace_versions({}, options)}
-                  </h2>
-                  <p className="studio-help">{copy.historyHelp}</p>
+              <section
+                id={`${id}-history`}
+                hidden={!historyOpen}
+                className="studio-history-canvas studio-stack"
+                aria-label={m.studio_workspace_versions({}, options)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape' && !event.defaultPrevented) {
+                    event.preventDefault();
+                    closeHistory();
+                  }
+                }}
+              >
+                {historyVisited ? (
                   <StudioVersions
                     key={postId}
                     controller={controller}
                     state={state}
                     presentation={presentation}
                     active={historyOpen}
+                    headingRef={historyHeading}
+                    workingHelp={copy.historyHelp}
                   />
-                </section>
-              ) : null}
+                ) : null}
+              </section>
             </>
           ) : (
             <section className="studio-empty">

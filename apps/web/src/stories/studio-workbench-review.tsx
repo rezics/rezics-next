@@ -39,13 +39,13 @@ export function StudioWorkbenchReview({
   return (
     <PatternStory path="/studio" visitor="Signed In">
       <AppShell>
-        <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6">
+        <div className="min-w-0">
           {prepared?.key === key ? (
             <StudioWorkbench key={key} {...prepared.fixture.props} controller={prepared.fixture.controller} />
           ) : (
             <p role="status">{m.studio_account_preparing({}, { locale })}</p>
           )}
-        </main>
+        </div>
       </AppShell>
     </PatternStory>
   );

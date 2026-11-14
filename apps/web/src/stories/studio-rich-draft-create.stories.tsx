@@ -165,8 +165,6 @@ type Story = StoryObj<typeof meta>;
 
 async function compose(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  const navigation = canvasElement.querySelector<HTMLDetailsElement>('.studio-mobile-navigation')!;
-  if (!navigation.open) await userEvent.click(navigation.querySelector('summary')!);
   const form = await canvas.findByRole('form', { name: m.studio_account_create() });
   const fields = within(form);
   await userEvent.type(fields.getByRole('textbox', { name: m.studio_account_board() }), id(7));
@@ -259,8 +257,6 @@ export const VisitReplacement: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Replace account visit' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Finish old response' }));
     await expect(editor).not.toBeInTheDocument();
-    const navigation = canvasElement.querySelector<HTMLDetailsElement>('.studio-mobile-navigation')!;
-    if (!navigation.open) await userEvent.click(navigation.querySelector('summary')!);
     const destination = canvas.getByRole('textbox', { name: m.studio_account_board() });
     await userEvent.click(destination);
     await expect(destination).toHaveValue('');

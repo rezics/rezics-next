@@ -67,6 +67,8 @@ type VersionProps = {
   presentation: StudioPresentation;
   /** Closing the workspace history retires readers and focus, while keeping its bounded page and copy review. */
   active?: boolean;
+  headingRef?: RefObject<HTMLHeadingElement | null>;
+  workingHelp?: string;
 };
 
 /** Replacement retires local disclosures and focus as well as the controller's version coordinates. */
@@ -154,7 +156,7 @@ function useVersionMovement(controller: StudioController, root: RefObject<HTMLEl
   };
 }
 
-function VersionVisit({ controller, state, presentation, active = true }: VersionProps) {
+function VersionVisit({ controller, state, presentation, active = true, headingRef, workingHelp }: VersionProps) {
   const root = useRef<HTMLElement>(null);
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const comparisonHeading = useRef<HTMLHeadingElement>(null);
@@ -188,7 +190,13 @@ function VersionVisit({ controller, state, presentation, active = true }: Versio
   return (
     <section ref={root} className="studio-stack min-w-0" aria-label={m.studio_revision_region({}, options)}>
       <div className="studio-section-heading flex-wrap gap-3">
-        <h2 ref={pageHeading} tabIndex={-1}>
+        <h2
+          ref={(heading) => {
+            pageHeading.current = heading;
+            if (headingRef) headingRef.current = heading;
+          }}
+          tabIndex={-1}
+        >
           {m.studio_revision_heading({}, options)}
         </h2>
         <Button
@@ -201,7 +209,7 @@ function VersionVisit({ controller, state, presentation, active = true }: Versio
           {m.studio_revision_first({}, options)}
         </Button>
       </div>
-      <p className="studio-help">{m.studio_revision_intro({}, options)}</p>
+      <p className="studio-help">{workingHelp ?? m.studio_revision_intro({}, options)}</p>
       {failed ? (
         <div role="status" className="studio-stack">
           <p>{m.studio_revision_navigation_failed({}, options)}</p>

@@ -4,7 +4,6 @@
   max-inline-size: 92rem;
   margin-inline: auto;
   overflow-wrap: anywhere;
-  --studio-gap: clamp(1rem, 2vw, 2rem);
 }
 
 .studio-workspace *,
@@ -70,9 +69,6 @@
 }
 
 .studio-stack {
-  margin-block-start: 0.75rem;
-}
-.studio-stack {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -105,7 +101,9 @@
 .studio-workspace button,
 .studio-context-navigation button,
 .studio-workspace input:not([type='checkbox']),
-.studio-workspace textarea {
+.studio-context-navigation input:not([type='checkbox']),
+.studio-workspace textarea,
+.studio-context-navigation textarea {
   min-block-size: 2.75rem;
 }
 .studio-workspace button,
@@ -122,7 +120,8 @@
   flex: 0 0 auto;
   accent-color: var(--primary);
 }
-.studio-workspace textarea {
+.studio-workspace textarea,
+.studio-context-navigation textarea {
   inline-size: 100%;
   min-inline-size: 0;
   border: 1px solid var(--input);
@@ -416,6 +415,11 @@
 }
 .studio-context-navigation h2 {
   font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.studio-context-navigation h3 {
+  font-weight: 600;
 }
 .studio-context-navigation .studio-section-heading > span {
   font-size: 0.75rem;

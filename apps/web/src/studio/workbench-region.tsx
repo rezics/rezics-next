@@ -43,6 +43,7 @@ type AuthoringSelection = {
   target: HTMLElement;
   text: { start: number; end: number; direction: 'forward' | 'backward' | 'none' } | null;
   range: Range | null;
+  backward: boolean;
 };
 
 /** DOM selection only: the shared editor remains the document and undo owner. */
@@ -50,7 +51,10 @@ export function useAuthoringSelection(canvas: RefObject<HTMLElement | null>, gen
   const saved = useRef<AuthoringSelection | null>(null);
   return {
     remember(target: HTMLElement) {
-      if (target instanceof window.HTMLInputElement || target instanceof window.HTMLTextAreaElement) {
+      if (
+        (target instanceof window.HTMLInputElement && target.type === 'text') ||
+        target instanceof window.HTMLTextAreaElement
+      ) {
         saved.current = {
           generation,
           target,
@@ -60,14 +64,22 @@ export function useAuthoringSelection(canvas: RefObject<HTMLElement | null>, gen
             direction: target.selectionDirection ?? 'none',
           },
           range: null,
+          backward: false,
         };
       } else if (target.isContentEditable || target.getAttribute('role') === 'textbox') {
         const selection = target.ownerDocument.getSelection();
+        const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
         saved.current = {
           generation,
           target,
           text: null,
-          range: selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null,
+          range,
+          backward: Boolean(
+            range &&
+            !range.collapsed &&
+            selection!.anchorNode === range.endContainer &&
+            selection!.anchorOffset === range.endOffset,
+          ),
         };
       }
     },
@@ -89,6 +101,14 @@ export function useAuthoringSelection(canvas: RefObject<HTMLElement | null>, gen
         const current = selection.target.ownerDocument.getSelection()!;
         current.removeAllRanges();
         current.addRange(selection.range);
+        if (selection.backward) {
+          current.setBaseAndExtent(
+            selection.range.endContainer,
+            selection.range.endOffset,
+            selection.range.startContainer,
+            selection.range.startOffset,
+          );
+        }
       }
     },
   };

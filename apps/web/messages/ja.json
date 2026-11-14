@@ -12525,7 +12525,7 @@
   "studio_workspace_book_navigation": "文書と目次",
   "studio_workspace_article_navigation": "文書と記事",
   "studio_workspace_drafts": "文書の下書き",
-  "studio_workspace_book_drafts_help": "文書は保存後に章として配置できます。",
+  "studio_workspace_book_drafts_help": "まだ章として配置されていない保存済みの文書です。",
   "studio_workspace_article_drafts_help": "各記事にはそれぞれ保存済みの版と公開版があります。",
   "studio_workspace_published_document": "公開済みの文書",
   "studio_workspace_protected_document": "保護された文書",

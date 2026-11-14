@@ -18,6 +18,8 @@ import type {
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { workbenchCopy } from '../studio/workbench-copy';
+import { AppShell } from '../shell/shell';
+import { PatternStory } from './page';
 
 type Scenario =
   | 'populated'
@@ -283,9 +285,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 async function openDraftNavigation(canvasElement: HTMLElement) {
-  const canvas = within(canvasElement);
-  const summary = await canvas.findByText(m.studio_workspace_article_navigation());
-  if (!summary.closest('details')!.open) await userEvent.click(summary);
+  const page = within(canvasElement.ownerDocument.body);
+  const trigger = page.queryByRole('button', { name: m.shell_open_navigation(), exact: true });
+  if (trigger && trigger.getAttribute('aria-expanded') !== 'true') await userEvent.click(trigger);
 }
 
 export const Populated: Story = { args: { scenario: 'populated' } };
@@ -442,18 +444,27 @@ export const UncertainIntent: Story = {
   },
 };
 
+const inShell: NonNullable<Story['decorators']>[number] = (Story) => (
+  <PatternStory path="/studio" visitor="Signed In">
+    <AppShell>
+      <Story />
+    </AppShell>
+  </PatternStory>
+);
+
 export const PhoneKeyboardRecovery: Story = {
+  decorators: [inShell],
   args: { scenario: 'populated' },
   globals: { locale: 'ja', viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const navigation = await canvas.findByText(m.studio_workspace_article_navigation());
-    await expect(navigation.closest('details')?.open).toBe(false);
+    const navigation = await canvas.findByRole('button', { name: m.shell_open_navigation(), exact: true });
     navigation.focus();
     await expect(navigation).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await userEvent.tab();
-    const draft = canvas.getByRole('button', { name: 'A private opening' });
+    const page = within(canvasElement.ownerDocument.body);
+    const draft = await page.findByRole('button', { name: 'A private opening' });
+    draft.focus();
     await expect(draft).toHaveFocus();
     await userEvent.keyboard('{Enter}');
     await canvas.findByRole('textbox', { name: m.studio_workspace_article_document() });
@@ -463,6 +474,7 @@ export const PhoneKeyboardRecovery: Story = {
 };
 
 export const DesktopKeyboardRecovery: Story = {
+  decorators: [inShell],
   args: { scenario: 'populated' },
   globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
   play: async ({ canvasElement }) => {
@@ -474,8 +486,7 @@ export const DesktopKeyboardRecovery: Story = {
     canvas.getByRole('link', { name: m.studio_workspace_skip() }).focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: m.studio_workspace_write() })).toHaveFocus();
-    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: m.studio_workspace_preview() })).toHaveFocus();
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: m.studio_workspace_versions() })).toHaveFocus();
     await userEvent.tab();
