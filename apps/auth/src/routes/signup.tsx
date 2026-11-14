@@ -15,7 +15,7 @@ import {
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
-import { AuthActions, AuthHelp, AuthNotice, AuthTask } from '../auth-task-view';
+import { AuthActions, AuthHelp, AuthNotice, AuthTask, AuthTaskSection } from '../auth-task-view';
 import {
   explainSignIn,
   normalizeSignupHandle,
@@ -513,13 +513,17 @@ function SignupActivePageState({
       <AuthPage heading={m.auth_signup_heading()}>
         {departure}
         <AuthTask>
-          <p role="status">{m.auth_signup_already_signed_in()}</p>
-          <AuthHelp aria-label={m.auth_signup_continue()}>
-            <a href={signInTarget(journey.query)}>{m.auth_signup_continue()}</a>
-            <a href={`/login${journey.query}`} onClick={follow}>
-              {m.auth_signup_sign_in()}
-            </a>
-          </AuthHelp>
+          <AuthTaskSection className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+            <AuthNotice className="max-w-prose border-primary/30 bg-primary/5">
+              <p role="status">{m.auth_signup_already_signed_in()}</p>
+            </AuthNotice>
+            <AuthHelp aria-label={m.auth_signup_continue()}>
+              <a href={signInTarget(journey.query)}>{m.auth_signup_continue()}</a>
+              <a href={`/login${journey.query}`} onClick={follow}>
+                {m.auth_signup_sign_in()}
+              </a>
+            </AuthHelp>
+          </AuthTaskSection>
         </AuthTask>
       </AuthPage>
     );
@@ -548,27 +552,31 @@ function SignupActivePageState({
       <AuthPage heading={m.auth_signup_heading()}>
         {departure}
         <AuthTask>
-          {phase.kind === 'uncertain' ? (
-            <SignupUncertainty phase={phase} query={journey.query} follow={follow} unavailable />
-          ) : phase.kind === 'dispatched' ? (
-            <ErrorAlert>
-              <p role="status">{m.auth_signup_creating()}</p>
-              <p>{m.auth_signup_page_unavailable()}</p>
+          <AuthTaskSection className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+            {phase.kind === 'uncertain' ? (
+              <SignupUncertainty phase={phase} query={journey.query} follow={follow} unavailable />
+            ) : phase.kind === 'dispatched' ? (
+              <ErrorAlert className="max-w-prose">
+                <p role="status">{m.auth_signup_creating()}</p>
+                <p>{m.auth_signup_page_unavailable()}</p>
+                <SignupAuthLinks query={journey.query} follow={follow} />
+              </ErrorAlert>
+            ) : (
+              <ErrorAlert className="max-w-prose">
+                <p>
+                  {page.reason === 'verification' ? m.auth_signup_turnstile_failed() : m.auth_signup_page_unavailable()}
+                </p>
+              </ErrorAlert>
+            )}
+            <AuthActions>
+              <Button type="button" onClick={retryAdvice}>
+                {m.auth_signup_retry()}
+              </Button>
+            </AuthActions>
+            {phase.kind !== 'uncertain' && phase.kind !== 'dispatched' ? (
               <SignupAuthLinks query={journey.query} follow={follow} />
-            </ErrorAlert>
-          ) : (
-            <ErrorAlert>
-              <p>
-                {page.reason === 'verification' ? m.auth_signup_turnstile_failed() : m.auth_signup_page_unavailable()}
-              </p>
-            </ErrorAlert>
-          )}
-          <Button type="button" onClick={retryAdvice}>
-            {m.auth_signup_retry()}
-          </Button>
-          {phase.kind !== 'uncertain' && phase.kind !== 'dispatched' ? (
-            <SignupAuthLinks query={journey.query} follow={follow} />
-          ) : null}
+            ) : null}
+          </AuthTaskSection>
         </AuthTask>
       </AuthPage>
     );
@@ -624,13 +632,22 @@ function SignupCompletion({
   }, [phase.kind]);
   return (
     <AuthTask aria-busy={phase.kind === 'signing-in'}>
-      <p role="status">{phase.kind === 'signing-in' ? m.auth_signup_signing_in() : m.auth_signup_created()}</p>
-      {phase.kind === 'sign-in-failed' ? (
-        <ErrorAlert ref={alert} tabIndex={-1}>
-          <p>{phase.message}</p>
-        </ErrorAlert>
-      ) : null}
-      <SignupAuthLinks query={query} follow={follow} />
+      <AuthTaskSection className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <AuthNotice className="max-w-prose border-primary/30 bg-primary/5">
+          <p role="status">{phase.kind === 'signing-in' ? m.auth_signup_signing_in() : m.auth_signup_created()}</p>
+        </AuthNotice>
+        {phase.kind === 'sign-in-failed' ? (
+          <ErrorAlert
+            ref={alert}
+            tabIndex={-1}
+            className="max-w-prose focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4
+              focus:ring-offset-background"
+          >
+            <p>{phase.message}</p>
+          </ErrorAlert>
+        ) : null}
+        <SignupAuthLinks query={query} follow={follow} />
+      </AuthTaskSection>
     </AuthTask>
   );
 }
@@ -646,12 +663,18 @@ function SignupRefusal({
 }) {
   return (
     <AuthTask>
-      <div tabIndex={-1} id="signup-refusal">
-        <ErrorAlert>
-          <p>{message}</p>
-        </ErrorAlert>
-      </div>
-      <SignupAuthLinks query={query} follow={follow} />
+      <AuthTaskSection className="rounded-xl border border-destructive/25 bg-card p-4 shadow-sm sm:p-5">
+        <div
+          tabIndex={-1}
+          id="signup-refusal"
+          className="max-w-prose rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+        >
+          <ErrorAlert>
+            <p>{message}</p>
+          </ErrorAlert>
+        </div>
+        <SignupAuthLinks query={query} follow={follow} />
+      </AuthTaskSection>
     </AuthTask>
   );
 }
@@ -672,11 +695,14 @@ function SignupUncertainty({
   retryDisabled?: boolean;
 }) {
   return (
-    <div id={uncertainPanelId} className="grid gap-4">
-      <ErrorAlert tabIndex={-1}>
-        <h2>{m.auth_signup_uncertain_title()}</h2>
-        <p>{m.auth_signup_uncertain_body()}</p>
-        <dl className="grid gap-3 [&_dt]:text-sm [&_dd]:font-medium">
+    <div
+      id={uncertainPanelId}
+      className="grid min-w-0 gap-4 rounded-xl border border-destructive/25 bg-card p-4 shadow-sm [overflow-wrap:anywhere] sm:p-5"
+    >
+      <ErrorAlert tabIndex={-1} className="max-w-prose">
+        <h2 className="text-lg font-semibold tracking-tight">{m.auth_signup_uncertain_title()}</h2>
+        <p className="max-w-prose">{m.auth_signup_uncertain_body()}</p>
+        <dl className="grid min-w-0 gap-3 [&_dt]:text-sm [&_dd]:min-w-0 [&_dd]:font-medium [&_dd]:[overflow-wrap:anywhere]">
           <div>
             <dt>{m.auth_signup_handle()}</dt>
             <dd>{phase.attempt.handle}</dd>
@@ -695,9 +721,11 @@ function SignupUncertainty({
         )}
         {unavailable ? <p>{m.auth_signup_page_unavailable()}</p> : null}
         {onRetry ? (
-          <Button type="button" disabled={retryDisabled} onClick={onRetry}>
-            {m.auth_signup_retry_original()}
-          </Button>
+          <AuthActions>
+            <Button type="button" disabled={retryDisabled} onClick={onRetry}>
+              {m.auth_signup_retry_original()}
+            </Button>
+          </AuthActions>
         ) : null}
       </ErrorAlert>
       <SignupAuthLinks query={query} follow={follow} />
@@ -866,14 +894,18 @@ function SignupForm({
   return (
     <>
       {journey.freshAfterReturn === 'created' ? (
-        <AuthNotice role="status">{m.auth_signup_return_new_attempt_created()}</AuthNotice>
+        <AuthNotice className="max-w-prose border-primary/30 bg-primary/5" role="status">
+          {m.auth_signup_return_new_attempt_created()}
+        </AuthNotice>
       ) : journey.freshAfterReturn === 'unresolved' ? (
-        <AuthNotice role="status">{m.auth_signup_return_new_attempt()}</AuthNotice>
+        <AuthNotice className="max-w-prose border-primary/30 bg-primary/5" role="status">
+          {m.auth_signup_return_new_attempt()}
+        </AuthNotice>
       ) : null}
       <form
         ref={form}
         id="signup-form"
-        className="grid min-w-0 gap-5"
+        className="grid min-w-0 gap-6 [overflow-wrap:anywhere]"
         aria-busy={readOnly}
         method="post"
         action="/signup"
@@ -881,25 +913,47 @@ function SignupForm({
         onSubmit={(event) => void sendAttempt(false, event)}
       >
         {draftForm && values ? (
-          <SignupCredentials
-            values={values}
-            requirements={requirements}
-            errors={errors}
-            readOnly={readOnly}
-            emailRef={emailInput}
-            onChange={change}
-          />
-        ) : null}
-        {phase.kind === 'handle-unavailable' ? (
-          <ErrorAlert>
-            <p>{m.auth_signup_handle_correction_body()}</p>
-            <Button type="button" disabled={!handleCorrectionReady} onClick={useCorrectedHandle}>
-              {m.auth_signup_handle_correction_action()}
-            </Button>
-          </ErrorAlert>
+          <section
+            aria-label={`${m.auth_signup_handle()}, ${m.auth_signup_email()}, ${m.auth_signup_password()}`}
+            className="grid min-w-0 gap-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5"
+          >
+            <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-foreground"
+              >
+                01
+              </span>
+              <span>{m.auth_signup_handle()}</span>
+            </div>
+            <SignupCredentials
+              values={values}
+              requirements={requirements}
+              errors={errors}
+              readOnly={readOnly}
+              emailRef={emailInput}
+              onChange={change}
+              handleNotice={
+                phase.kind === 'handle-unavailable' ? (
+                  <ErrorAlert className="max-w-prose border-destructive/30">
+                    <p>{m.auth_signup_handle_correction_body()}</p>
+                    <AuthActions>
+                      <Button type="button" disabled={!handleCorrectionReady} onClick={useCorrectedHandle}>
+                        {m.auth_signup_handle_correction_action()}
+                      </Button>
+                    </AuthActions>
+                  </ErrorAlert>
+                ) : null
+              }
+            />
+          </section>
         ) : null}
         {phase.kind === 'uncertain' ? (
-          <div ref={alert} tabIndex={-1}>
+          <div
+            ref={alert}
+            tabIndex={-1}
+            className="rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+          >
             <SignupUncertainty
               phase={phase}
               query={query}
@@ -909,64 +963,109 @@ function SignupForm({
             />
           </div>
         ) : null}
-        <Field
-          className="gap-3 rounded-lg border border-border p-4"
-          data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}
+        <section
+          aria-label={m.auth_signup_turnstile_required()}
+          className="grid min-w-0 gap-4 rounded-xl border border-border bg-muted/20 p-4 sm:p-5"
         >
-          <div
-            id="signup-turnstile"
-            tabIndex={-1}
-            aria-describedby={['signup-verification-hint', turnstileError ? turnstileErrorId : null]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <TurnstileWidget
-              ref={turnstile}
-              siteKey={siteKey}
-              scriptUrl={scriptUrl}
-              language={challengeLanguage}
-              onStatus={(status) => {
-                if (journey.active) setChallengeStatus(status);
-              }}
-              onToken={(value) => {
-                if (!journey.active) return;
-                if (value) setTurnstileError('');
-              }}
-            />
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span
+              aria-hidden="true"
+              className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-foreground"
+            >
+              02
+            </span>
+            <span>{m.auth_signup_turnstile_required()}</span>
           </div>
-          <p id="signup-verification-hint" className="text-sm leading-relaxed text-muted-foreground">
-            {m.auth_signup_turnstile_required()}
-          </p>
-          {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
-          {challengeStatus === 'failed' ? (
-            <div className="grid gap-3">
-              <ErrorAlert>
-                <p>{m.auth_signup_turnstile_failed()}</p>
-              </ErrorAlert>
-              <Button
-                type="button"
-                disabled={readOnly}
-                onClick={() => {
-                  setTurnstileError('');
-                  turnstile.current?.retry();
+          <Field
+            className="min-w-0 gap-3 rounded-lg border border-border bg-background p-3 sm:p-4"
+            data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}
+          >
+            <div
+              id="signup-turnstile"
+              tabIndex={-1}
+              className="rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+              aria-describedby={['signup-verification-hint', turnstileError ? turnstileErrorId : null]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              <TurnstileWidget
+                ref={turnstile}
+                siteKey={siteKey}
+                scriptUrl={scriptUrl}
+                language={challengeLanguage}
+                onStatus={(status) => {
+                  if (journey.active) setChallengeStatus(status);
                 }}
-              >
-                {m.auth_signup_turnstile_retry()}
-              </Button>
+                onToken={(value) => {
+                  if (!journey.active) return;
+                  if (value) setTurnstileError('');
+                }}
+              />
             </div>
-          ) : null}
-          {turnstileError ? <FieldError id={turnstileErrorId}>{turnstileError}</FieldError> : null}
-        </Field>
+            <p id="signup-verification-hint" className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+              {m.auth_signup_turnstile_required()}
+            </p>
+            {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
+            {challengeStatus === 'failed' ? (
+              <div className="grid min-w-0 gap-3 sm:max-w-prose">
+                <ErrorAlert>
+                  <p>{m.auth_signup_turnstile_failed()}</p>
+                </ErrorAlert>
+                <AuthActions>
+                  <Button
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() => {
+                      setTurnstileError('');
+                      turnstile.current?.retry();
+                    }}
+                  >
+                    {m.auth_signup_turnstile_retry()}
+                  </Button>
+                </AuthActions>
+              </div>
+            ) : null}
+            {turnstileError ? <FieldError id={turnstileErrorId}>{turnstileError}</FieldError> : null}
+          </Field>
+        </section>
         {phase.kind === 'dispatched' ? (
-          <p role="status" aria-busy="true">
-            {m.auth_signup_creating()}
-          </p>
+          <section
+            aria-label={m.auth_signup_heading()}
+            className="grid min-w-0 gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"
+          >
+            <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-foreground"
+              >
+                03
+              </span>
+              <span>{m.auth_signup_heading()}</span>
+            </div>
+            <p role="status" aria-busy="true">
+              {m.auth_signup_creating()}
+            </p>
+          </section>
         ) : phase.kind === 'draft' ? (
-          <AuthActions>
-            <Button type="submit" aria-busy={false}>
-              {m.auth_signup_heading()}
-            </Button>
-          </AuthActions>
+          <section
+            aria-label={m.auth_signup_heading()}
+            className="grid min-w-0 gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5"
+          >
+            <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-foreground"
+              >
+                03
+              </span>
+              <span>{m.auth_signup_heading()}</span>
+            </div>
+            <AuthActions>
+              <Button type="submit" aria-busy={false}>
+                {m.auth_signup_heading()}
+              </Button>
+            </AuthActions>
+          </section>
         ) : null}
       </form>
       {phase.kind === 'draft' || phase.kind === 'handle-unavailable' ? (

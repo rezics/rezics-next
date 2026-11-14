@@ -43,23 +43,37 @@ export function SignupReturnView({
   return (
     <AuthPage heading={m.auth_signup_heading()}>
       <AuthTask>
-        <AuthTaskSection aria-busy={checking}>
-          <h2 ref={heading} tabIndex={-1}>
+        <AuthTaskSection
+          aria-busy={checking}
+          className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6"
+        >
+          <h2
+            ref={heading}
+            tabIndex={-1}
+            className="max-w-prose text-xl font-semibold tracking-tight focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-4 focus:ring-offset-background"
+          >
             {title}
           </h2>
           {checking ? (
-            <p role="status">{m.auth_signup_return_checking()}</p>
+            <p className="max-w-prose" role="status">{m.auth_signup_return_checking()}</p>
           ) : unavailable ? (
-            <ErrorAlert>{m.auth_signup_return_unavailable_body()}</ErrorAlert>
+            <ErrorAlert className="max-w-prose">{m.auth_signup_return_unavailable_body()}</ErrorAlert>
           ) : currentSession ? (
-            <p role="status">
-              {state.currentViewerChanged
-                ? m.auth_signup_return_viewer_changed()
-                : m.auth_signup_return_current_session()}
-            </p>
+            <AuthNotice className="max-w-prose border-primary/30 bg-primary/5">
+              <p role="status">
+                {state.currentViewerChanged
+                  ? m.auth_signup_return_viewer_changed()
+                  : m.auth_signup_return_current_session()}
+              </p>
+            </AuthNotice>
           ) : null}
           {summary ? (
-            <AuthNotice role="status">
+            <AuthNotice
+              className={
+                summary.kind === 'created' ? 'max-w-prose border-primary/30 bg-primary/5' : 'max-w-prose bg-muted/50'
+              }
+              role="status"
+            >
               {summary.kind === 'created' ? m.auth_signup_return_created_body() : m.auth_signup_return_unknown_body()}
             </AuthNotice>
           ) : null}
