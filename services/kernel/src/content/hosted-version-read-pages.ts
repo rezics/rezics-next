@@ -122,8 +122,8 @@ async function pushSpine<Value>(
   }
 }
 
-/** Prepare the in-order candidates strictly after/before an already-proven member. */
-async function pushAfterAnchor<Value>(
+/** Prepare eligible in-order ancestors beyond an already-proven member. */
+async function pushDirectionalAncestors<Value>(
   access: VersionedOutlineSequenceReadWriteSet<Value>,
   rootId: string,
   anchor: VersionedOutlineSequenceNode<Value>,
@@ -151,6 +151,18 @@ async function pushAfterAnchor<Value>(
   // The nearest eligible ancestor must be on top; a nearer subtree, if present,
   // is pushed last and therefore traversed first.
   for (let index = ancestors.length - 1; index >= 0; index -= 1) schedule(stack, scheduled, ancestors[index]!);
+}
+
+/** Prepare the in-order candidates strictly after/before an already-proven member. */
+async function pushAfterAnchor<Value>(
+  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  rootId: string,
+  anchor: VersionedOutlineSequenceNode<Value>,
+  direction: HostedVersionReadDirection,
+  stack: VersionedOutlineSequenceNode<Value>[],
+  scheduled: Set<string>,
+): Promise<void> {
+  await pushDirectionalAncestors(access, rootId, anchor, direction, stack, scheduled);
   const subtreeId = direction === 'forward' ? anchor.rightId : anchor.leftId;
   await pushSpine(access, stack, scheduled, subtreeId, anchor.id, direction);
 }
@@ -181,9 +193,10 @@ async function readWindow<Value>(
       const selected = await selectVersionedOutlineSequenceNode(access, index.rootId, query.startRank);
       if (selected !== null) {
         nextRank = query.startRank;
-        scheduled.add(selected.id);
-        await pushAfterAnchor(access, index.rootId!, selected, query.direction, stack, scheduled);
-        stack.push(selected);
+        // The selected rank is inclusive. Its directional subtree is added after
+        // the selected node is consumed, while eligible ancestors remain below it.
+        await pushDirectionalAncestors(access, index.rootId!, selected, query.direction, stack, scheduled);
+        schedule(stack, scheduled, selected);
       }
     }
   } else if (root !== null) {

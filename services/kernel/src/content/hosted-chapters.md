@@ -755,6 +755,9 @@ Children default to the root; an explicit parent must be a part in the selected 
 and returns only chapters, excluding the origin. `direction=next` returns ascending order; `previous` returns
 descending order, nearest first. A part can serve as the navigation origin.
 
+Decision: an inclusive first-page rank visits its selected chapter once, then its directional subtree and eligible
+ancestors in order; continuation remains exclusive of its cursor anchor.
+
 The default and maximum page limit is 20. A page selects at most limit plus one indexed rows, discloses at most
 limit targets, and never refills denied slots. The last raw position determines `nextCursor`. Continuations bind
 catalogue, original selector, selected immutable revision, kind, parent/origin, direction, limit, actor identity,
