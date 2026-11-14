@@ -1,6 +1,7 @@
 import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { browserObservation } from '../../../session';
+import { defaultReader } from '../../../subject/reader';
 import { m } from '../../../paraglide/messages.js';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { CharacterWorkRows } from '../character-work-visit/view';
@@ -23,20 +24,39 @@ export type CharacterAssociations = { source: object; viewer: string | null; rea
 
 /** A local presentation of the two existing native windows, with no document or per-row reader. */
 export function CharacterPublicReading({ source, viewer, read }: CharacterAssociations) {
-  const value = useCharacterPage();
+  const page = useCharacterPage();
+  // The route uses this shared conservative sentinel until its preferences are prepared.
+  const preferences = page?.reader === defaultReader ? undefined : page?.reader;
+  const value = page && {
+    ...page,
+    reader: {
+      spoilerLevel: preferences?.spoilerLevel ?? defaultReader.spoilerLevel,
+      suitability: preferences?.suitability ?? defaultReader.suitability,
+    },
+  };
   const { read: readSlot } = useCharacterReadingSlots();
   const bridge = useContext(CharacterAssociationContext);
   const binding = useSyncExternalStore(bridge?.subscribe ?? noSubscribe, bridge?.snapshot ?? noBinding, noBinding);
+  // A replaced read operation must not admit a second window for the same source.
+  // The shared lifetime keeps this retirement terminal even when the operation returns.
+  const operation = useRef({ source, read });
+  if (operation.current.source !== source) operation.current = { source, read };
   const descriptor = JSON.stringify([
     value?.subject,
     value?.context,
     value?.realm,
     value?.locale,
-    value?.reader,
     value?.releaseDigest,
     viewer,
+    operation.current.read === read,
   ]);
-  const lifetime = useSubjectCommunityReading({ source, reader: viewer, descriptor });
+  const lifetime = useSubjectCommunityReading({
+    source,
+    reader: viewer,
+    descriptor,
+    spoiler: preferences?.spoilerLevel,
+    suitability: preferences?.suitability,
+  });
   const owned = useRef<{
     source: object;
     descriptor: string;

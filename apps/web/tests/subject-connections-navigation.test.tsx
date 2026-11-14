@@ -14,6 +14,7 @@ import type {
 } from '../src/features/pages/subject-connections';
 import type { ConnectionRead } from '../src/features/pages/subject-connections-window';
 import { connectionReturnWindow, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import { defaultReader, type Reader } from '../src/subject/reader';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { OverviewContext } = await import('../src/features/pages/overview');
@@ -174,7 +175,12 @@ function visit(
 async function mounted(
   run: (
     host: HTMLDivElement,
-    render: (read: ConnectionRead, source?: ReturnType<typeof page>, context?: string) => Promise<void>,
+    render: (
+      read: ConnectionRead,
+      source?: ReturnType<typeof page>,
+      context?: string,
+      preferences?: Partial<Reader>,
+    ) => Promise<void>,
     client: QueryClient,
     browser: any,
   ) => Promise<void>,
@@ -202,13 +208,15 @@ async function mounted(
   const client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   const source = page();
-  const render = async (read: ConnectionRead, next = source, context?: string) => {
+  let settings: Partial<Reader> = defaultReader;
+  const render = async (read: ConnectionRead, next = source, context?: string, preferences = settings) => {
+    settings = preferences;
     const value = {
       subject: id(1),
       subjectLabel: 'Character',
       locale: 'en',
       link: (props: any) => h('a', props),
-      reader: { spoilerLevel: 0, suitability: 'show' },
+      reader: preferences,
       labels: { cover: {}, spoilerHide: 'Hide' },
       unlabelled: 'Unlabelled',
       spoilerShow: 'Reveal',
@@ -251,8 +259,17 @@ function button(section: Element, name: string) {
 test('mounted pages go forward, back through an empty terminal, and return to the exact retained assertion and focus', async () =>
   mounted(async (host, render, _client, browser) => {
     const calls: ConnectionAddress[] = [];
-    const read: ConnectionRead = async (address) => {
+    let settle!: () => void;
+    let pendingSignal!: AbortSignal;
+    let delay = false;
+    const read: ConnectionRead = async (address, signal) => {
       calls.push(address);
+      if (calls.length === 2 || delay)
+        return new Promise((resolve) => {
+          pendingSignal = signal;
+          settle = () =>
+            resolve(visit(address, { spoiler: true, ...(delay ? { privateTitle: 'Retired preference row' } : {}) }));
+        });
       return visit(address);
     };
     await render(read);
@@ -260,6 +277,10 @@ test('mounted pages go forward, back through an empty terminal, and return to th
     expect(characters().querySelector(`[data-work-statement="${id(10)}"]`)).toBeTruthy();
     await act(async () => button(characters(), 'Next page').click());
     expect(calls.at(-1)?.selection?.characters?.cursor).toBe('appearance-page-2');
+    await render(read, undefined, undefined, { spoilerLevel: 2 });
+    expect(calls).toHaveLength(2);
+    expect(pendingSignal.aborted).toBe(false);
+    await act(async () => settle());
     expect(characters().textContent).toContain('Page 2');
     expect(characters().querySelector(`[data-work-statement="${id(11)}"]`)).toBeTruthy();
     await act(async () => button(characters(), 'Next page').click());
@@ -280,7 +301,8 @@ test('mounted pages go forward, back through an empty terminal, and return to th
       holder: id(2),
     });
     browser.location.href = `https://site.test${via}`;
-    await render(read, page());
+    const returned = page();
+    await render(read, returned);
     expect(calls.at(-1)?.selection?.characters).toMatchObject({ cursor: 'appearance-page-2', reading: 'b'.repeat(64) });
     expect(document.activeElement?.closest('[data-work-statement]')?.getAttribute('data-work-statement')).toBe(id(11));
     expect(button(characters(), 'Previous page')).toBeTruthy();
@@ -290,6 +312,25 @@ test('mounted pages go forward, back through an empty terminal, and return to th
     expect(calls.at(-1)?.selection?.credits).toEqual({ stream: otherCredit.key });
     expect(host.querySelector('[aria-labelledby="connections-credits"]')?.textContent).toContain('Page 1');
     expect(host.querySelector('[aria-labelledby="connections-credits"] [data-slot="character-work-visit"]')).toBeNull();
+    const before = calls.length;
+    await render(read, returned, undefined, { spoilerLevel: 2, suitability: 'show' });
+    expect(host.querySelector<HTMLSelectElement>('[aria-labelledby="connections-credits"] select')?.value).toBe(
+      otherCredit.key,
+    );
+    expect(calls).toHaveLength(before);
+    delay = true;
+    await act(async () => button(characters(), 'Previous page').click());
+    await render(read, returned, undefined, { spoilerLevel: 2, suitability: 'blur' });
+    await render(read, returned, undefined, { spoilerLevel: 2, suitability: 'show' });
+    expect(pendingSignal.aborted).toBe(true);
+    await act(async () => settle());
+    expect(host.textContent).not.toContain('Retired preference row');
+    expect(host.querySelector(`[data-work-statement="${id(11)}"]`)).toBeNull();
+    expect(calls).toHaveLength(before + 1);
+    delay = false;
+    await render(read, page());
+    await act(async () => button(host, 'Start again').click());
+    expect(host.querySelector(`[data-work-statement="${id(10)}"]`)).toBeTruthy();
   }));
 
 test('a failed Previous keeps its page number and retries the same address with native refusal wording', async () =>

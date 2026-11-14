@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { defaultReader } from '../../subject/reader';
 import {
   CharacterAssociationBinding,
   CharacterWorkRows,
@@ -72,19 +73,32 @@ export function SubjectConnections({
   returnTo?: string | undefined;
   read?: ConnectionRead;
 }) {
-  const value = useContext(OverviewContext);
+  const overview = useContext(OverviewContext);
+  // Keep preparation outside both the lifetime descriptor and the retained window address.
+  const preferences = overview?.reader === defaultReader ? undefined : overview?.reader;
+  const value = overview && {
+    ...overview,
+    reader: {
+      spoilerLevel: preferences?.spoilerLevel ?? defaultReader.spoilerLevel,
+      suitability: preferences?.suitability ?? defaultReader.suitability,
+    },
+  };
+  // Read replacement retires this source; a fresh page admits its own operation.
+  // Returning to the original operation cannot reconstruct its selected frontier.
+  const operation = useRef({ page, read });
+  if (operation.current.page !== page) operation.current = { page, read };
   const sequence = useRef(0);
   const returnVisit = useRef<string | undefined>(undefined);
   const incarnation = useRef<{
     serial: number;
     page: SubjectPageData;
-    reader: string;
+    descriptor: string;
     read: ConnectionRead;
     window: ReturnType<typeof createConnectionWindow>;
     resume?: ConnectionReturnWindow;
     retiredReturn: boolean;
   } | null>(null);
-  const reader = JSON.stringify([
+  const descriptor = JSON.stringify([
     page.subject,
     page.profile,
     subjectBody(page),
@@ -95,20 +109,25 @@ export function SubjectConnections({
     value?.locale,
     value?.realm,
     value?.context,
-    value?.reader,
+    operation.current.read === read,
   ]);
-  const readingSource = useMemo(() => ({ page, reader }), [page, reader]);
   const lifetime = useSubjectCommunityReading({
-    source: readingSource,
-    descriptor: reader,
+    source: page,
+    descriptor,
     reader: viewer.state === 'signed-in' ? (viewer.subject ?? null) : null,
+    spoiler: preferences?.spoilerLevel,
+    suitability: preferences?.suitability,
   });
   if (!value || !page.subject) return null;
   const character = subjectBody(page)?.subject.type === 'wd:Q95074';
   const ready =
     lifetime.available && (viewer.state === 'signed-out' || (viewer.state === 'signed-in' && !!viewer.subject));
   const current = incarnation.current;
-  if (!current || current.page !== page || current.reader !== reader || current.read !== read || !lifetime.available) {
+  if (!lifetime.available) current?.window.retire(true);
+  if (
+    !current ||
+    (lifetime.available && (current.page !== page || current.descriptor !== descriptor || current.read !== read))
+  ) {
     current?.window.retire(true);
     const visitHref =
       typeof window !== 'undefined' && window.location.pathname.includes(`/subjects/${page.subject}/`)
@@ -148,7 +167,7 @@ export function SubjectConnections({
     incarnation.current = {
       serial: ++sequence.current,
       page,
-      reader,
+      descriptor,
       read,
       retiredReturn,
       window: createConnectionWindow(address, read, windowResume),
@@ -156,20 +175,22 @@ export function SubjectConnections({
     };
   }
   return (
-    <CharacterReadingBinding>
-      <CharacterAssociationBinding source={page} window={incarnation.current!.window}>
-        <ConnectionsReading
-          key={incarnation.current!.serial}
-          window={incarnation.current!.window}
-          character={character}
-          ready={ready}
-          unavailable={viewer.state === 'unavailable' || !lifetime.available}
-          returnTo={subjectVisitReturn(returnTo, value.locale)}
-          resume={incarnation.current!.resume}
-          retiredReturn={incarnation.current!.retiredReturn}
-        />
-      </CharacterAssociationBinding>
-    </CharacterReadingBinding>
+    <OverviewContext.Provider value={value}>
+      <CharacterReadingBinding>
+        <CharacterAssociationBinding source={page} window={incarnation.current!.window}>
+          <ConnectionsReading
+            key={incarnation.current!.serial}
+            window={incarnation.current!.window}
+            character={character}
+            ready={ready}
+            unavailable={viewer.state === 'unavailable' || !lifetime.available}
+            returnTo={subjectVisitReturn(returnTo, value.locale)}
+            resume={incarnation.current!.resume}
+            retiredReturn={incarnation.current!.retiredReturn}
+          />
+        </CharacterAssociationBinding>
+      </CharacterReadingBinding>
+    </OverviewContext.Provider>
   );
 }
 
@@ -239,10 +260,14 @@ function ConnectionsReading({
         ?.focus();
   }, [snapshot]);
   useEffect(() => {
+    if (!ready || unavailable || restartRequired) {
+      window.retire();
+      return;
+    }
     window.activate();
-    if (ready && !restartRequired) void window.load();
+    void window.load();
     return () => window.retire();
-  }, [window, ready, restartRequired]);
+  }, [window, ready, unavailable, restartRequired]);
   useLayoutEffect(() => {
     const trigger = focusIntent.current;
     if (snapshot.pending.size || !trigger) return;

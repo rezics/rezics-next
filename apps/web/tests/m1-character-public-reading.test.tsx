@@ -11,6 +11,7 @@ import type { GuideRelease } from '../src/features/catalogue/definition-guide';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ConnectionAddress, ConnectionVisit } from '../src/features/pages/subject-connections';
 import type { ConnectionRead } from '../src/features/pages/subject-connections-window';
+import { defaultReader, type Reader } from '../src/subject/reader';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
@@ -97,8 +98,11 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
   const fixture = characterPublicExample();
   let calls: ConnectionAddress[] = [];
   let response: ConnectionRead = fixture.read;
+  let preferences: Partial<Reader> = defaultReader;
+  let pendingSignal: AbortSignal;
   const read: ConnectionRead = async (address, signal) => {
     calls.push(address);
+    pendingSignal = signal;
     return response(address, signal);
   };
   let shared: ReturnType<typeof createConnectionWindow> | undefined;
@@ -113,6 +117,7 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
             {
               value: {
                 ...fixture.value,
+                reader: preferences as Reader,
                 realm: '00000000-0000-4000-8000-000000000006',
                 ...(context ? { context: { id: context, population: { kind: 'global' as const } } } : {}),
               },
@@ -148,7 +153,19 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
       button!.click();
     });
   try {
+    let settle!: (value: ConnectionVisit) => void;
+    response = () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      });
     await render(fixture);
+    const pending = host.querySelector('[data-slot="character-public-reading"]');
+    preferences = { spoilerLevel: 2, suitability: 'show' };
+    await render(fixture);
+    expect(pendingSignal!.aborted).toBe(false);
+    expect(host.querySelector('[data-slot="character-public-reading"]')).toBe(pending);
+    await act(async () => settle(characterPublicExample('en', 'spoiler').visit()));
+    response = fixture.read;
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       id: fixture.value.subject,
@@ -201,6 +218,7 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
     await render({});
     expect(host.textContent).not.toContain('今井麻美');
     const spoiler = characterPublicExample('en', 'spoiler');
+    preferences = defaultReader;
     response = spoiler.read;
     await render({});
     expect(host.innerHTML).not.toContain('STEINS;GATE');
@@ -221,7 +239,6 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
     await render({}, member);
     expect(calls.at(-1)?.viewer).toBe(member);
     expect(host.textContent).toContain('今井麻美');
-    let settle!: (value: ConnectionVisit) => void;
     response = () =>
       new Promise((resolve) => {
         settle = resolve;
@@ -256,9 +273,25 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
       await shared!.load();
     });
     const before = calls.length;
-    await render({}, member);
+    const managedSource = {};
+    await render(managedSource, member);
     expect(host.textContent).toContain('今井麻美');
     expect(calls).toHaveLength(before); // The mounted Connections controller supplies the profile without another read.
+    await click(m.subject_connections_next());
+    const selected = host.querySelector('[data-slot="character-public-reading"]');
+    preferences = { suitability: 'show' };
+    await render(managedSource, member);
+    preferences = { suitability: 'show', spoilerLevel: 2 };
+    await render(managedSource, member);
+    expect(calls).toHaveLength(before + 1);
+    expect(host.querySelector('[data-slot="character-public-reading"]')).toBe(selected);
+    expect(host.textContent).toContain('STEINS;GATE 0');
+    preferences = { spoilerLevel: 2, suitability: 'blur' };
+    await render(managedSource, member);
+    preferences = { spoilerLevel: 2, suitability: 'show' };
+    await render(managedSource, member);
+    expect(host.innerHTML).not.toContain('STEINS;GATE');
+    expect(calls).toHaveLength(before + 1);
   } finally {
     shared?.retire(true);
     await act(async () => root.unmount());

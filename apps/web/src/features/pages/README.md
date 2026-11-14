@@ -52,6 +52,11 @@ pass optional spoiler and suitability preparation through the existing community
 identity. Undefined keeps conservative rendering; each first prepared preference binds once without restarting
 pending definitions or discarding eligible facts, selected windows or evidence. Game retains its optional spoiler
 preparation. Later changes to either prepared preference retire the source, including returning to an earlier value.
+Decision: ordinary Subject connections and mounted or managed Character associations also keep both preference fields
+outside source, descriptor and local window identity. The route's shared `defaultReader` sentinel is conservative
+preparation, not an admitted preference; actual settings bind each field independently. Preparation retains pending
+native pages, selected relations and exact return frontiers without another read or visit mount. Later replacement
+retires the retained window; recovery belongs to a fresh admitted source and keeps deliberate same-address restart.
 Browser observation identity owns credential renewal and A/B/A,
 including equal successful session replacement and temporary authority loss between React renders. A current
 observation's first exposure success may prepare; its replacement, invalidation, removal or failure retires the
@@ -71,6 +76,11 @@ Affected caller coverage also includes `album-track-reader-recovery.test.tsx`, `
 Person/Character cases cover pending definitions, nondefault preparation, conservative gates, retained selection and
 inspection, preference retirement and late-result rejection; their execution remains deferred. Cost remains one
 definitions read per admitted visit, bounded local fact projection and one explicitly selected inspection.
+The mounted cases in `m1-character-public-reading.test.tsx` and `subject-connections-navigation.test.tsx` also cover
+joint and separate association preference preparation, pending reads, selected relations, exact return/focus and
+terminal replacement with fresh-source recovery. Their original disclosure and sparse continuation assertions remain;
+execution is deferred. Associations retain bounded native windows and selected inspection, one read per explicit
+page action, without prefetch, per-row hydration, private snapshots or accumulated history.
 
 ## Rating presentation
 
