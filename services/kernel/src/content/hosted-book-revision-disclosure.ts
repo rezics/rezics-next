@@ -13,10 +13,11 @@ import {
   readBookScopedPost,
   readBookScopedPostMetadata,
   type NativePostMetadata,
+  type RetainContentRead,
 } from './reads.ts';
 import type { HostedChapterTarget, HostedDependencies } from './hosted-chapters-model.ts';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
-import { discloseHostedTargetMetadata, prepareHostedTarget } from './hosted-chapters-disclosure.ts';
+import { prepareHostedTarget, prepareHostedTargetMetadata } from './hosted-chapters-disclosure.ts';
 
 export type HostedBookTargetDocument = Readonly<{
   anchor: AnchoredPosition;
@@ -68,15 +69,42 @@ export async function discloseHostedBookTargetMetadata(
   membership: RevisionDisclosureMembership,
   context: ReadContext,
 ) {
-  const ordinary = await discloseHostedTargetMetadata(deps, target, context);
-  if (ordinary) return ordinary;
+  const ordinary = await prepareHostedTargetMetadata(deps, target, context);
+  if (ordinary) return await ordinary.final();
+  const scoped = await prepareHostedBookTargetMetadata(deps, target, membership, context);
+  return (await scoped?.final()) ?? null;
+}
 
+/** Retain one selected occurrence's membership, source chain and native Access
+ * checks so page work cannot replace an observation that changes mid-page. */
+export async function prepareHostedBookTargetMetadata(
+  deps: HostedDependencies,
+  target: HostedChapterTarget,
+  membership: RevisionDisclosureMembership,
+  context: ReadContext,
+) {
   const gate = await issuedGate(deps, target, membership, context);
   if (!gate) return null;
+  const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
   try {
-    const disclosed = await readBookScopedPostMetadata(deps, membership.catalogueId, target, gate, context);
-    if (!metadataMatches(disclosed.value, target) || disclosed.value.documentKind !== 'opening') return null;
-    return { anchor: disclosed.anchor };
+    const initial = await readBookScopedPostMetadata(deps, membership.catalogueId, target, gate, context, (current) => {
+      observation.current = current;
+    });
+    if (!metadataMatches(initial.value, target) || initial.value.documentKind !== 'opening' || !observation.current)
+      return null;
+    const retained = observation.current;
+    return {
+      async final() {
+        try {
+          const disclosed = await retained();
+          if (!metadataMatches(disclosed.value, target) || disclosed.value.documentKind !== 'opening') return null;
+          return { anchor: disclosed.anchor };
+        } catch (error) {
+          if (error instanceof ContentNotFoundError || error instanceof ReadNotFoundError) return null;
+          throw error;
+        }
+      },
+    };
   } catch (error) {
     if (error instanceof ContentNotFoundError || error instanceof ReadNotFoundError) return null;
     throw error;

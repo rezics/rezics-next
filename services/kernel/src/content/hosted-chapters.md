@@ -330,6 +330,10 @@ other Books and unselected revisions remain unchanged. Use a new key after delib
 Keep the installed compatibility publisher's existing reference-selection behavior unchanged: an inaccessible
 selected target remains neutral unavailable to that reader, with no private title, target metadata or body.
 
+Decision: Contents and navigation share retained ordinary metadata checks by exact source target; private selected
+occurrences retain their own catalogue, publication and occurrence consent proof plus native source and Access
+observations through final disclosure. Page reads remain metadata-only.
+
 Later target draft edits do not change selected bytes. A newly published target revision does not substitute for the
 Book's selected revision. Revocation, takedown or erasure after a successful Book pointer change can make even an
 old exact Book link unavailable; Book never overrides current target access. Author-readable, publicly eligible and

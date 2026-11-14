@@ -2273,6 +2273,7 @@ export async function readBookScopedPostMetadata(
   target: RevisionDisclosureTarget,
   gate: RevisionDisclosureReaderGate,
   context: ReadContext,
+  retain?: RetainContentRead<NativePostMetadata>,
 ): Promise<Anchored<NativePostMetadata | null>> {
   if (
     routeOf(target.threadId) === null ||
@@ -2295,7 +2296,9 @@ export async function readBookScopedPostMetadata(
         false,
         undefined,
         'post',
-        undefined,
+        retain as unknown as
+          | RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata | NativePostMetadata>
+          | undefined,
         gate,
       )) as Anchored<NativePostMetadata | null>,
   );

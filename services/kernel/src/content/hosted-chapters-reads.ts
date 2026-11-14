@@ -16,7 +16,11 @@ import {
   prepareHostedTarget,
   prepareHostedTargetMetadata,
 } from './hosted-chapters-disclosure.ts';
-import { discloseHostedBookTargetMetadata, readHostedBookTarget } from './hosted-book-revision-disclosure.ts';
+import {
+  discloseHostedBookTargetMetadata,
+  prepareHostedBookTargetMetadata,
+  readHostedBookTarget,
+} from './hosted-book-revision-disclosure.ts';
 import type { RevisionDisclosureMembership } from './revision-disclosure.ts';
 import {
   hostedCatalogue,
@@ -412,7 +416,9 @@ async function page(
         (query.mode === 'previous' ? cursor.after >= mapped.value.origin : cursor.after <= mapped.value.origin))
     )
       throw new InvalidHostedCursorError();
-    const disclosed = await disclosePage(deps, mapped.value.placements, context, [mapped.anchor]);
+    const disclosed = await disclosePage(deps, catalogueId, selected.view, mapped.value.placements, context, [
+      mapped.anchor,
+    ]);
     const lastAfter = mapped.value.lastAfter;
     const nextCursor =
       mapped.value.hasMore && lastAfter !== null
@@ -464,7 +470,7 @@ async function page(
   );
   if (raw.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
   const placements = raw.value.slice(0, limit);
-  const disclosed = await disclosePage(deps, placements, context, [raw.anchor]);
+  const disclosed = await disclosePage(deps, catalogueId, selected.view, placements, context, [raw.anchor]);
   const last = placements.at(-1);
   const nextCursor =
     raw.value.length > limit && last
@@ -483,6 +489,8 @@ async function page(
 
 async function disclosePage(
   deps: HostedDependencies,
+  catalogueId: string,
+  view: HostedRevisionView,
   placements: readonly OrderedHostedPlacement[],
   context: ReadContext,
   initial: AnchoredPosition[],
@@ -493,17 +501,37 @@ async function disclosePage(
     const key = hostedTargetKey(placement.target);
     if (!guards.has(key)) guards.set(key, await prepareHostedTargetMetadata(deps, placement.target, context));
   }
-  const targets = new Map<
-    string,
-    Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>['final']>>
-  >();
-  for (const [key, guard] of guards) targets.set(key, (await guard?.final()) ?? null);
+  const bookGuards = new Map<string, Awaited<ReturnType<typeof prepareHostedBookTargetMetadata>>>();
+  if (view.kind === 'publication') {
+    for (const placement of placements) {
+      if (placement.kind !== 'chapter' || guards.get(hostedTargetKey(placement.target))) continue;
+      bookGuards.set(
+        placement.occurrenceId,
+        await prepareHostedBookTargetMetadata(
+          deps,
+          placement.target,
+          {
+            catalogueId,
+            publicationId: view.revisionId,
+            occurrenceId: placement.occurrenceId,
+            sourceRevisionId: placement.target.revisionId,
+          },
+          context,
+        ),
+      );
+    }
+  }
+  const targets = new Map<string, AnchoredPosition | null>();
+  for (const [key, guard] of guards) targets.set(key, (await guard?.final())?.anchor ?? null);
+  const bookTargets = new Map<string, AnchoredPosition | null>();
+  for (const [occurrenceId, guard] of bookGuards) bookTargets.set(occurrenceId, (await guard?.final())?.anchor ?? null);
   const anchors = [...initial];
   const items = placements.map((placement) => {
     if (placement.kind === 'part') return available(placement);
-    const target = targets.get(hostedTargetKey(placement.target));
-    if (!target) return unavailable(placement);
-    anchors.push(target.anchor);
+    const key = hostedTargetKey(placement.target);
+    const targetAnchor = guards.get(key) ? targets.get(key) : bookTargets.get(placement.occurrenceId);
+    if (!targetAnchor) return unavailable(placement);
+    anchors.push(targetAnchor);
     return available(placement);
   });
   return { items, anchors };
