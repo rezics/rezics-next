@@ -148,6 +148,7 @@ export async function readReleaseSearchGroups(input: {
     now: input.now,
     state: createReleaseSearchRelevanceState({
       pool: input.pool,
+      deadline: input.deadline,
       run: input.runSource,
       reserve: () => reserve(input.reserve, poolId, { searchReads: 1 }),
       poolId,

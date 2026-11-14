@@ -1,10 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import {
+  BoundedReadDeadlineError,
+  RetiredReadClientError,
+  withBoundedReadLifetime,
+} from '../database/bounded-read-lifetime.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
 import type { ReleaseGroupingRequest } from './release-search-grouping.ts';
 import type { ReleaseSearchCandidateCut } from './release-search-native-stream.ts';
 
-const LIFETIME_MS = 15 * 60_000;
+const RETENTION_MS = 15 * 60_000;
 const CLEAN_WORK_LIMIT = 500;
 const CLEAN_POSITION_LIMIT = 500;
 const CLEAN_NODE_LIMIT = 500;
@@ -108,9 +114,9 @@ function bound(binding: ReleaseSearchRelevanceBinding): Bound {
 }
 
 function timestamp(now: number): { now: Date; expiresAt: Date } {
-  if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(now + LIFETIME_MS))
+  if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(now + RETENTION_MS))
     throw new TypeError('Invalid release relevance state time');
-  return { now: new Date(now), expiresAt: new Date(now + LIFETIME_MS) };
+  return { now: new Date(now), expiresAt: new Date(now + RETENTION_MS) };
 }
 
 function workIds(values: readonly string[]): string[] {
@@ -131,14 +137,77 @@ function validLocation(location: ReleaseSearchRelevanceLocation): boolean {
 /** PostgreSQL-backed exact duplicate suppression with immutable fixed-depth membership roots. */
 export function createReleaseSearchRelevanceState(input: {
   pool: Pool;
+  deadline: number;
   run: Run;
   reserve: Reserve;
   poolId: string;
 }): ReleaseSearchRelevanceState {
+  // Retention belongs to the cursor; every admission and physical statement shares this request deadline.
+  const { pool, deadline, run, reserve, poolId } = input;
+
+  function remaining(): number {
+    const now = Date.now();
+    if (!Number.isFinite(deadline) || now >= deadline) throw new BoundedReadDeadlineError();
+    return Math.max(1, Math.floor(deadline - now));
+  }
+
+  function reserveStatement(): void {
+    remaining();
+    reserve(poolId);
+  }
+
   async function query<Row extends Record<string, unknown>>(sql: string, values: unknown[]): Promise<readonly Row[]> {
-    input.reserve(input.poolId);
-    const result = await input.run(() => input.pool.query<Row>(sql, values));
-    return result.rows;
+    // Reserve BEGIN before runner admission, then account for every setup, state and terminal statement.
+    reserveStatement();
+    let ended = false;
+    let transaction: 'none' | 'beginning' | 'open' | 'committing' = 'none';
+    try {
+      return await withBoundedReadLifetime(
+        (work) =>
+          run(() => {
+            if (ended) throw new RetiredReadClientError();
+            remaining();
+            return withConnection(pool, work);
+          }),
+        discardConnection,
+        deadline,
+        async (client) => {
+          // SELECT can mutate membership too. Never let a late statement commit implicitly.
+          transaction = 'beginning';
+          await client.query('BEGIN');
+          transaction = 'open';
+          try {
+            reserveStatement();
+            await client.query(`SET LOCAL statement_timeout = '${remaining()}ms'`);
+            reserveStatement();
+            const result = await client.query<Row>(sql, values);
+            reserveStatement();
+            transaction = 'committing';
+            await client.query('COMMIT');
+            transaction = 'none';
+            return result.rows;
+          } catch (error) {
+            if (transaction === 'open') {
+              try {
+                reserveStatement();
+                await client.query('ROLLBACK');
+                transaction = 'none';
+              } catch {
+                // No fresh cleanup budget: the lifetime discards an unclosed transaction below.
+              }
+            }
+            throw error;
+          }
+        },
+        {
+          isUncertainSettledQueryError: () => true,
+          isUncertainWorkError: () => transaction !== 'none',
+        },
+      );
+    } finally {
+      // A runner that rejects while admission is queued must not check out a client later.
+      ended = true;
+    }
   }
 
   async function clean(now: Date): Promise<void> {
@@ -224,6 +293,7 @@ export function createReleaseSearchRelevanceState(input: {
     currentTime: number,
     initialWorks: readonly string[] = [],
   ): Promise<ReleaseSearchRelevanceLocation> {
+    remaining();
     const identity = bound(requestBinding);
     const time = timestamp(currentTime);
     const seed = workIds(initialWorks);
@@ -277,6 +347,7 @@ export function createReleaseSearchRelevanceState(input: {
     location: ReleaseSearchRelevanceLocation,
     currentTime: number,
   ): Promise<void> {
+    remaining();
     if (!validLocation(location)) throw new ReleaseSearchRelevanceStateExpired();
     const identity = bound(requestBinding);
     const time = timestamp(currentTime);
@@ -314,6 +385,7 @@ export function createReleaseSearchRelevanceState(input: {
     values: readonly string[],
     currentTime: number,
   ): Promise<ReadonlySet<string>> {
+    remaining();
     if (!validLocation(location)) throw new ReleaseSearchRelevanceStateExpired();
     const identity = bound(requestBinding);
     const time = timestamp(currentTime);
@@ -376,6 +448,7 @@ export function createReleaseSearchRelevanceState(input: {
     values: readonly string[],
     currentTime: number,
   ): Promise<ReleaseSearchRelevanceLocation> {
+    remaining();
     const emitted = workIds(values);
     if (!emitted.length) return location;
     if (!validLocation(location) || !/^[0-9a-f]{64}$/.test(branch)) throw new ReleaseSearchRelevanceStateExpired();
