@@ -86,6 +86,7 @@ The wrapping, theme-token layout and existing controls apply at phone390/desktop
 `pages-library-games--main` is the canonical Game review entry. It mounts `PageStory`'s generated application
 route tree and existing providers, with a signed-in reader and ordinary native loaders. Harbour Lights, its people,
 six software releases, story acts, characters, related games, reviews and collections are explicitly synthetic.
+Game identities and media use a UUID namespace distinct from the other routed fixture families.
 Original CC0 cover illustrations and their WebP variants live in `.storybook/media/`; no provider recording is claimed.
 All installed tabs remain reachable. Native references use the reserved `north-quay.example` catalogue address.
 
