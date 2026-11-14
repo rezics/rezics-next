@@ -51,3 +51,61 @@ export function retainKnowledgeHistoryNavigation(
     truncated: request.truncated || start > 0,
   };
 }
+
+/** One keyboard action's focus request; it holds no reading data and starts no scheduled work. */
+export function createKnowledgeHistoryFocus() {
+  let pending: { source: HTMLElement; current: () => boolean; cleanup: () => void } | null = null;
+  function cancel() {
+    pending?.cleanup();
+    pending = null;
+  }
+  function lostSource(source: HTMLElement) {
+    return !source.isConnected || source.matches(':disabled') || source.closest('[hidden]') !== null;
+  }
+  return {
+    cancel,
+    request(source: HTMLElement, keyboard: boolean, current: () => boolean) {
+      cancel();
+      const document = source.ownerDocument;
+      if (!keyboard || !current() || document.activeElement !== source) return;
+      const moved = (event: FocusEvent) => {
+        if (event.target === source || (event.target === document.body && lostSource(source))) return;
+        cancel();
+      };
+      const hidden = () => {
+        if (document.hidden) cancel();
+      };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('pointermove', cancel, true);
+      document.addEventListener('keydown', cancel, true);
+      document.addEventListener('wheel', cancel, true);
+      document.addEventListener('visibilitychange', hidden);
+      document.defaultView?.addEventListener('blur', cancel);
+      document.defaultView?.addEventListener('pagehide', cancel);
+      pending = {
+        source,
+        current,
+        cleanup() {
+          document.removeEventListener('focusin', moved, true);
+          document.removeEventListener('pointerdown', cancel, true);
+          document.removeEventListener('pointermove', cancel, true);
+          document.removeEventListener('keydown', cancel, true);
+          document.removeEventListener('wheel', cancel, true);
+          document.removeEventListener('visibilitychange', hidden);
+          document.defaultView?.removeEventListener('blur', cancel);
+          document.defaultView?.removeEventListener('pagehide', cancel);
+        },
+      };
+    },
+    arrive(target: HTMLElement | null) {
+      const request = pending;
+      if (!request) return;
+      const document = request.source.ownerDocument;
+      const active = document.activeElement;
+      const stayed = active === request.source || (active === document.body && lostSource(request.source));
+      cancel();
+      if (request.current() && stayed && target?.isConnected && !target.closest('[hidden]')) target.focus();
+    },
+  };
+}

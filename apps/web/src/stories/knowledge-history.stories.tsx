@@ -48,7 +48,17 @@ const access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   history: 'available',
   compare: 'available',
 };
-type Scenario = 'Revisions' | 'Comparison' | 'ConflictedDraft' | 'Sparse' | 'Unavailable';
+type Scenario =
+  | 'Revisions'
+  | 'Comparison'
+  | 'ConflictedDraft'
+  | 'Sparse'
+  | 'Unavailable'
+  | 'CrossPageComparison'
+  | 'FailedExactRetry'
+  | 'WindowEdge'
+  | 'DeliberateFocus';
+const olderCursor = 'illustrative +/= exact older request';
 function illustrativeOperations(scenario: Scenario): KnowledgePrivateOperations {
   const original: KnowledgePrivateHead = {
     accountId: viewer,
@@ -75,7 +85,7 @@ function illustrativeOperations(scenario: Scenario): KnowledgePrivateOperations 
     body: revisedBody,
   };
   const saved = (id: string): KnowledgeHistoryRevision => {
-    const head = id === revisionA ? original : current;
+    const head = id === revisionA ? original : { ...current, revisionId: id };
     return {
       ...head,
       sha256: id === revisionA ? 'a'.repeat(64) : 'b'.repeat(64),
@@ -85,6 +95,7 @@ function illustrativeOperations(scenario: Scenario): KnowledgePrivateOperations 
     };
   };
   let reads = 0;
+  let failedOlderRead = false;
   return {
     prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
     read: async () => ({
@@ -101,28 +112,50 @@ function illustrativeOperations(scenario: Scenario): KnowledgePrivateOperations 
     revise: async () => ({ state: 'conflict', status: 412 }),
     selectPublication: async () => ({ state: 'unavailable', status: 503 }),
     history: {
-      read: async (_address, cursor) =>
-        scenario === 'Unavailable'
-          ? { state: 'unavailable', status: 503 }
-          : {
-              state: 'ready',
-              page: {
-                documentId,
-                revisions:
-                  scenario === 'Sparse' && cursor === null
-                    ? []
-                    : [current, original].map((head) => ({
-                        revisionId: head.revisionId,
-                        title: head.title,
-                        language: head.language,
-                        licence: head.licence,
-                        sha256: saved(head.revisionId).sha256,
-                        createdAt:
-                          head.revisionId === revisionA ? '2026-11-01T09:00:00.000Z' : '2026-11-02T12:30:00.000Z',
-                      })),
-                next: scenario === 'Sparse' && cursor === null ? 'illustrative-opaque-continuation' : null,
-              },
+      read: async (_address, cursor) => {
+        if (scenario === 'DeliberateFocus') await new Promise((resolve) => setTimeout(resolve, 180));
+        if (scenario === 'Unavailable') return { state: 'unavailable', status: 503 };
+        if (scenario === 'FailedExactRetry' && cursor === olderCursor && !failedOlderRead) {
+          failedOlderRead = true;
+          return { state: 'unavailable', status: 503 };
+        }
+        let heads = [current, original];
+        let next: string | null = null;
+        if (scenario === 'Sparse' && cursor === null) {
+          heads = [];
+          next = olderCursor;
+        }
+        if (scenario === 'CrossPageComparison' || scenario === 'FailedExactRetry') {
+          heads = cursor === null ? [current] : [original];
+          next = cursor === null ? olderCursor : null;
+        }
+        if (scenario === 'WindowEdge') {
+          const index = cursor === null ? 0 : Number(cursor.slice('window:'.length));
+          heads = [
+            {
+              ...current,
+              revisionId: `0192f3a0-6c1e-7b2a-9d4e-${(40 + index).toString(16).padStart(12, '0')}`,
+              title: `Saved page ${index}`,
             },
+          ];
+          next = `window:${index + 1}`;
+        }
+        return {
+          state: 'ready',
+          page: {
+            documentId,
+            revisions: heads.map((head) => ({
+              revisionId: head.revisionId,
+              title: head.title,
+              language: head.language,
+              licence: head.licence,
+              sha256: saved(head.revisionId).sha256,
+              createdAt: head.revisionId === revisionA ? '2026-11-01T09:00:00.000Z' : '2026-11-02T12:30:00.000Z',
+            })),
+            next,
+          },
+        };
+      },
       compare: async (_address, pair) => ({
         state: 'ready',
         comparison: { documentId, left: saved(pair.leftRevisionId), right: saved(pair.rightRevisionId) },
@@ -175,7 +208,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Illustrative private history for a signed-in author. Use phone390 and desktop1280, both themes and all eight locales. Native two-editor/history, accessibility, visual review and promotion remain integration verifier acceptance.',
+          'Illustrative private history for a signed-in author. Use phone390 and desktop1280, both themes and all eight locales. Previous/next, sparse continuation, exact retry, cross-page comparison return, the bounded edge and deliberate keyboard focus are source fixtures. Native two-editor/history, accessibility, visual review and promotion remain integration verifier acceptance.',
       },
     },
   },
@@ -226,6 +259,10 @@ export const Sparse: Story = {
     const canvas = await open(canvasElement);
     await expect(await canvas.findByText(m.knowledge_history_sparse())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.knowledge_history_more() })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_more() }));
+    await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionA}` });
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_previous() }));
+    await expect(await canvas.findByText(m.knowledge_history_sparse())).toBeVisible();
   },
 };
 export const Unavailable: Story = {
@@ -234,5 +271,82 @@ export const Unavailable: Story = {
     const canvas = await open(canvasElement);
     await expect(await canvas.findByText(m.knowledge_history_unavailable())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.knowledge_private_retry() })).toBeEnabled();
+  },
+};
+
+export const CrossPageComparisonReturn: Story = {
+  args: { scenario: 'CrossPageComparison' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const title = await canvas.findByLabelText(m.knowledge_private_document_title(), { selector: 'input' });
+    await userEvent.clear(title);
+    await userEvent.type(title, 'My retained cross-page draft');
+    await open(canvasElement);
+    await userEvent.click(await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` }));
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_more() }));
+    await userEvent.click(await canvas.findByRole('radio', { name: `${m.knowledge_history_right()}: ${revisionA}` }));
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_compare() }));
+    await expect(await canvas.findByText(m.knowledge_history_difference_help())).toBeVisible();
+    canvas.getByRole('button', { name: m.knowledge_history_back() }).focus();
+    await userEvent.keyboard('[Enter]');
+    await expect(canvas.getByRole('button', { name: m.knowledge_history_compare() })).toHaveFocus();
+    await expect(canvas.getByRole('radio', { name: `${m.knowledge_history_right()}: ${revisionA}` })).toBeChecked();
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_previous() }));
+    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` })).toBeChecked();
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_more() }));
+    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_right()}: ${revisionA}` })).toBeChecked();
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_return() }));
+    await expect(title).toHaveValue('My retained cross-page draft');
+  },
+};
+export const FailedExactRetry: Story = {
+  args: { scenario: 'FailedExactRetry' },
+  play: async ({ canvasElement }) => {
+    const canvas = await open(canvasElement);
+    await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` });
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_more() }));
+    await expect(await canvas.findByText(m.knowledge_history_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_private_retry() }));
+    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionA}` })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_previous() }));
+    await expect(await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionB}` })).toBeVisible();
+  },
+};
+export const WindowEdge: Story = {
+  args: { scenario: 'WindowEdge' },
+  play: async ({ canvasElement }) => {
+    const canvas = await open(canvasElement);
+    await canvas.findByRole('heading', { name: 'Saved page 0' });
+    for (let index = 1; index <= 22; index++) {
+      await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_more() }));
+      await canvas.findByRole('heading', { name: `Saved page ${index}` });
+    }
+    for (let index = 21; index >= 4; index--) {
+      await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_previous() }));
+      await canvas.findByRole('heading', { name: `Saved page ${index}` });
+    }
+    await expect(canvas.getByRole('button', { name: m.knowledge_history_previous() })).toBeDisabled();
+    await expect(canvas.getByText(m.knowledge_history_window_edge())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.knowledge_history_restart() })).toBeEnabled();
+  },
+};
+export const DeliberateFocus: Story = {
+  args: { scenario: 'DeliberateFocus' },
+  play: async ({ canvasElement }) => {
+    const canvas = await open(canvasElement);
+    await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionA}` });
+    await expect(canvas.getByRole('heading', { name: m.knowledge_history_heading(), level: 2 })).not.toHaveFocus();
+    canvas.getByRole('button', { name: m.knowledge_history_return() }).focus();
+    await userEvent.keyboard('[Enter]');
+    await expect(canvas.getByRole('button', { name: m.knowledge_history_open() })).toHaveFocus();
+    await userEvent.keyboard('[Enter]');
+    await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionA}` });
+    await expect(canvas.getByRole('heading', { name: m.knowledge_history_heading(), level: 2 })).toHaveFocus();
+    canvas.getByRole('button', { name: m.knowledge_history_restart() }).focus();
+    await userEvent.keyboard('[Enter]');
+    const title = canvas.getByLabelText(m.knowledge_private_document_title(), { selector: 'input' });
+    await userEvent.click(title);
+    await canvas.findByRole('radio', { name: `${m.knowledge_history_left()}: ${revisionA}` });
+    await expect(title).toHaveFocus();
   },
 };

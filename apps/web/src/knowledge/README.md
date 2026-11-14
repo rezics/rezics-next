@@ -68,6 +68,8 @@ existing `knowledge-history` tests/harness/stories, the private history contract
 reference index. Source fixtures cover bounded previous/next, sparse continuation, failed exact retry, comparison
 return and deliberate focus. Test execution, typing, builds, native acceptance and keyboard/phone/desktop browser
 acceptance remain unverified until the separate integration verifier runs them; the single publisher owns publication.
+Existing focus-return assertions use keyboard activation; pointer actions assert no requested heading focus. The
+exact-pair fixture spans pages and retries the same operands while retaining its draft and original-save assertions.
 
 ## Private document lifecycle
 

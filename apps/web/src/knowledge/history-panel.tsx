@@ -1,5 +1,5 @@
 import { KnowledgeDetails, knowledgeControl } from './workspace';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import type { DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -14,6 +14,7 @@ import {
 } from './history';
 import { KnowledgeHistoryComparisonView } from './history-comparison';
 import {
+  createKnowledgeHistoryFocus,
   firstKnowledgeHistoryPage,
   nextKnowledgeHistoryPage,
   previousKnowledgeHistoryPage,
@@ -58,7 +59,9 @@ export function KnowledgeHistoryPanel({
   const compareTrigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const returnTarget = useRef<HTMLElement | null>(null);
-  const focusTarget = useRef<'heading' | 'return' | null>(null);
+  const editorReturnTarget = useRef<HTMLElement | null>(null);
+  const focusTarget = useRef<{ ticket: number; target: 'heading' | 'return' } | null>(null);
+  const [focus] = useState(createKnowledgeHistoryFocus);
   const [focusTick, setFocusTick] = useState(0);
   const [open, setOpen] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
@@ -78,33 +81,65 @@ export function KnowledgeHistoryPanel({
     return () => {
       live.current = false;
       sequence.current++;
+      focus.cancel();
+      focusTarget.current = null;
+      returnTarget.current = null;
+      editorReturnTarget.current = null;
     };
-  }, []);
+  }, [focus]);
   useLayoutEffect(() => {
-    if (!live.current || !isCurrent() || !focusTarget.current) return;
-    const target = focusTarget.current === 'heading' ? heading.current : returnTarget.current;
+    const requested = focusTarget.current;
     focusTarget.current = null;
-    if (target?.isConnected) target.focus();
-  }, [focusTick]);
+    if (!requested) return;
+    if (!current(requested.ticket)) return focus.cancel();
+    focus.arrive(requested.target === 'heading' ? heading.current : returnTarget.current);
+  }, [focusTick, focus]);
 
-  function focus(target: 'heading' | 'return') {
-    focusTarget.current = target;
+  function requestFocus(event: MouseEvent<HTMLElement>, ticket: number) {
+    focusTarget.current = null;
+    focus.request(event.currentTarget, event.detail === 0, () => current(ticket));
+  }
+  function arrive(ticket: number, target: 'heading' | 'return') {
+    focusTarget.current = { ticket, target };
     setFocusTick((value) => value + 1);
   }
   function current(ticket: number) {
     return live.current && isCurrent() && sequence.current === ticket;
   }
+  function invalidate() {
+    sequence.current++;
+    busy.current = false;
+    setPending(false);
+    focus.cancel();
+    focusTarget.current = null;
+  }
+  function clearHistory() {
+    setOpen(false);
+    setShowComparison(false);
+    setPage(null);
+    setNavigation(firstKnowledgeHistoryPage());
+    setAttempt(null);
+    setLeft('');
+    setRight('');
+    setPair(null);
+    setComparison(null);
+    setPageState('idle');
+    setCompareState('idle');
+    returnTarget.current = null;
+    editorReturnTarget.current = null;
+  }
   function refused(result: KnowledgeHistoryFailure) {
     if (result.state === 'denied' || result.state === 'signed-out' || result.state === 'retired') {
-      sequence.current++;
-      setPage(null);
-      setComparison(null);
+      invalidate();
+      clearHistory();
       onRetire(result.state);
     }
   }
-  async function load(request: KnowledgeHistoryNavigation) {
+  async function load(request: KnowledgeHistoryNavigation, event: MouseEvent<HTMLElement>) {
     if (!operations || busy.current || !live.current || !isCurrent() || admission !== 'available') return;
     const ticket = ++sequence.current;
+    requestFocus(event, ticket);
+    if (!open) editorReturnTarget.current = historyTrigger.current;
     busy.current = true;
     setPending(true);
     setOpen(true);
@@ -114,7 +149,6 @@ export function KnowledgeHistoryPanel({
     setPair(null);
     setAttempt(request);
     setPageState('preparing');
-    focus('heading');
     try {
       const result = await operations.read(address, request.cursor, binding);
       if (!current(ticket)) return;
@@ -134,23 +168,27 @@ export function KnowledgeHistoryPanel({
       if (current(ticket)) {
         busy.current = false;
         setPending(false);
+        arrive(ticket, 'heading');
       }
     }
   }
-  async function compare(exactPair: KnowledgeHistoryPair, initiator: HTMLElement | null) {
+  async function compare(
+    exactPair: KnowledgeHistoryPair,
+    initiator: HTMLElement | null,
+    event: MouseEvent<HTMLElement>,
+  ) {
     if (!operations || busy.current || !live.current || !isCurrent() || compareAdmission !== 'available') return;
     const ticket = ++sequence.current;
+    requestFocus(event, ticket);
+    if (!open) editorReturnTarget.current = initiator;
     busy.current = true;
     setPending(true);
     setOpen(true);
     setShowComparison(true);
     setPair(exactPair);
-    setLeft(exactPair.leftRevisionId);
-    setRight(exactPair.rightRevisionId);
     setComparison(null);
     setCompareState('preparing');
     returnTarget.current = initiator;
-    focus('heading');
     try {
       const result = await operations.compare(address, exactPair, binding);
       if (!current(ticket)) return;
@@ -168,37 +206,30 @@ export function KnowledgeHistoryPanel({
       if (current(ticket)) {
         busy.current = false;
         setPending(false);
+        arrive(ticket, 'heading');
       }
     }
   }
-  function back() {
+  function back(event: MouseEvent<HTMLElement>) {
     if (!live.current || !isCurrent()) return;
-    sequence.current++;
-    busy.current = false;
-    setPending(false);
+    invalidate();
+    const ticket = sequence.current;
+    requestFocus(event, ticket);
     setComparison(null);
     setPair(null);
-    setShowComparison(false);
-    focus('return');
-  }
-  function close() {
-    if (!live.current || !isCurrent()) return;
-    sequence.current++;
-    busy.current = false;
-    setPending(false);
-    setOpen(false);
-    setShowComparison(false);
-    setPage(null);
-    setNavigation(firstKnowledgeHistoryPage());
-    setAttempt(null);
-    setLeft('');
-    setRight('');
-    setPair(null);
-    setComparison(null);
-    setPageState('idle');
     setCompareState('idle');
-    returnTarget.current = historyTrigger.current;
-    focus('return');
+    setShowComparison(false);
+    arrive(ticket, 'return');
+  }
+  function close(event: MouseEvent<HTMLElement>) {
+    if (!live.current || !isCurrent()) return;
+    const target = editorReturnTarget.current ?? historyTrigger.current;
+    invalidate();
+    clearHistory();
+    const ticket = sequence.current;
+    requestFocus(event, ticket);
+    returnTarget.current = target;
+    arrive(ticket, 'return');
   }
   const failureText = (state: string) => {
     if (state === 'preparing' || state === 'unknown') return m.knowledge_private_preparing({}, options);
@@ -221,7 +252,7 @@ export function KnowledgeHistoryPanel({
           variant="outline"
           className={control}
           disabled={pending || open || admission !== 'available' || !operations}
-          onClick={() => void load(firstKnowledgeHistoryPage())}
+          onClick={(event) => void load(firstKnowledgeHistoryPage(), event)}
         >
           {m.knowledge_history_open({}, options)}
         </Button>
@@ -232,7 +263,7 @@ export function KnowledgeHistoryPanel({
             variant="outline"
             className={control}
             disabled={pending || compareAdmission !== 'available' || !operations}
-            onClick={() => void compare(conflictPair, conflictTrigger.current)}
+            onClick={(event) => void compare(conflictPair, conflictTrigger.current, event)}
           >
             {m.knowledge_history_compare_heads({}, options)}
           </Button>
@@ -264,7 +295,7 @@ export function KnowledgeHistoryPanel({
             </dl>
           </KnowledgeDetails>
           <div className="flex min-w-0 flex-wrap gap-3">
-            {showComparison ? (
+            {showComparison && pageState !== 'idle' ? (
               <Button type="button" variant="outline" className={control} onClick={back}>
                 {m.knowledge_history_back({}, options)}
               </Button>
@@ -306,7 +337,7 @@ export function KnowledgeHistoryPanel({
                   type="button"
                   variant="outline"
                   className={control}
-                  onClick={() => void compare(pair, returnTarget.current)}
+                  onClick={(event) => void compare(pair, returnTarget.current, event)}
                 >
                   {m.knowledge_history_retry_pair({}, options)}
                 </Button>
@@ -356,6 +387,7 @@ export function KnowledgeHistoryPanel({
                               disabled={pending}
                               onChange={() => {
                                 if (!live.current || !isCurrent()) return;
+                                focus.cancel();
                                 if (side === 'left') setLeft(row.revisionId);
                                 else setRight(row.revisionId);
                               }}
@@ -402,7 +434,7 @@ export function KnowledgeHistoryPanel({
                     !rightRevisionId ||
                     leftRevisionId === rightRevisionId
                   }
-                  onClick={() => void compare({ leftRevisionId, rightRevisionId }, compareTrigger.current)}
+                  onClick={(event) => void compare({ leftRevisionId, rightRevisionId }, compareTrigger.current, event)}
                 >
                   {m.knowledge_history_compare({}, options)}
                 </Button>
@@ -411,7 +443,7 @@ export function KnowledgeHistoryPanel({
                   variant="outline"
                   className={control}
                   disabled={pending || !page || !navigation.previous.length}
-                  onClick={() => void load(previousKnowledgeHistoryPage(navigation))}
+                  onClick={(event) => void load(previousKnowledgeHistoryPage(navigation), event)}
                 >
                   {m.knowledge_history_previous({}, options)}
                 </Button>
@@ -421,7 +453,7 @@ export function KnowledgeHistoryPanel({
                     variant="outline"
                     className={control}
                     disabled={pending}
-                    onClick={() => void load(nextKnowledgeHistoryPage(navigation, page.next!))}
+                    onClick={(event) => void load(nextKnowledgeHistoryPage(navigation, page.next!), event)}
                   >
                     {m.knowledge_history_more({}, options)}
                   </Button>
@@ -432,7 +464,7 @@ export function KnowledgeHistoryPanel({
                     variant="outline"
                     className={control}
                     disabled={pending}
-                    onClick={() => void load(attempt)}
+                    onClick={(event) => void load(attempt, event)}
                   >
                     {m.knowledge_private_retry({}, options)}
                   </Button>
@@ -442,7 +474,7 @@ export function KnowledgeHistoryPanel({
                   variant="outline"
                   className={control}
                   disabled={pending}
-                  onClick={() => void load(firstKnowledgeHistoryPage())}
+                  onClick={(event) => void load(firstKnowledgeHistoryPage(), event)}
                 >
                   {m.knowledge_history_restart({}, options)}
                 </Button>
