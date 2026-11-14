@@ -111,9 +111,13 @@ test('bounded rollback failure keeps the original source error and discards the 
     return { rows: [] };
   });
   const primary = new Error('erasure status source failed');
-  const visit = withErasureStatusReadSnapshot(fakePool(async () => source.client), Date.now() + 180, async () => {
-    throw primary;
-  });
+  const visit = withErasureStatusReadSnapshot(
+    fakePool(async () => source.client),
+    Date.now() + 180,
+    async () => {
+      throw primary;
+    },
+  );
 
   await rollbackStarted.promise;
   await expect(visit).rejects.toBe(primary);
