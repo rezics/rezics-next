@@ -63,6 +63,7 @@ import {
 } from '@rezics/composition';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { DefaultReaderProvider } from '../../shell/current-reading';
+import { BookOverviewRating } from './subject-ratings-view';
 import {
   useEffect,
   useLayoutEffect,
@@ -1619,6 +1620,7 @@ export function SubjectPage({
                               />
                             )}
                             {domainReading}
+                            {read && <BookOverviewRating subject={read.subject.id} locale={locale} />}
                             <CompositionRender
                               document={readingParts.reviews}
                               definitions={pageDefinitions}

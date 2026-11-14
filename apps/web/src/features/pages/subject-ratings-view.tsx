@@ -638,7 +638,7 @@ function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; lo
   );
 }
 
-/** The admitted public measurement beside Book identity; detailed populations stay in the full review journey. */
+/** The existing native rating follows work synopsis and facts; detailed populations stay in the review journey. */
 export function BookOverviewRating({ subject, locale }: { subject: string; locale: string }) {
   const routeData = useContext(RatingsContext);
   const previewData = useContext(RatingsPreviewContext);
@@ -662,8 +662,12 @@ export function BookOverviewRating({ subject, locale }: { subject: string; local
         }
       : undefined;
   return (
-    <section data-slot="book-identity-ratings" aria-labelledby="book-identity-ratings-title" className="space-y-3 pt-2">
-      <h2 id="book-identity-ratings-title" className="sr-only">
+    <section
+      data-slot="book-identity-ratings"
+      aria-labelledby="book-identity-ratings-title"
+      className="min-w-0 space-y-5"
+    >
+      <h2 id="book-identity-ratings-title" className="text-lg font-semibold">
         {m.subject_ratings({}, options)}
       </h2>
       <div className="space-y-2" data-slot="book-rating-public">

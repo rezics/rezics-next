@@ -139,10 +139,18 @@ test('The default Subject reader does not describe admitted incoming editions as
   expect(html.match(/data-slot="subject-header"/g)).toHaveLength(1);
   expect(html.indexOf('data-slot="subject-header"')).toBeLessThan(html.indexOf('data-slot="literary-reader"'));
   expect(html).toMatch(/<h1[^>]*font-sans[^>]*>The Little Prince<\/h1>/);
-  expect(html).toMatch(/data-slot="subject-primary-actions"[^>]*class="[^"]*col-span-full[^">]*grid-cols-1/);
+  expect(html).toMatch(/data-slot="subject-primary-actions"[^>]*class="[^"]*col-span-full[^">]*flex-col/);
   expect(html.indexOf('data-slot="subject-primary-actions"')).toBeGreaterThan(html.indexOf('<h1'));
   expect(html).toContain('data-slot="subject-library-actions"');
   expect(html).toContain('data-slot="subject-header-actions"');
+  for (const slot of ['subject-library-actions', 'subject-header-actions']) {
+    const classes = html.match(new RegExp(`class="([^"]+)" data-slot="${slot}"`))?.[1];
+    expect(classes).toContain('w-full flex-wrap');
+    expect(classes).not.toMatch(/sm:(?:flex-nowrap|col-start|row-start)/);
+  }
+  expect(html.indexOf('data-slot="subject-library-actions"')).toBeLessThan(
+    html.indexOf('data-slot="subject-header-actions"'),
+  );
   expect(html).toContain('href="/auth/sign-in?return_to=');
   expect(html).toContain('id="summary"');
   expect(html).toContain('id="sources"');

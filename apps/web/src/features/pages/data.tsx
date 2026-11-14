@@ -1,4 +1,3 @@
-import { BookOverviewContext } from './book-overview';
 import { ReadingDomainContext } from './reading-overview';
 import { ReadingDate } from './reading-date';
 import { Members } from './member-list';
@@ -264,10 +263,6 @@ function foldName(text: string): string {
   return text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function BookIdentityRating({ subject, locale }: { subject: string; locale: string }) {
-  return useContext(BookOverviewContext) ? <overview.BookOverviewRating subject={subject} locale={locale} /> : null;
-}
-
 function subjectHeader(read: SubjectRead, creators: Creator[], date: ReactNode, options: Options) {
   const { subject, summary } = read;
   const original = originalLanguage(subject);
@@ -350,11 +345,10 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: ReactNode, 
               ))}
             </p>
           )}
-          <BookIdentityRating subject={subject.id} locale={options.locale} />
         </div>
         <div
           data-slot="subject-primary-actions"
-          className="col-span-full grid min-w-0 grid-cols-1 gap-3 sm:col-span-1 sm:col-start-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+          className="col-span-full flex min-w-0 flex-col gap-3 sm:col-span-1 sm:col-start-2"
         >
           {options.headerActions}
         </div>

@@ -488,8 +488,32 @@ The [Subject page owner](../../../../../docs/subject-pages.md#reading-first-over
 `reading-overview.tsx` owns the presentation-only projection, review partition, open section rhythm and secondary
 Details disclosure for Book, Game and Screen. `book-overview.tsx` retains the existing literary consumer exports.
 `SubjectPage` selects the domain from its admitted readers and binds compact Game/Screen extensions without extra
-reads. Identity keeps native cover/media, creator, Library actions and source-local rating failure/retry. The public
-figure retains its own count; imported scores and personal votes never substitute for an aggregate.
+reads. Identity keeps native cover/media, creator and Library actions. The public figure retains its own count;
+imported scores and personal votes never substitute for an aggregate.
+
+Decision: mount the existing `BookOverviewRating` once after synopsis and domain facts and before reviews, under
+the same rating providers and native lifetime; give Library actions a full-width wrapping row before secondary
+reactions, Follow and overflow. The retained component/slot names also serve Game and Screen. Missing sources stay
+missing, unavailable sources retain their warnings, and public/question/private recovery remains independent.
+Presentation rerenders keep the current private draft; viewer or source retirement remains the native owner's
+decision. Both action rows wrap at phone and desktop widths, with currentness, permission and uncertain-outcome
+messages beside the affected controls. Existing copy supports all eight locales.
+
+| Actual shared consumer                                                                                                                                                                                          | Reading placement inherited                                   | Header geometry inherited                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------- |
+| Ordinary `SubjectPage` Book and admitted literary Series/Edition                                                                                                                                                | Synopsis and literary facts, one rating, reviews              | Primary Library row, then secondary actions |
+| Ordinary `SubjectPage` Game (including the original `pages-catalogue-game-reader--work-and-exact-release` PageStory)                                                                                            | Synopsis and compact Game facts, one rating, reviews          | Same                                        |
+| Ordinary `SubjectPage` Screen work/season/episode                                                                                                                                                               | Synopsis and compact Screen facts, one rating, reviews        | Same                                        |
+| Person, Character, Organization                                                                                                                                                                                 | Their distinct biography, facts, works and discussion readers | Same shared identity actions only           |
+| Other `SubjectPage` families: Manga, general work/franchise, Recipe, Agent, catalogue release/file, music album/edition/track, Recording, music place/event/instrument, story arc, Concept and generic Subjects | Their existing domain composition                             | Same shared identity actions only           |
+| Unframed `SubjectPage` detail views                                                                                                                                                                             | Existing canonical detail composition                         | Same shared identity actions only           |
+
+`SubjectViewPage` supplies its own compact `SubjectFrame` identity around the framed `SubjectPage`; that frame keeps
+its existing placement.
+
+Page definitions/templates stay with Search; Library and purchase slots with Commerce; reactions and vote authority
+with Content; work facts, exact releases and citations with their domain owners. This is one bounded presentation
+projection of already admitted data, with no new read, hydration, observer, cache or browser filtering.
 
 The original document still owns planning, admission and counts. Projected detailed populations remain reachable in
 canonical views. Reviews retain native order, authors, thread destinations, admission, lifetime and provenance;

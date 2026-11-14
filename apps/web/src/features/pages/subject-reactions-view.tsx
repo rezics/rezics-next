@@ -9,8 +9,8 @@ import type { SubjectReactionKind, SubjectReactions } from './subject-reactions'
 import { FollowTargetControl } from '../../library/follow-target-control';
 
 /**
- * The reaction cluster and the overflow menu in the subject header's action area, with any other action (the
- * Library controls) beneath. Reporting lives only in the menu. When the counts could not be read the cluster says so
+ * Library actions lead at the available header width; reactions, follow and overflow wrap in a separate row.
+ * Reporting lives only in the menu. When the counts could not be read the cluster says so
  * in a sentence instead of showing a count that is not known.
  */
 export function SubjectHeaderActions({
@@ -43,8 +43,11 @@ export function SubjectHeaderActions({
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   return (
     <>
+      <div className="flex min-w-0 w-full flex-wrap items-center gap-2" data-slot="subject-library-actions">
+        {children}
+      </div>
       <div
-        className="flex min-w-0 flex-wrap items-start justify-end gap-2 sm:flex-nowrap sm:col-start-2 sm:row-start-1"
+        className="flex min-w-0 w-full flex-wrap items-start gap-2 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11 [&_a]:min-w-11"
         data-slot="subject-header-actions"
       >
         <PublicReactionRecovery
@@ -75,13 +78,13 @@ export function SubjectHeaderActions({
           )}
         </PublicReactionRecovery>
         {reactionRecovery && (reactionRecovery.failed || reactionRecovery.pending) ? (
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <p className="text-sm text-muted-foreground" role="status">
               {reactionRecovery.pending ? m.subject_reaction_recovery_pending() : m.subject_reaction_recovery_failure()}
             </p>
             <button
               type="button"
-              className="rounded-md px-2 py-1 text-sm underline"
+              className="min-h-11 min-w-11 rounded-md px-2 py-1 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={reactionRecovery.pending}
               onClick={reactionRecovery.retry}
             >
@@ -89,16 +92,10 @@ export function SubjectHeaderActions({
             </button>
           </div>
         ) : null}
+        <FollowTargetControl targetId={id} />
         <div className="shrink-0">
           <PostActions target={{ kind: 'subject', id }} verification={verification} />
         </div>
-      </div>
-      <div
-        className="flex min-w-0 flex-wrap items-center gap-2 sm:col-start-1 sm:row-start-2"
-        data-slot="subject-library-actions"
-      >
-        {children}
-        <FollowTargetControl targetId={id} />
       </div>
     </>
   );
