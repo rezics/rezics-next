@@ -116,6 +116,62 @@ test('group and preview child cursors encrypt native positions and resume indepe
   expect(nextChildren.next).toBeNull();
 });
 
+test('129 relevance pages keep public continuations bounded as the private lineage advances', async () => {
+  const total = 129;
+  const position = (offset: number) =>
+    JSON.stringify({
+      version: 2,
+      binding: 'b'.repeat(64),
+      namesAfter: String(offset),
+      relevance: {
+        execution: '00000000-0000-8000-8000-000000000001',
+        node: '00000000-0000-8000-8000-000000000002',
+      },
+    });
+  const source: ReleaseGroupingSource<{ id: string }, { id: string }> = {
+    observe: async () => ({
+      releaseDigest: request.releaseDigest,
+      physical,
+      epoch: 'source-epoch-secret',
+      calendarReadyFor: null,
+    }),
+    groups: async (_request, after) => {
+      const offset = after === null ? 0 : Number((JSON.parse(after) as { namesAfter: string }).namesAfter);
+      if (offset >= total) return { keys: [], after: position(offset), exhausted: true };
+      const id = `10000000-0000-8000-8000-${String(1000 + offset).padStart(12, '0')}`;
+      return {
+        keys: [{ kind: 'work', id }],
+        after: position(offset + 1),
+        exhausted: offset + 1 === total,
+      };
+    },
+    children: async () => ({ keys: [], after: 'child-eof', exhausted: true }),
+    works: async (_request, ids) => new Map(ids.map((id) => [id, { id }])),
+    releases: async () => new Map(),
+  };
+  const relevanceRequest = { ...request, sort: 'relevance' as const };
+  const lengths: number[] = [];
+  let cursor: string | undefined;
+  for (let index = 0; index < total; index++) {
+    const page = await readReleaseGroupsPage({
+      ...options,
+      request: relevanceRequest,
+      source,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    expect(page.groups).toHaveLength(1);
+    if (index + 1 === total) expect(page.next).toBeNull();
+    else {
+      expect(typeof page.next).toBe('string');
+      cursor = page.next!;
+      lengths.push(cursor.length);
+    }
+  }
+  expect(lengths).toHaveLength(128);
+  expect(Math.max(...lengths)).toBeLessThan(900);
+  expect(Math.max(...lengths) - Math.min(...lengths)).toBeLessThan(40);
+});
+
 test('both streams authenticate viewer, ordered request, stream, work, token integrity and expiry before reads', async () => {
   const native = fixture();
   const { page, group } = await firstPage(native);

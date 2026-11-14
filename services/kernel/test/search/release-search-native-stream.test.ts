@@ -12,6 +12,13 @@ import {
   type ReleaseGroupingBasis,
   type ReleaseGroupingRequest,
 } from '../../src/search/release-search-grouping.ts';
+import {
+  ReleaseSearchRelevanceStateConflict,
+  ReleaseSearchRelevanceStateExpired,
+  type ReleaseSearchRelevanceBinding,
+  type ReleaseSearchRelevanceLocation,
+  type ReleaseSearchRelevanceState,
+} from '../../src/search/release-search-relevance-state.ts';
 import { subjectPartition, type IndexedSubject, type NativeWorkLinkEvidence } from '../../src/search/source.ts';
 
 const request: ReleaseGroupingRequest = {
@@ -24,6 +31,68 @@ const request: ReleaseGroupingRequest = {
   childLimit: 2,
   previewLimit: 1,
 };
+
+function memoryRelevanceState(): ReleaseSearchRelevanceState {
+  let sequence = 1;
+  const uuid = () => `00000000-0000-8000-8000-${String(sequence++).padStart(12, '0')}`;
+  const sessions = new Map<string, { binding: string; expires: number }>();
+  const nodes = new Map<string, { parent: string | null; works: Set<string> }>();
+  const branches = new Map<string, string>();
+  const key = (execution: string, node: string) => `${execution}/${node}`;
+  const bindingKey = (binding: ReleaseSearchRelevanceBinding) => JSON.stringify(binding);
+  function session(binding: ReleaseSearchRelevanceBinding, location: ReleaseSearchRelevanceLocation, now: number) {
+    const value = sessions.get(location.execution);
+    if (
+      !value ||
+      value.binding !== bindingKey(binding) ||
+      value.expires <= now ||
+      !nodes.has(key(location.execution, location.node))
+    )
+      throw new ReleaseSearchRelevanceStateExpired();
+    return value;
+  }
+  return {
+    async start(binding, now, initialWorks = []) {
+      const execution = uuid();
+      const node = uuid();
+      sessions.set(execution, { binding: bindingKey(binding), expires: now + 15 * 60_000 });
+      nodes.set(key(execution, node), { parent: null, works: new Set(initialWorks) });
+      return { execution, node };
+    },
+    async resume(binding, location, now) {
+      session(binding, location, now).expires = now + 15 * 60_000;
+    },
+    async seen(binding, location, works, now) {
+      session(binding, location, now);
+      const candidates = new Set(works);
+      const seen = new Set<string>();
+      let current: string | null = location.node;
+      while (current !== null) {
+        const value = nodes.get(key(location.execution, current));
+        if (!value) throw new ReleaseSearchRelevanceStateExpired();
+        for (const id of value.works) if (candidates.has(id)) seen.add(id);
+        current = value.parent;
+      }
+      return seen;
+    },
+    async advance(binding, location, branch, works, now) {
+      session(binding, location, now);
+      if (!works.length) return location;
+      const branchKey = `${key(location.execution, location.node)}/${branch}`;
+      const existing = branches.get(branchKey);
+      if (existing) {
+        const saved = nodes.get(key(location.execution, existing))!;
+        if (JSON.stringify([...saved.works].sort()) !== JSON.stringify([...works].sort()))
+          throw new ReleaseSearchRelevanceStateConflict();
+        return { execution: location.execution, node: existing };
+      }
+      const node = uuid();
+      branches.set(branchKey, node);
+      nodes.set(key(location.execution, node), { parent: location.node, works: new Set(works) });
+      return { execution: location.execution, node };
+    },
+  };
+}
 
 async function fixture() {
   const id = (index: number) =>
@@ -117,6 +186,12 @@ async function fixture() {
       return basis;
     },
   };
+  const relevanceProgress = {
+    principal: 'account:00000000-0000-8000-8000-000000000001',
+    generation: 1,
+    now: 1_800_000_000_000,
+    state: memoryRelevanceState(),
+  };
   const release: FilterRelease = {
     types: {
       work: { bases: ['schema:CreativeWork'] },
@@ -126,7 +201,7 @@ async function fixture() {
     properties: { 'schema:exampleOfWork': { datatype: 'wikibase-item' } },
   };
   const cut = await observeReleaseSearchCandidates(pools, context);
-  const streams = createReleaseSearchCandidateStreams({ pools, release, cut, context });
+  const streams = createReleaseSearchCandidateStreams({ pools, release, cut, context, relevanceProgress });
   return {
     id,
     subjects,
@@ -139,6 +214,7 @@ async function fixture() {
     cut,
     context,
     release,
+    relevanceProgress,
     change: (patch: Partial<ReleaseGroupingBasis>) => {
       basis = { ...basis, ...patch };
     },
@@ -261,6 +337,124 @@ test('a stale native filter candidate cannot claim a work before its first curre
   });
   const page = await streams.groups({ ...request, sort: 'relevance' }, null, 2);
   expect(page.keys).toEqual([{ kind: 'work', id: f.id(0) }]);
+});
+
+test('a valid inline relevance cursor seeds private progress during protocol migration', async () => {
+  const f = await fixture();
+  const relevanceRequest = { ...request, sort: 'relevance' as const };
+  f.subjects[6]!.type = 'edition';
+  f.links.set(f.id(6), { complete: true, values: [{ kind: 'work', id: f.id(0) }] });
+  const ids = [f.id(1), f.id(6)];
+  const relevance = async (_request: ReleaseGroupingRequest, after: string | null, size: number) => {
+    const offset = after === null ? 0 : Number(after);
+    const selected = ids.slice(offset, offset + size);
+    const keys = selected.map((id, index) => ({
+      id,
+      pool: 'pool-0',
+      partition: 0,
+      name: null,
+      securityRevision: 0,
+      after: String(offset + index + 1),
+    }));
+    return { keys, after: String(offset + selected.length), exhausted: selected.length === 0 };
+  };
+  const streams = createReleaseSearchCandidateStreams({ ...f, relevance });
+  const first = await streams.groups(relevanceRequest, null, 1);
+  expect(first.keys).toEqual([{ kind: 'work', id: f.id(0) }]);
+  const current = JSON.parse(first.after) as { binding: string; namesAfter: string };
+  const legacy = JSON.stringify({
+    version: 1,
+    binding: current.binding,
+    namesAfter: current.namesAfter,
+    seenWorks: [f.id(0)],
+  });
+  const resumed = await streams.groups(relevanceRequest, legacy, 1);
+  expect(resumed.keys).toEqual([]);
+  expect(JSON.parse(resumed.after)).toHaveProperty('relevance');
+});
+
+test('relevance resumes beyond 128 works with current ownership, interleaved repeats and replayable branches', async () => {
+  const f = await fixture();
+  const relevanceRequest = { ...request, sort: 'relevance' as const };
+  const stale = f.id(2000);
+  const workIds = Array.from({ length: 129 }, (_, index) => f.id(1000 + index));
+  const releaseIds = Array.from({ length: 129 }, (_, index) => f.id(3000 + index * 2));
+  const repeatIds = Array.from({ length: 129 }, (_, index) => f.id(3001 + index * 2));
+  const subject = (id: string, type: string): IndexedSubject => ({
+    id,
+    type,
+    visibility: 'visible',
+    redirect: null,
+    securityRevision: 0,
+    labels: [{ language: 'en', value: id }],
+    aliases: [],
+    descriptions: [],
+    statements: [],
+  });
+  for (const id of workIds) f.subjects.push(subject(id, 'work'));
+  f.subjects.push(subject(stale, 'edition'));
+  f.links.set(stale, { complete: true, values: [{ kind: 'work', id: workIds[0]! }] });
+  const nativeIds = [stale];
+  for (let index = 0; index < workIds.length; index++) {
+    const work = workIds[index]!;
+    const release = releaseIds[index]!;
+    const repeat = repeatIds[index]!;
+    f.subjects.push(subject(release, 'edition'), subject(repeat, 'edition'));
+    f.links.set(release, { complete: true, values: [{ kind: 'work', id: work }] });
+    f.links.set(repeat, { complete: true, values: [{ kind: 'work', id: work }] });
+    nativeIds.push(release);
+    if (index === 0 || index % 5 === 0) nativeIds.push(repeatIds[Math.max(0, index - 1)]!);
+  }
+  const nativeWindowSizes: number[] = [];
+  const relevance = async (_request: ReleaseGroupingRequest, after: string | null, size: number) => {
+    const offset = after === null ? 0 : Number(after);
+    const selected = nativeIds.slice(offset, offset + size);
+    nativeWindowSizes.push(selected.length);
+    const keys = selected.map((id, index) => ({
+      id,
+      pool: 'pool-0',
+      partition: subjectPartition(id),
+      name: null,
+      securityRevision: 0,
+      after: String(offset + index + 1),
+    }));
+    return { keys, after: String(offset + selected.length), exhausted: selected.length === 0 };
+  };
+  const currentMatches = async (_request: ReleaseGroupingRequest, keys: readonly { id: string }[]) =>
+    new Set(keys.filter(({ id }) => id !== stale).map(({ id }) => id));
+  const streams = createReleaseSearchCandidateStreams({ ...f, relevance, currentMatches });
+  const reopened = createReleaseSearchCandidateStreams({ ...f, relevance, currentMatches });
+  const results: { kind: string; id: string }[] = [];
+  let after: string | null = null;
+  let firstAfter: string | undefined;
+  let firstNext: Awaited<ReturnType<typeof streams.groups>> | undefined;
+  let maxPositionBytes = 0;
+  for (let pageNumber = 0; pageNumber < 20; pageNumber++) {
+    const page = await streams.groups(relevanceRequest, after, 20);
+    results.push(...page.keys);
+    after = page.after;
+    const position = JSON.parse(page.after) as { seenWorks?: unknown; relevance?: Record<string, unknown> };
+    expect(position.seenWorks).toBeUndefined();
+    expect(Object.keys(position.relevance ?? {}).sort()).toEqual(['execution', 'node']);
+    maxPositionBytes = Math.max(maxPositionBytes, Buffer.byteLength(page.after));
+    if (pageNumber === 0) firstAfter = page.after;
+    if (pageNumber === 1) firstNext = page;
+    if (page.exhausted) break;
+  }
+  expect(firstAfter).toBeDefined();
+  expect(firstNext).toBeDefined();
+  const replay = await reopened.groups(relevanceRequest, firstAfter!, 20);
+  expect(replay.keys).toEqual(firstNext!.keys);
+  expect(replay.after).toBe(firstNext!.after);
+  expect(maxPositionBytes).toBeLessThan(512);
+  expect(results.filter(({ kind }) => kind === 'work').map(({ id }) => id)).toEqual(workIds);
+  expect(new Set(results.filter(({ kind }) => kind === 'work').map(({ id }) => id)).size).toBe(129);
+  expect(results.some(({ id }) => id === stale)).toBe(false);
+  expect(Math.max(...nativeWindowSizes)).toBeLessThanOrEqual(20);
+  f.change({ epoch: 'changed-after-relevance-page' });
+  await expect(reopened.groups(relevanceRequest, firstAfter!, 20)).rejects.toBeInstanceOf(
+    ReleaseGroupingRestartRequired,
+  );
 });
 
 test('full authority retires both streams on resume and during complete link reads, beyond name cuts', async () => {
