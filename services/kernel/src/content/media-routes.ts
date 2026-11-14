@@ -14,6 +14,7 @@ import { AuthenticationError } from '../access/contract/authentication.ts';
 import { routeOf } from '../route/route.ts';
 import { threadTarget } from './commands.ts';
 import { readDocumentMediaPresentations } from './media-presentation.ts';
+import { knowledgeMediaSelectionFromQuery } from './knowledge-media.ts';
 import { readOwnMediaInventory, recordOwnMediaReservation } from './own-media.ts';
 import { mutateContentPoint } from './erase-post.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -173,6 +174,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
           return readDocumentMediaPresentations(dependencies, actor, body.ids, {
             deadline: job.deadline,
             routeKey: dependencies.routeKey,
+            ...(body.knowledge === undefined ? {} : { knowledge: body.knowledge }),
           });
         }),
     )
@@ -398,8 +400,19 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         admission.run('normal', job, async () => {
           existing(id);
           set.headers['cache-control'] = 'private, no-store';
+          let knowledge: ReturnType<typeof knowledgeMediaSelectionFromQuery>;
+          try {
+            knowledge = knowledgeMediaSelectionFromQuery(query);
+          } catch (error) {
+            if (error instanceof TypeError) throw new ProblemError('invalid_request');
+            throw error;
+          }
           const decision = await decideDownload(
-            { ...dependencies, downloadContext: { deadline: job.deadline, routeKey: dependencies.routeKey } },
+            { ...dependencies, downloadContext: {
+              deadline: job.deadline,
+              routeKey: dependencies.routeKey,
+              ...(knowledge === undefined ? {} : { knowledge }),
+            } },
             id,
             actor,
             query.variant as DownloadVariant,

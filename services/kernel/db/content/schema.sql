@@ -968,6 +968,16 @@ CREATE FUNCTION content.guard_realm_media_claim() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF OLD.purpose = 'knowledge-image' AND OLD.claimed_at IS NOT NULL THEN
+    IF TG_OP = 'DELETE' THEN
+      RAISE EXCEPTION 'Knowledge media claims are permanent' USING ERRCODE = '23514';
+    END IF;
+    IF ROW(NEW.route, NEW.media_id, NEW.container_id, NEW.uploader_id, NEW.purpose, NEW.claimed_at)
+      IS DISTINCT FROM
+      ROW(OLD.route, OLD.media_id, OLD.container_id, OLD.uploader_id, OLD.purpose, OLD.claimed_at) THEN
+      RAISE EXCEPTION 'Knowledge media claims are permanent' USING ERRCODE = '23514';
+    END IF;
+  END IF;
   IF OLD.claimed_realm_id IS NOT NULL THEN
     IF TG_OP = 'DELETE' THEN
       RAISE EXCEPTION 'Realm media claims are permanent' USING ERRCODE = '23514';
@@ -3699,6 +3709,7 @@ CREATE TABLE content.media (
     focal_y real,
     claimed_item_id uuid,
     claimed_realm_id uuid,
+    knowledge_publication_generation bigint,
     CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
     CONSTRAINT media_avatar_owner_check CHECK (((purpose <> 'avatar'::text) OR ((container_id = uploader_id) AND (source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL)))),
     CONSTRAINT media_byte_count_check CHECK (((byte_count >= 1) AND (byte_count <= 20971520))),
@@ -3720,7 +3731,9 @@ CREATE TABLE content.media (
     CONSTRAINT media_focal_point_check CHECK ((((focal_x IS NULL) AND (focal_y IS NULL)) OR ((focal_x IS NOT NULL) AND (focal_y IS NOT NULL) AND (focal_x >= (0)::double precision) AND (focal_x <= (1)::double precision) AND (focal_y >= (0)::double precision) AND (focal_y <= (1)::double precision)))),
     CONSTRAINT media_measurements_check CHECK (((((state = 'reserved'::text) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = ANY (ARRAY['uploaded'::text, 'available'::text, 'rejected'::text])) AND (byte_count IS NOT NULL) AND (media_type IS NOT NULL) AND (actual_byte_count IS NOT NULL) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (((state = 'uploaded'::text) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'available'::text) AND (decision IS NULL)) OR ((state = 'rejected'::text) AND (decision IS NOT NULL) AND (claimed_at IS NULL)))) OR ((purpose = 'cover'::text) AND (state = 'rejected'::text) AND (byte_count IS NULL) AND (media_type IS NULL) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (declared_sha256 IS NULL) AND (decision IS NOT NULL) AND (claimed_at IS NULL))) IS TRUE)),
     CONSTRAINT media_media_type_check CHECK ((media_type = ANY (ARRAY['image/avif'::text, 'image/gif'::text, 'image/jpeg'::text, 'image/png'::text, 'image/webp'::text]))),
-    CONSTRAINT media_purpose_check CHECK ((purpose = ANY (ARRAY['post-image'::text, 'cover'::text, 'avatar'::text, 'realm-icon'::text, 'realm-banner'::text]))),
+    CONSTRAINT media_purpose_check CHECK ((purpose = ANY (ARRAY['post-image'::text, 'cover'::text, 'avatar'::text, 'realm-icon'::text, 'realm-banner'::text, 'knowledge-image'::text]))),
+    CONSTRAINT media_knowledge_browser_provenance_check CHECK (((purpose <> 'knowledge-image'::text) OR ((source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL) AND (claimed_item_id IS NULL) AND (claimed_realm_id IS NULL)))),
+    CONSTRAINT media_knowledge_publication_generation_check CHECK (((knowledge_publication_generation IS NULL) OR ((purpose = 'knowledge-image'::text) AND (claimed_at IS NOT NULL) AND (knowledge_publication_generation >= 0)))),
     CONSTRAINT media_realm_asset_check CHECK (((purpose <> ALL (ARRAY['realm-icon'::text, 'realm-banner'::text])) OR ((source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL) AND (claimed_item_id IS NULL)))),
     CONSTRAINT media_realm_claim_check CHECK (((claimed_realm_id IS NULL) OR ((purpose = ANY (ARRAY['realm-icon'::text, 'realm-banner'::text])) AND (claimed_realm_id = container_id) AND (claimed_at IS NOT NULL)))),
     CONSTRAINT media_reservation_request_id_check CHECK (((char_length(reservation_request_id) >= 1) AND (char_length(reservation_request_id) <= 255))),

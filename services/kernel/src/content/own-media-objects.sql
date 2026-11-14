@@ -9,7 +9,13 @@ SELECT m.media_id::text AS id, COALESCE(m.claimed_item_id, m.container_id)::text
        m.claimed_at::text AS claimed_at, m.erased, m.collection_pending, m.taken_down,
        (m.source_url IS NULL AND m.credit IS NULL AND m.provenance IS NULL) AS browser_reservation,
        jsonb_build_array(m.reservation_request_id, m.transaction_id, m.security_revision,
-         m.media_episode, p.xmin::text, r.xmin::text, t.xmin::text)::text AS observation_json,
+         m.media_episode, p.xmin::text, r.xmin::text, t.xmin::text,
+         knowledge_document.xmin::text, knowledge_notebook.xmin::text,
+         CASE WHEN knowledge_document.document_id IS NOT NULL
+           THEN content.knowledge_document_eligible(knowledge_document.route, knowledge_document.document_id)
+           ELSE false END)::text AS observation_json,
+       (m.purpose = 'knowledge-image' AND knowledge_notebook.owner_account_id = m.uploader_id
+         AND content.knowledge_document_eligible(m.route, knowledge_document.document_id)) IS TRUE AS related_knowledge,
        m.claimed_realm_id::text AS claimed_realm_id,
        CASE
          WHEN m.purpose = 'post-image' AND p.post_id IS NOT NULL THEN 'post'
@@ -54,6 +60,13 @@ LEFT JOIN content.thread AS t
   ON m.purpose = 'post-image'
  AND t.route = m.route
  AND t.thread_id = CASE WHEN m.claimed_item_id IS NULL THEN COALESCE(p.thread_id, m.container_id) ELSE p.thread_id END
+LEFT JOIN content.knowledge_document AS knowledge_document
+  ON m.purpose = 'knowledge-image' AND knowledge_document.route = m.route
+ AND knowledge_document.document_id = m.container_id
+LEFT JOIN content.knowledge_notebook AS knowledge_notebook
+  ON knowledge_notebook.route = knowledge_document.route
+ AND knowledge_notebook.notebook_id = knowledge_document.notebook_id
+ AND knowledge_notebook.owner_account_id = m.uploader_id
 LEFT JOIN LATERAL (
   SELECT jsonb_agg(jsonb_build_object(
            'format', selected.format,

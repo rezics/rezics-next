@@ -20,7 +20,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 function imageFields(fields: Record<string, unknown>) {
   if (
-    !['post-image', 'avatar', 'realm-icon', 'realm-banner'].includes(String(fields.purpose)) ||
+    !['post-image', 'knowledge-image', 'avatar', 'realm-icon', 'realm-banner'].includes(String(fields.purpose)) ||
     typeof fields.mediaType !== 'string' ||
     !imageTypes.includes(fields.mediaType) ||
     typeof fields.byteCount !== 'number' ||
@@ -30,7 +30,7 @@ function imageFields(fields: Record<string, unknown>) {
   )
     throw invalidRequest();
   const shared = {
-    purpose: fields.purpose as 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner',
+    purpose: fields.purpose as 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner',
     mediaType: fields.mediaType as ReservationInput['mediaType'],
     byteCount: fields.byteCount,
   };
@@ -115,10 +115,10 @@ async function reservationInput(request: Request): Promise<SiteReservation> {
   if ('realmId' in fields || hasContainer === hasFuture) throw invalidRequest();
   if (hasContainer) {
     if (typeof fields.containerId !== 'string') throw invalidRequest();
-    if (shared.purpose === 'avatar' && !contentId.test(fields.containerId)) throw invalidRequest();
+    if ((shared.purpose === 'avatar' || shared.purpose === 'knowledge-image') && !contentId.test(fields.containerId)) throw invalidRequest();
     return { containerId: fields.containerId, ...shared, purpose: shared.purpose };
   }
-  if (shared.purpose === 'avatar') throw invalidRequest();
+  if (shared.purpose === 'avatar' || shared.purpose === 'knowledge-image') throw invalidRequest();
   return { newThread: futureThread(fields.newThread), ...shared, purpose: 'post-image' };
 }
 
