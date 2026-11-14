@@ -42,9 +42,11 @@ git status --short
 
 Read the contract's outcomes and likely files, verify its premises against your base, implement the complete outcome,
 then follow [verification](verification.md). Preserve frozen files; update an existing test whose behaviour the
-contract changes and list it. Decide ambiguities from the owner documents, record each decision in your summary and the
-owning document, and, for product work on dev, tell your manager with an `info` message. For a minimal adjacent
-correction, check risk ownership, cover every changed outside-path file with its affected tests and list the reason in
+contract changes and list it. Decide ambiguities from the owner documents. Record decisions that change the adopted
+contract in your summary and its owning document; hand off an owning-document change outside your declared paths
+while continuing independent work. Routine implementation and test choices that preserve the contract belong in the
+handoff and do not require an owning-document edit. For product work on dev, tell your manager with an `info` message.
+For a minimal adjacent correction, check risk ownership, cover every changed outside-path file with its affected tests and list the reason in
 the handoff for owner notice. Do not rebase. Merge or cherry-pick only a branch or commit the contract names
 explicitly, and only for product work on dev in your own worktree; never in a shared workspace. Keep temporary files
 under `.temp/`; a continuation brief for the rest of your outcome goes to `.temp/continuation/`. Report a blocker only
