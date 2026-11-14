@@ -41,11 +41,7 @@ const read = (client: AccessClient) => client.query('SELECT source').then(() => 
 test('own Realm snapshots preserve the repeatable-read statements and result', async () => {
   const current = connection();
   await expect(withOwnRealmsReadSnapshot(poolFor(current), Date.now() + 1000, read)).resolves.toBe('current source');
-  expect(current.statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT source',
-    'COMMIT',
-  ]);
+  expect(current.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'COMMIT']);
   expect(current.releaseError()).toBeUndefined();
 });
 
