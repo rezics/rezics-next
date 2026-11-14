@@ -1412,10 +1412,6 @@ export async function listSubjectLinks(
     )
       return [];
     const related = relatedEntries(statementItems(assertion), summaries, survivors);
-    // A requested work-membership window needs the exact assertion even without qualifiers:
-    // release navigation binds its holder and original selection to the disclosed work target.
-    // Keep the same current-statement and related-target disclosure checks above.
-    const membership = options.property === 'schema:exampleOfWork';
     const credit = options.property !== null && summaryRelease?.properties[link.property]?.relation?.group === 'credit';
     const slotKey = credit ? summaryRelease?.properties[link.property]?.relation?.slotKey : undefined;
     const rawKey = slotKey ? current.qualifiers.find((snak) => snak.property.id === slotKey) : undefined;
@@ -1432,7 +1428,7 @@ export async function listSubjectLinks(
     return [
       {
         ...link,
-        ...(assertion.qualifiers.length || credit || membership ? { assertion, related } : {}),
+        ...(options.property !== null || assertion.qualifiers.length ? { assertion, related } : {}),
         ...(creditSlot ? { creditSlot } : {}),
         ...(type ? { type } : {}),
         label: summary?.label?.value ?? '',
@@ -1755,7 +1751,11 @@ export async function listSubjectRelations(
     )
       continue;
     const related = relatedEntries(statementItems(statement), summaries, survivors);
-    const entry = { ...raw, statement, ...(statement.qualifiers.length ? { related } : {}) };
+    const entry = {
+      ...raw,
+      statement,
+      ...(statement.qualifiers.length || Object.keys(related).length ? { related } : {}),
+    };
     if (!entry.target) {
       relations.push({ ...entry, summary: null });
       continue;
