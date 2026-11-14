@@ -1057,13 +1057,17 @@ to B only after a B hit is consumed.
 
 For native name ordering, Search stores the full normalized name key only when it is at most 512 UTF-16 code units;
 missing and oversized keys use null with native missing-last behavior and unique `id` ties. Do not truncate or hash
-the key. Full names and `names.exact` remain unchanged. The index's `name_key` normalizer is applied to the complete visible name in a
-bounded write-side `_analyze` pass before bulk indexing: deduplicate distinct nonnull raw names and send one
-`_analyze` request per name, with at most 16 requests in flight. Do not send hidden or deleted action names to
-analysis. Keep one bulk action and its anchor external version
-per subject; if normalization fails, do not partially bulk or advance the checkpoint. Mapping `ignore_above: 512`
-is only a defense: OpenSearch checks raw string length before applying the normalizer, so a short input can expand
-past the normalized bound. See the pinned OpenSearch 3.9.0
+the key. Full names and `names.exact` remain unchanged. Decision: deduplicate distinct nonnull visible names and pass
+each complete raw name to the installed `name_key` normalizer in multi-value `_analyze` batches, preserving each local
+token group and the original action order. Each request carries at most 256 values and a serialized JSON body of at
+most 65,536 bytes;
+an individual name above that byte limit stays whole in a singleton request. Up to 16 requests may run concurrently;
+the 256-value cap is the 4,096-token ceiling divided across those requests, with at most one normalized token per
+input. Empty input and empty normalized keys remain exact empty keys. Do not send hidden or deleted action names to
+analysis. Keep existing source chunks and one bulk action with its anchor external version per subject. If
+normalization fails, do not partially bulk or advance the checkpoint.
+Mapping `ignore_above: 512` is only a defense: OpenSearch checks raw string length before applying the normalizer, so a
+short input can expand past the normalized bound. See the pinned OpenSearch 3.9.0
 [keyword mapping implementation](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/index/mapper/KeywordFieldMapper.java#L1023-L1031).
 Existing oversized indexed keys require replay into a real new generation before bounded-read readiness; a mapping
 update does not rewrite existing terms.

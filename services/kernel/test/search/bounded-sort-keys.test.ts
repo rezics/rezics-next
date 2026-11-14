@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bulkLines, documentActions, type IndexAction } from '../../src/search/document.ts';
+import { ENGINE_ANALYSIS_LIMITS } from '../../src/search/engine-analysis.ts';
 import { createSubjectIndex, subjectIndexDefinition, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import type { IndexedSubject } from '../../src/search/source.ts';
@@ -7,6 +8,8 @@ import type { IndexedSubject } from '../../src/search/source.ts';
 const url = process.env.OPENSEARCH_URL;
 if (!url) throw new Error("OPENSEARCH_URL must name the check's OpenSearch node");
 const search = createOpenSearch(url);
+const MAX_ANALYSIS_BATCH_VALUES = 256;
+const MAX_ANALYSIS_BATCH_BYTES = 64 * 1024;
 type Token = { token: string; position: number; start_offset: number; end_offset: number };
 type Analysis = { tokens: Token[] };
 type Hit = { _id: string; sort: (string | null)[] };
@@ -41,13 +44,17 @@ async function nativeKey(index: string, text: string): Promise<string> {
     normalizer: 'name_key',
     text,
   });
+  if (text.length === 0) {
+    expect(body.tokens).toEqual([]);
+    return '';
+  }
   expect(body.tokens).toHaveLength(1);
   return body.tokens[0]!.token;
 }
 
 // A transparent observer: all successful normalization comes from the real target index.
 function observe(index: string) {
-  const requests: { texts: string[]; tokens: Token[] }[] = [];
+  const requests: { texts: string[]; tokens: Token[]; bytes: number }[] = [];
   let active = 0;
   let maximum = 0;
   let bulks = 0;
@@ -55,16 +62,19 @@ function observe(index: string) {
     request: (async (method, path, body, options) => {
       expect(method).toBe('POST');
       expect(path).toBe(`/${index}/_analyze`);
-      const input = body as { normalizer: string; text: string | string[] };
+      const input = body as { normalizer: string; text: string[] };
       expect(input.normalizer).toBe('name_key');
-      const texts = typeof input.text === 'string' ? [input.text] : input.text;
+      expect(Array.isArray(input.text)).toBe(true);
+      const texts = input.text;
       expect(texts.length).toBeGreaterThan(0);
-      expect(texts.length).toBeLessThanOrEqual(256);
+      expect(texts.length).toBeLessThanOrEqual(MAX_ANALYSIS_BATCH_VALUES);
+      const bytes = Buffer.byteLength(JSON.stringify(body));
+      expect(texts.length === 1 || bytes <= MAX_ANALYSIS_BATCH_BYTES).toBe(true);
       active += 1;
       maximum = Math.max(maximum, active);
       try {
         const result = await search.request<Analysis>(method, path, body, options);
-        requests.push({ texts: [...texts], tokens: result.body.tokens });
+        requests.push({ texts: [...texts], tokens: result.body.tokens, bytes });
         return result;
       } finally {
         active -= 1;
@@ -135,7 +145,10 @@ test('native normalization bounds complete name sort values on writes while pres
     expect(prepare).toBeFunction();
     const boundary = '\uFDFA'.repeat(28) + 'Ａ'.repeat(8);
     const supplementary = '\uFDFA'.repeat(27) + '𠀀'.repeat(13);
-    const names = [expanded, cjk, 'ＲＵＳＴ', 'ＲＵＳＴ', boundary, boundary + 'a', supplementary, supplementary + 'a'];
+    const names = [
+      expanded, cjk, 'ＲＵＳＴ', 'ＲＵＳＴ', boundary, boundary + 'a',
+      supplementary, supplementary + 'a', '', '\u200B'.repeat(4),
+    ];
     expect(names.every((name) => name.length <= 250)).toBe(true);
     const originals = actionsFor(names.map((name, n) => subject(n + 1, name)));
     const nullAction = actionsFor([subject(90, null)])[0]!;
@@ -171,9 +184,9 @@ test('native normalization bounds complete name sort values on writes while pres
     expect(observed.bulks()).toBe(0);
     expect(observed.requests.flatMap(({ texts }) => texts).sort()).toEqual([...new Set(names)].sort());
     for (const { texts, tokens } of observed.requests) {
-      expect(tokens.map(({ token }) => token)).toEqual(await Promise.all(texts.map((text) => nativeKey(index, text))));
-      // Real array responses must preserve one token per input, including duplicates at call boundaries.
-      expect(tokens).toHaveLength(texts.length);
+      const keys = await Promise.all(texts.map((text) => nativeKey(index, text)));
+      // Empty input has no native token; ignorable input may still have one token whose exact key is empty.
+      expect(tokens.map(({ token }) => token)).toEqual(keys.filter((_, n) => texts[n] !== ''));
     }
 
     const bulk = await search.bulk<{ errors: boolean }>(bulkLines(index, prepared), {
@@ -206,7 +219,7 @@ test('native normalization bounds complete name sort values on writes while pres
       expect(page).toBeLessThan(prepared.length);
     }
     expect(pageHits).toEqual(all.body.hits.hits);
-    expect(new Set(pageHits.map(({ _id }) => _id)).size).toBe(9);
+    expect(new Set(pageHits.map(({ _id }) => _id)).size).toBe(names.length + 1);
     const missing = pageHits.filter(({ sort }) => sort[0] === null);
     expect(missing.map(({ _id }) => _id)).toEqual([1, 6, 8, 90].map((n) => subject(n, null).id));
     expect(pageHits.slice(-missing.length)).toEqual(missing);
@@ -220,7 +233,14 @@ test('native normalization bounds complete name sort values on writes while pres
     const bounded = await prepare(batches.client, index, many);
     expect(many).toEqual(manyBefore);
     expect(batches.requests.flatMap(({ texts }) => texts).sort()).toEqual([...manyNames, 'key 0'].sort());
-    expect(batches.maximum()).toBeLessThanOrEqual(256);
+    expect(batches.requests.map(({ texts }) => texts.length).sort((a, b) => a - b)).toEqual([
+      2,
+      MAX_ANALYSIS_BATCH_VALUES,
+    ]);
+    expect(batches.maximum()).toBeLessThanOrEqual(ENGINE_ANALYSIS_LIMITS.concurrency);
+    expect(MAX_ANALYSIS_BATCH_VALUES * ENGINE_ANALYSIS_LIMITS.concurrency).toBeLessThanOrEqual(
+      ENGINE_ANALYSIS_LIMITS.tokens,
+    );
     const native = new Map<string, string>();
     for (const { texts, tokens } of batches.requests) {
       const keys = await Promise.all(texts.map((text) => nativeKey(index, text)));
@@ -236,9 +256,26 @@ test('native normalization bounds complete name sort values on writes while pres
         document: { ...original.document, name_sort: native.get(original.document.name_sort)! },
       });
     }
-    // Per-value fallback costs one real request per DISTINCT name; never describe it as one batched request.
-    if (batches.requests.every(({ texts }) => texts.length === 1)) expect(batches.requests).toHaveLength(258);
-    else expect(batches.requests.length).toBeGreaterThanOrEqual(2);
+    const byteNames = Array.from({ length: 6 }, (_, n) => `${'x'.repeat(11_999)}${n}`);
+    const byteBatches = observe(index);
+    await prepare(byteBatches.client, index, actionsFor(byteNames.map((name, n) => subject(2000 + n, name))));
+    expect(byteBatches.requests.map(({ texts }) => texts).sort((a, b) => a.length - b.length)).toEqual([
+      byteNames.slice(5),
+      byteNames.slice(0, 5),
+    ]);
+
+    const overBudgetName = 'z'.repeat(MAX_ANALYSIS_BATCH_BYTES + 1);
+    const indivisibleBatches = observe(index);
+    await prepare(
+      indivisibleBatches.client,
+      index,
+      actionsFor([subject(3000, overBudgetName), subject(3001, 'nearby')]),
+    );
+    expect(
+      indivisibleBatches.requests
+        .map(({ texts, bytes }) => [texts, bytes > MAX_ANALYSIS_BATCH_BYTES])
+        .sort((a, b) => Number(b[1]) - Number(a[1])),
+    ).toEqual([[[overBudgetName], true], [['nearby'], false]]);
 
     const empty = observe(index);
     expect(await prepare(empty.client, index, [nullAction, originals.at(-1)!])).toEqual([
