@@ -189,6 +189,7 @@ function SecurityPageView({
   const [consentHistory, setConsentHistory] = useState<ConsentReviewHistory>('none');
   const [passwordError, setPasswordError] = useState('');
   const [passwordDraftPresent, setPasswordDraftPresent] = useState(false);
+  const [passkeyRenameDraftIds, setPasskeyRenameDraftIds] = useState<Set<string>>(() => new Set());
   const [passwordLimits, setPasswordLimits] = useState<PasswordChangeLimits | null>(null);
   const [sessionNotice, setSessionNotice] = useState('');
   const [sessionError, setSessionError] = useState('');
@@ -231,8 +232,6 @@ function SecurityPageView({
   const registrationRecovery = operation?.kind === 'registration-review' ? operation : null;
   const reading = recovery?.reading ?? false;
   const operationBlocked = operation !== null;
-  const departureProtected = Boolean(passwordDraftPresent || passkeyName.trim() || operation);
-  if (departure) departure.current.protected = departureProtected;
   const [signedOutNotice, setSignedOutNotice] = useState('');
   const [targetReturn, setTargetReturn] = useState<SecurityTargetReturnOutcome | null>(null);
   const targetReturnValue = useRef<SecurityTargetReturnOutcome | null>(null);
@@ -261,6 +260,10 @@ function SecurityPageView({
   currentPasswordAdvice.current = page?.actions.change_password;
   const departureFocus = useRef<HTMLElement | null>(null);
   const focusAfterStay = useRef(false);
+  const departureProtected = Boolean(
+    passwordDraftPresent || passkeyName.trim() || passkeyRenameDraftIds.size > 0 || operation,
+  );
+  if (departure) departure.current.protected = departureProtected;
   const identity = useAccountIdentity(
     accountId,
     authorityGeneration.current,
@@ -271,6 +274,18 @@ function SecurityPageView({
     },
     identitySource,
   );
+
+  function reportPasskeyRenameDraft(owner: string, generation: number, id: string, present: boolean) {
+    const isCurrent = () => authorityGeneration.current === generation && activeAccount.current === owner;
+    if (!isCurrent()) return;
+    setPasskeyRenameDraftIds((current) => {
+      if (!isCurrent() || current.has(id) === present) return current;
+      const next = new Set(current);
+      if (present) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
 
   useLayoutEffect(() => {
     if (!focusConsentHistory.current) return;
@@ -587,6 +602,7 @@ function SecurityPageView({
     setPasskeys([]);
     setPasskeysLoad({ kind: 'hidden' });
     setPasswordDraftPresent(false);
+    setPasskeyRenameDraftIds(new Set());
     setPasswordLimits(null);
     setPasskeyName('');
     setPasswordError('');
@@ -1350,7 +1366,7 @@ function SecurityPageView({
                       {passkeys.length ? (
                         <ItemGroup aria-label={m.auth_security_passkeys_heading()}>
                           {passkeys.map((passkey) => (
-                            <Item key={passkey.id} render={<li />} variant="outline">
+                            <Item key={`${accountId}:${passkey.id}`} render={<li />} variant="outline">
                               <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
                                 <ItemContent className="min-w-0 w-full sm:w-auto">
                                   <ItemTitle className="line-clamp-none wrap-anywhere">
@@ -1383,6 +1399,9 @@ function SecurityPageView({
                                     passkey={passkey}
                                     disabled={operationBlocked}
                                     begin={beginPasskeyRename}
+                                    onDraftPresenceChange={(id, present) =>
+                                      reportPasskeyRenameDraft(accountId, renderGeneration, id, present)
+                                    }
                                     observe={(id, name) =>
                                       setPasskeys((rows) =>
                                         name === null

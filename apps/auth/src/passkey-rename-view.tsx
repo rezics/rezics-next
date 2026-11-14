@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { AuthButton as Button } from './button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from './paraglide/messages.js';
@@ -19,12 +19,14 @@ export function PasskeyRenameView({
   disabled,
   begin,
   observe,
+  onDraftPresenceChange,
 }: {
   accountId: string;
   passkey: SecurityPasskey;
   disabled: boolean;
   begin(): PasskeyRenameLease | null;
   observe(id: string, name: string | null): void;
+  onDraftPresenceChange(id: string, present: boolean): void;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(passkey.name);
@@ -32,6 +34,19 @@ export function PasskeyRenameView({
   const [notice, setNotice] = useState('');
   const lease = useRef<PasskeyRenameLease | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const reportDraft = useRef(onDraftPresenceChange);
+  reportDraft.current = onDraftPresenceChange;
+
+  useLayoutEffect(() => {
+    const id = passkey.id;
+    return () => reportDraft.current(id, false);
+  }, [passkey.id]);
+
+  function updateName(value: string) {
+    setName(value);
+    onDraftPresenceChange(passkey.id, value !== passkey.name);
+  }
+
   async function submit() {
     if (state !== 'draft') return;
     const command = createPasskeyRename(accountId, passkey.id, name);
@@ -56,6 +71,8 @@ export function PasskeyRenameView({
     lease.current = null;
     setState('draft');
     if (result.kind === 'acknowledged') {
+      setName(result.name);
+      onDraftPresenceChange(passkey.id, false);
       observe(result.id, result.name);
       setEditing(false);
       setNotice(m.auth_security_passkey_rename_saved());
@@ -82,6 +99,7 @@ export function PasskeyRenameView({
     setState('draft');
     setEditing(false);
     if (row) setName(row.name);
+    onDraftPresenceChange(passkey.id, false);
     setNotice(
       row ? m.auth_security_passkey_rename_observed({ name: row.name }) : m.auth_security_passkey_rename_history(),
     );
@@ -98,7 +116,7 @@ export function PasskeyRenameView({
             value={name}
             maxLength={128}
             disabled={state !== 'draft'}
-            onChange={(event) => setName(event.currentTarget.value)}
+            onChange={(event) => updateName(event.currentTarget.value)}
           />
           {state === 'unknown' || state === 'reading' ? (
             <Button type="button" variant="outline" disabled={state === 'reading'} onClick={() => void review()}>
@@ -121,6 +139,7 @@ export function PasskeyRenameView({
                 onClick={() => {
                   setEditing(false);
                   setName(passkey.name);
+                  onDraftPresenceChange(passkey.id, false);
                 }}
               >
                 {m.auth_security_passkey_rename_cancel()}
