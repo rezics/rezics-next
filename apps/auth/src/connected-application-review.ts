@@ -42,7 +42,9 @@ export type ConnectedApplicationReviewViewProps = {
   onFirstPage: () => void;
   onSelect: (consent: GrantedConsent, removeAll: boolean) => void;
   onRemovePermission: (scope: string) => void;
+  onRestorePermission: (scope: string) => void;
   onConfirmReview: () => void;
+  onEditSelection: () => void;
   onReduce: () => void;
   onCancel: () => void;
   canNavigatePrevious: boolean;
@@ -352,9 +354,27 @@ export function useConnectedApplicationReview({
   }
 
   function removePermission(scope: string) {
+    if (lifetime?.aborted || phase.current !== 'review') return;
     setSelection((draft) =>
-      draft && !draft.confirming ? { ...draft, retained: draft.retained.filter((entry) => entry !== scope) } : draft,
+      draft && !draft.confirming && draft.consent.granted.includes(scope)
+        ? { ...draft, retained: draft.retained.filter((entry) => entry !== scope) }
+        : draft,
     );
+  }
+
+  function restorePermission(scope: string) {
+    if (lifetime?.aborted || phase.current !== 'review') return;
+    setSelection((draft) => {
+      if (!draft || draft.confirming || !draft.consent.granted.includes(scope)) return draft;
+      const retained = new Set(draft.retained);
+      retained.add(scope);
+      return { ...draft, retained: draft.consent.granted.filter((entry) => retained.has(entry)) };
+    });
+  }
+
+  function editSelection() {
+    if (lifetime?.aborted || phase.current !== 'review') return;
+    setSelection((draft) => (draft ? { ...draft, confirming: false } : null));
   }
 
   return {
@@ -376,7 +396,9 @@ export function useConnectedApplicationReview({
     onFirstPage: () => void navigate(undefined, 'first'),
     onSelect: select,
     onRemovePermission: removePermission,
+    onRestorePermission: restorePermission,
     onConfirmReview: () => setSelection((draft) => (draft ? { ...draft, confirming: true } : null)),
+    onEditSelection: editSelection,
     onReduce: () => void reduce(),
     onCancel: cancelReview,
     canNavigatePrevious: !observationRetired && history.length > 0,

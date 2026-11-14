@@ -10,6 +10,7 @@ import {
   type ConnectedApplicationReviewViewProps,
 } from './connected-application-review';
 import { Permission, PermissionLimits, RemovablePermission } from './permission-view';
+import { permissionDescription } from './permission-description';
 import type { ConsentOperationBoundary, ConsentReviewHistory, GrantedConsent } from './security-inventory';
 import type { InventoryPage } from './security-inventory';
 
@@ -76,7 +77,9 @@ export function ConnectedApplicationReviewView({
   onFirstPage,
   onSelect,
   onRemovePermission,
+  onRestorePermission,
   onConfirmReview,
+  onEditSelection,
   onReduce,
   onCancel,
   canNavigatePrevious,
@@ -132,24 +135,60 @@ export function ConnectedApplicationReviewView({
               : m.auth_inventory_reduce_confirm({ name: row.display_name?.trim() || m.auth_inventory_unnamed() })}
           </p>
         ) : (
-          <>
-            <p>{m.auth_inventory_choose_removals()}</p>
-            <ul className="flex flex-col gap-3" aria-label={m.auth_inventory_retained()}>
-              {selection.retained.map((scope) => (
-                <li key={scope} className="grid min-w-0 gap-2">
-                  <RemovablePermission scope={scope} onRemove={() => onRemovePermission(scope)} />
-                </li>
-              ))}
-            </ul>
-          </>
+          <p>{m.auth_inventory_choose_removals()}</p>
+        )}
+        {selection.confirming ? (
+          <div className="flex min-w-0 flex-col gap-2">
+            <p>{m.auth_inventory_retained()}</p>
+            {selection.retained.length > 0 ? (
+              <ul className="flex min-w-0 flex-col gap-3" aria-label={m.auth_inventory_retained()}>
+                {selection.retained.map((scope) => (
+                  <li key={scope} className="grid min-w-0 gap-1">
+                    <Permission scope={scope} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>{m.auth_inventory_permissions({ count: 0 })}</p>
+            )}
+          </div>
+        ) : (
+          <ul className="flex min-w-0 flex-col gap-3" aria-label={m.auth_inventory_retained()}>
+            {selection.retained.map((scope) => (
+              <li key={scope} className="grid min-w-0 gap-2">
+                <RemovablePermission scope={scope} onRemove={() => onRemovePermission(scope)} />
+              </li>
+            ))}
+          </ul>
         )}
         {removed.length > 0 ? (
-          <div role="status">
+          <div className="flex min-w-0 flex-col gap-2">
             <p>{m.auth_inventory_removed()}</p>
-            <ul>
+            <ul className="flex min-w-0 flex-col gap-3" aria-label={m.auth_inventory_removed()}>
               {removed.map((scope) => (
                 <li key={scope} className="grid min-w-0 gap-1">
-                  <Permission scope={scope} />
+                  {selection.confirming ? (
+                    <Permission scope={scope} />
+                  ) : (
+                    <>
+                      <Permission scope={scope} />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="justify-self-start text-start wrap-anywhere"
+                        aria-label={m.auth_inventory_restore_permission_exact({
+                          permission: permissionDescription(scope).label,
+                          scope,
+                        })}
+                        onClick={() => onRestorePermission(scope)}
+                      >
+                        {m.auth_inventory_restore_permission_exact({
+                          permission: permissionDescription(scope).label,
+                          scope,
+                        })}
+                      </Button>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
@@ -157,9 +196,14 @@ export function ConnectedApplicationReviewView({
         ) : null}
         <div className="flex flex-wrap gap-3">
           {selection.confirming ? (
-            <Button type="button" disabled={reducing || pending} aria-busy={reducing} onClick={onReduce}>
-              {selection.retained.length === 0 ? m.auth_inventory_remove() : m.auth_inventory_reduce()}
-            </Button>
+            <>
+              <Button type="button" disabled={reducing || pending} aria-busy={reducing} onClick={onReduce}>
+                {selection.retained.length === 0 ? m.auth_inventory_remove() : m.auth_inventory_reduce()}
+              </Button>
+              <Button type="button" variant="outline" disabled={reducing || pending} onClick={onEditSelection}>
+                {m.auth_inventory_edit_selection()}
+              </Button>
+            </>
           ) : (
             <Button type="button" disabled={removed.length === 0 || reducing || pending} onClick={onConfirmReview}>
               {m.auth_inventory_review_removal()}
