@@ -181,6 +181,12 @@ test('selection streams past 512, replays a rolled-back step, and seals source-o
       expect(step.progress.state).not.toBe('failed');
       progress = step.progress;
     }
+    expect(await advance(locator, crashReplayId)).toMatchObject({
+      replayed: true,
+      phase: recovered.phase,
+      processed: recovered.processed,
+      progress: recovered.progress,
+    });
     expect(progress).toMatchObject({ candidateCount: '513', settledInputCount: '513', closureMissingCount: '0' });
     await transaction((client) => sealHostedPublicationStaging(client, f.native.author.actor, locator));
 

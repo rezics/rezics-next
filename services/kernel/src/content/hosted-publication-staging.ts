@@ -103,7 +103,7 @@ type TargetIdentityRow = QueryResultRow & {
 type PreparationAdvanceReceiptRow = QueryResultRow & {
   phase: HostedPublicationAdvancePhase;
   processed: number;
-  result_checkpoint: HostedPublicationStagingCheckpoint;
+  result_checkpoint: HostedPublicationStagingCheckpoint | null;
   result_preparation: unknown | null;
 };
 export type HostedPublicationAdvanceReplay =
@@ -125,6 +125,15 @@ export type HostedPublicationAdvanceReceipt = Readonly<{
   progress: HostedPublicationStagingCheckpoint;
   response: unknown;
 }>;
+
+function savedStepCheckpoint(receipt: PreparationAdvanceReceiptRow): HostedPublicationStagingCheckpoint {
+  if (receipt.result_checkpoint === null)
+    throw stagingConflict(
+      'Hosted publication step checkpoint is unavailable; read progress and continue with a new step ID',
+    );
+  return receipt.result_checkpoint;
+}
+
 type PinnedSourceRow = QueryResultRow & {
   head_revision_id: string;
   publication_id: string | null;
@@ -275,7 +284,7 @@ export async function readHostedPublicationAdvanceReplay(
   if (!prior) return null;
   return prior.result_preparation !== null
     ? { kind: 'preparation', response: prior.result_preparation }
-    : { kind: 'staging', progress: prior.result_checkpoint };
+    : { kind: 'staging', progress: savedStepCheckpoint(prior) };
 }
 
 /** Retain one bounded immutable non-source response in the native step index. */
@@ -706,7 +715,7 @@ export async function advanceHostedPublicationStaging(
       replayed: true,
       phase: prior.phase,
       processed: prior.processed,
-      progress: prior.result_checkpoint,
+      progress: savedStepCheckpoint(prior),
     };
   }
   const live = await requireLiveStage(client, row);

@@ -334,6 +334,12 @@ test('mounted whole and nested selection builds complete private candidates with
   const wholeStep = await f.native.call('POST', `${stagePath}:advance`, { stepId: wholeStepId }, { key: wholeStepKey });
   expect(wholeStep.status).toBe(200);
   expect(wholeStep.value.stage).toMatchObject({ state: 'building', sourceFrontier: '19', candidateCount: '20' });
+  const savedWholeCheckpoint = await f.native.pool.query<{ result_checkpoint: unknown }>(
+    `SELECT result_checkpoint FROM content.hosted_publication_staging_step
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND step_id=$4`,
+    [routeOf(book.catalogueId), book.catalogueId, stageId, wholeStepId],
+  );
+  expect(savedWholeCheckpoint.rows[0]?.result_checkpoint).toEqual(wholeStep.value.stage);
   expect(await preparationEventCount(book.catalogueId)).toBe(++events);
   const freshStepReplay = await f.native.call(
     'POST',
@@ -925,6 +931,55 @@ test('whole-source advance replays retained steps and rejects stale draft or pub
   });
   expect(await candidateCount(secondStageId)).toBe(20);
   expect(await selectedRelease(book.catalogueId)).toBe(movedRelease.value.revisionId);
+});
+
+test('legacy advance receipts without checkpoints require progress recovery and a new step ID', async () => {
+  const book = await newBook(22);
+  const stageId = book.newId();
+  const stagePath = prepPath(book.path, stageId);
+  const started = await f.native.call('POST', `${book.path}:prepareRelease`, {
+    stageId,
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'whole',
+  });
+  expect(started.status).toBe(202);
+
+  const committedStep = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
+  expect(committedStep.status).toBe(200);
+  expect(committedStep.value.stage).toMatchObject({ state: 'building', sourceFrontier: '19', candidateCount: '20' });
+
+  const legacyStepId = book.newId();
+  await f.native.pool.query(
+    `INSERT INTO content.hosted_publication_staging_step
+       (route,catalogue_id,stage_id,step_id,phase,from_frontier,to_frontier,processed,result_state)
+     VALUES ($1,$2,$3,$4,'whole',-1,19,20,'more')`,
+    [routeOf(book.catalogueId), book.catalogueId, stageId, legacyStepId],
+  );
+  const retainedCounts = async () =>
+    (
+      await f.native.pool.query<{ candidates: string; steps: string }>(
+        `SELECT
+           (SELECT count(*)::text FROM content.hosted_publication_staging_candidate
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS candidates,
+           (SELECT count(*)::text FROM content.hosted_publication_staging_step
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS steps`,
+        [routeOf(book.catalogueId), book.catalogueId, stageId],
+      )
+    ).rows[0];
+  const beforeReplay = await retainedCounts();
+
+  const unavailableReplay = await f.native.call('POST', `${stagePath}:advance`, { stepId: legacyStepId });
+  expect(unavailableReplay.status).toBe(412);
+  expect(unavailableReplay.value).toMatchObject({ code: 'precondition_failed' });
+  expect(await retainedCounts()).toEqual(beforeReplay);
+
+  const current = await f.native.call('POST', `${stagePath}:progress`, {});
+  expect(current.status).toBe(200);
+  expect(current.value.stage).toMatchObject({ state: 'building', sourceFrontier: '19', candidateCount: '20' });
+  const continued = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
+  expect(continued.status).toBe(200);
+  expect(continued.value.stage).toMatchObject({ state: 'ready', sourceFrontier: '25', candidateCount: '26' });
 });
 
 test('mounted boundary rejects malformed batches and non-authors; cancel and stale intents keep A selected', async () => {
