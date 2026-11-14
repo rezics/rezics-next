@@ -259,9 +259,7 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
     return recording ? { status: 200, ...recording } : problem(404, { 'cache-control': 'no-store' });
   }
   if (id === configuredEmptyZoneId) {
-    return target.route === ''
-      ? { status: 200, ...configuredEmpty }
-      : problem(404, { 'cache-control': 'no-store' });
+    return target.route === '' ? { status: 200, ...configuredEmpty } : problem(404, { 'cache-control': 'no-store' });
   }
   if (id === composedZoneId) {
     if (target.route !== '') return problem(404, { 'cache-control': 'no-store' });

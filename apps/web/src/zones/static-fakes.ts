@@ -239,7 +239,7 @@ export const configuredStaticZoneGuideFake = {
             ja: '島は海岸から内陸へ読み進めます。点線はまだ構想中の航路です。',
             ko: '각 섬은 해안에서 안쪽으로 읽습니다. 점선은 아직 구상 중인 항로입니다.',
             de: 'Lies jede Insel von der Küste nach innen; gestrichelte Routen sind erst skizziert.',
-            fr: "Parcourez chaque île depuis la côte; les pointillés indiquent des traversées encore esquissées.",
+            fr: 'Parcourez chaque île depuis la côte; les pointillés indiquent des traversées encore esquissées.',
             es: 'Lee cada isla desde la costa; las rutas punteadas son cruces aún esbozados.',
           },
         },
