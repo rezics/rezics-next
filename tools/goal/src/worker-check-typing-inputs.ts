@@ -204,10 +204,7 @@ export function retainedKernelMigrationHeaderDefect(
   const legacyLines = new Set<string>();
   let malformedLegacySetupDiagnostic = false;
   for (const line of lines) {
-    if (
-      LEGACY_DBMATE_SETUP_DIAGNOSTIC.test(line) ||
-      LEGACY_DBMATE_SETUP_WRAPPED_DIAGNOSTIC.test(line)
-    ) {
+    if (LEGACY_DBMATE_SETUP_DIAGNOSTIC.test(line) || LEGACY_DBMATE_SETUP_WRAPPED_DIAGNOSTIC.test(line)) {
       legacyLines.add(line);
     } else if (LEGACY_DBMATE_SETUP_PREFIX.test(line)) {
       malformedLegacySetupDiagnostic = true;
