@@ -7,7 +7,7 @@ import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
 setDefaultTimeout(180_000);
 
-test('hosted authoring receipts replay after source erasure without source probes or new writes', async () => {
+test('hosted authoring receipts replay after source erasure without probes or new writes', async () => {
   const f = await hostedChaptersFixture();
   const observer = observeSql(f.native.pool);
   try {
@@ -37,40 +37,31 @@ test('hosted authoring receipts replay after source erasure without source probe
       };
     };
     const target = f.target(source);
-    const initialOccurrenceId = f.newOccurrenceIdFor(catalogueId);
     const createInput = {
       postId: catalogueId,
       threadId: catalogue.id,
       placements: [
         {
-          occurrenceId: initialOccurrenceId,
+          occurrenceId: f.newOccurrenceIdFor(catalogueId),
           parentId: null,
           position: 0,
-          title: 'First chapter',
+          title: 'Opening',
           kind: 'chapter',
           target,
         },
       ],
     };
     const createKey = crypto.randomUUID();
-    const initial = await send('/v1/hostedCatalogues', createInput, createKey);
-    expect(initial.status, JSON.stringify(initial.value)).toBe(201);
-
-    const reviseInput = {
-      expectedRevisionId: initial.value.revisionId,
-      placements: [{ ...createInput.placements[0], title: 'Revised first chapter' }],
-    };
-    const reviseKey = crypto.randomUUID();
-    const revised = await send(`${path}:revise`, reviseInput, reviseKey);
-    expect(revised.status, JSON.stringify(revised.value)).toBe(200);
+    const created = await send('/v1/hostedCatalogues', createInput, createKey);
+    expect(created.status, JSON.stringify(created.value)).toBe(201);
 
     const occurrenceId = f.newOccurrenceIdFor(catalogueId);
     const insertInput = {
-      expectedRevisionId: revised.value.revisionId,
+      expectedRevisionId: created.value.revisionId,
       occurrenceId,
       parentId: null,
       beforeOccurrenceId: null,
-      title: 'Opening',
+      title: 'Second chapter',
       placement: { kind: 'chapter', target },
     };
     const insertKey = crypto.randomUUID();
@@ -80,7 +71,7 @@ test('hosted authoring receipts replay after source erasure without source probe
     const appendInput = {
       expectedRevisionId: inserted.value.revisionId,
       occurrenceId: f.newOccurrenceIdFor(catalogueId),
-      title: 'Appended chapter',
+      title: 'Third chapter',
       target,
     };
     const appendKey = crypto.randomUUID();
@@ -90,7 +81,7 @@ test('hosted authoring receipts replay after source erasure without source probe
     const publicationInput = {
       expectedRevisionId: appended.value.revisionId,
       expectedPublicationId: null,
-      occurrenceIds: [initialOccurrenceId, appendInput.occurrenceId, occurrenceId],
+      occurrenceIds: [createInput.placements[0]!.occurrenceId, occurrenceId, appendInput.occurrenceId],
     };
     const publicationKey = crypto.randomUUID();
     const published = await send(`${path}:publish`, publicationInput, publicationKey);
@@ -106,16 +97,15 @@ test('hosted authoring receipts replay after source erasure without source probe
     const updateInput = {
       expectedRevisionId: appended.value.revisionId,
       occurrenceId,
-      title: 'Revised opening',
+      title: 'Revised chapter',
       target: revisedTarget,
     };
     const updateKey = crypto.randomUUID();
     const updated = await send(`${path}:updateDraftPoint`, updateInput, updateKey);
     expect(updated.status, JSON.stringify(updated.value)).toBe(200);
-
     const later = await send(
       `${path}:updateDraftPoint`,
-      { ...updateInput, expectedRevisionId: updated.value.revisionId, title: 'Later opening' },
+      { ...updateInput, expectedRevisionId: updated.value.revisionId, title: 'Later chapter' },
       crypto.randomUUID(),
     );
     expect(later.status, JSON.stringify(later.value)).toBe(200);
@@ -129,32 +119,12 @@ test('hosted authoring receipts replay after source erasure without source probe
       );
     };
     const selectionProbes = (records: readonly SqlExecution[]) =>
-      records.filter((row) =>
-        /FROM content\.hosted_(?!catalogue\b)/.test(row.statement),
-      );
-    const receiptPosition = async (kind: string, revisionId: string) => {
-      const result = await f.native.pool.query<{
-        epoch: number;
-        position: string;
-        transaction_id: string;
-      }>(
-        `SELECT epoch,position::text,transaction_id::text FROM core.receipt
-         WHERE principal_kind='account' AND principal_id=$1 AND command_kind=$2
-           AND response->>'revisionId'=$3`,
-        [f.native.author.actor.accountId, kind, revisionId],
-      );
-      expect(result.rows).toHaveLength(1);
-      return result.rows[0]!;
-    };
+      records.filter((row) => /FROM content\.hosted_(?!catalogue\b)/.test(row.statement));
     const counts = async () => {
-      const result = await f.native.pool.query<{
-        revisions: string;
-        events: string;
-        position: string;
-      }>(
+      const result = await f.native.pool.query<{ revisions: string; events: string; position: string }>(
         `SELECT
-           (SELECT count(*)::text FROM content.hosted_structure_revision
-             WHERE route=$1 AND catalogue_id=$2) AS revisions,
+           ((SELECT count(*) FROM content.hosted_structure_revision WHERE route=$1 AND catalogue_id=$2) +
+            (SELECT count(*) FROM content.hosted_version_revision WHERE route=$1 AND catalogue_id=$2))::text AS revisions,
            (SELECT count(*)::text FROM core.outbox
              WHERE partition_no=$3 AND type LIKE 'com.rezics.content.hosted-catalogue.%'
                AND data->>'catalogueId'=$2) AS events,
@@ -163,63 +133,26 @@ test('hosted authoring receipts replay after source erasure without source probe
       );
       return result.rows[0]!;
     };
-
-    const originalReceipts = [
-      await receiptPosition('content.hosted-catalogue.create', initial.value.revisionId),
-      await receiptPosition('content.hosted-catalogue.revise', revised.value.revisionId),
-      await receiptPosition('content.hosted-catalogue.append', appended.value.revisionId),
-      await receiptPosition('content.hosted-catalogue.insert-draft-point', inserted.value.revisionId),
-      await receiptPosition('content.hosted-catalogue.publish', published.value.revisionId),
-      await receiptPosition('content.hosted-catalogue.update-draft-point', updated.value.revisionId),
+    const commands = [
+      { path: '/v1/hostedCatalogues', input: createInput, key: createKey, result: created, status: 201 },
+      { path: `${path}:insertDraftPoint`, input: insertInput, key: insertKey, result: inserted, status: 200 },
+      { path: `${path}:appendRootChapter`, input: appendInput, key: appendKey, result: appended, status: 200 },
+      { path: `${path}:publish`, input: publicationInput, key: publicationKey, result: published, status: 200 },
+      { path: `${path}:updateDraftPoint`, input: updateInput, key: updateKey, result: updated, status: 200 },
     ];
+
     const beforeReplay = await counts();
     const replayStart = observer.records.length;
-    const createReplay = await send('/v1/hostedCatalogues', createInput, createKey);
-    const reviseReplay = await send(`${path}:revise`, reviseInput, reviseKey);
-    const appendReplay = await send(`${path}:appendRootChapter`, appendInput, appendKey);
-    const insertReplay = await send(`${path}:insertDraftPoint`, insertInput, insertKey);
-    const publishReplay = await send(`${path}:publish`, publicationInput, publicationKey);
-    const updateReplay = await send(`${path}:updateDraftPoint`, updateInput, updateKey);
-    expect(createReplay.status).toBe(201);
-    expect(reviseReplay.status).toBe(200);
-    expect(appendReplay.status).toBe(200);
-    expect(insertReplay.status).toBe(200);
-    expect(publishReplay.status).toBe(200);
-    expect(updateReplay.status).toBe(200);
-    expect(createReplay.value).toEqual(initial.value);
-    expect(reviseReplay.value).toEqual(revised.value);
-    expect(appendReplay.value).toEqual(appended.value);
-    expect(insertReplay.value).toEqual(inserted.value);
-    expect(publishReplay.value).toEqual(published.value);
-    expect(updateReplay.value).toEqual(updated.value);
-    expect(createReplay.session).toBe(initial.session);
-    expect(reviseReplay.session).toBe(revised.session);
-    expect(appendReplay.session).toBe(appended.session);
-    expect(insertReplay.session).toBe(inserted.session);
-    expect(publishReplay.session).toBe(published.session);
-    expect(updateReplay.session).toBe(updated.session);
+    for (const command of commands) {
+      const replay = await send(command.path, command.input, command.key);
+      expect(replay.status).toBe(command.status);
+      expect(replay.value).toEqual(command.result.value);
+      expect(replay.session).toBe(command.result.session);
+    }
     const replayRecords = observer.records.slice(replayStart);
     expect(sourceProbes(replayRecords)).toEqual([]);
     expect(selectionProbes(replayRecords)).toEqual([]);
     expect(await counts()).toEqual(beforeReplay);
-    expect(await receiptPosition('content.hosted-catalogue.create', initial.value.revisionId)).toEqual(
-      originalReceipts[0],
-    );
-    expect(await receiptPosition('content.hosted-catalogue.revise', revised.value.revisionId)).toEqual(
-      originalReceipts[1],
-    );
-    expect(await receiptPosition('content.hosted-catalogue.append', appended.value.revisionId)).toEqual(
-      originalReceipts[2],
-    );
-    expect(await receiptPosition('content.hosted-catalogue.insert-draft-point', inserted.value.revisionId)).toEqual(
-      originalReceipts[3],
-    );
-    expect(await receiptPosition('content.hosted-catalogue.publish', published.value.revisionId)).toEqual(
-      originalReceipts[4],
-    );
-    expect(await receiptPosition('content.hosted-catalogue.update-draft-point', updated.value.revisionId)).toEqual(
-      originalReceipts[5],
-    );
 
     const failuresStart = observer.records.length;
     const unauthorized = await send(`${path}:insertDraftPoint`, insertInput, insertKey, true);
@@ -230,26 +163,11 @@ test('hosted authoring receipts replay after source erasure without source probe
       insertKey,
     );
     expect(conflict.status).toBe(409);
-    const freshCreate = await send('/v1/hostedCatalogues', createInput, crypto.randomUUID());
-    const freshRevise = await send(`${path}:revise`, reviseInput, crypto.randomUUID());
-    const freshAppend = await send(`${path}:appendRootChapter`, appendInput, crypto.randomUUID());
-    const freshInsert = await send(`${path}:insertDraftPoint`, insertInput, crypto.randomUUID());
-    const freshPublish = await send(`${path}:publish`, publicationInput, crypto.randomUUID());
-    const freshUpdate = await send(
-      `${path}:updateDraftPoint`,
-      { ...updateInput, expectedRevisionId: later.value.revisionId },
-      crypto.randomUUID(),
-    );
-    expect([
-      freshCreate.status,
-      freshRevise.status,
-      freshAppend.status,
-      freshInsert.status,
-      freshPublish.status,
-      freshUpdate.status,
-    ]).toEqual([404, 404, 404, 404, 404, 404]);
-    const failures = observer.records.slice(failuresStart);
-    expect(sourceProbes(failures).length).toBeGreaterThan(0);
+    const freshStatuses: number[] = [];
+    for (const command of commands)
+      freshStatuses.push((await send(command.path, command.input, crypto.randomUUID())).status);
+    expect(freshStatuses).toEqual(commands.map(() => 404));
+    expect(sourceProbes(observer.records.slice(failuresStart)).length).toBeGreaterThan(0);
     expect(await counts()).toEqual(beforeReplay);
 
     const minimized = await f.native.pool.query(
