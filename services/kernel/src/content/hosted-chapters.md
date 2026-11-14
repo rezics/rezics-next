@@ -415,6 +415,12 @@ Build and reclaim already fence the stage before candidate work. A cancellation 
 activation committed first keeps its exact receipt and selected edition after cancellation or expiry. Cancellation
 does not unpublish; withdrawal remains a separate command. Exact authorized receipt replay precedes this fence.
 
+Decision: because the HTTP body accepts any syntactically valid `HostedId` for `stepId`, every fresh
+hosted-preparation advance requires that ID to share the catalogue's native route before progress is read or candidate
+materialization/page writes occur; otherwise the wrong-route ID can consume a page and cannot be corrected in place.
+The pure route precondition runs only on a receipt miss after current authorization; exact committed receipts replay
+unchanged. It reuses the staging conflict response and adds no storage query.
+
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
 Decision: advertise and enforce a 1,024-ID selection batch cap, based on an isolated interleaved 40-sample benchmark;

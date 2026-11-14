@@ -165,7 +165,7 @@ function accountActor(actor: Actor): AccountActor {
     throw new HostedPublicationStagingNotFoundError();
   return actor;
 }
-function requireRoute(id: string, expected?: number): number {
+export function requireRoute(id: string, expected?: number): number {
   const route = routeOf(id);
   if (route === null || (expected !== undefined && route !== expected))
     throw stagingConflict('Hosted publication staging identifiers must share their native route');

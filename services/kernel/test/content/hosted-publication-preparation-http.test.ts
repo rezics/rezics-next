@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, ROUTES, routeOf } from '../../src/route/route.ts';
 
 setDefaultTimeout(240_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
@@ -148,16 +148,24 @@ test('mounted whole and nested selection builds complete private candidates with
   const stageId = startBody.stageId;
   expect(started.value.stageId).toBe(stageId);
   const stagePath = prepPath(book.path, stageId);
+  const wrongRouteStepId = newId((routeOf(book.catalogueId)! + 1) % ROUTES);
 
   const wholeStepId = book.newId();
   const wholeStepKey = crypto.randomUUID();
   const wholeStep = await f.native.call('POST', `${stagePath}:advance`, { stepId: wholeStepId }, { key: wholeStepKey });
   expect(wholeStep.status).toBe(200);
   expect(wholeStep.value.stage).toMatchObject({ state: 'ready', sourceExhausted: true, candidateCount: '4' });
+  const wrongMaterialization = await f.native.call('POST', `${stagePath}:advance`, { stepId: wrongRouteStepId });
+  expect(wrongMaterialization.status).toBe(412);
+
   const stageSeal = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
   expect(stageSeal.status).toBe(200);
   expect(stageSeal.value.stage.state).toBe('sealed');
   expect(stageSeal.value.candidate).toMatchObject({ coverageComplete: false, sealed: false });
+  const wrongPage = await f.native.call('POST', `${stagePath}:advance`, { stepId: wrongRouteStepId });
+  expect(wrongPage.status).toBe(412);
+  const beforeCandidatePage = await f.native.call('POST', `${stagePath}:progress`, {});
+  expect(beforeCandidatePage.value.candidate).toMatchObject({ placementCount: '0', coverageComplete: false });
   const candidatePage = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
   expect(candidatePage.status).toBe(200);
   expect(candidatePage.value.candidate).toMatchObject({ placementCount: '4', coverageComplete: true, sealed: false });

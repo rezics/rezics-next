@@ -26,6 +26,7 @@ import {
   beginHostedPublicationStaging,
   cancelHostedPublicationStaging,
   freezeHostedPublicationSelection,
+  requireRoute,
   readHostedPublicationStagingProgress,
   readHostedPublicationStagingProgressWithExpiry,
   sealHostedPublicationStaging,
@@ -318,6 +319,9 @@ export function advanceHostedPublicationPreparation(
     { stageId, stepId },
     context,
     async (tx) => {
+      // runCommand authorizes and checks committed receipts before entering this body. This
+      // fresh-work precondition covers candidate phases before any stage or candidate work.
+      requireRoute(stepId, routeOf(catalogueId)!);
       const stageLocator = locator(catalogueId, stageId);
       const stage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
 
