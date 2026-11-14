@@ -25,8 +25,12 @@ function queryArrayResult<Row extends unknown[]>(rows: Row[]): QueryArrayResult<
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => (resolve = done));
-  return { promise, resolve };
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 
 function fakeClient(
@@ -174,6 +178,323 @@ test('an expired callback cannot use its released client', async () => {
   resume.resolve();
   expect(await callbackFinished.promise).toBeInstanceOf(RetiredReadClientError);
   expect(statements).toEqual([]);
+});
+
+test('manual BEGIN and START TRANSACTION retain custody through non-query callback expiry', async () => {
+  for (const begin of ['BEGIN', '-- read snapshot\nSTART /* outer /* nested */ comment */ TRANSACTION']) {
+    const resume = deferred<void>();
+    const callbackFinished = deferred<unknown>();
+    const released = deferred<Error | boolean | undefined>();
+    const statements: string[] = [];
+    let checkouts = 0;
+    const database = fakePool(async () => {
+      checkouts += 1;
+      if (checkouts > 1) return fakeClient(() => queryResult([{ healthy: true }]));
+      return fakeClient(
+        (config) => {
+          statements.push(config.text ?? '');
+          return queryResult([]);
+        },
+        (error) => released.resolve(error),
+      );
+    });
+    const visit = withBoundedReadConnection(database, Date.now() + 40, async (client) => {
+      await client.query(begin);
+      await resume.promise;
+      const late = await client.query('ROLLBACK').catch((error: unknown) => error);
+      callbackFinished.resolve(late);
+      return 'late';
+    });
+
+    const failure = await visit.catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(BoundedReadDeadlineError);
+    expect(await released.promise).toBe(failure);
+    expect(statements).toEqual([begin]);
+    resume.resolve();
+    expect(await callbackFinished.promise).toBeInstanceOf(RetiredReadClientError);
+    expect(statements).toEqual([begin]);
+
+    const next = await withBoundedReadConnection(database, Date.now() + 500, (client) => client.query('SELECT healthy'));
+    expect(next.rows).toEqual([{ healthy: true }]);
+    expect(checkouts).toBe(2);
+  }
+});
+
+test('only full terminal commands release manual transaction custody', async () => {
+  const cases = [
+    { commands: ['BEGIN', 'SAVEPOINT checkpoint'], open: true },
+    { commands: ['BEGIN', 'SAVEPOINT checkpoint', 'ROLLBACK TO SAVEPOINT checkpoint'], open: true },
+    {
+      commands: ['BEGIN', 'SAVEPOINT checkpoint', 'ROLLBACK WORK TO checkpoint', 'RELEASE SAVEPOINT checkpoint'],
+      open: true,
+    },
+    { commands: ['START TRANSACTION', 'COMMIT'], open: false },
+    { commands: ['BEGIN', 'ROLLBACK TRANSACTION'], open: false },
+    { commands: ['BEGIN', 'COMMIT AND CHAIN'], open: true },
+    { commands: ['BEGIN', 'ROLLBACK AND NO CHAIN'], open: false },
+  ];
+  for (const { commands, open } of cases) {
+    const resume = deferred<void>();
+    const callbackFinished = deferred<void>();
+    const released = deferred<Error | boolean | undefined>();
+    const statements: string[] = [];
+    const database = fakePool(async () =>
+      fakeClient(
+        (config) => {
+          statements.push(config.text ?? '');
+          return queryResult([]);
+        },
+        (error) => released.resolve(error),
+      ),
+    );
+    const visit = withBoundedReadConnection(database, Date.now() + 40, async (client) => {
+      for (const command of commands) await client.query(command);
+      await resume.promise;
+      callbackFinished.resolve();
+    });
+
+    await expect(visit).rejects.toBeInstanceOf(BoundedReadDeadlineError);
+    const releaseError = await released.promise;
+    if (open) expect(releaseError).toBeInstanceOf(BoundedReadDeadlineError);
+    else expect(releaseError).toBeUndefined();
+    expect(statements).toEqual(commands);
+    resume.resolve();
+    await callbackFinished.promise;
+  }
+});
+
+test('manual callback expiry preserves the configured public error mapping', async () => {
+  const deadlineError = new BoundedReadDeadlineError();
+  const mapped = new Error('mapped read deadline', { cause: deadlineError });
+  const resume = deferred<void>();
+  const released = deferred<Error | boolean | undefined>();
+  const database = fakePool(async () => fakeClient(() => queryResult([]), (error) => released.resolve(error)));
+  const visit = withBoundedReadConnection(
+    database,
+    Date.now() + 40,
+    async (client) => {
+      await client.query('BEGIN');
+      await resume.promise;
+    },
+    { deadlineError: () => deadlineError, mapError: (error) => (error === deadlineError ? mapped : error) },
+  );
+
+  expect(await visit.catch((error: unknown) => error)).toBe(mapped);
+  expect(await released.promise).toBeInstanceOf(Error);
+  resume.resolve();
+});
+
+test('manual transaction queries retain config and callback overloads without automatic completion', async () => {
+  const submitted: NativeReadQueryConfig[] = [];
+  const releases: Array<Error | boolean | undefined> = [];
+  const database = fakePool(async () =>
+    fakeClient(
+      (config) => {
+        submitted.push(config);
+        return queryResult([]);
+      },
+      (error) => releases.push(error),
+    ),
+  );
+  const request: NativeReadQueryConfig = { text: 'START TRANSACTION', values: [], query_timeout: 25 };
+  const result = await withBoundedReadConnection(database, Date.now() + 500, async (client) => {
+    await new Promise<void>((resolve, reject) => {
+      client.query(request, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      client.query('COMMIT', [], (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    return 'completed';
+  });
+
+  expect(result).toBe('completed');
+  expect(submitted.map(({ text }) => text)).toEqual(['START TRANSACTION', 'COMMIT']);
+  expect(submitted[0]?.values).toBe(request.values);
+  expect(submitted[0]?.query_timeout).toBe(25);
+  expect(submitted[0]).not.toBe(request);
+  expect(request.query_timeout).toBe(25);
+  expect(releases).toEqual([undefined]);
+});
+
+test('returning with manual work open rolls back and rejects without silently committing', async () => {
+  const statements: string[] = [];
+  const releases: Array<Error | boolean | undefined> = [];
+  const database = fakePool(async () =>
+    fakeClient(
+      (config) => {
+        statements.push(config.text ?? '');
+        return queryResult([]);
+      },
+      (error) => releases.push(error),
+    ),
+  );
+
+  await expect(
+    withBoundedReadConnection(database, Date.now() + 500, async (client) => {
+      await client.query('BEGIN');
+      return 'unfinished';
+    }),
+  ).rejects.toThrow('manual transaction still open');
+  expect(statements).toEqual(['BEGIN', 'ROLLBACK']);
+  expect(releases).toEqual([undefined]);
+});
+
+test('settled PostgreSQL transaction errors remain recoverable before the deadline', async () => {
+  for (const rejected of ['BEGIN', 'COMMIT', 'ROLLBACK', 'ROLLBACK TO SAVEPOINT missing']) {
+    const serverError = Object.assign(new Error('transaction command rejected'), { code: '42601', severity: 'ERROR' });
+    const statements: string[] = [];
+    const releases: Array<Error | boolean | undefined> = [];
+    let rejectNext = true;
+    const database = fakePool(async () =>
+      fakeClient(
+        (config) => {
+          statements.push(config.text ?? '');
+          if (config.text === rejected && rejectNext) {
+            rejectNext = false;
+            return Promise.reject(serverError);
+          }
+          return queryResult([]);
+        },
+        (error) => releases.push(error),
+      ),
+    );
+
+    const result = await withBoundedReadConnection(database, Date.now() + 500, async (client) => {
+      if (rejected !== 'BEGIN') await client.query('BEGIN');
+      const failure = await client.query(rejected).catch((error: unknown) => error);
+      expect(failure).toBe(serverError);
+      if (rejected !== 'BEGIN') await client.query('ROLLBACK');
+      return 'recovered';
+    });
+    expect(result).toBe('recovered');
+    expect(statements).toEqual(rejected === 'BEGIN' ? ['BEGIN'] : ['BEGIN', rejected, 'ROLLBACK']);
+    expect(releases).toEqual([undefined]);
+  }
+});
+
+test('failed manual terminal commands retain unresolved custody until expiry', async () => {
+  for (const terminal of ['COMMIT', 'ROLLBACK']) {
+    const serverError = Object.assign(new Error('terminal command rejected'), { code: '40001', severity: 'ERROR' });
+    const resume = deferred<void>();
+    const released = deferred<Error | boolean | undefined>();
+    const statements: string[] = [];
+    const database = fakePool(async () =>
+      fakeClient(
+        (config) => {
+          statements.push(config.text ?? '');
+          return config.text === terminal ? Promise.reject(serverError) : queryResult([]);
+        },
+        (error) => released.resolve(error),
+      ),
+    );
+    const visit = withBoundedReadConnection(database, Date.now() + 40, async (client) => {
+      await client.query('BEGIN');
+      const failure = await client.query(terminal).catch((error: unknown) => error);
+      expect(failure).toBe(serverError);
+      await resume.promise;
+    });
+
+    await expect(visit).rejects.toBeInstanceOf(BoundedReadDeadlineError);
+    expect(await released.promise).toBeInstanceOf(BoundedReadDeadlineError);
+    expect(statements).toEqual(['BEGIN', terminal]);
+    resume.resolve();
+  }
+});
+
+test('late native transaction responses cannot rehabilitate a discarded checkout or replace its first cause', async () => {
+  const cases = [
+    { pending: 'BEGIN', failed: false },
+    { pending: 'COMMIT', failed: false },
+    { pending: 'ROLLBACK', failed: false },
+    { pending: 'COMMIT', failed: true },
+    { pending: 'ROLLBACK', failed: true },
+  ];
+  for (const { pending, failed } of cases) {
+    const native = deferred<FakeQueryResult>();
+    const released = deferred<Error | boolean | undefined>();
+    const releases: Array<Error | boolean | undefined> = [];
+    const statements: string[] = [];
+    let client!: PoolClient;
+    const database = fakePool(async () =>
+      fakeClient(
+        (config) => {
+          statements.push(config.text ?? '');
+          return config.text === pending ? native.promise : queryResult([]);
+        },
+        (error) => {
+          releases.push(error);
+          released.resolve(error);
+        },
+      ),
+    );
+    const visit = withBoundedReadConnection(database, Date.now() + 40, async (current) => {
+      client = current;
+      await client.query('BEGIN');
+      if (pending !== 'BEGIN') await client.query(pending);
+    });
+
+    const failure = await visit.catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(BoundedReadDeadlineError);
+    expect(await released.promise).toBe(failure);
+    if (failed) native.reject(Object.assign(new Error('late server error'), { code: '40001', severity: 'ERROR' }));
+    else native.resolve(queryResult([]));
+    await native.promise.catch(() => {});
+    await expect(client.query('SELECT stale')).rejects.toBeInstanceOf(RetiredReadClientError);
+    expect(releases).toEqual([failure]);
+    expect(statements).toEqual(pending === 'BEGIN' ? ['BEGIN'] : ['BEGIN', pending]);
+  }
+});
+
+test('manual rollback cannot extend the deadline or replace the original work failure', async () => {
+  const original = new Error('callback failed');
+  const rollback = deferred<FakeQueryResult>();
+  const released = deferred<Error | boolean | undefined>();
+  const statements: string[] = [];
+  const database = fakePool(async () =>
+    fakeClient(
+      (config) => {
+        statements.push(config.text ?? '');
+        return config.text === 'ROLLBACK' ? rollback.promise : queryResult([]);
+      },
+      (error) => released.resolve(error),
+    ),
+  );
+  const visit = withBoundedReadConnection(database, Date.now() + 40, async (client) => {
+    await client.query('BEGIN');
+    throw original;
+  });
+
+  expect(await visit.catch((error: unknown) => error)).toBe(original);
+  expect(await released.promise).toBeInstanceOf(Error);
+  expect(statements).toEqual(['BEGIN', 'ROLLBACK']);
+  rollback.resolve(queryResult([]));
+});
+
+test('a caught uncertain terminal failure remains the first cause when callback work expires', async () => {
+  const original = new Error('commit connection lost');
+  const resume = deferred<void>();
+  const released = deferred<Error | boolean | undefined>();
+  const database = fakePool(async () =>
+    fakeClient(
+      (config) => (config.text === 'COMMIT' ? Promise.reject(original) : queryResult([])),
+      (error) => released.resolve(error),
+    ),
+  );
+  const visit = withBoundedReadConnection(database, Date.now() + 40, async (client) => {
+    await client.query('BEGIN');
+    expect(await client.query('COMMIT').catch((error: unknown) => error)).toBe(original);
+    await resume.promise;
+  });
+
+  expect(await visit.catch((error: unknown) => error)).toBe(original);
+  expect(await released.promise).toBe(original);
+  resume.resolve();
 });
 
 test('nested checkout is refused before another physical connection is requested', async () => {

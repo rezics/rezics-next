@@ -48,6 +48,46 @@ function isPostgresServerError(error: unknown): boolean {
   return typeof details.code === 'string' && /^[0-9A-Z]{5}$/.test(details.code) && details.severity === 'ERROR';
 }
 
+/** Savepoint rollback and transaction chaining retain the current checkout's custody. */
+function transactionStateAfter(sql = ''): 'none' | 'open' | undefined {
+  let offset = 0;
+  const word = (): string | undefined => {
+    while (offset < sql.length) {
+      const space = /^(?:\s+|--[^\r\n]*)/.exec(sql.slice(offset));
+      if (space) {
+        offset += space[0].length;
+        continue;
+      }
+      if (!sql.startsWith('/*', offset)) break;
+      offset += 2;
+      let depth = 1;
+      while (depth > 0 && offset < sql.length) {
+        if (sql.startsWith('/*', offset)) {
+          depth += 1;
+          offset += 2;
+        } else if (sql.startsWith('*/', offset)) {
+          depth -= 1;
+          offset += 2;
+        } else offset += 1;
+      }
+    }
+    const token = /^[a-z]+/i.exec(sql.slice(offset))?.[0];
+    if (token === undefined) return undefined;
+    offset += token.length;
+    return token.toUpperCase();
+  };
+
+  const command = word();
+  if (command === 'BEGIN' || command === 'SAVEPOINT' || command === 'RELEASE') return 'open';
+  if (command === 'START') return word() === 'TRANSACTION' ? 'open' : undefined;
+  if (command !== 'COMMIT' && command !== 'END' && command !== 'ROLLBACK' && command !== 'ABORT') return undefined;
+  let next = word();
+  if (next === 'PREPARED') return undefined;
+  if (next === 'WORK' || next === 'TRANSACTION') next = word();
+  if (command === 'ROLLBACK' && next === 'TO') return 'open';
+  return next === 'AND' && word() === 'CHAIN' ? 'open' : 'none';
+}
+
 function mapError(error: unknown, options: BoundedReadLifetimeOptions): unknown {
   if (!options.mapError) return error;
   try {
@@ -113,7 +153,8 @@ export function withBoundedReadLifetime<T>(
   let uncertainty: unknown;
   let activeQueries = 0;
   const settledServerErrors = new WeakSet<object>();
-  let transaction: 'none' | 'beginning' | 'open' | 'committing' | 'rolling-back' | 'committed' | 'rolled-back' = 'none';
+  // Native custody is independent of whether this helper owns automatic completion.
+  let transaction: 'none' | 'open' = 'none';
   let hasFailure = false;
   let firstFailure: unknown;
 
@@ -174,9 +215,10 @@ export function withBoundedReadLifetime<T>(
       else if (typeof config.query_timeout === 'number' && config.query_timeout > 0)
         config.query_timeout = Math.min(config.query_timeout, timeout);
 
-      const command = /^\s*(BEGIN|COMMIT|ROLLBACK)\b/i.exec(config.text ?? '')?.[1]?.toUpperCase();
+      const transactionAfter = transactionStateAfter(config.text);
       let dispatched = false;
       let settled = false;
+      let nativeFailed = false;
       const native = Promise.resolve().then(() => {
         if (retired) throw retiredError();
         if (uncertain) throw uncertainty;
@@ -187,12 +229,16 @@ export function withBoundedReadLifetime<T>(
       });
       const observed = native.then(
         (result) => {
+          // Observe native completion even if the deadline already retired the wrapper.
+          // A late terminal response must never undo an earlier discard.
+          if (dispatched && transactionAfter !== undefined) transaction = transactionAfter;
           settled = true;
           if (dispatched) activeQueries -= 1;
           return result;
         },
         (error: unknown) => {
           settled = true;
+          nativeFailed = true;
           if (dispatched) activeQueries -= 1;
           throw error;
         },
@@ -200,15 +246,20 @@ export function withBoundedReadLifetime<T>(
 
       const completion = until(observed, deadline, deadlineError).catch((error: unknown) => {
         const mapped = mapError(error, options);
-        const settledServerError = settled && isPostgresServerError(error);
+        const settledServerError = nativeFailed && isPostgresServerError(error);
         if (settledServerError) {
           if (typeof error === 'object' && error !== null) settledServerErrors.add(error);
           if (typeof mapped === 'object' && mapped !== null) settledServerErrors.add(mapped);
         }
         const uncertainSettledError =
-          !settledServerError && (isUncertain(error) || options.isUncertainSettledQueryError?.(error) === true);
-        if (dispatched && (!settled || command !== undefined || uncertainSettledError || Date.now() >= deadline))
+          nativeFailed &&
+          !settledServerError &&
+          (transactionAfter !== undefined || isUncertain(error) || options.isUncertainSettledQueryError?.(error) === true);
+        if (dispatched && (!settled || uncertainSettledError)) {
+          // Catching an uncertain native failure cannot erase the lifetime's first cause.
+          remember(mapped);
           discard(mapped);
+        }
         throw mapped;
       });
       return completeWithCallback(completion);
@@ -217,9 +268,7 @@ export function withBoundedReadLifetime<T>(
     const run = async (): Promise<T> => {
       try {
         if (options.transaction === 'repeatable-read-read-only') {
-          transaction = 'beginning';
           await client.query(begin);
-          transaction = 'open';
         }
 
         const result = await read(client);
@@ -231,9 +280,9 @@ export function withBoundedReadLifetime<T>(
         }
 
         if (transaction === 'open') {
-          transaction = 'committing';
+          if (options.transaction !== 'repeatable-read-read-only')
+            throw new Error('A bounded database read returned with a manual transaction still open');
           await client.query('COMMIT');
-          transaction = 'committed';
         }
         return result;
       } catch (error) {
@@ -245,10 +294,8 @@ export function withBoundedReadLifetime<T>(
           if (uncertain || activeQueries > 0 || Date.now() >= deadline) {
             discard(firstFailure);
           } else {
-            transaction = 'rolling-back';
             try {
               await client.query('ROLLBACK');
-              transaction = 'rolled-back';
             } catch (rollbackError) {
               discard(rollbackError);
             }
@@ -263,14 +310,7 @@ export function withBoundedReadLifetime<T>(
     } catch (error) {
       const mapped = mapError(error, options);
       remember(mapped);
-      if (
-        activeQueries > 0 ||
-        transaction === 'beginning' ||
-        transaction === 'open' ||
-        transaction === 'committing' ||
-        transaction === 'rolling-back'
-      )
-        discard(firstFailure);
+      if (activeQueries > 0 || transaction === 'open') discard(firstFailure);
       throw firstFailure;
     } finally {
       retired = true;
@@ -279,15 +319,7 @@ export function withBoundedReadLifetime<T>(
 
   return until(operation, deadline, deadlineError).catch((error: unknown) => {
     retired = true;
-    if (
-      connection &&
-      (activeQueries > 0 ||
-        transaction === 'beginning' ||
-        transaction === 'open' ||
-        transaction === 'committing' ||
-        transaction === 'rolling-back')
-    )
-      discard(hasFailure ? firstFailure : error);
+    if (connection && (activeQueries > 0 || transaction === 'open')) discard(hasFailure ? firstFailure : error);
     if (hasFailure) throw firstFailure;
     throw mapError(error, options);
   });
