@@ -75,17 +75,14 @@ Focused native coverage is in `services/kernel/test/library/personal-http.test.t
 
 ## Web receiving
 
-The installed generated Kernel HTTP client still has no typed methods for
-listEntryStateHistory(actor, subjectId, {cursor?, limit?}), reviewEntryStateChange(actor, subjectId,
-changeRevision) or restoreEntryState(actor, subjectId, changeRevision, {incarnationId,currentRevision}, requestKey).
-Native Kernel HTTP routes and command types exist; Web does not bind them until those generated signatures and the
-coverage contract are installed. The Subject Library visit labels this capability unavailable; it does not query a
-guessed route, cast a substitute client or treat an empty history page as complete. State history remains distinct
-from the occurrence diary. No bounded keyset history, addressed review or guarded restore is added in this increment.
+The generated Kernel HTTP client includes the typed page, addressed review and restore routes in
+`packages/client/src/kernel/library/personal-routes.d.ts`. The remaining Web work is their Subject Library binding;
+it does not require a second client or new native route. State history remains distinct from the occurrence diary.
 
-Before activation, install and verify the generated methods and typed problem variants, bind every request to the
-current private viewer, and retain the original restore key and operands for an explicit retry. Review must precede
+Bind every request and received response to the current private viewer, and retain the original restore key and
+operands for an explicit retry. Review must precede
 deliberate restore; stale incarnation/revision requires a new review, and restore must not recreate a missing entry.
 The native page cap remains the documented maximum of 50 with default 20; Web must retain only that addressed page
 and the fixed review/restore/readback sequence. Pruned coverage is partial, pre-install coverage unknown, and an empty
-page does not establish completeness. No state-history acceptance ran in this increment.
+page does not establish completeness. The current released profile supplies presentation labels when available;
+historical state and profile identifiers remain exact recorded evidence.
