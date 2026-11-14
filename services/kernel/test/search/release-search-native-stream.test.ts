@@ -15,6 +15,7 @@ import {
 import {
   ReleaseSearchRelevanceStateConflict,
   ReleaseSearchRelevanceStateExpired,
+  ReleaseSearchRelevanceStatePreparing,
   type ReleaseSearchRelevanceBinding,
   type ReleaseSearchRelevanceLocation,
   type ReleaseSearchRelevanceState,
@@ -32,12 +33,15 @@ const request: ReleaseGroupingRequest = {
   previewLimit: 1,
 };
 
-function memoryRelevanceState(): ReleaseSearchRelevanceState {
+function memoryRelevanceState(
+  lookups: { candidates: number; trieEdges: number; lineageNodes: number }[],
+): ReleaseSearchRelevanceState {
   let sequence = 1;
   const uuid = () => `00000000-0000-8000-8000-${String(sequence++).padStart(12, '0')}`;
   const sessions = new Map<string, { binding: string; expires: number }>();
-  const nodes = new Map<string, { parent: string | null; works: Set<string> }>();
+  const nodes = new Map<string, { parent: string | null; works: Set<string>; root: string; digest: string }>();
   const branches = new Map<string, string>();
+  const roots = new Map<string, Set<string>>();
   const key = (execution: string, node: string) => `${execution}/${node}`;
   const bindingKey = (binding: ReleaseSearchRelevanceBinding) => JSON.stringify(binding);
   function session(binding: ReleaseSearchRelevanceBinding, location: ReleaseSearchRelevanceLocation, now: number) {
@@ -55,25 +59,28 @@ function memoryRelevanceState(): ReleaseSearchRelevanceState {
     async start(binding, now, initialWorks = []) {
       const execution = uuid();
       const node = uuid();
+      const root = uuid();
+      roots.set(root, new Set(initialWorks));
       sessions.set(execution, { binding: bindingKey(binding), expires: now + 15 * 60_000 });
-      nodes.set(key(execution, node), { parent: null, works: new Set(initialWorks) });
+      nodes.set(key(execution, node), {
+        parent: null,
+        works: new Set(initialWorks),
+        root,
+        digest: JSON.stringify([...new Set(initialWorks)].sort()),
+      });
       return { execution, node };
     },
     async resume(binding, location, now) {
       session(binding, location, now).expires = now + 15 * 60_000;
     },
     async seen(binding, location, works, now) {
+      const value = nodes.get(key(location.execution, location.node));
       session(binding, location, now);
-      const candidates = new Set(works);
-      const seen = new Set<string>();
-      let current: string | null = location.node;
-      while (current !== null) {
-        const value = nodes.get(key(location.execution, current));
-        if (!value) throw new ReleaseSearchRelevanceStateExpired();
-        for (const id of value.works) if (candidates.has(id)) seen.add(id);
-        current = value.parent;
-      }
-      return seen;
+      if (!value) throw new ReleaseSearchRelevanceStateExpired();
+      const membership = roots.get(value.root);
+      if (!membership) throw new ReleaseSearchRelevanceStateExpired();
+      lookups.push({ candidates: works.length, trieEdges: works.length * 32, lineageNodes: 0 });
+      return new Set(works.filter((id) => membership.has(id)));
     },
     async advance(binding, location, branch, works, now) {
       session(binding, location, now);
@@ -82,13 +89,22 @@ function memoryRelevanceState(): ReleaseSearchRelevanceState {
       const existing = branches.get(branchKey);
       if (existing) {
         const saved = nodes.get(key(location.execution, existing))!;
-        if (JSON.stringify([...saved.works].sort()) !== JSON.stringify([...works].sort()))
+        if (saved.digest !== JSON.stringify([...new Set(works)].sort()))
           throw new ReleaseSearchRelevanceStateConflict();
         return { execution: location.execution, node: existing };
       }
       const node = uuid();
+      const root = uuid();
+      const membership = new Set(roots.get(nodes.get(key(location.execution, location.node))!.root) ?? []);
+      for (const work of works) membership.add(work);
+      roots.set(root, membership);
       branches.set(branchKey, node);
-      nodes.set(key(location.execution, node), { parent: location.node, works: new Set(works) });
+      nodes.set(key(location.execution, node), {
+        parent: location.node,
+        works: new Set(works),
+        root,
+        digest: JSON.stringify([...new Set(works)].sort()),
+      });
       return { execution: location.execution, node };
     },
   };
@@ -186,11 +202,12 @@ async function fixture() {
       return basis;
     },
   };
+  const membershipLookups: { candidates: number; trieEdges: number; lineageNodes: number }[] = [];
   const relevanceProgress = {
     principal: 'account:00000000-0000-8000-8000-000000000001',
     generation: 1,
     now: 1_800_000_000_000,
-    state: memoryRelevanceState(),
+    state: memoryRelevanceState(membershipLookups),
   };
   const release: FilterRelease = {
     types: {
@@ -215,6 +232,7 @@ async function fixture() {
     context,
     release,
     relevanceProgress,
+    membershipLookups,
     change: (patch: Partial<ReleaseGroupingBasis>) => {
       basis = { ...basis, ...patch };
     },
@@ -446,15 +464,78 @@ test('relevance resumes beyond 128 works with current ownership, interleaved rep
   const replay = await reopened.groups(relevanceRequest, firstAfter!, 20);
   expect(replay.keys).toEqual(firstNext!.keys);
   expect(replay.after).toBe(firstNext!.after);
+  const sibling = await streams.groups(relevanceRequest, firstAfter!, 5);
+  const siblingReplay = await reopened.groups(relevanceRequest, firstAfter!, 5);
+  expect(sibling.keys.some(({ kind }) => kind === 'work')).toBe(true);
+  expect(siblingReplay).toEqual(sibling);
+  expect(sibling.after).not.toBe(firstNext!.after);
   expect(maxPositionBytes).toBeLessThan(512);
   expect(results.filter(({ kind }) => kind === 'work').map(({ id }) => id)).toEqual(workIds);
   expect(new Set(results.filter(({ kind }) => kind === 'work').map(({ id }) => id)).size).toBe(129);
   expect(results.some(({ id }) => id === stale)).toBe(false);
   expect(Math.max(...nativeWindowSizes)).toBeLessThanOrEqual(20);
+  expect(Math.max(...f.membershipLookups.map(({ candidates }) => candidates))).toBeLessThanOrEqual(20);
+  expect(
+    f.membershipLookups.every(
+      ({ candidates, trieEdges, lineageNodes }) => trieEdges === candidates * 32 && lineageNodes === 0,
+    ),
+  ).toBe(true);
   f.change({ epoch: 'changed-after-relevance-page' });
   await expect(reopened.groups(relevanceRequest, firstAfter!, 20)).rejects.toBeInstanceOf(
     ReleaseGroupingRestartRequired,
   );
+});
+
+test('legacy membership preparation leaves its native candidate for the next bounded slice', async () => {
+  const f = await fixture();
+  const relevanceRequest = { ...request, sort: 'relevance' as const };
+  f.subjects[6]!.type = 'edition';
+  f.links.set(f.id(6), { complete: true, values: [{ kind: 'work', id: f.id(0) }] });
+  const nativePositions: (string | null)[] = [];
+  const relevance = async (_request: ReleaseGroupingRequest, after: string | null) => {
+    nativePositions.push(after);
+    const offset = after === null ? 0 : Number(after);
+    const keys = offset === 0
+      ? [
+          {
+            id: f.id(6),
+            pool: 'pool-0',
+            partition: subjectPartition(f.id(6)),
+            name: null,
+            securityRevision: 0,
+            after: '1',
+          },
+        ]
+      : [];
+    return { keys, after: String(offset + keys.length), exhausted: keys.length === 0 };
+  };
+  const state = f.relevanceProgress.state;
+  let prepare = true;
+  const preparingState: ReleaseSearchRelevanceState = {
+    ...state,
+    async seen(...args) {
+      if (prepare) {
+        prepare = false;
+        throw new ReleaseSearchRelevanceStatePreparing();
+      }
+      return state.seen(...args);
+    },
+  };
+  const streams = createReleaseSearchCandidateStreams({
+    ...f,
+    relevance,
+    relevanceProgress: { ...f.relevanceProgress, state: preparingState },
+  });
+  const prepared = await streams.groups(relevanceRequest, null, 1);
+  expect(prepared.keys).toEqual([]);
+  expect(prepared.exhausted).toBe(false);
+  const preparationCursor = JSON.parse(prepared.after) as { namesAfter: string | null; migrationPulse: number };
+  expect(preparationCursor.namesAfter).toBeNull();
+  expect([0, 1]).toContain(preparationCursor.migrationPulse);
+
+  const resumed = await streams.groups(relevanceRequest, prepared.after, 1);
+  expect(resumed.keys).toEqual([{ kind: 'work', id: f.id(0) }]);
+  expect(nativePositions).toEqual([null, null]);
 });
 
 test('full authority retires both streams on resume and during complete link reads, beyond name cuts', async () => {

@@ -172,11 +172,11 @@ independent per-work progress. Both streams advance past rejected candidates and
 never determine ownership. Missing complete-reader support or evidence makes the operation unavailable; explicit
 incomplete evidence remains unproven, and concealed targets retain the owner's identity-free unknown value.
 
-The encrypted cursor carries only the execution and node UUIDs (plus an alternating private migration pulse while
-an old position is being prepared); it never exposes work IDs. The retained execution binds the principal, complete
-request, physical generation and source cut. Resume renews the cursor's 15-minute expiry; new traversals perform
-fixed-size cleanup sweeps. Each state SQL operation is included in the native search-read reservation. Child
-expansion remains independently keyset-paged and does not depend on this state.
+The encrypted cursor keeps its native position and binding with opaque execution and node UUIDs (plus an alternating
+private migration pulse while an old position is being prepared); it never exposes work IDs. The retained execution
+binds the principal, complete request, physical generation and source cut. Resume renews the cursor's 15-minute
+expiry; new traversals perform fixed-size cleanup sweeps. Each state SQL operation is included in the native
+search-read reservation. Child expansion remains independently keyset-paged and does not depend on this state.
 
 Its retained cut includes a required full-authority observer in addition to every pool's canonical-name population.
 Current snapshot positions and security revisions must agree with their name homes. Release, physical generation
