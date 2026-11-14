@@ -12512,6 +12512,5 @@
   "moderation_scope_catalogue": "Catálogo",
   "moderation_case_open": "Abrir caso",
   "moderation_action_target": "La acción se aplica a",
-  "moderation_action_review_hint": "Revisa el destino exacto y el motivo antes de enviar.",
-  "moderation_case_references": "Referencias del caso"
+  "moderation_action_review_hint": "Revisa el destino exacto y el motivo antes de enviar."
 }

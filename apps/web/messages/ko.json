@@ -12512,6 +12512,5 @@
   "moderation_scope_catalogue": "카탈로그",
   "moderation_case_open": "사례 열기",
   "moderation_action_target": "작업 대상",
-  "moderation_action_review_hint": "보내기 전에 정확한 대상과 사유를 확인하세요.",
-  "moderation_case_references": "사례 참조 정보"
+  "moderation_action_review_hint": "보내기 전에 정확한 대상과 사유를 확인하세요."
 }

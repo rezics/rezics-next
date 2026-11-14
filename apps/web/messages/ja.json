@@ -12512,6 +12512,5 @@
   "moderation_scope_catalogue": "カタログ",
   "moderation_case_open": "案件を開く",
   "moderation_action_target": "操作の対象",
-  "moderation_action_review_hint": "送信前に対象と理由を確認してください。",
-  "moderation_case_references": "案件の参照情報"
+  "moderation_action_review_hint": "送信前に対象と理由を確認してください。"
 }

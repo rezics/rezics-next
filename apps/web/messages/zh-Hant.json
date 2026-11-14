@@ -12512,6 +12512,5 @@
   "moderation_scope_catalogue": "目錄",
   "moderation_case_open": "開啟案件",
   "moderation_action_target": "操作對象",
-  "moderation_action_review_hint": "送出前請核對確切對象和理由。",
-  "moderation_case_references": "案件參照資訊"
+  "moderation_action_review_hint": "送出前請核對確切對象和理由。"
 }

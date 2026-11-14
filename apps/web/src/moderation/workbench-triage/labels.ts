@@ -72,8 +72,7 @@ export function workbenchTriageTime(createdAt: string, locale: string): { iso: s
         dateStyle: 'medium',
         timeStyle: 'short',
         timeZone: 'UTC',
-        timeZoneName: 'short',
-      }).format(date),
+      }).format(date) + ' UTC',
     };
   } catch {
     return null;

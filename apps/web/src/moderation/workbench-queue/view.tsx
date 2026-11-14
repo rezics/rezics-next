@@ -98,32 +98,32 @@ function CaseRow({
       ) : null}
       <WorkbenchTriageSummary item={item} />
       <div className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-1">
-      <a
-        aria-label={m.moderation_workbench_open_case({ id: item.id })}
-        className={`${control} justify-start px-0 text-left font-medium underline underline-offset-4`}
-        href={href}
-        onClick={(event) => {
-          if (isCurrent && !isCurrent()) event.preventDefault();
-          else if (
-            onOpenCase &&
-            event.button === 0 &&
-            !event.metaKey &&
-            !event.ctrlKey &&
-            !event.shiftKey &&
-            !event.altKey
-          ) {
-            event.preventDefault();
-            const source = event.currentTarget;
-            const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
-            const open = () => onOpenCase(item, href, source, keyboard);
-            requestDeparture(open);
-          }
-        }}
-        {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
-      >
-        {m.moderation_case_open()}
-      </a>
-      <WorkbenchTriageDetails item={item} identity={identity} />
+        <a
+          aria-label={m.moderation_workbench_open_case({ id: item.id })}
+          className={`${control} justify-start px-0 text-left font-medium underline underline-offset-4`}
+          href={href}
+          onClick={(event) => {
+            if (isCurrent && !isCurrent()) event.preventDefault();
+            else if (
+              onOpenCase &&
+              event.button === 0 &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              const source = event.currentTarget;
+              const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
+              const open = () => onOpenCase(item, href, source, keyboard);
+              requestDeparture(open);
+            }
+          }}
+          {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
+        >
+          {m.moderation_case_open()}
+        </a>
+        <WorkbenchTriageDetails item={item} identity={identity} />
       </div>
     </li>
   );
@@ -217,7 +217,7 @@ export function WorkbenchView({
           <ModerationScope
             kind={queueScope.kind}
             {...(boardId ? { id: boardId, label: page.boards.find((board) => board.id === boardId)?.title } : {})}
-            admitted={page.state === 'ready'}
+            admitted={page.state === 'ready' && isCurrent?.() !== false}
           />
         ) : <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>}
       </header>

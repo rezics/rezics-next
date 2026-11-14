@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient, SESSION_HEADER } from '@rezics/client';
 import { m } from '../src/paraglide/messages.js';
+import { routes as decisionFixtures } from '../src/kernel/fake/moderation-decisions';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 import {
   decisionNow,
@@ -90,5 +91,33 @@ test('only native permitted advice and browser admission admit appeals regardles
       expect(markup).toContain(page.decision.statement);
       if (page === unsupportedDecision) expect(markup).toContain(m.decision_appeal_unsupported());
     }
+  }
+});
+
+
+test('served decision fixtures retain readable concealed receipts with native advice and a final source header', async () => {
+  for (const state of ['open', 'pending', 'expired']) {
+    const id = `decision-${state}`;
+    const client = createKernelClient('https://kernel.test', {
+      fetch: async (url, init) => {
+        const request = new Request(String(url), init);
+        const recording = (await decisionFixtures[0]!.story!({
+          request,
+          recordings: {},
+          match: /^\/v1\/moderation-decisions\/([^/]+)$/.exec(new URL(request.url).pathname),
+        }))!;
+        const { status, headers, ...body } = recording;
+        return Response.json(body, { status, headers: headers as HeadersInit });
+      },
+    });
+    const page = await loadDecisionPage(id, decisionReadAdapters(client, 'Bearer fixture'), 'fixture-author');
+    expect(page?.decision.viewer.appeal.state).toBe(state === 'open' ? 'permitted' : 'unavailable');
+    expect(page?.decision.targetContext.state).toBe('concealed');
+    expect(page?.nativeSourceFingerprint).toHaveLength(64);
+    expect(JSON.stringify(page)).not.toContain('illustrative-decision-source');
+    const markup = renderToStaticMarkup(createElement(DecisionPageView, { page: page!, now: decisionNow }));
+    expect(markup).toContain(page!.decision.statement);
+    expect(markup).toContain(m.decision_target_concealed());
+    expect(markup).not.toContain('/posts/decision-post');
   }
 });

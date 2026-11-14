@@ -12512,6 +12512,5 @@
   "moderation_scope_catalogue": "目录",
   "moderation_case_open": "打开案件",
   "moderation_action_target": "操作对象",
-  "moderation_action_review_hint": "发送前请核对具体对象和理由。",
-  "moderation_case_references": "案件参考信息"
+  "moderation_action_review_hint": "发送前请核对具体对象和理由。"
 }

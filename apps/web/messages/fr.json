@@ -12512,6 +12512,5 @@
   "moderation_scope_catalogue": "Catalogue",
   "moderation_case_open": "Ouvrir le dossier",
   "moderation_action_target": "Cible de l’action",
-  "moderation_action_review_hint": "Vérifiez la cible exacte et le motif avant l’envoi.",
-  "moderation_case_references": "Références du dossier"
+  "moderation_action_review_hint": "Vérifiez la cible exacte et le motif avant l’envoi."
 }

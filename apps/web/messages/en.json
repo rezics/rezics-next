@@ -12519,6 +12519,5 @@
   "moderation_scope_catalogue": "Catalogue",
   "moderation_case_open": "Open case",
   "moderation_action_target": "Action applies to",
-  "moderation_action_review_hint": "Review the exact target and reason before sending.",
-  "moderation_case_references": "Case references"
+  "moderation_action_review_hint": "Review the exact target and reason before sending."
 }

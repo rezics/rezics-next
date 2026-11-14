@@ -368,6 +368,9 @@ function AppealsView({
       <header className="space-y-3">
         <p className="text-sm text-muted-foreground">{m.moderation_appeals_tab()}</p>
         <PageHeading id={headingId}>{m.moderation_appeals_heading()}</PageHeading>
+        {state === 'ready' && isCurrent?.() !== false ? (
+          <Badge variant="secondary">{m.moderation_admission_current()}</Badge>
+        ) : null}
       </header>
       <nav aria-label={m.moderation_tabs_label()} className="flex flex-wrap items-center gap-4 border-b pb-2">
         <a

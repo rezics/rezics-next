@@ -12512,6 +12512,5 @@
   "moderation_scope_catalogue": "Katalog",
   "moderation_case_open": "Fall öffnen",
   "moderation_action_target": "Aktion betrifft",
-  "moderation_action_review_hint": "Prüfe das genaue Ziel und die Begründung vor dem Senden.",
-  "moderation_case_references": "Fallreferenzen"
+  "moderation_action_review_hint": "Prüfe das genaue Ziel und die Begründung vor dem Senden."
 }

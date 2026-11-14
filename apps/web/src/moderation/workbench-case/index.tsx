@@ -22,6 +22,7 @@ import type { PrivateReportPage, Report, ReportReadInput, ReportTargetValue } fr
 import { reportPageIsCurrent, reportReadKey } from '../reports-read';
 import type { ReportQueueAction } from '../reports-view-action';
 import { ReportReviewCard } from '../reports-view-card';
+import { ModerationScope, moderationControl, moderationLink } from '../presentation';
 import { createPrivateReaderLifetime } from '../private-reader-lifetime';
 import type { ReportNavigation } from '../reports-page';
 import { reportReviewDepartureMessages, reportReviewNavigationContext } from '../reports-bulk-controls';
@@ -207,6 +208,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
   return (
     <WorkbenchCaseDetail
       report={result.report}
+      boardId={currentPage.input.boardId}
       target={result.target}
       revision={result.revision}
       {...(current.page.inspection
@@ -236,6 +238,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
 
 export function WorkbenchCaseDetail({
   report,
+  boardId,
   target,
   revision,
   reportedRevisionState,
@@ -250,6 +253,7 @@ export function WorkbenchCaseDetail({
   onRefresh,
 }: {
   report: Report;
+  boardId?: string;
   target: Parameters<typeof ReportReviewCard>[0]['target'];
   revision: ReportTargetValue | null;
   reportedRevisionState?: Parameters<typeof ReportReviewCard>[0]['reportedRevisionState'];
@@ -280,40 +284,43 @@ export function WorkbenchCaseDetail({
         <WorkbenchCaseReturnLink href={queueHref} {...(onReturnQueue ? { onReturnQueue } : {})}>
           {m.moderation_workbench_history_return()}
         </WorkbenchCaseReturnLink>
-        <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
+        <header className="space-y-4">
+          {boardId ? <ModerationScope kind="board" id={boardId} admitted={isCurrent()} /> : null}
+          <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
+        </header>
         <ReportReviewCard
           report={report}
           currentContext={
             <div className="min-w-0 space-y-2">
-                {currentState && currentState !== 'available' ? (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    {currentState === 'taken-down'
-                      ? m.moderation_target_taken_down()
-                      : currentState === 'erased'
-                        ? m.moderation_target_deleted()
-                        : currentState === 'withheld'
-                          ? m.moderation_target_withheld()
-                          : m.moderation_target_unavailable()}
-                  </p>
-                ) : null}
-                {destination ? (
-                  <nav aria-label={m.moderation_current_destination()} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              {currentState && currentState !== 'available' ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {currentState === 'taken-down'
+                    ? m.moderation_target_taken_down()
+                    : currentState === 'erased'
+                      ? m.moderation_target_deleted()
+                      : currentState === 'withheld'
+                        ? m.moderation_target_withheld()
+                        : m.moderation_target_unavailable()}
+                </p>
+              ) : null}
+              {destination ? (
+                <nav aria-label={m.moderation_current_destination()} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                  <a
+                    className={moderationLink}
+                    href={localizeHref(`/boards/${encodeURIComponent(destination.boardId)}`)}
+                  >
+                    {m.moderation_current_board({ id: destination.boardId })}
+                  </a>
+                  {destination.threadId ? (
                     <a
-                      className="min-h-11 break-all underline underline-offset-4"
-                      href={localizeHref(`/boards/${encodeURIComponent(destination.boardId)}`)}
+                      className={moderationLink}
+                      href={localizeHref(`/threads/${encodeURIComponent(destination.threadId)}`)}
                     >
-                      {m.moderation_current_board({ id: destination.boardId })}
+                      {m.moderation_current_thread({ id: destination.threadId })}
                     </a>
-                    {destination.threadId ? (
-                      <a
-                        className="min-h-11 break-all underline underline-offset-4"
-                        href={localizeHref(`/threads/${encodeURIComponent(destination.threadId)}`)}
-                      >
-                        {m.moderation_current_thread({ id: destination.threadId })}
-                      </a>
-                    ) : null}
-                  </nav>
-                ) : null}
+                  ) : null}
+                </nav>
+              ) : null}
             </div>
           }
           target={target}
@@ -372,11 +379,11 @@ export function WorkbenchCaseStatus({
           {message}
         </ContentItemHeading>
         {state === 'stale' && onRestart ? (
-          <Button className="min-h-11" variant="outline" onClick={onRestart}>
+          <Button className={moderationControl} variant="outline" onClick={onRestart}>
             {m.moderation_queue_restart()}
           </Button>
         ) : state === 'error' && onRetry ? (
-          <Button className="min-h-11" variant="outline" onClick={onRetry}>
+          <Button className={moderationControl} variant="outline" onClick={onRetry}>
             {m.moderation_queue_retry()}
           </Button>
         ) : null}
@@ -406,7 +413,7 @@ function WorkbenchCaseReturnLink({
   );
   return (
     <a
-      className="inline-flex min-h-11 items-center underline underline-offset-4"
+      className={moderationLink}
       href={href}
       onClick={(event: MouseEvent<HTMLAnchorElement>) => {
         if (!onReturnQueue || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
