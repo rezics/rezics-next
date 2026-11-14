@@ -63,7 +63,7 @@ function fixture(extra: NodeJS.ProcessEnv = {}) {
   return { ...temporary, env, command };
 }
 
-type Hosted = { child: ChildProcess; exited: Promise<void>; ready: Promise<void>; pid: number; diagnostics(): string };
+type Hosted = { child: ChildProcess; exited: Promise<void>; ready: Promise<void>; pid: number; diagnostics?(): string };
 function startHost(env: NodeJS.ProcessEnv): Hosted {
   const child = spawn(process.execPath, [runtime, '_manager-host'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let diagnostics = '';
@@ -96,7 +96,7 @@ function hostShutdownEvidence(stateDirectory: string, host: Hosted, identity: Pr
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') handoff = String(error);
   }
-  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${host.diagnostics()}`;
+  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${host.diagnostics?.() ?? ''}`;
 }
 
 function children(pid: number): ProcessIdentity[] {
@@ -1550,6 +1550,7 @@ test('a host that loaded one tools/goal revision retires once main publishes ano
     expect(code).toBe(0);
     expect(output).toContain('tools/goal is published as');
     expect(existsSync(join(f.path, 'manager.sock'))).toBe(false);
+    expect(existsSync(join(f.path, 'manager-app-servers-handoff.json'))).toBe(true);
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     await cleanHosted(f.path);

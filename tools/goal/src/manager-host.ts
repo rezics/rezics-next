@@ -460,8 +460,13 @@ function buildAppServerAttachment(pool: CodexPool, endpoint: string | undefined,
   };
 }
 
-function restartHandoffRequested(stateDirectory: string, codeRetiring: boolean | undefined): boolean {
-  if (codeRetiring) return true;
+function writeAppServerHandoffRequest(stateDirectory: string): void {
+  const path = join(stateDirectory, appServerHandoffName);
+  writeFileSync(path, JSON.stringify({ version: 1, requestedAt: Date.now(), requesterPid: process.pid }), { mode: 0o600 });
+  chmodSync(path, 0o600);
+}
+
+function restartHandoffRequested(stateDirectory: string): boolean {
   try {
     const value = JSON.parse(readFileSync(join(stateDirectory, appServerHandoffName), 'utf8')) as {
       version?: unknown;
@@ -534,7 +539,7 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
   let managers!: ManagerSessions;
   const registryPath = join(runtime.stateDirectory, appServerRegistryName);
   const handoffPath = join(runtime.stateDirectory, appServerHandoffName);
-  const handoffAppServers = () => restartHandoffRequested(runtime.stateDirectory, runtime.codeRetirement?.retiring);
+  const handoffAppServers = () => restartHandoffRequested(runtime.stateDirectory);
   const connectManagerPool = async (
     pool: CodexPool,
     onStart?: (identity: ProcessIdentity) => void,
@@ -695,7 +700,10 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
       const published = await currentCodeVersion(runtime.mainCheckout);
       // An unreadable main is not a new revision: only a readable, different tools/goal retires this host.
       if (published === undefined || published === loadedCode || stopRequested) return;
-      if (runtime.codeRetirement) runtime.codeRetirement.retiring = true;
+      if (runtime.codeRetirement) {
+        runtime.codeRetirement.retiring = true;
+        writeAppServerHandoffRequest(runtime.stateDirectory);
+      }
       console.log(
         `tools/goal is published as ${published}; this host stops after its active requests so systemd restarts it.`,
       );
