@@ -14,7 +14,15 @@ import {
   type OwnDraftSelectionRequest,
 } from '../src/threads/own-drafts/model';
 
-import { accountId, identity, mountOwnDrafts, postId, row, selected, threadId } from './own-drafts-fixture';
+import {
+  accountId,
+  identity,
+  mountOwnDrafts,
+  postId,
+  row,
+  selected,
+  threadId,
+} from './own-drafts-fixture';
 const revisionId = row().revisionId;
 
 test('explicit selection reads one exact current draft; stale or concealed revisions stay unavailable', async () => {
@@ -183,7 +191,7 @@ test('browser writing stays separate until the person names it as the editor sou
   const entry = row({ subjectIds: [unknownSubjectId] });
   const native = selected(entry, 'Server-saved body');
   native.post.body = fromMarkdown(
-    '## Server-saved body\n\n> A retained quotation\n\n- A retained item\n\nBefore >!Server secret!< after.\n\n```ts\nconst server = 1;\n```',
+    '## Server-saved body\n\n> A retained quotation\n\n- A retained item\n\nBefore >!Server secret!< after.\n\n```ts\nconst server = 1;\n```\n\nSee [^Server-1].\n\n[^Server-1]: Server citation',
     'blocks',
   );
   const browser = {
@@ -196,7 +204,10 @@ test('browser writing stays separate until the person names it as the editor sou
     state: 'unsent' as const,
     payload: prepareWriting(
       'Browser-only title',
-      fromMarkdown('## Independent browser body\n\nBefore >!Browser secret!< after.\n\n- A browser item', 'blocks'),
+      fromMarkdown(
+        '## Independent browser body\n\nBefore >!Browser secret!< after.\n\n- A browser item\n\nSee [^Browser-1].\n\n[^Browser-1]: Browser citation',
+        'blocks',
+      ),
     ),
   };
   const reader: OwnDraftReader = {
@@ -256,6 +267,25 @@ test('browser writing stays separate until the person names it as the editor sou
     // The account UI locale cannot become an unknown body's language.
     expect(previews[0]?.lang).toBe('en');
     expect(previews[1]?.lang).toBe('');
+    expect(previews[0]?.querySelector('[data-slot="document-footnotes"]')?.getAttribute('aria-label')).toBe(
+      m.document_footnotes({}, { locale }),
+    );
+    expect(previews[0]?.querySelector('summary')?.textContent).toContain(m.document_footnote({}, { locale }));
+    expect([...previews[0]!.querySelectorAll('a[aria-label]')].map((link) => link.getAttribute('aria-label'))).toContain(
+      `${m.document_go_to_footnote({}, { locale })} Server-1`,
+    );
+    const openFootnote = async (preview: Element) =>
+      act(async () => {
+        const details = preview.querySelector('details') as HTMLDetailsElement;
+        details.open = true;
+        details.dispatchEvent(new fixture.window.Event('toggle'));
+      });
+    await openFootnote(previews[0]!);
+    expect(previews[0]?.textContent).toContain('Server citation');
+    expect(previews[1]?.textContent).not.toContain('Server citation');
+    await openFootnote(previews[1]!);
+    expect(previews[1]?.textContent).toContain('Browser citation');
+    expect(previews[0]?.textContent).not.toContain('Browser citation');
     expect(previews[0]?.querySelector('blockquote')?.textContent).toContain('A retained quotation');
     expect(previews[0]?.querySelector('ul li')?.textContent).toContain('A retained item');
     expect(previews[0]?.querySelector('pre code')?.textContent).toContain('const server = 1;');
@@ -382,7 +412,7 @@ test('equal preview replacement retires disclosure, a wide inspector and late cl
   const { OwnDraftBodyPreview } = await import('../src/threads/own-drafts/body-preview');
   const fixture = await mountOwnDrafts();
   const prose = fromMarkdown(
-    '## Same supplied heading\n\nBefore >!Private conclusion!< after.\n\n```ts\nconst privateValue = 42;\n```',
+    '## Same supplied heading\n\nBefore >!Private conclusion!< after.\n\nSee [^Source-1].\n\n[^Source-1]: Private footnote\n\n```ts\nconst privateValue = 42;\n```',
     'blocks',
   );
   const document = {
@@ -406,10 +436,10 @@ test('equal preview replacement retires disclosure, a wide inspector and late cl
         }),
     },
   });
-  const render = (visitKey: string, source: 'server' | 'browser' = 'server') =>
+  const render = (visitKey: string, source: 'server' | 'browser' = 'server', supplied = document) =>
     fixture.renderComponent(
       createElement(OwnDraftBodyPreview, {
-        document,
+        document: supplied,
         source,
         visitKey,
         documentLanguage: 'ja',
@@ -423,6 +453,12 @@ test('equal preview replacement retires disclosure, a wide inspector and late cl
     expect(fixture.host.querySelector('[role="img"]')?.textContent).toContain('Unavailable supplied image');
     await fixture.click(m.thread_reveal_spoiler());
     expect(fixture.host.querySelector('.document-spoiler-revealed')?.textContent).toBe('Private conclusion');
+    const details = fixture.host.querySelector('details') as HTMLDetailsElement;
+    await act(async () => {
+      details.open = true;
+      details.dispatchEvent(new fixture.window.Event('toggle'));
+    });
+    expect(fixture.host.textContent).toContain('Private footnote');
     const headingId = fixture.host.querySelector('h2')?.id;
     await fixture.click(m.wide_document_code_inspect());
     const dialog = fixture.window.document.querySelector('[role="dialog"]');
@@ -432,9 +468,11 @@ test('equal preview replacement retires disclosure, a wide inspector and late cl
     );
     await act(async () => copy!.click());
     expect(finishCopy).toBeDefined();
-    await render('replacement', 'browser');
+    await render('replacement', 'server', structuredClone(document));
     expect(fixture.window.document.querySelector('[role="dialog"]')).toBeNull();
     expect(fixture.host.querySelector('.document-spoiler-revealed')).toBeNull();
+    expect(fixture.host.querySelector('details')?.hasAttribute('open')).toBe(false);
+    expect(fixture.host.textContent).not.toContain('Private footnote');
     expect(fixture.host.querySelector('h2')?.id).not.toBe(headingId);
     const focus = fixture.window.document.activeElement;
     await act(async () => finishCopy!());

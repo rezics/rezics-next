@@ -70,16 +70,9 @@ retirement of its state when the supplied document or reading visit changes. Its
   [reading output](../../../../../packages/ui/tests/document-body.test.ts) and
   [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
 
-Decision: Consume footnotes unchanged through the existing private `PostReadingBody` caller after Document adopts
-and delivers its snapshot format and public reading disclosure port. Bind the consumer dependency to the implementation
-change in `packages/document` and `packages/ui`, confirmed through their public entries and a linked integration brief;
-an integrated dependency revision alone does not establish producer delivery. That implementation
-owns the Document profile schemas, editor and Markdown preservation, and shared accessible reading controls. Its
-integration brief must identify the supported representation, controls and named story states before consumer fixtures
-and stories are written; Own drafts does not invent footnote payloads or controls.
-Until that implementation arrives, preserve the existing consumer source, assertions, messages and named stories.
-The next independent outcome is the producer in `packages/document` and `packages/ui`; dispatch the consumer
-continuation after that implementation and its integration brief, rather than after prerequisite documentation.
+Decision: Own drafts sends each supplied snapshot through its existing private `PostReadingBody`; the Web wrapper
+localizes footnote controls, source-plus-visit keys retire disclosure state, and explicit server or browser choices
+preserve the selected footnotes through editing and submission while later current reads keep their own returned snapshot.
 
 The integration preserves separate server, browser and current-readback source and visit identities:
 
