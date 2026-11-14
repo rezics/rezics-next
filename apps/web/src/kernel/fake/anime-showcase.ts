@@ -31,9 +31,9 @@ import {
   isAnimeShowcase,
 } from '../fixtures/anime-showcase';
 import type { FakeRoute } from '../fake-modules';
-import { communityAuthor, communityThread, communityThreadPage } from './subject-community';
+import { communityAuthor, communityBoard, communityThread, communityThreadPage } from './subject-community';
 import { authoredReadingPage } from './thread-reading-page';
-import { GLOBAL, ratingsFixtures } from './ratings';
+import { GLOBAL, QUESTION, ratingsFixtures } from './ratings';
 import { storyViewerId } from './identities';
 import collectionRecording from '../recorded/library-collection.json';
 
@@ -102,33 +102,39 @@ function threads(kind: 'review' | 'discussion', id: string, member: boolean) {
   if (sparse(id)) return [];
   const item = animeSubjectMap.get(id)!;
   const subject = { id, label: item.labels.en! };
-  return (kind === 'review' ? animeReviewTitles : discussionTitles).map((title, index) => {
-    const base = communityThread(kind, false, subject);
-    // Subject-local identity prevents a Season review opening the Series' thread.
-    const subjectIndex = animeSubjects.findIndex((row) => row.id === id);
-    const threadId = animeId(20000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index);
-    return {
-      ...base,
-      id: threadId,
-      title,
-      licence: 'CC0-1.0',
-      firstPost: {
-        ...base.firstPost,
-        id: animeId(30000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index),
-        threadId,
+  return (kind === 'review' ? animeReviewTitles : discussionTitles).map(
+    (title, index): ReturnType<typeof communityThread> => {
+      const base = communityThread(kind, false, subject);
+      const boardId = animeId(kind === 'review' ? 80 : 81);
+      // Subject-local identity prevents a Season review opening the Series' thread.
+      const subjectIndex = animeSubjects.findIndex((row) => row.id === id);
+      const threadId = animeId(20000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index);
+      return {
+        ...base,
+        id: threadId,
+        boardId,
+        title,
         licence: 'CC0-1.0',
-        revisionId: animeId(40000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index),
-        body: fromPlainText(
-          kind === 'review'
-            ? reviewBodies[index % reviewBodies.length]!
-            : `${title} Please name the season and episode you are discussing and mark spoilers for later visitors.`,
-          'blocks',
-        ),
-      },
-      reactions: { like: 12 + index, insightful: 3 + index },
-      viewerReaction: member ? 'like' : null,
-    };
-  });
+        firstPost: {
+          ...base.firstPost,
+          id: animeId(30000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index),
+          threadId,
+          boardId,
+          licence: 'CC0-1.0',
+          voteCitation: kind === 'review' ? { questionId: QUESTION, units: 14 + (index % 6), revision: 1 } : null,
+          revisionId: animeId(40000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index),
+          body: fromPlainText(
+            kind === 'review'
+              ? reviewBodies[index % reviewBodies.length]!
+              : `${title} Please name the season and episode you are discussing and mark spoilers for later visitors.`,
+            'blocks',
+          ),
+        },
+        reactions: { like: 12 + index, insightful: 3 + index },
+        viewerReaction: member ? 'like' : null,
+      };
+    },
+  );
 }
 const collectionTitles = ['Small places, wide skies', 'Quiet anime for a rainy evening', 'Cities after the last train'];
 function collections(id: string) {
@@ -507,6 +513,22 @@ export const routes: FakeRoute[] = [
       if (!isAnimeShowcase(id)) return;
       const page = windowOf(collections(id), 6, 'lists', new URL(request.url).searchParams.get('cursor') ?? undefined);
       return { status: 200, collections: page.items, count: page.count, next: page.next };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/boards\/([^/]+)$/,
+    story: ({ match }) => {
+      const kind = match?.[1] === animeId(80) ? 'review' : match?.[1] === animeId(81) ? 'discussion' : undefined;
+      if (!kind) return;
+      return {
+        status: 200,
+        board: {
+          ...communityBoard(kind),
+          id: match![1]!,
+          title: kind === 'review' ? 'Public anime reviews' : 'Public anime discussions',
+        },
+      };
     },
   },
   {
