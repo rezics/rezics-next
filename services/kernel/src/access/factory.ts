@@ -16,7 +16,7 @@ import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable }
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './credential-floor-identity.ts';
 import { installAccessClock } from './access-clock.ts';
 
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { withConnection, withBoundedReadOnlyTransaction, discardConnection } from '../database/pool.ts';
 import {
   accessCommandAttempt,
   commandAccessContext,
@@ -824,17 +824,20 @@ export function createAccess(config: AccessConfig): Access {
           }
           return false;
         };
-        return await accessCheckout(context.work, () =>
-          within(deadline, () =>
+        return await within(deadline, () =>
+          accessCheckout(context.work, () =>
             withConnection(context.pool, async (connection) => {
-              const bounded = deadlineClient(connection, deadline);
               try {
-                await accessTransaction(context.work, bounded, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-                const allowed = await evaluate(bounded);
-                await accessTransaction(context.work, bounded, 'COMMIT');
-                authoritativeTimeValue(time);
-                if (identityExpired(identity, clock)) throw new AccessUnavailableError('deadline');
-                return allowed;
+                return await within(deadline, async () => {
+                  requireAccessDeadline(deadline);
+                  const bounded = deadlineClient(connection, deadline);
+                  await accessTransaction(context.work, bounded, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+                  const allowed = await evaluate(bounded);
+                  await accessTransaction(context.work, bounded, 'COMMIT');
+                  authoritativeTimeValue(time);
+                  if (identityExpired(identity, clock)) throw new AccessUnavailableError('deadline');
+                  return allowed;
+                });
               } catch (error) {
                 // A failed ledger forbids further dispatch. Release destroys an open
                 // transaction's connection below rather than sending unadmitted IO.
@@ -880,29 +883,15 @@ export function createAccess(config: AccessConfig): Access {
       checks.push({ action, actor: gateActor, evidence });
     }
     requireAccessDeadline(context.deadline);
-    return withConnection(context.pool, async (client) => {
+    return withBoundedReadOnlyTransaction(context.pool, context.deadline, async (client) => {
       const bounded = deadlineClient(client, context.deadline);
-      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const pinned = atTimeClient(bounded, at);
-        for (const check of checks) {
-          requireAccessDeadline(context.deadline);
-          if (await gatePermissions.authorize(pinned, check.actor, check.action, resource, check.evidence)) {
-            await bounded.query('COMMIT');
-            return true;
-          }
-        }
-        await bounded.query('COMMIT');
-        return false;
-      } catch (error) {
-        try {
-          await bounded.query('ROLLBACK');
-        } catch {
-          // Preserve the original authorization failure.
-        }
-        throw error;
+      const pinned = atTimeClient(bounded, at);
+      for (const check of checks) {
+        requireAccessDeadline(context.deadline);
+        if (await gatePermissions.authorize(pinned, check.actor, check.action, resource, check.evidence)) return true;
       }
-    });
+      return false;
+    }, { deadlineError: () => new AccessUnavailableError('deadline') });
   });
   installCommandAdmission(access, admission);
   installDurableIdentityBridge(access, {
