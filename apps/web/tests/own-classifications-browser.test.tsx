@@ -2,11 +2,9 @@ import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ComponentProps } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ClassificationsReader } from '../src/ratings/own-classifications/reader';
 import { OwnClassificationsWorkspace } from '../src/ratings/own-classifications/page';
 import type { ClassificationCommands } from '../src/ratings/own-classifications/editor';
-import { OwnVotesDeparture, type OwnVotesDepartureRef } from '../src/ratings/own-votes/departure';
 import type { ClassificationIntent } from '../src/ratings/own-classifications/intent';
 import type { OwnClassificationsRead } from '../src/ratings/own-classifications/types';
 import { m } from '../src/paraglide/messages.js';
@@ -162,76 +160,6 @@ test('first-of-20 inspection stays at its opener; disclosure preserves the edito
     );
     expect(host.querySelector('section')).toBeNull();
     expect(document.activeElement).toBe(opener);
-  } finally {
-    await act(async () => root.unmount());
-    host.remove();
-  }
-});
-
-test('dirty close and switching share the editor decision; Stay also preserves an uncertain original intent', async () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  const page = classificationsPage([classificationRow(), classificationRow(1)]);
-  const departure: OwnVotesDepartureRef = { current: null };
-  const sent: ClassificationIntent[] = [];
-  const router = createRouter({
-    history: createMemoryHistory({ initialEntries: ['/'] }),
-    routeTree: createRootRoute({
-      component: () =>
-        workspace(page, {
-          confirmMovement: {
-            get current() {
-              return departure.current?.confirm ?? null;
-            },
-          },
-          departure: (dirty, locked, current, retire) => (
-            <OwnVotesDeparture
-              owner={page}
-              dirty={dirty}
-              locked={locked}
-              isCurrent={current}
-              onLeave={retire}
-              confirmMovement={departure}
-            />
-          ),
-          send: async (intent) => {
-            sent.push(intent);
-            return { kind: 'uncertain' };
-          },
-        }),
-    }),
-  });
-  const body = document.body;
-  try {
-    await act(async () => root.render(<RouterProvider router={router} />));
-    const openers = [...host.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')];
-    await act(async () => openers[0]!.click());
-    const draft = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-    await act(async () => draft.click());
-    await act(async () => button(host, m.own_classifications_close()).click());
-    expect(body.querySelector('[role="alertdialog"]')).not.toBeNull();
-    await act(async () => button(body, m.library_my_ratings_stay()).click());
-    await act(async () => openers[1]!.click());
-    await act(async () => button(body, m.library_my_ratings_stay()).click());
-    expect(host.querySelector('input[type="checkbox"]')).toBe(draft);
-    expect(draft.checked).toBe(false);
-    expect(openers[0]!.getAttribute('aria-expanded')).toBe('true');
-    await act(async () => button(host, m.own_classifications_close()).click());
-    await act(async () => button(body, m.library_my_ratings_leave()).click());
-    expect(host.querySelector('section')).toBeNull();
-    await act(async () => openers[1]!.click());
-    await act(async () => button(host, m.subject_classification_assessment_withdraw()).click());
-    await act(async () => button(host.querySelector('[role="group"]')!, m.library_my_ratings_confirm_clear()).click());
-    await act(async () => button(host, m.own_classifications_close()).click());
-    expect(body.querySelector('[role="alertdialog"]')?.textContent).toContain(m.library_my_ratings_departure_locked());
-    expect([...body.querySelectorAll('button')].some((node) => node.textContent === m.library_my_ratings_leave())).toBe(
-      false,
-    );
-    await act(async () => button(body, m.library_my_ratings_stay()).click());
-    await act(async () => button(host, m.subject_classification_assessment_retry()).click());
-    expect(sent).toHaveLength(2);
-    expect(sent[1]).toBe(sent[0]);
   } finally {
     await act(async () => root.unmount());
     host.remove();

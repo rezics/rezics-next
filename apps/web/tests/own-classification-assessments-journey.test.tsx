@@ -1,4 +1,11 @@
 import { expect, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { OwnVotesDeparture, type OwnVotesDepartureRef } from '../src/ratings/own-votes/departure';
+import type { ClassificationIntent } from '../src/ratings/own-classifications/intent';
+import { m } from '../src/paraglide/messages.js';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { OwnClassificationsWorkspace } from '../src/ratings/own-classifications/page';
 import { classificationFrontier, indexOwnClassifications } from '../src/ratings/own-classifications/inventory';
@@ -234,4 +241,161 @@ test('coordinates bound branching, failed targets, direct later entry and select
   windows.retire();
   expect(windows.path).toEqual([]);
   expect(windows.staged).toBeNull();
+});
+
+test('local close/switch preserves the inventory; Stay keeps drafts and unknown intent; replacement retires review', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library/classification-assessments' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    HTMLSelectElement: window.HTMLSelectElement,
+    HTMLInputElement: window.HTMLInputElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+    requestAnimationFrame: (callback: FrameRequestCallback) => (callback(0), 0),
+    cancelAnimationFrame: () => {},
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  const button = (scope: HTMLElement, label: string) => {
+    const found = [...scope.querySelectorAll('button')].find((node) => node.textContent === label);
+    if (!found) throw new Error(`Missing button: ${label}`);
+    return found;
+  };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const makePage = () => classificationsPage([classificationRow(), classificationRow(1)]);
+  const departure: OwnVotesDepartureRef = { current: null };
+  const sent: ClassificationIntent[] = [];
+  let retired = 0;
+  let replace!: () => void;
+  let decision: Promise<boolean> | undefined;
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+    routeTree: createRootRoute({
+      component: function Reading() {
+        const [page, setPage] = useState(makePage);
+        replace = () => setPage(makePage());
+        return (
+          <OwnClassificationsWorkspace
+            state="ready"
+            page={page}
+            frontier={frontier}
+            locale="en"
+            isCurrent={() => true}
+            onRetry={async () => {}}
+            onNext={() => {}}
+            commands={{
+              read: {
+                state: 'ready',
+                page,
+                frontier,
+                subject: page.viewer.accountId,
+                locale: 'en',
+                source: 'content.classification-ballot-own-page.v1',
+                credential: 'ab'.repeat(32),
+                observation: 'cd'.repeat(32),
+              },
+              retire: () => {
+                retired++;
+              },
+              confirmMovement: { current: (movement) => (decision = departure.current!.confirm(movement)) },
+              departure: (dirty, locked, current, retire) => (
+                <OwnVotesDeparture
+                  owner={page}
+                  dirty={dirty}
+                  locked={locked}
+                  isCurrent={current}
+                  onLeave={retire}
+                  confirmMovement={departure}
+                />
+              ),
+              csrfToken: () => 'csrf',
+              send: async (intent) => {
+                sent.push(intent);
+                return { kind: 'uncertain' };
+              },
+              review: async () => ({ kind: 'unavailable' }),
+            }}
+          />
+        );
+      },
+    }),
+  });
+  const body = document.body;
+  try {
+    await act(async () => root.render(<RouterProvider router={router} />));
+    const openers = [...host.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')];
+    await act(async () => openers[0]!.click());
+    const draft = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await act(async () => draft.click());
+    const close = button(host, m.own_classifications_close());
+    close.focus();
+    await act(async () => close.click());
+    expect(body.querySelector('[role="alertdialog"]')).not.toBeNull();
+    await act(async () => button(body, m.library_my_ratings_stay()).click());
+    expect(document.activeElement).toBe(close);
+    await act(async () => openers[1]!.click());
+    await act(async () => button(body, m.library_my_ratings_stay()).click());
+    expect(host.querySelector('input[type="checkbox"]')).toBe(draft);
+    expect(draft.checked).toBe(false);
+    expect(openers[0]!.getAttribute('aria-expanded')).toBe('true');
+    await act(async () => openers[1]!.click());
+    await act(async () => button(body, m.library_my_ratings_leave()).click());
+    expect(host.querySelector('section')?.parentElement).toBe(openers[1]!.parentElement);
+    expect(draft.isConnected).toBe(false);
+    expect(retired).toBe(0);
+    await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    await act(async () => button(host, m.own_classifications_close()).click());
+    await act(async () => button(body, m.library_my_ratings_leave()).click());
+    expect(host.querySelector('section')).toBeNull();
+    expect(host.querySelectorAll('li')).toHaveLength(2);
+    expect(retired).toBe(0);
+    await act(async () => openers[1]!.click());
+    await act(async () => button(host, m.subject_classification_assessment_withdraw()).click());
+    await act(async () => button(host.querySelector('[role="group"]')!, m.library_my_ratings_confirm_clear()).click());
+    await act(async () => button(host, m.own_classifications_close()).click());
+    expect(body.querySelector('[role="alertdialog"]')?.textContent).toContain(m.library_my_ratings_departure_locked());
+    expect([...body.querySelectorAll('button')].some((node) => node.textContent === m.library_my_ratings_leave())).toBe(
+      false,
+    );
+    await act(async () => button(body, m.library_my_ratings_stay()).click());
+    expect(host.querySelector('fieldset')?.disabled).toBe(true);
+    await act(async () => button(host, m.subject_classification_assessment_retry()).click());
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toBe(sent[0]);
+    expect(sent[0]?.csrfToken).toBe('csrf');
+    await act(async () => button(host, m.own_classifications_close()).click());
+    const pending = decision!;
+    const retiredStay = button(body, m.library_my_ratings_stay());
+    await act(async () => replace());
+    expect(await pending).toBe(false);
+    expect(body.querySelector('[role="alertdialog"]')).toBeNull();
+    await act(async () => button(host, m.subject_classification_assessment_inspect()).click());
+    const replacement = host.querySelector('section');
+    await act(async () => retiredStay.click());
+    expect(host.querySelector('section')).toBe(replacement);
+    expect(host.querySelector('fieldset')?.disabled).toBe(false);
+    expect(retired).toBe(0);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    for (const [key, value] of previous)
+      value ? Object.defineProperty(globalThis, key, value) : Reflect.deleteProperty(globalThis, key);
+    window.happyDOM.abort();
+  }
 });
