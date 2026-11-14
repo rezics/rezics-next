@@ -2334,11 +2334,70 @@ CONTROL_ROOT_FILES=set(${REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON})
 CONTROL_ROOT_DIRECTORIES=set(${REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON})
 RUN_SCRATCH_PATHS=set(${REMOTE_CHECK_RUN_SCRATCH_PATHS_JSON})
 
+PREPARATION_IO_ROOT = None
+PREPARATION_IO_NEXT = 0
+PREPARATION_IO_PHASE = None
+
+
+def preparation_io_gate():
+    global PREPARATION_IO_NEXT
+    if PREPARATION_IO_ROOT is None:
+        return
+    now = time.monotonic()
+    if now < PREPARATION_IO_NEXT:
+        return
+    deadline = float(os.environ['REMOTE_CHECK_PREPARATION_DEADLINE'])
+    phase = PREPARATION_IO_PHASE
+    waited = False
+    slots = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE']).parent / 'slots'
+    paused, _, _ = update_host_pressure(slots)
+    while paused:
+        if not waited:
+            preparation_progress(PREPARATION_IO_ROOT, 'cache-io-pressure-wait')
+            waited = True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError('absolute preparation deadline exceeded during cache I/O wait')
+        time.sleep(min(0.5, remaining))
+        paused, _, _ = update_host_pressure(slots)
+    PREPARATION_IO_NEXT = time.monotonic() + 0.25
+    if waited and phase is not None:
+        preparation_progress(PREPARATION_IO_ROOT, phase)
+
+
+def serialize_preparation_io(install):
+    def owned_install():
+        global PREPARATION_IO_ROOT, PREPARATION_IO_NEXT
+        root = Path.cwd()
+        cache = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE'])
+        cache.mkdir(parents=True, exist_ok=True)
+        deadline = float(os.environ['REMOTE_CHECK_PREPARATION_DEADLINE'])
+        preparation_progress(root, 'preparation-io-lock')
+        with (cache / '.preparation-io.lock').open('a') as owner:
+            while True:
+                try:
+                    fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError('absolute preparation deadline exceeded waiting for cache I/O')
+                    time.sleep(0.05)
+            PREPARATION_IO_ROOT, PREPARATION_IO_NEXT = root, 0
+            try:
+                return install()
+            finally:
+                PREPARATION_IO_ROOT = None
+    return owned_install
+
 
 def digest(path):
     value = hashlib.sha256()
     with open(path, 'rb') as source:
-        for block in iter(lambda: source.read(1024 * 1024), b''):
+        while True:
+            preparation_io_gate()
+            block = source.read(1024 * 1024)
+            if not block:
+                break
             value.update(block)
     return value.hexdigest()
 
@@ -2390,6 +2449,7 @@ def remove(path):
 
 def copy_entries(source, destination, entries):
     for name, entry in sorted(entries.items(), key=lambda pair: (pair[0].count('/'), pair[0])):
+        preparation_io_gate()
         target = destination / name
         kind = entry[0]
         if kind == 'directory':
@@ -2404,7 +2464,14 @@ def copy_entries(source, destination, entries):
                 target.symlink_to(entry[1])
             else:
                 # Never share mutable package inodes between runs, the artifact cache or Bun's tarball cache.
-                shutil.copy2(source / name, target)
+                with (source / name).open('rb') as incoming, target.open('wb') as outgoing:
+                    while True:
+                        preparation_io_gate()
+                        block = incoming.read(1024 * 1024)
+                        if not block:
+                            break
+                        outgoing.write(block)
+                shutil.copystat(source / name, target)
 
 
 def verified(entry, key, allocated=None):
@@ -3748,6 +3815,7 @@ def publish_artifacts(root, entry, manifest):
     # Partial staging stays private inside the owned run for normal post-command cleanup.
 
 
+@serialize_preparation_io
 def install():
     root = Path.cwd()
     if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
@@ -3914,6 +3982,8 @@ def active_packages(root):
 
 
 def preparation_progress(root, phase):
+    global PREPARATION_IO_PHASE
+    PREPARATION_IO_PHASE = phase
     path = root / '.temp/check-host/preparation-progress.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     pending = path.with_name(path.name + '.pending')
