@@ -109,6 +109,10 @@ attachment failures still write nothing; stale CAS follows preparation. Digest c
 their native command behavior. Empty withdrawal, responses, events and the existing 512-placement compatibility
 limits stay unchanged; prepared selection batches use the 1,024-ID cap below.
 
+Decision: chapter-target updates and single-chapter publication mint their write Access evidence only after exact
+selection and foreign attachment admission finish. Receipt preflight remains before those reads; transaction
+authorization and final source eligibility remain current under the original request deadline.
+
 Decision: bulk and point catalogue mutations complete exact chapter attachment admission before minting final
 attempt-bound Post authorization evidence. Keep the absolute request deadline, Access evidence TTL, receipt replay
 order, and transactional authority/container checks unchanged.

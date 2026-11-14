@@ -141,14 +141,13 @@ export async function prepareHostedPublicationPointCommand(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
+      const prepared = await prepareHostedPublicationPoint(deps, catalogueId, operation, reads, {
+        actor,
+        deadline: context.deadline,
+      });
+      // Mint current write authority after selection and foreign attachment reads.
       const evidence = await base.prepare!(attempt);
-      preparedByTime.set(
-        attempt.time,
-        await prepareHostedPublicationPoint(deps, catalogueId, operation, reads, {
-          actor,
-          deadline: context.deadline,
-        }),
-      );
+      preparedByTime.set(attempt.time, prepared);
       return evidence;
     },
     async authorize(tx, attempt, evidence) {

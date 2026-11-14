@@ -20,6 +20,7 @@ import type {
 import { issueRevisionDisclosure, revokeRevisionDisclosure } from '../../src/content/revision-disclosure.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
+import { withDelayedHostedAttachment } from './support/delayed-hosted-attachment.ts';
 
 setDefaultTimeout(180_000);
 
@@ -327,7 +328,9 @@ test('native point HTTP publishes, replaces and reads only exact ordered Book se
     selectedAncestors: [],
   };
   const publishKey = crypto.randomUUID();
-  const published = await f.native.call('POST', `${bookPath}:publishChapter`, publishInput, { key: publishKey });
+  const published = await withDelayedHostedAttachment(privateTarget.postId, () =>
+    f.native.call('POST', `${bookPath}:publishChapter`, publishInput, { key: publishKey }),
+  );
   expect(published.status).toBe(200);
   const firstPublicationId = published.value.revisionId as string;
   expect(
