@@ -13,7 +13,7 @@ export interface EditorCommand {
   /** Extra words the slash menu matches besides the localized label. */
   keywords?: readonly string[];
   active?: (editor: Editor) => boolean;
-  run: (editor: Editor, openLink: () => void, openImage?: () => void) => void;
+  run: (editor: Editor, openLink: () => void, openImage?: () => void) => boolean | void;
 }
 
 /** Block identities survive a change of text block type. */
@@ -97,17 +97,13 @@ export const touchBarFormatCommands: readonly EditorCommand[] = markCommands.fil
 export const undoCommand: EditorCommand = {
   id: 'undo',
   label: 'undo',
-  run: (editor) => {
-    undo(editor.state, (transaction) => editor.view.dispatch(transaction));
-  },
+  run: (editor) => undo(editor.state, (transaction) => editor.view.dispatch(transaction)),
 };
 
 export const redoCommand: EditorCommand = {
   id: 'redo',
   label: 'redo',
-  run: (editor) => {
-    redo(editor.state, (transaction) => editor.view.dispatch(transaction));
-  },
+  run: (editor) => redo(editor.state, (transaction) => editor.view.dispatch(transaction)),
 };
 
 const heading = (level: 1 | 2 | 3): EditorCommand => ({

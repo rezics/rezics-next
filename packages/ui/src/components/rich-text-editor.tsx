@@ -10,7 +10,7 @@ import {
 } from '@rezics/document';
 import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import { history } from '@tiptap/pm/history';
-import { NodeSelection, Plugin, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { useEditor } from '@tiptap/react';
 import { ImageIcon } from 'lucide-react';
 import {
@@ -47,7 +47,7 @@ import {
   type UploadAttachment,
   type UploadAttachmentActions,
 } from './editor-uploads.ts';
-import { availableCommands, imageCommand, runEditorCommand } from './editor-commands.ts';
+import { availableCommands, imageCommand, redoCommand, runEditorCommand, undoCommand } from './editor-commands.ts';
 import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
 
 import {
@@ -94,9 +94,26 @@ export interface RichTextEditorProps {
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
 }
 
+const resetEditorHistory = new PluginKey('resetEditorHistory');
+
 const EditorHistory = Extension.create({
   name: 'editorHistory',
-  addProseMirrorPlugins: () => [history()],
+  addProseMirrorPlugins() {
+    const plugin = history();
+    const state = plugin.spec.state!;
+    return [
+      new Plugin({
+        ...plugin.spec,
+        state: {
+          ...state,
+          apply: (transaction, value, oldState, newState) =>
+            transaction.getMeta(resetEditorHistory)
+              ? state.init({}, newState)
+              : state.apply(transaction, value, oldState, newState),
+        },
+      }),
+    ];
+  },
 });
 
 type PendingMovedUnit = { id: string; type: string };
@@ -741,7 +758,11 @@ export function RichTextEditor({
       if (externalReplacement) {
         setSnapshotError(false);
         if (schemaMatchesProfile && editor) {
-          editor.commands.setContent(normalizedValue.doc as JSONContent, { emitUpdate: false });
+          editor
+            .chain()
+            .setMeta(resetEditorHistory, true)
+            .setContent(normalizedValue.doc as JSONContent, { emitUpdate: false })
+            .run();
           lastPublishedDoc.current = editor.state.doc;
           publishedEditor.current = editor;
         } else {
@@ -910,6 +931,22 @@ export function RichTextEditor({
       if (!isCurrent()) return;
       latest.current.onKeyDown?.(event);
       if (event.defaultPrevented) return;
+
+      const key = event.key.toLowerCase();
+      const historyModifier = (event.ctrlKey || event.metaKey) && !event.altKey;
+      const historyCommand =
+        historyModifier && key === 'z'
+          ? event.shiftKey
+            ? redoCommand
+            : undoCommand
+          : event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && key === 'y'
+            ? redoCommand
+            : null;
+      if (historyCommand && editor && editor.view.hasFocus() && !editor.view.composing) {
+        // Keep caller cancellation and ProseMirror's other keymaps ahead of history. An empty stack bubbles.
+        if (historyCommand.run(editor, openLink)) event.preventDefault();
+        return;
+      }
 
       const modifier = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
       if (editable && editor && modifier && event.key.toLowerCase() === 'k' && editor.schema.marks.link) {

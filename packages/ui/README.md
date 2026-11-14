@@ -127,6 +127,20 @@ Editing continuity keeps one active document, caret, undo history and upload lif
 demand within that visit. Save and publication remain explicit actions; an uncertain command retains its independent
 frozen intent while newer edits stay in the working document.
 
+Keyboard undo (Ctrl/Cmd+Z) and redo (Ctrl/Cmd+Shift+Z or Ctrl+Y) share the toolbar's native ProseMirror history.
+Caller key handling runs first; only a handled shortcut is consumed, while composition, read-only mode and retired
+visits cannot dispatch history commands. History commands keep editor focus. Hiding the mounted editor for preview
+or version history retains its history; controlled echoes and editability toggles retain it too. An external document
+replacement clears both history stacks in the existing editor, and a replaced editor starts with its own history.
+
+This keyboard capability is inherited by Studio Book/Column ([workspace](../../apps/web/src/studio/workspace.tsx)),
+[native drafts](../../apps/web/src/studio/native-draft-composer.tsx),
+[Threads new/reply/revision](../../apps/web/src/threads/composer.tsx),
+[Knowledge private pages](../../apps/web/src/knowledge/private-page.tsx), catalogue
+[authored fields](../../apps/web/src/features/catalogue/authored-field-view.tsx),
+[Manga fields](../../apps/web/src/features/catalogue/manga-profile-field.tsx) and
+[Recipe editing](../../apps/web/src/features/catalogue/recipe-editor-view.tsx).
+
 The shared schema's [DOM round-trip contract](../document/README.md#interoperability) is inherited automatically by
 every `RichTextEditor` host: Studio workspace (Book and Column), native draft composer, thread/reply composer,
 Knowledge private editor, authored catalogue field, Manga field and Recipe editor. Caller workflow migrations remain
