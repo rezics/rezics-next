@@ -4,6 +4,8 @@ import type { PublicFilterCost } from '../semantic/index.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import type { KernelClock } from '../clock.ts';
 import type { PrivacyReductionStart, PublicFilterSource, PublicFilterProjectionFrontier } from '../semantic/index.ts';
 import type { PublicFilterSourceBinding } from '../semantic/index.ts';
@@ -26,6 +28,8 @@ import {
 import { sourceObservationIsDisclosable } from './query-privacy-observation.ts';
 
 const idle = 24 * 60 * 60 * 1000;
+const rollbackTimeoutMs = 100;
+const deadlineError = () => new Error('Facet deadline exceeded');
 const emptyCost = (): PublicFilterCost => ({
   inputKeys: 0,
   candidates: 0,
@@ -103,17 +107,74 @@ export function createFacetDiscoveryStorage(
 ) {
   const { pool, source, binding, population, scopedFacets, subjects, search, clock } = config;
   function check(context: PublicFilterConsumerContext) {
-    if (Date.now() >= context.deadline) throw new Error('Facet deadline exceeded');
+    if (!Number.isFinite(context.deadline) || Date.now() >= context.deadline) throw deadlineError();
+  }
+  /** The shared lifetime bounds checkout and every statement without imposing a read-only transaction.
+   * Physical custody outlives a refused turn only for bounded rollback; owner I/O never holds this client.
+   */
+  function connection<T>(
+    context: PublicFilterConsumerContext,
+    work: (db: PoolClient) => Promise<T>,
+    transaction = false,
+  ): Promise<T> {
+    const deadline = context.deadline;
+    let began = false;
+    let committed = false;
+    return withBoundedReadLifetime(
+      (run) =>
+        withConnection(pool, async (raw) => {
+          try {
+            // A checkout can arrive after its waiter has expired. Never return that late client to the pool.
+            if (Date.now() >= deadline) throw deadlineError();
+            return await run(raw);
+          } finally {
+            if (began && !committed) {
+              try {
+                // The expired/retired work client cannot roll back. Only cleanup uses this separate deadline.
+                await withBoundedReadLifetime(
+                  (cleanup) => cleanup(raw),
+                  discardConnection,
+                  Date.now() + rollbackTimeoutMs,
+                  (db) => db.query('ROLLBACK'),
+                  { isUncertainSettledQueryError: () => true },
+                );
+              } catch (error) {
+                discardConnection(raw, error instanceof Error ? error : new Error('Facet rollback failed'));
+              }
+            }
+            if (Date.now() >= deadline) discardConnection(raw, deadlineError());
+          }
+        }),
+      discardConnection,
+      deadline,
+      async (db) => {
+        if (!transaction) return work(db);
+        began = true;
+        await db.query('BEGIN');
+        const result = await work(db);
+        await db.query('COMMIT');
+        committed = true;
+        return result;
+      },
+      { deadlineError, isUncertainSettledQueryError: () => true },
+    );
+  }
+  function writeTransaction<T>(context: PublicFilterConsumerContext, work: (db: PoolClient) => Promise<T>) {
+    return connection(context, work, true);
   }
   async function sql<T extends import('pg').QueryResultRow>(
+    context: PublicFilterConsumerContext,
     db: Pool | PoolClient,
     meter: Meter,
     query: string,
     args: unknown[],
   ) {
-    const result = await db.query<T>(query, args);
-    if (/^(INSERT|UPDATE|DELETE)/.test(query)) meter.resultWrites += result.rowCount ?? 0;
-    return result.rows;
+    const execute = async (client: Pool | PoolClient) => {
+      const result = await client.query<T>(query, args);
+      if (/^(INSERT|UPDATE|DELETE)/.test(query)) meter.resultWrites += result.rowCount ?? 0;
+      return result.rows;
+    };
+    return db === pool ? connection(context, execute) : execute(db);
   }
   async function anchor(id: string, meter: Meter) {
     meter.accessPoints++;
@@ -272,6 +333,7 @@ export function createFacetDiscoveryStorage(
     const key = coordinates(plan, queried, joined.definition.source.partition);
     const now = clock().getTime();
     await sql(
+      context,
       pool,
       meter,
       `UPDATE search.facet_generation SET state='retired'
@@ -279,6 +341,7 @@ export function createFacetDiscoveryStorage(
       [key[0], key[1], now],
     );
     await sql(
+      context,
       pool,
       meter,
       `UPDATE search.facet_generation SET state='retired'
@@ -286,6 +349,7 @@ export function createFacetDiscoveryStorage(
       [key[0], key[1], now],
     );
     await sql(
+      context,
       pool,
       meter,
       `INSERT INTO search.facet_generation
@@ -294,6 +358,7 @@ export function createFacetDiscoveryStorage(
       [...key, plan.property, queried.snapshot.observation, now + idle],
     );
     const rows = await sql<Generation>(
+      context,
       pool,
       meter,
       `UPDATE search.facet_generation SET lease_until=$4
@@ -304,6 +369,7 @@ export function createFacetDiscoveryStorage(
     const state = rows[0];
     if (!state) {
       const current = await sql<{ state: string }>(
+        context,
         pool,
         meter,
         `SELECT state FROM search.facet_generation
@@ -314,6 +380,7 @@ export function createFacetDiscoveryStorage(
     }
     const changed = async () => {
       await sql(
+        context,
         pool,
         meter,
         `UPDATE search.facet_generation SET state='retired',expires_at=$6,version=version+1
@@ -342,6 +409,7 @@ export function createFacetDiscoveryStorage(
       terminal: string | null;
     }[] = [];
     let contributions: (StoredValue & { key: string })[] = [];
+    let failed = false;
     try {
       if (phase === 'population') {
         if (plan.scope && !scopedFacets) return false;
@@ -354,7 +422,7 @@ export function createFacetDiscoveryStorage(
               capture: { kind: 'population', queried, start: null, context },
             });
         add(meter, page.cost);
-        if (page.status === 'changed') return changed();
+        if (page.status === 'changed') return await changed();
         if (page.status !== 'progress' && page.status !== 'complete') return false;
         const expectedPopulation = plan.scope
           ? scopedFacetIdentityKey(plan.scope.identity)
@@ -401,21 +469,21 @@ export function createFacetDiscoveryStorage(
           context,
         });
         add(meter, page.cost);
-        if (page.status === 'changed') return changed();
+        if (page.status === 'changed') return await changed();
         if (page.status !== 'progress' && page.status !== 'complete') return false;
         if (
           page.source.subject !== subject ||
           page.source.terminal !== terminal ||
           page.source.securityRevision !== security
         )
-          return changed();
+          return await changed();
         if (
           page.records.length > 1 ||
           (previous && page.frontier.continuation === previous.continuation && page.status === 'progress')
         )
           return false;
         if (previous && (page.frontier.build !== previous.build || page.frontier.generation !== previous.generation))
-          return changed();
+          return await changed();
         projection = { ...page.frontier, generation: page.frontier.generation.toString() };
         for (const record of page.records) {
           if (record.subject !== subject || record.terminal !== terminal) return false;
@@ -523,6 +591,7 @@ export function createFacetDiscoveryStorage(
         }
       } else if (phase === 'contribute' && subject && terminal) {
         contributions = await sql<StoredValue & { key: string }>(
+          context,
           pool,
           meter,
           `SELECT key,value,labels,
@@ -556,20 +625,16 @@ export function createFacetDiscoveryStorage(
       )
         return false;
       meter.inputKeys += staged.length + contributions.length;
-      const db = await pool.connect();
-      try {
-        await db.query('BEGIN');
+      return await writeTransaction(context, async (db) => {
         const locked = await db.query(
           `SELECT version FROM search.facet_generation WHERE partition_no=$1 AND definition=$2
           AND generation=$3 AND version=$4 AND lease_until=$5 AND state='building' FOR UPDATE`,
           [...key, state.version, context.deadline],
         );
-        if (!locked.rowCount) {
-          await db.query('ROLLBACK');
-          return false;
-        }
+        if (!locked.rowCount) return false;
         for (const value of staged)
           await sql(
+            context,
             db,
             meter,
             `INSERT INTO search.facet_stage
@@ -579,6 +644,7 @@ export function createFacetDiscoveryStorage(
           );
         if (contributions.length)
           await sql(
+            context,
             db,
             meter,
             `INSERT INTO search.facet_value
@@ -590,6 +656,7 @@ export function createFacetDiscoveryStorage(
           );
         if (publish)
           await sql(
+            context,
             db,
             meter,
             `UPDATE search.facet_generation SET state='retired'
@@ -597,6 +664,7 @@ export function createFacetDiscoveryStorage(
             key,
           );
         await sql(
+          context,
           db,
           meter,
           `UPDATE search.facet_generation SET phase=$4,frontier=$5,population_complete=$6,
@@ -621,21 +689,24 @@ export function createFacetDiscoveryStorage(
           ],
         );
         meter.frontierWrites++;
-        await db.query('COMMIT');
-      } catch (error) {
-        await db.query('ROLLBACK');
-        throw error;
-      } finally {
-        db.release();
-      }
-      return publish;
+        return publish;
+      });
+    } catch (error) {
+      failed = true;
+      throw error;
     } finally {
-      // A crash leaves the deadline lease; a retry resumes exactly the last committed frontier.
-      await pool.query(
-        `UPDATE search.facet_generation SET lease_until=0 WHERE partition_no=$1 AND definition=$2
+      // Release is best effort within the original turn. After expiry the deadline lease is already reclaimable;
+      // neither cleanup failure nor process loss discards the last committed frontier or masks a preparation error.
+      if (Date.now() < context.deadline)
+        await sql(
+          context,
+          pool,
+          meter,
+          `UPDATE search.facet_generation SET lease_until=0 WHERE partition_no=$1 AND definition=$2
         AND generation=$3 AND version=$4 AND lease_until=$5`,
-        [...key, state.version, context.deadline],
-      );
+          [...key, state.version, context.deadline],
+        ).catch(() => undefined);
+      if (!failed) check(context);
     }
   }
   /** Private candidate data only. The shared native page executor brackets ALL siblings with one START/FINAL,
@@ -652,6 +723,7 @@ export function createFacetDiscoveryStorage(
     // One statement observes both ready generation and values. Expiry/replacement cannot delete a prefix
     // between a metadata check and the value seek and thereby manufacture final exhaustion.
     const selected = await sql<{ as_of: string; item: StoredValue | null }>(
+      context,
       pool,
       meter,
       `WITH valid AS (
@@ -685,6 +757,7 @@ export function createFacetDiscoveryStorage(
     if (!joined) return { cost: meter };
     const key = coordinates(read.plan, read.queried, joined.definition.source.partition);
     await sql(
+      context,
       pool,
       meter,
       `UPDATE search.facet_generation SET state='retired',version=version+1
@@ -697,9 +770,7 @@ export function createFacetDiscoveryStorage(
   async function expireFacetStep(context: PublicFilterConsumerContext) {
     check(context);
     const meter: Meter = { ...emptyCost() };
-    const db = await pool.connect();
-    try {
-      await db.query('BEGIN');
+    return writeTransaction(context, async (db) => {
       const expired = await db.query<{ partition_no: number; definition: string; generation: string }>(
         `SELECT partition_no,definition,generation FROM search.facet_generation WHERE expires_at<=$1
          ORDER BY expires_at,partition_no,definition,generation LIMIT 1 FOR UPDATE SKIP LOCKED`,
@@ -709,12 +780,14 @@ export function createFacetDiscoveryStorage(
       if (row) {
         const key = [row.partition_no, row.definition, row.generation];
         await sql(
+          context,
           db,
           meter,
           `UPDATE search.facet_generation SET state='retired' WHERE partition_no=$1 AND definition=$2 AND generation=$3`,
           key,
         );
         const removed = await sql(
+          context,
           db,
           meter,
           `DELETE FROM search.facet_stage WHERE (partition_no,definition,generation,subject,key) IN
@@ -723,6 +796,7 @@ export function createFacetDiscoveryStorage(
           key,
         );
         const values = await sql(
+          context,
           db,
           meter,
           `DELETE FROM search.facet_value WHERE (partition_no,definition,generation,value) IN
@@ -732,20 +806,15 @@ export function createFacetDiscoveryStorage(
         );
         if (!removed.length && !values.length)
           await sql(
+            context,
             db,
             meter,
             `DELETE FROM search.facet_generation WHERE partition_no=$1 AND definition=$2 AND generation=$3`,
             key,
           );
       }
-      await db.query('COMMIT');
       return meter;
-    } catch (error) {
-      await db.query('ROLLBACK');
-      throw error;
-    } finally {
-      db.release();
-    }
+    });
   }
   return {
     prepareFacetStep: step,
