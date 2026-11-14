@@ -864,6 +864,7 @@ and [review publication cadence](../../docs/development/storybook.md#review-publ
 deferred verification. Source completion does not claim mounted or deployed acceptance.
 
 #### Fixture and recording workflow
+
 Decision: Both previews use static docs source and disable the Code panel by default; rich page stories expose concise snippets. Web retains Docs and component prop documentation.
 
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
