@@ -832,7 +832,7 @@ test('existing standing parent authority still creates only the media owner role
   ).toEqual([{ grant_role: 'content.media.owner', subject_kind: 'identity', subject_id: actor.accountId }]);
 });
 
-test('deadline during an anchored board read denies and releases its sole client', async () => {
+test('deadline during a blocked board read releases capacity for the next authorized reservation', async () => {
   const f = await fixture(),
     context = { ...request(), deadline: Date.now() + 1000 };
   const trace = observeSql(db.pool),
@@ -843,7 +843,7 @@ test('deadline during an anchored board read denies and releases its sole client
     (error) => error,
   );
   try {
-    await Promise.race([
+    const blockedRead = await Promise.race([
       barrier.entered,
       outcome.then(() => {
         throw new Error('Did not reach board read');
@@ -851,9 +851,16 @@ test('deadline during an anchored board read denies and releases its sole client
     ]);
     await Bun.sleep(Math.max(0, context.deadline - Date.now() + 10));
     expect(await outcome).toBeInstanceOf(Error);
-    barrier.release();
-    await db.pool.query('SELECT 1');
     expect(await effects()).toEqual(before);
+    expect(
+      trace.records.some(
+        (record) => record.connectionId === blockedRead.connectionId && record.statement === 'ROLLBACK',
+      ),
+    ).toBe(false);
+    const retry = await reserveMedia(dependencies(), actor, input(f.thread), request());
+    expect(retry.replayed).toBe(false);
+    expect(retry.partition).toBe(partitionOf(containerRoute));
+    expect(await effects()).not.toEqual(before);
     expect(db.pool.waitingCount).toBe(0);
   } finally {
     barrier.release();

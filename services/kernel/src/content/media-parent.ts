@@ -6,6 +6,7 @@ import type { Actor } from '../request/access.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
 import { deadlineClient, within } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -117,14 +118,21 @@ export async function mediaParentSnapshot<T>(
         await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         const anchor = await readPartition(bounded, partitionOf(r));
         if (!anchor || anchor.writeState === 'moved') throw new GrantDeniedError();
-        const result = await read(bounded);
+        const result = await within(deadline, () => read(bounded));
         await bounded.query('COMMIT');
         return result;
       } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(client, rollbackError as Error);
+        if (error instanceof AccessUnavailableError && error.reason === 'deadline') {
+          discardConnection(client, error);
+        } else {
+          try {
+            await within(deadline, () => client.query('ROLLBACK'));
+          } catch (rollbackError) {
+            discardConnection(
+              client,
+              rollbackError instanceof Error ? rollbackError : new Error('Media parent snapshot rollback failed'),
+            );
+          }
         }
         throw error;
       }

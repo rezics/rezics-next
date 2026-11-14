@@ -3251,6 +3251,10 @@ Cost per operation:
 
 ## Media claims
 
+Decision: `mediaParentSnapshot` races checkout, transaction and partition reads, callbacks and cleanup against the
+original request deadline. A late checkout dispatches no SQL; expiry skips queued rollback and discards the client.
+Successful read-only repeatable-read snapshots still commit against the same current-disclosure checks.
+
 Decision: the supported local site reads the native worker's file store through a private loopback object port,
 using the existing uploader-bound site writer and current download admission. Its focused transport acceptance
 checks external credentials, keys, byte limits, ranges and deletion of the exact failed original; the native media
