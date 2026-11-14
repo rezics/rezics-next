@@ -127,7 +127,10 @@ Reopening creation restores its own form, metadata, editor and selection. Hidden
 tab order; their reading inspectors retire on hide and reopen as fresh readers.
 
 Decision: Book add, rename, move and removal share one central organization form owner in `workspace.tsx` through
-`book-organization-canvas.tsx`; the sidebar contains the native nested outline, release choices and concise actions.
+`book-organization-canvas.tsx`; the sidebar contains document rows, part disclosure chevrons, active-row highlighting
+and ellipsis menus for native organization actions. Publication inclusion belongs beside the central publication
+review in `book-publication-selection.tsx`, retaining explicit chapter, part and whole-Book choices. Opening a document
+never changes its publication inclusion. Structure identifiers and placement capacity remain in collapsed details.
 Opening an action uses Shell's admitted-selection handoff, so phone Menu dismissal cannot destroy its fields. The
 selected document editor remains mounted and inert while hidden. **Return to documents** deliberately restores that
 same editor, selection and Write/Preview/history choice without a read; it retains the organization draft. Hidden

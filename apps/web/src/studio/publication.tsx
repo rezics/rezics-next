@@ -4,6 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { ExactVersionDetails } from './revisions';
 import { bookTocRows } from './book-toc';
+import { BookPublicationSelection } from './book-publication-selection';
 import type { StudioController, StudioState } from './controller';
 import {
   ArticlePublicationOutcome,
@@ -91,6 +92,7 @@ export function StudioPublication({
         {book ? m.studio_release_book_help({}, options) : m.studio_release_article_help({}, options)}
       </p>
       {!controller.input.canPublish ? <p>{m.studio_release_unavailable({}, options)}</p> : null}
+      {book ? <BookPublicationSelection controller={controller} state={state} /> : null}
       {unsaved ? <p>{m.studio_release_save_first({}, options)}</p> : null}
       {book && !hasTarget ? <p>{m.studio_release_select_chapters({}, options)}</p> : null}
       {review?.authority === 'local' && review.target.kind === 'article' && review.articleSnapshot ? (
