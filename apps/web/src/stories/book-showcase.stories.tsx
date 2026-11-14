@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useCallback } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { View } from '@rezics/composition';
 import { book, bookEditions, bookSeries, bookSummary, bookRealm } from '../kernel/fixtures/book-showcase';
-import { bookStorySubject, selectBookShowcase, type BookScenario } from '../kernel/fake/book-showcase';
+import { bookStorySubject, prepareBookShowcase, type BookScenario } from '../kernel/fake/book-showcase';
 import { recordedBookState } from '../kernel/fake/library-entry-states';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -25,7 +25,7 @@ function BookStory({
   realm?: boolean;
 }) {
   const locale = getLocale();
-  useMemo(() => selectBookShowcase(state), [state, locale, member, subject]);
+  const prepareFixture = useCallback(() => prepareBookShowcase(state), [state]);
   const identity =
     subject === 'edition'
       ? { id: bookEditions[2]!.id, label: bookEditions[2]!.labels.en! }
@@ -36,6 +36,7 @@ function BookStory({
   return (
     <PageStory
       previewNewTabs
+      prepareFixture={prepareFixture}
       visitor={member ? 'Signed In' : 'Signed Out'}
       path={`${subjectViewHref(localized, locale, view)}${realm ? `?realm=${bookRealm}` : ''}`}
       ratingsFixture={state === 'sparse' ? 'subject-ratings-empty' : 'subject-ratings-global'}
@@ -51,7 +52,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'An invented, comprehensive bibliography combining characteristics of several books. All names, editions, community writing and cover artwork are synthetic interface fixtures, using the current API, definitions and viewer contracts; they are not recorded responses or native API acceptance. The real application shell, Book composition and router serve the complete visit. Explore every tab, open an edition or series, and use browser Back/Forward. Hosted chapter reading has its own Books/Hosted Book reader stories. Use shared Locale, Theme and phone390/desktop1280 globals on every entry.',
+          'An invented, comprehensive bibliography combining characteristics of several books. All names, editions, community writing and cover artwork are synthetic interface fixtures, using the current API, definitions and viewer contracts; they are not recorded responses or native API acceptance. The real application shell, Book composition and router serve the complete visit. Explore every tab, open an edition or series, and use browser Back/Forward. Hosted chapter reading has its own Books/Hosted Book reader stories. Review entries stay at their named state until you act. Interaction entries run scripted journeys with the same controls and fixtures. Use shared Locale, Theme and phone390/desktop1280 globals on every entry.',
       },
     },
   },
@@ -108,20 +109,7 @@ async function historyTo(context: Context, direction: 'back' | 'forward', view: 
 export const RichMember: Story = {
   name: 'Book · member',
   render: () => <BookStory />,
-  play: async (context) => {
-    await bookReady(context);
-    // Visit the full route compositions, then return the main entry to its Overview.
-    for (const view of supportedViews.slice(1)) {
-      await visit(context, view);
-      await expect(tabs(context.canvasElement).querySelector(`a[data-view="${view}"]`)).toHaveAttribute(
-        'href',
-        expect.stringContaining(book.id),
-      );
-    }
-    await visit(context, 'overview');
-    await historyTo(context, 'back', 'details');
-    await historyTo(context, 'forward', 'overview');
-  },
+  play: bookReady,
 };
 export const RichSignedOut: Story = {
   name: 'Book · signed out',
@@ -129,24 +117,15 @@ export const RichSignedOut: Story = {
   play: async (context) => {
     await bookReady(context);
     await expect(within(context.canvasElement).queryByRole('combobox', { name: m.library_subject_entry() })).toBeNull();
-    await visit(context, 'reviews');
-    await expect(
-      await within(context.canvasElement).findByRole('link', { name: 'A city worth getting lost in' }),
-    ).toBeVisible();
-    await visit(context, 'overview');
   },
 };
 export const Editions: Story = {
   render: () => <BookStory view="editions" />,
   play: async (context) => {
     await atView(context, 'editions');
-    const canvas = within(context.canvasElement);
-    await expect(await canvas.findByRole('link', { name: bookEditions[0]!.labels.en! })).toBeVisible();
-    const next = await canvas.findByRole('link', { name: m.subject_section_more({ label: m.subject_editions() }) });
-    await userEvent.click(next);
-    await expect(await canvas.findByRole('link', { name: bookEditions[14]!.labels.en! })).toBeVisible();
-    await historyTo(context, 'back', 'editions');
-    await expect(await canvas.findByRole('link', { name: bookEditions[0]!.labels.en! })).toBeVisible();
+    await expect(
+      await within(context.canvasElement).findByRole('link', { name: bookEditions[0]!.labels.en! }),
+    ).toBeVisible();
   },
 };
 export const Contents: Story = {
@@ -169,14 +148,9 @@ export const Reviews: Story = {
   render: () => <BookStory view="reviews" />,
   play: async (context) => {
     await atView(context, 'reviews');
-    const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('link', { name: m.subject_community_more() }));
-    const review = await canvas.findByRole('link', { name: 'Every borrowed day has a cost' });
-    await userEvent.click(review);
-    await expect(await canvas.findByRole('heading', { level: 1, name: 'Every borrowed day has a cost' })).toBeVisible();
-    await historyTo(context, 'back', 'reviews');
-    await visit(context, 'overview');
-    await bookReady(context);
+    await expect(
+      await within(context.canvasElement).findByRole('link', { name: 'A city worth getting lost in' }),
+    ).toBeVisible();
   },
 };
 export const Discussion: Story = {
@@ -199,22 +173,9 @@ export const EditionReturn: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    const returnLink = (
-      await canvas.findAllByRole('link', { name: bookSummary(book.id, getLocale()).label.value })
-    )[0]!;
-    await expect(returnLink).toHaveAttribute('href', expect.stringContaining(book.id));
-    await expect(new URL(returnLink.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(
-      bookRealm,
-    );
-    await userEvent.click(returnLink);
-    await bookReady(context);
-    await visit(context, 'editions');
-    const edition = await canvas.findByRole('link', { name: bookEditions[2]!.labels.en! });
-    await expect(new URL(edition.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(
-      bookRealm,
-    );
-    await userEvent.click(edition);
     await expect(await canvas.findByRole('heading', { level: 1, name: bookEditions[2]!.labels.en! })).toBeVisible();
+    const link = (await canvas.findAllByRole('link', { name: bookSummary(book.id, getLocale()).label.value }))[0]!;
+    await expect(new URL(link.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(bookRealm);
   },
 };
 export const SeriesReturn: Story = {
@@ -222,15 +183,9 @@ export const SeriesReturn: Story = {
   render: () => <BookStory subject="series" view="contents" realm />,
   play: async (context) => {
     await atView(context, 'contents');
-    const canvas = within(context.canvasElement);
-    const volume = await canvas.findByRole('link', { name: bookSummary(book.id, getLocale()).label.value });
-    await expect(new URL(volume.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(
-      bookRealm,
-    );
-    await userEvent.click(volume);
-    await bookReady(context);
-    await userEvent.click((await canvas.findAllByRole('link', { name: bookSeries.label }))[0]!);
-    await expect(await canvas.findByRole('heading', { level: 1, name: bookSeries.label })).toBeVisible();
+    await expect(
+      await within(context.canvasElement).findByRole('heading', { level: 1, name: bookSeries.label }),
+    ).toBeVisible();
   },
 };
 export const SparseData: Story = {
@@ -247,6 +202,169 @@ export const SectionRetry: Story = {
   render: () => <BookStory state="failure" view="editions" />,
   play: async (context) => {
     await atView(context, 'editions');
+    await expect(
+      await within(context.canvasElement).findByRole('link', { name: m.subject_section_retry() }),
+    ).toBeVisible();
+  },
+};
+export const PermissionLimited: Story = {
+  name: 'Member with limited contribution permission',
+  render: () => <BookStory state="limited" />,
+  play: bookReady,
+};
+export const LongMultilingualText: Story = {
+  render: () => <BookStory state="long" />,
+  play: async (context) => {
+    await atView(context, 'overview');
+    await expect(await within(context.canvasElement).findByRole('heading', { level: 1 })).toHaveTextContent(
+      bookSummary(bookStorySubject('long').id, getLocale()).label.value,
+    );
+  },
+};
+export const MemberReadback: Story = {
+  name: 'Member library and rating readback',
+  render: () => <BookStory />,
+  play: async (context) => {
+    await bookReady(context);
+    const canvas = within(context.canvasElement);
+    const state = await canvas.findByRole('combobox', { name: m.library_subject_entry() });
+    await waitFor(() => expect(state).toBeEnabled());
+    await expectSelectValue(state, recordedBookState(1)!);
+    await expect(await canvas.findByRole('slider', { name: 'How much did you like this work?' })).toHaveAttribute(
+      'aria-valuenow',
+      '17',
+    );
+  },
+};
+
+export const TabNavigationInteraction: Story = {
+  name: 'Interaction · all Book tabs and Back/Forward',
+  render: () => <BookStory />,
+  tags: ['interaction'],
+  play: async (context) => {
+    const frameUrl = window.location.href;
+    await bookReady(context);
+    // Visit the full route compositions, then return the main entry to its Overview.
+    for (const view of supportedViews.slice(1)) {
+      await visit(context, view);
+      await expect(tabs(context.canvasElement).querySelector(`a[data-view="${view}"]`)).toHaveAttribute(
+        'href',
+        expect.stringContaining(book.id),
+      );
+    }
+    await visit(context, 'overview');
+    await historyTo(context, 'back', 'details');
+    await historyTo(context, 'forward', 'overview');
+    await expect(window.location.href).toBe(frameUrl);
+  },
+};
+export const SignedOutNavigationInteraction: Story = {
+  name: 'Interaction · signed-out reviews and return',
+  render: () => <BookStory member={false} />,
+  tags: ['interaction'],
+  play: async (context) => {
+    await bookReady(context);
+    await expect(within(context.canvasElement).queryByRole('combobox', { name: m.library_subject_entry() })).toBeNull();
+    await visit(context, 'reviews');
+    await expect(
+      await within(context.canvasElement).findByRole('link', { name: 'A city worth getting lost in' }),
+    ).toBeVisible();
+    await visit(context, 'overview');
+  },
+};
+export const EditionsPaginationInteraction: Story = {
+  name: 'Interaction · editions continuation and Back',
+  render: () => <BookStory view="editions" />,
+  tags: ['interaction'],
+  play: async (context) => {
+    await atView(context, 'editions');
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByRole('link', { name: bookEditions[0]!.labels.en! })).toBeVisible();
+    const next = await canvas.findByRole('link', { name: m.subject_section_more({ label: m.subject_editions() }) });
+    await userEvent.click(next);
+    await expect(await canvas.findByRole('link', { name: bookEditions[14]!.labels.en! })).toBeVisible();
+    await historyTo(context, 'back', 'editions');
+    await expect(await canvas.findByRole('link', { name: bookEditions[0]!.labels.en! })).toBeVisible();
+  },
+};
+export const ReviewReturnInteraction: Story = {
+  name: 'Interaction · review continuation, reader and return',
+  render: () => <BookStory view="reviews" />,
+  tags: ['interaction'],
+  play: async (context) => {
+    await atView(context, 'reviews');
+    const canvas = within(context.canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: m.subject_community_more() }));
+    const review = await canvas.findByRole('link', { name: 'Every borrowed day has a cost' });
+    await userEvent.click(review);
+    await expect(await canvas.findByRole('heading', { level: 1, name: 'Every borrowed day has a cost' })).toBeVisible();
+    await historyTo(context, 'back', 'reviews');
+    await visit(context, 'overview');
+    await bookReady(context);
+  },
+};
+export const EditionReturnInteraction: Story = {
+  name: 'Interaction · edition → same Book → edition',
+  render: () => <BookStory subject="edition" realm />,
+  tags: ['interaction'],
+  play: async (context) => {
+    const frameUrl = window.location.href;
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const returnLink = (
+      await canvas.findAllByRole('link', { name: bookSummary(book.id, getLocale()).label.value })
+    )[0]!;
+    await expect(returnLink).toHaveAttribute('href', expect.stringContaining(book.id));
+    await expect(new URL(returnLink.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(
+      bookRealm,
+    );
+    await userEvent.click(returnLink);
+    await bookReady(context);
+    await visit(context, 'editions');
+    const edition = await canvas.findByRole('link', { name: bookEditions[2]!.labels.en! });
+    await expect(new URL(edition.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(
+      bookRealm,
+    );
+    await userEvent.click(edition);
+    await expect(await canvas.findByRole('heading', { level: 1, name: bookEditions[2]!.labels.en! })).toBeVisible();
+    await historyTo(context, 'back', 'editions');
+    await expect(
+      await canvas.findByRole('heading', { level: 1, name: bookSummary(book.id, getLocale()).label.value }),
+    ).toBeVisible();
+    window.history.forward();
+    await expect(await canvas.findByRole('heading', { level: 1, name: bookEditions[2]!.labels.en! })).toBeVisible();
+    await expect(window.location.href).toBe(frameUrl);
+  },
+};
+export const SeriesReturnInteraction: Story = {
+  name: 'Interaction · series → ordered Book → series',
+  render: () => <BookStory subject="series" view="contents" realm />,
+  tags: ['interaction'],
+  play: async (context) => {
+    const frameUrl = window.location.href;
+    await atView(context, 'contents');
+    const canvas = within(context.canvasElement);
+    const volume = await canvas.findByRole('link', { name: bookSummary(book.id, getLocale()).label.value });
+    await expect(new URL(volume.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(
+      bookRealm,
+    );
+    await userEvent.click(volume);
+    await bookReady(context);
+    await userEvent.click((await canvas.findAllByRole('link', { name: bookSeries.label }))[0]!);
+    await expect(await canvas.findByRole('heading', { level: 1, name: bookSeries.label })).toBeVisible();
+    window.history.back();
+    await bookReady(context);
+    window.history.forward();
+    await expect(await canvas.findByRole('heading', { level: 1, name: bookSeries.label })).toBeVisible();
+    await expect(window.location.href).toBe(frameUrl);
+  },
+};
+export const SectionRetryInteraction: Story = {
+  name: 'Interaction · editions retry and independent reviews',
+  render: () => <BookStory state="failure" view="editions" />,
+  tags: ['interaction'],
+  play: async (context) => {
+    await atView(context, 'editions');
     const canvas = within(context.canvasElement);
     await userEvent.click(await canvas.findByRole('link', { name: m.subject_section_retry() }));
     await expect(await canvas.findByRole('link', { name: bookEditions[0]!.labels.en! })).toBeVisible();
@@ -254,9 +372,10 @@ export const SectionRetry: Story = {
     await expect(await canvas.findByRole('link', { name: 'A city worth getting lost in' })).toBeVisible();
   },
 };
-export const PermissionLimited: Story = {
-  name: 'Member with limited contribution permission',
+export const PermissionLimitedInteraction: Story = {
+  name: 'Interaction · denied rating and saved readback',
   render: () => <BookStory state="limited" />,
+  tags: ['interaction'],
   play: async (context) => {
     await bookReady(context);
     const canvas = within(context.canvasElement);
@@ -273,18 +392,10 @@ export const PermissionLimited: Story = {
     );
   },
 };
-export const LongMultilingualText: Story = {
-  render: () => <BookStory state="long" />,
-  play: async (context) => {
-    await atView(context, 'overview');
-    await expect(await within(context.canvasElement).findByRole('heading', { level: 1 })).toHaveTextContent(
-      bookSummary(bookStorySubject('long').id, getLocale()).label.value,
-    );
-  },
-};
-export const MemberReadback: Story = {
-  name: 'Member library and rating readback',
+export const MemberReadbackInteraction: Story = {
+  name: 'Interaction · library and rating writes read back',
   render: () => <BookStory />,
+  tags: ['interaction'],
   play: async (context) => {
     await bookReady(context);
     const canvas = within(context.canvasElement);

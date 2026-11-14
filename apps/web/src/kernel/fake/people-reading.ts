@@ -82,14 +82,14 @@ function subject(id: string, type: string, labels: Record<string, string>, descr
     related: {},
   };
 }
-const portraitMedia: Record<PeopleReadingFamily, string> = {
-  character: peopleReadingId(70),
-  person: peopleReadingId(71),
-  organization: peopleReadingId(72),
+export const peopleReadingPortraitIds: Record<PeopleReadingFamily, string> = {
+  character: '0193d000-0000-7000-8000-000000000070',
+  person: '0193d000-0000-7000-8000-000000000071',
+  organization: '0193d000-0000-7000-8000-000000000072',
 };
 function portrait(family: PeopleReadingFamily): NonNullable<Summary['cover']> {
   return {
-    media: portraitMedia[family],
+    media: peopleReadingPortraitIds[family],
     width: 480,
     height: 600,
     placeholder: { thumbhash: '', color: family === 'person' ? '#764d44' : '#244d54' },

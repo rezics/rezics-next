@@ -6,9 +6,11 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { createKernelClient, type SubjectRead } from '@rezics/client';
 import { planReads, platformRegistry } from '@rezics/composition';
 import {
+  peopleReadingFixture,
   peopleReadingId,
   peopleReadingIds,
   peopleReadingPage,
+  peopleReadingPortraitIds,
   selectPeopleReading,
 } from '../src/kernel/fake/people-reading';
 import { peopleOverviewFamily } from '../src/features/pages/showcase-people/profile';
@@ -73,7 +75,7 @@ test('all eight locales read identity, context, one native biography, works and 
       expect(html).toContain('The Harbour Letters');
       expect(html).toContain('How do the harbour stories connect?');
       expect(html).toContain('data-slot="people-profile-details"');
-      expect(html).toContain(`/media/${peopleReadingId(70 + families.indexOf(family))}/webp-`);
+      expect(html).toContain(`/media/${peopleReadingPortraitIds[family]}/webp-`);
       expect(html).toContain(m.subject_details({}, { locale }));
       expect(html).not.toContain('data-slot="subject-summary"');
     }
@@ -92,7 +94,7 @@ test('sparse profiles keep recognition and a real work without inventing optiona
     expect(html).toContain(`data-people-family="${family}"`);
     expect(html).toContain('The Harbour Letters');
     expect(html).not.toContain(biography[family]);
-    expect(html).not.toContain(`/media/${peopleReadingId(70 + families.indexOf(family))}/`);
+    expect(html).not.toContain(`/media/${peopleReadingPortraitIds[family]}/`);
     expect(html).not.toContain('data-slot="character-reader-traits"');
     const primary = html.slice(0, html.indexOf('data-slot="people-profile-details"'));
     expect(primary).not.toContain('data-slot="person-reader-occupations"');
@@ -102,6 +104,32 @@ test('sparse profiles keep recognition and a real work without inventing optiona
       expect(html).toContain(m.people_biography_unsupported({}, { locale: 'en' }));
     }
     expect(html).not.toContain('170');
+  }
+});
+
+test('each People portrait has its own media identity and correctly sized advertised WebP files', async () => {
+  const { profiles } = peopleReadingFixture();
+  expect(new Set(Object.values(peopleReadingPortraitIds)).size).toBe(3);
+  for (const family of families) {
+    const cover = profiles[family].summary!.cover!;
+    expect(cover.media).toBe(peopleReadingPortraitIds[family]);
+    expect(cover.media.startsWith('0193d000-')).toBe(true);
+    expect([cover.width, cover.height]).toEqual([480, 600]);
+    expect(cover.variants).toEqual([
+      { format: 'webp', width: 160 },
+      { format: 'webp', width: 320 },
+    ]);
+    for (const variant of cover.variants) {
+      const bytes = Buffer.from(
+        await Bun.file(
+          new URL(`../.storybook/media/${cover.media}/webp-${variant.width}`, import.meta.url),
+        ).arrayBuffer(),
+      );
+      expect(bytes.toString('ascii', 0, 4)).toBe('RIFF');
+      expect(bytes.toString('ascii', 8, 16)).toBe('WEBPVP8 ');
+      expect(bytes.readUInt16LE(26) & 0x3fff).toBe(variant.width);
+      expect(bytes.readUInt16LE(28) & 0x3fff).toBe((variant.width * cover.height) / cover.width);
+    }
   }
 });
 
