@@ -1,12 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
-import { AccountMenu } from '../shell/shell';
-import { PhoneNavigationView } from '../shell/phone-navigation';
-import type { NavigationSession } from '../shell/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/app-shell';
+import { PageHeading } from '../shell/page-heading';
 import { SideNav } from '../shell/side-nav';
-import { NotificationsLink, ShellTopActions, TopBar } from '../shell/top-bar';
+import { NotificationsLink } from '../shell/top-bar';
+import type { NavigationSession } from '../shell/navigation';
+import { sessionQuery } from '../session/query';
+import { catalogueNavigation } from '../features/catalogue/navigation';
+import { contextsNavigation } from '../features/contexts/navigation';
 import { UnreadBadgeView } from '../inbox/unread-badge';
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pageReady } from './page';
@@ -14,69 +18,166 @@ import { PatternStory, pageReady } from './page';
 const meta = {
   title: 'Site Shell/App Shell',
   id: 'patterns-app-shell',
-  parameters: {
-    layout: 'fullscreen',
-  },
+  parameters: { layout: 'fullscreen' },
+  render: () => <ShellPreview />,
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
-function ShellPreview({
-  visitor = 'Signed In',
-  count = false,
-}: {
+type PreviewProps = {
   visitor?: 'Signed In' | 'Signed Out';
   count?: boolean;
-}) {
+  session?: NavigationSession;
+  longLabels?: boolean;
+};
+const previewPath = '/books?q=Prince&cursor=next%2Fpage';
+const compactPhone = () => window.matchMedia('(max-width: 767px)').matches;
+const longCreationLabel = () => `${m.catalogue_create_title()} · ${m.library_nav_collections()} · ${m.nav_library()}`;
+
+function PreparedShellPreview({ visitor = 'Signed In', count = false, session, longLabels = false }: PreviewProps) {
+  const client = useQueryClient();
+  // Each PatternStory owns this cache. Pending has no timer, global fixture or network completion.
+  useState(() => {
+    if (session === 'unknown') {
+      void client
+        .getQueryCache()
+        .build(client, { ...sessionQuery, queryFn: () => new Promise<never>(() => {}) })
+        .fetch();
+    } else if (session) {
+      client.setQueryData(sessionQuery.queryKey, {
+        state: session,
+        subject: session === 'signed-in' ? 'shell-preview-member' : null,
+        csrfToken: null,
+      });
+    }
+  });
+  const member = session ? session === 'signed-in' : visitor === 'Signed In';
   return (
-    <PatternStory visitor={visitor} path="/library">
-      <AppShell
-        communities={
-          visitor === 'Signed In' ? (
-            <SideNav
-              pathname="/library"
-              items={[
-                { id: 'reading', kind: 'realm', title: 'Reading together', path: '/realms/reading' },
-                { id: 'quiet', kind: 'space', title: 'A quiet space', path: '/spaces/quiet' },
-              ]}
-            />
-          ) : null
-        }
-        notifications={
-          count ? (
-            <NotificationsLink
-              pathname="/library"
-              badge={
-                <UnreadBadgeView
-                  data={{
-                    signedIn: true,
-                    state: 'ready',
-                    count: 23,
-                    capped: false,
-                    basis: 'current-visible-unread',
-                    witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
-                  }}
-                />
-              }
-            />
-          ) : undefined
-        }
-      >
-        <h1 className="text-2xl font-semibold">{m.nav_library()}</h1>
-        <p className="mt-3 text-muted-foreground">Your reading, collections and communities in one place.</p>
-      </AppShell>
+    <AppShell
+      navigation={
+        longLabels
+          ? [...catalogueNavigation.map((entry) => ({ ...entry, label: longCreationLabel() })), ...contextsNavigation]
+          : undefined
+      }
+      communities={
+        member ? (
+          <SideNav
+            pathname="/books"
+            items={[
+              {
+                id: 'reading',
+                kind: 'realm',
+                title: longLabels
+                  ? `${m.library_following_heading()} · ${m.realms_heading()} · ${m.nav_library()}`
+                  : 'Reading together',
+                path: '/realms/reading',
+              },
+              { id: 'quiet', kind: 'space', title: 'A quiet space', path: '/spaces/quiet' },
+            ]}
+          />
+        ) : null
+      }
+      notifications={
+        count ? (
+          <NotificationsLink
+            pathname="/books"
+            badge={
+              <UnreadBadgeView
+                data={{
+                  signedIn: true,
+                  state: 'ready',
+                  count: 23,
+                  capped: false,
+                  basis: 'current-visible-unread',
+                  witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+                }}
+              />
+            }
+          />
+        ) : undefined
+      }
+    >
+      <PageHeading>
+        {longLabels
+          ? `${m.nav_library()} · ${m.library_nav_collections()} · ${m.library_following_heading()}`
+          : m.nav_library()}
+      </PageHeading>
+      <p className="mt-3 max-w-prose text-muted-foreground">Your reading, collections and communities in one place.</p>
+      <div className="mt-8 space-y-6 border-t border-border/60 pt-6">
+        {[m.nav_home(), m.nav_library(), m.realms_heading()].map((heading) => (
+          <section key={heading} className="space-y-2">
+            <h2 className="text-lg font-semibold wrap-anywhere">{heading}</h2>
+            <p className="max-w-prose leading-7 text-muted-foreground">{m.route_loading_description()}</p>
+          </section>
+        ))}
+      </div>
+    </AppShell>
+  );
+}
+function ShellPreview(props: PreviewProps) {
+  return (
+    <PatternStory visitor={props.visitor ?? 'Signed In'} path={previewPath}>
+      <PreparedShellPreview key={props.session ?? props.visitor ?? 'member'} {...props} />
     </PatternStory>
   );
 }
 
-export const Navigation: Story = { render: () => <ShellPreview />, play: pageReady };
+/** Future runtime acceptance checks usable width and actual measured reading clearance. */
+async function shellReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const canvas = within(context.canvasElement);
+  const header = canvas.getByRole('banner');
+  const main = canvas.getByRole('main');
+  const search = header.querySelector<HTMLElement>('[data-shell-header-search]')!;
+  const root = context.canvasElement.querySelector<HTMLElement>('[data-phone-navigation-clearance]')!;
+  await waitFor(() => {
+    expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth + 1);
+    expect(search.getBoundingClientRect().width).toBeGreaterThanOrEqual(180);
+    expect(main.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth + 1);
+    expect(parseFloat(getComputedStyle(root).getPropertyValue('--shell-header-height'))).toBe(
+      Math.ceil(header.getBoundingClientRect().height),
+    );
+    if (compactPhone()) {
+      const phone = canvas.getByRole('navigation', { name: m.shell_phone_tabs() });
+      expect(parseFloat(getComputedStyle(main).paddingBottom)).toBeGreaterThanOrEqual(
+        phone.getBoundingClientRect().height,
+      );
+    }
+  });
+  return { canvas, header: within(header), main: within(main) };
+}
+function creationTrigger(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  return within(
+    canvas.getByRole(
+      compactPhone() ? 'navigation' : 'banner',
+      compactPhone() ? { name: m.shell_phone_tabs() } : undefined,
+    ),
+  ).getByRole('button', { name: m.shell_create() });
+}
+async function openCreate(context: { canvasElement: HTMLElement }) {
+  await shellReady(context);
+  const trigger = creationTrigger(context.canvasElement);
+  trigger.focus();
+  await userEvent.keyboard('{Enter}');
+  const dialog = await within(document.body).findByRole('dialog', { name: m.shell_create() });
+  return { trigger, menu: within(dialog) };
+}
+async function closeToTrigger(trigger: HTMLElement) {
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => expect(trigger).toHaveFocus());
+}
 
-export const SignedIn: Story = {
-  render: () => <ShellPreview />,
+export const Navigation: Story = {
   play: async (context) => {
-    await pageReady(context);
-    await userEvent.click(await within(context.canvasElement).findByRole('button', { name: m.account_menu() }));
-    const menu = within(await within(document.body).findByRole('dialog', { name: m.account_menu() }));
+    await shellReady(context);
+  },
+};
+export const SignedIn: Story = {
+  play: async (context) => {
+    const { canvas, header } = await shellReady(context);
+    const name = compactPhone() ? m.shell_you() : m.account_menu();
+    await userEvent.click((compactPhone() ? canvas : header).getByRole('button', { name }));
+    const menu = within(await within(document.body).findByRole('dialog', { name }));
     await expect(await menu.findByRole('button', { name: m.shell_theme() })).toBeVisible();
     await expect(await menu.findByRole('button', { name: new RegExp(m.shell_language()) })).toBeVisible();
   },
@@ -84,94 +185,130 @@ export const SignedIn: Story = {
 export const SignedOut: Story = {
   render: () => <ShellPreview visitor="Signed Out" />,
   play: async (context) => {
-    await pageReady(context);
-    await expect(await within(context.canvasElement).findByRole('link', { name: m.account_sign_in() })).toBeVisible();
+    const { header } = await shellReady(context);
+    await expect(await header.findByRole('link', { name: m.account_sign_in() })).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}${previewPath}`)}`,
+    );
   },
 };
 export const NotificationCount: Story = {
   render: () => <ShellPreview count />,
   play: async (context) => {
-    await pageReady(context);
-    await expect(
-      await within(context.canvasElement).findByLabelText(m.inbox_unread_count({ count: '23' })),
-    ).toBeVisible();
+    const { header } = await shellReady(context);
+    await expect(await header.findByLabelText(m.inbox_unread_count({ count: '23' }))).toBeVisible();
   },
 };
 
+// Keep the canonical ID; the adopted Following section is intentionally non-collapsible.
 export const FoldedCommunities: Story = {
+  name: 'Following communities',
   play: async (context) => {
-    await pageReady(context);
-    const canvas = within(context.canvasElement);
-    const heading = await canvas.findByRole('button', {
-      name: `${m.library_following_heading()} · ${m.realms_heading()}`,
-    });
-    await expect(heading).toHaveAttribute('aria-expanded', 'true');
-    await userEvent.click(heading);
-    await expect(heading).toHaveAttribute('aria-expanded', 'false');
-    await expect(canvas.queryByRole('link', { name: 'Reading together' })).toBeNull();
-    await userEvent.click(heading);
-    await expect(await canvas.findByRole('link', { name: 'Reading together' })).toBeVisible();
+    const { canvas } = await shellReady(context);
+    if (compactPhone()) await userEvent.click(canvas.getByRole('button', { name: m.shell_open_navigation() }));
+    const surface = compactPhone()
+      ? within(await within(document.body).findByRole('dialog', { name: m.shell_navigation() }))
+      : canvas;
+    const section = within(surface.getByRole('region', { name: m.library_following_heading() }));
+    await expect(section.getByRole('link', { name: 'Reading together' })).toBeVisible();
+    await expect(section.getByRole('link', { name: m.shell_manage_following() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library/following`,
+    );
   },
 };
-
 export const CreationActions: Story = {
   play: async (context) => {
-    await pageReady(context);
-    const nav = within(await within(context.canvasElement).findByRole('navigation', { name: m.shell_phone_tabs() }));
-    await userEvent.click(nav.getByRole('button', { name: m.shell_create() }));
-    await expect(await within(document.body).findByRole('dialog', { name: m.shell_create() })).toBeVisible();
-    await userEvent.keyboard('{Escape}');
-    await expect(nav.getByRole('button', { name: m.shell_create() })).toHaveFocus();
+    const { trigger, menu } = await openCreate(context);
+    await expect(await menu.findByRole('link', { name: m.library_collection_new() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/collections/new`,
+    );
+    await closeToTrigger(trigger);
   },
 };
-
-function HeaderState({ session }: { session: 'unknown' | 'unavailable' }) {
-  return (
-    <PatternStory visitor="Signed Out" path="/">
-      <TopBar
-        navigation={null}
-        logo={<a href="/en">REZICS</a>}
-        search={<input aria-label="Search" className="w-full" />}
-        actions={<ShellTopActions session={session} pathname="/" returnTo="/en" account={null} />}
-      />
-    </PatternStory>
-  );
-}
-export const RestoringHeader: Story = { render: () => <HeaderState session="unknown" /> };
-export const UnavailableHeader: Story = {
-  render: () => <HeaderState session="unavailable" />,
+export const RestoringHeader: Story = {
+  render: () => <ShellPreview visitor="Signed Out" session="unknown" />,
+  play: async (context) => {
+    const { header } = await shellReady(context);
+    await expect(header.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    await expect(header.queryByRole('link', { name: m.account_sign_in() })).toBeNull();
+  },
 };
-
-function PhoneSessionState({ session }: { session: NavigationSession }) {
-  const returnTo = `/${getLocale()}/books?q=Prince&cursor=next%2Fpage`;
-  return (
-    <PatternStory visitor="Signed Out" path="/books?q=Prince&cursor=next%2Fpage">
-      <PhoneNavigationView
-        pathname="/books"
-        session={session}
-        returnTo={returnTo}
-        library={false}
-        actions={[]}
-        account={<AccountMenu session={session} csrfToken={null} phone />}
-      />
-    </PatternStory>
-  );
-}
-async function openPhoneCreate(context: { canvasElement: HTMLElement }) {
-  await pageReady(context);
-  const phone = within(context.canvasElement).getByRole('navigation', { name: m.shell_phone_tabs() });
-  await userEvent.click(within(phone).getByRole('button', { name: m.shell_create() }));
-  await expect(await within(document.body).findByRole('dialog', { name: m.shell_create() })).toBeVisible();
-}
+export const UnavailableHeader: Story = {
+  render: () => <ShellPreview visitor="Signed Out" session="unavailable" />,
+  play: async (context) => {
+    const { header } = await shellReady(context);
+    const status = header.getByRole('status');
+    await expect(status).toHaveTextContent(m.shell_account_unavailable());
+    await expect(status).toBeVisible();
+    expect(status.getBoundingClientRect().width).toBeGreaterThan(40);
+    expect(status.getBoundingClientRect().height).toBeGreaterThan(10);
+    await expect(header.getByRole('link', { name: m.account_sign_in() })).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}${previewPath}`)}`,
+    );
+  },
+};
 export const PreparingPhoneCreate: Story = {
-  render: () => <PhoneSessionState session="unknown" />,
-  play: openPhoneCreate,
+  render: () => <ShellPreview visitor="Signed Out" session="unknown" />,
+  play: async (context) => {
+    const { menu } = await openCreate(context);
+    await expect(menu.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    await expect(menu.queryByRole('link')).toBeNull();
+  },
 };
 export const SignedOutPhoneCreate: Story = {
-  render: () => <PhoneSessionState session="signed-out" />,
-  play: openPhoneCreate,
+  render: () => <ShellPreview visitor="Signed Out" />,
+  play: async (context) => {
+    const { trigger, menu } = await openCreate(context);
+    await expect(menu.getByRole('link', { name: m.account_sign_in() })).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}${previewPath}`)}`,
+    );
+    await closeToTrigger(trigger);
+  },
 };
 export const UnavailablePhoneCreate: Story = {
-  render: () => <PhoneSessionState session="unavailable" />,
-  play: openPhoneCreate,
+  render: () => <ShellPreview visitor="Signed Out" session="unavailable" />,
+  play: async (context) => {
+    const { menu } = await openCreate(context);
+    await expect(menu.getByRole('status')).toHaveTextContent(m.shell_account_unavailable());
+    await expect(menu.getByRole('link', { name: m.account_sign_in() })).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}${previewPath}`)}`,
+    );
+    await expect(menu.queryByRole('link', { name: m.library_collection_new() })).toBeNull();
+  },
+};
+export const LongLabels: Story = {
+  render: () => <ShellPreview longLabels />,
+  play: async (context) => {
+    await shellReady(context);
+  },
+};
+export const LongLabelsCreate: Story = {
+  render: () => <ShellPreview longLabels />,
+  play: async (context) => {
+    const { trigger, menu } = await openCreate(context);
+    const link = await menu.findByRole('link', { name: longCreationLabel() });
+    await expect(link).toHaveAttribute('href', `/${getLocale()}/catalogue/new`);
+    await expect(link).toBeVisible();
+    expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth + 1);
+    await closeToTrigger(trigger);
+  },
+};
+export const PhoneNavigationOpen: Story = {
+  render: () => <ShellPreview longLabels />,
+  play: async (context) => {
+    const { canvas } = await shellReady(context);
+    if (!compactPhone()) return;
+    const trigger = canvas.getByRole('button', { name: m.shell_open_navigation() });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const menu = within(await within(document.body).findByRole('dialog', { name: m.shell_navigation() }));
+    await expect(menu.getByRole('link', { name: m.nav_search() })).toHaveAttribute('href', `/${getLocale()}/search`);
+    await expect(menu.getByRole('link', { name: m.shell_manage_following() })).toBeVisible();
+    await closeToTrigger(trigger);
+  },
 };

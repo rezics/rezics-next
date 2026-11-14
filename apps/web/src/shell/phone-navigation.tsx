@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { House, Inbox, Library, LogIn, Plus } from 'lucide-react';
 import { Menu } from '@rezics/ui/menu';
 import { UnreadBadgeView, useInboxUnreadCount, type UnreadCount } from '../inbox';
@@ -67,18 +67,21 @@ export const phoneTabClass =
   'relative flex min-h-14 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-center text-[11px] leading-tight wrap-anywhere font-medium text-muted-foreground outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:text-primary';
 const creationLinkClass =
   'flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring [&_svg]:shrink-0';
-export function PhoneCreationLinks({
-  actions,
-  pathname,
-  session,
-  returnTo,
-}: {
+type CreationMenuState = {
   actions: readonly PhoneCreationAction[];
   pathname: string;
   session: Session;
   /** Router-admitted public URL, including its query, without the fragment. */
   returnTo?: string;
-}) {
+};
+
+/** Header and phone tabs share one menu policy, including session feedback and focus ownership. */
+export function ShellCreationMenu({ trigger, ...state }: CreationMenuState & { trigger: ReactElement }) {
+  return (
+    <Menu title={m.shell_create()} closeOnNavigation trigger={trigger} content={<PhoneCreationLinks {...state} />} />
+  );
+}
+export function PhoneCreationLinks({ actions, pathname, session, returnTo }: CreationMenuState) {
   if (session === 'unknown')
     return (
       <p role="status" aria-busy="true" className="p-3 text-sm text-muted-foreground">
@@ -208,9 +211,11 @@ export function PhoneNavigationView({
           <span>{m.nav_library()}</span>
         </span>
       )}
-      <Menu
-        title={m.shell_create()}
-        closeOnNavigation
+      <ShellCreationMenu
+        actions={actions}
+        pathname={pathname}
+        session={session}
+        {...(returnTo ? { returnTo } : {})}
         trigger={
           <button type="button" className={`${phoneTabClass} group`}>
             <span className="grid h-9 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground transition-transform duration-150 group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
@@ -218,14 +223,6 @@ export function PhoneNavigationView({
             </span>
             <span>{m.shell_create()}</span>
           </button>
-        }
-        content={
-          <PhoneCreationLinks
-            actions={actions}
-            pathname={pathname}
-            session={session}
-            {...(returnTo ? { returnTo } : {})}
-          />
         }
       />
       {session === 'unknown' || session === 'unavailable' ? (

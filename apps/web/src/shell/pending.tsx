@@ -1,5 +1,6 @@
 import { useRouter, useRouterState } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from './page-heading';
 
 export type PendingLayout = 'page' | 'feed' | 'detail' | 'form';
 
@@ -54,7 +55,7 @@ export function RouteLoading({ layout = 'page' }: { layout?: PendingLayout }) {
       data-route-pending={layout}
       className="mx-auto w-full min-w-0 space-y-6 py-4 md:py-8"
     >
-      <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{label}</h1>
+      <PageHeading className="text-2xl sm:text-3xl">{label}</PageHeading>
       <p role="status" className="text-sm text-muted-foreground">
         {m.route_loading_description()}
       </p>

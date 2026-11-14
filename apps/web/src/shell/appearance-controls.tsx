@@ -365,7 +365,7 @@ export function AppearanceControls({ className }: AppearanceControlsProps) {
   return (
     <section aria-label={m.shell_appearance()} className={cn('space-y-3', className)}>
       <h3 className="text-sm font-semibold">{m.shell_appearance()}</h3>
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         <LanguageControl />
         <ThemeControl />
       </div>
