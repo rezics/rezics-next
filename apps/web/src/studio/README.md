@@ -117,6 +117,32 @@ Deferred acceptance: `bun run --cwd apps/web test tests/studio-workspace-languag
 dirty-switch and publication-lock assertions stay in the shared language regression. Manual stories are review
 fixtures; their supplied successful saves and unavailable publication do not establish native or promoted acceptance.
 
+## Working preview
+
+Decision: working Book/column preview composes the public `PostReadingBody` over `selected.body`; each body,
+saved-source or editor replacement starts a fresh reader visit, including equal-byte reloads and same-document save
+acknowledgements. Title edits preserve that visit. Returning to Write retires reader disclosures, references, wide
+inspection and late focus/clipboard effects while the mounted editor keeps undo, uploads and unsaved changes.
+Pending or invalid snapshots withhold the reader rather than presenting an older body as current. Dirty preview
+keeps its unsaved explanation; the separately labelled current saved draft shows only saved provenance, never a
+claim that working edits have that revision or digest. Save, publication and uncertain replay keep their controller.
+
+The supplied `presentation.reader` provides admitted images, mentions and labels; shared controls use all eight
+interface locales. Missing media stays unavailable and absent references stay absent. Account/source currentness,
+selection generation, body/source identity and locale fence callbacks before replacement renders. The shared reader
+owns one bounded projection and one inspector; Studio adds no reads, scans, body copies or second editor. Wide
+content uses the canvas width while the shared reader owns prose measure, overflow and inspector recovery.
+
+Sources read before design: `workspace.tsx`, `revisions.tsx`'s `RevisionBody`, public
+`threads/post-reading-body.tsx`, `contract.ts`'s `StudioPresentation`, `controller.ts`'s selected/currentness/save
+lifecycle, this README, existing workspace language tests and ordinary workbench story fixtures, and the read-only
+main checkout's `.reference/INDEX.md`.
+
+Source-only acceptance adds `tests/studio-working-preview.test.tsx` and extends the ordinary workbench stories with
+explicitly illustrative native-format structured bodies. The verifier separately runs that suite and
+`tests/studio-workspace-language.test.tsx`, plus mounted Book/column authoring, keyboard, phone, themes and all eight
+locales. Tests, typing, builds, browser and capture remain unverified in this source attempt.
+
 ## Saved-version language
 
 Decision: Book and column version comparison uses complete `studio_revision_*` messages in all eight launch locales,

@@ -519,9 +519,14 @@
 .studio-version-list .studio-technical {
   flex: 1 1 12rem;
 }
-.studio-preview > :last-child {
-  max-inline-size: 72ch;
-  margin-inline: auto;
+.studio-preview > [data-slot='post-reading-body'] {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+.studio-preview-source {
+  min-inline-size: 0;
+  padding-block: 0.5rem;
+  border-block-end: 1px solid var(--border);
 }
 .studio-book-start-region {
   margin-block-start: 1.5rem;

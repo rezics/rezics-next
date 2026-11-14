@@ -11,9 +11,9 @@ import {
 import { RichTextEditor } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { DocumentBody } from '../document-body';
+import { PostReadingBody } from '../threads/post-reading-body';
 import type { BookOrganizerPort, StudioInput, StudioPort, StudioPresentation } from './contract';
-import { StudioController } from './controller';
+import { StudioController, type WorkingDocument } from './controller';
 import { NativeDraftComposer } from './native-draft-composer';
 import { workspaceEditorLabels, workspaceFailureMessage } from './workspace-language';
 import { BookOrganizer } from './book-organizer';
@@ -581,22 +581,14 @@ export function StudioWorkbench({
                 </WorkbenchRegion>
               </section>
               {tab === 'preview' ? (
-                <section
-                  className="studio-preview studio-stack"
-                  aria-label={m.studio_workspace_preview_region({}, options)}
-                >
-                  <h2>{documentTitle}</h2>
-                  <p className="studio-preview-notice">
-                    {selected.dirty
-                      ? m.studio_workspace_preview_unsaved({}, options)
-                      : m.studio_workspace_preview_saved({}, options)}
-                  </p>
-                  <DocumentBody
-                    {...presentation.reader?.(selected.source.revision.exact)}
-                    document={selected.body}
-                    visitKey={`${input.visitKey}:${postId}:preview:${selected.editorGeneration}`}
-                  />
-                </section>
+                <WorkingPreview
+                  controller={controller}
+                  selected={selected}
+                  presentation={presentation}
+                  workspaceVisit={input.visitKey}
+                  title={documentTitle}
+                  locale={locale}
+                />
               ) : null}
               <div hidden={tab !== 'versions'}>
                 <StudioVersions key={postId} controller={controller} state={state} presentation={presentation} />
@@ -650,6 +642,80 @@ export function StudioWorkbench({
     </section>
   );
 }
+
+/** The working snapshot is independent of saved-version readers and never owns an editor or a body copy. */
+function WorkingPreview({
+  controller,
+  selected,
+  presentation,
+  workspaceVisit,
+  title,
+  locale,
+}: {
+  controller: StudioController;
+  selected: WorkingDocument;
+  presentation: StudioPresentation;
+  workspaceVisit: string;
+  title: string;
+  locale: Locale;
+}) {
+  const { source, body, editorGeneration, snapshotPending, invalid } = selected;
+  const { postId, revisionId, sha256 } = source.revision.exact;
+  const options = { locale };
+  // Titles and upload status do not replace structured content. A save acknowledgement does replace its source.
+  const readerIdentity = useMemo(
+    () => ({}),
+    [controller, workspaceVisit, locale, source, body, editorGeneration, snapshotPending, invalid],
+  );
+  const visitKey = `studio-working:${workspaceVisit}:${locale}:${postId}:${editorGeneration}:${revisionId}:${sha256}`;
+  const isReaderCurrent = () => {
+    const live = controller.snapshot().selected;
+    return (
+      getLocale() === locale &&
+      controller.isEditorCurrent(postId, editorGeneration) &&
+      live?.source === source &&
+      live.body === body &&
+      !live.snapshotPending &&
+      !live.invalid
+    );
+  };
+  return (
+    <section className="studio-preview studio-stack" aria-label={m.studio_workspace_preview_region({}, options)}>
+      <h2>{title}</h2>
+      <p className="studio-preview-notice">
+        {selected.dirty
+          ? m.studio_workspace_preview_unsaved({}, options)
+          : m.studio_workspace_preview_saved({}, options)}
+      </p>
+      <div className="studio-preview-source" role="group" aria-label={m.studio_revision_current({}, options)}>
+        <p className="studio-help">
+          <time dateTime={source.revision.savedAt} title={source.revision.savedAt}>
+            {m.studio_workspace_saved_at({ savedAt: source.revision.savedAt }, options)}
+          </time>
+        </p>
+        <ExactVersionDetails exact={source.revision.exact} />
+      </div>
+      {invalid || snapshotPending ? (
+        <p role="status">
+          {invalid
+            ? m.studio_workspace_snapshot_error({}, options)
+            : m.studio_workspace_snapshot_pending({}, options)}
+        </p>
+      ) : (
+        <PostReadingBody
+          {...presentation.reader?.(source.revision.exact)}
+          document={body}
+          readerIdentity={readerIdentity}
+          isReaderCurrent={isReaderCurrent}
+          visitKey={visitKey}
+          wideVisitKey={visitKey}
+          locale={locale}
+        />
+      )}
+    </section>
+  );
+}
+
 function NewDraft({ controller, disabled }: { controller: StudioController; disabled: boolean }) {
   const [title, setTitle] = useState('');
   const options = { locale: getLocale() };
