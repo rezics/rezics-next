@@ -38,15 +38,32 @@ export function AniListLabelAdoption({
   const [targets, setTargets] = useState<Extract<AniListLabelTargetsResult, { kind: 'label-targets' }> | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
+  const [failedSearch, setFailedSearch] = useState<{ query: string; cursor?: string } | null>(null);
   const searchEpoch = useRef(0);
+  const labels = meta.labels!;
+  const searchContext = useRef({ row, subjectId: labels.subjectId });
+  searchContext.current = { row, subjectId: labels.subjectId };
+  const visitIsCurrent = current();
   useEffect(
     () => () => {
       searchEpoch.current += 1;
     },
     [],
   );
+  useEffect(() => {
+    searchEpoch.current += 1;
+    setSearching(false);
+    setSearchFailed(false);
+    setFailedSearch(null);
+  }, [row, labels.subjectId]);
+  useEffect(() => {
+    if (visitIsCurrent) return;
+    searchEpoch.current += 1;
+    setSearching(false);
+    setSearchFailed(false);
+    setFailedSearch(null);
+  }, [visitIsCurrent]);
   const evidence = row.labelEvidence!;
-  const labels = meta.labels!;
   const selections = labels.selections;
   const reviewed = labels.review;
   const unfinished = Object.values(row.labelWork ?? {}).some(
@@ -67,15 +84,38 @@ export function AniListLabelAdoption({
       selections.map((item) => (item.key === key ? { key, target: next } : item)),
     );
   }
-  async function search(cursor?: string) {
+  async function search(cursor?: string, requestedQuery = query) {
+    if (!current()) return;
     const epoch = ++searchEpoch.current;
+    const requestedRow = row;
+    const requestedSubject = labels.subjectId;
+    const isCurrentRequest = () =>
+      epoch === searchEpoch.current &&
+      current() &&
+      searchContext.current.row === requestedRow &&
+      searchContext.current.subjectId === requestedSubject;
+    const request = { query: requestedQuery, ...(cursor === undefined ? {} : { cursor }) };
     setSearching(true);
-    const response = await onSearch(query, cursor);
-    if (!current() || epoch !== searchEpoch.current) return;
-    setSearching(false);
-    if (reviewed) onChoose(labels.subjectId, selections);
-    setSearchFailed(response.kind !== 'label-targets');
-    setTargets(response.kind === 'label-targets' ? response : null);
+    setSearchFailed(false);
+    setFailedSearch(null);
+    try {
+      const response = await onSearch(requestedQuery, cursor);
+      if (!isCurrentRequest()) return;
+      if (response.kind === 'label-targets') {
+        setTargets(response);
+        setSearchFailed(false);
+        setFailedSearch(null);
+      } else {
+        setSearchFailed(true);
+        setFailedSearch(request);
+      }
+    } catch {
+      if (!isCurrentRequest()) return;
+      setSearchFailed(true);
+      setFailedSearch(request);
+    } finally {
+      if (isCurrentRequest()) setSearching(false);
+    }
   }
   return (
     <section
@@ -122,6 +162,8 @@ export function AniListLabelAdoption({
               onChange={(event) => {
                 searchEpoch.current++;
                 setSearching(false);
+                setSearchFailed(false);
+                setFailedSearch(null);
                 setQuery(event.target.value);
                 setTargets(null);
               }}
@@ -130,6 +172,16 @@ export function AniListLabelAdoption({
               <AniListAction type="button" variant="outline" disabled={locked || searching} onClick={() => void search()}>
                 {m.library_anilist_labels_search()}
               </AniListAction>
+              {searchFailed && failedSearch ? (
+                <AniListAction
+                  type="button"
+                  variant="outline"
+                  disabled={locked || searching}
+                  onClick={() => void search(failedSearch.cursor, failedSearch.query)}
+                >
+                  {m.library_import_page_retry()}
+                </AniListAction>
+              ) : null}
               {targets?.next ? (
                 <AniListAction
                   type="button"

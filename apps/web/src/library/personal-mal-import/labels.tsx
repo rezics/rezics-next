@@ -190,11 +190,18 @@ export function MalCurrentAssignments({ subjectId, disabled = false }: { subject
   async function read() {
     const request = ++epoch.current;
     setBusy(true);
-    const response = await port.assignments?.(subjectId);
-    if (request !== epoch.current) return;
-    setBusy(false);
-    setFailed(response?.kind !== 'assignments');
-    setCurrent(response?.kind === 'assignments' ? response.assignments : null);
+    setFailed(false);
+    try {
+      const response = await port.assignments?.(subjectId);
+      if (request !== epoch.current) return;
+      if (response?.kind === 'assignments') setCurrent(response.assignments);
+      else setFailed(true);
+    } catch {
+      if (request !== epoch.current) return;
+      setFailed(true);
+    } finally {
+      if (request === epoch.current) setBusy(false);
+    }
   }
   return (
     <section
@@ -203,12 +210,12 @@ export function MalCurrentAssignments({ subjectId, disabled = false }: { subject
     >
       <h4 className="font-medium">{m.library_mal_label_current()}</h4>
       <MalAction type="button" variant="outline" disabled={disabled || busy} onClick={() => void read()}>
-        {m.library_anilist_labels_read()}
+        {failed ? m.library_import_page_retry() : m.library_anilist_labels_read()}
       </MalAction>
-      {failed ? <p role="status">{m.library_mal_unavailable()}</p> : null}
-      {current === null ? (
+      {failed ? <p role="status">{m.library_import_page_read_failed()}</p> : null}
+      {current === null && !failed ? (
         <p>{m.library_anilist_labels_read_pending()}</p>
-      ) : (
+      ) : current !== null ? (
         <>
           {!current.length ? <p>{m.library_mal_label_none()}</p> : null}
           <ul>

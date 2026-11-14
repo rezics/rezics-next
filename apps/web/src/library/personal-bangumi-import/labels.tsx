@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type {
   BangumiCommand,
@@ -99,14 +99,28 @@ export function BangumiLabelAdoption({
         }
     : null;
   const mounted = useRef(true);
+  const tagReadEpoch = useRef(0);
+  const searchEpoch = useRef(0);
+  const assignmentEpoch = useRef(0);
+  const [tagReadRetry, setTagReadRetry] = useState<{
+    rowRevision: string;
+    after: number;
+    readFailure: boolean;
+  } | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
-  const latest = useRef({ rowRevision, visit });
-  latest.current = { rowRevision, visit };
+  const subjectId = current?.labels?.review.subject?.subjectId ?? null;
+  const latest = useRef({ rowRevision, visit, subjectId });
+  latest.current = { rowRevision, visit, subjectId };
+  useEffect(() => {
+    tagReadEpoch.current++;
+    searchEpoch.current++;
+    assignmentEpoch.current++;
+  }, [rowRevision, subjectId, visit]);
   useEffect(() => {
     if (rowRevision && panel?.rowRevision !== rowRevision && !panel?.command)
       onChange(() => emptyBangumiLabelPanel(rowRevision));
@@ -135,6 +149,14 @@ export function BangumiLabelAdoption({
   async function loadTags(after = -1, retryCommand?: Extract<BangumiCommand, { kind: 'tags' }>) {
     if (!current || !rowRevision || disabled || current.busy || (current.command && !retryCommand) || !visit.current())
       return;
+    const expectedVisit = latest.current.visit;
+    const expectedSubjectId = latest.current.subjectId;
+    const request = ++tagReadEpoch.current;
+    const isCurrentRead = () =>
+      request === tagReadEpoch.current &&
+      latest.current.visit === expectedVisit &&
+      latest.current.subjectId === expectedSubjectId &&
+      isCurrent(rowRevision);
     const command: Extract<BangumiCommand, { kind: 'tags' }> = retryCommand ?? {
       kind: 'tags',
       uploadId,
@@ -142,49 +164,72 @@ export function BangumiLabelAdoption({
       after,
       ...(current.custody ? { custody: current.custody } : {}),
     };
+    setTagReadRetry(null);
     update((state) => ({ ...state, busy: true, notice: null }));
-    const response = await port.tags(command);
-    if (!isCurrent(rowRevision)) return;
-    if (response.kind === 'unknown') {
-      update((state) => ({
-        ...state,
-        busy: false,
-        command: response.command as Extract<BangumiCommand, { kind: 'tags' }>,
-      }));
-      return;
+    try {
+      const response = await port.tags(command);
+      if (!isCurrentRead()) return;
+      if (response.kind === 'unknown') {
+        update((state) => ({
+          ...state,
+          busy: false,
+          command: response.command as Extract<BangumiCommand, { kind: 'tags' }>,
+        }));
+        return;
+      }
+      if (response.kind !== 'tags') {
+        if (response.kind === 'conflict') {
+          setTagReadRetry({ rowRevision, after: command.after, readFailure: false });
+          update((state) => ({ ...state, busy: false, notice: response }));
+        } else {
+          setTagReadRetry({ rowRevision, after: command.after, readFailure: true });
+          update((state) => ({ ...state, busy: false, notice: null }));
+        }
+        return;
+      }
+      if (response.page.rowRevision !== rowRevision) {
+        setTagReadRetry({ rowRevision, after: command.after, readFailure: false });
+        update((state) => ({ ...state, busy: false, notice: { kind: 'conflict' } }));
+        return;
+      }
+      setTagReadRetry(null);
+      update((state) => {
+        const index = state.pages.findIndex(
+          (page) => page.tags[0]?.index === response.page.tags[0]?.index && page.tags.length > 0,
+        );
+        const pages = [...state.pages];
+        if (index >= 0) pages[index] = response.page;
+        else pages.push(response.page);
+        return {
+          ...state,
+          busy: false,
+          command: null,
+          custody: response.custody ?? state.custody,
+          pages,
+          pageIndex: index >= 0 ? index : Math.max(0, pages.length - 1),
+          labels: response.page.labels,
+          reviewedMappings: null,
+          notice: null,
+        };
+      });
+    } catch {
+      if (!isCurrentRead()) return;
+      setTagReadRetry({ rowRevision, after: command.after, readFailure: true });
+      update((state) => ({ ...state, busy: false, notice: null }));
     }
-    if (response.kind !== 'tags') {
-      update((state) => ({ ...state, busy: false, notice: response as BangumiFailure }));
-      return;
-    }
-    if (response.page.rowRevision !== rowRevision) {
-      update((state) => ({ ...state, busy: false, notice: { kind: 'conflict' } }));
-      return;
-    }
-    update((state) => {
-      const index = state.pages.findIndex(
-        (page) => page.tags[0]?.index === response.page.tags[0]?.index && page.tags.length > 0,
-      );
-      const pages = [...state.pages];
-      if (index >= 0) pages[index] = response.page;
-      else pages.push(response.page);
-      return {
-        ...state,
-        busy: false,
-        command: null,
-        custody: response.custody ?? state.custody,
-        pages,
-        pageIndex: index >= 0 ? index : Math.max(0, pages.length - 1),
-        labels: response.page.labels,
-        reviewedMappings: null,
-        notice: null,
-      };
-    });
   }
 
   async function search(index: number, fallback: string) {
     if (!current || disabled || current.busy || current.command || !visit.current()) return;
+    const expectedVisit = latest.current.visit;
+    const expectedSubjectId = latest.current.subjectId;
+    const request = ++searchEpoch.current;
     const query = current.queries[index] ?? fallback;
+    const isCurrentSearch = () =>
+      request === searchEpoch.current &&
+      latest.current.visit === expectedVisit &&
+      latest.current.subjectId === expectedSubjectId &&
+      isCurrent(rowRevision);
     update((state) => ({
       ...state,
       busy: true,
@@ -192,24 +237,34 @@ export function BangumiLabelAdoption({
       searchState: { ...state.searchState, [index]: 'idle' },
       notice: null,
     }));
-    const response = await port.searchLabels(query);
-    if (!isCurrent(rowRevision)) return;
-    if (response.kind !== 'label-options') {
+    try {
+      const response = await port.searchLabels(query);
+      if (!isCurrentSearch()) return;
+      if (response.kind !== 'label-options') {
+        update((state) => ({
+          ...state,
+          busy: false,
+          searchState: { ...state.searchState, [index]: 'unavailable' },
+          notice: null,
+        }));
+        return;
+      }
+      update((state) => ({
+        ...state,
+        busy: false,
+        options: { ...state.options, [index]: response.labels },
+        searchState: { ...state.searchState, [index]: 'loaded' },
+        notice: null,
+      }));
+    } catch {
+      if (!isCurrentSearch()) return;
       update((state) => ({
         ...state,
         busy: false,
         searchState: { ...state.searchState, [index]: 'unavailable' },
-        notice: response,
+        notice: null,
       }));
-      return;
     }
-    update((state) => ({
-      ...state,
-      busy: false,
-      options: { ...state.options, [index]: response.labels },
-      searchState: { ...state.searchState, [index]: 'loaded' },
-      notice: null,
-    }));
   }
 
   async function reviewLabels() {
@@ -228,6 +283,8 @@ export function BangumiLabelAdoption({
       key: newCommandKey(),
       custody: current.custody,
     };
+    tagReadEpoch.current++;
+    setTagReadRetry(null);
     update((state) => ({ ...state, busy: true, command, notice: null, labels: null, result: null, assignments: null }));
     const response = await port.reviewLabels(command);
     if (!isCurrent(rowRevision)) return;
@@ -257,15 +314,27 @@ export function BangumiLabelAdoption({
   }
 
   async function readAssignments(subjectId: string, expectedRevision: string | null) {
-    if (!isCurrent(expectedRevision)) return;
+    if (!isCurrent(expectedRevision) || latest.current.subjectId !== subjectId) return;
+    const expectedVisit = latest.current.visit;
+    const request = ++assignmentEpoch.current;
+    const isCurrentAssignmentRead = () =>
+      request === assignmentEpoch.current &&
+      latest.current.visit === expectedVisit &&
+      latest.current.subjectId === subjectId &&
+      isCurrent(expectedRevision);
     update((state) => ({ ...state, assignmentState: 'loading' }));
-    const response = await port.readAssignments(subjectId);
-    if (!isCurrent(expectedRevision)) return;
-    if (response.kind !== 'assignments') {
+    try {
+      const response = await port.readAssignments(subjectId);
+      if (!isCurrentAssignmentRead()) return;
+      if (response.kind !== 'assignments' || response.subjectId !== subjectId) {
+        update((state) => ({ ...state, assignmentState: 'unavailable' }));
+        return;
+      }
+      update((state) => ({ ...state, assignments: response.assignments, assignmentState: 'loaded' }));
+    } catch {
+      if (!isCurrentAssignmentRead()) return;
       update((state) => ({ ...state, assignmentState: 'unavailable' }));
-      return;
     }
-    update((state) => ({ ...state, assignments: response.assignments, assignmentState: 'loaded' }));
   }
 
   async function applyLabels(command?: Extract<BangumiCommand, { kind: 'apply-labels' }>, retry = false) {
@@ -283,6 +352,8 @@ export function BangumiLabelAdoption({
       reviewToken: review!.token,
       custody: current.custody!,
     };
+    tagReadEpoch.current++;
+    setTagReadRetry(null);
     update((state) => ({ ...state, busy: true, command: exact, notice: null }));
     const response = await port.applyLabels(exact);
     if (!isCurrent(rowRevision)) return;
@@ -308,6 +379,14 @@ export function BangumiLabelAdoption({
     expectedRevision: string,
   ) {
     if (!isCurrent(expectedRevision)) return;
+    const expectedVisit = latest.current.visit;
+    const expectedSubjectId = latest.current.subjectId;
+    const request = ++tagReadEpoch.current;
+    const isCurrentReadback = () =>
+      request === tagReadEpoch.current &&
+      latest.current.visit === expectedVisit &&
+      latest.current.subjectId === expectedSubjectId &&
+      isCurrent(expectedRevision);
     const tagsCommand: Extract<BangumiCommand, { kind: 'tags' }> = {
       kind: 'tags',
       uploadId: command.uploadId,
@@ -315,16 +394,46 @@ export function BangumiLabelAdoption({
       after: -1,
       custody: command.custody,
     };
-    const response = await port.tags(tagsCommand);
-    if (!isCurrent(expectedRevision)) return;
-    if (response.kind === 'tags' && response.page.rowRevision === expectedRevision)
+    try {
+      const response = await port.tags(tagsCommand);
+      if (!isCurrentReadback()) return;
+      if (response.kind === 'unknown') {
+        update((state) =>
+          state.command
+            ? state
+            : {
+                ...state,
+                command: response.command as Extract<BangumiCommand, { kind: 'tags' }>,
+                notice: null,
+              },
+        );
+        return;
+      }
+      if (response.kind === 'tags' && response.page.rowRevision === expectedRevision) {
+        setTagReadRetry(null);
+        update((state) =>
+          state.command
+            ? state
+            : {
+                ...state,
+                pages: [response.page],
+                pageIndex: 0,
+                labels: response.page.labels,
+                custody: response.custody ?? state.custody,
+              },
+        );
+        return;
+      }
+      const conflict = response.kind === 'conflict' || response.kind === 'tags';
+      setTagReadRetry({ rowRevision: expectedRevision, after: tagsCommand.after, readFailure: !conflict });
       update((state) => ({
         ...state,
-        pages: [response.page],
-        pageIndex: 0,
-        labels: response.page.labels,
-        custody: response.custody ?? state.custody,
+        notice: conflict ? { kind: 'conflict' } : null,
       }));
+    } catch {
+      if (!isCurrentReadback()) return;
+      setTagReadRetry({ rowRevision: expectedRevision, after: tagsCommand.after, readFailure: true });
+    }
   }
 
   async function retry() {
@@ -368,6 +477,7 @@ export function BangumiLabelAdoption({
   }
 
   const page = current.pages[current.pageIndex];
+  const failedTagRead = tagReadRetry?.rowRevision === rowRevision ? tagReadRetry : null;
   const allTags: BangumiTag[] = current.pages.flatMap((item) => item.tags);
   const selectedCount = Object.keys(current.mappings).length;
   const selectedMappings = Object.entries(current.mappings)
@@ -395,17 +505,25 @@ export function BangumiLabelAdoption({
         {!current.pages.length ? <p className="text-sm">{m.library_bangumi_label_not_loaded()}</p> : null}
         <div className="flex flex-wrap gap-3">
           {!current.pages.length ? (
-            <BangumiAction type="button" disabled={disabled || current.busy || held} onClick={() => void loadTags()}>
-              {current.busy ? m.library_bangumi_label_loading() : m.library_bangumi_label_load_tags()}
+            <BangumiAction
+              type="button"
+              disabled={disabled || current.busy || held}
+              onClick={() => void loadTags(failedTagRead?.after ?? -1)}
+            >
+              {current.busy
+                ? m.library_bangumi_label_loading()
+                : failedTagRead
+                  ? m.library_import_page_retry()
+                  : m.library_bangumi_label_load_tags()}
             </BangumiAction>
           ) : (
             <BangumiAction
               type="button"
               variant="outline"
               disabled={disabled || current.busy || held}
-              onClick={() => void loadTags()}
+              onClick={() => void loadTags(failedTagRead?.after === -1 ? failedTagRead.after : -1)}
             >
-              {m.library_bangumi_label_refresh_tags()}
+              {failedTagRead?.after === -1 ? m.library_import_page_retry() : m.library_bangumi_label_refresh_tags()}
             </BangumiAction>
           )}
           {page?.next !== null && page?.next !== undefined ? (
@@ -413,9 +531,21 @@ export function BangumiLabelAdoption({
               type="button"
               variant="outline"
               disabled={disabled || current.busy || held}
-              onClick={() => void loadTags(page.next!)}
+              onClick={() =>
+                void loadTags(failedTagRead?.after === page.next ? failedTagRead.after : page.next!)
+              }
             >
-              {m.library_bangumi_label_next_page()}
+              {failedTagRead?.after === page.next ? m.library_import_page_retry() : m.library_bangumi_label_next_page()}
+            </BangumiAction>
+          ) : null}
+          {failedTagRead && failedTagRead.after !== -1 && failedTagRead.after !== page?.next ? (
+            <BangumiAction
+              type="button"
+              variant="outline"
+              disabled={disabled || current.busy || held}
+              onClick={() => void loadTags(failedTagRead.after)}
+            >
+              {m.library_import_page_retry()}
             </BangumiAction>
           ) : null}
           {current.pages.length > 1 ? (
@@ -434,6 +564,9 @@ export function BangumiLabelAdoption({
             </BangumiAction>
           ) : null}
         </div>
+        {failedTagRead?.readFailure ? (
+          <p role="status">{m.library_import_page_read_failed()}</p>
+        ) : null}
         {current.notice ? (
           <p role="status">
             {current.notice.kind === 'conflict'
@@ -524,12 +657,16 @@ export function BangumiLabelAdoption({
                             className="min-h-11 w-full rounded-md border bg-background px-3 py-2"
                             value={query}
                             disabled={disabled || current.busy || held}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              searchEpoch.current++;
                               update((state) => ({
                                 ...state,
                                 queries: { ...state.queries, [tag.index]: event.target.value },
-                              }))
-                            }
+                                options: { ...state.options, [tag.index]: [] },
+                                searchState: { ...state.searchState, [tag.index]: 'idle' },
+                                notice: null,
+                              }));
+                            }}
                           />
                           <BangumiAction
                             type="button"
@@ -537,7 +674,9 @@ export function BangumiLabelAdoption({
                             disabled={disabled || current.busy || held || (selectedCount >= 16 && !target)}
                             onClick={() => void search(tag.index, query)}
                           >
-                            {m.library_bangumi_label_search_owned()}
+                            {current.searchState[tag.index] === 'unavailable'
+                              ? m.library_import_page_retry()
+                              : m.library_bangumi_label_search_owned()}
                           </BangumiAction>
                           {current.searchState[tag.index] === 'loaded' && current.options[tag.index]?.length === 0 ? (
                             <p>{m.library_bangumi_label_no_owned_labels()}</p>
@@ -667,18 +806,18 @@ export function BangumiLabelAdoption({
         {current.labels?.review.subject ? (
           <section className="space-y-2 rounded-md border p-3">
             <h5 className="font-medium">{m.library_bangumi_label_current_assignments()}</h5>
-            {current.assignmentState !== 'loaded' ? (
-              <BangumiAction
-                type="button"
-                variant="outline"
-                disabled={disabled || current.busy || held || current.assignmentState === 'loading'}
-                onClick={() => void readAssignments(current.labels!.review.subject!.subjectId, rowRevision)}
-              >
-                {current.assignmentState === 'loading'
-                  ? m.library_bangumi_label_assignments_loading()
+            <BangumiAction
+              type="button"
+              variant="outline"
+              disabled={disabled || current.busy || held || current.assignmentState === 'loading'}
+              onClick={() => void readAssignments(current.labels!.review.subject!.subjectId, rowRevision)}
+            >
+              {current.assignmentState === 'loading'
+                ? m.library_bangumi_label_assignments_loading()
+                : current.assignmentState === 'unavailable'
+                  ? m.library_import_page_retry()
                   : m.library_bangumi_label_read_assignments()}
-              </BangumiAction>
-            ) : null}
+            </BangumiAction>
             {current.assignmentState === 'unavailable' ? (
               <p role="status">{m.library_bangumi_label_assignments_unavailable()}</p>
             ) : null}
