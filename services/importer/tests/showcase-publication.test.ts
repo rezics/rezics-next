@@ -910,10 +910,9 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       const currentSelection = adopted.get(`${subject.id}\0schema:abstract`)!.selection;
       expect(currentSelection).toEqual(
         subject.id === workId
-          ? [
-              ...retainedAbstractSelection,
-              { candidate: candidate.id, rank: 'normal' },
-            ].sort((left, right) => left.candidate.localeCompare(right.candidate))
+          ? [...retainedAbstractSelection, { candidate: candidate.id, rank: 'normal' }].sort((left, right) =>
+              left.candidate.localeCompare(right.candidate),
+            )
           : [{ candidate: candidate.id, rank: 'normal' }],
       );
       expect(subject.statements['schema:abstract']).toEqual(
