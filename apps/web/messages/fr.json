@@ -12013,6 +12013,8 @@
   "knowledge_history_sparse": "Aucune révision sur cette page. Révisions suivantes poursuit la lecture de l’historique natif.",
   "knowledge_history_compare": "Comparer les révisions sélectionnées",
   "knowledge_history_more": "Révisions suivantes",
+  "knowledge_history_previous": "Révisions précédentes",
+  "knowledge_history_window_edge": "Les pages antérieures ne sont plus dans cette fenêtre d’historique. Redémarrez l’historique pour lire depuis le début.",
   "knowledge_history_restart": "Redémarrer l’historique",
   "knowledge_history_provenance": "Source de la copie",
   "knowledge_transfer_heading": "Réutiliser cette révision",

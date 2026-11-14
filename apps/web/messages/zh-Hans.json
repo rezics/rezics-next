@@ -12013,6 +12013,8 @@
   "knowledge_history_sparse": "此页没有修订。点击「更多修订」继续读取原生历史。",
   "knowledge_history_compare": "比较所选修订",
   "knowledge_history_more": "更多修订",
+  "knowledge_history_previous": "上一页修订",
+  "knowledge_history_window_edge": "更早的页面已不在当前历史范围内。请重新读取历史以从头开始。",
   "knowledge_history_restart": "重新读取历史",
   "knowledge_history_provenance": "复制来源",
   "knowledge_transfer_heading": "复用此修订版本",

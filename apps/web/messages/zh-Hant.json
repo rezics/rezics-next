@@ -12013,6 +12013,8 @@
   "knowledge_history_sparse": "此頁沒有修訂。點選「更多修訂」繼續讀取原生歷史。",
   "knowledge_history_compare": "比較所選修訂",
   "knowledge_history_more": "更多修訂",
+  "knowledge_history_previous": "上一頁修訂",
+  "knowledge_history_window_edge": "更早的頁面已不在目前歷史範圍內。請重新讀取歷史以從頭開始。",
   "knowledge_history_restart": "重新讀取歷史",
   "knowledge_history_provenance": "複製來源",
   "knowledge_transfer_heading": "重用此修訂版本",

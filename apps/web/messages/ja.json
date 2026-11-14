@@ -12013,6 +12013,8 @@
   "knowledge_history_sparse": "このページに改訂はありません。「次の改訂」で履歴の続きを読み込みます。",
   "knowledge_history_compare": "選択した改訂を比較",
   "knowledge_history_more": "次の改訂",
+  "knowledge_history_previous": "前の改訂",
+  "knowledge_history_window_edge": "これより前のページは保持範囲外です。最初から読むには履歴を再開してください。",
   "knowledge_history_restart": "履歴を最初から読む",
   "knowledge_history_provenance": "コピー元",
   "knowledge_transfer_heading": "このリビジョンを再利用",

@@ -13,6 +13,13 @@ import {
   type KnowledgeHistoryPair,
 } from './history';
 import { KnowledgeHistoryComparisonView } from './history-comparison';
+import {
+  firstKnowledgeHistoryPage,
+  nextKnowledgeHistoryPage,
+  previousKnowledgeHistoryPage,
+  retainKnowledgeHistoryNavigation,
+  type KnowledgeHistoryNavigation,
+} from './history-navigation';
 
 const control = knowledgeControl;
 type Admission = 'unknown' | 'available' | 'denied' | 'unavailable';
@@ -58,7 +65,8 @@ export function KnowledgeHistoryPanel({
   const [pending, setPending] = useState(false);
   const [page, setPage] = useState<KnowledgeHistoryPage | null>(null);
   const [pageState, setPageState] = useState('idle');
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [navigation, setNavigation] = useState(firstKnowledgeHistoryPage);
+  const [attempt, setAttempt] = useState<KnowledgeHistoryNavigation | null>(null);
   const [leftRevisionId, setLeft] = useState('');
   const [rightRevisionId, setRight] = useState('');
   const [pair, setPair] = useState<KnowledgeHistoryPair | null>(null);
@@ -94,7 +102,7 @@ export function KnowledgeHistoryPanel({
       onRetire(result.state);
     }
   }
-  async function load(next: string | null) {
+  async function load(request: KnowledgeHistoryNavigation) {
     if (!operations || busy.current || !live.current || !isCurrent() || admission !== 'available') return;
     const ticket = ++sequence.current;
     busy.current = true;
@@ -104,14 +112,16 @@ export function KnowledgeHistoryPanel({
     setPage(null);
     setComparison(null);
     setPair(null);
-    setCursor(next);
+    setAttempt(request);
     setPageState('preparing');
     focus('heading');
     try {
-      const result = await operations.read(address, next, binding);
+      const result = await operations.read(address, request.cursor, binding);
       if (!current(ticket)) return;
       if (result.state === 'ready') {
         setPage(result.page);
+        setNavigation(retainKnowledgeHistoryNavigation(request, result.page.next));
+        setAttempt(null);
         setPageState('ready');
       } else {
         setPageState(result.state);
@@ -179,7 +189,8 @@ export function KnowledgeHistoryPanel({
     setOpen(false);
     setShowComparison(false);
     setPage(null);
-    setCursor(null);
+    setNavigation(firstKnowledgeHistoryPage());
+    setAttempt(null);
     setLeft('');
     setRight('');
     setPair(null);
@@ -210,7 +221,7 @@ export function KnowledgeHistoryPanel({
           variant="outline"
           className={control}
           disabled={pending || open || admission !== 'available' || !operations}
-          onClick={() => void load(null)}
+          onClick={() => void load(firstKnowledgeHistoryPage())}
         >
           {m.knowledge_history_open({}, options)}
         </Button>
@@ -395,24 +406,33 @@ export function KnowledgeHistoryPanel({
                 >
                   {m.knowledge_history_compare({}, options)}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={control}
+                  disabled={pending || !page || !navigation.previous.length}
+                  onClick={() => void load(previousKnowledgeHistoryPage(navigation))}
+                >
+                  {m.knowledge_history_previous({}, options)}
+                </Button>
                 {page?.next ? (
                   <Button
                     type="button"
                     variant="outline"
                     className={control}
                     disabled={pending}
-                    onClick={() => void load(page.next)}
+                    onClick={() => void load(nextKnowledgeHistoryPage(navigation, page.next!))}
                   >
                     {m.knowledge_history_more({}, options)}
                   </Button>
                 ) : null}
-                {pageState === 'unavailable' ? (
+                {pageState === 'unavailable' && attempt ? (
                   <Button
                     type="button"
                     variant="outline"
                     className={control}
                     disabled={pending}
-                    onClick={() => void load(cursor)}
+                    onClick={() => void load(attempt)}
                   >
                     {m.knowledge_private_retry({}, options)}
                   </Button>
@@ -422,11 +442,16 @@ export function KnowledgeHistoryPanel({
                   variant="outline"
                   className={control}
                   disabled={pending}
-                  onClick={() => void load(null)}
+                  onClick={() => void load(firstKnowledgeHistoryPage())}
                 >
                   {m.knowledge_history_restart({}, options)}
                 </Button>
               </div>
+              {page && navigation.truncated && !navigation.previous.length ? (
+                <p role="status" className="max-w-prose text-sm text-muted-foreground">
+                  {m.knowledge_history_window_edge({}, options)}
+                </p>
+              ) : null}
               {compareAdmission !== 'available' ? <p role="status">{failureText(compareAdmission)}</p> : null}
             </div>
           </div>

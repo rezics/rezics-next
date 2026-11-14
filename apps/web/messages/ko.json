@@ -12013,6 +12013,8 @@
   "knowledge_history_sparse": "이 페이지에는 리비전이 없습니다. 다음 리비전을 누르면 기본 기록 읽기를 계속합니다.",
   "knowledge_history_compare": "선택한 리비전 비교",
   "knowledge_history_more": "다음 리비전",
+  "knowledge_history_previous": "이전 리비전",
+  "knowledge_history_window_edge": "더 이전 페이지는 보관된 기록 범위 밖에 있습니다. 처음부터 읽으려면 기록을 다시 시작하세요.",
   "knowledge_history_restart": "기록 다시 시작",
   "knowledge_history_provenance": "복사 원본",
   "knowledge_transfer_heading": "이 리비전 재사용",

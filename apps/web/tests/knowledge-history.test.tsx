@@ -41,7 +41,7 @@ function exact(revisionId: string): KnowledgeHistoryRevision {
 function comparison(left = revisionA, right = revisionB): KnowledgeHistoryComparison {
   return { documentId, left: exact(left), right: exact(right) };
 }
-function page(next: string | null = null, revisions = [revisionB, revisionA]): KnowledgeHistoryRead {
+function page(next: string | null = null, revisions = [revisionB, revisionA]): Extract<KnowledgeHistoryRead, { state: 'ready' }> {
   return {
     state: 'ready',
     page: {
@@ -126,6 +126,67 @@ test('history reads one replacing page per action, preserves sparse continuation
     expect(compareCalls).toBe(0);
     await view.click(view.button('Return to draft'));
     expect(view.activeElement()).toBe(view.button('Open revision history'));
+  } finally {
+    await mount.close();
+  }
+});
+
+test('Previous rereads exact cursors, retries a failed traversal and stops at the bounded window with explicit Restart', async () => {
+  const mount = await harness();
+  const cursors: Array<string | null> = [];
+  let failPrevious = false;
+  const ops = operations({
+    history: {
+      read: async (_address, cursor) => {
+        cursors.push(cursor);
+        if (failPrevious) {
+          failPrevious = false;
+          return { state: 'unavailable', status: 503 };
+        }
+        const index = cursor === null ? 0 : Number(cursor.slice(5));
+        const result = page(`page-${index + 1}`);
+        return {
+          ...result,
+          page: { ...result.page, revisions: [{ ...result.page.revisions[0]!, title: `Page ${index}` }] },
+        };
+      },
+      compare: async () => ({ state: 'unavailable' }),
+    },
+  });
+  try {
+    const view = await mount.mount(address, ops);
+    await view.findInput('Document title');
+    await view.click(view.button('Open revision history'));
+    await view.findText('Page 0');
+    expect(view.button('Previous revisions').disabled).toBe(true);
+    for (let index = 1; index <= 22; index++) {
+      await view.click(view.button('More revisions'));
+      await view.findText(`Page ${index}`);
+      view.expectMissingText(`Page ${index - 1}`);
+    }
+    failPrevious = true;
+    await view.click(view.button('Previous revisions'));
+    await view.findText('Revision history is unavailable.');
+    view.expectMissingText('Page 22');
+    await view.click(view.button('Retry this visit'));
+    await view.findText('Page 21');
+    expect(cursors.slice(-2)).toEqual(['page-21', 'page-21']);
+    await view.click(view.button('More revisions'));
+    await view.findText('Page 22');
+    for (let index = 21; index >= 4; index--) {
+      await view.click(view.button('Previous revisions'));
+      await view.findText(`Page ${index}`);
+      expect(cursors.at(-1)).toBe(`page-${index}`);
+    }
+    expect(view.button('Previous revisions').disabled).toBe(true);
+    view.expectText('Earlier pages are outside this history window.');
+    const reads = cursors.length;
+    await view.click(view.button('Previous revisions'));
+    expect(cursors).toHaveLength(reads);
+    await view.click(view.button('Restart history'));
+    await view.findText('Page 0');
+    expect(cursors.at(-1)).toBe(null);
+    expect(view.button('Previous revisions').disabled).toBe(true);
   } finally {
     await mount.close();
   }
