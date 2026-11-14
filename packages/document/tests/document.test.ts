@@ -56,9 +56,9 @@ test('ordinary DOM tags retain identity, language and custom attributes in both 
       ),
     );
     const schema = schemaForProfile(profile);
-    expect(schema.nodes.codeBlock.spec.parseDOM![0]).toMatchObject({ tag: 'pre', preserveWhitespace: 'full' });
+    expect(schema.nodes.codeBlock!.spec.parseDOM![0]).toMatchObject({ tag: 'pre', preserveWhitespace: 'full' });
     expect(
-      schema.nodes.paragraph.spec.parseDOM![0]!.getAttrs!({ getAttribute: () => null } as unknown as HTMLElement),
+      schema.nodes.paragraph!.spec.parseDOM![0]!.getAttrs!({ getAttribute: () => null } as unknown as HTMLElement),
     ).toEqual({ id: null, lang: null, dir: null });
   }
 });
@@ -157,15 +157,15 @@ test('footnote definition DOM attributes and formatted body survive both schemas
       lang: 'zh-Hant',
       dir: 'rtl',
     };
-    const attrs = schema.nodes.footnoteDefinition.spec.parseDOM![0]!.getAttrs!({
+    const attrs = schema.nodes.footnoteDefinition!.spec.parseDOM![0]!.getAttrs!({
       getAttribute: (name: string) => domAttrs[name] ?? null,
     } as unknown as HTMLElement);
-    const body = schema.nodes.paragraph.create(
+    const body = schema.nodes.paragraph!.create(
       { id: 'body' },
-      schema.text('Formatted body', [schema.marks.bold.create()]),
+      schema.text('Formatted body', [schema.marks.bold!.create()]),
     );
-    const definition = schema.nodes.footnoteDefinition
-      .create(attrs === false ? null : attrs, body)
+    const definition = schema.nodes
+      .footnoteDefinition!.create(attrs === false ? null : attrs, body)
       .toJSON() as DocumentNode;
     const document = normalizeDocument(snapshot([definition], profile));
     expectDOMBlockRoundTrip(document);
