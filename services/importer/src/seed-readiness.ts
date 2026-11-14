@@ -147,7 +147,7 @@ export async function waitForKernelReadiness(options: SeedReadinessOptions): Pro
         origin: readScope.origin,
         pathPrefix: READINESS_PATH,
         deadlineMs: Math.ceil(remaining),
-        sleep: options.sleep,
+        ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
         now,
         schedule,
         fetch: (async (_input, init) => {
