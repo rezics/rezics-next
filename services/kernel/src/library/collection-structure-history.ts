@@ -1,12 +1,11 @@
-import type { Pool } from 'pg';
-import { deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import type { Pool, PoolClient } from 'pg';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { CollectionResourceView } from './collection-reads.ts';
+import { withCollectionReadSnapshot } from './collection-read-connection.ts';
 import historyHead from './collection-structure-history-head.sql';
 import historyPage from './collection-structure-history-page.sql';
 import historySelected from './collection-structure-history-selected.sql';
@@ -282,25 +281,6 @@ function viewChange(
   };
 }
 
-async function snapshot<T>(
-  pool: Pool,
-  deadline: number,
-  read: (client: ReturnType<typeof deadlineClient>) => Promise<T>,
-) {
-  return withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const value = await read(client);
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      throw error;
-    }
-  });
-}
-
 export function createCollectionStructureHistory(dependencies: { pool: Pool; tokens: KeyRing; current: Current }) {
   const { pool, tokens } = dependencies;
   return { page, compare };
@@ -320,7 +300,7 @@ export function createCollectionStructureHistory(dependencies: { pool: Pool; tok
   }
 
   async function readHead(
-    client: ReturnType<typeof deadlineClient>,
+    client: Pick<PoolClient, 'query'>,
     route: number,
     collectionId: string,
   ): Promise<Head> {
@@ -337,7 +317,7 @@ export function createCollectionStructureHistory(dependencies: { pool: Pool; tok
     const limit = options.limit ?? DEFAULT_LIMIT;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw new ProblemError('invalid_request');
     const pageBinding = binding(pageOperation, route, collectionId, curator, limit);
-    const result = await snapshot(pool, deadline, async (client) => {
+    const result = await withCollectionReadSnapshot(pool, deadline, async (client) => {
       const head = await readHead(client, route, collectionId);
       let after = (BigInt(head.nextChangeNo) + 1n).toString();
       let basis: Basis = {
@@ -398,7 +378,7 @@ export function createCollectionStructureHistory(dependencies: { pool: Pool; tok
     const positions = addresses.map((address) => decodePosition(tokens, addressBinding, address));
     const basis = positions[0]!.basis;
     if (positions.some((position) => JSON.stringify(position.basis) !== JSON.stringify(basis))) throw invalidCursor();
-    const result = await snapshot(pool, deadline, async (client) => {
+    const result = await withCollectionReadSnapshot(pool, deadline, async (client) => {
       const head = await readHead(client, route, collectionId);
       const rows = await historySelected.run(client, {
         route,
