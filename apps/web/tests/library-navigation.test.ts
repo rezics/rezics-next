@@ -246,3 +246,36 @@ test('Collection overflow keeps every real Library destination and unavailable p
     setLocale(previousLocale, { reload: false });
   }
 });
+
+test('navigation notices keep pin precedence and distinguish empty, preparing and unavailable reads in every locale', () => {
+  const previousLocale = getLocale();
+  const empty: LibraryPinsRead = { state: 'loaded', revision: 0, next: null, pins: [] };
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const cases: [Parameters<typeof LibraryNavigationNotice>[0], string | null][] = [
+        [{ pins: empty }, null],
+        [{ pins: { state: 'closed' } }, null],
+        [{ pins: { state: 'preparing' } }, m.library_navigation_loading()],
+        [{ pins: empty, collectionsState: 'preparing' }, m.library_navigation_loading()],
+        [{ pins: empty, collectionsState: 'unavailable' }, m.library_collections_unavailable()],
+        [{ pins: empty, collectionsState: 'error' }, m.library_collections_unavailable()],
+        [{ pins: { state: 'preparing' }, collectionsState: 'denied' }, m.library_collections_denied()],
+        [{ pins: { state: 'unavailable' }, collectionsState: 'denied' }, m.library_pin_read_failed()],
+        [{ pins: { state: 'denied' }, collectionsState: 'error' }, m.library_pin_denied()],
+        [{ pins: { state: 'closed', platformClosed: true }, collectionsState: 'error' }, m.library_subject_closed()],
+        [{ pins: empty, collectionsState: 'denied', showCollectionsNotice: false }, null],
+        [{ pins: empty, collectionsState: 'preparing', showCollectionsNotice: false }, null],
+        [{ pins: { state: 'denied' }, showCollectionsNotice: false }, m.library_pin_denied()],
+      ];
+      for (const [props, text] of cases) {
+        const html = renderToStaticMarkup(createElement(LibraryNavigationNotice, props));
+        expect(html).toBe(text === null ? '' : renderToStaticMarkup(
+          createElement('p', { role: 'status', className: 'text-sm text-muted-foreground' }, text),
+        ));
+      }
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
+});

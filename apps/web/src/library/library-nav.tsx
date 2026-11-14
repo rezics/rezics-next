@@ -2,7 +2,7 @@ import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { builtinCollectionDestinations, type BuiltinCollectionRecord } from './builtin-collections';
@@ -161,7 +161,10 @@ function DestinationList({ entries }: { entries: readonly LibraryNavigationEntry
             aria-hidden={entry.href ? true : undefined}
             className={`flex min-h-11 min-w-11 items-start gap-3 rounded-lg px-3 py-3 text-sm leading-5 ${entry.current ? 'bg-muted font-semibold' : ''} ${entry.href ? '' : 'text-muted-foreground'}`}
           >
-            <span className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere]">{entry.label}</span>
+            <div className="min-w-0 flex-1 space-y-1 whitespace-normal [overflow-wrap:anywhere]">
+              <span>{entry.label}</span>
+              {!entry.href ? <span className="block text-xs font-normal">{entry.id}</span> : null}
+            </div>
             {entry.current ? <CheckIcon aria-hidden="true" className="size-5 shrink-0" /> : null}
           </div>
           {entry.href ? (
@@ -210,16 +213,23 @@ export function libraryNavigationMenuEntries(
 function DestinationMenu({
   entries,
   current,
+  notice,
 }: {
   entries: readonly LibraryNavigationEntry[];
   current?: string | undefined;
+  notice: ReactNode;
 }) {
   const titleId = useId();
   const purposeId = useId();
   return (
     <Menu
       title={m.library_nav_selector()}
-      content={<DestinationList entries={entries} />}
+      content={
+        <div className="min-w-0 max-w-full">
+          <div className="px-3 py-2 empty:hidden">{notice}</div>
+          <DestinationList entries={entries} />
+        </div>
+      }
       closeOnNavigation
       trigger={
         <Button
@@ -264,6 +274,13 @@ export function LibraryNavigation({
   const tabs: LibraryNavigationEntry[] = [...destinations.tabs, ...managementDestinations(current, locale)];
   const all = [...tabs, ...overflow];
   const phonePins = tabs.filter((entry) => entry.pin).slice(0, 3);
+  const notice = (
+    <LibraryNavigationNotice
+      pins={pins}
+      collectionsState={collectionsState}
+      showCollectionsNotice={showCollectionsNotice}
+    />
+  );
   return (
     <div data-library-navigation data-collections-state={collectionsState} className="min-w-0 space-y-2">
       <nav
@@ -286,13 +303,9 @@ export function LibraryNavigation({
             <DestinationLink key={entry.id} entry={entry} />
           ))}
         </div>
-        <DestinationMenu entries={all} current={all.find((entry) => entry.current)?.label} />
+        <DestinationMenu entries={all} current={all.find((entry) => entry.current)?.label} notice={notice} />
       </nav>
-      <LibraryNavigationNotice
-        pins={pins}
-        collectionsState={collectionsState}
-        showCollectionsNotice={showCollectionsNotice}
-      />
+      {notice}
     </div>
   );
 }

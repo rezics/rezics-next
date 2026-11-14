@@ -60,8 +60,11 @@ export const SelectorOpen: Story = {
       await expect(link).toHaveAttribute('href', `/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}`);
       await expect(menu.getByText(pin.target.title!, { exact: true, selector: 'span:not(.sr-only)' })).toBeVisible();
     }
-    await expect(menu.getByRole('link', { name: m.library_dynamic_everything() })).toBeInTheDocument();
-    await expect(menu.getByRole('link', { name: m.library_dynamic_liked() })).toBeInTheDocument();
+    for (const label of [m.library_dynamic_everything(), m.library_dynamic_liked(), m.library_nav_all_collections()]) {
+      const link = menu.getByRole('link', { name: label });
+      link.scrollIntoView({ block: 'nearest' });
+      await expect(link).toBeVisible();
+    }
     const unavailable = surface.querySelector('[data-library-destination="story-pinned-6"]')!;
     await expect(unavailable).toHaveTextContent(m.library_pin_unavailable());
     await expect(unavailable.querySelector('a, button, [tabindex]')).toBeNull();
@@ -98,5 +101,61 @@ export const SelectedCollectionSelector: Story = {
     await waitFor(() => expect(selector).toHaveFocus());
     await expect(selector).toHaveAccessibleName(`${selectedCollection.title} ${m.library_nav_selector()}`);
     await expect(within(document.body).queryByRole('dialog', { name: m.library_nav_selector() })).toBeNull();
+  },
+};
+
+export const UnavailableCurrentDestination: Story = {
+  render: () => (
+    <PatternStory>
+      <LibraryNavigation current={{ collectionId: 'story-pinned-6' }} pins={pins} collections={destinations} />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const selector = within(canvasElement).getByRole('button', {
+      name: `${m.library_pin_unavailable()} ${m.library_nav_selector()}`,
+    });
+    await userEvent.click(selector);
+    const surface = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
+    const row = surface.querySelector('[data-library-destination="story-pinned-6"]')!;
+    row.scrollIntoView({ block: 'nearest' });
+    await expect(within(row as HTMLElement).getByText(m.library_pin_unavailable(), { exact: true })).toBeVisible();
+    await expect(within(row as HTMLElement).getByText('story-pinned-6', { exact: true })).toBeVisible();
+    await expect(row).toHaveAttribute('aria-current', 'page');
+    await expect(row.querySelector('svg')).toBeVisible();
+    await expect(row.querySelector('a, button, [tabindex]')).toBeNull();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(selector).toHaveFocus());
+  },
+};
+
+export const DestinationReadStates: Story = {
+  name: 'Empty, preparing and unavailable destination reads',
+  render: () => (
+    <PatternStory>
+      <section aria-label="Empty pins">
+        <LibraryNavigation current="tracked" pins={{ state: 'loaded', revision: 0, next: null, pins: [] }} collections={[]} />
+      </section>
+      <section aria-label="Preparing destinations">
+        <LibraryNavigation current="tracked" pins={{ state: 'preparing' }} collections={[]} collectionsState="preparing" />
+      </section>
+      <section aria-label="Unavailable destinations">
+        <LibraryNavigation current="tracked" pins={{ state: 'unavailable' }} collections={[]} collectionsState="denied" />
+      </section>
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(within(canvas.getByRole('region', { name: 'Empty pins' })).queryByRole('status')).toBeNull();
+    await expect(within(canvas.getByRole('region', { name: 'Preparing destinations' })).getByRole('status'))
+      .toHaveTextContent(m.library_navigation_loading());
+    const unavailable = within(canvas.getByRole('region', { name: 'Unavailable destinations' }));
+    await expect(unavailable.getByRole('status')).toHaveTextContent(m.library_pin_read_failed());
+    await userEvent.click(unavailable.getByRole('button', {
+      name: `${m.library_nav_tracked_entries()} ${m.library_nav_selector()}`,
+    }));
+    const surface = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
+    await expect(within(surface).getByRole('status')).toHaveTextContent(m.library_pin_read_failed());
+    await expect(within(surface).getByRole('link', { name: m.library_nav_all_collections() }))
+      .toHaveAttribute('href', `/${getLocale()}/library/collections`);
   },
 };
