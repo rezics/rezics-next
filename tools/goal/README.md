@@ -96,6 +96,9 @@ current attempt with no runner process can also release the future-writing reser
 when every listed check has an exactly owned finished result and physical history, a local terminal proof, and a
 locally terminal runner identity. This local proof does not settle remote execution or cleanup. Active, current,
 replacement and unknown scopes retain conservative accounting and cannot stand in for an unidentified current writer.
+Decision: persist exact local retirements in `<state>/capacity-retired-scopes.json`, bound to cgroup device/inode/ctime
+and finished check/runner identity; reapply only to that unchanged scope when it predates the check, and let current or
+unidentified writers keep their reserve.
 Check wakes use the existing capacity ticket and task lease to reserve the active minimum before launch. That ticket's
 memory charge transfers to the reconciled current writer's scope; pending or unreconciled launches keep their ticket
 charge until start or explicit release. Memory floors, PSI, worker caps and check slots remain independent limits.
@@ -1386,6 +1389,14 @@ operator worker slice enables aggregate memory admission: product code starts re
 and unknown starts 4 GiB. Existing worker scopes reserve at least 4 GiB or their measured peak, whichever is larger;
 support services' current memory and admitted reservations are included. The 12 GiB per-worker hard limit remains a
 burst safety ceiling, not an expected working set. Support growth can still compete within the hard aggregate.
+Decision: positive terminal proof retires only the writing reserve of its exact task, attempt and scope incarnation.
+That proof survives a subsequent check or resume in another scope; changing the current check list cannot recharge
+an already retired scope. Aggregate actual memory, including surviving shared SSH masters, stays charged. A current
+or replacement writer retains its reservation, and an unknown scope gains no exemption from another scope's proof.
+Implementation: `<state>/capacity-retired-scopes.json` binds each retirement to its task, attempt and worktree, the
+finished check's id, physical run and runner identity, and the cgroup device, inode and ctime. Admission reapplies it
+only to the same extant incarnation created before that check started, prunes missing or replaced cgroups, and
+suppresses retirement while current writer or check custody is unknown.
 Linux memory-full PSI at 1% or I/O-full at 10% pauses new starts. Recovery requires 30 seconds continuously below
 0.2% and 2% respectively, sampled in the existing admission loop without another watcher or model turn.
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
@@ -3773,6 +3784,8 @@ viewer in the manager window. Close obsolete viewers with a visible empty compos
 windows. On a new viewer, bounded asynchronous startup probes may select Leave paused in the exact Codex resume
 menu. They do not block manager recovery, submit a prompt or resume the Goal. Unknown panes and unrelated dialogs
 remain untouched.
+Decision: A Goal-owned Codex viewer runs under a terminal shell. Ctrl+C still reaches Codex; exiting the viewer
+returns to the shell without deleting the pane or stopping the manager's provider thread.
 Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 

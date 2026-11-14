@@ -4,8 +4,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
+import type { CheckPhysicalRecord } from '../../../scripts/worker-check.ts';
 import { acquireDirectoryLease } from './lease.ts';
-import { processIdentity } from './process.ts';
+import { processIdentity, type ProcessIdentity } from './process.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { openDb } from './db.ts';
 import {
@@ -19,7 +20,13 @@ import {
 import * as launchCapacity from './launch-capacity.ts';
 import { admittedMemoryMiB } from './launch-capacity.ts';
 import type { CapacityLifecycle, CapacityRelease, HostCapacityStore } from './launch-capacity.ts';
-import { HEAVY_WORKER_MIB, workerHeadroomMiB, workerMemoryCurrentMiB } from './host-pressure.ts';
+import {
+  HEAVY_WORKER_MIB,
+  workerHeadroomMiB,
+  workerMemoryCurrentMiB,
+  workerScopeIncarnation,
+  type WorkerScopeIncarnation,
+} from './host-pressure.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -46,33 +53,64 @@ function liveTicketBody(value: Record<string, unknown>): string {
   if (!identity) throw new Error('test process identity unavailable');
   return JSON.stringify({ ...identity, ...value });
 }
+function scopeNames(scopes: ReadonlyMap<string, unknown> | undefined): Set<string> {
+  return new Set(scopes?.keys() ?? []);
+}
+function scopeIdentityMap(scopes: ReadonlyMap<string, WorkerScopeIncarnation>): Map<string, WorkerScopeIncarnation> {
+  return new Map(scopes);
+}
 
 function terminalRemoteCheckFixture(directory: string) {
   const taskId = 'capacity-owner';
   const worktree = join(directory, 'worktree');
   const resultDirectory = join(worktree, '.temp/goal/checks/results');
   const historyDirectory = join(worktree, '.temp/goal/checks/custody/history');
-  const sliceRoot = join(directory, 'slice');
+  const cgroupRoot = join(directory, 'cgroup');
+  const cgroupGroupRoot = 'user.slice/user-1000.slice/user@1000.service/rezics.slice/rezics-workers.slice';
+  const sliceRoot = join(cgroupRoot, cgroupGroupRoot);
+  const procRoot = join(directory, 'proc');
   const checkId = randomUUID();
   const physicalRunId = randomUUID();
   const historyPath = physicalHistoryPath(worktree, checkId, physicalRunId);
-  const identity = processIdentity();
-  if (!identity) throw new Error('test process identity unavailable');
+  const liveIdentity = processIdentity();
+  if (!liveIdentity) throw new Error('test process identity unavailable');
+  const identity: ProcessIdentity = { ...liveIdentity, group: liveIdentity.pid };
   const terminalRunner = { pid: 999_999_999, start: '1', boot: identity.boot, group: 999_999_999 };
   mkdirSync(resultDirectory, { recursive: true });
   mkdirSync(historyDirectory, { recursive: true });
   mkdirSync(sliceRoot, { recursive: true });
   const terminalScope = `rezics-worker-${taskId}-1-oldscope.scope`;
   const unknownScope = 'rezics-worker-unrelated-1-unknown.scope';
-  const scope = (name: string, currentGiB: number, peakGiB: number) => {
+  const createScope = (name: string, currentGiB: number, peakGiB: number) => {
     mkdirSync(join(sliceRoot, name), { recursive: true });
     writeFileSync(join(sliceRoot, name, 'memory.current'), String(Math.round(currentGiB * 1024 ** 3)));
     writeFileSync(join(sliceRoot, name, 'memory.peak'), String(Math.round(peakGiB * 1024 ** 3)));
   };
   writeFileSync(join(sliceRoot, 'memory.max'), String(26 * 1024 ** 3));
   writeFileSync(join(sliceRoot, 'memory.current'), String(10 * 1024 ** 3));
-  scope(terminalScope, 0.04, 3.7);
-  scope(unknownScope, 0.1, 4.5);
+  createScope(terminalScope, 0.04, 3.7);
+  createScope(unknownScope, 0.1, 4.5);
+  const terminalCheckStartedAt = new Date(Date.now() + 5_000).toISOString();
+  const terminalCheckFinishedAt = new Date(Date.now() + 10_000).toISOString();
+  mkdirSync(join(procRoot, 'sys/kernel/random'), { recursive: true });
+  mkdirSync(join(procRoot, String(identity.pid)), { recursive: true });
+  writeFileSync(join(procRoot, 'sys/kernel/random/boot_id'), identity.boot);
+  const liveStat = readFileSync(`/proc/${identity.pid}/stat`, 'utf8');
+  const statEnd = liveStat.lastIndexOf(')');
+  const statFields = liveStat
+    .slice(statEnd + 2)
+    .trim()
+    .split(/\s+/);
+  statFields[2] = String(identity.group);
+  writeFileSync(
+    join(procRoot, String(identity.pid), 'stat'),
+    `${identity.pid} ${liveStat.slice(liveStat.indexOf('('), statEnd + 1)} ${statFields.join(' ')}`,
+  );
+  const setFakeProcess = (args: string[], scope: string) => {
+    writeFileSync(join(procRoot, String(identity.pid), 'cmdline'), `${args.join('\0')}\0`);
+    writeFileSync(join(procRoot, String(identity.pid), 'cgroup'), `0::/${cgroupGroupRoot}/${scope}\n`);
+  };
+  setFakeProcess([], terminalScope);
   writeFileSync(
     join(resultDirectory, `${checkId}.json`),
     JSON.stringify({
@@ -101,10 +139,10 @@ function terminalRemoteCheckFixture(directory: string) {
       log: join(worktree, '.temp/goal/checks/logs', `${checkId}.log`),
       status: 'finished',
       remoteExpected: true,
-      terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+      terminalProof: { local: true, remote: null, resultKnown: true, observedAt: terminalCheckFinishedAt },
       exitCode: 2,
-      createdAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
+      createdAt: terminalCheckStartedAt,
+      finishedAt: terminalCheckFinishedAt,
     }),
   );
   let attemptState: 'waiting' | 'running' = 'waiting';
@@ -115,16 +153,64 @@ function terminalRemoteCheckFixture(directory: string) {
     body: '',
     worktree,
   };
-  const updateAttempt = (state: 'waiting' | 'running') => {
+  const updateAttempt = (
+    state: 'waiting' | 'running',
+    checks = [checkId],
+    process: ProcessIdentity | null = state === 'running' ? identity : null,
+    processScope = terminalScope,
+  ) => {
+    if (process) setFakeProcess([], processScope);
     attemptState = state;
     row.attempt_state = state;
     row.body = JSON.stringify({
       taskId,
       attempt: 1,
       state,
-      process: state === 'running' ? processIdentity() : null,
-      checks: [checkId],
+      process,
+      checks,
     });
+  };
+  const markTerminalCheckStarted = () => {
+    const physical = JSON.parse(readFileSync(historyPath, 'utf8')) as CheckPhysicalRecord;
+    physical.createdAt = new Date(Date.now() - 10).toISOString();
+    physical.terminalProof!.observedAt = new Date().toISOString();
+    physical.finishedAt = physical.terminalProof!.observedAt;
+    writeFileSync(historyPath, JSON.stringify(physical));
+  };
+  const writeRunningCheck = (id: string, runId: string, scope: string) => {
+    const argv = ['bun', 'test', 'tests/example.test.ts'];
+    setFakeProcess(['bun', join(worktree, 'scripts/worker-check.ts'), '--run', id, '--physical-run', runId], scope);
+    writeFileSync(
+      join(resultDirectory, `${id}.json`),
+      JSON.stringify({
+        id,
+        cwd: worktree,
+        argv,
+        status: 'running',
+        log: join(worktree, '.temp/goal/checks/logs', `${id}.log`),
+        ownership: { taskId, attempt: 1 },
+        physicalRunId: runId,
+        runnerHost: hostname(),
+        runnerIdentity: identity,
+      }),
+    );
+    writeFileSync(
+      physicalHistoryPath(worktree, id, runId),
+      JSON.stringify({
+        version: 1,
+        id,
+        cwd: worktree,
+        argv,
+        ownership: { taskId, attempt: 1 },
+        physicalRunId: runId,
+        runnerHost: hostname(),
+        runnerIdentity: identity,
+        log: join(worktree, '.temp/goal/checks/logs', `${id}.log`),
+        status: 'running',
+        remoteExpected: true,
+        createdAt: new Date().toISOString(),
+      }),
+    );
   };
   updateAttempt('waiting');
   const store = {
@@ -133,7 +219,23 @@ function terminalRemoteCheckFixture(directory: string) {
     attempts: () => [{ attempt: 1, state: attemptState }],
     taskGoal: () => 'library',
   } as unknown as HostCapacityStore;
-  return { taskId, checkId, sliceRoot, terminalScope, unknownScope, historyPath, store, updateAttempt };
+  return {
+    taskId,
+    checkId,
+    writerIdentity: identity,
+    worktree,
+    sliceRoot,
+    cgroupRoot,
+    procRoot,
+    terminalScope,
+    unknownScope,
+    historyPath,
+    createScope,
+    markTerminalCheckStarted,
+    writeRunningCheck,
+    store,
+    updateAttempt,
+  };
 }
 
 test('launch.ts re-exports the host-capacity implementation', () => {
@@ -516,14 +618,16 @@ test('terminal local check proof releases only its waiting generation reserve an
   let pendingReplacement: Promise<() => void> | undefined;
   let replacementStarted = false;
   let parked = new Set<string>();
+  let parkedEvidence = new Map<string, WorkerScopeIncarnation>();
   const capacity = { maxWorkers: 8, minAvailableMiB: 0 };
   const headroom: typeof workerHeadroomMiB = (
     running,
     root = fixture.sliceRoot,
-    scopes = new Set(),
-    active = new Set(),
+    scopes = new Map(),
+    active = new Map(),
   ) => {
-    parked = new Set(scopes);
+    parked = scopeNames(scopes);
+    parkedEvidence = scopeIdentityMap(scopes);
     return workerHeadroomMiB(running, root, scopes, active);
   };
   const options = {
@@ -538,9 +642,9 @@ test('terminal local check proof releases only its waiting generation reserve an
   try {
     writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify(capacity));
     const memoryBefore = workerMemoryCurrentMiB(fixture.sliceRoot);
-    const before = workerHeadroomMiB(0, fixture.sliceRoot, new Set(), new Set());
+    const before = workerHeadroomMiB(0, fixture.sliceRoot, new Map(), new Map());
     release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
-    const after = workerHeadroomMiB(0, fixture.sliceRoot, parked, new Set());
+    const after = workerHeadroomMiB(0, fixture.sliceRoot, parkedEvidence, new Map());
     expect(parked).toContain(fixture.terminalScope);
     expect(parked).not.toContain(fixture.unknownScope);
     expect(after - before).toBeCloseTo(3.96 * 1024, 1);
@@ -561,13 +665,142 @@ test('terminal local check proof releases only its waiting generation reserve an
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(replacementStarted).toBe(false);
     expect(parked).not.toContain(fixture.terminalScope);
-    expect(workerHeadroomMiB(1, fixture.sliceRoot, parked, new Set())).toBeLessThan(HEAVY_WORKER_MIB);
+    expect(workerHeadroomMiB(1, fixture.sliceRoot, parkedEvidence, new Map())).toBeLessThan(HEAVY_WORKER_MIB);
     rmSync(join(directory.path, 'capacity.json'), { force: true });
     release = await pendingReplacement;
     pendingReplacement = undefined;
   } finally {
     rmSync(join(directory.path, 'capacity.json'), { force: true });
     if (pendingReplacement) release = await pendingReplacement;
+    release?.();
+    directory.close();
+  }
+});
+
+test('terminal scope retirement survives a later check without exempting its new or replacement writer', async () => {
+  const directory = temporaryDirectory();
+  const fixture = terminalRemoteCheckFixture(directory.path);
+  let release: (() => void) | undefined;
+  let parked = new Map<string, WorkerScopeIncarnation>();
+  let active = new Map<string, WorkerScopeIncarnation>();
+  let bypassMemory = false;
+  const headroom: typeof workerHeadroomMiB = (
+    running,
+    root = fixture.sliceRoot,
+    scopes = new Map(),
+    writers = new Map(),
+  ) => {
+    parked = scopeIdentityMap(scopes);
+    active = scopeIdentityMap(writers);
+    const measured = workerHeadroomMiB(running, root, scopes, writers);
+    return bypassMemory ? Infinity : measured;
+  };
+  const options = {
+    pollIntervalMs: 5,
+    availableMiB: () => Infinity,
+    pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+    workerSliceRoot: fixture.sliceRoot,
+    workerProcessRoot: fixture.procRoot,
+    workerCgroupRoot: fixture.cgroupRoot,
+    memoryCurrentMiB: () => workerMemoryCurrentMiB(fixture.sliceRoot),
+    workerHeadroomMiB: headroom,
+    resume: true,
+  };
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 8, minAvailableMiB: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fixture.markTerminalCheckStarted();
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    expect(parked.has(fixture.terminalScope)).toBe(true);
+    release();
+    release = undefined;
+
+    const ledgerPath = join(directory.path, 'capacity-retired-scopes.json');
+    const oldRetirement = JSON.parse(readFileSync(ledgerPath, 'utf8')) as {
+      version: number;
+      scopes: { name: string; checks: { id: string; physicalRunId: string; runnerIdentity: ProcessIdentity }[] }[];
+    };
+    expect(oldRetirement.scopes.map((scope) => scope.name)).toEqual([fixture.terminalScope]);
+    expect(oldRetirement.scopes[0]?.checks[0]).toMatchObject({ id: fixture.checkId });
+    bypassMemory = true;
+
+    const nextScope = `rezics-worker-${fixture.taskId}-1-newscope.scope`;
+    fixture.createScope(nextScope, 0.25, 1.5);
+    writeFileSync(join(fixture.sliceRoot, 'memory.current'), String(Math.round(10.25 * 1024 ** 3)));
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    expect(parked.has(fixture.terminalScope)).toBe(true);
+    expect(parked.has(nextScope)).toBe(false);
+    const afterStaleCheck = JSON.parse(readFileSync(ledgerPath, 'utf8')) as typeof oldRetirement;
+    expect(afterStaleCheck.scopes.map((scope) => scope.name)).toEqual([fixture.terminalScope]);
+    const nextIdentity = workerScopeIncarnation(fixture.sliceRoot, nextScope)!;
+    const chargedHeadroom = workerHeadroomMiB(0, fixture.sliceRoot, parked, active);
+    const staleExemption = new Map(parked);
+    staleExemption.set(nextScope, nextIdentity);
+    expect(workerHeadroomMiB(0, fixture.sliceRoot, staleExemption, active) - chargedHeadroom).toBeCloseTo(3_840, 1);
+    expect(workerMemoryCurrentMiB(fixture.sliceRoot)).toBeCloseTo(10.25 * 1024, 1);
+    release();
+    release = undefined;
+
+    fixture.updateAttempt('running', [fixture.checkId], fixture.writerIdentity, nextScope);
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    expect(active.has(nextScope)).toBe(true);
+    expect(parked.has(fixture.terminalScope)).toBe(true);
+    expect(parked.has(nextScope)).toBe(false);
+    const activeHeadroom = workerHeadroomMiB(1, fixture.sliceRoot, parked, active);
+    const wronglyParkedWriter = new Map(parked);
+    wronglyParkedWriter.set(nextScope, active.get(nextScope)!);
+    expect(activeHeadroom - workerHeadroomMiB(0, fixture.sliceRoot, wronglyParkedWriter, new Map())).toBeCloseTo(
+      -3_840,
+      1,
+    );
+    release();
+    release = undefined;
+
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const nextCheck = randomUUID();
+    const nextRun = randomUUID();
+    fixture.writeRunningCheck(nextCheck, nextRun, nextScope);
+    fixture.updateAttempt('waiting', [nextCheck]);
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    const whileNewCheckRuns = JSON.parse(readFileSync(ledgerPath, 'utf8')) as typeof oldRetirement;
+    expect(whileNewCheckRuns.scopes.map((scope) => scope.name)).toEqual([fixture.terminalScope]);
+    expect(parked.has(fixture.terminalScope)).toBe(true);
+    expect(parked.has(nextScope)).toBe(true);
+    expect(workerMemoryCurrentMiB(fixture.sliceRoot)).toBeCloseTo(10.25 * 1024, 1);
+    release();
+    release = undefined;
+
+    rmSync(physicalHistoryPath(fixture.worktree, nextCheck, nextRun));
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    expect(parked.has(fixture.terminalScope)).toBe(false);
+    expect(parked.has(nextScope)).toBe(false);
+    const unknownHeadroom = workerHeadroomMiB(0, fixture.sliceRoot, parked, active);
+    const wronglyRetiredOldScope = new Map([
+      [fixture.terminalScope, workerScopeIncarnation(fixture.sliceRoot, fixture.terminalScope)!],
+    ]);
+    expect(
+      workerHeadroomMiB(0, fixture.sliceRoot, wronglyRetiredOldScope, new Map()) -
+        workerHeadroomMiB(0, fixture.sliceRoot, new Map(), new Map()),
+    ).toBeCloseTo(HEAVY_WORKER_MIB - 0.04 * 1024, 1);
+    expect(unknownHeadroom).toBeCloseTo(workerHeadroomMiB(0, fixture.sliceRoot, new Map(), new Map()), 1);
+    release();
+    release = undefined;
+
+    fixture.updateAttempt('running', [nextCheck]);
+    bypassMemory = true;
+    release = await awaitHostCapacity(fixture.store, directory.path, false, fixture.taskId, 1, options);
+    expect(active.has(fixture.terminalScope)).toBe(true);
+    expect(parked.has(fixture.terminalScope)).toBe(false);
+    const replacementHeadroom = workerHeadroomMiB(1, fixture.sliceRoot, parked, active);
+    const staleReplacementExemption = new Map(parked);
+    staleReplacementExemption.set(
+      fixture.terminalScope,
+      workerScopeIncarnation(fixture.sliceRoot, fixture.terminalScope)!,
+    );
+    const wronglyExemptedHeadroom = workerHeadroomMiB(0, fixture.sliceRoot, staleReplacementExemption, new Map());
+    expect(replacementHeadroom).toBeLessThan(wronglyExemptedHeadroom);
+  } finally {
+    rmSync(join(directory.path, 'capacity.json'), { force: true });
     release?.();
     directory.close();
   }
@@ -590,7 +823,7 @@ test('a legacy reclaim latch reopens once exact terminal custody proves its old 
       workerSliceRoot: fixture.sliceRoot,
       memoryCurrentMiB: () => workerMemoryCurrentMiB(fixture.sliceRoot),
       workerHeadroomMiB: (_running, _root, parked) => {
-        terminalScopes = new Set(parked);
+        terminalScopes = scopeNames(parked);
         return headroom;
       },
       reclaim: () => {
@@ -631,7 +864,7 @@ test('missing physical custody evidence keeps the scope reserve and reports the 
       pressure: () => ({ memoryFull: 0, ioFull: 0 }),
       workerSliceRoot: fixture.sliceRoot,
       workerHeadroomMiB: (_running, _root, scopes) => {
-        parked = new Set(scopes);
+        parked = scopeNames(scopes);
         return 0;
       },
     });
