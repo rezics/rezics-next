@@ -15,7 +15,7 @@ import { AccessUnavailableError, CommandUnavailableError } from '../access/unava
 import type { JoinedPopulationRequest, PublicFilterNativeSource } from './public-filter-source-binding.ts';
 import type { PublicCanonicalCaptureInput } from '../search/index.ts';
 import type { PublicFilterConsumerContext } from './source-binding-port.ts';
-import { BoundedReadDeadlineError, withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -242,15 +242,9 @@ async function inReadSnapshot<T>(
       return result;
     },
     {
-      deadlineError: () => {
-        accessPort.requireDeadline(deadline);
-        return new BoundedReadDeadlineError();
-      },
+      deadlineError: () => new AccessUnavailableError('deadline'),
     },
-  ).catch((error: unknown) => {
-    accessPort.requireDeadline(deadline);
-    throw error;
-  });
+  );
 }
 
 /**
@@ -382,7 +376,10 @@ export function createNativePublicFilterSource(
           ),
         );
       } catch (error) {
-        if (accessPort.isUnavailable(error)) return unavailable('deadline');
+        if (accessPort.isUnavailable(error))
+          return unavailable(
+            accessPort.classifyUnavailability(error) === 'deadline' ? 'deadline' : 'dependency_unavailable',
+          );
         throw error;
       }
     },
@@ -493,7 +490,10 @@ export function createNativePublicFilterSource(
           ),
         );
       } catch (error) {
-        if (accessPort.isUnavailable(error)) return unavailable('deadline');
+        if (accessPort.isUnavailable(error))
+          return unavailable(
+            accessPort.classifyUnavailability(error) === 'deadline' ? 'deadline' : 'dependency_unavailable',
+          );
         throw error;
       }
     },
