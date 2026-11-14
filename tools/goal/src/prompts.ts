@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { formatModuleMap, loadManifest } from '../../../scripts/architecture-map.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
@@ -629,20 +629,88 @@ export function renderCheckProtocol(
   return loadCondition(promptDirectory, check, view, policy).text;
 }
 
-/** Each owned Goal's definition and continuation, in that order, when the files exist. */
-export function readGoalDocuments(cwd: string, goals: readonly string[]): string[] {
-  const texts: string[] = [];
-  for (const goal of goals) {
-    for (const path of [
-      join(cwd, 'docs', 'goals', `${goal}.md`),
-      join(cwd, '.temp', 'goal', goal, 'CONTINUATION.md'),
-    ]) {
-      if (!existsSync(path)) continue;
-      const text = readFileSync(path, 'utf8').trim();
-      if (text) texts.push(text);
+type ManagerGoalDocument = {
+  goal: string;
+  path: string;
+  outcome?: string;
+  scope?: string;
+};
+
+function firstGoalParagraph(markdown: string, heading: 'Outcome' | 'Scope'): string | undefined {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((line) => new RegExp(`^##\\s+${heading}\\s*$`, 'i').test(line));
+  if (start < 0) return undefined;
+  const paragraph: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^#{1,6}\s+/.test(line)) break;
+    if (!line.trim()) {
+      if (paragraph.length) break;
+      continue;
     }
+    paragraph.push(line.trim());
   }
-  return texts;
+  const text = paragraph.join(' ').replace(/\s+/g, ' ').trim();
+  return text || undefined;
+}
+
+/** Extract concise opening paragraphs from each owner document; full contracts stay linked for on-demand access. */
+function readGoalDocuments(cwd: string, goals: readonly string[]): ManagerGoalDocument[] {
+  return goals.map((goal) => {
+    const path = `docs/goals/${goal}.md`;
+    const absolutePath = join(cwd, path);
+    if (!existsSync(absolutePath)) return { goal, path };
+    const markdown = readFileSync(absolutePath, 'utf8');
+    return {
+      goal,
+      path,
+      outcome: firstGoalParagraph(markdown, 'Outcome'),
+      scope: firstGoalParagraph(markdown, 'Scope'),
+    };
+  });
+}
+
+type ManagerContinuation = { path: string; text: string };
+
+/** Read each owned Goal continuation plus a distinct renewal continuation at most once. */
+function readManagerContinuations(cwd: string, goals: readonly string[], continuationFile?: string): ManagerContinuation[] {
+  const paths = [
+    ...goals.map((goal) => join(cwd, '.temp', 'goal', goal, 'CONTINUATION.md')),
+    ...(continuationFile ? [continuationFile] : []),
+  ];
+  const seen = new Set<string>();
+  const continuations: ManagerContinuation[] = [];
+  for (const path of paths) {
+    const absolutePath = resolve(cwd, path);
+    if (seen.has(absolutePath)) continue;
+    seen.add(absolutePath);
+    if (!existsSync(absolutePath)) continue;
+    const text = readFileSync(absolutePath, 'utf8');
+    if (text.trim()) continuations.push({ path: relative(cwd, absolutePath).replaceAll('\\', '/'), text });
+  }
+  return continuations;
+}
+
+function renderManagerGoalDocument(
+  document: ManagerGoalDocument,
+  includeOutcome: boolean,
+  includeScope: boolean,
+): string {
+  const links = [
+    `[full Goal document](${document.path})`,
+    `[scope](${document.path}#scope)`,
+    `[ownership](${document.path}#ownership)`,
+    `[Done when](${document.path}#done-when)`,
+    `[acceptance](${document.path}#acceptance)`,
+  ].join(' · ');
+  return [
+    `### Goal: ${document.goal}`,
+    `- Owner details: ${links}. Read them on demand for full cases, ownership, requirements and decisions.`,
+    includeOutcome && document.outcome ? `- Objective: ${document.outcome}` : '',
+    includeScope && document.scope ? `- Opening scope: ${document.scope}` : '',
+    '- Next: follow the configured brief and this Goal’s current continuation.',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function renderManagerOpening(input: {
@@ -655,7 +723,6 @@ export function renderManagerOpening(input: {
     engine: 'codex' | 'claude';
   };
   continuationFile?: string | undefined;
-  continuationText?: string | undefined;
   backlogPath: string;
   command: string;
   policy?: ControlPolicy | undefined;
@@ -682,11 +749,30 @@ export function renderManagerOpening(input: {
         : `When no decision is pending, run ${input.command} inbox wait ${input.spec.id} in the background and end the turn.`,
   };
   const roleText = collapse(fillTemplate(roleFile.text, view, policy));
-  const prompt = collapse(
-    [roleText, ...readGoalDocuments(input.spec.cwd, goals), input.spec.brief, input.continuationText]
+  const documents = readGoalDocuments(input.spec.cwd, goals);
+  const continuations = readManagerContinuations(input.spec.cwd, goals, input.continuationFile);
+  const selections = documents.map(() => ({ outcome: false, scope: false }));
+  const renderPrompt = () =>
+    [
+      roleText,
+      ...documents.map((document, index) =>
+        renderManagerGoalDocument(document, selections[index]!.outcome, selections[index]!.scope),
+      ),
+      input.spec.brief ? `## Configured manager brief\n${input.spec.brief}` : '',
+      ...continuations.map(({ path, text }) => `## Current continuation: ${path}\n${text}`),
+    ]
       .filter(Boolean)
-      .join('\n\n'),
-  );
+      .join('\n\n');
+  let prompt = renderPrompt();
+  for (const field of ['scope', 'outcome'] as const) {
+    for (const [index, document] of documents.entries()) {
+      if (!document[field]) continue;
+      selections[index]![field] = true;
+      const candidate = renderPrompt();
+      if (bytes(candidate) <= policy.prompt.managerOpeningBytes) prompt = candidate;
+      else selections[index]![field] = false;
+    }
+  }
   const roleBytes = bytes(roleText);
   const openingBytes = bytes(prompt);
   const layers = { role: roleBytes, opening: openingBytes };

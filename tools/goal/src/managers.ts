@@ -847,8 +847,6 @@ export class ManagerSessions {
     return renderManagerOpening({
       spec: { ...spec, goals },
       continuationFile,
-      continuationText:
-        continuationFile && existsSync(continuationFile) ? readFileSync(continuationFile, 'utf8') : undefined,
       backlogPath: goals.map((goal) => join(this.backlogRoot(spec), goal)).join(', '),
       command: this.services.command.join(' '),
       policy: this.policy,

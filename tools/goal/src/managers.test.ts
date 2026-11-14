@@ -1232,8 +1232,8 @@ test('a Codex manager opening ends idle turns instead of sleeping and names its 
     expect(normalizedOpening).toContain('Do not read or wait on inbox, sleep, or poll workers/checks to look for work');
     expect(normalizedOpening).toContain('The controller resumes this thread on the next inbox event');
     expect(normalizedOpening).toContain('Read and acknowledge delivered inbox events');
-    expect(normalizedOpening).toContain(`ready briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
-    expect(normalizedOpening).toContain("Synthesize your workers' reports");
+    expect(normalizedOpening).toContain(`next briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
+    expect(normalizedOpening).toContain('Turn worker results and conflicts into decisions');
     expect(normalizedOpening).toContain('at most 60 words each');
     expect(normalizedOpening).toContain('Do not write receipts, status snapshots or lists of actions not taken.');
     expect(normalizedOpening).toContain('Read your brief and continuation once per session');
@@ -1899,10 +1899,13 @@ test('manager assign moves a Goal onto another running manager without restartin
     const wake = s
       .requests()
       .filter((request) => request.method === 'turn/start' && request.params.threadId === dest.threadId);
-    expect(wake.at(-1)?.params.input[0].text).toContain('Refactor goal brief');
-    expect(wake.at(-1)?.params.input[0].text).toContain('Refactor continuation');
-    expect(wake.at(-1)?.params.input[0].text).toContain('Commerce goal brief');
-    expect(wake.at(-1)?.params.input[0].text).toContain('Commerce continuation');
+    const wakePrompt = wake.at(-1)?.params.input[0].text as string;
+    expect(wakePrompt).toContain('Read the assigned Goal documents if present:');
+    expect(wakePrompt).toContain('docs/goals/refactor.md');
+    expect(wakePrompt).toContain('.temp/goal/refactor/CONTINUATION.md');
+    expect(wakePrompt).toContain('docs/goals/commerce.md');
+    expect(wakePrompt).toContain('.temp/goal/commerce/CONTINUATION.md');
+    expect(wakePrompt).toContain('Repair the refactor journey');
     expect(
       s.managers
         .list()
