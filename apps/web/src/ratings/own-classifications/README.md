@@ -62,6 +62,18 @@ current readback cannot acknowledge that intent, including an absent or opposite
 stays unavailable. Acknowledged, stale or denied commands require fresh exact page inspection before another edit.
 Unknown commands keep new edits locked. Changing the selected record or private visit destroys drafts and intent.
 
+Decision: inspection and its one existing editor follow the exact supplied occurrence in normal list flow; opening
+keeps focus and viewport on Inspect. Subject/Concept labels and own assessment lead; original keys, complete
+association metadata and neutral-slug links sit in a keyboard-operable technical disclosure. Disclosure changes
+never remount the editor. Withheld rows retain only supplied own-state and actual action advice.
+
+Close, unhandled Escape and switching use the current editor's existing selection departure decision, including
+its selection movement argument so approved local dismissal does not retire the private visit. Stay retains the
+draft and immutable uncertain intent; separate readback still cannot acknowledge it. Close returns focus to the
+same surviving opener with `preventScroll`. Page/visit replacement fences pending decisions and cancels deferred
+focus; retired openers cannot receive it. Deliberate keyboard page-heading orientation and frontier navigation
+keep their existing meanings.
+
 Decision: unsent drafts and uncertain commands protect departure; settled commands remain locked for fresh inspection
 but do not count as unsaved work, and confirmed Leave retires the current reader before route admission.
 
@@ -81,8 +93,9 @@ but do not count as unsaved work, and confirmed Leave retires the current reader
   lookup. One HTTP request is not constant native work. Native physical rows, authorization, nested Semantic
   disclosure and producer growth evidence remain producer/controller obligations.
 
-Storybook supplies ready, preparing, empty, sparse, concealed, binding-mismatch, read-only, selected off-page,
-uncertain withdrawal and long-label states with the existing locale/theme controls and 390/1280 viewports. Supplied
+Storybook supplies ready, preparing, empty, sparse, concealed, binding-mismatch, read-only, first-of-20 selection,
+selected promotion in supplied order, protected close, uncertain withdrawal and long-label states with the existing
+locale/theme controls and 390/1280 viewports. Supplied
 command adapters illustrate interactions; native recorded responses and browser/keyboard/screen-reader execution
 remain controller verification, separate from these authored examples.
 

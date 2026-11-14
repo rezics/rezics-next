@@ -1,19 +1,14 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import { classificationAddressKey, classificationPair, indexOwnClassifications } from './inventory';
-import { ClassificationEditor, type ClassificationCommands } from './editor';
+import type { ClassificationCommands } from './editor';
+import { ClassificationInspection, ClassificationAvailability, OwnState, classificationControl } from './inspection';
 import { classificationActionAllowed } from './intent';
-import type {
-  ClassificationFrontier,
-  OwnClassification,
-  OwnClassificationsPage,
-  OwnClassificationsState,
-} from './types';
+import type { ClassificationFrontier, OwnClassificationsPage, OwnClassificationsState } from './types';
 
-const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2';
+const control = classificationControl;
 
 /** Native page order and original keys survive summary movement and selected promotion. */
 export function OwnClassificationsWorkspace({
@@ -40,8 +35,15 @@ export function OwnClassificationsWorkspace({
   commands?: ClassificationCommands | undefined;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
-  const [selection, select] = useState<{ generation: number; key: string } | null>(null);
-  const [protectedEditor, protectEditor] = useState(false);
+  const [selection, select] = useState<{ generation: number; key: string | null } | null>(null);
+  const protection = useRef<{ generation: number; key: string | null; protected: boolean } | null>(null);
+  const focusFrame = useRef<number | null>(null);
+  const focusVersion = useRef(0);
+  function cancelFocus() {
+    focusVersion.current++;
+    if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = null;
+  }
   const active = isCurrent();
   const address = classificationAddressKey(frontier);
   const latest = useRef({ page, state, active, locale, address, generation: 0 });
@@ -50,6 +52,7 @@ export function OwnClassificationsWorkspace({
     mounted.current = true;
     return () => {
       mounted.current = false;
+      cancelFocus();
     };
   }, []);
   if (
@@ -79,18 +82,57 @@ export function OwnClassificationsWorkspace({
         ? classificationPair(frontier.selected)
         : null;
   const selected = admitted && selectedKey ? index?.get(selectedKey) : null;
-  const inspect = useRef<HTMLElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const detailId = useId();
+  const liveSelection = useRef(selectedKey);
+  liveSelection.current = selectedKey;
+  const selectionCurrent = () => current() && liveSelection.current === selectedKey;
+  const protectedEditor = () =>
+    protection.current?.generation === generation &&
+    protection.current.key === selectedKey &&
+    protection.current.protected;
+  useLayoutEffect(() => cancelFocus, [generation]);
   const heading = useRef<HTMLHeadingElement>(null);
   useLayoutEffect(() => {
     if (focusHeading && current() && document.activeElement === document.body) heading.current?.focus();
   }, [focusHeading]);
-  const moving = useRef(false);
+  const moving = useRef<{ generation: number; token: symbol } | null>(null);
+  async function changeSelection(key: string | null) {
+    if (!selectionCurrent() || moving.current?.generation === generation || key === selectedKey) return;
+    const token = Symbol();
+    moving.current = { generation, token };
+    const returnOpener = opener.current;
+    // The existing departure owner distinguishes selection from leaving the private visit.
+    const decision:
+      | ((movement: { kind: 'selection'; returnFocus: HTMLElement | null }) => Promise<boolean>)
+      | null
+      | undefined = selected ? commands?.confirmMovement?.current : null;
+    const leave = decision
+      ? await decision({
+          kind: 'selection',
+          returnFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+        })
+      : !protectedEditor();
+    if (moving.current?.token === token) moving.current = null;
+    if (!leave || !selectionCurrent()) return;
+    cancelFocus();
+    select({ generation, key });
+    if (key === null && returnOpener) {
+      const version = focusVersion.current;
+      focusFrame.current = requestAnimationFrame(() => {
+        focusFrame.current = null;
+        if (current() && focusVersion.current === version && returnOpener.isConnected)
+          returnOpener.focus({ preventScroll: true });
+      });
+    }
+  }
   async function move(cursor: string | null, keyboard: boolean) {
-    if (!current() || moving.current) return;
-    moving.current = true;
+    if (!current() || moving.current?.generation === generation) return;
+    const token = Symbol();
+    moving.current = { generation, token };
     const decision = selected ? commands?.confirmMovement?.current : null;
-    const leave = decision ? await decision() : !protectedEditor;
-    moving.current = false;
+    const leave = decision ? await decision() : !protectedEditor();
+    if (moving.current?.token === token) moving.current = null;
     if (!leave || !current()) return;
     const target = {
       cursor,
@@ -101,9 +143,6 @@ export function OwnClassificationsWorkspace({
     commands?.retire?.();
     onNext(target, keyboard);
   }
-  useLayoutEffect(() => {
-    if (!focusHeading && commands && selected && current()) inspect.current?.focus();
-  }, [generation, selectedKey]);
   const feedback = () => {
     if (state === 'signed-out') return m.own_classifications_signed_out({}, options);
     if (state === 'denied') return m.own_classifications_denied({}, options);
@@ -141,6 +180,7 @@ export function OwnClassificationsWorkspace({
           <ol key={generation} className="space-y-3" aria-label={m.own_classifications_title({}, options)}>
             {admitted.items.map((row) => {
               const pair = classificationPair(row);
+              const expanded = selected === row;
               return (
                 <li key={pair} className="min-w-0 space-y-3 rounded-xl border p-4 wrap-anywhere">
                   {row.state === 'available' ? (
@@ -152,88 +192,47 @@ export function OwnClassificationsWorkspace({
                     <p>{m.own_classifications_withheld({}, options)}</p>
                   )}
                   <OwnState row={row} locale={locale} />
+                  {!expanded ? <ClassificationAvailability row={row} locale={locale} /> : null}
                   {row.state === 'available' || (commands && classificationActionAllowed(row, 'DELETE')) ? (
                     <Button
                       className={control}
                       variant="outline"
-                      aria-pressed={selected === row}
-                      disabled={protectedEditor}
+                      ref={expanded ? opener : undefined}
+                      aria-expanded={expanded}
+                      aria-controls={expanded ? detailId : undefined}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape' && expanded && !event.defaultPrevented) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void changeSelection(null);
+                        }
+                      }}
                       onClick={() => {
-                        if (!current() || protectedEditor) return;
-                        select({ generation, key: pair });
-                        requestAnimationFrame(() => {
-                          if (current()) inspect.current?.focus();
-                        });
+                        void changeSelection(pair);
                       }}
                     >
                       {m.subject_classification_assessment_inspect({}, options)}
                     </Button>
                   ) : null}
+                  {expanded ? (
+                    <ClassificationInspection
+                      key={`${generation}:${pair}`}
+                      id={detailId}
+                      row={row}
+                      commands={commands}
+                      locale={locale}
+                      isCurrent={selectionCurrent}
+                      refresh={() => onRetry(frontier)}
+                      onClose={() => void changeSelection(null)}
+                      onProtection={(value) => {
+                        if (selectionCurrent()) protection.current = { generation, key: selectedKey, protected: value };
+                      }}
+                    />
+                  ) : null}
                 </li>
               );
             })}
           </ol>
-          {selected ? (
-            <section
-              key={`${generation}:${classificationPair(selected)}`}
-              ref={inspect}
-              tabIndex={-1}
-              className="min-w-0 space-y-3 rounded-xl border p-4 wrap-anywhere"
-            >
-              <h2 className="text-xl font-semibold">{m.subject_classification_assessment_provenance({}, options)}</h2>
-              {selected.state === 'available' ? (
-                <>
-                  <p>
-                    {m.own_classifications_original({}, options)}: {selected.subjectId} · {selected.associationId}
-                  </p>
-                  <p>
-                    {selected.association.property} · {selected.association.release} · {selected.association.revision}
-                  </p>
-                  <dl className="space-y-2 break-all text-sm">
-                    {(['bindingHash', 'statementDigest', 'qualifiersDigest'] as const).map((name) => (
-                      <div key={name}>
-                        <dt>{name}</dt>
-                        <dd>{selected.association[name]}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <div className="flex flex-wrap gap-3">
-                    {[selected.subject, selected.target].map((summary, position) => (
-                      <a
-                        key={position}
-                        className={`${control} inline-flex items-center underline`}
-                        href={subjectHref({ id: summary.id, label: '' }, locale).href}
-                        onClick={(event) => {
-                          if (!current()) event.preventDefault();
-                        }}
-                      >
-                        {summary.label ?? m.subject_value_unlabelled({}, options)}
-                      </a>
-                    ))}
-                  </div>
-                  <Aggregate row={selected} locale={locale} />
-                </>
-              ) : (
-                <p>{m.own_classifications_withheld({}, options)}</p>
-              )}
-              {commands ? (
-                <ClassificationEditor
-                  row={selected}
-                  commands={commands}
-                  locale={locale}
-                  isCurrent={current}
-                  refresh={() => onRetry(frontier)}
-                  onProtection={protectEditor}
-                />
-              ) : (
-                <p role="status">
-                  {selected.actions.state === 'read-only' || selected.actions.state === 'withheld'
-                    ? m.own_classifications_read_only({}, options)
-                    : m.own_classifications_commands_unavailable({}, options)}
-                </p>
-              )}
-            </section>
-          ) : null}
           <div key={`navigation:${generation}`} className="flex flex-wrap gap-3">
             {previous ? (
               <Button className={control} onClick={(event) => void move(previous.cursor, event.detail === 0)}>
@@ -254,66 +253,5 @@ export function OwnClassificationsWorkspace({
         </>
       )}
     </main>
-  );
-}
-
-function OwnState({ row, locale }: { row: OwnClassification; locale: string }) {
-  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
-  return (
-    <div className="space-y-1 text-sm">
-      <p>
-        {row.own.assessment === 'support'
-          ? m.subject_classification_assessment_own_support({}, options)
-          : m.subject_classification_assessment_own_oppose({}, options)}
-      </p>
-      {row.own.falsePositive ? <p>{m.subject_classification_assessment_own_lie({}, options)}</p> : null}
-      <p>
-        {row.own.pending === 'current'
-          ? m.own_classifications_current({}, options)
-          : row.own.pending === 'pending'
-            ? m.subject_classification_assessment_pending({}, options)
-            : m.own_classifications_unknown({}, options)}
-      </p>
-      <p>
-        {m.own_classifications_revision({}, options)}: {row.own.revision}
-      </p>
-    </div>
-  );
-}
-
-function Aggregate({ row, locale }: { row: OwnClassification; locale: string }) {
-  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
-  if (!row.aggregate) return null;
-  if (row.aggregate.state === 'suppressed') return <p>{m.subject_classification_assessment_suppressed({}, options)}</p>;
-  const number = new Intl.NumberFormat(locale);
-  return (
-    <div className="space-y-1">
-      <h3>{m.subject_classification_assessment_published({}, options)}</h3>
-      <p>
-        {m.subject_classification_assessment_support_count(
-          { count: number.format(row.aggregate.supportCount) },
-          options,
-        )}
-      </p>
-      <p>
-        {m.subject_classification_assessment_oppose_count({ count: number.format(row.aggregate.opposeCount) }, options)}
-      </p>
-      <p>
-        {m.subject_classification_assessment_lie_count(
-          { count: number.format(row.aggregate.falsePositiveCount) },
-          options,
-        )}
-      </p>
-      {row.aggregate.supportFraction !== null ? (
-        <p>
-          {m.subject_classification_assessment_support_fraction(
-            { fraction: number.format(row.aggregate.supportFraction * 100) },
-            options,
-          )}
-        </p>
-      ) : null}
-      <p>{m.subject_classification_assessment_as_of({ date: row.aggregate.asOf }, options)}</p>
-      <p>{m.library_publication_published_generation({ generation: row.aggregate.generation }, options)}</p>
-    </div>
   );
 }
