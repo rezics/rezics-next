@@ -12,14 +12,12 @@ import { browserArchiveRecoveryPort } from './port';
 import { type RecoveryBinding } from './visit';
 import { archiveFileFromCustody, bindArchiveCustodyOwner, completedArchiveFor } from '../private-export/custody';
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
+import { actionClass } from '../private-export/controls';
+import { EvidenceDetails } from '../archive-progress-recovery/review';
+import { ArchiveRecordSummary, ArchiveChoiceSummary, ArchiveNativeReviewSummary, ArchiveCurrentFacts, sectionLabel, statusLabel, recordTitle } from './presentation';
 
-const control = 'min-h-11 min-w-11 rounded-md border px-3 py-2 disabled:opacity-50';
+const control = `${actionClass} rounded-md border disabled:opacity-50`;
 const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
-const json = (value: unknown) => (
-  <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-sm [overflow-wrap:anywhere]">
-    {JSON.stringify(value, null, 2)}
-  </pre>
-);
 
 /** Every callback consults the current query cache and address, including before React effects run. */
 export function ArchiveEntryRecoveryPage() {
@@ -67,6 +65,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
   const snapshot = journey?.snapshot();
   const state = snapshot?.state;
   const review = state?.review;
+  const displayedRows = new Map<number, ArchiveRow>(state?.page?.rows.map((row) => [row.ordinal, row]) ?? []);
   const confirmed = !!review && confirmation === review;
   const phase = state?.phase ?? 'idle';
   const locked = ['applying', 'uncertain', 'recoverable', 'cancelling'].includes(phase);
@@ -99,13 +98,15 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         {snapshot?.notice
           ? notice(snapshot.notice)
           : terminal
-            ? phase
+            ? statusLabel(phase)
             : !live
               ? m.library_archive_entry_preparing()
               : busy
                 ? m.library_archive_entry_working()
                 : ''}
       </p>
+      {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large'
+        ? <EvidenceDetails value={{ notice: snapshot.notice }} /> : null}
       <section aria-labelledby="archive-upload" className="space-y-3 rounded-lg border p-4">
         <h2 id="archive-upload" className="text-xl font-semibold">
           {m.library_archive_upload_step()}
@@ -181,14 +182,15 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
               <dl className="grid gap-2 sm:grid-cols-2">
                 {state.upload!.metadata.coverage.map((item) => (
                   <div key={item.section} className="rounded border p-3">
-                    <dt className="font-semibold">{item.section}</dt>
-                    <dd>
-                      {item.rows} · {item.capture} ·{' '}
-                      {supportedRecoverySection(item.section) ? item.treatment : m.library_archive_entry_retained()}
-                    </dd>
+                    <dt className="font-semibold">{sectionLabel(item.section)}</dt>
+                    <dd>{item.capture === 'empty' ? m.library_archive_recovery_coverage_empty()
+                      : !supportedRecoverySection(item.section) || item.treatment === 'retained-unsupported'
+                        ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
+                        : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}</dd>
                   </div>
                 ))}
               </dl>
+              <EvidenceDetails value={state.upload!.metadata} />
               <button type="button" className={control} disabled={busy} onClick={() => act(journey!.status())}>
                 {m.library_archive_entry_status()}
               </button>
@@ -203,19 +205,10 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
               {state.page?.rows.length === 0 && <p>{m.library_archive_entry_empty()}</p>}
               {state.page?.rows.map((row) => (
                 <article key={row.ordinal} className="space-y-3 rounded-lg border p-4">
-                  <h3 className="font-semibold">
-                    #{row.ordinal} · {row.section} · {row.status}
-                  </h3>
-                  <details>
-                    <summary className={control}>{m.library_archive_entry_evidence()}</summary>
-                    {json(row.evidence)}
-                  </details>
-                  {row.review !== null && (
-                    <>
-                      <p>{m.library_archive_entry_revision({ ordinal: row.ordinal, revision: row.reviewRevision })}</p>
-                      {json(row.review)}
-                    </>
-                  )}
+                  <h3 className="font-semibold">{recordTitle(row)}</h3>
+                  <p className="text-sm">{sectionLabel(row.section)} · {statusLabel(row.status)}</p>
+                  <ArchiveRecordSummary row={row} />
+                  <ArchiveNativeReviewSummary row={row} />
                   {supportedRecoverySection(row.section) &&
                   !['unsupported', 'applying', 'acknowledged'].includes(row.status) ? (
                     row.section === 'annotations' ? (
@@ -327,7 +320,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
               <p>{m.library_archive_entry_assignment_help()}</p>
               {state.choices.map((choice) => (
                 <div key={choice.ordinal} className="space-y-2 rounded border p-3">
-                  {json(choice.choice)}
+                  <ArchiveChoiceSummary choice={choice.choice} row={displayedRows.get(choice.ordinal)} />
                   <button
                     type="button"
                     className={control}
@@ -348,13 +341,13 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
               </button>
               {review && (
                 <div className="space-y-3 rounded border p-4">
-                  {snapshot!.reviewed.map((item) => (
-                    <p key={item.ordinal}>
-                      {m.library_archive_entry_revision({ ordinal: item.ordinal, revision: item.reviewRevision })} ·{' '}
-                      {item.status}
-                    </p>
-                  ))}
-                  {json(review.body)}
+                  {snapshot!.reviewed.map((item) => {
+                    const row = displayedRows.get(item.ordinal);
+                    return <p key={item.ordinal}>
+                      {row ? recordTitle(row) : m.library_archive_present_title_unavailable()} · {statusLabel(item.status)}
+                    </p>;
+                  })}
+                  <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} />
                   <label className="flex min-h-11 items-center gap-3">
                     <input
                       type="checkbox"
@@ -404,12 +397,16 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
               <h2 id="archive-results" className="text-xl font-semibold">
                 {m.library_archive_results_step()}
               </h2>
+              {phase === 'complete' ? <p role="status" className="font-semibold">{m.library_archive_recovery_complete_title()}</p> : null}
               <p>{m.library_archive_entry_result_help()}</p>
               {state.results.rows.map((row) => (
                 <div key={row.ordinal} className="space-y-2 rounded border p-3">
+                  <h3 className="font-semibold">{displayedRows.has(row.ordinal)
+                    ? recordTitle(displayedRows.get(row.ordinal)!) : m.library_archive_present_title_unavailable()}</h3>
                   <p>
-                    #{row.ordinal} · {row.section} · {row.status}
+                    {sectionLabel(row.section)} · {statusLabel(row.status)}
                   </p>
+                  <EvidenceDetails value={row} />
                   {row.subjectId && (
                     <>
                       <a
@@ -444,10 +441,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 </div>
               ))}
               {snapshot?.readback && (
-                <div>
-                  <h3>{m.library_archive_entry_current()}</h3>
-                  {json(snapshot.readback.value)}
-                </div>
+                <ArchiveCurrentFacts value={snapshot.readback.value} />
               )}
               {phase !== 'expired' && (
                 <div className="flex flex-wrap gap-3">
@@ -534,7 +528,11 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
 function notice(value: string) {
   if (value === 'uncertain') return m.library_archive_recovery_uncertain();
   if (value === 'file_too_large') return m.library_archive_recovery_upload_too_large();
-  return m.library_archive_entry_native_status({ status: value });
+  if (value === 'ready') return m.library_archive_present_ready();
+  if (value === 'pruned') return m.library_archive_present_pruned();
+  if (value === 'prune_more') return m.library_archive_present_prune_more();
+  if (value === 'cancelled' || value === 'expired') return statusLabel(value);
+  return m.library_archive_present_refused();
 }
 
 function MappingForm({
@@ -686,6 +684,7 @@ function MappingForm({
             {row.section === 'entries' && action !== 'preserve' && (
               <>
                 <label htmlFor={`${prefix}-state`}>{m.library_archive_entry_state_id()}</label>
+                {action === 'update' ? <p>{m.library_archive_present_replacement()}</p> : null}
                 <input
                   id={`${prefix}-state`}
                   className={`${control} block w-full`}

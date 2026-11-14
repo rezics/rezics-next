@@ -6,7 +6,7 @@ Library navigation and the private export page link this journey separately from
 Decision: keep the original upload bytes for Restart after cancellation, and offer a completed export from this
 signed-in owner. All supported versions reach native validation as original bytes, preserving their manifests and unsupported coverage. An
 acknowledged Session opens the current progress reader. Journey tests pin that restart; the native Web owner walk
-restores one occurrence through the page. Named stories stay with Collection and Entry recovery.
+restores one occurrence through the page. Named progress stories use the real visit with contract-shaped presentation fixtures, separate from native proof.
 
 `native.ts` derives all request/result types from generated methods and quotes logical keys once. `server.ts`
 binds current HTTP viewer evidence and the existing sealed original command credential. `controller.ts` retains

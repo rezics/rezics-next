@@ -3,6 +3,8 @@ import { useEffect, useState, type MouseEvent } from 'react';
 import { CopyEditionPicker } from '../copy-edition-picker';
 import { m } from '../../paraglide/messages.js';
 import { actionClass } from '../private-export/controls';
+import { EvidenceDetails } from '../archive-progress-recovery/review';
+import { sectionLabel } from '../archive-entry-recovery/presentation';
 import {
   RECOVERY_SELECTED_OCCURRENCES,
   RECOVERY_ID,
@@ -13,39 +15,6 @@ import {
   type RecoveryReview,
 } from './contract';
 import { canSelectOccurrence, selectionLimitReached, type OccurrenceSelection } from './selection';
-
-function sectionLabel(section: string): string {
-  switch (section) {
-    case 'entries':
-      return m.library_export_section_entries();
-    case 'labels':
-      return m.library_export_section_labels();
-    case 'assignments':
-      return m.library_export_section_assignments();
-    case 'sessions':
-      return m.library_export_section_sessions();
-    case 'units':
-      return m.library_export_section_units();
-    case 'history':
-      return m.library_export_section_history();
-    case 'holdings':
-      return m.library_export_section_holdings();
-    case 'collections':
-      return m.library_export_section_collections();
-    case 'collectionPins':
-      return m.library_export_section_pins();
-    case 'occurrences':
-      return m.library_export_section_occurrences();
-    case 'bangumiUploads':
-    case 'bangumiEvidence':
-      return m.library_export_section_bangumi();
-    case 'malImports':
-    case 'malEvidence':
-      return m.library_export_section_mal();
-    default:
-      return m.library_export_section_other({ section });
-  }
-}
 
 function Coverage({ page }: { page: RecoveryCollectionsPage }) {
   return (
@@ -68,17 +37,11 @@ function Coverage({ page }: { page: RecoveryCollectionsPage }) {
                   ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
                   : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}
             </span>
-            <span className="text-muted-foreground">
-              {item.capture === 'empty'
-                ? m.library_archive_recovery_coverage_empty()
-                : item.treatment === 'retained-unsupported'
-                  ? m.library_archive_recovery_coverage_scope()
-                  : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}
-            </span>
           </li>
         ))}
       </ul>
       <p className="text-sm text-muted-foreground">{m.library_archive_recovery_omissions()}</p>
+      <EvidenceDetails value={{ manifest: page.manifest, coverage: page.coverage }} />
     </section>
   );
 }
@@ -109,6 +72,7 @@ function CollectionOption({
             ? m.library_archive_recovery_private_collection()
             : m.library_archive_recovery_collection_unsupported()}
         </p>
+        <EvidenceDetails value={collection} />
       </div>
       <button
         type="button"
@@ -227,14 +191,8 @@ function OccurrenceRow({
         <span className="font-medium">{m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })}</span>
       </label>
       <div className="grid min-w-0 gap-2">
-        <p className="break-all text-xs text-muted-foreground">
-          {m.library_archive_recovery_occurrence_id({ id: row.sourceOccurrenceId })}
-        </p>
-        <p className="text-sm">
-          {row.sourceSubjectId
-            ? m.library_archive_recovery_source_subject({ id: row.sourceSubjectId })
-            : m.library_archive_recovery_subject_missing()}
-        </p>
+        <p className="text-sm">{row.sourceSubjectId
+          ? m.library_archive_present_title_unavailable() : m.library_archive_recovery_subject_missing()}</p>
         <p className="whitespace-pre-wrap break-words text-sm">
           <span className="font-medium">{noteLabel(row)}: </span>
           {row.note ?? m.library_archive_recovery_note_none()}
@@ -247,6 +205,7 @@ function OccurrenceRow({
         {unavailable ? (
           <p className="text-sm text-destructive-foreground">{m.library_archive_recovery_note_cannot_preserve()}</p>
         ) : null}
+        <EvidenceDetails value={row} />
       </div>
     </li>
   );
@@ -393,7 +352,7 @@ export function ArchiveRecoveryReview({
           </div>
           <div className="grid gap-1">
             <dt className="font-medium">{m.library_archive_recovery_title_label()}</dt>
-            <dd className="break-words">{collection.title}</dd>
+            <dd className="break-words">{collection.title || m.library_archive_recovery_untitled()}</dd>
           </div>
           <div className="grid gap-1 sm:col-span-2">
             <dt className="font-medium">{m.library_archive_recovery_description_label()}</dt>
@@ -421,9 +380,10 @@ export function ArchiveRecoveryReview({
         <h3 className="font-semibold">{m.library_archive_recovery_mappings_title()}</h3>
         <p className="text-sm text-muted-foreground">{m.library_archive_recovery_mappings_help()}</p>
         {sources.length ? (
-          sources.map((sourceSubjectId) => (
+          sources.map((sourceSubjectId, index) => (
             <div key={sourceSubjectId} className="grid min-w-0 gap-2 rounded-lg border p-4">
-              <p className="break-all text-sm">{m.library_archive_recovery_source_subject({ id: sourceSubjectId })}</p>
+              <p className="font-medium">{m.library_archive_present_item({ number: index + 1 })} · {m.library_archive_present_title_unavailable()}</p>
+              <EvidenceDetails value={{ sourceSubjectId }} />
               <CopyEditionPicker
                 value={targets.get(sourceSubjectId) ?? null}
                 disabled={busy || Boolean(review)}
@@ -439,11 +399,10 @@ export function ArchiveRecoveryReview({
       <div className="grid gap-3">
         <h3 className="font-semibold">{m.library_archive_recovery_notes_title()}</h3>
         <ol className="grid max-h-[30rem] gap-3 overflow-auto rounded-lg border p-3">
-          {[...selected.values()].map((row) => (
+          {[...selected.values()].map((row, index) => (
             <li key={row.sourceOccurrenceId} className="grid gap-1 border-b pb-3 last:border-0 last:pb-0">
-              <p className="break-all text-xs text-muted-foreground">
-                {m.library_archive_recovery_occurrence_id({ id: row.sourceOccurrenceId })}
-              </p>
+              <p className="font-medium">{m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
+                {(row.sourceSubjectId && targets.get(row.sourceSubjectId)?.title) || m.library_archive_present_title_unavailable()}</p>
               <p className="whitespace-pre-wrap break-words text-sm">
                 <span className="font-medium">{noteLabel(row)}: </span>
                 {row.note ?? m.library_archive_recovery_note_none()}
@@ -453,10 +412,10 @@ export function ArchiveRecoveryReview({
                   ? m.library_archive_recovery_native_order()
                   : m.library_archive_recovery_order_unsupported()}
               </p>
+              <EvidenceDetails value={row} />
             </li>
           ))}
         </ol>
-        <p className="text-sm text-muted-foreground">{m.library_archive_recovery_note_choice_help()}</p>
       </div>
 
       {review ? (
@@ -476,7 +435,8 @@ export function ArchiveRecoveryReview({
             <p key={mapping.sourceSubjectId} className="break-all text-sm">
               {mapping.state === 'mapped'
                 ? m.library_archive_recovery_mapping_current({
-                    id: mapping.currentSubjectId ?? mapping.sourceSubjectId,
+                    id: targets.get(mapping.sourceSubjectId)?.id === mapping.currentSubjectId
+                      ? targets.get(mapping.sourceSubjectId)!.title : m.library_archive_present_title_unavailable(),
                   })
                 : mapping.state === 'canonical-changed'
                   ? m.library_archive_recovery_mapping_changed()
@@ -486,8 +446,14 @@ export function ArchiveRecoveryReview({
           <p>
             {review.pin.state === 'unsupported'
               ? m.library_archive_recovery_pin_unsupported()
-              : m.library_archive_recovery_pin_state({ state: review.pin.state })}
+              : m.library_archive_recovery_pin_state({ state: review.pin.state === 'applied'
+                ? m.library_archive_recovery_effect_applied() : review.pin.state === 'pending'
+                  ? m.library_archive_recovery_effect_pending() : review.pin.state === 'none'
+                    ? m.library_archive_recovery_effect_not_applicable() : m.library_archive_present_unknown() })}
           </p>
+          <p>{m.library_archive_recovery_destination_private()}</p>
+          <p>{m.library_archive_recovery_note_choice_help()}</p>
+          <EvidenceDetails value={review} title={m.library_archive_progress_exact()} />
           <label className="flex min-h-11 items-start gap-3 rounded-md bg-muted/40 p-3">
             <input
               type="checkbox"

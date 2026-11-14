@@ -76,9 +76,18 @@ Decision: keep the original encoded archive after a successful read so Cancel th
 export from this signed-in owner is the same source. Results reopen the current Collection reader for actual title,
 privacy, member identities, notes and order.
 
-Stories cover upload, local preparation, file-read failure, reviewed selection, stale conflict and partial result.
+Stories cover upload, local preparation, file-read failure, populated review, unsupported evidence, sparse
+continuation, unknown application recovery, acknowledged result, stale conflict and partial result.
 Journey tests pin original-archive restart, exact original bytes, opaque sequential cursors, native Collection readback and other-member denial. The native Web owner
 and other-member walk exports a completed file, restores through the page, and rereads the Collection. Focused Web
 acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer acceptance
 remains owned by Commerce.
 Preparation decoders and producer implementation are not Web delivery; this guide describes the delivered consumer.
+
+Decision: show each Coverage fact once, then lead review and results with supplied Collection and selected target
+titles. Preserve duplicate occurrences in native order and distinguish missing, empty, cleared, invalid and supplied
+notes. Localize independent add/note/order outcomes; keep source IDs, review/digest, reasons and complete supplied
+evidence in closed labelled details. Privacy, unsupported scope and note omission warnings remain beside
+confirmation. The destination is always a new private Collection, without title-based merge. Story assertions pin
+confirmation, continuation and evidence disclosure using the real components on the private route. Execution and
+native, focus/keyboard and visual acceptance are deferred to the verifier.

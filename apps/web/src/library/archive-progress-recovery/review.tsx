@@ -213,7 +213,7 @@ export function RecoveryResult({ application, result, pending }: {
                 </> : <Fact title={m.library_progress_units()}>{session.completedUnitCount}</Fact>}
               </dl>
               <p className="text-sm">{meaning ? unitLabel(meaning) : m.library_progress_unit_unspecified()}</p>
-              {session.measures?.map((measure, index) => (
+              {session.measures?.filter((measure) => session.mode !== 'scalar_amount' || measure.unit !== session.unit).map((measure, index) => (
                 <div key={index} className="rounded border p-3">
                   <p>{unitLabel(result!.review.measures.find((item) => item.currentUnit === measure.unit) ?? { currentMeaning: null })}</p>
                   <p>{m.library_progress_amount()}: {measure.amount ?? m.library_progress_measure_absent()}</p>

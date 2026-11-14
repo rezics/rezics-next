@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useReducer, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { PageStory } from './page';
+import { PageStory, PatternStory } from './page';
 import { RecoveryJourney } from '../library/archive-progress-recovery/page';
 import { ProgressRecoveryJourney } from '../library/archive-progress-recovery/controller';
 import type { ProgressChoices } from '../library/progress-profile';
@@ -85,9 +85,14 @@ function ProgressStory({ stage }: { stage: Stage }) {
       await mounted.review(operands);
       if (stage === 'complete' || stage === 'unknown') await mounted.confirm(review.reviewId);
     })();
-    return () => { active = false; mounted.retire(); };
+    return () => {
+      const retire = () => { active = false; mounted.retire(); };
+      // A fixture can acknowledge its synthetic original before releasing unknown-command custody.
+      if (mounted.snapshot().pending) void mounted.retry().finally(retire);
+      else retire();
+    };
   }, [stage]);
-  return journey ? <RecoveryJourney journey={journey} snap={journey.snapshot()} owner={id} /> : null;
+  return journey ? <PatternStory visitor="Signed In" path="/library/recover-progress"><RecoveryJourney journey={journey} snap={journey.snapshot()} owner={id} /></PatternStory> : null;
 }
 const meta = { title: 'Library/Archive progress recovery', id: 'pages-library-archive-progress-recovery', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -106,7 +111,17 @@ export const PopulatedReview: Story = {
     await expect(confirm).toBeEnabled();
   },
 };
-export const UnsupportedEvidence: Story = { render: () => <ProgressStory stage="unsupported" /> };
+export const UnsupportedEvidence: Story = {
+  render: () => <ProgressStory stage="unsupported" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(m.library_archive_present_review_partial())).toBeVisible();
+    const amount = within(canvas.getByRole('region', { name: m.library_progress_mode_amount() }));
+    await expect(amount.getByText('999')).toBeVisible();
+    await expect(amount.getByText(m.library_archive_entry_retained())).toBeVisible();
+    await expect(amount.getByText(m.library_archive_present_will_apply())).toBeVisible();
+  },
+};
 export const SparseContinuation: Story = {
   render: () => <ProgressStory stage="sparse" />,
   play: async ({ canvasElement }) => {
@@ -115,5 +130,21 @@ export const SparseContinuation: Story = {
     await expect(canvas.getByRole('button', { name: m.buyer_history_next() })).toBeEnabled();
   },
 };
-export const UnknownApplicationRecovery: Story = { render: () => <ProgressStory stage="unknown" /> };
-export const CompletedResult: Story = { render: () => <ProgressStory stage="complete" /> };
+export const UnknownApplicationRecovery: Story = {
+  render: () => <ProgressStory stage="unknown" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('button', { name: m.library_archive_progress_retry() })).toBeEnabled();
+    await expect(canvas.queryByRole('link', { name: m.library_archive_progress_open_session() })).toBeNull();
+  },
+};
+export const CompletedResult: Story = {
+  render: () => <ProgressStory stage="complete" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const outcome = within(await canvas.findByRole('region', { name: m.library_archive_progress_result() }));
+    await expect(outcome.getByRole('status')).toHaveTextContent(m.library_archive_recovery_complete_title());
+    await expect(outcome.getByText('0')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.library_archive_progress_open_session() })).toHaveAttribute('href', expect.stringContaining(id));
+  },
+};

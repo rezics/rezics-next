@@ -422,7 +422,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
         </>
       ) : null}
       {choice?.mode === 'scalar_amount'
-        ? (source.additional_measures ?? []).map((measure) => {
+        ? (source.additional_measures ?? []).map((measure, index) => {
             const additionalMeasureOptions = [
               { value: null, label: m.library_archive_progress_omit() },
               ...pairs
@@ -444,7 +444,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
                 >
                   {
                     <>
-                      {measure.unit} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
+                      {m.library_archive_present_item({ number: index + 1 })} · {m.library_progress_unit_unspecified()} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
                       {measure.total ?? m.library_progress_measure_absent()}
                     </>
                   }
