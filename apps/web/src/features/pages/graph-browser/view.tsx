@@ -6,6 +6,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/load-subject';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
+import { CandidateValue } from '../scalar-value';
 import { ViewHeading } from '../view-heading';
 import { graphPublicIntentFits, graphPublicVisitSearch, type GraphPublicVisit } from './public-visit';
 import {
@@ -17,6 +18,7 @@ import {
   type GraphRead,
   type GraphRelation,
   type GraphSelection,
+  type GraphTruncation,
 } from './index';
 
 const actionClass =
@@ -24,7 +26,7 @@ const actionClass =
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const selectClass =
-  'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:whitespace-normal [overflow-wrap:anywhere]';
+  'h-auto data-[size=default]:h-auto data-[size=sm]:h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:whitespace-normal [overflow-wrap:anywhere]';
 const selectItemClass =
   'min-h-11 min-w-0 whitespace-normal [&_[data-slot=select-item-text]]:whitespace-normal [&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal [overflow-wrap:anywhere]';
 
@@ -111,7 +113,7 @@ function NodeControl({
       onClick={() => onSelect({ kind: 'node', id })}
       onKeyDown={onKeyDown}
     >
-      <span className="min-w-0">{nodeLabel(node, locale)}</span>
+      <span className="min-w-0" dir="auto">{nodeLabel(node, locale)}</span>
     </Button>
   );
 }
@@ -131,7 +133,7 @@ function EdgeControl({ row, selected, selectionConfirmed, onSelect, locale }: Om
       onClick={() => onSelect({ kind: 'edge', ...row.edge })}
     >
       <span className="shrink-0 font-mono text-xs" aria-hidden="true">{row.position + 1}</span>
-      <span className="min-w-0">
+      <span className="min-w-0" lang={row.relation?.label.lang ?? undefined} dir="auto">
         <span className="sr-only">{m.graph_explore_statement_number({ number: String(row.position + 1) }, option(locale))}: </span>
         {relationLabel(row.relation, locale)}
       </span>
@@ -192,7 +194,7 @@ function GraphDiagram(props: ExplorationProps & { visible: boolean }) {
     function measure() {
       const origin = canvas.getBoundingClientRect();
       const nodes = new Map([...nodeRefs.current].map(([id, element]) => [id, element.getBoundingClientRect()]));
-      const edges = new Map([...edgeRefs.current].map(([id, element]) => [id, element.getBoundingClientRect()]));
+      const edges = new Map([...edgeRefs.current].map(([id, element]) => [id, element.querySelector('button')!.getBoundingClientRect()]));
       setPaths(projection.edges.flatMap(({ edge }) => {
         const from = nodes.get(edge.from);
         const to = nodes.get(edge.to);
@@ -233,7 +235,7 @@ function GraphDiagram(props: ExplorationProps & { visible: boolean }) {
     <section aria-label={m.graph_explore_diagram({}, o)} className="min-w-0 space-y-3">
       <p className="text-sm text-muted-foreground">{m.graph_explore_diagram_help({}, o)}</p>
       <div ref={canvasRef} className="relative grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-x-10">
-        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full">
           <defs>
             <marker id={marker} markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto" markerUnits="userSpaceOnUse">
               <path d="M 0 0 L 6 3 L 0 6 Z" fill="currentColor" />
@@ -299,6 +301,215 @@ type GraphPageState = {
   localOnly?: boolean | undefined;
 };
 
+function GraphMeaning({
+  read,
+  projection,
+  selection,
+  locale,
+}: {
+  read: GraphSuccess;
+  projection: GraphProjection;
+  selection: GraphSelection | undefined;
+  locale: string;
+}) {
+  const o = option(locale);
+  const detail = read.detail!;
+  const subject = detail.subject.subject;
+  const label = pickText(subject.labels, locale);
+  const description = pickText(subject.descriptions ?? {}, locale);
+  const statement = detail.statement;
+  const row = selection?.kind === 'edge' ? projection.edgeByStatement.get(selection.statement) : undefined;
+  const relation = statement ? projection.relationById.get(statement.property.id) : undefined;
+  const propertyLabel = (property: string) =>
+    projection.relationById.get(property)?.label.text || detail.labels[property]?.text || m.graph_explore_relation_unavailable({}, o);
+  function part(snak: NonNullable<typeof statement>['qualifiers'][number], index: number) {
+    return (
+      <div key={index} className="min-w-0 space-y-1">
+        <dt className="text-sm text-muted-foreground">{propertyLabel(snak.property.id)}</dt>
+        <dd className="min-w-0"><CandidateValue snak={snak} related={detail.subject.related} locale={locale} subject={subject.id} /></dd>
+      </div>
+    );
+  }
+  return (
+    <div className="min-w-0 space-y-4" data-graph-detail={selection ? selectedKey(selection) : undefined}>
+      <h3 className="font-sans text-lg font-semibold" lang={label.lang ?? undefined}>
+        {label.text || m.subject_value_unlabelled({}, o)}
+      </h3>
+      {description.text && <p lang={description.lang ?? undefined} className="text-sm">{description.text}</p>}
+      {statement && (
+        <div className="min-w-0 space-y-4">
+          <dl className="space-y-3">
+            <div>
+              <dt className="text-sm text-muted-foreground">{m.graph_explore_from({}, o)}</dt>
+              <dd>{nodeLabel(row?.from, locale)}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">{m.graph_explore_relation({}, o)}</dt>
+              <dd className="font-medium">{propertyLabel(statement.property.id)}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">{m.graph_explore_to({}, o)}</dt>
+              <dd>{nodeLabel(row?.to, locale)}</dd>
+            </div>
+            {relation?.inverse?.text && (
+              <div>
+                <dt className="text-sm text-muted-foreground">{m.graph_explore_inverse({}, o)}</dt>
+                <dd lang={relation.inverse.lang ?? undefined}>{relation.inverse.text}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-sm text-muted-foreground">{m.candidate_rank({}, o)}</dt>
+              <dd>{statement.rank === 'preferred' ? m.candidate_rank_preferred({}, o) : statement.rank === 'normal' ? m.candidate_rank_normal({}, o) : m.changes_rank_deprecated({}, o)}</dd>
+            </div>
+          </dl>
+          {statement.qualifiers.length > 0 && (
+            <section className="space-y-2" aria-label={m.value_qualifiers({}, o)}>
+              <h4 className="font-medium">{m.value_qualifiers({}, o)}</h4>
+              <dl className="space-y-3">{statement.qualifiers.map(part)}</dl>
+            </section>
+          )}
+          <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
+            <h4 className="font-medium">{m.sources_citations({}, o)}</h4>
+            {statement.references.length ? (
+              <ol className="list-decimal space-y-3 ps-5">
+                {statement.references.map((reference, index) => (
+                  <li key={index} className="min-w-0">
+                    {reference.parts.length ? <dl className="space-y-2">{reference.parts.map(part)}</dl> : m.value_reference_unavailable({}, o)}
+                  </li>
+                ))}
+              </ol>
+            ) : <p className="text-sm text-muted-foreground">{m.catalogue_file_reader_no_references({}, o)}</p>}
+            <p className="text-sm text-muted-foreground">{m.value_citation_scope({}, o)}</p>
+          </section>
+        </div>
+      )}
+      <details className="min-w-0 border-t pt-2">
+        <summary className={`${linkClass} cursor-pointer`}>{m.catalogue_technical_details({}, o)}</summary>
+        <dl className="mt-2 space-y-3 text-sm">
+          <div><dt className="text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt><dd><code>{subject.id}</code></dd></div>
+          <div><dt className="text-muted-foreground">{m.specialist_identity_type({}, o)}</dt><dd><code>{subject.type}</code></dd></div>
+          {selection?.kind === 'edge' && statement && <>
+            <div><dt className="text-muted-foreground">{m.catalogue_statement_id({}, o)}</dt><dd><code>{statement.id}</code></dd></div>
+            <div><dt className="text-muted-foreground">{m.graph_explore_relation({}, o)}</dt><dd><code>{statement.property.id}</code></dd></div>
+            <div><dt className="text-muted-foreground">{m.graph_explore_from({}, o)}</dt><dd><code>{selection.from}</code></dd></div>
+            <div><dt className="text-muted-foreground">{m.graph_explore_to({}, o)}</dt><dd><code>{selection.to}</code></dd></div>
+          </>}
+        </dl>
+      </details>
+    </div>
+  );
+}
+
+function GraphBranches({
+  branches,
+  projection,
+  unavailable,
+  onContinue,
+  locale,
+}: {
+  branches: GraphTruncation[];
+  projection: GraphProjection;
+  unavailable: boolean;
+  onContinue: (branch: GraphTruncation) => void;
+  locale: string;
+}) {
+  const o = option(locale);
+  return (
+    <section className="min-w-0 space-y-3" aria-label={m.graph_explore_expansions({}, o)}>
+      <h2 className="font-sans text-lg font-semibold">{m.graph_explore_expansions({}, o)}</h2>
+      <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
+        {branches.map((branch) => (
+          <li key={`${branch.node}:${branch.property}:${branch.direction}`} className="min-w-0 space-y-2 rounded-lg border p-3">
+            <p className="text-sm">
+              {nodeLabel(projection.nodeById.get(branch.node), locale)} · {relationLabel(projection.relationById.get(branch.property), locale)} · {branch.direction === 'in' ? m.graph_explore_in({}, o) : m.graph_explore_out({}, o)}
+            </p>
+            <details>
+              <summary className={`${linkClass} cursor-pointer text-sm`}>{m.catalogue_technical_details({}, o)}</summary>
+              <dl className="space-y-2 text-sm">
+                <div>
+                  <dt>{m.specialist_identity_subject_id({}, o)}</dt>
+                  <dd><code>{branch.node}</code></dd>
+                </div>
+                <div>
+                  <dt>{m.graph_explore_relation({}, o)}</dt>
+                  <dd><code>{branch.property}</code></dd>
+                </div>
+              </dl>
+            </details>
+            <Button type="button" variant="outline" className={actionClass} disabled={unavailable} onClick={() => onContinue(branch)}>
+              {m.graph_explore_continue({}, o)}
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function GraphLinks({
+  detail,
+  projection,
+  selection,
+  locale,
+  returnTo,
+  quotations,
+}: {
+  detail: NonNullable<GraphSuccess['detail']>;
+  projection: GraphProjection;
+  selection: GraphSelection | undefined;
+  locale: string;
+  returnTo: string | undefined;
+  quotations: ReturnType<typeof catalogueEntries.quotations> | null;
+}) {
+  const o = option(locale);
+  const address = {
+    id: detail.subject.subject.id,
+    label: pickText(detail.subject.subject.labels, locale).text,
+    locale,
+  };
+  const readers = [
+    { label: m.graph_explore_concepts({}, o), href: catalogueEntries.concepts(address).href },
+    { label: m.graph_explore_music({}, o), href: catalogueEntries.musicContext(address).href },
+  ];
+  return (
+    <nav aria-label={m.graph_explore_inspect({}, o)} className="flex min-w-0 flex-col items-start gap-2 border-t pt-3">
+      <a className={linkClass} href={appendReturnTo(subjectHref(address, locale).href, returnTo)}>
+        {m.graph_explore_open_subject({}, o)}
+      </a>
+      {selection?.kind === 'edge' && (
+        <a className={linkClass} href={appendReturnTo(subjectHref({
+          id: selection.to,
+          label: nodeLabel(projection.nodeById.get(selection.to), locale),
+        }, locale).href, returnTo)}>
+          {m.graph_explore_to({}, o)}: {nodeLabel(projection.nodeById.get(selection.to), locale)}
+        </a>
+      )}
+      {quotations && ('href' in quotations ? (
+        <a className={linkClass} href={quotations.href}>{m.graph_explore_quotations({}, o)}</a>
+      ) : (
+        <div className="min-w-0 space-y-2">
+          <p role="status" className="text-sm text-muted-foreground">
+            {quotations.unsupported === 'origin'
+              ? m.quotation_entry_origin_unsupported({}, o)
+              : m.quotation_entry_address_unsupported({}, o)}
+          </p>
+          {quotations.generalHref && <a className={linkClass} href={quotations.generalHref}>{m.quotation_entry_general({}, o)}</a>}
+        </div>
+      ))}
+      {readers.map((entry) => (
+        <a key={entry.href} className={linkClass} href={appendReturnTo(entry.href, returnTo)}>{entry.label}</a>
+      ))}
+      <a className={linkClass} href={appendReturnTo(
+        catalogueEntries.facts(address).href,
+        returnTo,
+        detail.statement ? { property: detail.statement.property.id, statement: detail.statement.id } : undefined,
+      )}>
+        {m.graph_explore_correct({}, o)}
+      </a>
+    </nav>
+  );
+}
+
 function copyRoute(route: GraphRoute): GraphRoute {
   return {
     property: route.property,
@@ -334,6 +545,19 @@ function requestedSelection(route: GraphRoute): GraphSelection | undefined {
   if (route.edge && route.from && route.to && route.edgeProperty)
     return { kind: 'edge', statement: route.edge, from: route.from, to: route.to, property: route.edgeProperty };
   return undefined;
+}
+
+function routeForSelection(query: GraphSuccess['query'], selection?: GraphSelection): GraphRoute {
+  return {
+    property: query.property.join(','),
+    direction: query.direction,
+    depth: query.depth,
+    ...(selection?.kind === 'node'
+      ? { node: selection.id }
+      : selection?.kind === 'edge'
+        ? { edge: selection.statement, from: selection.from, to: selection.to, edgeProperty: selection.property }
+        : {}),
+  };
 }
 
 function hasRequestedSelection(route: GraphRoute) {
@@ -456,9 +680,10 @@ export function graphBrowserReturnHref(
   return graphPublicIntentFits(href) ? href : undefined;
 }
 
-function appendReturnTo(href: string, returnTo: string | undefined) {
-  if (!returnTo) return href;
-  return `${href}${href.includes('?') ? '&' : '?'}${new URLSearchParams({ returnTo })}`;
+function appendReturnTo(href: string, returnTo: string | undefined, selection?: { property: string; statement: string }) {
+  const query = new URLSearchParams({ ...(returnTo ? { returnTo } : {}), ...selection });
+  if (!query.size) return href;
+  return `${href}${href.includes('?') ? '&' : '?'}${query}`;
 }
 
 export function GraphBrowserPage({
@@ -503,6 +728,7 @@ export function GraphBrowserPage({
   const directionId = useId();
   const depthId = useId();
   const workspaceId = useId();
+  const inspectorId = useId();
   const [viewMode, setViewMode] = useState<'list' | 'diagram'>('list');
   const failureRef = useRef<HTMLParagraphElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
@@ -715,15 +941,7 @@ export function GraphBrowserPage({
 
   function select(next: GraphSelection) {
     if (!read) return;
-    const target: GraphRoute = {
-      property: read.query.property.join(','),
-      direction: read.query.direction,
-      depth: read.query.depth,
-      ...(next.kind === 'node'
-        ? { node: next.id }
-        : { edge: next.statement, from: next.from, to: next.to, edgeProperty: next.property }),
-    };
-    request(target, 'selection');
+    request(routeForSelection(read.query, next), 'selection');
   }
 
   function retry() {
@@ -775,7 +993,7 @@ export function GraphBrowserPage({
         </p>
       )}
       {error && (
-        <div>
+        <div className="space-y-3 rounded-lg border p-4">
           <p ref={failureRef} role="alert" tabIndex={-1}>
             {failed}
           </p>
@@ -880,7 +1098,9 @@ export function GraphBrowserPage({
             </Button>
           </form>
           {!read.relations.length && <p>{m.graph_explore_no_relation({}, o)}</p>}
-          {read.graph.nodes.length === 0 && <p>{m.graph_explore_empty({}, o)}</p>}
+          {read.graph.edges.length === 0 && (
+            <p role="status">{read.graph.truncated.length ? m.graph_explore_sparse({}, o) : m.graph_explore_empty({}, o)}</p>
+          )}
           {read.graph.truncated.length > 0 && (
             <p role="status">{m.graph_explore_incomplete({ limit: String(GRAPH_LIMIT) }, o)}</p>
           )}
@@ -892,140 +1112,46 @@ export function GraphBrowserPage({
               {m.graph_explore_diagram({}, o)}
             </Button>
           </div>
-          <div id={workspaceId} className="min-w-0 rounded-lg border p-3 sm:p-4">
-            <div hidden={viewMode !== 'list'}>
-              <GraphList projection={projection!} selected={selected} selectionConfirmed={selectionConfirmed} onSelect={select} locale={locale} />
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
+            <div id={workspaceId} className="min-w-0 space-y-4 rounded-lg border p-3 sm:p-4">
+              <a className={linkClass} href={`#${inspectorId}`}>{m.graph_explore_inspect({}, o)}</a>
+              <div hidden={viewMode !== 'list'}>
+                <GraphList projection={projection!} selected={selected} selectionConfirmed={selectionConfirmed} onSelect={select} locale={locale} />
+              </div>
+              <div hidden={viewMode !== 'diagram'}>
+                <GraphDiagram projection={projection!} selected={selected} selectionConfirmed={selectionConfirmed} onSelect={select} locale={locale} visible={viewMode === 'diagram'} />
+              </div>
             </div>
-            <div hidden={viewMode !== 'diagram'}>
-              <GraphDiagram projection={projection!} selected={selected} selectionConfirmed={selectionConfirmed} onSelect={select} locale={locale} visible={viewMode === 'diagram'} />
-            </div>
-          </div>
-          {read.graph.truncated.map((entry) => (
-            <Button
-              key={`${entry.node}:${entry.property}:${entry.direction}`}
-              type="button"
-              variant="outline"
-              className={actionClass}
-              onClick={() => {
-                const selection = requestedSelection(activeRoute);
-                request(
-                  {
-                    property: read.query.property.join(','),
-                    direction: read.query.direction,
-                    depth: read.query.depth,
-                    ...(selection?.kind === 'node'
-                      ? { node: selection.id }
-                      : selection?.kind === 'edge'
-                        ? {
-                            edge: selection.statement,
-                            from: selection.from,
-                            to: selection.to,
-                            edgeProperty: selection.property,
-                          }
-                        : {}),
-                  },
-                  'expansion',
-                  { expansion: entry },
-                  false,
-                );
-              }}
-            >
-              {m.graph_explore_continue({}, o)}
-            </Button>
-          ))}
-          {read.detail && (
-            <section className="space-y-3" aria-live="polite">
-              <h2 ref={detailHeadingRef} tabIndex={-1} className="font-sans text-xl font-semibold">
+            <section className="min-w-0 self-start space-y-4 rounded-lg border bg-muted/20 p-4 lg:sticky lg:top-4" aria-labelledby={inspectorId} aria-live="polite">
+              <h2 id={inspectorId} ref={detailHeadingRef} tabIndex={-1} className="font-sans text-xl font-semibold">
                 {m.graph_explore_inspect({}, o)}
               </h2>
-              <p>{pickText(read.detail.subject.subject.labels, locale).text || m.subject_value_unlabelled({}, o)}</p>
-              {read.detail.statement && (
-                <p>
-                  {read.detail.labels[read.detail.statement.property.id]?.text ?? read.detail.statement.property.id}
-                </p>
-              )}
-              <div className="flex min-w-0 flex-wrap gap-2">
-                <a
-                  className={linkClass}
-                  href={
-                    subjectHref(
-                      {
-                        id: read.detail.subject.subject.id,
-                        label: pickText(read.detail.subject.subject.labels, locale).text,
-                      },
-                      locale,
-                    ).href
-                  }
-                >
-                  {m.graph_explore_open_subject({}, o)}
-                </a>
-                {quotations &&
-                  ('href' in quotations ? (
-                    <a className={linkClass} href={quotations.href}>
-                      {m.graph_explore_quotations({}, o)}
-                    </a>
-                  ) : (
-                    <div className="space-y-2">
-                      <p role="status" className="text-sm text-muted-foreground">
-                        {quotations.unsupported === 'origin'
-                          ? m.quotation_entry_origin_unsupported({}, o)
-                          : m.quotation_entry_address_unsupported({}, o)}
-                      </p>
-                      {quotations.generalHref && (
-                        <a className={linkClass} href={quotations.generalHref}>
-                          {m.quotation_entry_general({}, o)}
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                <a
-                  className={linkClass}
-                  href={appendReturnTo(
-                    catalogueEntries.concepts({
-                      id: read.detail.subject.subject.id,
-                      label: pickText(read.detail.subject.subject.labels, locale).text,
-                      locale,
-                    }).href,
-                    returnTo,
-                  )}
-                >
-                  {m.graph_explore_concepts({}, o)}
-                </a>
-                <a
-                  className={linkClass}
-                  href={appendReturnTo(
-                    catalogueEntries.musicContext({
-                      id: read.detail.subject.subject.id,
-                      label: pickText(read.detail.subject.subject.labels, locale).text,
-                      locale,
-                    }).href,
-                    returnTo,
-                  )}
-                >
-                  {m.graph_explore_music({}, o)}
-                </a>
-                <a
-                  className={linkClass}
-                  href={appendReturnTo(
-                    catalogueEntries.facts({
-                      id: read.detail.subject.subject.id,
-                      label: pickText(read.detail.subject.subject.labels, locale).text,
-                      locale,
-                    }).href,
-                    returnTo,
-                  )}
-                >
-                  {m.graph_explore_correct({}, o)}
-                </a>
-              </div>
+              {read.detail ? <>
+                <GraphMeaning read={read} projection={projection!} selection={selection} locale={locale} />
+                <GraphLinks detail={read.detail} projection={projection!} selection={selection} locale={locale} returnTo={returnTo} quotations={quotations} />
+              </> : <p className="text-sm text-muted-foreground">
+                {status === 'pending' ? m.graph_explore_loading({}, o) : selection ? m.graph_explore_unconfirmed({}, o) : m.graph_explore_select({}, o)}
+              </p>}
             </section>
-          )}
-          {!publicReturnHref && (
-            <a className={linkClass} href={origin.href}>
-              {m.graph_explore_return({}, o)}
-            </a>
+          </div>
+          {read.graph.truncated.length > 0 && (
+            <GraphBranches
+              branches={read.graph.truncated}
+              projection={projection!}
+              locale={locale}
+              unavailable={status === 'pending' || status === 'failure'}
+              onContinue={(entry) => request(
+                routeForSelection(read.query, selection),
+                'expansion',
+                { expansion: entry },
+                false,
+              )}
+            />
           )}
         </div>
+      )}
+      {!publicReturnHref && (
+        <a className={linkClass} href={origin.href}>{m.graph_explore_return({}, o)}</a>
       )}
       {publicReturnHref && (
         <a className={linkClass} href={publicReturnHref}>
