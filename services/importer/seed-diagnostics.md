@@ -63,3 +63,10 @@ rewritten, and changing this envelope never replays completed seed writes. It ke
 nonzero exit and ordinary bounded diagnostic. The page-data runner admits only this handoff for its expected result
 path and verifies the current bounded regular file against the digest; source failures, development-showcase
 incompleteness and old or edited result files remain stops.
+
+
+Seed journals use one current local schema. A fresh action journal includes nullable native result IDs; the cover
+journal stores each exact response digest beside its original source JSON. The cross-media graph includes its
+sealed command and retraction payload fields. Normal open never adds missing columns, renames old tables or
+rehashes historical rows. A retained older schema requires explicit bounded maintenance after its original
+receipts, command bodies, keys and source evidence have been preserved; it is refused before journal data changes.

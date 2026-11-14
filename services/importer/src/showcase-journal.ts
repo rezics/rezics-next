@@ -88,6 +88,21 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
 
   constructor(path: string) {
     this.#db = new Database(path, { create: true, strict: true });
+    try {
+      for (const [table, fields] of [
+        ['showcase_action', 'action_key,body_digest,body_json,idempotency_key,state,error_code,result_id'],
+        ['showcase_cover_source', 'id,source_alias,external_id,archive_digest,response_digest,source_json'],
+      ] as const) {
+        const retained = this.#db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
+        if (retained) this.#db.query(`SELECT ${fields} FROM ${table} LIMIT 0`).all();
+      }
+    } catch (cause) {
+      this.#db.close();
+      throw new TypeError(
+        'Showcase journal requires the canonical schema; explicit state maintenance is required',
+        { cause },
+      );
+    }
     if (path !== ':memory:') chmodSync(path, 0o600);
     this.#db.exec(`
       PRAGMA journal_mode=WAL;
@@ -144,7 +159,8 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         body_json TEXT NOT NULL,
         idempotency_key TEXT NOT NULL,
         state TEXT NOT NULL CHECK (state IN ('prepared','acknowledged','refused')),
-        error_code TEXT
+        error_code TEXT,
+        result_id TEXT
       ) STRICT;
       CREATE TABLE IF NOT EXISTS showcase_action_decision (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,51 +192,6 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         PRIMARY KEY(listing_key,page_index)
       ) STRICT;
     `);
-    // Native fixture creates need their acknowledged UUID alongside the sealed action.
-    const actionColumns = this.#db.query<{ name: string }, []>('PRAGMA table_info(showcase_action)').all();
-    if (!actionColumns.some((column) => column.name === 'result_id'))
-      this.#db.exec('ALTER TABLE showcase_action ADD COLUMN result_id TEXT');
-    const coverColumns = this.#db.query<{ name: string }, []>('PRAGMA table_info(showcase_cover_source)').all();
-    if (!coverColumns.some((column) => column.name === 'response_digest')) {
-      const receipts = this.#db
-        .query<{ source_alias: string; external_id: string; archive_digest: string; source_json: string }, []>(
-          'SELECT source_alias,external_id,archive_digest,source_json FROM showcase_cover_source ORDER BY rowid',
-        )
-        .all();
-      this.#db.exec(`
-        BEGIN IMMEDIATE;
-        ALTER TABLE showcase_cover_source RENAME TO showcase_cover_source_legacy;
-        CREATE TABLE showcase_cover_source (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          source_alias TEXT NOT NULL,
-          external_id TEXT NOT NULL,
-          archive_digest TEXT NOT NULL,
-          response_digest TEXT NOT NULL,
-          source_json TEXT NOT NULL,
-          UNIQUE(source_alias,external_id,archive_digest,response_digest)
-        ) STRICT;
-      `);
-      try {
-        const insert = this.#db.query(
-          'INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)',
-        );
-        for (const receipt of receipts) {
-          const source = JSON.parse(receipt.source_json) as BangumiCoverSource;
-          if (!source.responseDigest) throw new TypeError('Legacy Bangumi source receipt has no response digest');
-          insert.run(
-            receipt.source_alias,
-            receipt.external_id,
-            receipt.archive_digest,
-            source.responseDigest,
-            receipt.source_json,
-          );
-        }
-        this.#db.exec('DROP TABLE showcase_cover_source_legacy; COMMIT;');
-      } catch (error) {
-        this.#db.exec('ROLLBACK;');
-        throw error;
-      }
-    }
   }
 
   prepareCommand(command: BatchCommand): void {
