@@ -6,6 +6,7 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/fiel
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { cn } from '@rezics/ui/utils';
 import { XIcon } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
@@ -461,21 +462,21 @@ function RefinementInstance({
                   label(
                     pages.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
                       ?.labels ?? {},
-                  ) || m.refinement_selected_value({}, options);
+                  ) || value;
                 const propertyName =
                   property === 'type'
                     ? m.search_subject_types({}, options)
-                    : label(data.properties.find((entry) => entry.property === property)?.labels ?? {});
+                    : label(data.properties.find((entry) => entry.property === property)?.labels ?? {}) || property;
                 const chip = propertyName ? `${propertyName}: ${text}` : text;
                 const values = conditions.facetValues[property]!.filter((entry) => entry !== value);
                 return (
-                  <li key={`${property}:${value}`}>
+                  <li key={`${property}:${value}`} className="min-w-0 max-w-full">
                     <a
-                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-10 max-w-full whitespace-normal py-2')}
                       aria-label={m.refinement_remove({ value: chip }, options)}
                       href={href({ ...conditions, facetValues: { ...conditions.facetValues, [property]: values } })}
                     >
-                      <span className="max-w-44 truncate">{chip}</span>
+                      <span className="min-w-0 text-start wrap-anywhere">{chip}</span>
                       <XIcon aria-hidden="true" className="size-3" />
                     </a>
                   </li>
@@ -484,9 +485,9 @@ function RefinementInstance({
               {Object.entries(conditions.ranges ?? {}).map(([property, range]) => {
                 const definition = data.properties.find((entry) => entry.property === property);
                 return (
-                  <li key={property}>
+                  <li key={property} className="min-w-0 max-w-full">
                     <a
-                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-10 max-w-full whitespace-normal py-2 wrap-anywhere')}
                       aria-label={m.refinement_remove(
                         {
                           value: label(definition?.labels ?? {}) || m.refinement_range({}, options),
@@ -500,7 +501,7 @@ function RefinementInstance({
                         ),
                       })}
                     >
-                      {label(definition?.labels ?? {})}: {range.gte === undefined ? '…' : `≥ ${range.gte}`} –{' '}
+                      {label(definition?.labels ?? {}) || property}: {range.gte === undefined ? '…' : `≥ ${range.gte}`} –{' '}
                       {range.lte === undefined ? '…' : `≤ ${range.lte}`}{' '}
                       {definition?.datatype === 'quantity' && (
                         <span title={range.unit} data-unit-id={range.unit}>
@@ -645,8 +646,8 @@ function RefinementInstance({
             className="min-w-0 gap-2 border-t border-border/60 pt-4"
             disabled={propertyDisabled}
           >
-            <FieldLegend variant="label">{title}</FieldLegend>
-            {definition.help && <p className="text-sm text-muted-foreground">{definition.help}</p>}
+            <FieldLegend variant="label" className="min-w-0 wrap-anywhere">{title}</FieldLegend>
+            {definition.help && <p className="text-sm text-muted-foreground wrap-anywhere">{definition.help}</p>}
             {definition.mode === 'types' && (
               <p className="text-sm text-muted-foreground">{m.search_subject_types_help({}, options)}</p>
             )}
@@ -680,16 +681,16 @@ function RefinementInstance({
                   const picked = localizedLabel(entry.labels, locale);
                   const text =
                     picked.text.trim() ||
-                    (selectedValueFallbacks.includes(property) && selectedValues.includes(entry.value)
+                    (selectedValues[0] === entry.value ? selectedLabels[property] : undefined) ||
+                    ((selectedValueFallbacks.includes(property) || selectedValues.includes(entry.value))
                       ? entry.value
                       : undefined) ||
-                    (selectedValues[0] === entry.value ? selectedLabels[property] : undefined) ||
                     (perPropertyState ? entry.value : m.refinement_selected_value({}, options));
                   return (
                     <Label
                       key={entry.value}
                       htmlFor={`${id}-${property}-${index}`}
-                      className="min-h-9 items-start gap-2 font-normal"
+                      className="min-h-9 min-w-0 items-start gap-2 font-normal"
                     >
                       <NativeCheckbox
                         id={`${id}-${property}-${index}`}
@@ -739,7 +740,7 @@ function RefinementInstance({
                         }}
                       />
                       <span
-                        className="min-w-0 break-words"
+                        className="min-w-0 wrap-anywhere"
                         lang={property === RESOURCE_LANGUAGE_PROPERTY ? picked.lang : undefined}
                       >
                         {text}
@@ -903,12 +904,13 @@ function RangeControl({
   };
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${id}-lower`}>{m.refinement_lower({}, options)}</FieldLabel>
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Input
               id={`${id}-lower`}
+              className="min-w-0 flex-1 basis-24"
               type="number"
               name={rangeName?.(definition.property, 'from')}
               min={time ? -Number.MAX_SAFE_INTEGER : undefined}
@@ -921,7 +923,7 @@ function RangeControl({
             />
             {!time && (
               <span
-                className="shrink-0 text-sm text-muted-foreground"
+                className="min-w-0 max-w-full wrap-anywhere text-sm text-muted-foreground"
                 title={unit || undefined}
                 data-unit-id={unit || undefined}
               >
@@ -932,9 +934,10 @@ function RangeControl({
         </Field>
         <Field>
           <FieldLabel htmlFor={`${id}-upper`}>{m.refinement_upper({}, options)}</FieldLabel>
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Input
               id={`${id}-upper`}
+              className="min-w-0 flex-1 basis-24"
               type="number"
               name={rangeName?.(definition.property, 'to')}
               min={time ? -Number.MAX_SAFE_INTEGER : undefined}
@@ -947,7 +950,7 @@ function RangeControl({
             />
             {!time && (
               <span
-                className="shrink-0 text-sm text-muted-foreground"
+                className="min-w-0 max-w-full wrap-anywhere text-sm text-muted-foreground"
                 title={unit || undefined}
                 data-unit-id={unit || undefined}
               >
@@ -969,7 +972,7 @@ function RangeControl({
               else onDraftChange({ ...draft, unit: next ?? '' });
             }}
           >
-            <SelectTrigger id={`${id}-unit`}>
+            <SelectTrigger id={`${id}-unit`} className="min-w-0 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

@@ -158,6 +158,9 @@ export function ConditionEditor({
   requestResources,
   embedded = false,
   requestIdentity,
+  showApply = true,
+  framed = true,
+  showHeading = true,
 }: {
   value?: FilterDocument | undefined;
   onChange(value: FilterDocument | undefined): void;
@@ -176,6 +179,9 @@ export function ConditionEditor({
   requestResources?: RequestResourceInput | false;
   embedded?: boolean;
   requestIdentity?: string | undefined;
+  showApply?: boolean;
+  framed?: boolean;
+  showHeading?: boolean;
 }) {
   const options = messageOptions(locale);
   const { store, value: reader } = useWorkspaceAdmission(PRESET_OPERATIONS);
@@ -344,8 +350,12 @@ export function ConditionEditor({
       }
     : undefined;
   return (
-    <div ref={root} className="min-w-0 space-y-3 border-t border-border/60 pt-4" data-condition-editor>
-      <h2 className="font-medium">{m.condition_heading({}, options)}</h2>
+    <div
+      ref={root}
+      className={framed ? 'min-w-0 space-y-3 border-t border-border/60 pt-4' : 'min-w-0 space-y-3'}
+      data-condition-editor
+    >
+      {showHeading && <h2 className="font-medium">{m.condition_heading({}, options)}</h2>}
       <p className="text-sm text-muted-foreground">
         {embedded ? m.library_rule_hint({}, options) : m.condition_hint({}, options)}
       </p>
@@ -425,7 +435,7 @@ export function ConditionEditor({
         )}
       </fieldset>
       {value && <input type="hidden" name="condition" value={JSON.stringify(value)} />}
-      {!embedded && (
+      {!embedded && showApply && (
         <Button type="submit" variant="outline" disabled={disabled || !conditionTreeCanSubmit(value)}>
           {m.search_apply({}, options)}
         </Button>
@@ -454,8 +464,8 @@ function EditorField({
   const firstError = errors[0];
   const fieldSpecific = firstError && !exact && firstError.pointer === pointer && firstError.code !== 'out_of_range';
   return (
-    <Field data-invalid={errors.length > 0 || undefined} data-condition-field-pointer={pointer}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    <Field className="min-w-0 flex-1" data-invalid={errors.length > 0 || undefined} data-condition-field-pointer={pointer}>
+      <FieldLabel htmlFor={id} className="wrap-anywhere">{label}</FieldLabel>
       {children({
         id,
         'aria-invalid': errors.length > 0,
@@ -876,7 +886,7 @@ function NodeEditor({
       data-condition-node={draft.key}
       tabIndex={-1}
     >
-      <FieldLegend variant="label">{label}</FieldLegend>
+      <FieldLegend variant="label" className="min-w-0 wrap-anywhere">{label}</FieldLegend>
       <div className="flex flex-wrap items-end gap-2">
         <EditorField context={context} pointer={pointer} label={m.condition_group({}, options)} exact>
           {(props) => (
@@ -1129,7 +1139,7 @@ function NodeEditor({
                       label={label}
                     >
                       {(props) => (
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <ConditionRangeInput
                             {...props}
                             draft={draft.ranges[bound]}
@@ -1146,7 +1156,7 @@ function NodeEditor({
                           />
                           {definition?.datatype === 'quantity' && (
                             <span
-                              className="shrink-0 text-sm text-muted-foreground"
+                              className="min-w-0 max-w-full wrap-anywhere text-sm text-muted-foreground"
                               title={range.unit}
                               data-unit-id={range.unit}
                             >
@@ -1251,7 +1261,9 @@ function NodeEditor({
               data-condition-pointer={`${pointer}/statement/qualifiers/${index}`}
               tabIndex={-1}
             >
-              <FieldLegend variant="label">{m.condition_qualifier({}, options)}</FieldLegend>
+              <FieldLegend variant="label" className="min-w-0 wrap-anywhere">
+                {m.condition_qualifier({}, options)}
+              </FieldLegend>
               <EditorField
                 context={context}
                 pointer={`${pointer}/statement/qualifiers/${index}/property`}
@@ -1456,9 +1468,9 @@ function NodeEditor({
             )}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            <code title={pendingUnitChange.from}>{pendingUnitChange.from ?? ''}</code>
+            <code title={pendingUnitChange.from} className="wrap-anywhere">{pendingUnitChange.from ?? ''}</code>
             {' → '}
-            <code title={pendingUnitChange.to}>{pendingUnitChange.to ?? ''}</code>
+            <code title={pendingUnitChange.to} className="wrap-anywhere">{pendingUnitChange.to ?? ''}</code>
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingUnitChange(false)}>
@@ -1669,7 +1681,7 @@ function ConditionEntityValues({
                 : undefined;
         const retryable = hidden || valueFailure === 'unavailable' || valueFailure === 'preparing';
         return (
-          <div key={`${occurrence}:${index}`} className="flex items-end gap-1">
+          <div key={`${occurrence}:${index}`} className="flex min-w-0 flex-wrap items-end gap-2">
             <EditorField
               context={context}
               pointer={`${pointer}/${index}`}
@@ -1678,7 +1690,7 @@ function ConditionEntityValues({
               {(props) => (
                 <div className="min-w-0 flex-1 space-y-1">
                   {selected ? (
-                    <p dir="auto" className="break-words text-sm font-medium">
+                    <p dir="auto" className="wrap-anywhere text-sm font-medium">
                       {selected.label}
                       <span className="ml-2 text-xs font-normal text-muted-foreground">{selected.type}</span>
                     </p>
@@ -1824,7 +1836,7 @@ function ValueFields({
         </datalist>
       )}
       {values.map((value, index) => (
-        <div key={index} className="flex items-end gap-1">
+        <div key={index} className="flex min-w-0 flex-wrap items-end gap-2">
           <EditorField
             context={context}
             pointer={`${pointer}/${index}`}
