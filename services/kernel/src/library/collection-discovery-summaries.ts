@@ -9,11 +9,10 @@ import {
   type CollectionDiscoveryContextFilters,
   type DiscoveryMemberKey,
 } from './collection-discovery-context.ts';
-import { deadlineClient } from './access-port.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/contract/errors.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withCollectionDiscoveryReadSnapshot } from './collection-discovery-read-connection.ts';
 import { readPartition } from '../partition/partition.ts';
 import {
   readFollowCountHealthObservation,
@@ -230,11 +229,9 @@ async function round(
     ...(context.time ? { time: context.time } : {}),
     context: { pool: dependencies.pool, deadline: context.deadline, ...(context.time ? { time: context.time } : {}) },
   });
-  return withConnection(dependencies.pool, async (connection) => {
-    const client = deadlineClient(connection, context.deadline);
+  return withCollectionDiscoveryReadSnapshot(dependencies.pool, context.deadline, async (client) => {
     let ownedTime: AuthoritativeTime | undefined;
     try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const time = context.time ?? (ownedTime = await mintReadTime(client, dependencies.clock));
       const partition = await readPartition(client, context.partition);
       if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
@@ -307,7 +304,6 @@ async function round(
           ]),
         });
       }
-      await client.query('COMMIT');
       return {
         epoch: partition.epoch,
         node: partition.node,
@@ -315,13 +311,6 @@ async function round(
         ...(followCountHealth ? { followCountHealth } : {}),
         rows: observed,
       };
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (cleanup) {
-        discardConnection(connection, cleanup instanceof Error ? cleanup : new Error('Read rollback failed'));
-      }
-      throw error;
     } finally {
       if (ownedTime) releaseOperationalTime(ownedTime);
     }

@@ -2511,6 +2511,9 @@ the original visit deadline; uncertain transaction clients are discarded without
 
 ### Public Collection discovery summaries
 
+Decision: Both public-discovery snapshots carry the original request deadline through checkout, BEGIN, queries,
+COMMIT and cleanup; uncertain clients are discarded without post-expiry rollback.
+
 `readPublicCollectionDiscoverySummaries(dependencies, ids, context)` is the native hydration producer for Search
 candidates. Its adapter entry owns request/context/dependency/result types; the serializable card summary lives at
 the Library contract entry for Content and Client consumers. Content and Web must obtain a ready
