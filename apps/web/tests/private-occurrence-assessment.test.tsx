@@ -115,8 +115,12 @@ async function mount() {
     history: createMemoryHistory({ initialEntries: ['/library/progress/exact'] }),
   });
   await router.load();
-  const show = (id = 'exact') =>
-    act(async () => {
+  const click = (label: string) => act(async () => {
+    [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const show = async (id = 'exact', openEditor = true) => {
+    await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <RouterContextProvider router={router}>
@@ -126,10 +130,17 @@ async function mount() {
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-  const submit = () =>
-    act(async () =>
-      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-    );
+    if (openEditor && [...host.querySelectorAll('button')].some((button) => button.textContent === m.library_journal_edit_entry()))
+      await click(m.library_journal_edit_entry());
+  };
+  const review = () => act(async () => {
+    host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+  const submit = async () => {
+    await review();
+    const save = [...host.querySelectorAll('button')].find((button) => button.textContent === m.library_occurrence_save());
+    if (save && !save.disabled) await click(m.library_occurrence_save());
+  };
   const edit = async (value: string) =>
     act(async () => {
       const field = host.querySelector('textarea')!;
@@ -140,17 +151,14 @@ async function mount() {
     host,
     show,
     submit,
+    review,
+    click,
     edit,
     assess: (value: string) =>
       act(async () => {
-        const field = host.querySelector('input[type=number]')!;
+        const field = host.querySelector('input[inputmode="decimal"]')!;
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value);
         field.dispatchEvent(new Event('input', { bubbles: true }));
-      }),
-    click: (label: string) =>
-      act(async () => {
-        [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
-        await new Promise((resolve) => setTimeout(resolve, 0));
       }),
     close: async () => {
       await act(async () => root.unmount());
@@ -165,7 +173,7 @@ test('assessment omission preserves absence; exact journal intent and independen
   try {
     await h.show();
     await h.show();
-    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('');
+    expect(h.host.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value).toBe('');
     await h.edit('private edit');
     await h.submit();
     expect(write).toHaveBeenCalledTimes(1);
@@ -244,14 +252,14 @@ test('selected occurrence sets zero, explicitly clears, and keeps independent re
       },
     ]);
     await act(async () => finish({ kind: 'saved', journal: journal('exact', 'keep unrelated draft', 4, 0) }));
-    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('0');
+    expect(h.host.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value).toBe('0');
     await h.click(m.library_occurrence_clear_assessment());
     await h.submit();
     expect(write.mock.calls[1]).toMatchObject([{ data: { body: { revision: 4, assessment: null } } }]);
     await act(async () => finish({ kind: 'saved', journal: journal('exact', 'keep unrelated draft', 5) }));
     await h.show('second');
     await h.show('second');
-    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('6.5');
+    expect(h.host.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value).toBe('6.5');
     expect(session('second').revision).toBe(7);
   } finally {
     await h.close();
@@ -275,8 +283,9 @@ test('stale journal review retains edited fields while adopting unrelated fresh 
       finish({ kind: 'conflict' });
       await new Promise((r) => setTimeout(r, 0));
     });
+    await h.click(m.library_occurrence_read_current());
     expect(h.host.querySelector('textarea')!.value).toBe('fresh reflection');
-    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('8.5');
+    expect(h.host.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value).toBe('8.5');
     await h.submit();
     expect(write).toHaveBeenCalledTimes(1);
     await h.click(m.library_occurrence_review_latest());
@@ -284,7 +293,7 @@ test('stale journal review retains edited fields while adopting unrelated fresh 
     expect(write.mock.calls[1]).toMatchObject([{ data: { body: { revision: 4, assessment: { units: 17 } } } }]);
     expect(write.mock.calls[1]![0].data.body).toEqual({ revision: 4, assessment: { units: 17 } });
     await act(async () => finish({ kind: 'missing' }));
-    expect(h.host.querySelector('input[type=number]')).toBeNull();
+    expect(h.host.querySelector('input[inputmode="decimal"]')).toBeNull();
   } finally {
     await h.close();
   }
@@ -312,8 +321,60 @@ test('matching independent readback leaves an uncertain assessment bound to its 
     await h.click(m.library_rich_entry_retry());
     expect(write.mock.calls[1]).toEqual(original);
     await act(async () => finish({ kind: 'retired' }));
-    expect(h.host.querySelector('input[type=number]')).toBeNull();
+    expect(h.host.querySelector('input[inputmode="decimal"]')).toBeNull();
   } finally {
     await h.close();
   }
+});
+
+
+test('journal opens as private reading and explicit cancel discards only the unsent draft', async () => {
+  const h = await mount();
+  try {
+    await h.show('exact', false);
+    await h.show('exact', false);
+    expect(h.host.querySelector('textarea')).toBeNull();
+    expect(h.host.textContent).toContain('exact');
+    await h.click(m.library_journal_edit_entry());
+    expect(document.activeElement).toBe(h.host.querySelector('textarea'));
+    await h.edit('私人感想\nA long second paragraph. <em>literal</em>');
+    await h.review();
+    expect(write).toHaveBeenCalledTimes(0);
+    expect(h.host.textContent).toContain(m.library_journal_original_value());
+    expect(h.host.querySelector('em')).toBeNull();
+    await h.click(m.library_progress_cancel());
+    expect(h.host.querySelector('form')).toBeNull();
+    expect(h.host.textContent).not.toContain('A long second paragraph.');
+    expect(document.activeElement?.textContent).toBe(m.library_journal_edit_entry());
+    await h.click(m.library_journal_edit_entry());
+    expect(h.host.querySelector('textarea')!.value).toBe('exact');
+    expect(write).toHaveBeenCalledTimes(0);
+  } finally { await h.close(); }
+});
+
+test('a fresh read cannot replace the original comparison or exact retry after an uncertain save', async () => {
+  const h = await mount();
+  try {
+    await h.show();
+    await h.show();
+    await h.edit('提案した感想\nProposed private note');
+    await h.submit();
+    const original = write.mock.calls[0];
+    await act(async () => finish({ kind: 'uncertain' }));
+    read.mockImplementationOnce(async () => ({
+      kind: 'ready', viewer: owner, csrfToken: owner + '-csrf',
+      journal: journal('exact', 'CURRENT OTHER DEVICE VALUE', 4),
+    }));
+    await h.click(m.library_occurrence_read_current());
+    const comparison = h.host.querySelector('[aria-label="' + m.library_journal_review() + '"]')!;
+    expect(comparison.textContent).toContain(m.library_journal_review_basis({ revision: 3 }));
+    expect(comparison.textContent).toContain('Proposed private note');
+    expect(comparison.textContent).not.toContain('CURRENT OTHER DEVICE VALUE');
+    expect(h.host.querySelector('[aria-label="' + m.library_journal_current_value() + '"]')!.textContent).toContain('CURRENT OTHER DEVICE VALUE');
+    expect([...h.host.querySelectorAll('button')].some((button) => button.textContent === m.library_progress_cancel())).toBe(false);
+    await h.click(m.library_rich_entry_retry());
+    expect(write.mock.calls[1]).toEqual(original);
+    await act(async () => finish({ kind: 'saved', journal: journal('exact', 'Proposed private note', 4) }));
+    expect(session('exact').revision).toBe(7);
+  } finally { await h.close(); }
 });

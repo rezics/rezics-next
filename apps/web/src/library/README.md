@@ -537,3 +537,9 @@ contracts, and the read-only main checkout `.reference/INDEX.md`. Impeccable fil
 skill/reference roots; use the documented project-context fallback in `docs/development/delivery.md#skill-instructions`.
 Mounted actual-route stories use constructed contract-shaped data; they are manual examples, not native acceptance.
 Focused acceptance source is maintained; test, compiler, build, browser and native execution are deferred.
+
+Acceptance source: `private-diary-timeline`, `private-diary-year-navigation` and
+`private-occurrence-assessment` pin native grouping, sparse/empty distinction, contextual Cancel, literal text and
+original-comparison retry. `my-logs-content-item` adds the public boundary and date headings. Existing
+`library-logs` assertions stay intact; publishing scenarios now open the contextual composer first. The journal
+helper follows explicit edit/review/save and read-after-conflict, targeting the installed decimal text input.

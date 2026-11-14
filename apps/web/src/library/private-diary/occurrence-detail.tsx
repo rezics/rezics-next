@@ -53,7 +53,7 @@ type LifecycleCommand = {
 type PrivateJournal = Extract<JournalReadResult, { kind: 'ready' }>['journal'];
 type JournalCustody = { command?: JournalCommand; basis?: PrivateJournal; flight?: object };
 // Only the existing progress-reader lifetime can retain a dispatched command through a read replacement.
-// This map contains no journal read, reflected draft or independent request identity.
+// Only a dispatched command and its original comparison survive here. Neither authorizes a current read.
 const journalCommands = new WeakMap<object, JournalCustody>();
 function journalCustody(lifetime: object | undefined): JournalCustody {
   if (!lifetime) return {};
@@ -257,6 +257,7 @@ function OccurrenceControls({
   useEffect(() => {
     // Admission replacement can retire rendering, but cannot settle a dispatched command.
     setReview(custody.command ?? null);
+    setReviewBasis(custody.command ? (custody.basis ?? null) : null);
     setJournalCommand(custody.command ?? null);
     setJournalNotice(custody.command ? 'uncertain' : null);
     setConflictRevision(null);
@@ -313,7 +314,7 @@ function OccurrenceControls({
     if (!currentRef.current.journalUpdateAllowed || !stillCurrent(command) || flight.current || custody.flight) return;
     if (custody.command && custody.command !== command) return;
     custody.command ??= command;
-    custody.basis ??= reviewBasis ?? journal ?? undefined;
+    if (reviewBasis !== null) custody.basis ??= reviewBasis;
     const attempt = {};
     custody.flight = attempt;
     flight.current = true;
@@ -540,8 +541,7 @@ function OccurrenceControls({
           <div className="grid gap-4 md:grid-cols-2">
             {(['reflection', 'startDate', 'finishDate', 'assessment'] as const).map((field) => (
               <div key={field} ref={field === 'reflection' ? reflectionField : undefined} className={field === 'reflection' ? 'min-w-0 md:col-span-2' : 'min-w-0'}>
-              <JournalFieldEditor
-                key={field}
+                <JournalFieldEditor
                 field={field}
                 selection={draft[field]}
                 value={working[field]}

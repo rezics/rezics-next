@@ -763,6 +763,7 @@ test(
     const sessionId = id(20);
     const { page } = await open(`/en/library/progress/${sessionId}`);
     try {
+      await page.locator('summary:has(#publish-log-heading)').click();
       await page.getByRole('textbox', { name: 'Publish note', exact: true }).fill('A public reading milestone');
       await page.getByRole('button', { name: 'Publish log', exact: true }).click();
       await page.waitForURL(/\/en\/logs\//);
@@ -815,6 +816,7 @@ test(
     const sessionId = id(20);
     const { page } = await open(`/en/library/progress/${sessionId}`);
     try {
+      await page.locator('summary:has(#publish-log-heading)').click();
       await page.getByRole('button', { name: 'Publish log', exact: true }).click();
       await page.waitForURL(/\/en\/logs\//);
       const logId = new URL(page.url()).pathname.split('/').at(-1)!;
@@ -854,6 +856,7 @@ test(
     const { page: author } = await open(`/en/library/progress/${id(20)}`);
     let logId = '';
     try {
+      await author.locator('summary:has(#publish-log-heading)').click();
       await author.getByRole('button', { name: 'Publish log', exact: true }).click();
       await author.waitForURL(/\/en\/logs\//);
       logId = new URL(author.url()).pathname.split('/').at(-1)!;

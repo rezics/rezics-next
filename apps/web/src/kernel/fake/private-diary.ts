@@ -204,13 +204,23 @@ export const routes: FakeRoute[] = [
   },
   {
     method: 'GET', path: /^\/v1\/progressSessions\/([^/]+)\/changes$/,
-    story: ({ match }) => state && rowFor(match![1]!) ? {
-      status: 200, changes: [
-        { id: `${match![1]}:6`, revision: 6, createdAt: '2026-11-14T01:00:00.000Z', intent: { amount: '18' } },
-        { id: `${match![1]}:5`, revision: 5, createdAt: '2026-11-13T23:00:00.000Z', intent: { amount: '12' } },
-        { id: `${match![1]}:4`, revision: 4, createdAt: '2026-11-13T21:00:00.000Z', intent: { clear: true } },
-      ], next: null, headers,
-    } : undefined,
+    story: ({ match }) => {
+      if (!state) return;
+      const id = match![1]!;
+      const row = rowFor(id);
+      if (!row) return;
+      const intents = [{ amount: '18' }, { amount: '12' }, { clear: true }];
+      return {
+        status: 200,
+        changes: intents.slice(0, Math.min(3, row.revision - 1)).map((intent, index) => ({
+          id: `${id}:${row.revision - index - 1}`,
+          revision: row.revision - index - 1,
+          createdAt: new Date(new Date(row.recordedStartedAt).getTime() + (3 - index) * 3_600_000).toISOString(),
+          intent,
+        })),
+        next: null, headers,
+      };
+    },
   },
   { method: 'GET', path: /^\/v1\/progressSessions\/([^/]+)\/completedUnits$/, story: ({ match }) => state && rowFor(match![1]!) ? { status: 200, completedUnits: [], next: null, headers } : undefined },
   {
@@ -236,10 +246,15 @@ export const routes: FakeRoute[] = [
       }
       const patch = JSON.parse(body) as ProgressSessionJournalPatch;
       if (patch.revision !== value.revision) return { status: 409, code: 'conflict', headers };
-      const next: ProgressSessionJournal = { ...value, ...patch, revision: value.revision + 1, assessment: patch.assessment ?? value.assessment };
-      if (patch.assessment === null) next.assessment = { meaningRevision: 1, units: null };
+      const proposed: ProgressSessionJournal = {
+        ...value, ...patch,
+        assessment: patch.assessment === undefined ? value.assessment : { meaningRevision: 1, units: patch.assessment?.units ?? null },
+      };
+      const changed = (['startDate', 'finishDate', 'reflection', 'assessment'] as const)
+        .some((field) => JSON.stringify(value[field]) !== JSON.stringify(proposed[field]));
+      const next = { ...proposed, revision: value.revision + (changed ? 1 : 0) };
       current.journals.set(id, next);
-      const response: KernelRecording = { status: 200, journal: structuredClone(next), headers };
+      const response: KernelRecording = { status: 200, journal: { sessionId: id, revision: next.revision, changed }, headers };
       current.replays.set(key, { body, response });
       if (current.scenario === 'failed-save' && !current.failed) {
         current.failed = true;
